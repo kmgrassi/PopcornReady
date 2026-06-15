@@ -39,11 +39,43 @@ function isPubliclyDeliverable(asset: StoredAssetUrlFields): boolean {
   return !asset.storage_bucket || asset.storage_bucket === config.publicBucket;
 }
 
+function isHostedRuntime(): boolean {
+  return Boolean(
+    process.env.RAILWAY_ENVIRONMENT ||
+      process.env.RAILWAY_SERVICE_ID ||
+      process.env.RAILWAY_PROJECT_ID ||
+      process.env.RAILWAY_PUBLIC_DOMAIN
+  );
+}
+
+function isUndeliverableHostedRemoteUrl(value: string): boolean {
+  if (!isHostedRuntime()) return false;
+
+  try {
+    const parsed = new URL(value);
+    const host = parsed.hostname.toLowerCase();
+    return (
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "::1" ||
+      host.endsWith(".local")
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function remoteAssetUrlForDelivery(value: string | null): string | undefined {
+  if (!value || isUndeliverableHostedRemoteUrl(value)) return undefined;
+  return value;
+}
+
 export async function resolveAssetUrl(
   asset: StoredAssetUrlFields,
   opts: { privateTtlSec?: number } = {}
 ): Promise<string | undefined> {
-  if (asset.remote_url) return asset.remote_url;
+  const remoteUrl = remoteAssetUrlForDelivery(asset.remote_url);
+  if (remoteUrl) return remoteUrl;
   if (!asset.storage_key) return undefined;
 
   const config = readStorageConfig();
