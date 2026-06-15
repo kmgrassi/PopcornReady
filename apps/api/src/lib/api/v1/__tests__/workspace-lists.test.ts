@@ -9,9 +9,8 @@ import {
   type ListWorkspaceGenerationRunsDeps,
   type ListWorkspaceOutputsDeps,
 } from "../store";
-import type { GenerationRunsStore } from "../../../v1/generation-runs/store";
-import type { GenerationRun } from "@popcorn/shared/v1/types";
 import type { Artifact } from "../../../agent-api/types";
+import type { OrchestratorRun } from "../orchestrator-store";
 
 // Unit coverage for the workspace-scoped cross-project aggregations that back
 // the dashboard Projects/Runs + Outputs views. The project enumeration and the
@@ -22,14 +21,20 @@ import type { Artifact } from "../../../agent-api/types";
 
 function makeRun(
   projectId: string,
-  overrides: Partial<GenerationRun> & { runId: string }
-): GenerationRun {
+  overrides: Partial<OrchestratorRun> & { runId: string }
+): OrchestratorRun {
   return {
+    id: overrides.runId,
+    schemaVersion: "orchestrator_run.v1",
     projectId,
     status: "succeeded",
+    inputSummary: "test run",
+    spentUsd: 0,
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
-    ...overrides,
+    ...("status" in overrides ? { status: overrides.status } : {}),
+    ...("createdAt" in overrides ? { createdAt: overrides.createdAt } : {}),
+    ...("updatedAt" in overrides ? { updatedAt: overrides.updatedAt } : {}),
   };
 }
 
@@ -50,11 +55,8 @@ function makeArtifact(
   };
 }
 
-function runStoreFrom(runs: GenerationRun[]): GenerationRunsStore {
-  return {
-    listRunsForProject: async (projectId: string) =>
-      runs.filter((r) => r.projectId === projectId),
-  } as unknown as GenerationRunsStore;
+function listRunsFrom(runs: OrchestratorRun[]) {
+  return async (projectId: string) => runs.filter((r) => r.projectId === projectId);
 }
 
 function artifactStoreFrom(
@@ -80,7 +82,7 @@ test("listWorkspaceGenerationRuns aggregates runs across projects with project n
       { id: "p1", name: "Alpha" },
       { id: "p2", name: "Beta" },
     ],
-    runStore: runStoreFrom(runs),
+    listRunsForProject: listRunsFrom(runs),
   };
 
   const { items, nextCursor } = await listWorkspaceGenerationRuns(
@@ -113,7 +115,7 @@ test("listWorkspaceGenerationRuns filters by status and projectId", async () => 
       { id: "p1", name: "Alpha" },
       { id: "p2", name: "Beta" },
     ],
-    runStore: runStoreFrom(runs),
+    listRunsForProject: listRunsFrom(runs),
   };
 
   const byStatus = await listWorkspaceGenerationRuns(
@@ -149,7 +151,7 @@ test("listWorkspaceGenerationRuns paginates with a stable runId cursor", async (
   ];
   const deps: ListWorkspaceGenerationRunsDeps = {
     listProjects: async () => [{ id: "p1", name: "Alpha" }],
-    runStore: runStoreFrom(runs),
+    listRunsForProject: listRunsFrom(runs),
   };
 
   const page1 = await listWorkspaceGenerationRuns("ws1", {}, 2, null, deps);
@@ -240,8 +242,6 @@ test("getWorkspaceDashboardSummary counts and caps dashboard state", async () =>
     makeRun("p1", {
       runId: "r1",
       status: "running",
-      currentStageType: "asset_generation",
-      progressPercent: 40,
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:30:00.000Z",
     }),
@@ -288,7 +288,7 @@ test("getWorkspaceDashboardSummary counts and caps dashboard state", async () =>
       { id: "p1", name: "Alpha" },
       { id: "p2", name: "Beta" },
     ],
-    runStore: runStoreFrom(runs),
+    listRunsForProject: listRunsFrom(runs),
     artifactStore: artifactStoreFrom(artifacts),
   };
 
@@ -313,27 +313,21 @@ test("getWorkspaceDashboardSummary counts and caps dashboard state", async () =>
   );
 });
 
-test("getWorkspaceDashboardSummary includes reviewGate for gated runs", async () => {
+test("getWorkspaceDashboardSummary maps waiting orchestrator runs as active runs", async () => {
   const runs = [
     makeRun("p1", {
       runId: "r1",
-      status: "running",
-      reviewGate: {
-        stageType: "quality_review",
-        stageId: "stage_1",
-        state: "awaiting_review",
-        enteredAt: "2026-01-03T00:00:00.000Z",
-      },
+      status: "waiting",
     }),
   ];
   const deps: GetWorkspaceDashboardSummaryDeps = {
     listProjects: async () => [{ id: "p1", name: "Alpha" }],
-    runStore: runStoreFrom(runs),
+    listRunsForProject: listRunsFrom(runs),
     artifactStore: artifactStoreFrom([]),
   };
 
   const summary = await getWorkspaceDashboardSummary("ws1", deps);
 
   assert.equal(summary.activeRuns.length, 1);
-  assert.equal(summary.activeRuns[0].reviewGate?.stageType, "quality_review");
+  assert.equal(summary.activeRuns[0].status, "running");
 });

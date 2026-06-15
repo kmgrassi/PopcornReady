@@ -65,9 +65,10 @@ import {
 import type { EditPlan } from "@popcorn/shared/types";
 import type { Asset } from "@popcorn/shared/assets/types";
 import {
-  getGenerationRunStore,
-  type GenerationRunsStore,
-} from "../../v1/generation-runs/store";
+  getOrchestratorRun,
+  listOrchestratorRunsForProject,
+  type OrchestratorRun,
+} from "./orchestrator-store";
 import { getRequestSupabase } from "../../supabase/clients";
 import { agentApiStore, type AgentApiStore } from "../../agent-api/jobs";
 import { resolveAssetUrl } from "../../storage/asset-urls";
@@ -243,7 +244,7 @@ export interface V1Action {
   id: string;
   schemaVersion: "action.v1";
   projectId: string;
-  runId?: string;
+  orchestratorRunId?: string;
   tool: string;
   status: ActionStatus;
   params: Record<string, unknown>;
@@ -261,7 +262,6 @@ export interface V1Action {
 
 export interface CreateActionInput {
   projectId: string;
-  runId?: string;
   orchestratorRunId?: string;
   tool: string;
   status?: ActionStatus;
@@ -549,7 +549,7 @@ interface ActionRow {
   id: string;
   schema_version: "action.v1";
   project_id: string;
-  run_id: string | null;
+  orchestrator_run_id: string | null;
   tool: string;
   status: ActionStatus;
   params: Record<string, unknown>;
@@ -563,12 +563,6 @@ interface ActionRow {
   error: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
-}
-
-interface RunBudgetRow {
-  id: string;
-  project_id: string;
-  budget_usd: number | null;
 }
 
 interface AssetFingerprintRow {
@@ -591,7 +585,7 @@ function mapAction(row: ActionRow): V1Action {
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
   };
-  if (row.run_id != null) action.runId = row.run_id;
+  if (row.orchestrator_run_id != null) action.orchestratorRunId = row.orchestrator_run_id;
   if (row.rationale != null) action.rationale = row.rationale;
   const proposal = unmarkedJson(row.proposal);
   if (proposal) action.proposal = proposal;
@@ -839,7 +833,6 @@ export async function createAction(input: CreateActionInput): Promise<V1Action> 
     .insert({
       schema_version: "action.v1",
       project_id: input.projectId,
-      run_id: input.runId ?? null,
       orchestrator_run_id: input.orchestratorRunId ?? null,
       tool: input.tool,
       status: input.status ?? "proposed",
@@ -890,30 +883,18 @@ export async function assertRunBudgetAllows(input: {
   additionalCostUsd: number;
 }): Promise<void> {
   if (!input.runId) return;
-  const db = getServiceSupabase();
-  const { data: run, error: runError } = await db
-    .from("generation_runs")
-    .select("id,project_id,budget_usd")
-    .eq("id", input.runId)
-    .maybeSingle();
-  if (isNoRows(runError)) {
-    throw new Error(`Run not found: ${input.runId}`);
-  }
-  throwOnError(runError, "assertRunBudgetAllows run");
-
-  const scopedRun = run as RunBudgetRow | null;
-  if (!scopedRun) throw new Error(`Run not found: ${input.runId}`);
-  if (scopedRun.project_id !== input.projectId) {
+  const run = await getOrchestratorRun(input.runId);
+  if (run.projectId !== input.projectId) {
     throw new Error(`Run project mismatch: ${input.runId}`);
   }
-
-  const budgetUsd = scopedRun.budget_usd;
+  const budgetUsd = run.budgetUsd;
   if (budgetUsd == null || budgetUsd <= 0) return;
 
+  const db = getServiceSupabase();
   const { data: actions, error: actionsError } = await db
     .from("actions")
     .select("estimated_cost_usd,actual_cost_usd,status")
-    .eq("run_id", input.runId)
+    .eq("orchestrator_run_id", input.runId)
     .in("status", ["proposed", "approved", "running", "applied"]);
   throwOnError(actionsError, "assertRunBudgetAllows actions");
 
@@ -1051,8 +1032,7 @@ async function assertStudioDraftRefs(
     await getProject(workspaceId, payload.projectId);
   }
   if (payload.runId) {
-    const run = await getGenerationRunStore().getRun(payload.runId);
-    if (!run) throw notFound(`Generation run not found: ${payload.runId}`);
+    const run = await getOrchestratorRun(payload.runId);
     await getProject(workspaceId, run.projectId);
     if (payload.projectId && payload.projectId !== run.projectId) {
       throw notFound(`Generation run not found: ${payload.runId}`);
@@ -3112,7 +3092,37 @@ export interface WorkspaceGenerationRunSummary extends GenerationRun {
 
 export interface ListWorkspaceGenerationRunsDeps {
   listProjects: (workspaceId: string) => Promise<WorkspaceProjectRef[]>;
-  runStore: GenerationRunsStore;
+  listRunsForProject: (projectId: string) => Promise<OrchestratorRun[]>;
+}
+
+function mapOrchestratorSummary(run: OrchestratorRun): GenerationRun {
+  const status = run.status === "waiting" ? "running" : run.status;
+  return {
+    runId: run.id,
+    projectId: run.projectId,
+    status,
+    progressPercent: status === "succeeded" ? 100 : status === "queued" ? 0 : 50,
+    message:
+      run.status === "waiting"
+        ? "Generation is waiting for a job or approval gate."
+        : run.status === "running"
+          ? "The orchestrator is running."
+          : undefined,
+    createdAt: run.createdAt,
+    updatedAt: run.updatedAt,
+    startedAt: run.startedAt,
+    completedAt: run.completedAt,
+    error: run.error
+      ? {
+          code: typeof run.error.kind === "string" ? run.error.kind : "orchestrator_error",
+          message:
+            typeof run.error.message === "string"
+              ? run.error.message
+              : "The orchestrator run failed.",
+          retryable: run.error.recoverable === true,
+        }
+      : undefined,
+  };
 }
 
 export async function listWorkspaceGenerationRuns(
@@ -3122,7 +3132,7 @@ export async function listWorkspaceGenerationRuns(
   cursor: string | null,
   deps: ListWorkspaceGenerationRunsDeps = {
     listProjects: listWorkspaceProjectRefs,
-    runStore: getGenerationRunStore(),
+    listRunsForProject: listOrchestratorRunsForProject,
   }
 ): Promise<PageResult<WorkspaceGenerationRunSummary>> {
   const projects = await deps.listProjects(workspaceId);
@@ -3132,8 +3142,11 @@ export async function listWorkspaceGenerationRuns(
 
   const perProject = await Promise.all(
     scoped.map(async (project) => {
-      const runs = await deps.runStore.listRunsForProject(project.id);
-      return runs.map((run) => ({ ...run, projectName: project.name }));
+      const runs = await deps.listRunsForProject(project.id);
+      return runs.map((run) => ({
+        ...mapOrchestratorSummary(run),
+        projectName: project.name,
+      }));
     })
   );
 
@@ -3394,7 +3407,7 @@ export async function getProjectWatchMedia(
 
 export interface GetWorkspaceDashboardSummaryDeps {
   listProjects: (workspaceId: string) => Promise<WorkspaceProjectRef[]>;
-  runStore: GenerationRunsStore;
+  listRunsForProject: (projectId: string) => Promise<OrchestratorRun[]>;
   artifactStore: Pick<AgentApiStore, "listArtifactsForProject">;
 }
 
@@ -3406,7 +3419,7 @@ export async function getWorkspaceDashboardSummary(
   workspaceId: string,
   deps: GetWorkspaceDashboardSummaryDeps = {
     listProjects: listWorkspaceProjectRefs,
-    runStore: getGenerationRunStore(),
+    listRunsForProject: listOrchestratorRunsForProject,
     artifactStore: agentApiStore,
   }
 ): Promise<DashboardSummary> {
@@ -3419,7 +3432,7 @@ export async function getWorkspaceDashboardSummary(
       {},
       Number.MAX_SAFE_INTEGER,
       null,
-      { listProjects: listProjectsOnce, runStore: deps.runStore }
+      { listProjects: listProjectsOnce, listRunsForProject: deps.listRunsForProject }
     ),
     listWorkspaceOutputs(
       workspaceId,

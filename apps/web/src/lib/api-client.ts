@@ -384,7 +384,7 @@ export interface StartUploadedFootageRunInput {
 }
 
 export interface StartGenerationRunResponse {
-  job: GenerationJob;
+  job?: GenerationJob;
   runId: string | null;
 }
 

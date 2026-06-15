@@ -205,6 +205,19 @@ export async function getOrchestratorRun(runId: string): Promise<OrchestratorRun
   return mapRun(data as OrchestratorRunRow);
 }
 
+export async function listOrchestratorRunsForProject(
+  projectId: string
+): Promise<OrchestratorRun[]> {
+  const db = getServiceSupabase();
+  const { data, error } = await db
+    .from("orchestrator_runs")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false });
+  throwOnError(error, "listOrchestratorRunsForProject");
+  return ((data as OrchestratorRunRow[]) ?? []).map(mapRun);
+}
+
 export async function updateOrchestratorRun(
   runId: string,
   patch: UpdateOrchestratorRunPatch
