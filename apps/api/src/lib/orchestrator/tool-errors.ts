@@ -24,7 +24,8 @@ export type ToolErrorKind =
   | "budget_exceeded"
   | "approval_rejected"
   | "policy_violation"
-  | "timeout";
+  | "timeout"
+  | "database_error";
 
 export interface SuggestedToolCall {
   tool: ToolName;
@@ -310,6 +311,24 @@ export function preconditionFromApiError(
       retryAfterSec: context.retryAfterSec,
       details: { code: error.code },
     });
+  }
+
+  // A persistence failure (the store's runQuery surfaces these as
+  // database_error) is transient infrastructure trouble, NOT a permanent
+  // provider failure. Without this case it would fall through to
+  // classifyToolFailure and be classified provider_failed/recoverable:false,
+  // stranding the run after the tool already did its expensive work (e.g.
+  // plan_shots persisting after a planEdit model call). Mark it recoverable so
+  // the orchestrator can retry the same tool.
+  if (error.code === "database_error") {
+    return {
+      kind: "database_error",
+      message: error.message,
+      recoverable: true,
+      retryAfterSec: context.retryAfterSec,
+      suggestedNextTools: [{ tool: context.toolName, inputHint: { retry: true } }],
+      details: compactRecord({ code: error.code, ...(error.details ?? {}) }),
+    };
   }
 
   return null;

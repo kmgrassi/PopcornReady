@@ -25,8 +25,8 @@ import { AsyncLocalStorage } from "async_hooks";
 import { randomUUID } from "crypto";
 import path from "path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { isMissingRow } from "../../supabase/db-errors";
-import { iso, markedJson, throwOnError, unmarkedJson } from "./store-internal";
+import { databaseError, runQuery } from "../../supabase/db-errors";
+import { iso, markedJson, unmarkedJson } from "./store-internal";
 import {
   canonicalContentHash,
   graphInputsFromProvenance,
@@ -397,14 +397,15 @@ function getRequestSupabaseOrService(): SupabaseClient {
 // Callers translate that into notFound/null; other DB failures use the typed
 // database_error envelope instead of leaking as generic internal errors.
 // iso/throwOnError/markedJson/unmarkedJson now live in ./store-internal.
-const isNoRows = isMissingRow;
 
 export async function defaultVisibilityForWorkspace(
   db: SupabaseClient,
   workspaceId: string
 ): Promise<"public" | "private"> {
-  const { data, error } = await db.rpc("owner_tier", { ws_id: workspaceId });
-  throwOnError(error, "defaultVisibilityForWorkspace");
+  const data = await runQuery(
+    "store.defaultVisibilityForWorkspace",
+    db.rpc("owner_tier", { ws_id: workspaceId })
+  );
   return data === "paid" ? "private" : "public";
 }
 
@@ -415,14 +416,15 @@ export async function effectiveAssetStorageVisibility(input: {
 }): Promise<"public" | "private"> {
   if (input.assetVisibility === "private") return "private";
   const db = getServiceSupabase();
-  const { data, error } = await db
-    .from("projects")
-    .select("visibility")
-    .eq("id", input.projectId)
-    .eq("workspace_id", input.workspaceId)
-    .maybeSingle();
-  if (isNoRows(error)) throw notFound(`Project not found: ${input.projectId}`);
-  throwOnError(error, "effectiveAssetStorageVisibility project");
+  const data = await runQuery(
+    "store.effectiveAssetStorageVisibility project",
+    db
+      .from("projects")
+      .select("visibility")
+      .eq("id", input.projectId)
+      .eq("workspace_id", input.workspaceId)
+      .maybeSingle()
+  );
   const row = data as { visibility?: "public" | "private" } | null;
   if (!row) throw notFound(`Project not found: ${input.projectId}`);
   return row.visibility === "private" ? "private" : "public";
@@ -625,14 +627,15 @@ async function dataAssetById(
   db: SupabaseClient,
   assetId: string
 ): Promise<DataAssetRow | null> {
-  const { data, error } = await db
-    .from("assets")
-    .select("*")
-    .eq("id", assetId)
-    .eq("media", "data")
-    .maybeSingle();
-  if (isNoRows(error)) return null;
-  throwOnError(error, "dataAssetById");
+  const data = await runQuery(
+    "store.dataAssetById",
+    db
+      .from("assets")
+      .select("*")
+      .eq("id", assetId)
+      .eq("media", "data")
+      .maybeSingle()
+  );
   return (data as DataAssetRow | null) ?? null;
 }
 
@@ -649,13 +652,14 @@ async function latestDataAsset(
     .eq("kind", kind)
     .eq("media", "data");
   if (role) query = query.eq("role", role);
-  const { data, error } = await query
-    .order("created_at", { ascending: false })
-    .order("id", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (isNoRows(error)) return null;
-  throwOnError(error, `latestDataAsset ${kind}`);
+  const data = await runQuery(
+    `store.latestDataAsset ${kind}`,
+    query
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+  );
   return (data as DataAssetRow | null) ?? null;
 }
 
@@ -666,16 +670,17 @@ async function selectedDataAsset(
   kind: GraphAssetKind,
   assetRole?: string
 ): Promise<DataAssetRow | null> {
-  const selected = await db
-    .from("current_selections")
-    .select("active_asset_id")
-    .eq("project_id", projectId)
-    .eq("slot_role", slotRole)
-    .maybeSingle();
-  if (isNoRows(selected.error)) return latestDataAsset(db, projectId, kind, assetRole);
-  throwOnError(selected.error, `selectedDataAsset ${slotRole}`);
+  const selected = await runQuery(
+    `store.selectedDataAsset ${slotRole}`,
+    db
+      .from("current_selections")
+      .select("active_asset_id")
+      .eq("project_id", projectId)
+      .eq("slot_role", slotRole)
+      .maybeSingle()
+  );
 
-  const activeAssetId = (selected.data as CurrentSelectionRow | null)?.active_asset_id;
+  const activeAssetId = (selected as CurrentSelectionRow | null)?.active_asset_id;
   if (!activeAssetId) return latestDataAsset(db, projectId, kind, assetRole);
   const asset = await dataAssetById(db, activeAssetId);
   if (asset && asset.kind === kind && (!assetRole || asset.role === assetRole)) return asset;
@@ -725,9 +730,7 @@ async function readyImageAssetById(
     .eq("media", "image")
     .eq("status", "ready");
   if (opts.publicOnly) query = query.eq("visibility", "public");
-  const { data, error } = await query.maybeSingle();
-  if (isNoRows(error)) return null;
-  throwOnError(error, "readyImageAssetById");
+  const data = await runQuery("store.readyImageAssetById", query.maybeSingle());
   return (data as PosterAssetRow | null) ?? null;
 }
 
@@ -745,13 +748,14 @@ async function latestReadyImageAsset(
     .eq("status", "ready");
   if (kind) query = query.eq("kind", kind);
   if (opts.publicOnly) query = query.eq("visibility", "public");
-  const { data, error } = await query
-    .order("created_at", { ascending: false })
-    .order("id", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (isNoRows(error)) return null;
-  throwOnError(error, `latestReadyImageAsset ${kind ?? "image"}`);
+  const data = await runQuery(
+    `store.latestReadyImageAsset ${kind ?? "image"}`,
+    query
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+  );
   return (data as PosterAssetRow | null) ?? null;
 }
 
@@ -760,17 +764,17 @@ async function projectPosterAsset(
   projectId: string,
   opts: PosterVisibilityOpts = {}
 ): Promise<PosterAssetRow | null> {
-  const selected = await db
-    .from("current_selections")
-    .select("active_asset_id")
-    .eq("project_id", projectId)
-    .is("slot_owner_lineage_id", null)
-    .eq("slot_role", POSTER_SLOT_ROLE)
-    .maybeSingle();
-  if (!isNoRows(selected.error)) {
-    throwOnError(selected.error, "projectPosterAsset selection");
-  }
-  const activeAssetId = (selected.data as CurrentSelectionRow | null)?.active_asset_id;
+  const selected = await runQuery(
+    "store.projectPosterAsset selection",
+    db
+      .from("current_selections")
+      .select("active_asset_id")
+      .eq("project_id", projectId)
+      .is("slot_owner_lineage_id", null)
+      .eq("slot_role", POSTER_SLOT_ROLE)
+      .maybeSingle()
+  );
+  const activeAssetId = (selected as CurrentSelectionRow | null)?.active_asset_id;
   if (activeAssetId) {
     const asset = await readyImageAssetById(db, projectId, activeAssetId, opts);
     if (asset) return asset;
@@ -801,31 +805,25 @@ async function projectProjection(
 }> {
   const [briefAsset, storyboard, posterAsset] = await Promise.all([
     selectedDataAsset(db, projectId, "brief", "brief"),
-    db
-      .from("storyboards")
-      .select("id")
-      .eq("project_id", projectId)
-      .limit(1)
-      .maybeSingle(),
+    runQuery(
+      "store.projectProjection storyboard",
+      db
+        .from("storyboards")
+        .select("id")
+        .eq("project_id", projectId)
+        .limit(1)
+        .maybeSingle()
+    ),
     projectPosterAsset(db, projectId, opts),
   ]);
   const poster = {
     posterAssetId: posterAsset?.id ?? null,
     posterUrl: await posterUrlFor(posterAsset),
   };
-  if (isNoRows(storyboard.error)) {
-    return {
-      brief: briefAsset ? unmarkedContent<VideoBrief>(briefAsset.content) : null,
-      currentBriefVersionId: briefAsset?.id ?? null,
-      hasStoryboard: false,
-      ...poster,
-    };
-  }
-  throwOnError(storyboard.error, "projectProjection storyboard");
   return {
     brief: briefAsset ? unmarkedContent<VideoBrief>(briefAsset.content) : null,
     currentBriefVersionId: briefAsset?.id ?? null,
-    hasStoryboard: Boolean(storyboard.data),
+    hasStoryboard: Boolean(storyboard),
     ...poster,
   };
 }
@@ -845,42 +843,44 @@ async function setActiveAssetSelection(
   activeAssetId: string,
   setByActionId?: string
 ): Promise<void> {
-  const { error } = await db
-    .from("selections")
-    .insert({
+  await runQuery(
+    `store.setActiveAssetSelection ${slotRole}`,
+    db.from("selections").insert({
       project_id: projectId,
       slot_owner_lineage_id: null,
       slot_role: slotRole,
       active_asset_id: activeAssetId,
       set_by_action_id: setByActionId ?? null,
-    });
-  throwOnError(error, `setActiveAssetSelection ${slotRole}`);
+    })
+  );
 }
 
 export async function createAction(input: CreateActionInput): Promise<V1Action> {
   const db = getServiceSupabase();
-  const { data, error } = await db
-    .from("actions")
-    .insert({
-      schema_version: "action.v1",
-      project_id: input.projectId,
-      run_id: input.runId ?? null,
-      orchestrator_run_id: input.orchestratorRunId ?? null,
-      tool: input.tool,
-      status: input.status ?? "proposed",
-      params: markedJson("action_params.v1", input.params ?? {}) ?? {},
-      input_asset_ids: input.inputAssetIds ?? [],
-      rationale: input.rationale ?? null,
-      proposal: markedJson("action_proposal.v1", input.proposal) ?? null,
-      estimated_cost_usd: input.estimatedCostUsd ?? null,
-      actual_cost_usd: input.actualCostUsd ?? null,
-      job_ids: input.jobIds ?? [],
-      output_asset_ids: input.outputAssetIds ?? [],
-      error: markedJson("action_error.v1", input.error) ?? null,
-    })
-    .select("*")
-    .single();
-  throwOnError(error, `createAction ${input.tool}`);
+  const data = await runQuery(
+    `store.createAction ${input.tool}`,
+    db
+      .from("actions")
+      .insert({
+        schema_version: "action.v1",
+        project_id: input.projectId,
+        run_id: input.runId ?? null,
+        orchestrator_run_id: input.orchestratorRunId ?? null,
+        tool: input.tool,
+        status: input.status ?? "proposed",
+        params: markedJson("action_params.v1", input.params ?? {}) ?? {},
+        input_asset_ids: input.inputAssetIds ?? [],
+        rationale: input.rationale ?? null,
+        proposal: markedJson("action_proposal.v1", input.proposal) ?? null,
+        estimated_cost_usd: input.estimatedCostUsd ?? null,
+        actual_cost_usd: input.actualCostUsd ?? null,
+        job_ids: input.jobIds ?? [],
+        output_asset_ids: input.outputAssetIds ?? [],
+        error: markedJson("action_error.v1", input.error) ?? null,
+      })
+      .select("*")
+      .single()
+  );
   return mapAction(data as ActionRow);
 }
 
@@ -899,13 +899,10 @@ export async function updateAction(
   if (patch.error !== undefined) row.error = markedJson("action_error.v1", patch.error) ?? null;
 
   const db = getServiceSupabase();
-  const { data, error } = await db
-    .from("actions")
-    .update(row)
-    .eq("id", actionId)
-    .select("*")
-    .single();
-  throwOnError(error, `updateAction ${actionId}`);
+  const data = await runQuery(
+    `store.updateAction ${actionId}`,
+    db.from("actions").update(row).eq("id", actionId).select("*").single()
+  );
   return mapAction(data as ActionRow);
 }
 
@@ -916,15 +913,14 @@ export async function assertRunBudgetAllows(input: {
 }): Promise<void> {
   if (!input.runId) return;
   const db = getServiceSupabase();
-  const { data: run, error: runError } = await db
-    .from("generation_runs")
-    .select("id,project_id,budget_usd")
-    .eq("id", input.runId)
-    .maybeSingle();
-  if (isNoRows(runError)) {
-    throw new Error(`Run not found: ${input.runId}`);
-  }
-  throwOnError(runError, "assertRunBudgetAllows run");
+  const run = await runQuery(
+    "store.assertRunBudgetAllows run",
+    db
+      .from("generation_runs")
+      .select("id,project_id,budget_usd")
+      .eq("id", input.runId)
+      .maybeSingle()
+  );
 
   const scopedRun = run as RunBudgetRow | null;
   if (!scopedRun) throw new Error(`Run not found: ${input.runId}`);
@@ -935,12 +931,14 @@ export async function assertRunBudgetAllows(input: {
   const budgetUsd = scopedRun.budget_usd;
   if (budgetUsd == null || budgetUsd <= 0) return;
 
-  const { data: actions, error: actionsError } = await db
-    .from("actions")
-    .select("estimated_cost_usd,actual_cost_usd,status")
-    .eq("run_id", input.runId)
-    .in("status", ["proposed", "approved", "running", "applied"]);
-  throwOnError(actionsError, "assertRunBudgetAllows actions");
+  const actions = await runQuery(
+    "store.assertRunBudgetAllows actions",
+    db
+      .from("actions")
+      .select("estimated_cost_usd,actual_cost_usd,status")
+      .eq("run_id", input.runId)
+      .in("status", ["proposed", "approved", "running", "applied"])
+  );
 
   const committedUsd = ((actions as Pick<
     ActionRow,
@@ -962,12 +960,14 @@ export async function getAssetFingerprintPins(
   const uniqueIds = [...new Set(assetIds)].filter(Boolean);
   if (uniqueIds.length === 0) return {};
   const db = getServiceSupabase();
-  const { data, error } = await db
-    .from("assets")
-    .select("id,content_hash,inputs_fingerprint")
-    .eq("project_id", projectId)
-    .in("id", uniqueIds);
-  throwOnError(error, "getAssetFingerprintPins");
+  const data = await runQuery(
+    "store.getAssetFingerprintPins",
+    db
+      .from("assets")
+      .select("id,content_hash,inputs_fingerprint")
+      .eq("project_id", projectId)
+      .in("id", uniqueIds)
+  );
   const pins: Record<string, string> = {};
   for (const row of ((data as AssetFingerprintRow[]) ?? [])) {
     const fingerprint = row.inputs_fingerprint ?? row.content_hash;
@@ -1015,12 +1015,10 @@ async function insertDataAsset(input: {
   if (input.lineageId) row.lineage_id = input.lineageId;
   if (input.version) row.version = input.version;
 
-  const { data, error } = await input.db
-    .from("assets")
-    .insert(row)
-    .select("*")
-    .single();
-  throwOnError(error, `insertDataAsset ${input.kind}`);
+  const data = await runQuery(
+    `store.insertDataAsset ${input.kind}`,
+    input.db.from("assets").insert(row).select("*").single()
+  );
   return data as DataAssetRow;
 }
 
@@ -1214,12 +1212,14 @@ async function contentHashesForAssets(
   const uniqueIds = [...new Set(assetIds)].filter(Boolean);
   if (uniqueIds.length === 0) return new Map();
 
-  const { data, error } = await db
-    .from("assets")
-    .select("id, content_hash")
-    .eq("project_id", projectId)
-    .in("id", uniqueIds);
-  throwOnError(error, "contentHashesForAssets");
+  const data = await runQuery(
+    "store.contentHashesForAssets",
+    db
+      .from("assets")
+      .select("id, content_hash")
+      .eq("project_id", projectId)
+      .in("id", uniqueIds)
+  );
 
   const rows = (data ?? []) as Array<{ id: string; content_hash: string | null }>;
   return new Map(rows.map((row) => [row.id, row.content_hash]));
@@ -1311,15 +1311,16 @@ async function getAssetRow(
   assetId: string,
   context: string
 ): Promise<AssetRow> {
-  const { data, error } = await db
-    .from("assets")
-    .select("*")
-    .eq("id", assetId)
-    .eq("project_id", projectId)
-    .eq("workspace_id", workspaceId)
-    .maybeSingle();
-  if (isNoRows(error)) throw notFound(`Asset not found: ${assetId}`);
-  throwOnError(error, context);
+  const data = await runQuery(
+    `store.${context}`,
+    db
+      .from("assets")
+      .select("*")
+      .eq("id", assetId)
+      .eq("project_id", projectId)
+      .eq("workspace_id", workspaceId)
+      .maybeSingle()
+  );
   if (!data) throw notFound(`Asset not found: ${assetId}`);
   return data as AssetRow;
 }
@@ -1406,9 +1407,8 @@ async function ensureWorkspaceByNaturalKey(
     "ownerId" in match
       ? query.eq("owner_id", match.ownerId)
       : query.is("owner_id", null).eq("name", match.localName);
-  const existing = await scoped.maybeSingle();
-  throwOnError(existing.error, "ensureWorkspace select");
-  if (existing.data) return mapWorkspace(existing.data as WorkspaceRow);
+  const existing = await runQuery("store.ensureWorkspace select", scoped.maybeSingle());
+  if (existing) return mapWorkspace(existing as WorkspaceRow);
 
   const now = new Date().toISOString();
   const inserted = await db
@@ -1432,9 +1432,9 @@ async function ensureWorkspaceByNaturalKey(
         ? rereadQuery.eq("owner_id", match.ownerId)
         : rereadQuery.is("owner_id", null).eq("name", match.localName);
     const reread = await rescoped.maybeSingle();
-    throwOnError(reread.error, "ensureWorkspace reread");
+    if (reread.error) throw databaseError("store.ensureWorkspace reread", reread.error);
     if (reread.data) return mapWorkspace(reread.data as WorkspaceRow);
-    throwOnError(inserted.error, "ensureWorkspace insert");
+    throw databaseError("store.ensureWorkspace insert", inserted.error);
   }
   return mapWorkspace(inserted.data as WorkspaceRow);
 }
@@ -1464,21 +1464,23 @@ export async function createProject(input: {
   const now = new Date().toISOString();
   const visibility = await defaultVisibilityForWorkspace(db, input.workspaceId);
 
-  const insertedProject = await db
-    .from("projects")
-    .insert({
-      schema_version: SCHEMA_VERSIONS.project,
-      workspace_id: input.workspaceId,
-      name: input.name,
-      status: "active",
-      visibility,
-      created_at: now,
-      updated_at: now,
-    })
-    .select("*")
-    .single();
-  throwOnError(insertedProject.error, "createProject insert project");
-  const projectRow = insertedProject.data as ProjectRow;
+  const insertedProject = await runQuery(
+    "store.createProject insert project",
+    db
+      .from("projects")
+      .insert({
+        schema_version: SCHEMA_VERSIONS.project,
+        workspace_id: input.workspaceId,
+        name: input.name,
+        status: "active",
+        visibility,
+        created_at: now,
+        updated_at: now,
+      })
+      .select("*")
+      .single()
+  );
+  const projectRow = insertedProject as ProjectRow;
   const projectId = projectRow.id;
 
   let briefVersion: V1BriefVersion | null = null;
@@ -1759,15 +1761,16 @@ export async function getProject(
   projectId: string
 ): Promise<V1Project> {
   const db = getServiceSupabase();
-  const { data, error } = await db
-    .from("projects")
-    .select("*")
-    .eq("id", projectId)
-    .eq("workspace_id", workspaceId)
-    .neq("status", "deleted")
-    .maybeSingle();
-  if (isNoRows(error)) throw notFound(`Project not found: ${projectId}`);
-  throwOnError(error, "getProject");
+  const data = await runQuery(
+    "store.getProject",
+    db
+      .from("projects")
+      .select("*")
+      .eq("id", projectId)
+      .eq("workspace_id", workspaceId)
+      .neq("status", "deleted")
+      .maybeSingle()
+  );
   if (!data) throw notFound(`Project not found: ${projectId}`);
   return mapProjectWithProjection(db, data as ProjectRow);
 }
@@ -1781,15 +1784,16 @@ export async function setProjectPoster(
   assetId: string
 ): Promise<V1Project> {
   const db = getServiceSupabase();
-  const { data, error } = await db
-    .from("projects")
-    .select("*")
-    .eq("id", projectId)
-    .eq("workspace_id", workspaceId)
-    .neq("status", "deleted")
-    .maybeSingle();
-  if (isNoRows(error)) throw notFound(`Project not found: ${projectId}`);
-  throwOnError(error, "setProjectPoster project");
+  const data = await runQuery(
+    "store.setProjectPoster project",
+    db
+      .from("projects")
+      .select("*")
+      .eq("id", projectId)
+      .eq("workspace_id", workspaceId)
+      .neq("status", "deleted")
+      .maybeSingle()
+  );
   if (!data) throw notFound(`Project not found: ${projectId}`);
   const projectRow = data as ProjectRow;
 
@@ -1980,12 +1984,10 @@ async function getStoryboardRow(
     .select("*")
     .eq("project_id", projectId);
   if (storyboardId) query = query.eq("id", storyboardId);
-  const { data, error } = await query
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (isNoRows(error)) return null;
-  throwOnError(error, "getStoryboardRow");
+  const data = await runQuery(
+    "store.getStoryboardRow",
+    query.order("created_at", { ascending: false }).limit(1).maybeSingle()
+  );
   return (data as StoryboardRow | null) ?? null;
 }
 
@@ -1994,15 +1996,16 @@ async function requireProjectRow(
   workspaceId: string,
   projectId: string
 ): Promise<ProjectRow> {
-  const { data, error } = await db
-    .from("projects")
-    .select("*")
-    .eq("id", projectId)
-    .eq("workspace_id", workspaceId)
-    .neq("status", "deleted")
-    .maybeSingle();
-  if (isNoRows(error)) throw notFound(`Project not found: ${projectId}`);
-  throwOnError(error, "requireProjectRow");
+  const data = await runQuery(
+    "store.requireProjectRow",
+    db
+      .from("projects")
+      .select("*")
+      .eq("id", projectId)
+      .eq("workspace_id", workspaceId)
+      .neq("status", "deleted")
+      .maybeSingle()
+  );
   if (!data) throw notFound(`Project not found: ${projectId}`);
   return data as ProjectRow;
 }
@@ -2016,38 +2019,44 @@ export async function getProjectStoryboard(
   const storyboard = await getStoryboardRow(db, projectId);
   if (!storyboard) return null;
 
-  const scenesResult = await db
-    .from("storyboard_scenes")
-    .select("*")
-    .eq("project_id", projectId)
-    .eq("storyboard_id", storyboard.id)
-    .order("scene_index", { ascending: true });
-  throwOnError(scenesResult.error, "getProjectStoryboard scenes");
-  const sceneRows = (scenesResult.data ?? []) as StoryboardSceneRow[];
+  const scenesData = await runQuery(
+    "store.getProjectStoryboard scenes",
+    db
+      .from("storyboard_scenes")
+      .select("*")
+      .eq("project_id", projectId)
+      .eq("storyboard_id", storyboard.id)
+      .order("scene_index", { ascending: true })
+  );
+  const sceneRows = (scenesData ?? []) as StoryboardSceneRow[];
   const sceneIds = sceneRows.map((scene) => scene.id);
 
-  const beatsResult = sceneIds.length
-    ? await db
-        .from("storyboard_beats")
-        .select("*")
-        .eq("project_id", projectId)
-        .in("scene_id", sceneIds)
-        .order("beat_index", { ascending: true })
-    : { data: [], error: null };
-  throwOnError(beatsResult.error, "getProjectStoryboard beats");
-  const beatRows = (beatsResult.data ?? []) as StoryboardBeatRow[];
+  const beatsData = sceneIds.length
+    ? await runQuery(
+        "store.getProjectStoryboard beats",
+        db
+          .from("storyboard_beats")
+          .select("*")
+          .eq("project_id", projectId)
+          .in("scene_id", sceneIds)
+          .order("beat_index", { ascending: true })
+      )
+    : [];
+  const beatRows = (beatsData ?? []) as StoryboardBeatRow[];
   const beatIds = beatRows.map((beat) => beat.id);
 
-  const panelsResult = beatIds.length
-    ? await db
-        .from("storyboard_panels")
-        .select("*")
-        .eq("project_id", projectId)
-        .in("beat_id", beatIds)
-        .order("panel_index", { ascending: true })
-    : { data: [], error: null };
-  throwOnError(panelsResult.error, "getProjectStoryboard panels");
-  const panelRows = (panelsResult.data ?? []) as StoryboardPanelRow[];
+  const panelsData = beatIds.length
+    ? await runQuery(
+        "store.getProjectStoryboard panels",
+        db
+          .from("storyboard_panels")
+          .select("*")
+          .eq("project_id", projectId)
+          .in("beat_id", beatIds)
+          .order("panel_index", { ascending: true })
+      )
+    : [];
+  const panelRows = (panelsData ?? []) as StoryboardPanelRow[];
 
   const panelsByBeat = new Map<string, StoryboardPanel[]>();
   for (const panel of panelRows.map(mapStoryboardPanel)) {
@@ -2125,13 +2134,10 @@ async function assertStoryboardIdAvailable(
 ): Promise<void> {
   assertUuid(storyboardId, "id");
   if (!storyboardId) return;
-  const { data, error } = await db
-    .from("storyboards")
-    .select("id, project_id")
-    .eq("id", storyboardId)
-    .maybeSingle();
-  if (isNoRows(error)) return;
-  throwOnError(error, "assertStoryboardIdAvailable");
+  const data = await runQuery(
+    "store.assertStoryboardIdAvailable",
+    db.from("storyboards").select("id, project_id").eq("id", storyboardId).maybeSingle()
+  );
   if (data && (data as StoryboardRow).project_id !== projectId) {
     throw new ApiError("validation_failed", "Storyboard id belongs to another project.");
   }
@@ -2155,11 +2161,13 @@ async function assertStoryboardRowsAreWritable(input: {
   }
 
   if (sceneIds.length > 0) {
-    const { data, error } = await input.db
-      .from("storyboard_scenes")
-      .select("id, project_id, storyboard_id")
-      .in("id", sceneIds);
-    throwOnError(error, "assertStoryboardRowsAreWritable scenes");
+    const data = await runQuery(
+      "store.assertStoryboardRowsAreWritable scenes",
+      input.db
+        .from("storyboard_scenes")
+        .select("id, project_id, storyboard_id")
+        .in("id", sceneIds)
+    );
     for (const row of (data ?? []) as StoryboardSceneRow[]) {
       if (row.project_id !== input.projectId || row.storyboard_id !== input.storyboardId) {
         throw new ApiError(
@@ -2171,27 +2179,31 @@ async function assertStoryboardRowsAreWritable(input: {
   }
 
   if (beatIds.length === 0) return;
-  const beats = await input.db
-    .from("storyboard_beats")
-    .select("id, project_id, scene_id")
-    .in("id", beatIds);
-  throwOnError(beats.error, "assertStoryboardRowsAreWritable beats");
-  const existingBeatRows = (beats.data ?? []) as Pick<
+  const beatsData = await runQuery(
+    "store.assertStoryboardRowsAreWritable beats",
+    input.db
+      .from("storyboard_beats")
+      .select("id, project_id, scene_id")
+      .in("id", beatIds)
+  );
+  const existingBeatRows = (beatsData ?? []) as Pick<
     StoryboardBeatRow,
     "id" | "project_id" | "scene_id"
   >[];
   const existingBeatSceneIds = [
     ...new Set(existingBeatRows.map((beat) => beat.scene_id)),
   ];
-  const beatScenes = existingBeatSceneIds.length
-    ? await input.db
-        .from("storyboard_scenes")
-        .select("id, project_id, storyboard_id")
-        .in("id", existingBeatSceneIds)
-    : { data: [], error: null };
-  throwOnError(beatScenes.error, "assertStoryboardRowsAreWritable beat scenes");
+  const beatScenesData = existingBeatSceneIds.length
+    ? await runQuery(
+        "store.assertStoryboardRowsAreWritable beat scenes",
+        input.db
+          .from("storyboard_scenes")
+          .select("id, project_id, storyboard_id")
+          .in("id", existingBeatSceneIds)
+      )
+    : [];
   const sceneById = new Map(
-    ((beatScenes.data ?? []) as StoryboardSceneRow[]).map((scene) => [scene.id, scene])
+    ((beatScenesData ?? []) as StoryboardSceneRow[]).map((scene) => [scene.id, scene])
   );
   for (const row of existingBeatRows) {
     const scene = sceneById.get(row.scene_id);
@@ -2216,20 +2228,24 @@ async function restoreStoryboardOrder(
   beats: Array<{ id: string; beatIndex: number }>
 ): Promise<void> {
   for (const scene of scenes) {
-    const { error } = await db
-      .from("storyboard_scenes")
-      .update({ scene_index: scene.sceneIndex })
-      .eq("project_id", projectId)
-      .eq("id", scene.id);
-    throwOnError(error, "restoreStoryboardOrder scene");
+    await runQuery(
+      "store.restoreStoryboardOrder scene",
+      db
+        .from("storyboard_scenes")
+        .update({ scene_index: scene.sceneIndex })
+        .eq("project_id", projectId)
+        .eq("id", scene.id)
+    );
   }
   for (const beat of beats) {
-    const { error } = await db
-      .from("storyboard_beats")
-      .update({ beat_index: beat.beatIndex })
-      .eq("project_id", projectId)
-      .eq("id", beat.id);
-    throwOnError(error, "restoreStoryboardOrder beat");
+    await runQuery(
+      "store.restoreStoryboardOrder beat",
+      db
+        .from("storyboard_beats")
+        .update({ beat_index: beat.beatIndex })
+        .eq("project_id", projectId)
+        .eq("id", beat.id)
+    );
   }
 }
 
@@ -2251,18 +2267,20 @@ export async function saveProjectStoryboard(
     storyboard: input,
   });
   if (!storyboard) {
-    const { data, error } = await db
-      .from("storyboards")
-      .insert({
-        id: storyboardId,
-        project_id: projectId,
-        status: input.status ?? "draft",
-        created_at: now,
-        updated_at: now,
-      })
-      .select("*")
-      .single();
-    throwOnError(error, "saveProjectStoryboard create storyboard");
+    const data = await runQuery(
+      "store.saveProjectStoryboard create storyboard",
+      db
+        .from("storyboards")
+        .insert({
+          id: storyboardId,
+          project_id: projectId,
+          status: input.status ?? "draft",
+          created_at: now,
+          updated_at: now,
+        })
+        .select("*")
+        .single()
+    );
     storyboard = data as StoryboardRow;
   }
 
@@ -2358,73 +2376,91 @@ export async function saveProjectStoryboard(
           .eq("project_id", projectId)
           .eq("id", id)
       );
-      for (const update of updates) throwOnError((await update).error, "saveProjectStoryboard offset scenes");
+      for (const update of updates) {
+        await runQuery("store.saveProjectStoryboard offset scenes", update);
+      }
     }
 
     for (const sceneRow of sceneRows) {
       if (existingScenes.has(sceneRow.id)) {
-        const { error } = await db
-          .from("storyboard_scenes")
-          .update(sceneRow)
-          .eq("project_id", projectId)
-          .eq("id", sceneRow.id);
-        throwOnError(error, "saveProjectStoryboard update scene");
+        await runQuery(
+          "store.saveProjectStoryboard update scene",
+          db
+            .from("storyboard_scenes")
+            .update(sceneRow)
+            .eq("project_id", projectId)
+            .eq("id", sceneRow.id)
+        );
       } else {
-        const { error } = await db.from("storyboard_scenes").insert(sceneRow);
-        throwOnError(error, "saveProjectStoryboard insert scene");
+        await runQuery(
+          "store.saveProjectStoryboard insert scene",
+          db.from("storyboard_scenes").insert(sceneRow)
+        );
       }
     }
 
     const existingBeatIds = [...existingBeats.keys()];
     for (const [index, id] of existingBeatIds.entries()) {
-      const { error } = await db
-        .from("storyboard_beats")
-        .update({ beat_index: 10000 + index })
-        .eq("project_id", projectId)
-        .eq("id", id);
-      throwOnError(error, "saveProjectStoryboard offset beats");
+      await runQuery(
+        "store.saveProjectStoryboard offset beats",
+        db
+          .from("storyboard_beats")
+          .update({ beat_index: 10000 + index })
+          .eq("project_id", projectId)
+          .eq("id", id)
+      );
     }
 
     for (const scene of input.scenes) {
       for (const beatRow of beatRowsByScene.get(scene.id) ?? []) {
         const id = String(beatRow.id);
         if (existingBeats.has(id)) {
-          const { error } = await db
-            .from("storyboard_beats")
-            .update(beatRow)
-            .eq("project_id", projectId)
-            .eq("id", id);
-          throwOnError(error, "saveProjectStoryboard update beat");
+          await runQuery(
+            "store.saveProjectStoryboard update beat",
+            db
+              .from("storyboard_beats")
+              .update(beatRow)
+              .eq("project_id", projectId)
+              .eq("id", id)
+          );
         } else {
-          const { error } = await db.from("storyboard_beats").insert(beatRow);
-          throwOnError(error, "saveProjectStoryboard insert beat");
+          await runQuery(
+            "store.saveProjectStoryboard insert beat",
+            db.from("storyboard_beats").insert(beatRow)
+          );
         }
       }
     }
 
     if (removeBeatIds.length > 0) {
-      const { error } = await db
-        .from("storyboard_beats")
-        .delete()
-        .eq("project_id", projectId)
-        .in("id", removeBeatIds);
-      throwOnError(error, "saveProjectStoryboard remove beats");
+      await runQuery(
+        "store.saveProjectStoryboard remove beats",
+        db
+          .from("storyboard_beats")
+          .delete()
+          .eq("project_id", projectId)
+          .in("id", removeBeatIds)
+      );
     }
     if (removeSceneIds.length > 0) {
-      const { error } = await db
-        .from("storyboard_scenes")
-        .delete()
-        .eq("project_id", projectId)
-        .in("id", removeSceneIds);
-      throwOnError(error, "saveProjectStoryboard remove scenes");
+      await runQuery(
+        "store.saveProjectStoryboard remove scenes",
+        db
+          .from("storyboard_scenes")
+          .delete()
+          .eq("project_id", projectId)
+          .in("id", removeSceneIds)
+      );
     }
 
-    const { error } = await db
-      .from("storyboards")
-      .update({ status: input.status ?? storyboard.status, updated_at: now })
-      .eq("project_id", projectId)
-      .eq("id", storyboard.id);
-    throwOnError(error, "saveProjectStoryboard update storyboard");
+    await runQuery(
+      "store.saveProjectStoryboard update storyboard",
+      db
+        .from("storyboards")
+        .update({ status: input.status ?? storyboard.status, updated_at: now })
+        .eq("project_id", projectId)
+        .eq("id", storyboard.id)
+    );
   } catch (err) {
     await restoreStoryboardOrder(db, projectId, sceneOrderBackup, beatOrderBackup);
     throw err;
@@ -2441,12 +2477,14 @@ export async function listProjects(
   cursor: string | null
 ): Promise<PageResult<V1Project>> {
   const db = getServiceSupabase();
-  const { data, error } = await db
-    .from("projects")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .neq("status", "deleted");
-  throwOnError(error, "listProjects");
+  const data = await runQuery(
+    "store.listProjects",
+    db
+      .from("projects")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .neq("status", "deleted")
+  );
   const all = await Promise.all(
     (data as ProjectRow[]).map((row) => mapProjectWithProjection(db, row))
   );
@@ -2458,12 +2496,14 @@ export async function listPublicProjects(
   cursor: string | null
 ): Promise<PageResult<V1Project>> {
   const db = getServiceSupabase();
-  const { data, error } = await db
-    .from("projects")
-    .select("*")
-    .eq("visibility", "public")
-    .neq("status", "deleted");
-  throwOnError(error, "listPublicProjects");
+  const data = await runQuery(
+    "store.listPublicProjects",
+    db
+      .from("projects")
+      .select("*")
+      .eq("visibility", "public")
+      .neq("status", "deleted")
+  );
   const all = await Promise.all(
     (data as ProjectRow[]).map((row) =>
       mapProjectWithProjection(db, row, { publicOnly: true })
@@ -2531,13 +2571,15 @@ export async function listBriefVersions(
 ): Promise<PageResult<V1BriefVersion>> {
   await getProject(workspaceId, projectId);
   const db = getServiceSupabase();
-  const { data, error } = await db
-    .from("assets")
-    .select("*")
-    .eq("project_id", projectId)
-    .eq("kind", "brief")
-    .eq("media", "data");
-  throwOnError(error, "listBriefVersions");
+  const data = await runQuery(
+    "store.listBriefVersions",
+    db
+      .from("assets")
+      .select("*")
+      .eq("project_id", projectId)
+      .eq("kind", "brief")
+      .eq("media", "data")
+  );
   const all = (data as DataAssetRow[]).map(mapBriefVersion);
   return paginate(all, limit, cursor);
 }
@@ -2562,8 +2604,7 @@ export async function listStudioDrafts(
     ? query.eq("local_actor_id", actor.id).is("owner_user_id", null)
     : query.eq("owner_user_id", actor.id);
 
-  const { data, error } = await query;
-  throwOnError(error, "listStudioDrafts");
+  const data = await runQuery("store.listStudioDrafts", query);
   const all = (data as StudioDraftRow[]).map(mapStudioDraftSummary);
   return paginateByUpdatedAt(all, limit, cursor);
 }
@@ -2590,12 +2631,10 @@ export async function createStudioDraft(input: {
     updated_at: now,
   };
 
-  const { data, error } = await db
-    .from("studio_drafts")
-    .insert(row)
-    .select("*")
-    .single();
-  throwOnError(error, "createStudioDraft");
+  const data = await runQuery(
+    "store.createStudioDraft",
+    db.from("studio_drafts").insert(row).select("*").single()
+  );
   return mapStudioDraft(data as StudioDraftRow);
 }
 
@@ -2614,9 +2653,7 @@ export async function getStudioDraft(
     ? query.eq("local_actor_id", actor.id).is("owner_user_id", null)
     : query.eq("owner_user_id", actor.id);
 
-  const { data, error } = await query.maybeSingle();
-  if (isNoRows(error)) throw notFound(`Studio draft not found: ${draftId}`);
-  throwOnError(error, "getStudioDraft");
+  const data = await runQuery("store.getStudioDraft", query.maybeSingle());
   if (!data) throw notFound(`Studio draft not found: ${draftId}`);
   return mapStudioDraft(data as StudioDraftRow);
 }
@@ -2647,9 +2684,7 @@ export async function updateStudioDraft(input: {
     ? query.eq("local_actor_id", input.actor.id).is("owner_user_id", null)
     : query.eq("owner_user_id", input.actor.id);
 
-  const { data, error } = await query.select("*").maybeSingle();
-  if (isNoRows(error)) throw notFound(`Studio draft not found: ${input.draftId}`);
-  throwOnError(error, "updateStudioDraft");
+  const data = await runQuery("store.updateStudioDraft", query.select("*").maybeSingle());
   if (!data) throw notFound(`Studio draft not found: ${input.draftId}`);
   return mapStudioDraft(data as StudioDraftRow);
 }
@@ -2669,9 +2704,7 @@ export async function deleteStudioDraft(
     ? query.eq("local_actor_id", actor.id).is("owner_user_id", null)
     : query.eq("owner_user_id", actor.id);
 
-  const { data, error } = await query.select("id").maybeSingle();
-  if (isNoRows(error)) throw notFound(`Studio draft not found: ${draftId}`);
-  throwOnError(error, "deleteStudioDraft");
+  const data = await runQuery("store.deleteStudioDraft", query.select("id").maybeSingle());
   if (!data) throw notFound(`Studio draft not found: ${draftId}`);
 }
 
@@ -2692,12 +2725,10 @@ export async function addAsset(
   if (options.createdByActionId) {
     row.created_by_action_id = options.createdByActionId;
   }
-  const { data, error } = await db
-    .from("assets")
-    .insert(row)
-    .select("*")
-    .single();
-  throwOnError(error, "addAsset");
+  const data = await runQuery(
+    "store.addAsset",
+    db.from("assets").insert(row).select("*").single()
+  );
   return mapAsset(data as AssetRow);
 }
 
@@ -2726,27 +2757,28 @@ export async function updateAsset(
   current.updatedAt = new Date().toISOString();
 
   const row = assetToRow(current);
-  const { data, error } = await db
-    .from("assets")
-    .update({
-      status: row.status,
-      filename: row.filename,
-      remote_url: row.remote_url,
-      storage_key: row.storage_key,
-      storage_bucket: row.storage_bucket,
-      duration_sec: row.duration_sec,
-      description: row.description,
-      context: row.context,
-      semantic_analysis: row.semantic_analysis,
-      updated_at: row.updated_at,
-    })
-    .eq("id", assetId)
-    .eq("project_id", projectId)
-    .eq("workspace_id", workspaceId)
-    .select("*")
-    .maybeSingle();
-  if (isNoRows(error)) throw notFound(`Asset not found: ${assetId}`);
-  throwOnError(error, "updateAsset");
+  const data = await runQuery(
+    "store.updateAsset",
+    db
+      .from("assets")
+      .update({
+        status: row.status,
+        filename: row.filename,
+        remote_url: row.remote_url,
+        storage_key: row.storage_key,
+        storage_bucket: row.storage_bucket,
+        duration_sec: row.duration_sec,
+        description: row.description,
+        context: row.context,
+        semantic_analysis: row.semantic_analysis,
+        updated_at: row.updated_at,
+      })
+      .eq("id", assetId)
+      .eq("project_id", projectId)
+      .eq("workspace_id", workspaceId)
+      .select("*")
+      .maybeSingle()
+  );
   if (!data) throw notFound(`Asset not found: ${assetId}`);
   return mapAsset(data as AssetRow);
 }
@@ -2760,27 +2792,29 @@ export async function setAssetVisibility(
 ): Promise<V1Asset> {
   const db = getServiceSupabase();
 
-  const { data: projectData, error: projectError } = await db
-    .from("projects")
-    .select("*")
-    .eq("id", projectId)
-    .eq("workspace_id", workspaceId)
-    .neq("status", "deleted")
-    .maybeSingle();
-  if (isNoRows(projectError)) throw notFound(`Project not found: ${projectId}`);
-  throwOnError(projectError, "setAssetVisibility project");
+  const projectData = await runQuery(
+    "store.setAssetVisibility project",
+    db
+      .from("projects")
+      .select("*")
+      .eq("id", projectId)
+      .eq("workspace_id", workspaceId)
+      .neq("status", "deleted")
+      .maybeSingle()
+  );
   if (!projectData) throw notFound(`Project not found: ${projectId}`);
   const project = projectData as ProjectRow;
 
-  const { data: currentData, error: currentError } = await db
-    .from("assets")
-    .select("*")
-    .eq("id", assetId)
-    .eq("project_id", projectId)
-    .eq("workspace_id", workspaceId)
-    .maybeSingle();
-  if (isNoRows(currentError)) throw notFound(`Asset not found: ${assetId}`);
-  throwOnError(currentError, "setAssetVisibility current");
+  const currentData = await runQuery(
+    "store.setAssetVisibility current",
+    db
+      .from("assets")
+      .select("*")
+      .eq("id", assetId)
+      .eq("project_id", projectId)
+      .eq("workspace_id", workspaceId)
+      .maybeSingle()
+  );
   if (!currentData) throw notFound(`Asset not found: ${assetId}`);
   const current = currentData as AssetRow;
 
@@ -2816,20 +2850,21 @@ export async function setAssetVisibility(
           : "private",
       store: options.store,
       persistStorageBucket: async (storageBucket) => {
-        const { data, error } = await db
-          .from("assets")
-          .update({
-            visibility,
-            storage_bucket: storageBucket,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", assetId)
-          .eq("project_id", projectId)
-          .eq("workspace_id", workspaceId)
-          .select("*")
-          .maybeSingle();
-        if (isNoRows(error)) throw notFound(`Asset not found: ${assetId}`);
-        throwOnError(error, "setAssetVisibility update");
+        const data = await runQuery(
+          "store.setAssetVisibility update",
+          db
+            .from("assets")
+            .update({
+              visibility,
+              storage_bucket: storageBucket,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", assetId)
+            .eq("project_id", projectId)
+            .eq("workspace_id", workspaceId)
+            .select("*")
+            .maybeSingle()
+        );
         if (!data) throw notFound(`Asset not found: ${assetId}`);
         updated = data as AssetRow;
       },
@@ -2860,25 +2895,28 @@ export async function setProjectVisibility(
 ): Promise<V1Project> {
   const db = getServiceSupabase();
 
-  const { data: projectData, error: projectError } = await db
-    .from("projects")
-    .select("*")
-    .eq("id", projectId)
-    .eq("workspace_id", workspaceId)
-    .neq("status", "deleted")
-    .maybeSingle();
-  if (isNoRows(projectError)) throw notFound(`Project not found: ${projectId}`);
-  throwOnError(projectError, "setProjectVisibility project");
+  const projectData = await runQuery(
+    "store.setProjectVisibility project",
+    db
+      .from("projects")
+      .select("*")
+      .eq("id", projectId)
+      .eq("workspace_id", workspaceId)
+      .neq("status", "deleted")
+      .maybeSingle()
+  );
   if (!projectData) throw notFound(`Project not found: ${projectId}`);
   const project = projectData as ProjectRow;
 
-  const { data: assetData, error: assetError } = await db
-    .from("assets")
-    .select("*")
-    .eq("project_id", projectId)
-    .eq("workspace_id", workspaceId)
-    .neq("media", "data");
-  throwOnError(assetError, "setProjectVisibility assets");
+  const assetData = await runQuery(
+    "store.setProjectVisibility assets",
+    db
+      .from("assets")
+      .select("*")
+      .eq("project_id", projectId)
+      .eq("workspace_id", workspaceId)
+      .neq("media", "data")
+  );
   const assets = (assetData ?? []) as AssetRow[];
 
   const action = await createAction({
@@ -2912,30 +2950,33 @@ export async function setProjectVisibility(
             : "private",
         store: options.store,
         persistStorageBucket: async (storageBucket) => {
-          const { error } = await db
-            .from("assets")
-            .update({
-              storage_bucket: storageBucket,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", asset.id)
-            .eq("project_id", projectId)
-            .eq("workspace_id", workspaceId);
-          throwOnError(error, "setProjectVisibility asset bucket");
+          await runQuery(
+            "store.setProjectVisibility asset bucket",
+            db
+              .from("assets")
+              .update({
+                storage_bucket: storageBucket,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", asset.id)
+              .eq("project_id", projectId)
+              .eq("workspace_id", workspaceId)
+          );
         },
       });
     }
 
-    const { data, error } = await db
-      .from("projects")
-      .update({ visibility, updated_at: new Date().toISOString() })
-      .eq("id", projectId)
-      .eq("workspace_id", workspaceId)
-      .neq("status", "deleted")
-      .select("*")
-      .maybeSingle();
-    if (isNoRows(error)) throw notFound(`Project not found: ${projectId}`);
-    throwOnError(error, "setProjectVisibility update project");
+    const data = await runQuery(
+      "store.setProjectVisibility update project",
+      db
+        .from("projects")
+        .update({ visibility, updated_at: new Date().toISOString() })
+        .eq("id", projectId)
+        .eq("workspace_id", workspaceId)
+        .neq("status", "deleted")
+        .select("*")
+        .maybeSingle()
+    );
     if (!data) throw notFound(`Project not found: ${projectId}`);
 
     await updateAction(action.id, {
@@ -2979,13 +3020,15 @@ export async function listAssets(
 ): Promise<PageResult<V1Asset>> {
   await getProject(workspaceId, projectId);
   const db = getServiceSupabase();
-  const { data, error } = await db
-    .from("assets")
-    .select("*")
-    .eq("project_id", projectId)
-    .eq("workspace_id", workspaceId)
-    .neq("media", "data");
-  throwOnError(error, "listAssets");
+  const data = await runQuery(
+    "store.listAssets",
+    db
+      .from("assets")
+      .select("*")
+      .eq("project_id", projectId)
+      .eq("workspace_id", workspaceId)
+      .neq("media", "data")
+  );
   const all = await mapAssets(data as AssetRow[]);
   return paginate(all, limit, cursor);
 }
@@ -3064,15 +3107,16 @@ export async function getAssetMediaUrls(
   assetId: string
 ): Promise<AssetMediaUrls> {
   const db = getServiceSupabase();
-  const { data, error } = await db
-    .from("assets")
-    .select("*")
-    .eq("id", assetId)
-    .eq("workspace_id", workspaceId)
-    .neq("media", "data")
-    .maybeSingle();
-  if (isNoRows(error)) throw notFound(`Asset not found: ${assetId}`);
-  throwOnError(error, "getAssetMediaUrls");
+  const data = await runQuery(
+    "store.getAssetMediaUrls",
+    db
+      .from("assets")
+      .select("*")
+      .eq("id", assetId)
+      .eq("workspace_id", workspaceId)
+      .neq("media", "data")
+      .maybeSingle()
+  );
   if (!data) throw notFound(`Asset not found: ${assetId}`);
 
   const row = data as AssetRow;
@@ -3095,8 +3139,7 @@ export async function listWorkspaceAssets(
   if (opts.kind) query = query.eq("media", opts.kind);
   if (opts.projectId) query = query.eq("project_id", opts.projectId);
 
-  const { data, error } = await query;
-  throwOnError(error, "listWorkspaceAssets");
+  const data = await runQuery("store.listWorkspaceAssets", query);
   const filtered = (data as WorkspaceAssetJoinRow[]).filter((row) => {
     const isGenerated = row.params?.provenance != null;
     if (opts.source === "generated") return isGenerated;
@@ -3164,12 +3207,14 @@ async function listWorkspaceProjectRefs(
   workspaceId: string
 ): Promise<WorkspaceProjectRef[]> {
   const db = getServiceSupabase();
-  const { data, error } = await db
-    .from("projects")
-    .select("id, name")
-    .eq("workspace_id", workspaceId)
-    .neq("status", "deleted");
-  throwOnError(error, "listWorkspaceProjectRefs");
+  const data = await runQuery(
+    "store.listWorkspaceProjectRefs",
+    db
+      .from("projects")
+      .select("id, name")
+      .eq("workspace_id", workspaceId)
+      .neq("status", "deleted")
+  );
   return ((data as { id: string; name: string }[]) ?? []).map((row) => ({
     id: row.id,
     name: row.name ?? "Untitled project",
@@ -3354,26 +3399,25 @@ async function selectedMediaAsset(
     selectionQuery = selectionQuery.is("slot_owner_lineage_id", null);
   }
 
-  const selected = await selectionQuery
-    .order("seq", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (isNoRows(selected.error)) return null;
-  throwOnError(selected.error, `selectedMediaAsset ${slotRole}`);
+  const selected = await runQuery(
+    `store.selectedMediaAsset ${slotRole}`,
+    selectionQuery.order("seq", { ascending: false }).limit(1).maybeSingle()
+  );
 
-  const activeAssetId = (selected.data as CurrentSelectionRow | null)?.active_asset_id;
+  const activeAssetId = (selected as CurrentSelectionRow | null)?.active_asset_id;
   if (!activeAssetId) return null;
 
-  const { data, error } = await db
-    .from("assets")
-    .select("*")
-    .eq("project_id", projectId)
-    .eq("id", activeAssetId)
-    .eq("media", media)
-    .eq("status", "ready")
-    .maybeSingle();
-  if (isNoRows(error)) return null;
-  throwOnError(error, `selectedMediaAsset asset ${slotRole}`);
+  const data = await runQuery(
+    `store.selectedMediaAsset asset ${slotRole}`,
+    db
+      .from("assets")
+      .select("*")
+      .eq("project_id", projectId)
+      .eq("id", activeAssetId)
+      .eq("media", media)
+      .eq("status", "ready")
+      .maybeSingle()
+  );
   return (data as AssetRow | null) ?? null;
 }
 
@@ -3383,19 +3427,20 @@ async function latestReadyMediaAsset(
   kind: GraphAssetKind,
   media: AssetMedia
 ): Promise<AssetRow | null> {
-  const { data, error } = await db
-    .from("assets")
-    .select("*")
-    .eq("project_id", projectId)
-    .eq("kind", kind)
-    .eq("media", media)
-    .eq("status", "ready")
-    .order("created_at", { ascending: false })
-    .order("id", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (isNoRows(error)) return null;
-  throwOnError(error, `latestReadyMediaAsset ${kind}`);
+  const data = await runQuery(
+    `store.latestReadyMediaAsset ${kind}`,
+    db
+      .from("assets")
+      .select("*")
+      .eq("project_id", projectId)
+      .eq("kind", kind)
+      .eq("media", media)
+      .eq("status", "ready")
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+  );
   return (data as AssetRow | null) ?? null;
 }
 
@@ -3404,30 +3449,33 @@ async function renderForCutAsset(
   projectId: string,
   cutAssetId: string
 ): Promise<AssetRow | null> {
-  const edgeRows = await db
-    .from("asset_edges")
-    .select("from_id")
-    .eq("project_id", projectId)
-    .eq("to_id", cutAssetId);
-  throwOnError(edgeRows.error, "renderForCutAsset edges");
+  const edgeData = await runQuery(
+    "store.renderForCutAsset edges",
+    db
+      .from("asset_edges")
+      .select("from_id")
+      .eq("project_id", projectId)
+      .eq("to_id", cutAssetId)
+  );
 
-  const renderIds = [...new Set(((edgeRows.data ?? []) as Array<{ from_id: string }>).map((row) => row.from_id))];
+  const renderIds = [...new Set(((edgeData ?? []) as Array<{ from_id: string }>).map((row) => row.from_id))];
   if (renderIds.length === 0) return null;
 
-  const { data, error } = await db
-    .from("assets")
-    .select("*")
-    .eq("project_id", projectId)
-    .eq("kind", "render")
-    .eq("media", "video")
-    .eq("status", "ready")
-    .in("id", renderIds)
-    .order("created_at", { ascending: false })
-    .order("id", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (isNoRows(error)) return null;
-  throwOnError(error, "renderForCutAsset render");
+  const data = await runQuery(
+    "store.renderForCutAsset render",
+    db
+      .from("assets")
+      .select("*")
+      .eq("project_id", projectId)
+      .eq("kind", "render")
+      .eq("media", "video")
+      .eq("status", "ready")
+      .in("id", renderIds)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+  );
   return (data as AssetRow | null) ?? null;
 }
 
@@ -3556,8 +3604,7 @@ export async function listPublicAssets(
     query = query.eq("media", kind);
   }
 
-  const { data, error } = await query;
-  throwOnError(error, "listPublicAssets");
+  const data = await runQuery("store.listPublicAssets", query);
   const assets = await mapAssets(data as AssetWithProjectRow[]);
   return paginate(assets, limit, cursor);
 }
@@ -3576,23 +3623,26 @@ export async function searchPublicContent(
   const normalized = searchQuery.trim();
   if (!normalized) return { items: [], nextCursor: null };
 
-  const [projectsResult, assetsResult] = await Promise.all([
-    db.rpc("search_public_projects", { search_query: normalized }),
-    db.rpc("search_public_assets", {
-      search_query: normalized,
-      media_filter: kind ?? null,
-    }),
+  const [projectsData, assetsData] = await Promise.all([
+    runQuery(
+      "store.searchPublicContent projects",
+      db.rpc("search_public_projects", { search_query: normalized })
+    ),
+    runQuery(
+      "store.searchPublicContent assets",
+      db.rpc("search_public_assets", {
+        search_query: normalized,
+        media_filter: kind ?? null,
+      })
+    ),
   ]);
 
-  throwOnError(projectsResult.error, "searchPublicContent projects");
-  throwOnError(assetsResult.error, "searchPublicContent assets");
-
-  const projectItems: DiscoverSearchItem[] = (projectsResult.data as ProjectRow[])
+  const projectItems: DiscoverSearchItem[] = (projectsData as ProjectRow[])
     .map((project) => {
       const item = mapProject(project);
       return { type: "project", item, id: `project:${item.id}`, createdAt: item.createdAt };
     });
-  const publicAssets = await mapAssets(assetsResult.data as AssetRow[]);
+  const publicAssets = await mapAssets(assetsData as AssetRow[]);
   const assetItems: DiscoverSearchItem[] = publicAssets.map((item) => ({
     type: "asset",
     item,
@@ -3619,13 +3669,15 @@ export async function listCharacterAnchorAssets(
 ): Promise<PageResult<V1Asset>> {
   await getProject(workspaceId, projectId);
   const db = getServiceSupabase();
-  const { data, error } = await db
-    .from("assets")
-    .select("*")
-    .eq("project_id", projectId)
-    .eq("workspace_id", workspaceId)
-    .neq("media", "data");
-  throwOnError(error, "listCharacterAnchorAssets");
+  const data = await runQuery(
+    "store.listCharacterAnchorAssets",
+    db
+      .from("assets")
+      .select("*")
+      .eq("project_id", projectId)
+      .eq("workspace_id", workspaceId)
+      .neq("media", "data")
+  );
   const mapped = await mapAssets(data as AssetRow[]);
   const anchors = mapped.filter(isCharacterAnchorAsset);
   return paginate(anchors, limit, cursor);
@@ -3747,12 +3799,10 @@ export async function saveCompositionPlan(
   // Omit `id` so Postgres assigns it; the caller's composition.id is a placeholder.
   const { id: _omit, ...row } = compositionToRow(composition);
   void _omit;
-  const { data, error } = await db
-    .from("compositions")
-    .insert(row)
-    .select("*")
-    .single();
-  throwOnError(error, "saveCompositionPlan");
+  const data = await runQuery(
+    "store.saveCompositionPlan",
+    db.from("compositions").insert(row).select("*").single()
+  );
   return mapComposition(data as CompositionRow);
 }
 
@@ -3763,14 +3813,15 @@ export async function getCompositionPlan(
 ): Promise<ContractCompositionPlan> {
   await getProject(workspaceId, projectId);
   const db = getServiceSupabase();
-  const { data, error } = await db
-    .from("compositions")
-    .select("*")
-    .eq("id", compositionId)
-    .eq("project_id", projectId)
-    .maybeSingle();
-  if (isNoRows(error)) throw notFound(`Composition not found: ${compositionId}`);
-  throwOnError(error, "getCompositionPlan");
+  const data = await runQuery(
+    "store.getCompositionPlan",
+    db
+      .from("compositions")
+      .select("*")
+      .eq("id", compositionId)
+      .eq("project_id", projectId)
+      .maybeSingle()
+  );
   if (!data) throw notFound(`Composition not found: ${compositionId}`);
   return mapComposition(data as CompositionRow);
 }
@@ -3783,11 +3834,10 @@ export async function listCompositionPlans(
 ): Promise<PageResult<ContractCompositionPlan>> {
   await getProject(workspaceId, projectId);
   const db = getServiceSupabase();
-  const { data, error } = await db
-    .from("compositions")
-    .select("*")
-    .eq("project_id", projectId);
-  throwOnError(error, "listCompositionPlans");
+  const data = await runQuery(
+    "store.listCompositionPlans",
+    db.from("compositions").select("*").eq("project_id", projectId)
+  );
   const all = (data as CompositionRow[]).map(mapComposition);
   return paginate(all, limit, cursor);
 }
@@ -3826,12 +3876,10 @@ export async function createJob(input: {
   const db = getServiceSupabase();
   const { id: _omit, ...row } = jobToRow(job);
   void _omit;
-  const { data, error } = await db
-    .from("jobs")
-    .insert(row)
-    .select("*")
-    .single();
-  throwOnError(error, "createJob");
+  const data = await runQuery(
+    "store.createJob",
+    db.from("jobs").insert(row).select("*").single()
+  );
   return mapJob(data as JobRow);
 }
 
@@ -3842,15 +3890,16 @@ export async function getJob(
 ): Promise<Job> {
   await getProject(workspaceId, projectId);
   const db = getServiceSupabase();
-  const { data, error } = await db
-    .from("jobs")
-    .select("*")
-    .eq("id", jobId)
-    .eq("project_id", projectId)
-    .eq("workspace_id", workspaceId)
-    .maybeSingle();
-  if (isNoRows(error)) throw notFound(`Job not found: ${jobId}`);
-  throwOnError(error, "getJob");
+  const data = await runQuery(
+    "store.getJob",
+    db
+      .from("jobs")
+      .select("*")
+      .eq("id", jobId)
+      .eq("project_id", projectId)
+      .eq("workspace_id", workspaceId)
+      .maybeSingle()
+  );
   if (!data) throw notFound(`Job not found: ${jobId}`);
   return mapJob(data as JobRow);
 }
@@ -3872,8 +3921,7 @@ export async function listJobs(
   if (type !== null) {
     query = query.eq("type", type);
   }
-  const { data, error } = await query;
-  throwOnError(error, "listJobs");
+  const data = await runQuery("store.listJobs", query);
   const all = (data as JobRow[]).map(mapJob);
   return paginate(all, limit, cursor);
 }
@@ -3884,10 +3932,10 @@ export async function getProjectManifest(
 ): Promise<unknown> {
   await getProject(workspaceId, projectId);
   const db = getRequestSupabaseOrService();
-  const { data, error } = await db.rpc("project_manifest", {
-    p_project_id: projectId,
-  });
-  throwOnError(error, "getProjectManifest");
+  const data = await runQuery(
+    "store.getProjectManifest",
+    db.rpc("project_manifest", { p_project_id: projectId })
+  );
   return data ?? {};
 }
 
@@ -3899,27 +3947,26 @@ export async function getStaleCandidates(
   await getProject(workspaceId, projectId);
   const db = getRequestSupabaseOrService();
 
-  const changed = await db
-    .from("assets")
-    .select("id, ref, kind, status, role, lineage_id, version, content_hash, inputs_fingerprint")
-    .eq("id", changedAssetId)
-    .eq("project_id", projectId)
-    .eq("workspace_id", workspaceId)
-    .maybeSingle();
-  if (isNoRows(changed.error)) {
+  const changedData = await runQuery(
+    "store.getStaleCandidates.changedAsset",
+    db
+      .from("assets")
+      .select("id, ref, kind, status, role, lineage_id, version, content_hash, inputs_fingerprint")
+      .eq("id", changedAssetId)
+      .eq("project_id", projectId)
+      .eq("workspace_id", workspaceId)
+      .maybeSingle()
+  );
+  if (!changedData) {
     throw notFound(`Asset not found: ${changedAssetId}`);
   }
-  throwOnError(changed.error, "getStaleCandidates.changedAsset");
-  if (!changed.data) {
-    throw notFound(`Asset not found: ${changedAssetId}`);
-  }
-  const changedAsset = changed.data as GraphAssetSummaryRow;
+  const changedAsset = changedData as GraphAssetSummaryRow;
 
-  const downstream = await db.rpc("downstream_assets", {
-    p_asset_id: changedAssetId,
-  });
-  throwOnError(downstream.error, "getStaleCandidates.downstreamAssets");
-  const rows = ((downstream.data ?? []) as DownstreamAssetRow[]).sort(
+  const downstreamData = await runQuery(
+    "store.getStaleCandidates.downstreamAssets",
+    db.rpc("downstream_assets", { p_asset_id: changedAssetId })
+  );
+  const rows = ((downstreamData ?? []) as DownstreamAssetRow[]).sort(
     (a, b) => a.depth - b.depth || a.asset_id.localeCompare(b.asset_id)
   );
   const candidateIds = rows.map((row) => row.asset_id);
@@ -3935,30 +3982,34 @@ export async function getStaleCandidates(
     };
   }
 
-  const [assetsResult, selectionsResult] = await Promise.all([
-    db
-      .from("assets")
-      .select("id, ref, kind, status, role, lineage_id, version, content_hash, inputs_fingerprint")
-      .eq("project_id", projectId)
-      .eq("workspace_id", workspaceId)
-      .in("id", candidateIds),
-    db
-      .from("current_selections")
-      .select("slot_owner_lineage_id, slot_role, seq, active_asset_id")
-      .eq("project_id", projectId)
-      .in("active_asset_id", candidateIds),
+  const [assetsData, selectionsData] = await Promise.all([
+    runQuery(
+      "store.getStaleCandidates.assets",
+      db
+        .from("assets")
+        .select("id, ref, kind, status, role, lineage_id, version, content_hash, inputs_fingerprint")
+        .eq("project_id", projectId)
+        .eq("workspace_id", workspaceId)
+        .in("id", candidateIds)
+    ),
+    runQuery(
+      "store.getStaleCandidates.selections",
+      db
+        .from("current_selections")
+        .select("slot_owner_lineage_id, slot_role, seq, active_asset_id")
+        .eq("project_id", projectId)
+        .in("active_asset_id", candidateIds)
+    ),
   ]);
-  throwOnError(assetsResult.error, "getStaleCandidates.assets");
-  throwOnError(selectionsResult.error, "getStaleCandidates.selections");
 
   const assetsById = new Map(
-    ((assetsResult.data ?? []) as GraphAssetSummaryRow[]).map((asset) => [
+    ((assetsData ?? []) as GraphAssetSummaryRow[]).map((asset) => [
       asset.id,
       asset,
     ])
   );
   const selectionsByAssetId = new Map<string, AssetGraphSelectionRef[]>();
-  for (const selection of (selectionsResult.data ?? []) as CurrentSelectionSummaryRow[]) {
+  for (const selection of (selectionsData ?? []) as CurrentSelectionSummaryRow[]) {
     const refs = selectionsByAssetId.get(selection.active_asset_id) ?? [];
     refs.push({
       slotOwnerLineageId: selection.slot_owner_lineage_id,
@@ -4025,14 +4076,15 @@ export async function findIdempotencyRecord(
   key: string
 ): Promise<IdempotencyRecord | undefined> {
   const db = getServiceSupabase();
-  const { data, error } = await db
-    .from("idempotency")
-    .select("*")
-    .eq("scope", scope)
-    .eq("key", key)
-    .maybeSingle();
-  if (isNoRows(error)) return undefined;
-  throwOnError(error, "findIdempotencyRecord");
+  const data = await runQuery(
+    "store.findIdempotencyRecord",
+    db
+      .from("idempotency")
+      .select("*")
+      .eq("scope", scope)
+      .eq("key", key)
+      .maybeSingle()
+  );
   if (!data) return undefined;
   return mapIdempotency(data as IdempotencyRow);
 }
@@ -4043,9 +4095,9 @@ export async function saveIdempotencyRecord(
   const db = getServiceSupabase();
   // First write wins (matching the JSON store's "does not duplicate" semantics):
   // ignore the conflict on the (scope, key) primary key.
-  const { error } = await db
-    .from("idempotency")
-    .upsert(
+  await runQuery(
+    "store.saveIdempotencyRecord",
+    db.from("idempotency").upsert(
       {
         scope: record.scope,
         key: record.key,
@@ -4055,6 +4107,6 @@ export async function saveIdempotencyRecord(
         created_at: record.createdAt,
       },
       { onConflict: "scope,key", ignoreDuplicates: true }
-    );
-  throwOnError(error, "saveIdempotencyRecord");
+    )
+  );
 }

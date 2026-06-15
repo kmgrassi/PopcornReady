@@ -4,7 +4,7 @@ import type { AuthContext } from "./auth";
 import { ApiError, notFound } from "./errors";
 import { getProject } from "./store";
 import { getServiceSupabase } from "@/lib/supabase/clients";
-import { isMissingRow, throwDatabaseError } from "@/lib/supabase/db-errors";
+import { runQuery } from "@/lib/supabase/db-errors";
 
 type StoryboardStatus =
   | "draft"
@@ -198,9 +198,6 @@ function iso(value: string | null | undefined): string {
   if (!value) return new Date(0).toISOString();
   return new Date(value).toISOString();
 }
-
-const throwOnError = (error: Parameters<typeof throwDatabaseError>[1], context: string) =>
-  throwDatabaseError(`storyboards.${context}`, error);
 
 function bodyObject(body: unknown): Record<string, unknown> {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
@@ -399,8 +396,10 @@ async function defaultVisibilityForWorkspace(
   db: SupabaseClient,
   workspaceId: string
 ): Promise<"public" | "private"> {
-  const { data, error } = await db.rpc("owner_tier", { ws_id: workspaceId });
-  throwOnError(error, "defaultVisibilityForWorkspace");
+  const data = await runQuery(
+    "storyboards.defaultVisibilityForWorkspace",
+    db.rpc("owner_tier", { ws_id: workspaceId })
+  );
   return data === "paid" ? "private" : "public";
 }
 
@@ -409,14 +408,16 @@ async function getStoryboardRow(
   projectId: string,
   storyboardId: string
 ): Promise<StoryboardRow> {
-  const { data, error } = await db
-    .from("storyboards")
-    .select("*")
-    .eq("project_id", projectId)
-    .eq("id", storyboardId)
-    .maybeSingle();
-  if (isMissingRow(error) || !data) throw notFound(`Storyboard not found: ${storyboardId}`);
-  throwOnError(error, "getStoryboard");
+  const data = await runQuery(
+    "storyboards.getStoryboard",
+    db
+      .from("storyboards")
+      .select("*")
+      .eq("project_id", projectId)
+      .eq("id", storyboardId)
+      .maybeSingle()
+  );
+  if (!data) throw notFound(`Storyboard not found: ${storyboardId}`);
   return data as StoryboardRow;
 }
 
@@ -426,15 +427,17 @@ async function getSceneRow(
   storyboardId: string,
   sceneId: string
 ): Promise<StoryboardSceneRow> {
-  const { data, error } = await db
-    .from("storyboard_scenes")
-    .select("*")
-    .eq("project_id", projectId)
-    .eq("storyboard_id", storyboardId)
-    .eq("id", sceneId)
-    .maybeSingle();
-  if (isMissingRow(error) || !data) throw notFound(`Storyboard scene not found: ${sceneId}`);
-  throwOnError(error, "getScene");
+  const data = await runQuery(
+    "storyboards.getScene",
+    db
+      .from("storyboard_scenes")
+      .select("*")
+      .eq("project_id", projectId)
+      .eq("storyboard_id", storyboardId)
+      .eq("id", sceneId)
+      .maybeSingle()
+  );
+  if (!data) throw notFound(`Storyboard scene not found: ${sceneId}`);
   return data as StoryboardSceneRow;
 }
 
@@ -444,15 +447,17 @@ async function getBeatRow(
   sceneId: string,
   beatId: string
 ): Promise<StoryboardBeatRow> {
-  const { data, error } = await db
-    .from("storyboard_beats")
-    .select("*")
-    .eq("project_id", projectId)
-    .eq("scene_id", sceneId)
-    .eq("id", beatId)
-    .maybeSingle();
-  if (isMissingRow(error) || !data) throw notFound(`Storyboard beat not found: ${beatId}`);
-  throwOnError(error, "getBeat");
+  const data = await runQuery(
+    "storyboards.getBeat",
+    db
+      .from("storyboard_beats")
+      .select("*")
+      .eq("project_id", projectId)
+      .eq("scene_id", sceneId)
+      .eq("id", beatId)
+      .maybeSingle()
+  );
+  if (!data) throw notFound(`Storyboard beat not found: ${beatId}`);
   return data as StoryboardBeatRow;
 }
 
@@ -462,15 +467,17 @@ async function getPanelRow(
   beatId: string,
   panelId: string
 ): Promise<StoryboardPanelRow> {
-  const { data, error } = await db
-    .from("storyboard_panels")
-    .select("*")
-    .eq("project_id", projectId)
-    .eq("beat_id", beatId)
-    .eq("id", panelId)
-    .maybeSingle();
-  if (isMissingRow(error) || !data) throw notFound(`Storyboard panel not found: ${panelId}`);
-  throwOnError(error, "getPanel");
+  const data = await runQuery(
+    "storyboards.getPanel",
+    db
+      .from("storyboard_panels")
+      .select("*")
+      .eq("project_id", projectId)
+      .eq("beat_id", beatId)
+      .eq("id", panelId)
+      .maybeSingle()
+  );
+  if (!data) throw notFound(`Storyboard panel not found: ${panelId}`);
   return data as StoryboardPanelRow;
 }
 
@@ -481,13 +488,15 @@ async function nextIndex(
   parentId: string,
   indexColumn: "scene_index" | "beat_index" | "panel_index"
 ): Promise<number> {
-  const { data, error } = await db
-    .from(table)
-    .select(indexColumn)
-    .eq(parentColumn, parentId)
-    .order(indexColumn, { ascending: false })
-    .limit(1);
-  throwOnError(error, `nextIndex ${table}`);
+  const data = await runQuery(
+    `storyboards.nextIndex ${table}`,
+    db
+      .from(table)
+      .select(indexColumn)
+      .eq(parentColumn, parentId)
+      .order(indexColumn, { ascending: false })
+      .limit(1)
+  );
   const row = (data as Array<Record<string, number>>)[0];
   return row ? row[indexColumn] + 1 : 0;
 }
@@ -506,17 +515,19 @@ async function swapIndex(input: {
 }): Promise<boolean> {
   if (input.fromIndex === input.toIndex) return true;
 
-  const occupantResult = await input.db
-    .from(input.table)
-    .select("id")
-    .eq("project_id", input.projectId)
-    .eq(input.parentColumn, input.parentId)
-    .eq(input.indexColumn, input.toIndex)
-    .maybeSingle();
-  if (isMissingRow(occupantResult.error) || !occupantResult.data) return false;
-  throwOnError(occupantResult.error, `swapIndex ${input.table} lookup`);
+  const occupant = await runQuery(
+    `storyboards.swapIndex ${input.table} lookup`,
+    input.db
+      .from(input.table)
+      .select("id")
+      .eq("project_id", input.projectId)
+      .eq(input.parentColumn, input.parentId)
+      .eq(input.indexColumn, input.toIndex)
+      .maybeSingle()
+  );
+  if (!occupant) return false;
 
-  const occupantId = (occupantResult.data as { id: string }).id;
+  const occupantId = (occupant as { id: string }).id;
   if (occupantId === input.rowId) return true;
 
   const tempIndex = Math.max(input.fromIndex, input.toIndex) + 1_000_000;
@@ -525,12 +536,14 @@ async function swapIndex(input: {
     [input.rowId, input.toIndex],
     [occupantId, input.fromIndex],
   ] as Array<[string, number]>) {
-    const { error } = await input.db
-      .from(input.table)
-      .update({ [input.indexColumn]: index })
-      .eq("project_id", input.projectId)
-      .eq("id", rowId);
-    throwOnError(error, `swapIndex ${input.table}`);
+    await runQuery(
+      `storyboards.swapIndex ${input.table}`,
+      input.db
+        .from(input.table)
+        .update({ [input.indexColumn]: index })
+        .eq("project_id", input.projectId)
+        .eq("id", rowId)
+    );
   }
   return true;
 }
@@ -543,21 +556,25 @@ async function setSelectedPanel(
   isSelected: boolean
 ): Promise<void> {
   if (isSelected) {
-    const cleared = await db
+    await runQuery(
+      "storyboards.clearSelectedPanels",
+      db
+        .from("storyboard_panels")
+        .update({ is_selected: false })
+        .eq("project_id", projectId)
+        .eq("beat_id", beatId)
+        .eq("is_selected", true)
+    );
+  }
+  await runQuery(
+    "storyboards.setSelectedPanel",
+    db
       .from("storyboard_panels")
-      .update({ is_selected: false })
+      .update({ is_selected: isSelected })
       .eq("project_id", projectId)
       .eq("beat_id", beatId)
-      .eq("is_selected", true);
-    throwOnError(cleared.error, "clearSelectedPanels");
-  }
-  const selected = await db
-    .from("storyboard_panels")
-    .update({ is_selected: isSelected })
-    .eq("project_id", projectId)
-    .eq("beat_id", beatId)
-    .eq("id", panelId);
-  throwOnError(selected.error, "setSelectedPanel");
+      .eq("id", panelId)
+  );
 }
 
 async function insertBeatSnapshotAsset(input: {
@@ -567,51 +584,55 @@ async function insertBeatSnapshotAsset(input: {
   beat: StoryboardBeatRow;
   previousAssetId: string;
 }): Promise<string> {
-  const previousAsset = await input.db
-    .from("assets")
-    .select("id,lineage_id,version")
-    .eq("project_id", input.projectId)
-    .eq("id", input.previousAssetId)
-    .eq("kind", "beat")
-    .eq("media", "data")
-    .maybeSingle();
-  if (isMissingRow(previousAsset.error) || !previousAsset.data) {
+  const previousAsset = await runQuery(
+    "storyboards.previousBeatAsset",
+    input.db
+      .from("assets")
+      .select("id,lineage_id,version")
+      .eq("project_id", input.projectId)
+      .eq("id", input.previousAssetId)
+      .eq("kind", "beat")
+      .eq("media", "data")
+      .maybeSingle()
+  );
+  if (!previousAsset) {
     throw notFound(`Beat snapshot asset not found: ${input.previousAssetId}`);
   }
-  throwOnError(previousAsset.error, "previousBeatAsset");
 
-  const previous = previousAsset.data as BeatAssetRow;
+  const previous = previousAsset as BeatAssetRow;
   const now = new Date().toISOString();
   const visibility = await defaultVisibilityForWorkspace(input.db, input.auth.workspaceId);
-  const { data, error } = await input.db
-    .from("assets")
-    .insert({
-      schema_version: "asset.v2",
-      workspace_id: input.auth.workspaceId,
-      project_id: input.projectId,
-      lineage_id: previous.lineage_id,
-      version: previous.version + 1,
-      kind: "beat",
-      media: "data",
-      status: "ready",
-      role: "storyboard_beat",
-      content: {
-        schema_version: "beat.v1",
-        storyboardBeatId: input.beat.id,
-        sceneId: input.beat.scene_id,
-        intent: input.beat.intent,
-        visualDescription: input.beat.visual_description,
-        dialogueSummary: input.beat.dialogue_summary,
-        narration: input.beat.narration,
-        durationSec: input.beat.duration_sec,
-      },
-      visibility,
-      created_at: now,
-      updated_at: now,
-    })
-    .select("id")
-    .single();
-  throwOnError(error, "insertBeatSnapshotAsset");
+  const data = await runQuery(
+    "storyboards.insertBeatSnapshotAsset",
+    input.db
+      .from("assets")
+      .insert({
+        schema_version: "asset.v2",
+        workspace_id: input.auth.workspaceId,
+        project_id: input.projectId,
+        lineage_id: previous.lineage_id,
+        version: previous.version + 1,
+        kind: "beat",
+        media: "data",
+        status: "ready",
+        role: "storyboard_beat",
+        content: {
+          schema_version: "beat.v1",
+          storyboardBeatId: input.beat.id,
+          sceneId: input.beat.scene_id,
+          intent: input.beat.intent,
+          visualDescription: input.beat.visual_description,
+          dialogueSummary: input.beat.dialogue_summary,
+          narration: input.beat.narration,
+          durationSec: input.beat.duration_sec,
+        },
+        visibility,
+        created_at: now,
+        updated_at: now,
+      })
+      .select("id")
+      .single()
+  );
   return (data as { id: string }).id;
 }
 
@@ -631,12 +652,14 @@ export async function listStoryboards(input: {
 }): Promise<Storyboard[]> {
   await assertProject(input.auth, input.projectId);
   const db = getServiceSupabase();
-  const { data, error } = await db
-    .from("storyboards")
-    .select("*")
-    .eq("project_id", input.projectId)
-    .order("created_at", { ascending: false });
-  throwOnError(error, "listStoryboards");
+  const data = await runQuery(
+    "storyboards.listStoryboards",
+    db
+      .from("storyboards")
+      .select("*")
+      .eq("project_id", input.projectId)
+      .order("created_at", { ascending: false })
+  );
   return (data as StoryboardRow[]).map(mapStoryboard);
 }
 
@@ -647,16 +670,18 @@ export async function createStoryboard(input: {
 }): Promise<Storyboard> {
   await assertProject(input.auth, input.projectId);
   const db = getServiceSupabase();
-  const { data, error } = await db
-    .from("storyboards")
-    .insert({
-      project_id: input.projectId,
-      plan_asset_id: input.data.planAssetId ?? null,
-      status: input.data.status ?? "draft",
-    })
-    .select("*")
-    .single();
-  throwOnError(error, "createStoryboard");
+  const data = await runQuery(
+    "storyboards.createStoryboard",
+    db
+      .from("storyboards")
+      .insert({
+        project_id: input.projectId,
+        plan_asset_id: input.data.planAssetId ?? null,
+        status: input.data.status ?? "draft",
+      })
+      .select("*")
+      .single()
+  );
   return mapStoryboard(data as StoryboardRow);
 }
 
@@ -684,14 +709,16 @@ export async function updateStoryboard(input: {
   if (input.data.planAssetId !== undefined) updates.plan_asset_id = input.data.planAssetId;
   if (input.data.status !== undefined) updates.status = input.data.status;
   if (Object.keys(updates).length === 0) return mapStoryboard(existing);
-  const { data, error } = await db
-    .from("storyboards")
-    .update(updates)
-    .eq("project_id", input.projectId)
-    .eq("id", input.storyboardId)
-    .select("*")
-    .single();
-  throwOnError(error, "updateStoryboard");
+  const data = await runQuery(
+    "storyboards.updateStoryboard",
+    db
+      .from("storyboards")
+      .update(updates)
+      .eq("project_id", input.projectId)
+      .eq("id", input.storyboardId)
+      .select("*")
+      .single()
+  );
   return mapStoryboard(data as StoryboardRow);
 }
 
@@ -703,12 +730,14 @@ export async function deleteStoryboard(input: {
   await assertProject(input.auth, input.projectId);
   const db = getServiceSupabase();
   await getStoryboardRow(db, input.projectId, input.storyboardId);
-  const { error } = await db
-    .from("storyboards")
-    .delete()
-    .eq("project_id", input.projectId)
-    .eq("id", input.storyboardId);
-  throwOnError(error, "deleteStoryboard");
+  await runQuery(
+    "storyboards.deleteStoryboard",
+    db
+      .from("storyboards")
+      .delete()
+      .eq("project_id", input.projectId)
+      .eq("id", input.storyboardId)
+  );
 }
 
 export async function listScenes(input: {
@@ -719,13 +748,15 @@ export async function listScenes(input: {
   await assertProject(input.auth, input.projectId);
   const db = getServiceSupabase();
   await getStoryboardRow(db, input.projectId, input.storyboardId);
-  const { data, error } = await db
-    .from("storyboard_scenes")
-    .select("*")
-    .eq("project_id", input.projectId)
-    .eq("storyboard_id", input.storyboardId)
-    .order("scene_index", { ascending: true });
-  throwOnError(error, "listScenes");
+  const data = await runQuery(
+    "storyboards.listScenes",
+    db
+      .from("storyboard_scenes")
+      .select("*")
+      .eq("project_id", input.projectId)
+      .eq("storyboard_id", input.storyboardId)
+      .order("scene_index", { ascending: true })
+  );
   return (data as StoryboardSceneRow[]).map(mapScene);
 }
 
@@ -741,23 +772,25 @@ export async function createScene(input: {
   const sceneIndex =
     input.data.sceneIndex ??
     (await nextIndex(db, "storyboard_scenes", "storyboard_id", input.storyboardId, "scene_index"));
-  const { data, error } = await db
-    .from("storyboard_scenes")
-    .insert({
-      project_id: input.projectId,
-      storyboard_id: input.storyboardId,
-      scene_index: sceneIndex,
-      title: input.data.title ?? null,
-      summary: input.data.summary ?? null,
-      setting: input.data.setting ?? null,
-      mood: input.data.mood ?? null,
-      duration_sec: input.data.durationSec ?? null,
-      scene_asset_id: input.data.sceneAssetId ?? null,
-      status: input.data.status ?? "draft",
-    })
-    .select("*")
-    .single();
-  throwOnError(error, "createScene");
+  const data = await runQuery(
+    "storyboards.createScene",
+    db
+      .from("storyboard_scenes")
+      .insert({
+        project_id: input.projectId,
+        storyboard_id: input.storyboardId,
+        scene_index: sceneIndex,
+        title: input.data.title ?? null,
+        summary: input.data.summary ?? null,
+        setting: input.data.setting ?? null,
+        mood: input.data.mood ?? null,
+        duration_sec: input.data.durationSec ?? null,
+        scene_asset_id: input.data.sceneAssetId ?? null,
+        status: input.data.status ?? "draft",
+      })
+      .select("*")
+      .single()
+  );
   return mapScene(data as StoryboardSceneRow);
 }
 
@@ -800,15 +833,17 @@ export async function updateScene(input: {
     return mapScene(await getSceneRow(db, input.projectId, input.storyboardId, input.sceneId));
   }
 
-  const { data, error } = await db
-    .from("storyboard_scenes")
-    .update(updates)
-    .eq("project_id", input.projectId)
-    .eq("storyboard_id", input.storyboardId)
-    .eq("id", input.sceneId)
-    .select("*")
-    .single();
-  throwOnError(error, "updateScene");
+  const data = await runQuery(
+    "storyboards.updateScene",
+    db
+      .from("storyboard_scenes")
+      .update(updates)
+      .eq("project_id", input.projectId)
+      .eq("storyboard_id", input.storyboardId)
+      .eq("id", input.sceneId)
+      .select("*")
+      .single()
+  );
   return mapScene(data as StoryboardSceneRow);
 }
 
@@ -821,13 +856,15 @@ export async function deleteScene(input: {
   await assertProject(input.auth, input.projectId);
   const db = getServiceSupabase();
   await getSceneRow(db, input.projectId, input.storyboardId, input.sceneId);
-  const { error } = await db
-    .from("storyboard_scenes")
-    .delete()
-    .eq("project_id", input.projectId)
-    .eq("storyboard_id", input.storyboardId)
-    .eq("id", input.sceneId);
-  throwOnError(error, "deleteScene");
+  await runQuery(
+    "storyboards.deleteScene",
+    db
+      .from("storyboard_scenes")
+      .delete()
+      .eq("project_id", input.projectId)
+      .eq("storyboard_id", input.storyboardId)
+      .eq("id", input.sceneId)
+  );
 }
 
 export async function listBeats(input: {
@@ -839,13 +876,15 @@ export async function listBeats(input: {
   await assertProject(input.auth, input.projectId);
   const db = getServiceSupabase();
   await getSceneRow(db, input.projectId, input.storyboardId, input.sceneId);
-  const { data, error } = await db
-    .from("storyboard_beats")
-    .select("*")
-    .eq("project_id", input.projectId)
-    .eq("scene_id", input.sceneId)
-    .order("beat_index", { ascending: true });
-  throwOnError(error, "listBeats");
+  const data = await runQuery(
+    "storyboards.listBeats",
+    db
+      .from("storyboard_beats")
+      .select("*")
+      .eq("project_id", input.projectId)
+      .eq("scene_id", input.sceneId)
+      .order("beat_index", { ascending: true })
+  );
   return (data as StoryboardBeatRow[]).map(mapBeat);
 }
 
@@ -862,23 +901,25 @@ export async function createBeat(input: {
   const beatIndex =
     input.data.beatIndex ??
     (await nextIndex(db, "storyboard_beats", "scene_id", input.sceneId, "beat_index"));
-  const { data, error } = await db
-    .from("storyboard_beats")
-    .insert({
-      project_id: input.projectId,
-      scene_id: input.sceneId,
-      beat_index: beatIndex,
-      intent: input.data.intent ?? "",
-      visual_description: input.data.visualDescription ?? null,
-      dialogue_summary: input.data.dialogueSummary ?? null,
-      narration: input.data.narration ?? null,
-      duration_sec: input.data.durationSec ?? null,
-      status: input.data.status ?? "draft",
-      beat_asset_id: input.data.beatAssetId ?? null,
-    })
-    .select("*")
-    .single();
-  throwOnError(error, "createBeat");
+  const data = await runQuery(
+    "storyboards.createBeat",
+    db
+      .from("storyboard_beats")
+      .insert({
+        project_id: input.projectId,
+        scene_id: input.sceneId,
+        beat_index: beatIndex,
+        intent: input.data.intent ?? "",
+        visual_description: input.data.visualDescription ?? null,
+        dialogue_summary: input.data.dialogueSummary ?? null,
+        narration: input.data.narration ?? null,
+        duration_sec: input.data.durationSec ?? null,
+        status: input.data.status ?? "draft",
+        beat_asset_id: input.data.beatAssetId ?? null,
+      })
+      .select("*")
+      .single()
+  );
   return mapBeat(data as StoryboardBeatRow);
 }
 
@@ -960,15 +1001,17 @@ export async function updateBeat(input: {
     return mapBeat(await getBeatRow(db, input.projectId, input.sceneId, input.beatId));
   }
 
-  const { data, error } = await db
-    .from("storyboard_beats")
-    .update(updates)
-    .eq("project_id", input.projectId)
-    .eq("scene_id", input.sceneId)
-    .eq("id", input.beatId)
-    .select("*")
-    .single();
-  throwOnError(error, "updateBeat");
+  const data = await runQuery(
+    "storyboards.updateBeat",
+    db
+      .from("storyboard_beats")
+      .update(updates)
+      .eq("project_id", input.projectId)
+      .eq("scene_id", input.sceneId)
+      .eq("id", input.beatId)
+      .select("*")
+      .single()
+  );
   return mapBeat(data as StoryboardBeatRow);
 }
 
@@ -983,13 +1026,15 @@ export async function deleteBeat(input: {
   const db = getServiceSupabase();
   await getSceneRow(db, input.projectId, input.storyboardId, input.sceneId);
   await getBeatRow(db, input.projectId, input.sceneId, input.beatId);
-  const { error } = await db
-    .from("storyboard_beats")
-    .delete()
-    .eq("project_id", input.projectId)
-    .eq("scene_id", input.sceneId)
-    .eq("id", input.beatId);
-  throwOnError(error, "deleteBeat");
+  await runQuery(
+    "storyboards.deleteBeat",
+    db
+      .from("storyboard_beats")
+      .delete()
+      .eq("project_id", input.projectId)
+      .eq("scene_id", input.sceneId)
+      .eq("id", input.beatId)
+  );
 }
 
 export async function listPanels(input: {
@@ -1003,13 +1048,15 @@ export async function listPanels(input: {
   const db = getServiceSupabase();
   await getSceneRow(db, input.projectId, input.storyboardId, input.sceneId);
   await getBeatRow(db, input.projectId, input.sceneId, input.beatId);
-  const { data, error } = await db
-    .from("storyboard_panels")
-    .select("*")
-    .eq("project_id", input.projectId)
-    .eq("beat_id", input.beatId)
-    .order("panel_index", { ascending: true });
-  throwOnError(error, "listPanels");
+  const data = await runQuery(
+    "storyboards.listPanels",
+    db
+      .from("storyboard_panels")
+      .select("*")
+      .eq("project_id", input.projectId)
+      .eq("beat_id", input.beatId)
+      .order("panel_index", { ascending: true })
+  );
   return (data as StoryboardPanelRow[]).map(mapPanel);
 }
 
@@ -1029,29 +1076,33 @@ export async function createPanel(input: {
     input.data.panelIndex ??
     (await nextIndex(db, "storyboard_panels", "beat_id", input.beatId, "panel_index"));
   if (input.data.isSelected) {
-    const cleared = await db
-      .from("storyboard_panels")
-      .update({ is_selected: false })
-      .eq("project_id", input.projectId)
-      .eq("beat_id", input.beatId)
-      .eq("is_selected", true);
-    throwOnError(cleared.error, "createPanel clearSelected");
+    await runQuery(
+      "storyboards.createPanel clearSelected",
+      db
+        .from("storyboard_panels")
+        .update({ is_selected: false })
+        .eq("project_id", input.projectId)
+        .eq("beat_id", input.beatId)
+        .eq("is_selected", true)
+    );
   }
-  const { data, error } = await db
-    .from("storyboard_panels")
-    .insert({
-      project_id: input.projectId,
-      beat_id: input.beatId,
-      panel_index: panelIndex,
-      image_asset_id: input.data.imageAssetId ?? null,
-      prompt_asset_id: input.data.promptAssetId ?? null,
-      status: input.data.status ?? "queued",
-      is_selected: input.data.isSelected ?? false,
-      approved_at: input.data.approvedAt ?? null,
-    })
-    .select("*")
-    .single();
-  throwOnError(error, "createPanel");
+  const data = await runQuery(
+    "storyboards.createPanel",
+    db
+      .from("storyboard_panels")
+      .insert({
+        project_id: input.projectId,
+        beat_id: input.beatId,
+        panel_index: panelIndex,
+        image_asset_id: input.data.imageAssetId ?? null,
+        prompt_asset_id: input.data.promptAssetId ?? null,
+        status: input.data.status ?? "queued",
+        is_selected: input.data.isSelected ?? false,
+        approved_at: input.data.approvedAt ?? null,
+      })
+      .select("*")
+      .single()
+  );
   return mapPanel(data as StoryboardPanelRow);
 }
 
@@ -1104,15 +1155,17 @@ export async function updatePanel(input: {
     return mapPanel(await getPanelRow(db, input.projectId, input.beatId, input.panelId));
   }
 
-  const { data, error } = await db
-    .from("storyboard_panels")
-    .update(updates)
-    .eq("project_id", input.projectId)
-    .eq("beat_id", input.beatId)
-    .eq("id", input.panelId)
-    .select("*")
-    .single();
-  throwOnError(error, "updatePanel");
+  const data = await runQuery(
+    "storyboards.updatePanel",
+    db
+      .from("storyboard_panels")
+      .update(updates)
+      .eq("project_id", input.projectId)
+      .eq("beat_id", input.beatId)
+      .eq("id", input.panelId)
+      .select("*")
+      .single()
+  );
   return mapPanel(data as StoryboardPanelRow);
 }
 
@@ -1129,13 +1182,15 @@ export async function deletePanel(input: {
   await getSceneRow(db, input.projectId, input.storyboardId, input.sceneId);
   await getBeatRow(db, input.projectId, input.sceneId, input.beatId);
   await getPanelRow(db, input.projectId, input.beatId, input.panelId);
-  const { error } = await db
-    .from("storyboard_panels")
-    .delete()
-    .eq("project_id", input.projectId)
-    .eq("beat_id", input.beatId)
-    .eq("id", input.panelId);
-  throwOnError(error, "deletePanel");
+  await runQuery(
+    "storyboards.deletePanel",
+    db
+      .from("storyboard_panels")
+      .delete()
+      .eq("project_id", input.projectId)
+      .eq("beat_id", input.beatId)
+      .eq("id", input.panelId)
+  );
 }
 
 // Build the relational storyboard for a plan: one scene per plan scene, one beat
