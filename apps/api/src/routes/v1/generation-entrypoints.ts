@@ -11,11 +11,25 @@ import {
   V1Asset as ApiAsset,
 } from "@/lib/api/v1/store";
 import { parseBrief } from "@/lib/api/v1/schemas";
+import {
+  createOrchestratorRun,
+  type OrchestratorRun,
+} from "@/lib/api/v1/orchestrator-store";
 import { createGenerationJob, runGenerationJob } from "@/lib/v1/generation";
 import { createGenerationRunExecution } from "@/lib/v1/generation/run-execution";
 import { Actor } from "@/lib/v1/actor";
 import { getStore, V1Store } from "@/lib/v1/store";
-import { SCHEMA, GenerationRequest, V1Asset } from "@popcorn/shared/v1/types";
+import { isOrchestratorToolLoopEnabled } from "@/lib/orchestrator/feature-flag";
+import { runOrchestratorToCompletion } from "@/lib/orchestrator/engine";
+import { orchestratorGateStages } from "./orchestrator-run-payload";
+import {
+  GATEABLE_GENERATION_STAGE_TYPES,
+  SCHEMA,
+  GenerationRequest,
+  GateableGenerationStageType,
+  JobStatus,
+  V1Asset,
+} from "@popcorn/shared/v1/types";
 
 export const generationEntrypointsRouter = Router();
 
@@ -171,6 +185,37 @@ function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
 }
 
+const GATEABLE_STAGE_SET = new Set<string>(GATEABLE_GENERATION_STAGE_TYPES);
+
+function reviewGatesFromBody(body: unknown): GateableGenerationStageType[] {
+  if (!isRecord(body) || body.reviewGates == null) return [];
+  if (!Array.isArray(body.reviewGates)) {
+    throw new ApiError("validation_failed", "reviewGates must be an array.", {
+      fields: [{ path: "reviewGates", message: "Must be an array of stage types." }],
+    });
+  }
+
+  const gates: GateableGenerationStageType[] = [];
+  const seen = new Set<string>();
+  body.reviewGates.forEach((raw, index) => {
+    if (typeof raw !== "string" || !GATEABLE_STAGE_SET.has(raw)) {
+      throw new ApiError("validation_failed", "reviewGates contains an invalid stage type.", {
+        fields: [
+          {
+            path: `reviewGates.${index}`,
+            message: "Must be a gateable generation stage type.",
+          },
+        ],
+      });
+    }
+    if (!seen.has(raw)) {
+      seen.add(raw);
+      gates.push(raw as GateableGenerationStageType);
+    }
+  });
+  return gates;
+}
+
 function generationBody(
   body: unknown,
   briefVersionId: string,
@@ -194,6 +239,60 @@ function generationBody(
     variantCount: source.variantCount === undefined ? 1 : Number(source.variantCount),
     showCaptions:
       typeof source.showCaptions === "boolean" ? source.showCaptions : undefined,
+  };
+}
+
+function orchestratorJobStatus(status: OrchestratorRun["status"]): JobStatus {
+  switch (status) {
+    case "queued":
+      return "queued";
+    case "succeeded":
+      return "succeeded";
+    case "failed":
+      return "failed";
+    case "canceled":
+      return "canceled";
+    case "running":
+    case "waiting":
+    default:
+      return "running";
+  }
+}
+
+function orchestratorJob(args: {
+  run: OrchestratorRun;
+  auth: AuthContext;
+  requestId: string;
+  idempotencyKey?: string;
+  body: GenerationRequest;
+}) {
+  return {
+    id: args.run.id,
+    schemaVersion: SCHEMA.job,
+    workspaceId: args.auth.workspaceId,
+    projectId: args.run.projectId,
+    requestId: args.requestId,
+    type: "generation",
+    status: orchestratorJobStatus(args.run.status),
+    progress: {
+      currentStep: args.run.status === "waiting" ? "waiting_for_orchestrator" : "orchestrator",
+      percent: args.run.status === "succeeded" ? 100 : 0,
+      message:
+        args.run.status === "succeeded"
+          ? "The orchestrator run completed."
+          : "The orchestrator is generating your video.",
+    },
+    input: args.body,
+    result: null,
+    error: args.run.error
+      ? {
+          code: String(args.run.error.kind ?? "orchestrator_failed"),
+          message: String(args.run.error.message ?? "The orchestrator run failed."),
+        }
+      : null,
+    ...(args.idempotencyKey ? { idempotencyKey: args.idempotencyKey } : {}),
+    createdAt: args.run.createdAt,
+    updatedAt: args.run.updatedAt,
   };
 }
 
@@ -270,6 +369,35 @@ async function createAndMaybeRunGeneration(args: {
   assetIds: string[];
   generatedJobIdByAssetId?: Map<string, string>;
 }) {
+  const requestBody = generationBody(args.body, args.briefVersionId, args.assetIds);
+  if (isOrchestratorToolLoopEnabled()) {
+    const run = await createOrchestratorRun({
+      projectId: args.projectId,
+      inputSummary: JSON.stringify({
+        briefVersionId: args.briefVersionId,
+        request: requestBody,
+      }),
+      gates: orchestratorGateStages(reviewGatesFromBody(args.body)),
+    });
+    const shouldRun = isRecord(args.body) && args.body.runNow === false ? false : true;
+    const drivenRun = shouldRun
+      ? await runOrchestratorToCompletion(run.id, { workspaceId: args.auth.workspaceId })
+      : run;
+    return {
+      status: 202,
+      body: {
+        job: orchestratorJob({
+          run: drivenRun,
+          auth: args.auth,
+          requestId: args.requestId,
+          idempotencyKey: args.idempotencyKey ?? undefined,
+          body: requestBody,
+        }),
+        runId: drivenRun.id,
+      },
+    };
+  }
+
   const store = getStore();
   await mirrorProjectInputs({
     auth: args.auth,
@@ -281,7 +409,7 @@ async function createAndMaybeRunGeneration(args: {
     store,
     actor: actorForAuth(args.auth),
     projectId: args.projectId,
-    body: generationBody(args.body, args.briefVersionId, args.assetIds),
+    body: requestBody,
     idempotencyKey: args.idempotencyKey ?? undefined,
     requestId: args.requestId,
   });

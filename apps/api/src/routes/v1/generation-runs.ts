@@ -1,7 +1,16 @@
 import { Router } from "express";
 import { mutation, route } from "@/core/adapter";
 import { ApiError } from "@/core/errors";
+import type { GateableGenerationStageType } from "@popcorn/shared/v1/types";
+import {
+  getOrchestratorRun,
+  listRunGates,
+  resolveGate,
+  updateOrchestratorRun,
+  type OrchestratorRunGate,
+} from "@/lib/api/v1/orchestrator-store";
 import { getProject } from "@/lib/api/v1/store";
+import { resumeOrchestratorRun } from "@/lib/orchestrator/engine";
 import {
   approveReviewGate,
   assemblePayload,
@@ -14,6 +23,7 @@ import {
 } from "@/lib/v1/generation-runs";
 import { resumeGenerationRun } from "@/lib/v1/generation/run-execution";
 import { getStore } from "@/lib/v1/store";
+import { assembleOrchestratorPayload } from "./orchestrator-run-payload";
 
 const NO_STORE_HEADERS = { "Cache-Control": "no-store" };
 
@@ -27,6 +37,41 @@ function requireParam(params: Record<string, string | undefined>, name: string):
 
 async function requireProjectAccess(workspaceId: string, projectId: string): Promise<void> {
   await getProject(workspaceId, projectId);
+}
+
+async function maybeAssembleOrchestratorPayload(runId: string, projectId: string) {
+  try {
+    const run = await getOrchestratorRun(runId);
+    if (run.projectId !== projectId) return null;
+    return assembleOrchestratorPayload(run);
+  } catch (error) {
+    if (error instanceof ApiError && error.code === "not_found") return null;
+    throw error;
+  }
+}
+
+async function requireOrchestratorPayload(runId: string, projectId: string) {
+  const payload = await maybeAssembleOrchestratorPayload(runId, projectId);
+  if (!payload) {
+    throw new ApiError("not_found", `Generation run not found: ${runId}`);
+  }
+  return payload;
+}
+
+async function requireReachedOrchestratorGate(runId: string): Promise<OrchestratorRunGate> {
+  const gate = (await listRunGates(runId)).find((candidate) => candidate.status === "reached");
+  if (!gate) {
+    throw new ApiError("validation_failed", "Run is not awaiting review.");
+  }
+  return gate;
+}
+
+function rejectStageType(body: unknown): GateableGenerationStageType | undefined {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return undefined;
+  const stageType = (body as { stageType?: unknown }).stageType;
+  return typeof stageType === "string"
+    ? (stageType as GateableGenerationStageType)
+    : undefined;
 }
 
 export const generationRunsRouter = Router();
@@ -76,7 +121,10 @@ generationRunsRouter.get(
 
     const store = getGenerationRunStore();
     const payload = await assemblePayload(store, runId);
-    const verified = requireRun(payload, runId, projectId);
+    const verified =
+      payload && payload.run.projectId === projectId
+        ? requireRun(payload, runId, projectId)
+        : await requireOrchestratorPayload(runId, projectId);
 
     return {
       status: 200,
@@ -140,6 +188,20 @@ generationRunsRouter.post(
 
     const store = getGenerationRunStore();
     const payload = await assemblePayload(store, runId);
+    if (!payload || payload.run.projectId !== projectId) {
+      const orchestratorPayload = await requireOrchestratorPayload(runId, projectId);
+      const gate = orchestratorPayload.run.reviewGate;
+      if (!gate) {
+        return { status: 200, body: orchestratorPayload };
+      }
+      const reached = await requireReachedOrchestratorGate(runId);
+      await resolveGate(reached.id, "approved");
+      const resumed = await resumeOrchestratorRun(runId, { workspaceId: auth.workspaceId });
+      return {
+        status: 202,
+        body: await assembleOrchestratorPayload(resumed),
+      };
+    }
     const existing = requireRun(payload, runId, projectId);
 
     const approved = await approveReviewGate(store, runId, body ?? {});
@@ -162,6 +224,26 @@ generationRunsRouter.post(
 
     const store = getGenerationRunStore();
     const payload = await assemblePayload(store, runId);
+    if (!payload || payload.run.projectId !== projectId) {
+      const orchestratorPayload = await requireOrchestratorPayload(runId, projectId);
+      const gate = orchestratorPayload.run.reviewGate;
+      if (!gate) {
+        throw new ApiError("validation_failed", "Run is not awaiting review.");
+      }
+      const requestedStage = rejectStageType(body);
+      if (requestedStage !== undefined && requestedStage !== gate.stageType) {
+        throw new ApiError("validation_failed", "Reject stageType must match the active review gate.", {
+          fields: [{ path: "stageType", message: `Expected ${gate.stageType}.` }],
+        });
+      }
+      const reached = await requireReachedOrchestratorGate(runId);
+      await resolveGate(reached.id, "rejected");
+      const resumed = await resumeOrchestratorRun(runId, { workspaceId: auth.workspaceId });
+      return {
+        status: 202,
+        body: await assembleOrchestratorPayload(resumed),
+      };
+    }
     requireRun(payload, runId, projectId);
 
     await rejectReviewGate(store, runId, body ?? {});
@@ -181,6 +263,17 @@ generationRunsRouter.post(
 
     const store = getGenerationRunStore();
     const payload = await assemblePayload(store, runId);
+    if (!payload || payload.run.projectId !== projectId) {
+      await requireOrchestratorPayload(runId, projectId);
+      const canceled = await updateOrchestratorRun(runId, {
+        status: "canceled",
+        completedAt: new Date().toISOString(),
+      });
+      return {
+        status: 200,
+        body: await assembleOrchestratorPayload(canceled),
+      };
+    }
     requireRun(payload, runId, projectId);
 
     const canceled = await cancelGenerationRun(store, runId);
