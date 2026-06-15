@@ -35,7 +35,12 @@ const driverContext: DriverContext = {
   workspaceId: "ws_test",
   projectId: "proj_test",
   orchestratorRunId: "orch_test",
+  toolCallId: "tool_call_test",
   actorId: "actor_test",
+  agentId: "agent_test",
+  messageId: "msg_test",
+  requestId: "req_test",
+  metadata: { harness: true },
 };
 
 test("only-mode bridges a single tool and maps execution to mode", () => {
@@ -66,6 +71,11 @@ test("bridged execute delegates to the real registry and synthesizes auth", asyn
   assert.equal(seen?.auth.workspaceId, "ws_test");
   assert.equal(seen?.auth.actor.id, "actor_test");
   assert.equal(seen?.projectId, "proj_test");
+  assert.equal(seen?.toolCallId, "tool_call_test");
+  assert.equal(seen?.agentId, "agent_test");
+  assert.equal(seen?.messageId, "msg_test");
+  assert.equal(seen?.requestId, "req_test");
+  assert.deepEqual(seen?.metadata, { harness: true });
 });
 
 test("default mode exposes only the wired tools (no stubs)", () => {

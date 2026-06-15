@@ -454,8 +454,12 @@ async function requireProjectRun(runId: string, projectId: string): Promise<Orch
   return run;
 }
 
-function startRun(workspaceId: string, runId: string): void {
-  void runOrchestratorToCompletion(runId, { workspaceId }).catch((err) => {
+function startRun(workspaceId: string, runId: string, actorId: string): void {
+  void runOrchestratorToCompletion(runId, {
+    workspaceId,
+    actorId,
+    agentId: "orchestrator",
+  }).catch((err) => {
     console.error("orchestrator run failed", err);
   });
 }
@@ -480,7 +484,7 @@ orchestratorRunsRouter.post(
       budgetUsd: budget,
       body,
     });
-    if (!replayed) startRun(auth.workspaceId, run.id);
+    if (!replayed) startRun(auth.workspaceId, run.id, auth.actor.id);
     return { status: 202, body: { runId: run.id } };
   })
 );
@@ -523,7 +527,7 @@ orchestratorRunsRouter.post(
       budgetUsd: budget,
       body,
     });
-    if (!replayed) startRun(auth.workspaceId, run.id);
+    if (!replayed) startRun(auth.workspaceId, run.id, auth.actor.id);
     return { status: 202, body: { runId: run.id } };
   })
 );

@@ -26,6 +26,7 @@ import { toOrchestratorRegistry } from "@/lib/orchestrator-tools/to-orchestrator
 import { agentApiStore } from "@/lib/agent-api/jobs";
 import { orchestratorModel, type OrchestratorModel } from "./model";
 import { executeRegisteredTool, type ToolRegistry } from "./registry";
+import { createToolExecutionContext } from "./tool-context";
 import type { ToolCallResult } from "./types";
 
 const DEFAULT_MAX_TURNS = 50;
@@ -74,6 +75,11 @@ export interface JobStatusReader {
 export interface EngineDeps {
   /** The throwaway/owning workspace; tools execute in its scope. */
   workspaceId: string;
+  actorId?: string;
+  agentId?: string;
+  messageId?: string;
+  requestId?: string;
+  metadata?: Record<string, unknown>;
   store?: OrchestratorEngineStore;
   model?: OrchestratorModel;
   /** Bridged orchestrator registry; defaults to the wired tools only. */
@@ -134,6 +140,11 @@ function resolved(deps: EngineDeps) {
     jobs: deps.jobs ?? { getJob: (id: string) => agentApiStore.getJob(id) },
     maxTurns: deps.maxTurns ?? DEFAULT_MAX_TURNS,
     workspaceId: deps.workspaceId,
+    actorId: deps.actorId,
+    agentId: deps.agentId,
+    messageId: deps.messageId,
+    requestId: deps.requestId,
+    metadata: deps.metadata,
   };
 }
 
@@ -297,12 +308,16 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
         registry: r.registry,
         toolName: decision.toolName,
         input: decision.input,
-        context: {
+        context: createToolExecutionContext({
           workspaceId: r.workspaceId,
           projectId: run.projectId,
           orchestratorRunId: run.id,
-          actorId: "orchestrator",
-        },
+          actorId: r.actorId ?? "orchestrator",
+          agentId: r.agentId ?? "orchestrator",
+          messageId: r.messageId,
+          requestId: r.requestId,
+          metadata: r.metadata,
+        }),
       });
     } catch (err) {
       const error = {

@@ -87,6 +87,11 @@ export interface ToolExecutionContext {
   auth: AuthContext;
   projectId?: string;
   generationRunId?: string;
+  toolCallId?: string;
+  agentId?: string;
+  messageId?: string;
+  requestId?: string;
+  metadata?: Record<string, unknown>;
   /** The orchestrator run driving this call — async tools' workers use it to
    * resume the run when their job completes. */
   orchestratorRunId?: string;
