@@ -26,7 +26,7 @@ import { randomUUID } from "crypto";
 import path from "path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { databaseError, runQuery } from "../../supabase/db-errors";
-import { iso, markedJson, unmarkedJson } from "./store-internal";
+import { deploymentMetadata, iso, markedJson, unmarkedJson } from "./store-internal";
 import {
   canonicalContentHash,
   graphInputsFromProvenance,
@@ -3762,6 +3762,8 @@ interface JobRow {
   result: unknown;
   error: Job["error"];
   idempotency_key: string | null;
+  deploy_id: string | null;
+  git_sha: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -3780,6 +3782,7 @@ function jobToRow(job: Job): JobRow {
     result: job.result,
     error: job.error,
     idempotency_key: job.idempotencyKey ?? null,
+    ...deploymentMetadata(),
     created_at: job.createdAt,
     updated_at: job.updatedAt,
   };

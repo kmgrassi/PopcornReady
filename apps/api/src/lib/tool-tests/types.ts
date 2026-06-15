@@ -8,6 +8,7 @@ export interface Sandbox {
   workspaceId: string;
   projectId: string;
   workspaceName: string;
+  sandboxId?: string;
 }
 
 export interface VerifyContext {
