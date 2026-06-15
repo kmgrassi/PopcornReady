@@ -13,7 +13,7 @@ interface JudgmentBadgeProps {
 
 export function JudgmentBadge({ judgment, compact = false }: JudgmentBadgeProps) {
   if (!judgment) {
-    return compact ? null : <span className="judgment-badge pending">Not judged</span>;
+    return compact ? null : <span className="judgment-badge pending">Needs review</span>;
   }
 
   return (

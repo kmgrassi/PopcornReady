@@ -6,6 +6,7 @@ import {
   GENERATION_STAGE_LABELS,
   type GenerationRun,
   type GenerationStage,
+  type GenerationStageType,
   type GenerationStageItem,
 } from "@popcorn/shared/v1/types";
 import { StageItemCard } from "../generation-progress/StageItemCard";
@@ -43,6 +44,76 @@ interface ProgressViewProps {
 
 function isTerminal(status: GenerationRun["status"]): boolean {
   return status === "succeeded" || status === "failed" || status === "canceled";
+}
+
+const VISIBLE_STAGE_COUNT = 8;
+
+const REVIEW_STAGE_LABELS: Record<GenerationStageType, string> = {
+  brief_intake: "Concept",
+  creative_plan: "Brief",
+  storyboard: "Storyboard",
+  asset_generation: "Assets",
+  audio_generation: "Audio",
+  timeline_assembly: "Timeline",
+  quality_review: "Quality review",
+  export: "Final render",
+  ready: "Ready",
+};
+
+const VISIBLE_STAGE_INDEX: Record<GenerationStageType, number> = {
+  brief_intake: 1,
+  creative_plan: 2,
+  storyboard: 4,
+  asset_generation: 6,
+  audio_generation: 6,
+  timeline_assembly: 7,
+  quality_review: 8,
+  export: 8,
+  ready: 8,
+};
+
+function titleForRun(run: GenerationRun): string {
+  if (run.projectId === "demo-project") return "Demo project";
+  return "Video generation run";
+}
+
+function shortId(id: string): string {
+  if (id.length <= 18) return id;
+  return `${id.slice(0, 8)}...${id.slice(-6)}`;
+}
+
+function reviewStageLabel(stageType: GenerationStageType): string {
+  return REVIEW_STAGE_LABELS[stageType] ?? GENERATION_STAGE_LABELS[stageType];
+}
+
+function progressSummary(run: GenerationRun, stages: GenerationStage[]) {
+  const activeStage =
+    stages.find((stage) => run.reviewGate?.stageId === stage.stageId) ??
+    stages.find((stage) => stage.status === "running") ??
+    stages.find((stage) => stage.status === "failed") ??
+    stages.find((stage) => stage.status === "queued");
+  const type = activeStage?.type ?? run.currentStageType ?? "ready";
+  const currentStage = VISIBLE_STAGE_INDEX[type] ?? VISIBLE_STAGE_COUNT;
+  const completed = stages.filter((stage) => stage.status === "succeeded").length;
+  const fallbackPercent =
+    stages.length > 0 ? Math.round((completed / stages.length) * 100) : 0;
+  const percent = Math.max(
+    0,
+    Math.min(100, Math.round(run.progressPercent ?? fallbackPercent)),
+  );
+
+  return {
+    currentStage: Math.min(VISIBLE_STAGE_COUNT, currentStage),
+    percent,
+  };
+}
+
+function formatDateTime(value?: string) {
+  if (!value) return "Not started";
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
 }
 
 export function ProgressView({
@@ -84,6 +155,12 @@ export function ProgressView({
   const showCancelAction = !terminal && !detail.run.reviewGate && !!cancelAction;
   const feedbackNote = reviewActions?.feedbackNote ?? fallbackFeedbackNote;
   const setFeedbackNote = reviewActions?.onFeedbackNoteChange ?? setFallbackFeedbackNote;
+  const progress = progressSummary(detail.run, detail.stages);
+  const currentStageLabel = detail.run.reviewGate
+    ? reviewStageLabel(detail.run.reviewGate.stageType)
+    : detail.run.currentStageType
+      ? reviewStageLabel(detail.run.currentStageType)
+      : "Final render";
 
   async function approveFallback() {
     const reviewGate = detail.run.reviewGate;
@@ -148,27 +225,33 @@ export function ProgressView({
     : approveFallback;
 
   return (
-    <div className="progress-shell">
-      <header className="progress-header">
-        <div>
-          <p className="progress-eyebrow">Generation run</p>
-          <h1 className="progress-title">
-            {detail.run.projectId === "demo-project" ? "Demo project" : detail.run.projectId}
-          </h1>
-          <p className="progress-subtitle muted">
-            Run <code>{detail.run.runId}</code>
-          </p>
+    <div className={styles.shell}>
+      <header className={styles.header}>
+        <div className={styles.headerCopy}>
+          <p className={styles.eyebrow}>Generation workspace</p>
+          <h1 className={styles.title}>{titleForRun(detail.run)}</h1>
+          <div className={styles.runIdRow}>
+            <span className={styles.runIdLabel}>Run ID</span>
+            <code className={styles.runId} title={detail.run.runId}>{shortId(detail.run.runId)}</code>
+            <button
+              type="button"
+              className={styles.copyButton}
+              onClick={() => void navigator.clipboard?.writeText(detail.run.runId)}
+            >
+              Copy
+            </button>
+          </div>
         </div>
         {alternateRuns && alternateRuns.length > 0 ? (
-          <nav className="progress-alt-runs" aria-label="Other demo states">
-            <span className="progress-alt-runs-label">View other states:</span>
+          <nav className={styles.altRuns} aria-label="Other demo states">
+            <span className={styles.altRunsLabel}>View other states:</span>
             <ul>
               {alternateRuns.map((alt) => (
                 <li key={alt.runId}>
                   <Link
                     to={`/projects/${detail.run.projectId}/runs/${alt.runId}`}
-                    className={`progress-alt-link${
-                      alt.runId === detail.run.runId ? " active" : ""
+                    className={`${styles.altLink}${
+                      alt.runId === detail.run.runId ? ` ${styles.altLinkActive}` : ""
                     }`}
                   >
                     {alt.label}
@@ -180,26 +263,50 @@ export function ProgressView({
         ) : null}
       </header>
 
-      <div className="progress-body">
-        <section className="progress-main">
+      <section className={styles.progressOverview} aria-label="Overall progress">
+        <div>
+          <p className={styles.progressLabel}>
+            Stage {progress.currentStage} of {VISIBLE_STAGE_COUNT}
+          </p>
+          <p className={styles.progressTitle}>{currentStageLabel}</p>
+        </div>
+        <div className={styles.progressMeterWrap}>
+          <span className={styles.progressPercent}>{progress.percent}%</span>
+          <div
+            className={styles.progressMeter}
+            role="progressbar"
+            aria-valuenow={progress.percent}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
+            <div
+              className={styles.progressMeterFill}
+              style={{ width: `${Math.max(2, progress.percent)}%` }}
+            />
+          </div>
+        </div>
+      </section>
+
+      <div className={styles.body}>
+        <section className={styles.main}>
           {terminal ? <TerminalState run={detail.run} /> : <StatusBanner run={detail.run} />}
 
           {showCancelAction ? (
             <section
-              className="progress-empty-card awaiting-review-card"
+              className={`${styles.card} ${styles.activeRunCard}`}
               aria-labelledby="run-actions-heading"
             >
-              <div className="review-gate-head">
+              <div className={styles.cardHeader}>
                 <div>
-                  <p className="progress-eyebrow">Run controls</p>
-                  <h2 id="run-actions-heading" className="progress-card-heading">
+                  <p className={styles.eyebrow}>Run controls</p>
+                  <h2 id="run-actions-heading" className={styles.cardHeading}>
                     Active generation
                   </h2>
                 </div>
-                <div className="review-actions">
+                <div className={styles.actions}>
                   <button
                     type="button"
-                    className="secondary compact"
+                    className={styles.secondaryButton}
                     onClick={cancelAction.onCancel}
                     disabled={cancelAction.pending}
                   >
@@ -208,7 +315,7 @@ export function ProgressView({
                 </div>
               </div>
               {cancelAction.error ? (
-                <p className="review-gate-error" role="alert">
+                <p className={styles.error} role="alert">
                   {cancelAction.error}
                 </p>
               ) : null}
@@ -217,56 +324,47 @@ export function ProgressView({
 
           {detail.run.reviewGate ? (
             <section
-              className="review-gate-card awaiting-review-card"
+              className={`${styles.card} ${styles.reviewCard}`}
               aria-labelledby="review-gate-heading"
             >
-              <div className="review-gate-head">
+              <div className={styles.reviewHeader}>
                 <div>
-                  <p className="progress-eyebrow">Awaiting review</p>
-                  <h2 id="review-gate-heading" className="progress-card-heading">
-                    {reviewStage?.label ??
-                      GENERATION_STAGE_LABELS[detail.run.reviewGate.stageType]}{" "}
-                    is ready
+                  <p className={styles.reviewStatus}>Needs your review</p>
+                  <h2 id="review-gate-heading" className={styles.reviewTitle}>
+                    {reviewStageLabel(detail.run.reviewGate.stageType)} ready.
                   </h2>
                 </div>
                 <JudgmentBadge judgment={reviewStage?.judgment ?? null} />
-                <div className="review-actions">
-                  <button
-                    type="button"
-                    className="primary compact"
-                    onClick={onApprove}
-                    disabled={!!pending}
-                  >
-                    {pending === "approve" ? "Approving..." : "Approve & continue"}
-                  </button>
-                  {reviewActions ? (
-                    <>
-                      <button
-                        type="button"
-                        className="secondary compact"
-                        onClick={() => reviewActions.onReject(feedbackNote)}
-                        disabled={!!pending}
-                      >
-                        {pending === "reject"
-                          ? "Regenerating..."
-                          : "Reject / regenerate"}
-                      </button>
-                      <button
-                        type="button"
-                        className="secondary compact"
-                        onClick={reviewActions.onCancel}
-                        disabled={!!pending}
-                      >
-                        {pending === "cancel" ? "Canceling..." : "Cancel generation"}
-                      </button>
-                    </>
-                  ) : null}
-                </div>
               </div>
-              <p className="review-gate-copy">
-                {reviewStage?.message ??
-                  "Inspect this stage's output before the next generation stage starts."}
-              </p>
+              <div className={styles.reviewSummary}>
+                <p>
+                  {reviewStage?.message ??
+                    "Inspect this stage's output before the next generation stage starts."}
+                </p>
+                <dl className={styles.summaryGrid}>
+                  <div>
+                    <dt>Stage output</dt>
+                    <dd>{reviewItems.length > 0 ? `${reviewItems.length} item${reviewItems.length === 1 ? "" : "s"} ready` : "Summary only"}</dd>
+                  </div>
+                  <div>
+                    <dt>Next step</dt>
+                    <dd>Approve to continue the run</dd>
+                  </div>
+                </dl>
+              </div>
+              {reviewItems.length > 0 ? (
+                <div className={`${styles.itemGrid} ${styles.reviewOutputGrid}`}>
+                  {reviewItems.map((item) => (
+                    <StageItemCard key={item.itemId} item={item} />
+                  ))}
+                </div>
+              ) : (
+                <div className={styles.reviewOutputEmpty}>
+                  <span>
+                    No separate assets were produced for this checkpoint. Use the summary above to approve or request changes.
+                  </span>
+                </div>
+              )}
               <div className={styles.feedbackField}>
                 <label className={styles.feedbackLabel} htmlFor="review-feedback-note">
                   Feedback
@@ -285,51 +383,101 @@ export function ProgressView({
                 </p>
               </div>
               {actionError ? (
-                <p className="review-gate-error" role="alert">
+                <p className={styles.error} role="alert">
                   {actionError}
                 </p>
               ) : null}
-              {reviewItems.length > 0 ? (
-                <div className="stage-item-grid review-output-grid">
-                  {reviewItems.map((item) => (
-                    <StageItemCard key={item.itemId} item={item} />
-                  ))}
-                </div>
-              ) : (
-                <div className="review-output-empty">
-                  <span className="muted">
-                    This stage has no itemized output yet. Review the stage summary above.
-                  </span>
-                </div>
-              )}
+              <div className={styles.reviewActionRow}>
+                <button
+                  type="button"
+                  className={styles.primaryButton}
+                  onClick={onApprove}
+                  disabled={!!pending}
+                >
+                  {pending === "approve" ? "Approving..." : "Approve & continue"}
+                </button>
+                {reviewActions ? (
+                  <>
+                    <button
+                      type="button"
+                      className={styles.secondaryButton}
+                      onClick={() => reviewActions.onReject(feedbackNote)}
+                      disabled={!!pending}
+                    >
+                      {pending === "reject"
+                        ? "Regenerating..."
+                        : "Regenerate with feedback"}
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.dangerButton}
+                      onClick={reviewActions.onCancel}
+                      disabled={!!pending}
+                    >
+                      {pending === "cancel" ? "Canceling..." : "Cancel generation"}
+                    </button>
+                  </>
+                ) : null}
+              </div>
             </section>
           ) : null}
 
           <section
-            className="progress-empty-card awaiting-review-card"
+            className={`${styles.card} ${styles.assetsCard}`}
             aria-labelledby="generated-assets-heading"
           >
-            <h2 id="generated-assets-heading" className="progress-card-heading">
+            <h2 id="generated-assets-heading" className={styles.cardHeading}>
               Generated assets
             </h2>
             {generatedItems.length > 0 ? (
-              <div className="stage-item-grid review-output-grid">
+              <div className={`${styles.itemGrid} ${styles.reviewOutputGrid}`}>
                 {generatedItems.map((item) => (
                   <StageItemCard key={item.itemId} item={item} />
                 ))}
               </div>
             ) : (
-              <p className="muted">
-                Generated visuals, audio, and timeline beats will appear here as
-                each stage produces them.
-              </p>
+              <div className={styles.assetsEmpty}>
+                <p>No generated assets yet.</p>
+                <span>
+                  As the run advances, this area will collect storyboard frames,
+                  shot candidates, voice or audio items, timeline artifacts, and
+                  the final render for review.
+                </span>
+              </div>
             )}
           </section>
         </section>
 
-        <aside className="progress-rail-pane" aria-label="Stage rail">
-          <h2 className="progress-rail-heading">Stages</h2>
+        <aside className={styles.sidePanel} aria-label="Stage rail">
+          <div className={styles.sidePanelHeader}>
+            <div>
+              <p className={styles.eyebrow}>Run timeline</p>
+              <h2 className={styles.sidePanelHeading}>Stages</h2>
+            </div>
+            <span className={styles.sidePanelPercent}>{progress.percent}%</span>
+          </div>
           <StageRail stages={detail.stages} reviewGate={detail.run.reviewGate} />
+          <div className={styles.metadataCard} aria-label="Run metadata">
+            <h3>Run metadata</h3>
+            <dl>
+              <div>
+                <dt>Project</dt>
+                <dd title={detail.run.projectId}>{shortId(detail.run.projectId)}</dd>
+              </div>
+              <div>
+                <dt>Status</dt>
+                <dd>{detail.run.reviewGate ? "Waiting for approval" : detail.run.status}</dd>
+              </div>
+              <div>
+                <dt>Started</dt>
+                <dd>{formatDateTime(detail.run.startedAt)}</dd>
+              </div>
+              <div>
+                <dt>Updated</dt>
+                <dd>{formatDateTime(detail.run.updatedAt)}</dd>
+              </div>
+            </dl>
+          </div>
         </aside>
       </div>
     </div>
