@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readStorageConfig, resolveBucket, StorageConfigError } from "../config";
+import {
+  HostedLocalStorageConfigError,
+  readStorageConfig,
+  resolveBucket,
+  StorageConfigError,
+} from "../config";
 
 test("storage config defaults to local disk media storage", () => {
   const config = readStorageConfig({
@@ -9,8 +14,42 @@ test("storage config defaults to local disk media storage", () => {
 
   assert.equal(config.backend, "local");
   assert.equal(config.localMediaDir, "/tmp/popcorn-local/media");
+  assert.equal(config.localUrlBase, "http://localhost:4000");
   assert.equal(config.publicBucket, "assets-public");
   assert.equal(config.privateBucket, "assets-private");
+});
+
+test("local storage uses explicit public local URL base when provided", () => {
+  const config = readStorageConfig({
+    STORAGE_BACKEND: "local",
+    STORAGE_LOCAL_URL_BASE: "https://api.example.com/",
+    PORT: "8080",
+  });
+
+  assert.equal(config.localUrlBase, "https://api.example.com");
+});
+
+test("local storage derives hosted Railway media origin from public domain", () => {
+  const config = readStorageConfig({
+    STORAGE_BACKEND: "local",
+    PORT: "8080",
+    RAILWAY_ENVIRONMENT: "production",
+    RAILWAY_PUBLIC_DOMAIN: "api.popcornready.example",
+  });
+
+  assert.equal(config.localUrlBase, "https://api.popcornready.example");
+});
+
+test("hosted local storage does not fall back to localhost", () => {
+  assert.throws(
+    () =>
+      readStorageConfig({
+        STORAGE_BACKEND: "local",
+        PORT: "8080",
+        RAILWAY_ENVIRONMENT: "production",
+      }),
+    HostedLocalStorageConfigError
+  );
 });
 
 test("s3 config reads MinIO endpoint and path-style options", () => {
@@ -41,4 +80,20 @@ test("s3 config validates required delivery settings", () => {
       error instanceof StorageConfigError &&
       error.message.includes("S3_PUBLIC_URL_BASE")
   );
+});
+
+test("hosted s3 storage does not require a local media URL base", () => {
+  const config = readStorageConfig({
+    STORAGE_BACKEND: "s3",
+    RAILWAY_ENVIRONMENT: "production",
+    AWS_REGION: "us-east-1",
+    AWS_ACCESS_KEY_ID: "aws-key",
+    AWS_SECRET_ACCESS_KEY: "aws-secret",
+    S3_PUBLIC_BUCKET: "assets-public",
+    S3_PRIVATE_BUCKET: "assets-private",
+    S3_PUBLIC_URL_BASE: "https://cdn.example.com",
+  });
+
+  assert.equal(config.backend, "s3");
+  assert.equal(config.localUrlBase, "http://localhost:4000");
 });

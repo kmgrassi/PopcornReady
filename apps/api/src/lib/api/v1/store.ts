@@ -81,7 +81,7 @@ import {
 } from "./orchestrator-store";
 import { getRequestSupabase } from "../../supabase/clients";
 import { agentApiStore, type AgentApiStore } from "../../agent-api/jobs";
-import { resolveAssetUrl } from "../../storage/asset-urls";
+import { remoteAssetUrlForDelivery, resolveAssetUrl } from "../../storage/asset-urls";
 import {
   AgentAssetSource,
   AgentAssetContext,
@@ -1268,6 +1268,7 @@ async function mapAsset(row: AssetRow): Promise<V1Asset> {
   const asset = mapAssetRow(row);
   const resolvedUrl = await resolveAssetUrl(row);
   if (resolvedUrl) asset.remoteUrl = resolvedUrl;
+  else delete asset.remoteUrl;
   return asset;
 }
 
@@ -3005,7 +3006,7 @@ export async function assetMediaUrlsForRow(
     try {
       url = (await resolveAssetUrl(row, { privateTtlSec: MEDIA_URL_EXPIRES_IN_SEC })) ?? null;
     } catch {
-      url = row.remote_url;
+      url = remoteAssetUrlForDelivery(row.remote_url) ?? null;
     }
   }
 
@@ -3319,15 +3320,15 @@ async function projectedAssetUrl(
         url:
           (await resolveAssetUrl(row, {
             privateTtlSec: expiresInSec,
-          })) ?? row.remote_url,
+          })) ?? remoteAssetUrlForDelivery(row.remote_url) ?? null,
         expiresAt: new Date(Date.now() + expiresInSec * 1000).toISOString(),
       };
     } catch {
-      return { url: row.remote_url };
+      return { url: remoteAssetUrlForDelivery(row.remote_url) ?? null };
     }
   }
 
-  return { url: row.remote_url };
+  return { url: remoteAssetUrlForDelivery(row.remote_url) ?? null };
 }
 
 async function selectedMediaAsset(
