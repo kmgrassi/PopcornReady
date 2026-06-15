@@ -5,8 +5,9 @@
 // shared low-level mappers come from ./store-internal.
 
 import { getServiceSupabase } from "../../supabase/clients";
+import { runQuery } from "../../supabase/db-errors";
 import { ApiError } from "./errors";
-import { iso, markedJson, throwOnError, unmarkedJson } from "./store-internal";
+import { iso, markedJson, unmarkedJson } from "./store-internal";
 
 export type OrchestratorRunStatus =
   | "queued"
@@ -160,47 +161,49 @@ export async function createOrchestratorRun(
 ): Promise<OrchestratorRun> {
   const db = getServiceSupabase();
   const now = new Date().toISOString();
-  const inserted = await db
-    .from("orchestrator_runs")
-    .insert({
-      schema_version: "orchestrator_run.v1",
-      project_id: input.projectId,
-      status: input.status ?? "queued",
-      input_summary: input.inputSummary,
-      budget_usd: input.budgetUsd ?? null,
-      spent_usd: 0,
-      created_at: now,
-      updated_at: now,
-    })
-    .select("*")
-    .single();
-  throwOnError(inserted.error, "createOrchestratorRun");
-  const run = mapRun(inserted.data as OrchestratorRunRow);
+  const inserted = await runQuery(
+    "store.createOrchestratorRun",
+    db
+      .from("orchestrator_runs")
+      .insert({
+        schema_version: "orchestrator_run.v1",
+        project_id: input.projectId,
+        status: input.status ?? "queued",
+        input_summary: input.inputSummary,
+        budget_usd: input.budgetUsd ?? null,
+        spent_usd: 0,
+        created_at: now,
+        updated_at: now,
+      })
+      .select("*")
+      .single()
+  );
+  const run = mapRun(inserted as OrchestratorRunRow);
 
   const stages = [...new Set((input.gates ?? []).filter((stage) => stage.trim().length > 0))];
   if (stages.length > 0) {
-    const { error } = await db.from("orchestrator_run_gates").insert(
-      stages.map((stage) => ({
-        orchestrator_run_id: run.id,
-        stage,
-        status: "pending",
-        created_at: now,
-        updated_at: now,
-      }))
+    await runQuery(
+      "store.createOrchestratorRun gates",
+      db.from("orchestrator_run_gates").insert(
+        stages.map((stage) => ({
+          orchestrator_run_id: run.id,
+          stage,
+          status: "pending",
+          created_at: now,
+          updated_at: now,
+        }))
+      )
     );
-    throwOnError(error, "createOrchestratorRun gates");
   }
   return run;
 }
 
 export async function getOrchestratorRun(runId: string): Promise<OrchestratorRun> {
   const db = getServiceSupabase();
-  const { data, error } = await db
-    .from("orchestrator_runs")
-    .select("*")
-    .eq("id", runId)
-    .maybeSingle();
-  throwOnError(error, "getOrchestratorRun");
+  const data = await runQuery(
+    "store.getOrchestratorRun",
+    db.from("orchestrator_runs").select("*").eq("id", runId).maybeSingle()
+  );
   if (!data) throw new ApiError("not_found", `Orchestrator run not found: ${runId}`);
   return mapRun(data as OrchestratorRunRow);
 }
@@ -219,24 +222,23 @@ export async function updateOrchestratorRun(
   if (patch.completedAt !== undefined) row.completed_at = patch.completedAt;
 
   const db = getServiceSupabase();
-  const { data, error } = await db
-    .from("orchestrator_runs")
-    .update(row)
-    .eq("id", runId)
-    .select("*")
-    .single();
-  throwOnError(error, `updateOrchestratorRun ${runId}`);
+  const data = await runQuery(
+    `store.updateOrchestratorRun ${runId}`,
+    db.from("orchestrator_runs").update(row).eq("id", runId).select("*").single()
+  );
   return mapRun(data as OrchestratorRunRow);
 }
 
 export async function listRunGates(runId: string): Promise<OrchestratorRunGate[]> {
   const db = getServiceSupabase();
-  const { data, error } = await db
-    .from("orchestrator_run_gates")
-    .select("*")
-    .eq("orchestrator_run_id", runId)
-    .order("created_at", { ascending: true });
-  throwOnError(error, "listRunGates");
+  const data = await runQuery(
+    "store.listRunGates",
+    db
+      .from("orchestrator_run_gates")
+      .select("*")
+      .eq("orchestrator_run_id", runId)
+      .order("created_at", { ascending: true })
+  );
   return ((data as OrchestratorRunGateRow[]) ?? []).map(mapGate);
 }
 
@@ -247,15 +249,17 @@ export async function markGateReached(
   stage: string
 ): Promise<OrchestratorRunGate | null> {
   const db = getServiceSupabase();
-  const { data, error } = await db
-    .from("orchestrator_run_gates")
-    .update({ status: "reached", updated_at: new Date().toISOString() })
-    .eq("orchestrator_run_id", runId)
-    .eq("stage", stage)
-    .eq("status", "pending")
-    .select("*")
-    .maybeSingle();
-  throwOnError(error, "markGateReached");
+  const data = await runQuery(
+    "store.markGateReached",
+    db
+      .from("orchestrator_run_gates")
+      .update({ status: "reached", updated_at: new Date().toISOString() })
+      .eq("orchestrator_run_id", runId)
+      .eq("stage", stage)
+      .eq("status", "pending")
+      .select("*")
+      .maybeSingle()
+  );
   return data ? mapGate(data as OrchestratorRunGateRow) : null;
 }
 
@@ -265,18 +269,20 @@ export async function resolveGate(
   decidedByActionId?: string
 ): Promise<OrchestratorRunGate> {
   const db = getServiceSupabase();
-  const { data, error } = await db
-    .from("orchestrator_run_gates")
-    .update({
-      status,
-      decided_at: new Date().toISOString(),
-      decided_by_action_id: decidedByActionId ?? null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", gateId)
-    .select("*")
-    .single();
-  throwOnError(error, `resolveGate ${gateId}`);
+  const data = await runQuery(
+    `store.resolveGate ${gateId}`,
+    db
+      .from("orchestrator_run_gates")
+      .update({
+        status,
+        decided_at: new Date().toISOString(),
+        decided_by_action_id: decidedByActionId ?? null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", gateId)
+      .select("*")
+      .single()
+  );
   return mapGate(data as OrchestratorRunGateRow);
 }
 
@@ -284,11 +290,13 @@ export async function resolveGate(
 // context when a parked run resumes.
 export async function listRunActions(runId: string): Promise<RunActionSummary[]> {
   const db = getServiceSupabase();
-  const { data, error } = await db
-    .from("actions")
-    .select("id, tool, status, params, output_asset_ids, job_ids, error, created_at")
-    .eq("orchestrator_run_id", runId)
-    .order("created_at", { ascending: true });
-  throwOnError(error, "listRunActions");
+  const data = await runQuery(
+    "store.listRunActions",
+    db
+      .from("actions")
+      .select("id, tool, status, params, output_asset_ids, job_ids, error, created_at")
+      .eq("orchestrator_run_id", runId)
+      .order("created_at", { ascending: true })
+  );
   return ((data as RunActionRow[]) ?? []).map(mapRunAction);
 }
