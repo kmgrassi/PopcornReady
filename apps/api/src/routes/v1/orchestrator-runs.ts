@@ -1,6 +1,8 @@
+import { createHash } from "crypto";
 import { Router } from "express";
 import { mutation, route } from "@/core/adapter";
 import { ApiError } from "@/core/errors";
+import { runIdempotent } from "@/lib/api/v1/idempotency";
 import {
   createOrchestratorRun,
   getOrchestratorRun,
@@ -36,6 +38,12 @@ interface GenerationRunDetail {
   run: GenerationRun;
   stages: GenerationStage[];
   stageItems: GenerationStageItem[];
+  resultArtifacts?: Array<{
+    kind: GenerationStageItem["kind"];
+    artifactId: string;
+    assetId?: string;
+    stageId: string;
+  }>;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -113,6 +121,105 @@ function requestedGateTools(body: unknown): string[] {
   return [...new Set(tools)];
 }
 
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (isRecord(value)) {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, canonicalize(value[key])])
+    );
+  }
+  return value ?? null;
+}
+
+function sha256(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function runIdempotencyScope(args: {
+  workspaceId: string;
+  actorId: string;
+  projectId: string;
+  entrypoint: string;
+}): string {
+  return [
+    args.workspaceId,
+    args.actorId,
+    "POST",
+    `/api/v1/projects/${args.projectId}/generation-entrypoints/${args.entrypoint}`,
+    "orchestrator_run",
+  ].join(":");
+}
+
+function runBodyHash(args: {
+  inputSummary: string;
+  gates: string[];
+  budgetUsd?: number;
+  body: unknown;
+}): string {
+  return sha256(
+    JSON.stringify(
+      canonicalize({
+        inputSummary: args.inputSummary,
+        gates: args.gates,
+        budgetUsd: args.budgetUsd ?? null,
+        body: isRecord(args.body) ? args.body : {},
+      })
+    )
+  );
+}
+
+async function createEntrypointRun(args: {
+  workspaceId: string;
+  actorId: string;
+  projectId: string;
+  entrypoint: string;
+  idempotencyKey: string | null;
+  inputSummary: string;
+  gates: string[];
+  budgetUsd?: number;
+  body: unknown;
+}): Promise<{ run: OrchestratorRun; replayed: boolean }> {
+  if (!args.idempotencyKey) {
+    return {
+      run: await createOrchestratorRun({
+        projectId: args.projectId,
+        inputSummary: args.inputSummary,
+        gates: args.gates,
+        budgetUsd: args.budgetUsd,
+      }),
+      replayed: false,
+    };
+  }
+
+  let produced = false;
+  const result = await runIdempotent(
+    runIdempotencyScope(args),
+    args.idempotencyKey,
+    runBodyHash(args),
+    async () => {
+      produced = true;
+      const run = await createOrchestratorRun({
+        projectId: args.projectId,
+        inputSummary: args.inputSummary,
+        gates: args.gates,
+        budgetUsd: args.budgetUsd,
+      });
+      return { status: 202, body: { runId: run.id } };
+    }
+  );
+  const body = isRecord(result.body) ? result.body : {};
+  const runId = typeof body.runId === "string" ? body.runId : "";
+  if (!runId) {
+    throw new ApiError("internal_error", "Idempotent orchestrator run response was missing runId.");
+  }
+  return {
+    run: await getOrchestratorRun(runId),
+    replayed: !produced,
+  };
+}
+
 function budgetUsd(body: unknown): number | undefined {
   if (!isRecord(body) || body.budgetUsd === undefined) return undefined;
   const parsed = Number(body.budgetUsd);
@@ -148,6 +255,23 @@ function runStatus(status: OrchestratorRun["status"]): GenerationRunStatus {
   return status;
 }
 
+function hasFinishedVideo(actions: RunActionSummary[]): boolean {
+  return actions.some(
+    (action) =>
+      action.tool === "export_video" &&
+      action.status === "applied" &&
+      action.outputAssetIds.length > 0
+  );
+}
+
+function projectedRunStatus(
+  run: OrchestratorRun,
+  actions: RunActionSummary[]
+): GenerationRunStatus {
+  if (run.status !== "succeeded") return runStatus(run.status);
+  return hasFinishedVideo(actions) ? "succeeded" : "running";
+}
+
 function actionStatus(status: string): GenerationRunStatus {
   if (status === "applied") return "succeeded";
   if (status === "failed") return "failed";
@@ -155,7 +279,7 @@ function actionStatus(status: string): GenerationRunStatus {
   return "queued";
 }
 
-function runMessage(run: OrchestratorRun): string {
+function runMessage(run: OrchestratorRun, actions: RunActionSummary[]): string {
   switch (run.status) {
     case "queued":
       return "Generation is queued.";
@@ -164,7 +288,9 @@ function runMessage(run: OrchestratorRun): string {
     case "waiting":
       return "Generation is waiting for a job or approval gate.";
     case "succeeded":
-      return "Generation completed.";
+      return hasFinishedVideo(actions)
+        ? "Generation completed."
+        : "The orchestrator completed the currently available tools, but no video export is ready yet.";
     case "failed":
       return "Generation failed.";
     case "canceled":
@@ -190,6 +316,7 @@ function projectRun(
   gates: OrchestratorRunGate[],
   actions: RunActionSummary[] = []
 ): GenerationRun {
+  const status = projectedRunStatus(run, actions);
   const reachedGate = gates.find((gate) => gate.status === "reached");
   const reviewGate = reachedGate
     ? {
@@ -199,24 +326,49 @@ function projectRun(
         enteredAt: reachedGate.updatedAt,
       }
     : null;
-  const latestAction = [...actions].reverse().find((action) => action.status === "running");
-  const currentStageType = reviewGate?.stageType ?? (latestAction ? toolStage(latestAction.tool) : undefined);
+  const latestRunningAction = [...actions].reverse().find((action) => action.status === "running");
+  const latestAction = [...actions].reverse()[0];
+  const currentStageType =
+    status === "succeeded"
+      ? "ready"
+      : reviewGate?.stageType ??
+        (latestRunningAction
+          ? toolStage(latestRunningAction.tool)
+          : latestAction
+            ? toolStage(latestAction.tool)
+            : undefined);
 
   return {
     runId: run.id,
     projectId: run.projectId,
-    status: runStatus(run.status),
+    status,
     reviewGates: gates.map((gate) => toolStage(gate.stage) as GateableGenerationStageType),
     reviewGate,
     currentStageType,
-    progressPercent: run.status === "succeeded" ? 100 : run.status === "queued" ? 0 : 50,
-    message: runMessage(run),
+    progressPercent: status === "succeeded" ? 100 : run.status === "queued" ? 0 : 50,
+    message: runMessage(run, actions),
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
     startedAt: run.startedAt,
     completedAt: run.completedAt,
     error: toErrorSummary(run.error),
   };
+}
+
+function projectResultArtifacts(
+  run: OrchestratorRun,
+  actions: RunActionSummary[]
+): GenerationRunDetail["resultArtifacts"] {
+  return actions
+    .filter((action) => action.tool === "export_video" && action.status === "applied")
+    .flatMap((action) =>
+      action.outputAssetIds.map((assetId) => ({
+        kind: "export" as const,
+        artifactId: assetId,
+        assetId,
+        stageId: stageId(run.id, "export"),
+      }))
+    );
 }
 
 function projectStages(run: OrchestratorRun, actions: RunActionSummary[]): GenerationStage[] {
@@ -269,6 +421,19 @@ function projectStageItems(run: OrchestratorRun, actions: RunActionSummary[]): G
   });
 }
 
+export function projectRunDetailFromParts(
+  run: OrchestratorRun,
+  gates: OrchestratorRunGate[],
+  actions: RunActionSummary[]
+): GenerationRunDetail {
+  return {
+    run: projectRun(run, gates, actions),
+    stages: projectStages(run, actions),
+    stageItems: projectStageItems(run, actions),
+    resultArtifacts: projectResultArtifacts(run, actions),
+  };
+}
+
 async function assembleRunDetail(runId: string, projectId: string): Promise<GenerationRunDetail> {
   const [run, gates, actions] = await Promise.all([
     getOrchestratorRun(runId),
@@ -278,11 +443,7 @@ async function assembleRunDetail(runId: string, projectId: string): Promise<Gene
   if (run.projectId !== projectId) {
     throw new ApiError("not_found", `Generation run not found: ${runId}`);
   }
-  return {
-    run: projectRun(run, gates, actions),
-    stages: projectStages(run, actions),
-    stageItems: projectStageItems(run, actions),
-  };
+  return projectRunDetailFromParts(run, gates, actions);
 }
 
 async function requireProjectRun(runId: string, projectId: string): Promise<OrchestratorRun> {
@@ -301,25 +462,32 @@ function startRun(workspaceId: string, runId: string): void {
 
 orchestratorRunsRouter.post(
   "/projects/:projectId/generation-entrypoints/prompt",
-  mutation(async ({ auth, body }, params) => {
+  mutation(async ({ auth, body, req }, params) => {
     const projectId = requireParam(params, "projectId");
     await requireProjectAccess(auth.workspaceId, projectId);
     const brief = promptBriefFromBody(body);
     await createBriefVersion(auth.workspaceId, projectId, brief);
-    const run = await createOrchestratorRun({
+    const gates = requestedGateTools(body);
+    const budget = budgetUsd(body);
+    const { run, replayed } = await createEntrypointRun({
+      workspaceId: auth.workspaceId,
+      actorId: auth.actor.id,
       projectId,
       inputSummary: brief.goal,
-      gates: requestedGateTools(body),
-      budgetUsd: budgetUsd(body),
+      entrypoint: "prompt",
+      idempotencyKey: req.header("Idempotency-Key"),
+      gates,
+      budgetUsd: budget,
+      body,
     });
-    startRun(auth.workspaceId, run.id);
+    if (!replayed) startRun(auth.workspaceId, run.id);
     return { status: 202, body: { runId: run.id } };
   })
 );
 
 orchestratorRunsRouter.post(
   "/projects/:projectId/generation-entrypoints/uploaded-footage",
-  mutation(async ({ auth, body }, params) => {
+  mutation(async ({ auth, body, req }, params) => {
     const projectId = requireParam(params, "projectId");
     await requireProjectAccess(auth.workspaceId, projectId);
     if (!isRecord(body)) {
@@ -342,13 +510,20 @@ orchestratorRunsRouter.post(
       `briefVersionId=${briefVersionId}`,
       `selectedAssetIds=${assetIds.join(",")}`,
     ];
-    const run = await createOrchestratorRun({
+    const gates = requestedGateTools(body);
+    const budget = budgetUsd(body);
+    const { run, replayed } = await createEntrypointRun({
+      workspaceId: auth.workspaceId,
+      actorId: auth.actor.id,
       projectId,
       inputSummary: summaryParts.join("\n"),
-      gates: requestedGateTools(body),
-      budgetUsd: budgetUsd(body),
+      entrypoint: "uploaded-footage",
+      idempotencyKey: req.header("Idempotency-Key"),
+      gates,
+      budgetUsd: budget,
+      body,
     });
-    startRun(auth.workspaceId, run.id);
+    if (!replayed) startRun(auth.workspaceId, run.id);
     return { status: 202, body: { runId: run.id } };
   })
 );
@@ -360,7 +535,9 @@ orchestratorRunsRouter.get(
     await requireProjectAccess(auth.workspaceId, projectId);
     const runs = await listOrchestratorRunsForProject(projectId);
     const bodies = await Promise.all(
-      runs.map(async (run) => projectRun(run, await listRunGates(run.id)))
+      runs.map(async (run) =>
+        projectRun(run, await listRunGates(run.id), await listRunActions(run.id))
+      )
     );
     return { status: 200, body: { runs: bodies }, headers: NO_STORE_HEADERS };
   })
