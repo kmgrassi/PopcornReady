@@ -12,10 +12,24 @@ import {
 } from "@/lib/api/v1/store";
 import { parseBrief } from "@/lib/api/v1/schemas";
 import { createGenerationJob, runGenerationJob } from "@/lib/v1/generation";
-import { createGenerationRunExecution } from "@/lib/v1/generation/run-execution";
+import {
+  createGenerationRunExecution,
+  createGenerationRunExecutionForRun,
+} from "@/lib/v1/generation/run-execution";
+import {
+  createRunWithSeedStages,
+  getGenerationRunStore,
+  type GenerationRunsStore,
+} from "@/lib/v1/generation-runs";
 import { Actor } from "@/lib/v1/actor";
 import { getStore, V1Store } from "@/lib/v1/store";
-import { SCHEMA, GenerationRequest, V1Asset } from "@popcorn/shared/v1/types";
+import {
+  SCHEMA,
+  GenerationJob,
+  GenerationRequest,
+  GenerationRunStatus,
+  V1Asset,
+} from "@popcorn/shared/v1/types";
 
 export const generationEntrypointsRouter = Router();
 
@@ -306,28 +320,293 @@ async function createAndMaybeRunGeneration(args: {
   return { status: 202, body: { job, runId: runExecution.runId } };
 }
 
+function errorSummary(err: unknown) {
+  const message = err instanceof Error ? err.message : "Generation failed.";
+  return {
+    code: err instanceof ApiError ? err.code : "internal_error",
+    message,
+    retryable: false,
+  };
+}
+
+function jobErrorSummary(job: GenerationJob) {
+  return {
+    code: job.error?.code ?? "internal_error",
+    message: job.error?.message ?? "Generation failed.",
+    retryable: false,
+  };
+}
+
+function isTerminalRunStatus(status: GenerationRunStatus): boolean {
+  return status === "succeeded" || status === "failed" || status === "canceled";
+}
+
+async function isEntrypointRunTerminal(args: {
+  store: GenerationRunsStore;
+  runId: string;
+}): Promise<boolean> {
+  const run = await args.store.getRun(args.runId);
+  return !run || isTerminalRunStatus(run.status);
+}
+
+async function failEntrypointRun(args: {
+  store: GenerationRunsStore;
+  runId: string;
+  err: unknown;
+}): Promise<void> {
+  const now = new Date().toISOString();
+  const error = errorSummary(args.err);
+  const stages = await args.store.listStagesForRun(args.runId);
+  const firstQueuedStage = stages
+    .sort((a, b) => a.order - b.order)
+    .find((stage) => stage.status === "queued");
+  if (firstQueuedStage) {
+    await args.store.updateStage(firstQueuedStage.stageId, {
+      status: "failed",
+      completedAt: now,
+      error,
+    });
+  }
+  await args.store.updateRun(args.runId, {
+    status: "failed",
+    completedAt: now,
+    currentStageType: firstQueuedStage?.type ?? "brief_intake",
+    error,
+    message: error.message,
+  });
+}
+
+async function finalizeEntrypointRunFromJob(args: {
+  store: GenerationRunsStore;
+  runId: string;
+  job: GenerationJob;
+}): Promise<void> {
+  if (args.job.status !== "succeeded" && args.job.status !== "failed") {
+    return;
+  }
+
+  const run = await args.store.getRun(args.runId);
+  if (!run || isTerminalRunStatus(run.status)) return;
+
+  const now = new Date().toISOString();
+  const stages = await args.store.listStagesForRun(args.runId);
+  if (args.job.status === "succeeded") {
+    const readyStage = stages.find((stage) => stage.type === "ready");
+    if (readyStage && readyStage.status !== "succeeded") {
+      await args.store.updateStage(readyStage.stageId, {
+        status: "succeeded",
+        progressPercent: 100,
+        completedAt: now,
+        message: "Timeline ready.",
+      });
+    }
+    await args.store.updateRun(args.runId, {
+      status: "succeeded",
+      currentStageType: "ready",
+      progressPercent: 100,
+      completedAt: now,
+      message: "Timeline ready.",
+    });
+    return;
+  }
+
+  const error = jobErrorSummary(args.job);
+  const failedStage =
+    stages.find((stage) => stage.status === "failed") ??
+    stages.find((stage) => stage.status === "running") ??
+    stages.find((stage) => stage.status === "queued");
+  if (failedStage && failedStage.status !== "failed") {
+    await args.store.updateStage(failedStage.stageId, {
+      status: "failed",
+      completedAt: now,
+      error,
+    });
+  }
+  await args.store.updateRun(args.runId, {
+    status: "failed",
+    currentStageType: failedStage?.type ?? run.currentStageType ?? "brief_intake",
+    completedAt: now,
+    error,
+    message: error.message,
+  });
+}
+
+async function markEntrypointRunStarting(args: {
+  store: GenerationRunsStore;
+  runId: string;
+}): Promise<void> {
+  const stages = await args.store.listStagesForRun(args.runId);
+  const firstStage = stages.sort((a, b) => a.order - b.order)[0];
+  if (firstStage) {
+    await args.store.updateStage(firstStage.stageId, {
+      status: "running",
+      progressPercent: 5,
+      message: "Starting generation.",
+    });
+  }
+  await args.store.updateRun(args.runId, {
+    status: "running",
+    currentStageType: firstStage?.type ?? "brief_intake",
+    progressPercent: 5,
+    message: "Starting generation.",
+  });
+}
+
+async function startGenerationForExistingRun(args: {
+  auth: AuthContext;
+  requestId: string;
+  idempotencyKey: string | null;
+  projectId: string;
+  runId: string;
+  body: unknown;
+  briefVersionId: string;
+  assetIds: string[];
+  generatedJobIdByAssetId?: Map<string, string>;
+}): Promise<GenerationJob> {
+  const store = getStore();
+  await mirrorProjectInputs({
+    auth: args.auth,
+    projectId: args.projectId,
+    store,
+    generatedJobIdByAssetId: args.generatedJobIdByAssetId,
+  });
+  const generationJob = await createGenerationJob({
+    store,
+    actor: actorForAuth(args.auth),
+    projectId: args.projectId,
+    body: generationBody(args.body, args.briefVersionId, args.assetIds),
+    idempotencyKey: args.idempotencyKey ?? undefined,
+    requestId: args.requestId,
+  });
+  const runExecution = await createGenerationRunExecutionForRun({
+    runId: args.runId,
+    briefVersionId: args.briefVersionId,
+  });
+  return runGenerationJob(
+    store,
+    generationJob.id,
+    undefined,
+    runExecution.progress,
+    runExecution.execution
+  );
+}
+
+function scheduleEntrypointRun(args: {
+  auth: AuthContext;
+  requestId: string;
+  idempotencyKey: string | null;
+  projectId: string;
+  runId: string;
+  body: unknown;
+  briefVersionId: string;
+  seedBriefGoal?: string;
+  assetIds?: string[];
+}) {
+  const runStore = getGenerationRunStore();
+  setImmediate(() => {
+    void (async () => {
+      try {
+        if (await isEntrypointRunTerminal({ store: runStore, runId: args.runId })) {
+          return;
+        }
+        await markEntrypointRunStarting({ store: runStore, runId: args.runId });
+        const suppliedAssetIds =
+          args.assetIds ?? (isRecord(args.body) ? stringArray(args.body.assetIds) : []);
+        const seeded = args.seedBriefGoal
+          ? await seedGeneratedAssets({
+              auth: args.auth,
+              projectId: args.projectId,
+              body: args.body,
+              briefGoal: args.seedBriefGoal,
+            })
+          : { assetIds: [], generatedJobIdByAssetId: new Map<string, string>() };
+        if (await isEntrypointRunTerminal({ store: runStore, runId: args.runId })) {
+          return;
+        }
+        const job = await startGenerationForExistingRun({
+          auth: args.auth,
+          requestId: args.requestId,
+          idempotencyKey: args.idempotencyKey,
+          projectId: args.projectId,
+          runId: args.runId,
+          body: args.body,
+          briefVersionId: args.briefVersionId,
+          assetIds: suppliedAssetIds.length ? suppliedAssetIds : seeded.assetIds,
+          generatedJobIdByAssetId: seeded.generatedJobIdByAssetId,
+        });
+        await finalizeEntrypointRunFromJob({
+          store: runStore,
+          runId: args.runId,
+          job,
+        });
+      } catch (err) {
+        console.error("generation entrypoint background run failed", err);
+        await failEntrypointRun({ store: runStore, runId: args.runId, err });
+      }
+    })();
+  });
+}
+
+async function createRunAndScheduleGeneration(args: {
+  auth: AuthContext;
+  requestId: string;
+  idempotencyKey: string | null;
+  projectId: string;
+  body: unknown;
+  briefVersionId: string;
+  seedBriefGoal?: string;
+  assetIds?: string[];
+}) {
+  const runStore = getGenerationRunStore();
+  const payload = await createRunWithSeedStages({
+    store: runStore,
+    projectId: args.projectId,
+    body: {
+      ...(isRecord(args.body) ? args.body : {}),
+      briefVersionId: args.briefVersionId,
+    },
+  });
+  scheduleEntrypointRun({
+    ...args,
+    runId: payload.run.runId,
+  });
+  return { status: 202, body: { job: null, runId: payload.run.runId } };
+}
+
 generationEntrypointsRouter.post(
   "/projects/:projectId/generation-entrypoints/prompt",
   mutation(async ({ auth, body, req, requestId }, params) => {
     const projectId = requireProjectId(params);
     const brief = promptBriefFromBody(body);
     const { briefVersion } = await createBriefVersion(auth.workspaceId, projectId, brief);
-    const suppliedAssetIds = isRecord(body) ? stringArray(body.assetIds) : [];
-    const seeded = await seedGeneratedAssets({
-      auth,
-      projectId,
-      body,
-      briefGoal: brief.goal,
-    });
-    return createAndMaybeRunGeneration({
+    const shouldRun = isRecord(body) && body.runNow === false ? false : true;
+    if (!shouldRun) {
+      const suppliedAssetIds = isRecord(body) ? stringArray(body.assetIds) : [];
+      const seeded = await seedGeneratedAssets({
+        auth,
+        projectId,
+        body,
+        briefGoal: brief.goal,
+      });
+      return createAndMaybeRunGeneration({
+        auth,
+        requestId,
+        idempotencyKey: req.header("Idempotency-Key"),
+        projectId,
+        body,
+        briefVersionId: briefVersion.id,
+        assetIds: suppliedAssetIds.length ? suppliedAssetIds : seeded.assetIds,
+        generatedJobIdByAssetId: seeded.generatedJobIdByAssetId,
+      });
+    }
+    return createRunAndScheduleGeneration({
       auth,
       requestId,
       idempotencyKey: req.header("Idempotency-Key"),
       projectId,
       body,
       briefVersionId: briefVersion.id,
-      assetIds: suppliedAssetIds.length ? suppliedAssetIds : seeded.assetIds,
-      generatedJobIdByAssetId: seeded.generatedJobIdByAssetId,
+      seedBriefGoal: brief.goal,
     });
   })
 );
@@ -351,7 +630,19 @@ generationEntrypointsRouter.post(
         fields: [{ path: "assetIds", message: "Provide at least one ready visual asset." }],
       });
     }
-    return createAndMaybeRunGeneration({
+    const shouldRun = isRecord(body) && body.runNow === false ? false : true;
+    if (!shouldRun) {
+      return createAndMaybeRunGeneration({
+        auth,
+        requestId,
+        idempotencyKey: req.header("Idempotency-Key"),
+        projectId,
+        body,
+        briefVersionId,
+        assetIds,
+      });
+    }
+    return createRunAndScheduleGeneration({
       auth,
       requestId,
       idempotencyKey: req.header("Idempotency-Key"),
