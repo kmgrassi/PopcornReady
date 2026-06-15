@@ -152,7 +152,10 @@ const RUN_STATE_VERSION = "generationRunState.v1";
 const RUN_STATE_WRITE_ATTEMPTS = 5;
 
 interface StoredRunState {
-  v: typeof RUN_STATE_VERSION;
+  // Schema marker keyed on `schema_version` to satisfy the
+  // generation_runs_gates_schema_check constraint and match the asset-graph
+  // JSONB convention (`schema_version: "<name>.v1"`).
+  schema_version: typeof RUN_STATE_VERSION;
   briefVersionId?: string;
   reviewGates?: GenerationRun["reviewGates"];
   reviewGate?: GenerationRun["reviewGate"] | null;
@@ -168,9 +171,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function parseRunState(value: unknown): StoredRunState {
-  if (isRecord(value) && value.v === RUN_STATE_VERSION) {
+  if (isRecord(value) && value.schema_version === RUN_STATE_VERSION) {
     return {
-      v: RUN_STATE_VERSION,
+      schema_version: RUN_STATE_VERSION,
       briefVersionId:
         typeof value.briefVersionId === "string" ? value.briefVersionId : undefined,
       reviewGates: Array.isArray(value.reviewGates)
@@ -201,7 +204,7 @@ function parseRunState(value: unknown): StoredRunState {
     };
   }
   return {
-    v: RUN_STATE_VERSION,
+    schema_version: RUN_STATE_VERSION,
     reviewGates: Array.isArray(value) ? (value as GenerationRun["reviewGates"]) : undefined,
     stages: [],
     stageItems: [],
@@ -211,7 +214,7 @@ function parseRunState(value: unknown): StoredRunState {
 
 function runStateFromRun(run: GenerationRun): StoredRunState {
   return {
-    v: RUN_STATE_VERSION,
+    schema_version: RUN_STATE_VERSION,
     briefVersionId: run.briefVersionId,
     reviewGates: run.reviewGates,
     reviewGate: run.reviewGate,
