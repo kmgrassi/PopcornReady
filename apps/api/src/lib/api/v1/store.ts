@@ -402,6 +402,14 @@ export async function defaultVisibilityForWorkspace(
   db: SupabaseClient,
   workspaceId: string
 ): Promise<"public" | "private"> {
+  const workspace = await runQuery(
+    "store.defaultVisibilityForWorkspace workspace",
+    db.from("workspaces").select("purpose").eq("id", workspaceId).maybeSingle()
+  );
+  if ((workspace as { purpose?: string } | null)?.purpose !== "user") {
+    return "private";
+  }
+
   const data = await runQuery(
     "store.defaultVisibilityForWorkspace",
     db.rpc("owner_tier", { ws_id: workspaceId })
@@ -2481,8 +2489,9 @@ export async function listPublicProjects(
     "store.listPublicProjects",
     db
       .from("projects")
-      .select("*")
+      .select("*, workspaces!inner(purpose)")
       .eq("visibility", "public")
+      .eq("workspaces.purpose", "user")
       .neq("status", "deleted")
   );
   const all = await Promise.all(
@@ -3015,7 +3024,12 @@ export async function listAssets(
 }
 
 interface AssetWithProjectRow extends AssetRow {
-  projects?: { id: string; visibility: "public" | "private"; status: "active" | "deleted" };
+  projects?: {
+    id: string;
+    visibility: "public" | "private";
+    status: "active" | "deleted";
+    workspaces?: { purpose: string };
+  };
 }
 
 // Workspace-scoped asset summary for the cross-project dashboard list.
@@ -3608,9 +3622,10 @@ export async function listPublicAssets(
   const db = getServiceSupabase();
   let query = db
     .from("assets")
-    .select("*, projects!inner(id, visibility, status)")
+    .select("*, projects!inner(id, visibility, status, workspaces!inner(purpose))")
     .eq("visibility", "public")
     .eq("projects.visibility", "public")
+    .eq("projects.workspaces.purpose", "user")
     .neq("projects.status", "deleted")
     .neq("media", "data");
 

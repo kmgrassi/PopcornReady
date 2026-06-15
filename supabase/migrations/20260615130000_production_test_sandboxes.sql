@@ -22,6 +22,62 @@ comment on column public.workspaces.purpose is
 comment on column public.workspaces.expires_at is
   'Optional cleanup deadline for non-customer workspaces.';
 
+-- Public content is only public when it belongs to a normal customer/user
+-- workspace. Internal test and fixture workspaces may contain rows whose tier
+-- defaults would otherwise mark them public, but they must not appear in public
+-- feeds or public-read RLS projections.
+create or replace function public.project_is_public(proj_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.projects p
+    join public.workspaces w on w.id = p.workspace_id
+    where p.id = proj_id
+      and p.visibility = 'public'
+      and p.status <> 'deleted'
+      and w.purpose = 'user'
+  )
+$$;
+
+create or replace function public.asset_is_effectively_public(p_asset_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.assets a
+    join public.projects p on p.id = a.project_id
+    join public.workspaces w on w.id = p.workspace_id
+    where a.id = p_asset_id
+      and a.visibility = 'public'
+      and p.visibility = 'public'
+      and p.status <> 'deleted'
+      and w.purpose = 'user'
+  )
+$$;
+
+drop policy if exists projects_public_read on public.projects;
+create policy projects_public_read on public.projects
+  for select to anon, authenticated
+  using (
+    visibility = 'public'
+    and status <> 'deleted'
+    and exists (
+      select 1
+      from public.workspaces w
+      where w.id = workspace_id
+        and w.purpose = 'user'
+    )
+  );
+
 -- Deploy/build metadata for production smoke tests and post-deploy debugging.
 alter table public.orchestrator_runs
   add column deploy_id text,
@@ -134,6 +190,54 @@ create trigger test_sandboxes_validate_refs
   for each row execute function public.validate_test_sandbox_refs();
 
 alter table public.test_sandboxes enable row level security;
+
+create or replace function public.search_public_projects(search_query text)
+returns setof public.projects
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select p.*
+  from public.projects p
+  join public.workspaces w on w.id = p.workspace_id
+  where p.visibility = 'public'
+    and p.status <> 'deleted'
+    and w.purpose = 'user'
+    and to_tsvector('english', coalesce(p.name, ''))
+      @@ plainto_tsquery('english', search_query)
+  order by p.created_at desc, p.id desc
+$$;
+
+create or replace function public.search_public_assets(
+  search_query text,
+  media_filter public.asset_media default null
+)
+returns setof public.assets
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select a.*
+  from public.assets a
+  join public.projects p on p.id = a.project_id
+  join public.workspaces w on w.id = p.workspace_id
+  where a.visibility = 'public'
+    and p.visibility = 'public'
+    and p.status <> 'deleted'
+    and w.purpose = 'user'
+    and (media_filter is null or a.media = media_filter)
+    and to_tsvector(
+      'english',
+      coalesce(a.description, '') || ' ' ||
+      coalesce(a.content ->> 'summary', '') || ' ' ||
+      coalesce(a.context ->> 'summary', '') || ' ' ||
+      coalesce(a.context #>> '{agentContext,summary}', '') || ' ' ||
+      coalesce(a.semantic_analysis::text, '')
+    ) @@ plainto_tsquery('english', search_query)
+  order by a.created_at desc, a.id desc
+$$;
 
 -- Service-role only: production smoke harnesses and cleanup jobs can manage
 -- sandboxes without exposing internal fixtures to normal app users.
