@@ -5,7 +5,7 @@ import type {
   OrchestratorRun,
   RunActionSummary,
 } from "@/lib/api/v1/orchestrator-store";
-import { assembleOrchestratorPayloadFromParts } from "../orchestrator-run-payload";
+import { projectRunDetailFromParts } from "../orchestrator-runs";
 
 function runFixture(overrides: Partial<OrchestratorRun> = {}): OrchestratorRun {
   return {
@@ -38,42 +38,40 @@ function actionFixture(
 }
 
 test("does not surface a storyboard-only orchestrator success as a ready video", () => {
-  const payload = assembleOrchestratorPayloadFromParts(
+  const payload = projectRunDetailFromParts(
     runFixture(),
+    [],
     [
       actionFixture("create_or_load_brief", { outputAssetIds: ["brief_asset"] }),
       actionFixture("plan_shots", { outputAssetIds: ["plan_asset"] }),
       actionFixture("generate_storyboard", { outputAssetIds: ["storyboard_asset"] }),
-    ],
-    []
+    ]
   );
 
   assert.equal(payload.run.status, "running");
   assert.equal(payload.run.currentStageType, "storyboard");
   assert.match(payload.run.message ?? "", /no video export is ready/i);
-  assert.equal(payload.stages.find((stage) => stage.type === "ready")?.status, "queued");
-  assert.deepEqual(payload.resultArtifacts, []);
+  assert.equal(payload.resultArtifacts?.length, 0);
 });
 
 test("surfaces orchestrator success as ready once export_video produced output", () => {
-  const payload = assembleOrchestratorPayloadFromParts(
+  const payload = projectRunDetailFromParts(
     runFixture(),
+    [],
     [
       actionFixture("assemble_timeline", { outputAssetIds: ["timeline_1"] }),
       actionFixture("export_video", { outputAssetIds: ["export_asset_1"] }),
-    ],
-    []
+    ]
   );
 
   assert.equal(payload.run.status, "succeeded");
   assert.equal(payload.run.currentStageType, "ready");
-  assert.equal(payload.stages.find((stage) => stage.type === "ready")?.status, "succeeded");
   assert.deepEqual(payload.resultArtifacts, [
     {
       kind: "export",
       artifactId: "export_asset_1",
       assetId: "export_asset_1",
-      stageId: "orchestrator-stage-export",
+      stageId: "run_1:export",
     },
   ]);
 });

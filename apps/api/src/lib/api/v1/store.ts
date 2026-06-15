@@ -65,9 +65,10 @@ import {
 import type { EditPlan } from "@popcorn/shared/types";
 import type { Asset } from "@popcorn/shared/assets/types";
 import {
-  getGenerationRunStore,
-  type GenerationRunsStore,
-} from "../../v1/generation-runs/store";
+  getOrchestratorRun,
+  listOrchestratorRunsForProject,
+  type OrchestratorRun,
+} from "./orchestrator-store";
 import { getRequestSupabase } from "../../supabase/clients";
 import { agentApiStore, type AgentApiStore } from "../../agent-api/jobs";
 import { resolveAssetUrl } from "../../storage/asset-urls";
@@ -243,7 +244,7 @@ export interface V1Action {
   id: string;
   schemaVersion: "action.v1";
   projectId: string;
-  runId?: string;
+  orchestratorRunId?: string;
   tool: string;
   status: ActionStatus;
   params: Record<string, unknown>;
@@ -261,7 +262,6 @@ export interface V1Action {
 
 export interface CreateActionInput {
   projectId: string;
-  runId?: string;
   orchestratorRunId?: string;
   tool: string;
   status?: ActionStatus;
@@ -274,6 +274,22 @@ export interface CreateActionInput {
   jobIds?: string[];
   outputAssetIds?: string[];
   error?: Record<string, unknown>;
+}
+
+export type VisualAnchorPlanItemKind = "character" | "location" | "style";
+
+export interface VisualAnchorPlanItem {
+  id: string;
+  kind: VisualAnchorPlanItemKind;
+  label: string;
+  description: string;
+  sourceSceneIds: string[];
+  sourceBeatIds: string[];
+}
+
+export interface VisualAnchorPlan {
+  schemaVersion: "visual_anchor_plan.v1";
+  anchors: VisualAnchorPlanItem[];
 }
 
 export type UpdateActionPatch = Partial<
@@ -497,7 +513,10 @@ interface DataAssetRow {
 // it when projecting the payload back out as a domain object.
 const CONTENT_SCHEMA_KEY = "schema_version";
 
-function markedContent(kind: "brief" | "beat" | "plan", content: unknown): Record<string, unknown> {
+function markedContent(
+  kind: "brief" | "beat" | "plan" | "visual_anchor_plan",
+  content: unknown
+): Record<string, unknown> {
   return { [CONTENT_SCHEMA_KEY]: `${kind}.v1`, ...(content as Record<string, unknown>) };
 }
 
@@ -551,7 +570,7 @@ interface ActionRow {
   id: string;
   schema_version: "action.v1";
   project_id: string;
-  run_id: string | null;
+  orchestrator_run_id: string | null;
   tool: string;
   status: ActionStatus;
   params: Record<string, unknown>;
@@ -565,12 +584,6 @@ interface ActionRow {
   error: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
-}
-
-interface RunBudgetRow {
-  id: string;
-  project_id: string;
-  budget_usd: number | null;
 }
 
 interface AssetFingerprintRow {
@@ -593,7 +606,7 @@ function mapAction(row: ActionRow): V1Action {
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
   };
-  if (row.run_id != null) action.runId = row.run_id;
+  if (row.orchestrator_run_id != null) action.orchestratorRunId = row.orchestrator_run_id;
   if (row.rationale != null) action.rationale = row.rationale;
   const proposal = unmarkedJson(row.proposal);
   if (proposal) action.proposal = proposal;
@@ -623,16 +636,19 @@ async function dataAssetById(
 async function latestDataAsset(
   db: SupabaseClient,
   projectId: string,
-  kind: GraphAssetKind
+  kind: GraphAssetKind,
+  role?: string
 ): Promise<DataAssetRow | null> {
+  let query = db
+    .from("assets")
+    .select("*")
+    .eq("project_id", projectId)
+    .eq("kind", kind)
+    .eq("media", "data");
+  if (role) query = query.eq("role", role);
   const data = await runQuery(
     `store.latestDataAsset ${kind}`,
-    db
-      .from("assets")
-      .select("*")
-      .eq("project_id", projectId)
-      .eq("kind", kind)
-      .eq("media", "data")
+    query
       .order("created_at", { ascending: false })
       .order("id", { ascending: false })
       .limit(1)
@@ -645,7 +661,8 @@ async function selectedDataAsset(
   db: SupabaseClient,
   projectId: string,
   slotRole: string,
-  kind: GraphAssetKind
+  kind: GraphAssetKind,
+  assetRole?: string
 ): Promise<DataAssetRow | null> {
   const selected = await runQuery(
     `store.selectedDataAsset ${slotRole}`,
@@ -658,8 +675,10 @@ async function selectedDataAsset(
   );
 
   const activeAssetId = (selected as CurrentSelectionRow | null)?.active_asset_id;
-  if (!activeAssetId) return latestDataAsset(db, projectId, kind);
-  return (await dataAssetById(db, activeAssetId)) ?? latestDataAsset(db, projectId, kind);
+  if (!activeAssetId) return latestDataAsset(db, projectId, kind, assetRole);
+  const asset = await dataAssetById(db, activeAssetId);
+  if (asset && asset.kind === kind && (!assetRole || asset.role === assetRole)) return asset;
+  return latestDataAsset(db, projectId, kind, assetRole);
 }
 
 // --- poster ----------------------------------------------------------------
@@ -814,7 +833,7 @@ async function mapProjectWithProjection(
 async function setActiveAssetSelection(
   db: SupabaseClient,
   projectId: string,
-  slotRole: "brief" | "plan" | typeof POSTER_SLOT_ROLE,
+  slotRole: "brief" | "plan" | "visual_anchors" | typeof POSTER_SLOT_ROLE,
   activeAssetId: string,
   setByActionId?: string
 ): Promise<void> {
@@ -839,7 +858,6 @@ export async function createAction(input: CreateActionInput): Promise<V1Action> 
       .insert({
         schema_version: "action.v1",
         project_id: input.projectId,
-        run_id: input.runId ?? null,
         orchestrator_run_id: input.orchestratorRunId ?? null,
         tool: input.tool,
         status: input.status ?? "proposed",
@@ -887,31 +905,20 @@ export async function assertRunBudgetAllows(input: {
   additionalCostUsd: number;
 }): Promise<void> {
   if (!input.runId) return;
-  const db = getServiceSupabase();
-  const run = await runQuery(
-    "store.assertRunBudgetAllows run",
-    db
-      .from("generation_runs")
-      .select("id,project_id,budget_usd")
-      .eq("id", input.runId)
-      .maybeSingle()
-  );
-
-  const scopedRun = run as RunBudgetRow | null;
-  if (!scopedRun) throw new Error(`Run not found: ${input.runId}`);
-  if (scopedRun.project_id !== input.projectId) {
+  const run = await getOrchestratorRun(input.runId);
+  if (run.projectId !== input.projectId) {
     throw new Error(`Run project mismatch: ${input.runId}`);
   }
-
-  const budgetUsd = scopedRun.budget_usd;
+  const budgetUsd = run.budgetUsd;
   if (budgetUsd == null || budgetUsd <= 0) return;
 
+  const db = getServiceSupabase();
   const actions = await runQuery(
     "store.assertRunBudgetAllows actions",
     db
       .from("actions")
       .select("estimated_cost_usd,actual_cost_usd,status")
-      .eq("run_id", input.runId)
+      .eq("orchestrator_run_id", input.runId)
       .in("status", ["proposed", "approved", "running", "applied"])
   );
 
@@ -956,6 +963,7 @@ async function insertDataAsset(input: {
   workspaceId: string;
   projectId: string;
   kind: "brief" | "beat" | "plan";
+  contentSchemaKind?: "brief" | "beat" | "plan" | "visual_anchor_plan";
   role: string;
   content: unknown;
   // Upstream asset snapshot. The DB trigger mirrors this into asset_edges, so the
@@ -967,7 +975,7 @@ async function insertDataAsset(input: {
 }): Promise<DataAssetRow> {
   const now = new Date().toISOString();
   const visibility = await defaultVisibilityForWorkspace(input.db, input.workspaceId);
-  const content = markedContent(input.kind, input.content);
+  const content = markedContent(input.contentSchemaKind ?? input.kind, input.content);
   const inputs = input.inputs ?? [];
   const row: Record<string, unknown> = {
     schema_version: "asset.v2",
@@ -1049,8 +1057,7 @@ async function assertStudioDraftRefs(
     await getProject(workspaceId, payload.projectId);
   }
   if (payload.runId) {
-    const run = await getGenerationRunStore().getRun(payload.runId);
-    if (!run) throw notFound(`Generation run not found: ${payload.runId}`);
+    const run = await getOrchestratorRun(payload.runId);
     await getProject(workspaceId, run.projectId);
     if (payload.projectId && payload.projectId !== run.projectId) {
       throw notFound(`Generation run not found: ${payload.runId}`);
@@ -1594,6 +1601,53 @@ export async function addProjectPlan(input: {
   return { planAssetId: planAsset.id };
 }
 
+// Persist the reusable visual-anchor plan as a typed data asset. It is still a
+// plan-kind graph node because it describes what later anchor-generation tools
+// should create; the role + active selection distinguish it from the shot plan.
+export async function addProjectVisualAnchorPlan(input: {
+  workspaceId: string;
+  projectId: string;
+  visualAnchorPlan: VisualAnchorPlan;
+  planAssetId: string;
+  planContentHash: string;
+}): Promise<{ visualAnchorPlanAssetId: string }> {
+  const db = getServiceSupabase();
+  const graphInputs: GraphAssetInput[] = [
+    {
+      assetId: input.planAssetId,
+      relation: "input",
+      role: "plan",
+      position: 0,
+      ...(input.planContentHash ? { contentHash: input.planContentHash } : {}),
+    },
+  ];
+  const action = await createAction({
+    projectId: input.projectId,
+    tool: "plan_visual_anchors",
+    status: "running",
+    params: { source: "plan_visual_anchors" },
+    inputAssetIds: [input.planAssetId],
+    rationale: "Persist the visual-anchor plan for later anchor generation.",
+  });
+  const asset = await insertDataAsset({
+    db,
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    kind: "plan",
+    contentSchemaKind: "visual_anchor_plan",
+    role: "visual_anchor_plan",
+    content: input.visualAnchorPlan,
+    inputs: graphInputs,
+    createdByActionId: action.id,
+  });
+  await setActiveAssetSelection(db, input.projectId, "visual_anchors", asset.id, action.id);
+  await updateAction(action.id, {
+    status: "applied",
+    outputAssetIds: [asset.id],
+  });
+  return { visualAnchorPlanAssetId: asset.id };
+}
+
 export interface ActiveProjectPlan {
   plan: EditPlan;
   /** The plan asset id — recorded as the input of anything derived from it. */
@@ -1608,7 +1662,7 @@ export async function getActiveProjectPlan(
   projectId: string
 ): Promise<ActiveProjectPlan | null> {
   const db = getServiceSupabase();
-  const planAsset = await selectedDataAsset(db, projectId, "plan", "plan");
+  const planAsset = await selectedDataAsset(db, projectId, "plan", "plan", "current_plan");
   if (!planAsset) return null;
   return {
     plan: unmarkedContent<EditPlan>(planAsset.content),
@@ -3157,7 +3211,37 @@ export interface WorkspaceGenerationRunSummary extends GenerationRun {
 
 export interface ListWorkspaceGenerationRunsDeps {
   listProjects: (workspaceId: string) => Promise<WorkspaceProjectRef[]>;
-  runStore: GenerationRunsStore;
+  listRunsForProject: (projectId: string) => Promise<OrchestratorRun[]>;
+}
+
+function mapOrchestratorSummary(run: OrchestratorRun): GenerationRun {
+  const status = run.status === "waiting" ? "running" : run.status;
+  return {
+    runId: run.id,
+    projectId: run.projectId,
+    status,
+    progressPercent: status === "succeeded" ? 100 : status === "queued" ? 0 : 50,
+    message:
+      run.status === "waiting"
+        ? "Generation is waiting for a job or approval gate."
+        : run.status === "running"
+          ? "The orchestrator is running."
+          : undefined,
+    createdAt: run.createdAt,
+    updatedAt: run.updatedAt,
+    startedAt: run.startedAt,
+    completedAt: run.completedAt,
+    error: run.error
+      ? {
+          code: typeof run.error.kind === "string" ? run.error.kind : "orchestrator_error",
+          message:
+            typeof run.error.message === "string"
+              ? run.error.message
+              : "The orchestrator run failed.",
+          retryable: run.error.recoverable === true,
+        }
+      : undefined,
+  };
 }
 
 export async function listWorkspaceGenerationRuns(
@@ -3167,7 +3251,7 @@ export async function listWorkspaceGenerationRuns(
   cursor: string | null,
   deps: ListWorkspaceGenerationRunsDeps = {
     listProjects: listWorkspaceProjectRefs,
-    runStore: getGenerationRunStore(),
+    listRunsForProject: listOrchestratorRunsForProject,
   }
 ): Promise<PageResult<WorkspaceGenerationRunSummary>> {
   const projects = await deps.listProjects(workspaceId);
@@ -3177,8 +3261,11 @@ export async function listWorkspaceGenerationRuns(
 
   const perProject = await Promise.all(
     scoped.map(async (project) => {
-      const runs = await deps.runStore.listRunsForProject(project.id);
-      return runs.map((run) => ({ ...run, projectName: project.name }));
+      const runs = await deps.listRunsForProject(project.id);
+      return runs.map((run) => ({
+        ...mapOrchestratorSummary(run),
+        projectName: project.name,
+      }));
     })
   );
 
@@ -3442,7 +3529,7 @@ export async function getProjectWatchMedia(
 
 export interface GetWorkspaceDashboardSummaryDeps {
   listProjects: (workspaceId: string) => Promise<WorkspaceProjectRef[]>;
-  runStore: GenerationRunsStore;
+  listRunsForProject: (projectId: string) => Promise<OrchestratorRun[]>;
   artifactStore: Pick<AgentApiStore, "listArtifactsForProject">;
 }
 
@@ -3454,7 +3541,7 @@ export async function getWorkspaceDashboardSummary(
   workspaceId: string,
   deps: GetWorkspaceDashboardSummaryDeps = {
     listProjects: listWorkspaceProjectRefs,
-    runStore: getGenerationRunStore(),
+    listRunsForProject: listOrchestratorRunsForProject,
     artifactStore: agentApiStore,
   }
 ): Promise<DashboardSummary> {
@@ -3467,7 +3554,7 @@ export async function getWorkspaceDashboardSummary(
       {},
       Number.MAX_SAFE_INTEGER,
       null,
-      { listProjects: listProjectsOnce, runStore: deps.runStore }
+      { listProjects: listProjectsOnce, listRunsForProject: deps.listRunsForProject }
     ),
     listWorkspaceOutputs(
       workspaceId,
