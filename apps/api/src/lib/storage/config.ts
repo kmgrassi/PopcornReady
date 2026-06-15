@@ -31,6 +31,16 @@ export class StorageConfigError extends Error {
   }
 }
 
+export class HostedLocalStorageConfigError extends Error {
+  constructor() {
+    super(
+      "Hosted local storage requires STORAGE_LOCAL_URL_BASE or RAILWAY_PUBLIC_DOMAIN. " +
+        "Set STORAGE_BACKEND=s3 for durable production asset delivery."
+    );
+    this.name = "HostedLocalStorageConfigError";
+  }
+}
+
 export function readStorageConfig(
   env: NodeJS.ProcessEnv = process.env
 ): StorageConfig {
@@ -40,9 +50,7 @@ export function readStorageConfig(
     localMediaDir:
       trim(env.STORAGE_LOCAL_DIR) ||
       path.join(trim(env.POPCORN_READY_LOCAL_DIR) || path.join(process.cwd(), ".local"), "media"),
-    localUrlBase:
-      trim(env.STORAGE_LOCAL_URL_BASE).replace(/\/+$/, "") ||
-      `http://localhost:${trim(env.PORT) || "4000"}`,
+    localUrlBase: readLocalUrlBase(env, backend),
     region: trim(env.AWS_REGION) || "us-east-1",
     publicBucket: trim(env.S3_PUBLIC_BUCKET) || "assets-public",
     privateBucket: trim(env.S3_PRIVATE_BUCKET) || "assets-private",
@@ -78,6 +86,38 @@ function readBackend(value: string | undefined): StorageBackend {
   if (!normalized || normalized === "local") return "local";
   if (normalized === "s3") return "s3";
   throw new Error(`Unsupported STORAGE_BACKEND "${value}". Expected "local" or "s3".`);
+}
+
+function readLocalUrlBase(env: NodeJS.ProcessEnv, backend: StorageBackend): string {
+  const explicit = trim(env.STORAGE_LOCAL_URL_BASE).replace(/\/+$/, "");
+  if (explicit) return explicit;
+
+  const publicOrigin =
+    trim(env.API_PUBLIC_ORIGIN).replace(/\/+$/, "") ||
+    trim(env.PUBLIC_API_ORIGIN).replace(/\/+$/, "") ||
+    publicOriginFromDomain(trim(env.RAILWAY_PUBLIC_DOMAIN));
+  if (publicOrigin) return publicOrigin;
+
+  if (backend === "local" && isHostedRuntime(env)) {
+    throw new HostedLocalStorageConfigError();
+  }
+
+  return `http://localhost:${trim(env.PORT) || "4000"}`;
+}
+
+function publicOriginFromDomain(domain: string): string {
+  if (!domain) return "";
+  if (/^https?:\/\//i.test(domain)) return domain.replace(/\/+$/, "");
+  return `https://${domain.replace(/\/+$/, "")}`;
+}
+
+function isHostedRuntime(env: NodeJS.ProcessEnv): boolean {
+  return Boolean(
+    trim(env.RAILWAY_ENVIRONMENT) ||
+      trim(env.RAILWAY_SERVICE_ID) ||
+      trim(env.RAILWAY_PROJECT_ID) ||
+      trim(env.RAILWAY_PUBLIC_DOMAIN)
+  );
 }
 
 function validateS3Config(config: StorageConfig, env: NodeJS.ProcessEnv): void {
