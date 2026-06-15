@@ -1,8 +1,10 @@
+import { createHash } from "crypto";
 import { Router } from "express";
 import { mutation, route } from "@/core/adapter";
 import { ApiError } from "@/core/errors";
 import { createGeneratedAsset, getGeneratedAssetJob } from "@/lib/api/v1/generated-assets";
 import { AuthContext } from "@/lib/api/v1/auth";
+import { runIdempotent } from "@/lib/api/v1/idempotency";
 import {
   createBriefVersion,
   getProject as getApiProject,
@@ -13,6 +15,7 @@ import {
 import { parseBrief } from "@/lib/api/v1/schemas";
 import {
   createOrchestratorRun,
+  getOrchestratorRun,
   type OrchestratorRun,
 } from "@/lib/api/v1/orchestrator-store";
 import { createGenerationJob, runGenerationJob } from "@/lib/v1/generation";
@@ -252,6 +255,112 @@ function generationBody(
   };
 }
 
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (isRecord(value)) {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, canonicalize(value[key])])
+    );
+  }
+  return value ?? null;
+}
+
+function sha256(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function orchestratorRunIdempotencyScope(args: {
+  auth: AuthContext;
+  projectId: string;
+  entrypoint: string;
+}): string {
+  return [
+    args.auth.workspaceId,
+    args.auth.actor.id,
+    "POST",
+    `/api/v1/projects/${args.projectId}/generation-entrypoints/${args.entrypoint}`,
+    "orchestrator_run",
+  ].join(":");
+}
+
+function orchestratorRunBodyHash(args: {
+  briefVersionId: string;
+  requestBody: GenerationRequest;
+  gates: string[];
+  body: unknown;
+}): string {
+  return sha256(
+    JSON.stringify(
+      canonicalize({
+        briefVersionId: args.briefVersionId,
+        request: args.requestBody,
+        gates: args.gates,
+        userInput: isRecord(args.body) ? args.body : {},
+      })
+    )
+  );
+}
+
+async function createEntrypointOrchestratorRun(args: {
+  auth: AuthContext;
+  projectId: string;
+  entrypoint: string;
+  idempotencyKey: string | null;
+  briefVersionId: string;
+  body: unknown;
+  requestBody: GenerationRequest;
+}): Promise<{ run: OrchestratorRun; replayed: boolean }> {
+  const gates = orchestratorGateStages(reviewGatesFromBody(args.body));
+  const inputSummary = JSON.stringify({
+    briefVersionId: args.briefVersionId,
+    request: args.requestBody,
+    userInput: isRecord(args.body) ? args.body : {},
+  });
+
+  if (!args.idempotencyKey) {
+    return {
+      run: await createOrchestratorRun({
+        projectId: args.projectId,
+        inputSummary,
+        gates,
+      }),
+      replayed: false,
+    };
+  }
+
+  let produced = false;
+  const result = await runIdempotent(
+    orchestratorRunIdempotencyScope(args),
+    args.idempotencyKey,
+    orchestratorRunBodyHash({
+      briefVersionId: args.briefVersionId,
+      requestBody: args.requestBody,
+      gates,
+      body: args.body,
+    }),
+    async () => {
+      produced = true;
+      const run = await createOrchestratorRun({
+        projectId: args.projectId,
+        inputSummary,
+        gates,
+      });
+      return { status: 202, body: { runId: run.id } };
+    }
+  );
+  const body = isRecord(result.body) ? result.body : {};
+  const runId = typeof body.runId === "string" ? body.runId : "";
+  if (!runId) {
+    throw new ApiError("internal_error", "Idempotent orchestrator run response was missing runId.");
+  }
+  return {
+    run: await getOrchestratorRun(runId),
+    replayed: !produced,
+  };
+}
+
 function orchestratorJobStatus(status: OrchestratorRun["status"]): JobStatus {
   switch (status) {
     case "queued":
@@ -376,22 +485,23 @@ async function createAndMaybeRunGeneration(args: {
   projectId: string;
   body: unknown;
   briefVersionId: string;
+  entrypoint: "prompt" | "uploaded-footage";
   assetIds: string[];
   generatedJobIdByAssetId?: Map<string, string>;
 }) {
   const requestBody = generationBody(args.body, args.briefVersionId, args.assetIds);
   if (isOrchestratorToolLoopEnabled()) {
-    const run = await createOrchestratorRun({
+    const { run, replayed } = await createEntrypointOrchestratorRun({
+      auth: args.auth,
       projectId: args.projectId,
-      inputSummary: JSON.stringify({
-        briefVersionId: args.briefVersionId,
-        request: requestBody,
-        userInput: isRecord(args.body) ? args.body : {},
-      }),
-      gates: orchestratorGateStages(reviewGatesFromBody(args.body)),
+      entrypoint: args.entrypoint,
+      idempotencyKey: args.idempotencyKey,
+      briefVersionId: args.briefVersionId,
+      body: args.body,
+      requestBody,
     });
     const shouldRun = isRecord(args.body) && args.body.runNow === false ? false : true;
-    const drivenRun = shouldRun
+    const drivenRun = shouldRun && !replayed
       ? await runOrchestratorToCompletion(run.id, { workspaceId: args.auth.workspaceId })
       : run;
     return {
@@ -624,6 +734,7 @@ function scheduleEntrypointRun(args: {
   runId: string;
   body: unknown;
   briefVersionId: string;
+  entrypoint: "prompt" | "uploaded-footage";
   seedBriefGoal?: string;
   assetIds?: string[];
 }) {
@@ -679,6 +790,7 @@ async function createRunAndScheduleGeneration(args: {
   projectId: string;
   body: unknown;
   briefVersionId: string;
+  entrypoint: "prompt" | "uploaded-footage";
   seedBriefGoal?: string;
   assetIds?: string[];
 }) {
@@ -688,22 +800,24 @@ async function createRunAndScheduleGeneration(args: {
       args.briefVersionId,
       args.assetIds ?? []
     );
-    const run = await createOrchestratorRun({
+    const { run, replayed } = await createEntrypointOrchestratorRun({
+      auth: args.auth,
       projectId: args.projectId,
-      inputSummary: JSON.stringify({
-        briefVersionId: args.briefVersionId,
-        request: requestBody,
-        userInput: isRecord(args.body) ? args.body : {},
-      }),
-      gates: orchestratorGateStages(reviewGatesFromBody(args.body)),
+      entrypoint: args.entrypoint,
+      idempotencyKey: args.idempotencyKey,
+      briefVersionId: args.briefVersionId,
+      body: args.body,
+      requestBody,
     });
-    setImmediate(() => {
-      void runOrchestratorToCompletion(run.id, {
-        workspaceId: args.auth.workspaceId,
-      }).catch((err) => {
-        console.error("orchestrator entrypoint background run failed", err);
+    if (!replayed) {
+      setImmediate(() => {
+        void runOrchestratorToCompletion(run.id, {
+          workspaceId: args.auth.workspaceId,
+        }).catch((err) => {
+          console.error("orchestrator entrypoint background run failed", err);
+        });
       });
-    });
+    }
     return { status: 202, body: { job: null, runId: run.id } };
   }
 
@@ -745,6 +859,7 @@ generationEntrypointsRouter.post(
         projectId,
         body,
         briefVersionId: briefVersion.id,
+        entrypoint: "prompt",
         assetIds: suppliedAssetIds.length ? suppliedAssetIds : seeded.assetIds,
         generatedJobIdByAssetId: seeded.generatedJobIdByAssetId,
       });
@@ -756,6 +871,7 @@ generationEntrypointsRouter.post(
       projectId,
       body,
       briefVersionId: briefVersion.id,
+      entrypoint: "prompt",
       seedBriefGoal: brief.goal,
     });
   })
@@ -789,6 +905,7 @@ generationEntrypointsRouter.post(
         projectId,
         body,
         briefVersionId,
+        entrypoint: "uploaded-footage",
         assetIds,
       });
     }
@@ -799,6 +916,7 @@ generationEntrypointsRouter.post(
       projectId,
       body,
       briefVersionId,
+      entrypoint: "uploaded-footage",
       assetIds,
     });
   })

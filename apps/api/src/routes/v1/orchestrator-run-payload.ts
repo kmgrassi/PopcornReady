@@ -134,11 +134,12 @@ function stageStatus(args: {
   stageActions: RunActionSummary[];
   activeStage: GenerationStageType;
   gateStatus?: OrchestratorGateStatus;
+  finishedVideo: boolean;
 }): JobStatus {
-  const { run, stage, stageActions, activeStage, gateStatus } = args;
+  const { run, stage, stageActions, activeStage, gateStatus, finishedVideo } = args;
   if (run.status === "canceled") return "canceled";
   if (stage === "ready") {
-    return run.status === "succeeded" ? "succeeded" : "queued";
+    return run.status === "succeeded" && finishedVideo ? "succeeded" : "queued";
   }
   if (stageActions.some((action) => action.status === "failed")) return "failed";
   if (stageActions.some((action) => action.status === "running")) return "running";
@@ -164,11 +165,54 @@ export async function assembleOrchestratorPayload(
     listRunActions(run.id),
     listRunGates(run.id),
   ]);
+  return assembleOrchestratorPayloadFromParts(run, actions, gates);
+}
+
+function hasFinishedVideo(actions: RunActionSummary[]): boolean {
+  return actions.some(
+    (action) =>
+      action.tool === "export_video" &&
+      action.status === "applied" &&
+      action.outputAssetIds.length > 0
+  );
+}
+
+function surfaceRunStatus(run: OrchestratorRun, actions: RunActionSummary[]): JobStatus {
+  if (run.status !== "succeeded") return runStatus(run.status);
+  return hasFinishedVideo(actions) ? "succeeded" : "running";
+}
+
+function collectResultArtifacts(actions: RunActionSummary[]): GenerationRunPayload["resultArtifacts"] {
+  const artifacts: GenerationRunPayload["resultArtifacts"] = [];
+  for (const action of actions) {
+    if (action.tool !== "export_video" || action.status !== "applied") continue;
+    for (const assetId of action.outputAssetIds) {
+      artifacts.push({
+        kind: "export",
+        artifactId: assetId,
+        assetId,
+        stageId: stageId("export"),
+      });
+    }
+  }
+  return artifacts;
+}
+
+export function assembleOrchestratorPayloadFromParts(
+  run: OrchestratorRun,
+  actions: RunActionSummary[],
+  gates: OrchestratorRunGate[]
+): GenerationRunPayload {
   const activeGate = reachedGate(gates);
+  const finishedVideo = hasFinishedVideo(actions);
+  const status = surfaceRunStatus(run, actions);
   const activeStage = activeGate
     ? gateStage(activeGate) ?? latestActionStage(actions)
-    : latestActionStage(actions);
+    : run.status === "succeeded" && finishedVideo
+      ? "ready"
+      : latestActionStage(actions);
   const selectedGates = selectedReviewGates(gates);
+  const resultArtifacts = collectResultArtifacts(actions);
 
   const stages = STAGE_SEEDS.map((seed, index): GenerationStage => {
     const stageActions = actions.filter((action) => actionStage(action) === seed.type);
@@ -179,6 +223,7 @@ export async function assembleOrchestratorPayload(
       stageActions,
       activeStage,
       gateStatus: gate?.status,
+      finishedVideo,
     });
     const firstAction = stageActions[0];
     const lastAction = stageActions[stageActions.length - 1];
@@ -211,11 +256,11 @@ export async function assembleOrchestratorPayload(
     };
   });
 
-  const percent = run.status === "succeeded" ? 100 : progressPercent(stages);
+  const percent = status === "succeeded" ? 100 : progressPercent(stages);
   const surfaceRun: GenerationRun = {
     runId: run.id,
     projectId: run.projectId,
-    status: runStatus(run.status),
+    status,
     reviewGates: selectedGates,
     reviewGate: activeGate
       ? {
@@ -225,16 +270,18 @@ export async function assembleOrchestratorPayload(
           enteredAt: activeGate.updatedAt,
         }
       : null,
-    currentStageType: run.status === "succeeded" ? "ready" : activeStage,
+    currentStageType: status === "succeeded" ? "ready" : activeStage,
     progressPercent: percent,
     message:
-      run.status === "succeeded"
+      status === "succeeded"
         ? "Your video is ready."
         : activeGate
           ? `${GENERATION_STAGE_LABELS[activeStage]} is awaiting review.`
           : run.status === "failed"
             ? "The orchestrator run failed."
-            : "The orchestrator is generating your video.",
+            : run.status === "succeeded"
+              ? "The orchestrator completed the currently available tools, but no video export is ready yet."
+              : "The orchestrator is generating your video.",
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
     startedAt: run.startedAt,
@@ -254,6 +301,6 @@ export async function assembleOrchestratorPayload(
     run: surfaceRun,
     stages,
     stageItems: [],
-    resultArtifacts: [],
+    resultArtifacts,
   };
 }
