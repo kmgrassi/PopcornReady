@@ -5,6 +5,11 @@ deploys separately to Netlify and calls the Railway API through `VITE_API_URL`.
 The checked-in `railway.toml` pins the API build/start commands and configures
 the health route.
 
+Current production origin: `https://popcornready-production.up.railway.app`
+(generated Railway domain). Netlify's `VITE_API_URL` must point at this; if it is
+unset the web client falls back to same-origin `/api/*` and receives the SPA
+`index.html` instead of JSON.
+
 ## Pricing notes
 
 Railway pricing has two parts:
