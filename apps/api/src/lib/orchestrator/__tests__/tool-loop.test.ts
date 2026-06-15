@@ -66,7 +66,10 @@ test("executes one model-selected tool and keeps the run active after success", 
     run: runFixture(),
     workspaceId: "ws_1",
     actorId: "user_1",
+    agentId: "agent_1",
+    messageId: "msg_1",
     requestId: "req_1",
+    metadata: { source: "unit-test" },
     inputSummary: "make a trailer",
     registry,
     env: { POPCORN_ORCHESTRATOR_TOOL_LOOP: "1" },
@@ -89,13 +92,15 @@ test("executes one model-selected tool and keeps the run active after success", 
     resourceIds: ["composition_1"],
     output: { plannedBeats: 3 },
   });
-  assert.deepEqual(seenContext, {
-    workspaceId: "ws_1",
-    projectId: "proj_1",
-    orchestratorRunId: "orch_1",
-    actorId: "user_1",
-    requestId: "req_1",
-  });
+  assert.equal(seenContext?.workspaceId, "ws_1");
+  assert.equal(seenContext?.projectId, "proj_1");
+  assert.equal(seenContext?.orchestratorRunId, "orch_1");
+  assert.equal(seenContext?.actorId, "user_1");
+  assert.equal(seenContext?.agentId, "agent_1");
+  assert.equal(seenContext?.messageId, "msg_1");
+  assert.equal(seenContext?.requestId, "req_1");
+  assert.deepEqual(seenContext?.metadata, { source: "unit-test" });
+  assert.match(seenContext?.toolCallId ?? "", /^[0-9a-f-]{36}$/);
 });
 
 test("accepted async tool result parks the run on the job", async () => {

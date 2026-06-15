@@ -14,7 +14,7 @@ import {
   type InvocationRecord,
   type OrchestratorEngineStore,
 } from "../engine";
-import type { ToolCallResult, ToolName } from "../types";
+import type { ToolCallResult, ToolExecutionContext, ToolName } from "../types";
 import type { OrchestratorModel } from "../model";
 import type { ToolRegistry } from "../registry";
 
@@ -99,7 +99,7 @@ class FakeStore implements OrchestratorEngineStore {
 }
 
 function fakeRegistry(
-  handlers: Partial<Record<ToolName, () => ToolCallResult>>
+  handlers: Partial<Record<ToolName, (context: ToolExecutionContext) => ToolCallResult>>
 ): ToolRegistry {
   const map: ToolRegistry = new Map();
   for (const [name, fn] of Object.entries(handlers)) {
@@ -111,7 +111,7 @@ function fakeRegistry(
       requiredResourceIds: [],
       mode: "sync",
       estimateCostUsd: () => undefined,
-      execute: async () => fn!(),
+      execute: async (_input, context) => fn!(context),
     });
   }
   return map;
@@ -171,6 +171,43 @@ test("drives tool→tool→done and persists one action per executed tool", asyn
       ["plan_shots", "applied"],
     ]
   );
+});
+
+test("injects the server-owned wrapper context into each tool execution", async () => {
+  const store = new FakeStore(runFixture());
+  const { model } = scriptedModel([
+    { type: "tool_call", toolName: "plan_shots", input: { goal: "do not carry ids" } },
+    { type: "done" },
+  ]);
+  let seenContext: ToolExecutionContext | undefined;
+  const registry = fakeRegistry({
+    plan_shots: (context) => {
+      seenContext = context;
+      return ok(["asset_plan"]);
+    },
+  });
+
+  await runOrchestratorToCompletion(
+    "run1",
+    deps(store, model, registry, {
+      actorId: "user1",
+      agentId: "agent1",
+      messageId: "msg1",
+      requestId: "req1",
+      metadata: { entrypoint: "prompt" },
+    })
+  );
+
+  assert.equal(store.actions[0].params.messageId, undefined);
+  assert.equal(seenContext?.workspaceId, "ws1");
+  assert.equal(seenContext?.projectId, "proj1");
+  assert.equal(seenContext?.orchestratorRunId, "run1");
+  assert.equal(seenContext?.actorId, "user1");
+  assert.equal(seenContext?.agentId, "agent1");
+  assert.equal(seenContext?.messageId, "msg1");
+  assert.equal(seenContext?.requestId, "req1");
+  assert.deepEqual(seenContext?.metadata, { entrypoint: "prompt" });
+  assert.match(seenContext?.toolCallId ?? "", /^[0-9a-f-]{36}$/);
 });
 
 test("reconstructs priorResults from persisted actions for each model turn", async () => {

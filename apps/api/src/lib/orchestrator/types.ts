@@ -97,8 +97,12 @@ export interface ToolExecutionContext {
   workspaceId: string;
   projectId: string;
   orchestratorRunId: string;
+  toolCallId: string;
   actorId?: string;
+  agentId?: string;
+  messageId?: string;
   requestId?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ToolInvocation {
