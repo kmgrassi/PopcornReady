@@ -4,7 +4,7 @@ import { randomUUID } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { getServiceSupabase } from "../supabase-client";
-import { databaseError, isMissingRow } from "../../supabase/db-errors";
+import { runQuery } from "../../supabase/db-errors";
 import {
   GENERATION_STAGE_LABELS,
   GENERATION_STAGE_ORDER,
@@ -123,14 +123,6 @@ function safeKey(key: string): string {
 // ---------------------------------------------------------------------------
 // Supabase (Postgres) implementation
 // ---------------------------------------------------------------------------
-
-function isMissing(error: { code?: string } | null): boolean {
-  return isMissingRow(error);
-}
-
-function fail(op: string, error: { message?: string } | null): never {
-  throw databaseError(`generation-runs store.${op}`, error);
-}
 
 // --- runs ------------------------------------------------------------------
 
@@ -476,15 +468,11 @@ export function createSupabaseGenerationRunsStore(
   db: SupabaseClient = getServiceSupabase()
 ): GenerationRunsStore {
   async function getRunRow(runId: string): Promise<RunRow | null> {
-    const { data, error } = await db
-      .from("generation_runs")
-      .select("*")
-      .eq("id", runId)
-      .single();
-    if (error) {
-      if (isMissing(error)) return null;
-      fail("get run", error);
-    }
+    const data = await runQuery(
+      "generation-runs store.get run",
+      db.from("generation_runs").select("*").eq("id", runId).single(),
+      { allowMissing: true }
+    );
     return (data as RunRow | null) ?? null;
   }
 
@@ -500,14 +488,16 @@ export function createSupabaseGenerationRunsStore(
     patch: Partial<RunRow>,
     op: string
   ): Promise<RunRow | null> {
-    const { data, error } = await db
-      .from("generation_runs")
-      .update(patch)
-      .eq("id", runId)
-      .eq("updated_at", expectedUpdatedAt)
-      .select("*")
-      .maybeSingle();
-    if (error) fail(op, error);
+    const data = await runQuery(
+      `generation-runs store.${op}`,
+      db
+        .from("generation_runs")
+        .update(patch)
+        .eq("id", runId)
+        .eq("updated_at", expectedUpdatedAt)
+        .select("*")
+        .maybeSingle()
+    );
     return (data as RunRow | null) ?? null;
   }
 
@@ -547,12 +537,10 @@ export function createSupabaseGenerationRunsStore(
         updatedAt: now,
       });
       void _omit;
-      const { data, error } = await db
-        .from("generation_runs")
-        .insert(row)
-        .select("*")
-        .single();
-      if (error) fail("create run", error);
+      const data = await runQuery(
+        "generation-runs store.create run",
+        db.from("generation_runs").insert(row).select("*").single()
+      );
       return rowToRun(data as RunRow);
     },
 
@@ -585,12 +573,14 @@ export function createSupabaseGenerationRunsStore(
     },
 
     async listRunsForProject(projectId) {
-      const { data, error } = await db
-        .from("generation_runs")
-        .select("*")
-        .eq("project_id", projectId)
-        .order("created_at", { ascending: false });
-      if (error) fail("list runs", error);
+      const data = await runQuery(
+        "generation-runs store.list runs",
+        db
+          .from("generation_runs")
+          .select("*")
+          .eq("project_id", projectId)
+          .order("created_at", { ascending: false })
+      );
       return ((data as RunRow[]) ?? []).map(rowToRun);
     },
 

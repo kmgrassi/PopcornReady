@@ -61,6 +61,25 @@ test("converts existing ApiError preconditions into model-readable tool errors",
   });
 });
 
+test("classifies persistence failures as recoverable, retry the same tool", () => {
+  const err = classifyToolFailure(
+    new ApiError("database_error", "Database operation failed: store.addProjectPlan.", {
+      operation: "store.addProjectPlan",
+      dbCode: "57014",
+    }),
+    { toolName: "plan_shots", retryAfterSec: 5 }
+  );
+
+  assert.equal(err.kind, "database_error");
+  assert.equal(err.recoverable, true);
+  assert.equal(err.retryAfterSec, 5);
+  assert.deepEqual(err.suggestedNextTools?.[0], {
+    tool: "plan_shots",
+    inputHint: { retry: true },
+  });
+  assert.equal(err.details?.dbCode, "57014");
+});
+
 test("classifies provider quota failures as recoverable", () => {
   const err = classifyToolFailure(new Error("OpenAI request failed (429): quota"), {
     toolName: "generate_clip",

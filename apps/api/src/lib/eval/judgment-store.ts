@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Judgment } from "@popcorn/eval";
 import { getServiceSupabase } from "../v1/supabase-client";
+import { runQuery } from "../supabase/db-errors";
 
 // Append-only persistence for Judgment records (Stage Eval Framework §3).
 //
@@ -28,14 +29,6 @@ function safeKey(key: string): string {
 }
 
 // --- Supabase --------------------------------------------------------------
-
-const PGRST_NO_ROWS = "PGRST116";
-
-function fail(op: string, error: { message?: string } | null): never {
-  throw new Error(
-    `judgment store: ${op} failed: ${error?.message ?? "unknown error"}`
-  );
-}
 
 interface JudgmentRow {
   id: string;
@@ -120,32 +113,36 @@ export function createSupabaseJudgmentStore(
       // assigned id back so the caller acts on the persisted judgment.
       const { id: _omit, ...row } = judgmentToRow({ ...judgment, id: "" });
       void _omit;
-      const { data, error } = await db
-        .from("judgments")
-        .insert(row)
-        .select("*")
-        .single();
-      if (error) fail("save judgment", error);
+      const data = await runQuery(
+        "save judgment",
+        db.from("judgments").insert(row).select("*").single()
+      );
       return rowToJudgment(data as JudgmentRow);
     },
 
     async listJudgmentsForRun(generationRunId) {
-      const { data, error } = await db
-        .from("judgments")
-        .select("*")
-        .eq("generation_run_id", generationRunId)
-        .order("created_at", { ascending: true });
-      if (error && error.code !== PGRST_NO_ROWS) fail("list judgments for run", error);
+      const data = await runQuery(
+        "list judgments for run",
+        db
+          .from("judgments")
+          .select("*")
+          .eq("generation_run_id", generationRunId)
+          .order("created_at", { ascending: true }),
+        { allowMissing: true }
+      );
       return ((data as JudgmentRow[]) ?? []).map(rowToJudgment);
     },
 
     async listJudgmentsForStage(stageId) {
-      const { data, error } = await db
-        .from("judgments")
-        .select("*")
-        .eq("stage_id", stageId)
-        .order("created_at", { ascending: true });
-      if (error && error.code !== PGRST_NO_ROWS) fail("list judgments for stage", error);
+      const data = await runQuery(
+        "list judgments for stage",
+        db
+          .from("judgments")
+          .select("*")
+          .eq("stage_id", stageId)
+          .order("created_at", { ascending: true }),
+        { allowMissing: true }
+      );
       return ((data as JudgmentRow[]) ?? []).map(rowToJudgment);
     },
   };
