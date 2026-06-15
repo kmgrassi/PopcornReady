@@ -13,9 +13,15 @@ unset the web client falls back to same-origin `/api/*` and receives the SPA
 The API must run on **Node 22+**. `@supabase/supabase-js` constructs a realtime
 client (which needs a global `WebSocket`) when `createClient` is called; on Node
 20 that throws `Node.js 20 detected without native WebSocket support`, 500-ing
-every authenticated request in `authMiddleware`. The runtime is pinned via the
-root `.nvmrc` (read by Railpack) and belt-and-suspenders by the service env var
-`RAILPACK_NODE_VERSION=22`.
+every authenticated request in `authMiddleware`.
+
+Railpack resolves the Node version in this order: `RAILPACK_NODE_VERSION` →
+root `package.json` `engines.node` → `.nvmrc`. The authoritative repo pin is
+therefore **`engines.node: ">=22"`** in the root manifest (checked before
+`.nvmrc`, so a fresh deploy can't silently fall back to Node 20). The root
+`.nvmrc` (`22`) keeps local `nvm` in sync, and the live service also sets
+`RAILPACK_NODE_VERSION=22`. The Netlify web build pins `NODE_VERSION = "22"`
+to match.
 
 ## Pricing notes
 

@@ -18,7 +18,7 @@
   publish = "apps/web/dist"
 
 [build.environment]
-  NODE_VERSION = "20"
+  NODE_VERSION = "22"
 
 # SPA fallback: every non-asset route resolves to index.html so client-side
 # routing (react-router) handles deep links.
