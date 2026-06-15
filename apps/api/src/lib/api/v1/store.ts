@@ -639,14 +639,17 @@ async function dataAssetById(
 async function latestDataAsset(
   db: SupabaseClient,
   projectId: string,
-  kind: GraphAssetKind
+  kind: GraphAssetKind,
+  role?: string
 ): Promise<DataAssetRow | null> {
-  const { data, error } = await db
+  let query = db
     .from("assets")
     .select("*")
     .eq("project_id", projectId)
     .eq("kind", kind)
-    .eq("media", "data")
+    .eq("media", "data");
+  if (role) query = query.eq("role", role);
+  const { data, error } = await query
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(1)
@@ -660,7 +663,8 @@ async function selectedDataAsset(
   db: SupabaseClient,
   projectId: string,
   slotRole: string,
-  kind: GraphAssetKind
+  kind: GraphAssetKind,
+  assetRole?: string
 ): Promise<DataAssetRow | null> {
   const selected = await db
     .from("current_selections")
@@ -668,12 +672,14 @@ async function selectedDataAsset(
     .eq("project_id", projectId)
     .eq("slot_role", slotRole)
     .maybeSingle();
-  if (isNoRows(selected.error)) return latestDataAsset(db, projectId, kind);
+  if (isNoRows(selected.error)) return latestDataAsset(db, projectId, kind, assetRole);
   throwOnError(selected.error, `selectedDataAsset ${slotRole}`);
 
   const activeAssetId = (selected.data as CurrentSelectionRow | null)?.active_asset_id;
-  if (!activeAssetId) return latestDataAsset(db, projectId, kind);
-  return (await dataAssetById(db, activeAssetId)) ?? latestDataAsset(db, projectId, kind);
+  if (!activeAssetId) return latestDataAsset(db, projectId, kind, assetRole);
+  const asset = await dataAssetById(db, activeAssetId);
+  if (asset && asset.kind === kind && (!assetRole || asset.role === assetRole)) return asset;
+  return latestDataAsset(db, projectId, kind, assetRole);
 }
 
 // --- poster ----------------------------------------------------------------
@@ -1673,7 +1679,7 @@ export async function getActiveProjectPlan(
   projectId: string
 ): Promise<ActiveProjectPlan | null> {
   const db = getServiceSupabase();
-  const planAsset = await selectedDataAsset(db, projectId, "plan", "plan");
+  const planAsset = await selectedDataAsset(db, projectId, "plan", "plan", "current_plan");
   if (!planAsset) return null;
   return {
     plan: unmarkedContent<EditPlan>(planAsset.content),

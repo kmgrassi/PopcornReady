@@ -96,6 +96,47 @@ test("plan_visual_anchors requires a shot plan and suggests plan_shots", async (
   }
 });
 
+test("plan_visual_anchors accepts approval retry revisionInstruction", async () => {
+  const noAnchorPlan: EditPlan = {
+    targetLengthSec: 12,
+    style: "warm documentary",
+    aspectRatio: "16:9",
+    scenes: [
+      {
+        id: "scene_1",
+        name: "Morning texture",
+        beats: [{ id: "beat_1", name: "Hook", durationSec: 5, intent: "Show morning light." }],
+      },
+    ],
+  };
+  let persisted:
+    | {
+        visualAnchorPlan: VisualAnchorPlan;
+      }
+    | undefined;
+  const tool = createPlanVisualAnchorsTool({
+    getActiveProjectPlan: async () => ({
+      ...activePlan,
+      plan: noAnchorPlan,
+    }),
+    addProjectVisualAnchorPlan: async (input) => {
+      persisted = input;
+      return { visualAnchorPlanAssetId: "anchors_1" };
+    },
+  });
+  const registry = new ToolRegistry();
+  registry.register(tool);
+
+  const result = await registry.execute(
+    "plan_visual_anchors",
+    { revisionInstruction: "Lean into the cafe regulars." },
+    { auth, projectId: "proj_1" }
+  );
+
+  assert.equal(result.status, "succeeded");
+  assert.match(persisted?.visualAnchorPlan.anchors[0]?.description ?? "", /cafe regulars/);
+});
+
 test("plan_visual_anchors persists a typed anchor plan with plan provenance", async () => {
   let persisted:
     | {

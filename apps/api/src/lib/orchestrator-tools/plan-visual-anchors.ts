@@ -61,6 +61,10 @@ export const planVisualAnchorsInputSchema = {
       type: "string",
       description: "Optional instruction to bias which recurring anchors are most important.",
     },
+    revisionInstruction: {
+      type: "string",
+      description: "Alias used by approval-rejection retries.",
+    },
   },
   required: [],
 } as const;
@@ -86,7 +90,7 @@ export function parsePlanVisualAnchorsInput(input: unknown): PlanVisualAnchorsIn
       expected: planVisualAnchorsInputSchema,
     });
   }
-  const allowed = new Set(["feedback"]);
+  const allowed = new Set(["feedback", "revisionInstruction"]);
   const extra = Object.keys(input).filter((key) => !allowed.has(key));
   if (extra.length > 0) {
     throw new ToolInputError("plan_visual_anchors received unsupported fields.", {
@@ -97,7 +101,12 @@ export function parsePlanVisualAnchorsInput(input: unknown): PlanVisualAnchorsIn
   if (feedback !== undefined && typeof feedback !== "string") {
     throw new ToolInputError("plan_visual_anchors feedback must be a string.", {});
   }
-  return feedback && feedback.trim() ? { feedback: feedback.trim() } : {};
+  const revisionInstruction = input.revisionInstruction;
+  if (revisionInstruction !== undefined && typeof revisionInstruction !== "string") {
+    throw new ToolInputError("plan_visual_anchors revisionInstruction must be a string.", {});
+  }
+  const instruction = feedback ?? revisionInstruction;
+  return instruction && instruction.trim() ? { feedback: instruction.trim() } : {};
 }
 
 function slug(value: string): string {
