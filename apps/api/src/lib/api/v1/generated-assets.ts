@@ -23,12 +23,6 @@ import {
 import type { GeneratedAssetCharacterBinding } from "@popcorn/shared/types";
 import { buildSemanticAnalysis } from "@/lib/edit-graph/semantic-analysis";
 import { sha256Hex } from "./asset-graph";
-import {
-  RunStageHandle,
-  RunStageItemHandle,
-  stageItemKindForAssetKind,
-  toErrorSummary,
-} from "@/lib/v1/generation-progress";
 import { randomUUID } from "crypto";
 import { AuthContext } from "./auth";
 import { ApiError, ApiErrorCode, FieldError, validationError } from "./errors";
@@ -127,6 +121,38 @@ interface ParsedRequest {
   negativePrompt?: string;
   resolution?: string;
   runId?: string;
+}
+
+type ProgressItemKind = "image" | "video" | "audio" | "caption" | "timeline" | "export";
+
+interface RunStageItemHandle {
+  update(patch: { progressPercent?: number; message?: string }): Promise<void>;
+  succeed(patch?: { assetId?: string; message?: string }): Promise<void>;
+  fail(error: { code: string; message: string; retryable?: boolean }): Promise<void>;
+}
+
+interface RunStageHandle {
+  startItem(input: {
+    kind: ProgressItemKind;
+    label: string;
+    provider?: string;
+    promptPreview?: string;
+  }): Promise<RunStageItemHandle>;
+  attachJob(jobId: string): Promise<void>;
+}
+
+function stageItemKindForAssetKind(kind: GenerativeAssetKind): ProgressItemKind {
+  if (kind === "audio") return "audio";
+  if (kind === "video") return "video";
+  return "image";
+}
+
+function toGenerationErrorSummary(error: ApiError, fallbackCode = "job_failed") {
+  return {
+    code: error.code || fallbackCode,
+    message: error.message,
+    retryable: error.status >= 500,
+  };
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -633,7 +659,7 @@ async function runGeneration(
   });
   await createAction({
     projectId,
-    runId: parsed.runId,
+    orchestratorRunId: parsed.runId,
     tool: "store_asset_bytes",
     status: "applied",
     params: {
@@ -776,7 +802,7 @@ export async function runGeneratedAssetJob(args: {
     });
     action = await createAction({
       projectId,
-      runId: parsed.runId,
+      orchestratorRunId: parsed.runId,
       tool: actionToolForKind(parsed.kind),
       status: "running",
       params: {
@@ -870,9 +896,7 @@ export async function runGeneratedAssetJob(args: {
       });
     }
     if (item) {
-      await item.fail(
-        toErrorSummary(apiErr, { fallbackCode: "job_failed" })
-      );
+      await item.fail(toGenerationErrorSummary(apiErr));
     }
     return failed;
   }
