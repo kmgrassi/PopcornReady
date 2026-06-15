@@ -11,6 +11,15 @@ drop trigger if exists studio_drafts_validate_refs on public.studio_drafts;
 alter table public.studio_drafts
   drop constraint if exists studio_drafts_run_id_fkey;
 
+update public.studio_drafts d
+set run_id = null
+where d.run_id is not null
+  and not exists (
+    select 1
+    from public.orchestrator_runs r
+    where r.id = d.run_id
+  );
+
 create or replace function public.validate_studio_draft_refs()
 returns trigger
 language plpgsql

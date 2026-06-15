@@ -89,6 +89,30 @@ function requestedGates(body: unknown): GateableGenerationStageType[] {
   );
 }
 
+function requestedGateTools(body: unknown): string[] {
+  const tools = requestedGates(body).flatMap((stage) => {
+    switch (stage) {
+      case "brief_intake":
+        return ["create_or_load_brief"];
+      case "creative_plan":
+        return ["develop_story_blueprint", "draft_script", "plan_shots", "plan_visual_anchors"];
+      case "storyboard":
+        return ["generate_storyboard"];
+      case "asset_generation":
+        return ["generate_anchor", "generate_keyframe", "generate_clip"];
+      case "audio_generation":
+        return ["generate_audio"];
+      case "timeline_assembly":
+        return ["assemble_timeline"];
+      case "quality_review":
+        return ["critique_timeline", "request_approval"];
+      case "export":
+        return ["export_video"];
+    }
+  });
+  return [...new Set(tools)];
+}
+
 function budgetUsd(body: unknown): number | undefined {
   if (!isRecord(body) || body.budgetUsd === undefined) return undefined;
   const parsed = Number(body.budgetUsd);
@@ -261,6 +285,14 @@ async function assembleRunDetail(runId: string, projectId: string): Promise<Gene
   };
 }
 
+async function requireProjectRun(runId: string, projectId: string): Promise<OrchestratorRun> {
+  const run = await getOrchestratorRun(runId);
+  if (run.projectId !== projectId) {
+    throw new ApiError("not_found", `Generation run not found: ${runId}`);
+  }
+  return run;
+}
+
 function startRun(workspaceId: string, runId: string): void {
   void runOrchestratorToCompletion(runId, { workspaceId }).catch((err) => {
     console.error("orchestrator run failed", err);
@@ -277,7 +309,7 @@ orchestratorRunsRouter.post(
     const run = await createOrchestratorRun({
       projectId,
       inputSummary: brief.goal,
-      gates: requestedGates(body),
+      gates: requestedGateTools(body),
       budgetUsd: budgetUsd(body),
     });
     startRun(auth.workspaceId, run.id);
@@ -299,11 +331,21 @@ orchestratorRunsRouter.post(
         fields: [{ path: "assetIds", message: "Provide at least one ready visual asset." }],
       });
     }
-    const summary = body.prompt ? String(body.prompt) : `Generate from ${assetIds.length} uploaded assets.`;
+    const briefVersionId = String(body.briefVersionId || "").trim();
+    if (!briefVersionId) {
+      throw new ApiError("brief_missing", "briefVersionId is required.", {
+        fields: [{ path: "briefVersionId", message: "Required." }],
+      });
+    }
+    const summaryParts = [
+      body.prompt ? String(body.prompt) : `Generate from ${assetIds.length} uploaded assets.`,
+      `briefVersionId=${briefVersionId}`,
+      `selectedAssetIds=${assetIds.join(",")}`,
+    ];
     const run = await createOrchestratorRun({
       projectId,
-      inputSummary: summary,
-      gates: requestedGates(body),
+      inputSummary: summaryParts.join("\n"),
+      gates: requestedGateTools(body),
       budgetUsd: budgetUsd(body),
     });
     startRun(auth.workspaceId, run.id);
@@ -340,6 +382,7 @@ orchestratorRunsRouter.post(
     const projectId = requireParam(params, "projectId");
     const runId = requireParam(params, "runId");
     await requireProjectAccess(auth.workspaceId, projectId);
+    await requireProjectRun(runId, projectId);
     const gates = await listRunGates(runId);
     const gate = gates.find((candidate) => candidate.status === "reached");
     if (gate) {
@@ -356,6 +399,7 @@ orchestratorRunsRouter.post(
     const projectId = requireParam(params, "projectId");
     const runId = requireParam(params, "runId");
     await requireProjectAccess(auth.workspaceId, projectId);
+    await requireProjectRun(runId, projectId);
     const gates = await listRunGates(runId);
     const gate = gates.find((candidate) => candidate.status === "reached");
     if (gate) {
@@ -372,6 +416,7 @@ orchestratorRunsRouter.post(
     const projectId = requireParam(params, "projectId");
     const runId = requireParam(params, "runId");
     await requireProjectAccess(auth.workspaceId, projectId);
+    await requireProjectRun(runId, projectId);
     await updateOrchestratorRun(runId, {
       status: "canceled",
       completedAt: new Date().toISOString(),
