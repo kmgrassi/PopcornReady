@@ -20,6 +20,7 @@
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { requestContext } from "./request-context.js";
+import { runQuery } from "./db-errors.js";
 
 export class SupabaseConfigError extends Error {
   constructor(missing: string[]) {
@@ -142,7 +143,9 @@ export async function getCurrentAppUserId(): Promise<string> {
 export async function resolveAppUserId(
   supabase: SupabaseClient
 ): Promise<string | null> {
-  const { data, error } = await supabase.rpc("current_app_user_id");
-  if (error) throw error;
+  const data = await runQuery(
+    "clients.resolveAppUserId",
+    supabase.rpc("current_app_user_id")
+  );
   return (data as string | null) ?? null;
 }

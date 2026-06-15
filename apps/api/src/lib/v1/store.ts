@@ -12,7 +12,7 @@ import {
   VersionedTimeline,
 } from "@popcorn/shared/v1/types";
 import { getServiceSupabase } from "./supabase-client";
-import { databaseError, isMissingRow } from "../supabase/db-errors";
+import { runQuery } from "../supabase/db-errors";
 
 // Persistence repository for /api/v1's job + timeline stack.
 //
@@ -73,14 +73,6 @@ export interface V1Store {
 // filename. The composite (scope, key) primary key in the schema is a superset
 // shared with the api/v1 foundation store.
 const IDEMPOTENCY_KEY = "";
-
-function isMissing(error: { code?: string } | null): boolean {
-  return isMissingRow(error);
-}
-
-function fail(op: string, error: { message?: string } | null): never {
-  throw databaseError(`v1 store.${op}`, error);
-}
 
 // --- row <-> object mappers ------------------------------------------------
 
@@ -493,15 +485,11 @@ export function createSupabaseStore(
     column: string,
     value: string
   ): Promise<Row | null> {
-    const { data, error } = await db
-      .from(table)
-      .select("*")
-      .eq(column, value)
-      .single();
-    if (error) {
-      if (isMissing(error)) return null;
-      fail(`get ${table}`, error);
-    }
+    const data = await runQuery(
+      `v1 store.get ${table}`,
+      db.from(table).select("*").eq(column, value).single(),
+      { allowMissing: true }
+    );
     return (data as Row) ?? null;
   }
 
@@ -510,10 +498,10 @@ export function createSupabaseStore(
     row: Row,
     conflict: string
   ): Promise<void> {
-    const { error } = await db
-      .from(table)
-      .upsert(row as Record<string, unknown>, { onConflict: conflict });
-    if (error) fail(`save ${table}`, error);
+    await runQuery(
+      `v1 store.save ${table}`,
+      db.from(table).upsert(row as Record<string, unknown>, { onConflict: conflict })
+    );
   }
 
   // Create-or-update keyed on the DB-generated id. When the entity has no id yet
@@ -530,12 +518,14 @@ export function createSupabaseStore(
     }
     const { id: _omit, ...insertable } = row;
     void _omit;
-    const { data, error } = await db
-      .from(table)
-      .insert(insertable as Record<string, unknown>)
-      .select("id")
-      .single();
-    if (error) fail(`save ${table}`, error);
+    const data = await runQuery(
+      `v1 store.save ${table}`,
+      db
+        .from(table)
+        .insert(insertable as Record<string, unknown>)
+        .select("id")
+        .single()
+    );
     return (data as { id: string }).id;
   }
 
@@ -553,12 +543,10 @@ export function createSupabaseStore(
       return row ? rowToAsset(row) : null;
     },
     async listAssets(projectId) {
-      const { data, error } = await db
-        .from("assets")
-        .select("*")
-        .eq("project_id", projectId)
-        .neq("media", "data");
-      if (error) fail("list assets", error);
+      const data = await runQuery(
+        "v1 store.list assets",
+        db.from("assets").select("*").eq("project_id", projectId).neq("media", "data")
+      );
       return ((data as AssetRow[]) ?? []).map(rowToAsset);
     },
     async getComposition(id) {
@@ -587,12 +575,14 @@ export function createSupabaseStore(
       return row ? rowToTimeline(row) : null;
     },
     async listTimelinesForProject(projectId) {
-      const { data, error } = await db
-        .from("timelines")
-        .select("*")
-        .eq("project_id", projectId)
-        .order("created_at", { ascending: false });
-      if (error) fail("listTimelinesForProject", error);
+      const data = await runQuery(
+        "v1 store.listTimelinesForProject",
+        db
+          .from("timelines")
+          .select("*")
+          .eq("project_id", projectId)
+          .order("created_at", { ascending: false })
+      );
       return (data ?? []).map((row) => rowToTimeline(row as TimelineRow));
     },
     async saveTimeline(timeline) {
@@ -600,16 +590,16 @@ export function createSupabaseStore(
       return { ...timeline, id };
     },
     async getIdempotency(scope) {
-      const { data, error } = await db
-        .from("idempotency")
-        .select("*")
-        .eq("scope", scope)
-        .eq("key", IDEMPOTENCY_KEY)
-        .single();
-      if (error) {
-        if (isMissing(error)) return null;
-        fail("get idempotency", error);
-      }
+      const data = await runQuery(
+        "v1 store.get idempotency",
+        db
+          .from("idempotency")
+          .select("*")
+          .eq("scope", scope)
+          .eq("key", IDEMPOTENCY_KEY)
+          .single(),
+        { allowMissing: true }
+      );
       const row = data as {
         request_hash: string | null;
         job_id: string | null;
@@ -623,17 +613,19 @@ export function createSupabaseStore(
       };
     },
     async saveIdempotency(scope, record) {
-      const { error } = await db.from("idempotency").upsert(
-        {
-          scope,
-          key: IDEMPOTENCY_KEY,
-          request_hash: record.requestHash,
-          job_id: record.jobId,
-          created_at: record.createdAt,
-        },
-        { onConflict: "scope,key" }
+      await runQuery(
+        "v1 store.save idempotency",
+        db.from("idempotency").upsert(
+          {
+            scope,
+            key: IDEMPOTENCY_KEY,
+            request_hash: record.requestHash,
+            job_id: record.jobId,
+            created_at: record.createdAt,
+          },
+          { onConflict: "scope,key" }
+        )
       );
-      if (error) fail("save idempotency", error);
     },
 
     async saveProject(project) {

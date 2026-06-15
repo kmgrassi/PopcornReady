@@ -21,6 +21,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { getServiceSupabase } from "@/lib/v1/supabase-client";
 import { useSupabaseStorage } from "@/lib/supabase/storage";
+import { runQuery } from "@/lib/supabase/db-errors";
 import type {
   EvalFixtureArtifact,
   EvalFixtureCase,
@@ -86,16 +87,6 @@ const COLLECTIONS = {
 // ---------------------------------------------------------------------------
 // Supabase (Postgres) implementation
 // ---------------------------------------------------------------------------
-
-const PGRST_NO_ROWS = "PGRST116";
-
-function isMissing(error: { code?: string } | null): boolean {
-  return !!error && error.code === PGRST_NO_ROWS;
-}
-
-function fail(op: string, error: { message?: string } | null): never {
-  throw new Error(`eval store: ${op} failed: ${error?.message ?? "unknown error"}`);
-}
 
 function iso(value: string | null | undefined): string {
   if (!value) return new Date(0).toISOString();
@@ -316,38 +307,35 @@ export function createSupabaseEvalStore(
   return {
     async createSuite(input) {
       // Omit `id`; Postgres assigns it (gen_random_uuid) and we read it back.
-      const { data, error } = await db
-        .from("eval_suites")
-        .insert({
-          name: input.name,
-          description: input.description ?? null,
-          created_at: new Date().toISOString(),
-        })
-        .select("*")
-        .single();
-      if (error) fail("create suite", error);
+      const data = await runQuery(
+        "create suite",
+        db
+          .from("eval_suites")
+          .insert({
+            name: input.name,
+            description: input.description ?? null,
+            created_at: new Date().toISOString(),
+          })
+          .select("*")
+          .single()
+      );
       return rowToSuite(data as SuiteRow);
     },
 
     async getSuite(suiteId) {
-      const { data, error } = await db
-        .from("eval_suites")
-        .select("*")
-        .eq("id", suiteId)
-        .single();
-      if (error) {
-        if (isMissing(error)) return null;
-        fail("get suite", error);
-      }
+      const data = await runQuery(
+        "get suite",
+        db.from("eval_suites").select("*").eq("id", suiteId).single(),
+        { allowMissing: true }
+      );
       return data ? rowToSuite(data as SuiteRow) : null;
     },
 
     async listSuites() {
-      const { data, error } = await db
-        .from("eval_suites")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) fail("list suites", error);
+      const data = await runQuery(
+        "list suites",
+        db.from("eval_suites").select("*").order("created_at", { ascending: false })
+      );
       return ((data as SuiteRow[]) ?? []).map(rowToSuite);
     },
 
@@ -358,35 +346,31 @@ export function createSupabaseEvalStore(
         artifacts: input.artifacts ?? [],
       });
       void _omit;
-      const { data, error } = await db
-        .from("eval_cases")
-        .insert(row)
-        .select("*")
-        .single();
-      if (error) fail("save case", error);
+      const data = await runQuery(
+        "save case",
+        db.from("eval_cases").insert(row).select("*").single()
+      );
       return rowToCase(data as CaseRow);
     },
 
     async getCase(caseId) {
-      const { data, error } = await db
-        .from("eval_cases")
-        .select("*")
-        .eq("id", caseId)
-        .single();
-      if (error) {
-        if (isMissing(error)) return null;
-        fail("get case", error);
-      }
+      const data = await runQuery(
+        "get case",
+        db.from("eval_cases").select("*").eq("id", caseId).single(),
+        { allowMissing: true }
+      );
       return data ? rowToCase(data as CaseRow) : null;
     },
 
     async listCasesForSuite(suiteId) {
-      const { data, error } = await db
-        .from("eval_cases")
-        .select("*")
-        .eq("suite_id", suiteId)
-        .order("created_at", { ascending: true });
-      if (error) fail("list cases", error);
+      const data = await runQuery(
+        "list cases",
+        db
+          .from("eval_cases")
+          .select("*")
+          .eq("suite_id", suiteId)
+          .order("created_at", { ascending: true })
+      );
       return ((data as CaseRow[]) ?? []).map(rowToCase);
     },
 
@@ -397,35 +381,31 @@ export function createSupabaseEvalStore(
         createdAt: input.createdAt ?? new Date().toISOString(),
       });
       void _omit;
-      const { data, error } = await db
-        .from("eval_runs")
-        .insert(row)
-        .select("*")
-        .single();
-      if (error) fail("save run", error);
+      const data = await runQuery(
+        "save run",
+        db.from("eval_runs").insert(row).select("*").single()
+      );
       return rowToRun(data as RunRow);
     },
 
     async getRun(runId) {
-      const { data, error } = await db
-        .from("eval_runs")
-        .select("*")
-        .eq("id", runId)
-        .single();
-      if (error) {
-        if (isMissing(error)) return null;
-        fail("get run", error);
-      }
+      const data = await runQuery(
+        "get run",
+        db.from("eval_runs").select("*").eq("id", runId).single(),
+        { allowMissing: true }
+      );
       return data ? rowToRun(data as RunRow) : null;
     },
 
     async listRunsForSuite(suiteId) {
-      const { data, error } = await db
-        .from("eval_runs")
-        .select("*")
-        .eq("suite_id", suiteId)
-        .order("created_at", { ascending: false });
-      if (error) fail("list runs", error);
+      const data = await runQuery(
+        "list runs",
+        db
+          .from("eval_runs")
+          .select("*")
+          .eq("suite_id", suiteId)
+          .order("created_at", { ascending: false })
+      );
       return ((data as RunRow[]) ?? []).map(rowToRun);
     },
 
@@ -434,52 +414,49 @@ export function createSupabaseEvalStore(
       // DB-generated (gen_random_uuid); omit it and read the assigned id back.
       const { id: _omit, ...row } = judgmentToRow({ ...judgment, id: "" });
       void _omit;
-      const { data, error } = await db
-        .from("judgments")
-        .insert(row)
-        .select("*")
-        .single();
-      if (error) fail("save judgment", error);
+      const data = await runQuery(
+        "save judgment",
+        db.from("judgments").insert(row).select("*").single()
+      );
       return rowToJudgment(data as JudgmentRow);
     },
 
     async getJudgment(judgmentId) {
-      const { data, error } = await db
-        .from("judgments")
-        .select("*")
-        .eq("id", judgmentId)
-        .single();
-      if (error) {
-        if (isMissing(error)) return null;
-        fail("get judgment", error);
-      }
+      const data = await runQuery(
+        "get judgment",
+        db.from("judgments").select("*").eq("id", judgmentId).single(),
+        { allowMissing: true }
+      );
       return data ? rowToJudgment(data as JudgmentRow) : null;
     },
 
     async listJudgmentsForRun(runId) {
-      const { data, error } = await db
-        .from("judgments")
-        .select("*")
-        .eq("eval_run_id", runId)
-        .order("created_at", { ascending: true });
-      if (error) fail("list judgments", error);
+      const data = await runQuery(
+        "list judgments",
+        db
+          .from("judgments")
+          .select("*")
+          .eq("eval_run_id", runId)
+          .order("created_at", { ascending: true })
+      );
       return ((data as JudgmentRow[]) ?? []).map(rowToJudgment);
     },
 
     async saveExpectationResult(result) {
-      const { error } = await db
-        .from("expectation_results")
-        .upsert(expectationResultToRow(result), { onConflict: "eval_run_id,judgment_id" });
-      if (error) fail("save expectation result", error);
+      await runQuery(
+        "save expectation result",
+        db
+          .from("expectation_results")
+          .upsert(expectationResultToRow(result), { onConflict: "eval_run_id,judgment_id" })
+      );
       return result;
     },
 
     async listExpectationResultsForRun(runId) {
-      const { data, error } = await db
-        .from("expectation_results")
-        .select("*")
-        .eq("eval_run_id", runId);
-      if (error) fail("list expectation results", error);
+      const data = await runQuery(
+        "list expectation results",
+        db.from("expectation_results").select("*").eq("eval_run_id", runId)
+      );
       return ((data as ExpectationResultRow[]) ?? []).map(rowToExpectationResult);
     },
   };
