@@ -59,6 +59,7 @@ export function ErrorState({
   if (apiError) {
     details.push({ label: "Code", value: apiError.code });
     details.push({ label: "Status", value: String(apiError.status) });
+    details.push({ label: "Detail", value: apiError.message });
     if (apiError.requestId) {
       details.push({ label: "Request", value: apiError.requestId });
     }

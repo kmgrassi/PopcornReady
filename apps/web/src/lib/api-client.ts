@@ -46,6 +46,10 @@ export class ApiClientError extends Error {
   }
 }
 
+function contentType(response: Response): string {
+  return response.headers.get("content-type")?.toLowerCase() ?? "";
+}
+
 export type ApiRequestOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
   searchParams?: URLSearchParams | Record<string, string | number | boolean | null | undefined>;
@@ -74,7 +78,38 @@ function buildUrl(path: string, searchParams?: ApiRequestOptions["searchParams"]
 
 async function parseResponse<T>(response: Response): Promise<T> {
   const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
+  const responseContentType = contentType(response);
+  const isJson = responseContentType.includes("application/json");
+
+  if (text && !isJson) {
+    const looksLikeHtml = text.trimStart().startsWith("<");
+    throw new ApiClientError(502, {
+      code: "invalid_api_response",
+      message: looksLikeHtml
+        ? "The API request returned the web app HTML instead of JSON. Check VITE_API_URL or the production /api redirect."
+        : "The API request returned a non-JSON response.",
+      details: {
+        url: response.url,
+        upstreamStatus: response.status,
+        contentType: responseContentType || null,
+      },
+    });
+  }
+
+  let data: unknown = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch (error) {
+    throw new ApiClientError(502, {
+      code: "invalid_api_response",
+      message: "The API request returned malformed JSON.",
+      details: {
+        url: response.url,
+        upstreamStatus: response.status,
+        parseError: error instanceof Error ? error.message : String(error),
+      },
+    });
+  }
 
   if (!response.ok) {
     const envelope = isErrorEnvelope(data)
