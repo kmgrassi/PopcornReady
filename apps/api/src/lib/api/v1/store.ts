@@ -25,7 +25,8 @@ import { AsyncLocalStorage } from "async_hooks";
 import { randomUUID } from "crypto";
 import path from "path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { isMissingRow, throwDatabaseError } from "../../supabase/db-errors";
+import { isMissingRow } from "../../supabase/db-errors";
+import { iso, markedJson, throwOnError, unmarkedJson } from "./store-internal";
 import {
   canonicalContentHash,
   graphInputsFromProvenance,
@@ -61,6 +62,8 @@ import {
   type StudioDraftStep,
   type StudioDraftSummary,
 } from "@popcorn/shared/v1/studio-drafts";
+import type { EditPlan } from "@popcorn/shared/types";
+import type { Asset } from "@popcorn/shared/assets/types";
 import {
   getGenerationRunStore,
   type GenerationRunsStore,
@@ -259,6 +262,7 @@ export interface V1Action {
 export interface CreateActionInput {
   projectId: string;
   runId?: string;
+  orchestratorRunId?: string;
   tool: string;
   status?: ActionStatus;
   params?: Record<string, unknown>;
@@ -373,17 +377,11 @@ function getRequestSupabaseOrService(): SupabaseClient {
 
 // Normalize a DB timestamptz (or any date-ish value) to canonical ISO so cursor
 // pagination ordering is stable across the JSON-string and Postgres backends.
-function iso(value: string | null | undefined): string {
-  if (!value) return new Date(0).toISOString();
-  return new Date(value).toISOString();
-}
-
 // supabase-js returns `PGRST116` when a `.single()` lookup matches no rows.
 // Callers translate that into notFound/null; other DB failures use the typed
 // database_error envelope instead of leaking as generic internal errors.
+// iso/throwOnError/markedJson/unmarkedJson now live in ./store-internal.
 const isNoRows = isMissingRow;
-const throwOnError = (error: Parameters<typeof throwDatabaseError>[1], context: string) =>
-  throwDatabaseError(`store.${context}`, error);
 
 export async function defaultVisibilityForWorkspace(
   db: SupabaseClient,
@@ -497,7 +495,7 @@ interface DataAssetRow {
 // it when projecting the payload back out as a domain object.
 const CONTENT_SCHEMA_KEY = "schema_version";
 
-function markedContent(kind: "brief" | "beat", content: unknown): Record<string, unknown> {
+function markedContent(kind: "brief" | "beat" | "plan", content: unknown): Record<string, unknown> {
   return { [CONTENT_SCHEMA_KEY]: `${kind}.v1`, ...(content as Record<string, unknown>) };
 }
 
@@ -577,24 +575,6 @@ interface AssetFingerprintRow {
   id: string;
   content_hash: string | null;
   inputs_fingerprint: string | null;
-}
-
-function markedJson(
-  marker: string,
-  value: Record<string, unknown> | undefined
-): Record<string, unknown> | undefined {
-  if (value === undefined) return undefined;
-  return { schema_version: marker, ...value };
-}
-
-function unmarkedJson(
-  value: Record<string, unknown> | null
-): Record<string, unknown> | undefined {
-  if (!value) return undefined;
-  const { schema_version: _schemaVersion, schema: _schema, ...rest } = value;
-  void _schemaVersion;
-  void _schema;
-  return rest;
 }
 
 function mapAction(row: ActionRow): V1Action {
@@ -836,7 +816,7 @@ async function mapProjectWithProjection(
 async function setActiveAssetSelection(
   db: SupabaseClient,
   projectId: string,
-  slotRole: "brief" | typeof POSTER_SLOT_ROLE,
+  slotRole: "brief" | "plan" | typeof POSTER_SLOT_ROLE,
   activeAssetId: string,
   setByActionId?: string
 ): Promise<void> {
@@ -860,6 +840,7 @@ export async function createAction(input: CreateActionInput): Promise<V1Action> 
       schema_version: "action.v1",
       project_id: input.projectId,
       run_id: input.runId ?? null,
+      orchestrator_run_id: input.orchestratorRunId ?? null,
       tool: input.tool,
       status: input.status ?? "proposed",
       params: markedJson("action_params.v1", input.params ?? {}) ?? {},
@@ -974,9 +955,12 @@ async function insertDataAsset(input: {
   db: SupabaseClient;
   workspaceId: string;
   projectId: string;
-  kind: "brief" | "beat";
+  kind: "brief" | "beat" | "plan";
   role: string;
   content: unknown;
+  // Upstream asset snapshot. The DB trigger mirrors this into asset_edges, so the
+  // dependency/stale graph sees this asset as a consumer of its inputs.
+  inputs?: GraphAssetInput[];
   lineageId?: string;
   version?: number;
   createdByActionId?: string;
@@ -984,6 +968,7 @@ async function insertDataAsset(input: {
   const now = new Date().toISOString();
   const visibility = await defaultVisibilityForWorkspace(input.db, input.workspaceId);
   const content = markedContent(input.kind, input.content);
+  const inputs = input.inputs ?? [];
   const row: Record<string, unknown> = {
     schema_version: "asset.v2",
     workspace_id: input.workspaceId,
@@ -994,7 +979,8 @@ async function insertDataAsset(input: {
     role: input.role,
     content,
     content_hash: canonicalContentHash(content),
-    inputs_fingerprint: inputsFingerprint([], null),
+    inputs,
+    inputs_fingerprint: inputsFingerprint(inputs, null),
     visibility,
     created_at: now,
     updated_at: now,
@@ -1496,6 +1482,203 @@ export async function createProject(input: {
   }
 
   return { project: await mapProjectWithProjection(db, projectRow), briefVersion };
+}
+
+// Attach a brief to an EXISTING project: persists a brief data-asset and points
+// the project's active 'brief' selection at it, wrapped in a create_brief action
+// for provenance. This is the same persistence the createProject brief-block
+// runs; it is factored out so the orchestrator create_or_load_brief tool can
+// write a brief into a project it did not create.
+export async function addProjectBrief(input: {
+  workspaceId: string;
+  projectId: string;
+  brief: VideoBrief;
+}): Promise<V1BriefVersion> {
+  const db = getServiceSupabase();
+  const action = await createAction({
+    projectId: input.projectId,
+    tool: "create_brief",
+    status: "running",
+    params: { source: "create_or_load_brief" },
+    rationale: "Create the project brief asset via the orchestrator tool.",
+  });
+  const briefAsset = await insertDataAsset({
+    db,
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    kind: "brief",
+    role: "current_brief",
+    content: input.brief,
+    createdByActionId: action.id,
+  });
+  await setActiveAssetSelection(db, input.projectId, "brief", briefAsset.id, action.id);
+  await updateAction(action.id, {
+    status: "applied",
+    outputAssetIds: [briefAsset.id],
+  });
+  return mapBriefVersion(briefAsset);
+}
+
+// Read the project's active brief (the 'brief' selection slot, falling back to
+// the latest brief asset). Returns the unwrapped VideoBrief or null. Used by the
+// plan_shots tool's precondition check.
+export interface ActiveProjectBrief {
+  brief: VideoBrief;
+  /** The brief asset's id — recorded as the input of anything derived from it. */
+  assetId: string;
+  /** The brief asset's content hash — the stale-detection fingerprint. */
+  contentHash: string;
+}
+
+export async function getActiveProjectBrief(
+  projectId: string
+): Promise<ActiveProjectBrief | null> {
+  const db = getServiceSupabase();
+  const briefAsset = await selectedDataAsset(db, projectId, "brief", "brief");
+  if (!briefAsset) return null;
+  return {
+    brief: unmarkedContent<VideoBrief>(briefAsset.content),
+    assetId: briefAsset.id,
+    contentHash: briefAsset.content_hash ?? "",
+  };
+}
+
+// Persist a plan (scenes + beats) as the project's active 'plan' data asset,
+// wrapped in a plan_shots action for provenance. The plan records the active brief
+// as its input (asset `inputs` + the action's `inputAssetIds`) so that replacing
+// the brief marks this plan — and everything downstream of it — stale.
+export async function addProjectPlan(input: {
+  workspaceId: string;
+  projectId: string;
+  plan: EditPlan;
+  briefAssetId?: string;
+  briefContentHash?: string;
+}): Promise<{ planAssetId: string }> {
+  const db = getServiceSupabase();
+  const planInputs: GraphAssetInput[] = input.briefAssetId
+    ? [
+        {
+          assetId: input.briefAssetId,
+          relation: "input",
+          role: "brief",
+          position: 0,
+          ...(input.briefContentHash ? { contentHash: input.briefContentHash } : {}),
+        },
+      ]
+    : [];
+  const action = await createAction({
+    projectId: input.projectId,
+    tool: "plan_shots",
+    status: "running",
+    params: { source: "plan_shots" },
+    inputAssetIds: input.briefAssetId ? [input.briefAssetId] : [],
+    rationale: "Persist the shot plan as the project's active plan asset.",
+  });
+  const planAsset = await insertDataAsset({
+    db,
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    kind: "plan",
+    role: "current_plan",
+    content: input.plan,
+    inputs: planInputs,
+    createdByActionId: action.id,
+  });
+  await setActiveAssetSelection(db, input.projectId, "plan", planAsset.id, action.id);
+  await updateAction(action.id, {
+    status: "applied",
+    outputAssetIds: [planAsset.id],
+  });
+  return { planAssetId: planAsset.id };
+}
+
+export interface ActiveProjectPlan {
+  plan: EditPlan;
+  /** The plan asset id — recorded as the input of anything derived from it. */
+  assetId: string;
+  /** The plan asset's content hash — the stale-detection fingerprint. */
+  contentHash: string;
+}
+
+// The project's active shot plan (mirrors getActiveProjectBrief). The storyboard
+// stage reads this; the model only decides *when* to generate.
+export async function getActiveProjectPlan(
+  projectId: string
+): Promise<ActiveProjectPlan | null> {
+  const db = getServiceSupabase();
+  const planAsset = await selectedDataAsset(db, projectId, "plan", "plan");
+  if (!planAsset) return null;
+  return {
+    plan: unmarkedContent<EditPlan>(planAsset.content),
+    assetId: planAsset.id,
+    contentHash: planAsset.content_hash ?? "",
+  };
+}
+
+export interface PersistedStoryboardTile {
+  beatId: string;
+  assetId: string;
+}
+
+// Persist generated storyboard tiles (one per beat) as image asset rows, each
+// recording the plan as its input so a plan/brief change marks the tiles stale.
+// The relational storyboard (storyboards/scenes/panels) links to these via
+// panel.image_asset_id — see buildStoryboardForPlan.
+export async function addStoryboardTiles(input: {
+  workspaceId: string;
+  projectId: string;
+  planAssetId: string;
+  planContentHash: string;
+  tiles: Asset[];
+  createdByActionId?: string;
+}): Promise<PersistedStoryboardTile[]> {
+  const now = new Date().toISOString();
+  const persisted: PersistedStoryboardTile[] = [];
+  for (let i = 0; i < input.tiles.length; i += 1) {
+    const tile = input.tiles[i];
+    const beatId = tile.depicts?.beatId ?? "";
+    const asset: V1Asset = {
+      id: "",
+      schemaVersion: SCHEMA_VERSIONS.asset,
+      workspaceId: input.workspaceId,
+      projectId: input.projectId,
+      kind: "image",
+      filename: tile.media.filename,
+      status: "ready",
+      source: { type: "generated", generatedAssetId: "" },
+      // The primitive already wrote the bytes to the local generated dir; persist
+      // its storage-relative locator as storageKey (NOT remoteUrl) so
+      // resolveAssetUrl converts it to the API-served /generated/... URL. (remoteUrl
+      // is returned verbatim and would 404 the panel images in local/dev.)
+      storageKey: tile.media.url,
+      durationSec: tile.media.durationSec,
+      context: tile.description ? { summary: tile.description } : undefined,
+      provenance: {
+        provider: tile.provenance?.provider ?? "mock",
+        ...(tile.provenance?.model ? { model: tile.provenance.model } : {}),
+        prompt: tile.provenance?.prompt ?? "",
+        ...(beatId ? { beatId } : {}),
+      },
+      graphInputs: [
+        {
+          assetId: input.planAssetId,
+          relation: "input",
+          role: "plan",
+          position: i,
+          ...(input.planContentHash ? { contentHash: input.planContentHash } : {}),
+        },
+      ],
+      contentHash: canonicalContentHash({ url: tile.media.url, beatId }),
+      createdAt: now,
+      updatedAt: now,
+    };
+    const created = await addAsset(
+      asset,
+      input.createdByActionId ? { createdByActionId: input.createdByActionId } : {}
+    );
+    persisted.push({ beatId, assetId: created.id });
+  }
+  return persisted;
 }
 
 export async function getProject(
