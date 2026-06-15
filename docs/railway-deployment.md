@@ -10,6 +10,13 @@ Current production origin: `https://popcornready-production.up.railway.app`
 unset the web client falls back to same-origin `/api/*` and receives the SPA
 `index.html` instead of JSON.
 
+The API must run on **Node 22+**. `@supabase/supabase-js` constructs a realtime
+client (which needs a global `WebSocket`) when `createClient` is called; on Node
+20 that throws `Node.js 20 detected without native WebSocket support`, 500-ing
+every authenticated request in `authMiddleware`. The runtime is pinned via the
+root `.nvmrc` (read by Railpack) and belt-and-suspenders by the service env var
+`RAILPACK_NODE_VERSION=22`.
+
 ## Pricing notes
 
 Railway pricing has two parts:
