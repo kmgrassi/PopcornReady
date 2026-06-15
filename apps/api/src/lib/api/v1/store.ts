@@ -21,12 +21,22 @@
 //     as a structured envelope (see assetContextEnvelope / unpackAssetContext).
 //     `assets` stores METADATA only — the bytes live in storage (separate PR).
 
-import { AsyncLocalStorage } from "async_hooks";
 import { randomUUID } from "crypto";
-import path from "path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { databaseError, runQuery } from "../../supabase/db-errors";
 import { iso, markedJson, unmarkedJson } from "./store-internal";
+import {
+  localDir,
+  mediaAnalysisDir,
+  mediaGeneratedDir,
+  mediaUploadDir,
+  withLocalDir,
+} from "./media-paths";
+import {
+  paginate,
+  paginateByUpdatedAt,
+  type PageResult,
+} from "./pagination";
 import {
   canonicalContentHash,
   graphInputsFromProvenance,
@@ -283,42 +293,14 @@ export type UpdateActionPatch = Partial<
   >
 >;
 
-// ---------------------------------------------------------------------------
-// Local media paths (asset BYTES, not DB rows)
-// ---------------------------------------------------------------------------
-// These compute on-disk paths for uploaded/generated media bytes. They are
-// orthogonal to the Postgres metadata store below and are still consumed by the
-// asset byte/storage code (assets.ts / generated-assets.ts / jobs.ts), which a
-// separate storage PR owns. Kept here so this module's exported surface stays a
-// superset and nothing upstream needs to change.
-const localDirContext = new AsyncLocalStorage<string>();
-
-// Resolved per call so tests can point POPCORN_READY_LOCAL_DIR at a temp directory.
-export function localDir(): string {
-  const contextualDir = localDirContext.getStore();
-  if (contextualDir) return contextualDir;
-  return process.env.POPCORN_READY_LOCAL_DIR || path.join(process.cwd(), ".local");
-}
-
-export function withLocalDir<T>(dir: string, fn: () => T): T {
-  return localDirContext.run(dir, fn);
-}
-
-export function mediaUploadDir(workspaceId: string, projectId: string): string {
-  return path.join(localDir(), "media", "uploads", workspaceId, projectId);
-}
-
-export function mediaGeneratedDir(workspaceId: string, projectId: string): string {
-  return path.join(localDir(), "media", "generated", workspaceId, projectId);
-}
-
-export function mediaAnalysisDir(
-  workspaceId: string,
-  projectId: string,
-  assetId: string
-): string {
-  return path.join(localDir(), "media", "analysis", workspaceId, projectId, assetId);
-}
+export {
+  localDir,
+  mediaAnalysisDir,
+  mediaGeneratedDir,
+  mediaUploadDir,
+  withLocalDir,
+};
+export type { PageResult };
 
 // ---------------------------------------------------------------------------
 // Service-role Supabase client
@@ -1297,69 +1279,6 @@ async function getAssetRow(
   );
   if (!data) throw notFound(`Asset not found: ${assetId}`);
   return data as AssetRow;
-}
-
-// ---------------------------------------------------------------------------
-// Pagination
-// ---------------------------------------------------------------------------
-export interface PageResult<T> {
-  items: T[];
-  nextCursor: string | null;
-}
-
-// Newest-first cursor pagination keyed on stable record IDs. We over-fetch by one
-// to learn whether more rows exist, then trim. The (created_at desc, id desc)
-// ordering matches the old JSON sort exactly; the cursor is the last item's id and
-// its created_at locates the seek position even when timestamps collide.
-function orderTuple(a: { id: string; createdAt: string }, b: { id: string; createdAt: string }): number {
-  if (a.createdAt === b.createdAt) return a.id < b.id ? 1 : -1;
-  return a.createdAt < b.createdAt ? 1 : -1;
-}
-
-function paginate<T extends { id: string; createdAt: string }>(
-  all: T[],
-  limit: number,
-  cursor: string | null
-): PageResult<T> {
-  const sorted = [...all].sort(orderTuple);
-  let start = 0;
-  if (cursor) {
-    const idx = sorted.findIndex((item) => item.id === cursor);
-    start = idx === -1 ? sorted.length : idx + 1;
-  }
-  const items = sorted.slice(start, start + limit);
-  const nextCursor =
-    start + limit < sorted.length && items.length > 0
-      ? items[items.length - 1].id
-      : null;
-  return { items, nextCursor };
-}
-
-function updatedOrderTuple(
-  a: { id: string; updatedAt: string },
-  b: { id: string; updatedAt: string }
-): number {
-  if (a.updatedAt === b.updatedAt) return a.id < b.id ? 1 : -1;
-  return a.updatedAt < b.updatedAt ? 1 : -1;
-}
-
-function paginateByUpdatedAt<T extends { id: string; updatedAt: string }>(
-  all: T[],
-  limit: number,
-  cursor: string | null
-): PageResult<T> {
-  const sorted = [...all].sort(updatedOrderTuple);
-  let start = 0;
-  if (cursor) {
-    const idx = sorted.findIndex((item) => item.id === cursor);
-    start = idx === -1 ? sorted.length : idx + 1;
-  }
-  const items = sorted.slice(start, start + limit);
-  const nextCursor =
-    start + limit < sorted.length && items.length > 0
-      ? items[items.length - 1].id
-      : null;
-  return { items, nextCursor };
 }
 
 // ---------------------------------------------------------------------------
