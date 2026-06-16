@@ -79,6 +79,42 @@ test("surfaces orchestrator success as ready once export_video produced output",
   ]);
 });
 
+test("projects a regenerated stage from the latest action instead of stale failures", () => {
+  const payload = projectRunDetailFromParts(
+    runFixture({ status: "waiting" }),
+    [
+      {
+        id: "gate_1",
+        orchestratorRunId: "run_1",
+        stage: "create_or_load_brief",
+        status: "reached",
+        createdAt: "2026-06-15T00:00:00.000Z",
+        updatedAt: "2026-06-15T00:00:03.000Z",
+      },
+    ],
+    [
+      actionFixture("create_or_load_brief", {
+        id: "failed_brief",
+        status: "failed",
+        error: { kind: "invalid_input", message: "The request body is invalid.", recoverable: true },
+        createdAt: "2026-06-15T00:00:01.000Z",
+      }),
+      actionFixture("create_or_load_brief", {
+        id: "applied_brief",
+        status: "applied",
+        outputAssetIds: ["brief_asset_2"],
+        createdAt: "2026-06-15T00:00:02.000Z",
+      }),
+    ]
+  );
+
+  assert.equal(payload.run.status, "running");
+  assert.equal(payload.run.reviewGate?.stageType, "brief_intake");
+  assert.equal(payload.stages[0]?.status, "succeeded");
+  assert.equal(payload.stages[0]?.error, undefined);
+  assert.deepEqual(payload.stages[0]?.artifactIds, ["brief_asset_2"]);
+});
+
 test("resumeRunInBackground starts resume and returns before it settles", async () => {
   let resolveResume: (() => void) | undefined;
   let resumeStarted = false;

@@ -381,8 +381,7 @@ function projectStages(run: OrchestratorRun, actions: RunActionSummary[]): Gener
   return [...grouped.entries()]
     .map(([type, stageActions]) => {
       const latest = stageActions.at(-1);
-      const failed = stageActions.find((action) => action.status === "failed");
-      const status = failed ? "failed" : latest ? actionStatus(latest.status) : "queued";
+      const status = latest ? actionStatus(latest.status) : "queued";
       return {
         stageId: stageId(run.id, type),
         runId: run.id,
@@ -398,7 +397,7 @@ function projectStages(run: OrchestratorRun, actions: RunActionSummary[]): Gener
         artifactIds: stageActions.flatMap((action) => action.outputAssetIds),
         createdAt: stageActions[0]?.createdAt ?? run.createdAt,
         updatedAt: latest?.createdAt ?? run.updatedAt,
-        error: toErrorSummary(failed?.error),
+        error: latest?.status === "failed" ? toErrorSummary(latest.error) : undefined,
       };
     })
     .sort((a, b) => a.order - b.order);
