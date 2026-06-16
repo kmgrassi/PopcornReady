@@ -14,7 +14,7 @@ import {
   type InvocationRecord,
   type OrchestratorEngineStore,
 } from "../engine";
-import type { ToolCallResult, ToolExecutionContext, ToolName } from "../types";
+import type { ToolCallResult, ToolError, ToolExecutionContext, ToolName } from "../types";
 import type { OrchestratorModel } from "../model";
 import type { ToolRegistry } from "../registry";
 
@@ -228,6 +228,40 @@ test("reconstructs priorResults from persisted actions for each model turn", asy
   assert.deepEqual(calls[0], []);
   assert.deepEqual(calls[1], [
     { tool: "create_or_load_brief", status: "applied", outputAssetIds: ["asset_brief"] },
+  ]);
+});
+
+test("threads a failed action's recovery guidance into the next model turn", async () => {
+  const store = new FakeStore(runFixture());
+  const { model, calls } = scriptedModel([
+    { type: "tool_call", toolName: "plan_shots" },
+    { type: "tool_call", toolName: "create_or_load_brief" },
+    { type: "done" },
+  ]);
+  const planShotsError: ToolError = {
+    kind: "precondition_unmet",
+    message: "plan_shots needs a project brief before it can plan shots.",
+    recoverable: true,
+    unmetRequirements: [
+      {
+        requirement: "brief",
+        because: "The plan is derived from the project's brief.",
+        satisfyWith: { tool: "create_or_load_brief", inputHint: {} },
+      },
+    ],
+    suggestedNextTools: [{ tool: "create_or_load_brief", inputHint: {} }],
+  };
+  const registry = fakeRegistry({
+    plan_shots: () => ({ status: "failed", error: planShotsError }),
+    create_or_load_brief: () => ok(["asset_brief"]),
+  });
+
+  await runOrchestratorToCompletion("run1", deps(store, model, registry));
+
+  // The turn after plan_shots failed must carry WHY it failed and which tool to
+  // call next, so the model recovers instead of blindly retrying the failed tool.
+  assert.deepEqual(calls[1], [
+    { tool: "plan_shots", status: "failed", outputAssetIds: [], error: planShotsError },
   ]);
 });
 
