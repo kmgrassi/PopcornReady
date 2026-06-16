@@ -13,11 +13,19 @@ export function AuthNavButton() {
   // Sign-out lives in the dashboard account menu.
   if (status === "authenticated" || status === "disabled") {
     return (
-      <Link to="/dashboard" title={user?.email ?? "Go to dashboard"}>
-        Dashboard
+      <Link
+        className="web-shell-cta"
+        to="/dashboard"
+        title={user?.email ?? "Go to dashboard"}
+      >
+        Open dashboard
       </Link>
     );
   }
 
-  return <Link to="/login">Sign in</Link>;
+  return (
+    <Link className="web-shell-cta" to="/login">
+      Sign in
+    </Link>
+  );
 }
