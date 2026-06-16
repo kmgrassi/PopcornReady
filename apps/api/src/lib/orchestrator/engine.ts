@@ -26,6 +26,7 @@ import { toOrchestratorRegistry } from "@/lib/orchestrator-tools/to-orchestrator
 import { agentApiStore } from "@/lib/agent-api/jobs";
 import { orchestratorModel, type OrchestratorModel } from "./model";
 import { executeRegisteredTool, type ToolRegistry } from "./registry";
+import { withStoreRetry, type RetryOptions } from "./retry";
 import { createToolExecutionContext } from "./tool-context";
 import type { ToolCallResult, ToolName } from "./types";
 
@@ -88,6 +89,8 @@ export interface EngineDeps {
   jobs?: JobStatusReader;
   maxTurns?: number;
   modelTurnTimeoutMs?: number;
+  /** Bounded retry for idempotent store ops, so a transient infra blip costs a retry, not the run. */
+  retry?: RetryOptions;
 }
 
 export function defaultEngineStore(): OrchestratorEngineStore {
@@ -147,7 +150,10 @@ function registryForRejectedGate(
 
 function resolved(deps: EngineDeps) {
   return {
-    store: deps.store ?? defaultEngineStore(),
+    // Wrap the store so a transient blip in an idempotent op (read actions/gates,
+    // patch the run) retries instead of failing the whole run. recordInvocation is
+    // left un-retried inside withStoreRetry (non-idempotent append).
+    store: withStoreRetry(deps.store ?? defaultEngineStore(), deps.retry),
     model: deps.model ?? orchestratorModel,
     registry: deps.registry ?? defaultRegistry(),
     jobs: deps.jobs ?? { getJob: (id: string) => agentApiStore.getJob(id) },
