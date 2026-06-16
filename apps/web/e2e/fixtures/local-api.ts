@@ -5,9 +5,15 @@ const now = "2026-06-16T00:00:00.000Z";
 const emptyPagination = { limit: 24, nextCursor: null };
 
 async function json(route: Route, body: unknown, status = 200) {
+  const origin = route.request().headers().origin;
   await route.fulfill({
     status,
-    contentType: "application/json",
+    headers: {
+      "access-control-allow-credentials": "true",
+      "access-control-allow-origin": origin ?? "*",
+      "content-type": "application/json",
+      vary: "origin",
+    },
     body: JSON.stringify(body),
   });
 }
@@ -46,7 +52,7 @@ export async function mockLocalApi(page: Page) {
   await page.route("**/api/v1/workspaces/*/outputs?**", (route) =>
     json(route, { outputs: [], pagination: emptyPagination }),
   );
-  await page.route("**/api/v1/workspaces/*/studio-drafts?**", (route) =>
+  await page.route(/\/api\/v1\/workspaces\/[^/]+\/studio-drafts(?:\?.*)?$/, (route) =>
     json(route, { drafts: [], pagination: { limit: 20, nextCursor: null } }),
   );
 }
