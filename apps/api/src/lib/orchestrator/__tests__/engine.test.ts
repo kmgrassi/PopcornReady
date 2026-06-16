@@ -334,21 +334,51 @@ test("parks before a gated stage and resumes once the gate is approved", async (
 
 test("a rejected gate regenerates the gated stage and parks for review again", async () => {
   const store = new FakeStore(runFixture(), [gateFixture("create_or_load_brief", "rejected")]);
-  const { model } = scriptedModel([
-    { type: "tool_call", toolName: "create_or_load_brief" },
-    { type: "done" },
-  ]);
-  const registry = fakeRegistry({ create_or_load_brief: () => ok(["asset_brief"]) });
+  const seenRegistryKeys: string[][] = [];
+  const model: OrchestratorModel = async ({ registry }) => {
+    seenRegistryKeys.push(Array.from(registry.keys()));
+    return { type: "tool_call", toolName: "create_or_load_brief", input: {}, model: "mock" };
+  };
+  const registry = fakeRegistry({
+    create_or_load_brief: () => ok(["asset_brief"]),
+    plan_shots: () => ok(["asset_plan"]),
+  });
 
   const run = await runOrchestratorToCompletion("run1", deps(store, model, registry));
 
   assert.equal(run.status, "waiting");
+  assert.deepEqual(seenRegistryKeys, [["create_or_load_brief"]]);
   assert.equal(store.gates[0].status, "reached");
   assert.equal(store.actions.length, 1);
   assert.equal(store.actions[0].tool, "create_or_load_brief");
   assert.equal(store.actions[0].status, "applied");
   assert.deepEqual(store.actions[0].outputAssetIds, ["asset_brief"]);
   assert.equal(store.actions[0].error, undefined);
+});
+
+test("a rejected gate prevents a later-stage tool from executing", async () => {
+  const store = new FakeStore(runFixture(), [gateFixture("create_or_load_brief", "rejected")]);
+  const { model } = scriptedModel([
+    { type: "tool_call", toolName: "plan_shots" },
+  ]);
+  let planShotsExecuted = false;
+  const registry = fakeRegistry({
+    create_or_load_brief: () => ok(["asset_brief"]),
+    plan_shots: () => {
+      planShotsExecuted = true;
+      return ok(["asset_plan"]);
+    },
+  });
+
+  const run = await runOrchestratorToCompletion("run1", deps(store, model, registry));
+
+  assert.equal(run.status, "failed");
+  assert.equal(planShotsExecuted, false);
+  assert.equal(store.gates[0].status, "rejected");
+  assert.equal(store.actions.length, 1);
+  assert.equal(store.actions[0].tool, "plan_shots");
+  assert.equal(store.actions[0].status, "failed");
+  assert.match((store.actions[0].error as { message?: string }).message ?? "", /Unknown orchestrator tool/);
 });
 
 test("an async rejected gate parks on the job, then parks for review after job success", async () => {

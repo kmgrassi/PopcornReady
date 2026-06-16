@@ -17,6 +17,24 @@ const defaultDeps: CreateBriefDeps = {
 };
 
 const str = { type: "string" } as const;
+const platformSchema = {
+  type: "string",
+  enum: ["youtube", "tiktok", "reels", "facebook", "vimeo", "general"],
+  description:
+    "Publishing platform. Use general when the destination is broad or not one of the enum values.",
+} as const;
+const formatSchema = {
+  type: "string",
+  enum: [
+    "mystery_to_model",
+    "visual_reveal",
+    "challenge",
+    "misconception",
+    "animated_explainer",
+    "classroom_demo",
+    "aesthetic_montage",
+  ],
+} as const;
 
 // Provider-neutral JSON schema the model fills. Kept deliberately close to the
 // server-authoritative VideoBrief shape (apps/api/src/lib/api/v1/schemas.ts) so
@@ -32,10 +50,10 @@ export const createBriefInputSchema = {
       description: "Target length in seconds. Must be between 1 and 600.",
     },
     aspectRatio: { type: "string", enum: ["9:16", "16:9", "1:1"] },
-    platform: str,
+    platform: platformSchema,
     audience: str,
     style: str,
-    format: str,
+    format: formatSchema,
     hookQuestion: str,
     strongestVisual: str,
     oneBigIdea: str,

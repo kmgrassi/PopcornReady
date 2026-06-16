@@ -1,24 +1,72 @@
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig, devices } from "@playwright/test";
 
-const port = Number(process.env.PLAYWRIGHT_WEB_PORT ?? 3100);
-const baseURL = `http://127.0.0.1:${port}`;
+const webRoot = fileURLToPath(new URL(".", import.meta.url));
+const repoRoot = path.resolve(webRoot, "../..");
+const envFile = path.join(webRoot, "e2e", "e2e.env");
+
+function readEnvFile(file: string): Record<string, string> {
+  if (!existsSync(file)) return {};
+  const env: Record<string, string> = {};
+  for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const index = trimmed.indexOf("=");
+    if (index === -1) continue;
+    env[trimmed.slice(0, index)] = trimmed.slice(index + 1);
+  }
+  return env;
+}
+
+const e2eEnv = {
+  ...readEnvFile(envFile),
+  ...process.env,
+};
+
+const webPort = Number(e2eEnv.PLAYWRIGHT_WEB_PORT ?? 3100);
+const apiPort = Number(e2eEnv.PLAYWRIGHT_API_PORT ?? e2eEnv.PORT ?? 4100);
+const baseURL = e2eEnv.PLAYWRIGHT_BASE_URL || `http://127.0.0.1:${webPort}`;
+const apiURL = e2eEnv.VITE_API_URL || `http://127.0.0.1:${apiPort}`;
+const { VITE_API_URL: _clientApiURL, ...webE2EEnv } = e2eEnv;
 
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
-  reporter: process.env.CI ? "github" : "list",
+  workers: process.env.CI ? 1 : undefined,
+  reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
   use: {
     baseURL,
     trace: "on-first-retry",
   },
-  webServer: {
-    command: `pnpm dev --host 127.0.0.1 --port ${port} --strictPort`,
-    url: baseURL,
-    reuseExistingServer: false,
-    timeout: 120_000,
-  },
+  webServer: [
+    {
+      command: "pnpm --filter @popcorn/api start",
+      cwd: repoRoot,
+      env: {
+        ...e2eEnv,
+        VITE_API_URL: apiURL,
+      },
+      url: `${apiURL}/api/v1/health`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
+    {
+      command: `pnpm --filter @popcorn/web exec vite --host 127.0.0.1 --port ${webPort} --strictPort`,
+      cwd: repoRoot,
+      env: {
+        ...webE2EEnv,
+        PLAYWRIGHT_BASE_URL: baseURL,
+        PLAYWRIGHT_API_PORT: String(apiPort),
+      },
+      url: baseURL,
+      reuseExistingServer: false,
+      timeout: 120_000,
+    },
+  ],
   projects: [
     {
       name: "chromium",
