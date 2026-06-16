@@ -120,7 +120,7 @@
 }
 
 .gridProjects {
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 }
 
 .card {
@@ -188,6 +188,7 @@
 
 .projectCard {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -195,9 +196,16 @@
   color: var(--text);
 }
 
+.projectCard .cardLink {
+  height: clamp(240px, 38vh, 420px);
+  overflow: hidden;
+  background: var(--media-bg);
+}
+
 .projectCardBody {
   display: grid;
-  gap: var(--space-4);
+  align-content: start;
+  gap: var(--space-3);
   padding: var(--space-4);
 }
 
@@ -228,6 +236,11 @@
   aspect-ratio: 2 / 3;
   background: var(--media-bg);
   object-fit: cover;
+}
+
+.projectCard .poster {
+  height: 100%;
+  aspect-ratio: auto;
 }
 
 .posterEmpty {
@@ -353,5 +366,9 @@
 
   .runRow {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .projectCard .cardLink {
+    height: clamp(220px, 52vh, 360px);
   }
 }
