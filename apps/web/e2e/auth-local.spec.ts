@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-const apiPort = process.env.POPCORN_E2E_API_PORT ?? "4180";
+const apiPort = process.env.POPCORN_E2E_API_PORT ?? process.env.PLAYWRIGHT_API_PORT ?? "4100";
 const apiOrigin = process.env.VITE_API_URL ?? `http://127.0.0.1:${apiPort}`;
 const apiBase = `${apiOrigin.replace(/\/$/, "")}/api/v1`;
 const hasLocalStoreEnv = Boolean(

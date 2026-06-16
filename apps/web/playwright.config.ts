@@ -1,59 +1,89 @@
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig, devices } from "@playwright/test";
 
-const webPort = Number(
-  process.env.PLAYWRIGHT_WEB_PORT ?? process.env.POPCORN_E2E_WEB_PORT ?? 3100,
-);
-const apiPort = Number(process.env.POPCORN_E2E_API_PORT ?? 4180);
-const authMode = (process.env.POPCORN_E2E_AUTH_MODE ?? "local").toLowerCase();
-const hostedAuthMode = authMode === "supabase";
-const apiOrigin = process.env.VITE_API_URL ?? `http://127.0.0.1:${apiPort}`;
-const webOrigin = `http://127.0.0.1:${webPort}`;
+const webRoot = fileURLToPath(new URL(".", import.meta.url));
+const repoRoot = path.resolve(webRoot, "../..");
+const envFile = path.join(webRoot, "e2e", "e2e.env");
 
-const baseServerEnv = {
-  NODE_ENV: "development",
+function readEnvFile(file: string): Record<string, string> {
+  if (!existsSync(file)) return {};
+  const env: Record<string, string> = {};
+  for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const index = trimmed.indexOf("=");
+    if (index === -1) continue;
+    env[trimmed.slice(0, index)] = trimmed.slice(index + 1);
+  }
+  return env;
+}
+
+const e2eEnv = {
+  ...readEnvFile(envFile),
+  ...process.env,
+};
+
+const webPort = Number(
+  e2eEnv.PLAYWRIGHT_WEB_PORT ?? e2eEnv.POPCORN_E2E_WEB_PORT ?? 3100,
+);
+const authMode = (
+  e2eEnv.POPCORN_E2E_AUTH_MODE ??
+  e2eEnv.AUTH_MODE ??
+  "local"
+).toLowerCase();
+const hostedAuthMode = authMode === "supabase";
+const apiPort = Number(
+  e2eEnv.POPCORN_E2E_API_PORT ?? e2eEnv.PLAYWRIGHT_API_PORT ?? e2eEnv.PORT ?? 4100,
+);
+const baseURL = e2eEnv.PLAYWRIGHT_BASE_URL || `http://127.0.0.1:${webPort}`;
+const apiURL = e2eEnv.VITE_API_URL || `http://127.0.0.1:${apiPort}`;
+
+process.env.POPCORN_E2E_AUTH_MODE = authMode;
+process.env.POPCORN_E2E_API_PORT = String(apiPort);
+process.env.VITE_API_URL = apiURL;
+
+const serverEnv = {
+  ...e2eEnv,
   AUTH_MODE: authMode,
   PORT: String(apiPort),
-  WEB_ORIGIN: webOrigin,
-  VITE_API_URL: apiOrigin,
-  VITE_SUPABASE_ENV: process.env.VITE_SUPABASE_ENV ?? "default",
-  VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL ?? "",
-  VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY ?? "",
-  VITE_SUPABASE_DEV_URL: process.env.VITE_SUPABASE_DEV_URL ?? "",
-  VITE_SUPABASE_DEV_ANON_KEY: process.env.VITE_SUPABASE_DEV_ANON_KEY ?? "",
-  VITE_SUPABASE_PROD_URL: process.env.VITE_SUPABASE_PROD_URL ?? "",
-  VITE_SUPABASE_PROD_ANON_KEY: process.env.VITE_SUPABASE_PROD_ANON_KEY ?? "",
+  WEB_ORIGIN: baseURL,
+  PLAYWRIGHT_BASE_URL: baseURL,
+  VITE_API_URL: apiURL,
 };
 
 const webCommand = hostedAuthMode
-  ? `pnpm --dir apps/web exec vite build && pnpm --dir apps/web exec vite preview --host 127.0.0.1 --port ${webPort} --strictPort`
-  : `pnpm --dir apps/web exec vite --host 127.0.0.1 --port ${webPort} --strictPort`;
+  ? `pnpm --filter @popcorn/web exec vite build && pnpm --filter @popcorn/web exec vite preview --host 127.0.0.1 --port ${webPort} --strictPort`
+  : `pnpm --filter @popcorn/web exec vite --host 127.0.0.1 --port ${webPort} --strictPort`;
 
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
-  reporter: process.env.CI ? "github" : "list",
+  workers: process.env.CI ? 1 : undefined,
+  reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
   use: {
-    baseURL: webOrigin,
+    baseURL,
     trace: "on-first-retry",
   },
   webServer: [
     {
       command: "pnpm --filter @popcorn/api start",
-      cwd: "../..",
-      url: `http://127.0.0.1:${apiPort}/api/v1/health`,
+      cwd: repoRoot,
+      env: serverEnv,
+      url: `${apiURL}/api/v1/health`,
+      reuseExistingServer: !process.env.CI,
       timeout: 120_000,
-      reuseExistingServer: false,
-      env: baseServerEnv,
     },
     {
       command: webCommand,
-      cwd: "../..",
-      url: webOrigin,
-      timeout: 120_000,
+      cwd: repoRoot,
+      env: serverEnv,
+      url: baseURL,
       reuseExistingServer: false,
-      env: baseServerEnv,
+      timeout: 120_000,
     },
   ],
   projects: [
