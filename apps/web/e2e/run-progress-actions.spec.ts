@@ -54,18 +54,18 @@ test.describe("run progress actions", () => {
     const routes = await installRunProgressRoutes(page, { detail: gated });
 
     await page.goto(`/projects/${e2eProjectId}/runs/${gated.run.runId}`);
-    await expect(page.getByRole("heading", { name: "Quality review ready." })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Quality review ready for review" })).toBeVisible();
 
     const feedback = page.getByLabel("Feedback");
     await feedback.fill("Tighten the pacing before final export.");
-    await page.getByRole("button", { name: "Approve & continue" }).click();
+    await page.getByRole("button", { name: "Approve and continue" }).click();
 
     await expect.poll(() => routes.actionBodies[0]).toEqual({
       action: "approve",
       body: { note: "Tighten the pacing before final export." },
     });
     await expect(page.getByText("Review approved. Final render is in progress.")).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Quality review ready." })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Quality review ready for review" })).toHaveCount(0);
 
     const gatedAgain = makeRunDetail("run-reject", {
       status: "running",
@@ -76,7 +76,7 @@ test.describe("run progress actions", () => {
 
     await page.goto(`/projects/${e2eProjectId}/runs/${gatedAgain.run.runId}`);
     await page.getByLabel("Feedback").fill("Regenerate with a stronger ending.");
-    await page.getByRole("button", { name: "Regenerate with feedback" }).click();
+    await page.getByRole("button", { name: "Request changes" }).click();
 
     await expect.poll(() => rejectRoutes.actionBodies[0]).toEqual({
       action: "reject",

@@ -62,12 +62,12 @@ const VISIBLE_STAGES: Array<{
 ];
 
 const STATUS_LABEL: Record<GenerationRunStatus | "review", string> = {
-  queued: "Pending",
+  queued: "Upcoming",
   running: "Generating",
   succeeded: "Complete",
   failed: "Failed",
   canceled: "Canceled",
-  review: "Needs Review",
+  review: "Current",
 };
 
 function StatusGlyph({ status }: { status: GenerationRunStatus }) {
@@ -98,6 +98,7 @@ export function StageRail({ stages, reviewGate }: StageRailProps) {
   });
 
   const occurrenceCounts = new Map<GenerationStageType, number>();
+  let nextQueuedShown = false;
 
   return (
     <ol className={styles.stageRail} aria-label="Generation stages">
@@ -125,6 +126,15 @@ export function StageRail({ stages, reviewGate }: StageRailProps) {
         const message = stage?.error?.message ?? stage?.message ?? visibleStage.description;
         const awaitingReview = Boolean(stage && reviewGate?.stageId === stage.stageId);
         const statusKey = awaitingReview ? "review" : status;
+        const isUpcoming = status === "queued" && !nextQueuedShown;
+        if (isUpcoming) nextQueuedShown = true;
+        const showStatus =
+          awaitingReview ||
+          status === "running" ||
+          status === "succeeded" ||
+          status === "failed" ||
+          status === "canceled" ||
+          isUpcoming;
 
         return (
           <li
@@ -143,9 +153,11 @@ export function StageRail({ stages, reviewGate }: StageRailProps) {
             <div className={styles.stageBody}>
               <div className={styles.stageTitleRow}>
                 <span className={styles.stageTitle}>{visibleStage.label}</span>
-                <span className={`${styles.stageStatusPill} ${styles[`stageStatus_${statusKey}`]}`}>
-                  {stage?.reviewedAt ? "Complete" : STATUS_LABEL[statusKey]}
-                </span>
+                {showStatus ? (
+                  <span className={`${styles.stageStatusPill} ${styles[`stageStatus_${statusKey}`]}`}>
+                    {isUpcoming ? "Up next" : stage?.reviewedAt ? "Complete" : STATUS_LABEL[statusKey]}
+                  </span>
+                ) : null}
                 <JudgmentBadge judgment={stage?.judgment} compact />
               </div>
               {awaitingReview ? (
