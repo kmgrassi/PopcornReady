@@ -117,6 +117,44 @@ test("structured routes to the fast model and delegates required tool-call helpe
   assert.deepEqual(seen, ["claude-haiku"]);
 });
 
+test("structured retries once when the model omits the required tool, then succeeds", async () => {
+  let calls = 0;
+  const client = createAnthropicLlmClient({
+    model: "claude-x",
+    createMessage: async () => {
+      calls += 1;
+      // First attempt: the model emits only text and never calls the tool.
+      if (calls === 1) return { content: [{ type: "text", text: "thinking..." }] };
+      return {
+        content: [{ type: "tool_use", name: "return_result", input: { plan: 2 } }],
+      };
+    },
+  });
+
+  assert.deepEqual(
+    await client.structured({ cachedSystem: "s", user: "u", schema: {} }),
+    { plan: 2 }
+  );
+  assert.equal(calls, 2);
+});
+
+test("structured retries at most once, then surfaces the empty-tool error", async () => {
+  let calls = 0;
+  const bad = createAnthropicLlmClient({
+    model: "claude-x",
+    createMessage: async () => {
+      calls += 1;
+      return { content: [{ type: "text", text: "still no tool" }] };
+    },
+  });
+
+  await assert.rejects(
+    () => bad.structured({ cachedSystem: "s", user: "u", schema: {} }),
+    /did not call required tool/
+  );
+  assert.equal(calls, 2);
+});
+
 test("chooseTool sends input_schema tools + tool_choice auto and maps the result", async () => {
   let sent: any;
   const client = createAnthropicLlmClient({

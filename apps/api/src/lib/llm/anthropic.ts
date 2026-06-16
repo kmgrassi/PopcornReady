@@ -32,6 +32,22 @@ export function toAnthropicTool(spec: ToolSpec): Record<string, unknown> {
 
 const STRUCTURED_RESULT_TOOL = "return_result";
 
+// A forced tool call occasionally comes back with no (or malformed) tool call —
+// the model emits text/thinking and never invokes return_result. This is a
+// transient provider hiccup, but it otherwise classifies as
+// provider_failed/recoverable:false and kills the whole run. Retry the call once
+// before surfacing it. Scoped to this failure class only — real schema/auth
+// errors still fail fast.
+const STRUCTURED_RETRY_ATTEMPTS = 2;
+export function isMissingStructuredResultError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return (
+    message.includes("did not call required tool") ||
+    message.includes("invalid tool arguments") ||
+    message.includes("invalid tool input")
+  );
+}
+
 function resultFromAnthropicToolUse<T>(res: any): T {
   const content = Array.isArray(res?.content) ? res.content : [];
   const toolUse = content.find(
@@ -98,7 +114,7 @@ export function createAnthropicLlmClient(deps: AnthropicDeps = {}): LlmClient {
     userContent: unknown
   ): Promise<T> => {
     const callModel = pickModel(args.effort);
-    const res = await ensureCreate()({
+    const requestParams = {
       model: callModel,
       max_tokens: args.maxTokens ?? 8000,
       system: [
@@ -117,8 +133,18 @@ export function createAnthropicLlmClient(deps: AnthropicDeps = {}): LlmClient {
       ],
       tool_choice: { type: "tool", name: STRUCTURED_RESULT_TOOL },
       messages: [{ role: "user", content: userContent }],
-    });
-    return resultFromAnthropicToolUse<T>(res);
+    };
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < STRUCTURED_RETRY_ATTEMPTS; attempt += 1) {
+      const res = await ensureCreate()(requestParams);
+      try {
+        return resultFromAnthropicToolUse<T>(res);
+      } catch (err) {
+        if (!isMissingStructuredResultError(err)) throw err;
+        lastErr = err;
+      }
+    }
+    throw lastErr;
   };
 
   return {

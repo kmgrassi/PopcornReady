@@ -290,3 +290,49 @@ test("structured sends a required return_result function tool", async () => {
   assert.equal(sent.tools[0].function.name, "return_result");
   assert.ok(!("response_format" in sent));
 });
+
+test("structured retries once when the model omits the required tool, then succeeds", async () => {
+  let calls = 0;
+  const client = createOpenAiLlmClient({
+    model: "gpt-5",
+    create: async () => {
+      calls += 1;
+      // First attempt: the model emits reasoning/text and never calls the tool.
+      if (calls === 1) return { choices: [{ message: { content: "thinking..." } }] };
+      return {
+        choices: [
+          {
+            message: {
+              tool_calls: [
+                { function: { name: "return_result", arguments: '{"plan":2}' } },
+              ],
+            },
+          },
+        ],
+      };
+    },
+  });
+
+  assert.deepEqual(
+    await client.structured({ cachedSystem: "s", user: "u", schema: {} }),
+    { plan: 2 }
+  );
+  assert.equal(calls, 2);
+});
+
+test("structured retries at most once, then surfaces the empty-tool error", async () => {
+  let calls = 0;
+  const bad = createOpenAiLlmClient({
+    model: "gpt-5",
+    create: async () => {
+      calls += 1;
+      return { choices: [{ message: { content: "still no tool" } }] };
+    },
+  });
+
+  await assert.rejects(
+    () => bad.structured({ cachedSystem: "s", user: "u", schema: {} }),
+    /did not call required tool/
+  );
+  assert.equal(calls, 2);
+});
