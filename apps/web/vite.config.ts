@@ -9,6 +9,10 @@ const workspaceSourceAliases = [
   },
 ];
 
+const localApiTarget = process.env.PLAYWRIGHT_API_PORT
+  ? `http://127.0.0.1:${process.env.PLAYWRIGHT_API_PORT}`
+  : "http://localhost:4000";
+
 // The web app is a static SPA deployed to Netlify. It talks to the Express API
 // (Railway) over HTTP via VITE_API_URL. In dev we proxy /api to the local API
 // server so cookies/headers behave like production without CORS friction.
@@ -26,7 +30,7 @@ export default defineConfig({
     port: 3000,
     proxy: {
       "/api": {
-        target: process.env.VITE_API_URL || "http://localhost:4000",
+        target: process.env.VITE_API_URL || localApiTarget,
         changeOrigin: true,
       },
     },

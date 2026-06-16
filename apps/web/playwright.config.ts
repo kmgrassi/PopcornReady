@@ -26,8 +26,10 @@ const e2eEnv = {
 };
 
 const webPort = Number(e2eEnv.PLAYWRIGHT_WEB_PORT ?? 3100);
+const apiPort = Number(e2eEnv.PLAYWRIGHT_API_PORT ?? e2eEnv.PORT ?? 4100);
 const baseURL = e2eEnv.PLAYWRIGHT_BASE_URL || `http://127.0.0.1:${webPort}`;
-const apiURL = e2eEnv.VITE_API_URL || `http://127.0.0.1:${e2eEnv.PLAYWRIGHT_API_PORT ?? 4100}`;
+const apiURL = e2eEnv.VITE_API_URL || `http://127.0.0.1:${apiPort}`;
+const { VITE_API_URL: _clientApiURL, ...webE2EEnv } = e2eEnv;
 const browserAuthDisabledEnv = {
   VITE_SUPABASE_ENV: "",
   VITE_SUPABASE_URL: "",
@@ -65,10 +67,10 @@ export default defineConfig({
       command: `pnpm --filter @popcorn/web exec vite --host 127.0.0.1 --port ${webPort} --strictPort`,
       cwd: repoRoot,
       env: {
-        ...e2eEnv,
+        ...webE2EEnv,
         ...browserAuthDisabledEnv,
         PLAYWRIGHT_BASE_URL: baseURL,
-        VITE_API_URL: apiURL,
+        PLAYWRIGHT_API_PORT: String(apiPort),
       },
       url: baseURL,
       reuseExistingServer: false,

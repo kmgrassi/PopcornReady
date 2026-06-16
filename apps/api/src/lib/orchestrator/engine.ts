@@ -27,7 +27,7 @@ import { agentApiStore } from "@/lib/agent-api/jobs";
 import { orchestratorModel, type OrchestratorModel } from "./model";
 import { executeRegisteredTool, type ToolRegistry } from "./registry";
 import { createToolExecutionContext } from "./tool-context";
-import type { ToolCallResult } from "./types";
+import type { ToolCallResult, ToolName } from "./types";
 
 const DEFAULT_MAX_TURNS = 50;
 const DEFAULT_MODEL_TURN_TIMEOUT_MS = 60_000;
@@ -132,6 +132,17 @@ function defaultRegistry(): ToolRegistry {
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+function registryForRejectedGate(
+  registry: ToolRegistry,
+  gates: OrchestratorRunGate[]
+): ToolRegistry {
+  const rejectedGate = gates.find((gate) => gate.status === "rejected");
+  if (!rejectedGate) return registry;
+  const tool = registry.get(rejectedGate.stage as ToolName);
+  if (!tool) return registry;
+  return new Map([[tool.name, tool]]);
 }
 
 function resolved(deps: EngineDeps) {
@@ -278,12 +289,16 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       });
     }
 
-    const prior = await r.store.listRunActions(run.id);
+    const [prior, gates] = await Promise.all([
+      r.store.listRunActions(run.id),
+      r.store.listRunGates(run.id),
+    ]);
     const priorResults = prior.map((action) => ({
       tool: action.tool,
       status: action.status,
       outputAssetIds: action.outputAssetIds,
     }));
+    const turnRegistry = registryForRejectedGate(r.registry, gates);
 
     let decision;
     try {
@@ -292,7 +307,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
           projectId: run.projectId,
           inputSummary: run.inputSummary,
           priorResults,
-          registry: r.registry,
+          registry: turnRegistry,
         }),
         r.modelTurnTimeoutMs,
         `orchestrator model turn exceeded ${r.modelTurnTimeoutMs}ms`
@@ -313,7 +328,6 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
     // fall through. Rejected gates also fall through once: that is the
     // "regenerate this stage" path, and after the tool succeeds the gate is
     // marked reached again for another review stop.
-    const gates = await r.store.listRunGates(run.id);
     const gate = gates.find((g) => g.stage === decision.toolName);
     const regeneratingRejectedGate = gate?.status === "rejected";
     if (gate && gate.status !== "approved") {
@@ -329,7 +343,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
     let result: ToolCallResult;
     try {
       result = await executeRegisteredTool({
-        registry: r.registry,
+        registry: turnRegistry,
         toolName: decision.toolName,
         input: decision.input,
         context: createToolExecutionContext({
