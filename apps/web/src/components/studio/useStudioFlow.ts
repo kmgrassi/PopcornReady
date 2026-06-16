@@ -154,6 +154,10 @@ export interface StudioFlow {
   update(patch: Partial<BriefDraft>): void;
   /** Create the project + start the run, then switch state to 'generating'. */
   startGeneration(): Promise<StartRunResult>;
+  /** Clear a terminal run from the draft and return to an editable setup step. */
+  resetGeneration(step?: StudioStep): Promise<void>;
+  /** Clear a terminal run and immediately start a fresh generation attempt. */
+  retryGeneration(): Promise<StartRunResult>;
   /**
    * Approve the active run's review gate and resume. No-op when not gated.
    * Re-polls immediately so the generating view reflects the resumed run.
@@ -378,6 +382,32 @@ export function useStudioFlow(options: UseStudioFlowOptions = {}): StudioFlow {
     }
   }, [brief, persistDraft]);
 
+  const resetGeneration = useCallback(async (nextStep: StudioStep = "generate") => {
+    setError(undefined);
+    setRun(undefined);
+    setStages([]);
+    setResultArtifacts([]);
+    setProjectId(undefined);
+    setReviewProject(null);
+    setReviewTimeline(null);
+    setReviewTimelineId(undefined);
+    setReviewSegmentNotes({});
+    setState("initial");
+    setStep(nextStep);
+    if (!draftId) return;
+    try {
+      await saveDraft(draftId, briefRef.current, nextStep);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Could not reset draft.");
+      throw saveError;
+    }
+  }, [draftId]);
+
+  const retryGeneration = useCallback(async () => {
+    await resetGeneration("generate");
+    return startGeneration();
+  }, [resetGeneration, startGeneration]);
+
   useEffect(() => {
     if (!detail) return;
     setRun(detail.run);
@@ -527,6 +557,8 @@ export function useStudioFlow(options: UseStudioFlowOptions = {}): StudioFlow {
       next,
       update,
       startGeneration,
+      resetGeneration,
+      retryGeneration,
       approveGate,
       rejectGate,
       requestRevision,
@@ -534,6 +566,6 @@ export function useStudioFlow(options: UseStudioFlowOptions = {}): StudioFlow {
       updateReviewSegmentNote,
       completeDraft,
     }),
-    [state, step, brief, run, stages, resultArtifacts, projectId, reviewProject, reviewTimeline, reviewTimelineId, reviewSegmentNotes, runQuery.isLoading, reviewCutQuery.isLoading, reviewCutQuery.error, error, goTo, back, next, update, startGeneration, approveGate, rejectGate, requestRevision, updateReviewSegment, updateReviewSegmentNote, completeDraft],
+    [state, step, brief, run, stages, resultArtifacts, projectId, reviewProject, reviewTimeline, reviewTimelineId, reviewSegmentNotes, runQuery.isLoading, reviewCutQuery.isLoading, reviewCutQuery.error, error, goTo, back, next, update, startGeneration, resetGeneration, retryGeneration, approveGate, rejectGate, requestRevision, updateReviewSegment, updateReviewSegmentNote, completeDraft],
   );
 }
