@@ -21,7 +21,9 @@ import {
   type EvalSuiteFixture,
   type Evaluator,
   type ExpectationResult,
+  type GenerationStageType,
   type Judgment,
+  type JudgmentVerdict,
 } from "@popcorn/eval";
 
 import { getEvalStore, type EvalStore } from "./store";
@@ -63,8 +65,122 @@ export interface SuiteDetail {
   cases: EvalFixtureCase[];
 }
 
-export async function listSuites(store: EvalStore = getEvalStore()): Promise<EvalSuite[]> {
-  return store.listSuites();
+export interface EvalSuiteSummary extends EvalSuite {
+  latestPassRate: number;
+  latestRunId: string | null;
+  trend: number[];
+  stageRates: Array<{
+    stageType: GenerationStageType;
+    passRate: number;
+    verdict: JudgmentVerdict;
+  }>;
+}
+
+const GENERATION_STAGE_TYPES: GenerationStageType[] = [
+  "creative_plan",
+  "storyboard",
+  "asset_generation",
+  "clip_generation",
+  "timeline_assembly",
+  "final_export",
+];
+
+function isGenerationStageType(value: string): value is GenerationStageType {
+  return (GENERATION_STAGE_TYPES as string[]).includes(value);
+}
+
+function stageTypeFromStageId(stageId: string): GenerationStageType | null {
+  const candidate = stageId.split(":").at(-1);
+  return candidate && isGenerationStageType(candidate) ? candidate : null;
+}
+
+function stageTypeFromJudgment(
+  judgment: Judgment,
+  cases: EvalFixtureCase[]
+): GenerationStageType | null {
+  const stageFromId = stageTypeFromStageId(judgment.stageId);
+  if (stageFromId) return stageFromId;
+
+  for (const evalCase of cases) {
+    const artifact = evalCase.artifacts.find((candidate) => {
+      return (
+        (judgment.artifactId && candidate.artifactId === judgment.artifactId) ||
+        (judgment.itemId && candidate.itemId === judgment.itemId) ||
+        (judgment.assetId && candidate.assetId === judgment.assetId)
+      );
+    });
+    if (artifact) return artifact.stageType;
+  }
+
+  const evaluatorPrefix = judgment.evaluatorId.split(".")[0];
+  return evaluatorPrefix && isGenerationStageType(evaluatorPrefix) ? evaluatorPrefix : null;
+}
+
+function passRate(judgments: Judgment[]): number {
+  if (judgments.length === 0) return 0;
+  return judgments.filter((judgment) => judgment.verdict === "pass").length / judgments.length;
+}
+
+function verdictForRate(rate: number): JudgmentVerdict {
+  if (rate >= 1) return "pass";
+  if (rate <= 0) return "fail";
+  return "needs_review";
+}
+
+function stagesForCases(cases: EvalFixtureCase[]): GenerationStageType[] {
+  const stages = new Set<GenerationStageType>();
+  for (const evalCase of cases) {
+    for (const stage of evalCase.stagesToRun) {
+      stages.add(stage);
+    }
+    for (const artifact of evalCase.artifacts) {
+      stages.add(artifact.stageType);
+    }
+  }
+  return GENERATION_STAGE_TYPES.filter((stage) => stages.has(stage));
+}
+
+async function runPassRate(runId: string, store: EvalStore): Promise<number> {
+  return passRate(await store.listJudgmentsForRun(runId));
+}
+
+export async function listSuites(store: EvalStore = getEvalStore()): Promise<EvalSuiteSummary[]> {
+  const suites = await store.listSuites();
+  return Promise.all(
+    suites.map(async (suite) => {
+      const runs = await store.listRunsForSuite(suite.id);
+      const latestRun = runs[0] ?? null;
+      const latestJudgments = latestRun ? await store.listJudgmentsForRun(latestRun.id) : [];
+      const cases = await store.listCasesForSuite(suite.id);
+      const stages = stagesForCases(cases);
+      const stageRates = stages.map((stageType) => {
+        const judgments = latestJudgments.filter(
+          (judgment) => stageTypeFromJudgment(judgment, cases) === stageType
+        );
+        const rate = passRate(judgments);
+        return {
+          stageType,
+          passRate: rate,
+          verdict: verdictForRate(rate),
+        };
+      });
+
+      const trend = await Promise.all(
+        runs
+          .slice(0, 5)
+          .reverse()
+          .map((run) => runPassRate(run.id, store))
+      );
+
+      return {
+        ...suite,
+        latestPassRate: passRate(latestJudgments),
+        latestRunId: latestRun?.id ?? null,
+        trend,
+        stageRates,
+      };
+    })
+  );
 }
 
 export async function getSuiteDetail(
@@ -87,6 +203,23 @@ export interface RunDetail {
   expectationResults: ExpectationResult[];
 }
 
+export interface DashboardJudgment extends Judgment {
+  stageType: GenerationStageType;
+}
+
+export interface DashboardRunDetail extends RunDetail {
+  evalRun: EvalRun;
+  suiteName: string | null;
+  passRate: number;
+  previousRunId: string | null;
+  stages: GenerationStageType[];
+  judgments: DashboardJudgment[];
+  calibration: {
+    matchRate: number;
+    labeledCases: number;
+  };
+}
+
 export async function getRunDetail(
   runId: string,
   store: EvalStore = getEvalStore()
@@ -99,6 +232,41 @@ export async function getRunDetail(
     store.listExpectationResultsForRun(runId),
   ]);
   return { run, cases, judgments, expectationResults };
+}
+
+export async function getDashboardRunDetail(
+  runId: string,
+  store: EvalStore = getEvalStore()
+): Promise<DashboardRunDetail> {
+  const detail = await getRunDetail(runId, store);
+  const suite = detail.run.suiteId ? await store.getSuite(detail.run.suiteId) : null;
+  const runs = detail.run.suiteId ? await store.listRunsForSuite(detail.run.suiteId) : [];
+  const currentRunIndex = runs.findIndex((run) => run.id === runId);
+  const previousRunId =
+    currentRunIndex >= 0 && currentRunIndex + 1 < runs.length
+      ? runs[currentRunIndex + 1].id
+      : null;
+  const stages = stagesForCases(detail.cases);
+  const judgments = detail.judgments.flatMap((judgment): DashboardJudgment[] => {
+    const stageType = stageTypeFromJudgment(judgment, detail.cases);
+    return stageType ? [{ ...judgment, stageType }] : [];
+  });
+  const labeledCases = detail.expectationResults.length;
+  const matched = detail.expectationResults.filter((result) => result.matched).length;
+
+  return {
+    ...detail,
+    evalRun: detail.run,
+    suiteName: suite?.name ?? null,
+    passRate: passRate(detail.judgments),
+    previousRunId,
+    stages,
+    judgments,
+    calibration: {
+      matchRate: labeledCases > 0 ? matched / labeledCases : 0,
+      labeledCases,
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -164,7 +332,9 @@ export async function startSuiteRun(
 export interface VerdictFlip {
   // The graph coordinate that flipped, keyed the way the dashboard groups cells.
   caseId?: string;
+  caseLabel?: string;
   stageId: string;
+  stageType?: GenerationStageType;
   evaluatorId: string;
   artifactId?: string;
   itemId?: string;
@@ -208,6 +378,8 @@ export async function diffRuns(
     store.listJudgmentsForRun(baseRunId),
     store.listJudgmentsForRun(againstRunId),
   ]);
+  const cases = baseRun.suiteId ? await store.listCasesForSuite(baseRun.suiteId) : [];
+  const caseLabelById = new Map(cases.map((evalCase) => [evalCase.id, evalCase.label]));
 
   // Newest judgment wins per key within a run (re-judges append; the last is current).
   const baseByKey = latestByKey(baseJudgments);
@@ -224,7 +396,13 @@ export async function diffRuns(
       before: base.verdict,
       after: after.verdict,
     };
-    if (base.caseId != null) flip.caseId = base.caseId;
+    if (base.caseId != null) {
+      flip.caseId = base.caseId;
+      const caseLabel = caseLabelById.get(base.caseId);
+      if (caseLabel != null) flip.caseLabel = caseLabel;
+    }
+    const stageType = stageTypeFromJudgment(base, cases);
+    if (stageType != null) flip.stageType = stageType;
     if (base.artifactId != null) flip.artifactId = base.artifactId;
     if (base.itemId != null) flip.itemId = base.itemId;
     if (base.assetId != null) flip.assetId = base.assetId;

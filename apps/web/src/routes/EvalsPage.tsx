@@ -220,8 +220,8 @@ export function EvalsPage() {
             flips.map((flip) => (
               <div className="eval-flip-row" key={`${flip.caseId}-${flip.stageType}`}>
                 <div>
-                  <strong>{flip.caseLabel}</strong>
-                  <span>{stageLabel(flip.stageType)}</span>
+                  <strong>{flip.caseLabel ?? flip.caseId}</strong>
+                  <span>{flip.stageType ? stageLabel(flip.stageType) : flip.stageId}</span>
                 </div>
                 <span>
                   {verdictLabel(flip.before)} {"->"} {verdictLabel(flip.after)}

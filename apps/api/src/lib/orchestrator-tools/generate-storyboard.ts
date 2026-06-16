@@ -90,6 +90,15 @@ export function createGenerateStoryboardTool(
     name: "generate_storyboard",
     description:
       "Generate a cheap sketch storyboard — one tile per planned beat — and persist it as the project's storyboard. Requires a plan first. Runs asynchronously.",
+    usage: {
+      preconditions: ["An active shot plan exists (call plan_shots first)."],
+      produces: [
+        "A cheap sketch storyboard — one tile per planned beat — persisted as the project's storyboard. Runs asynchronously (parks the run until the job completes).",
+      ],
+      useWhen: [
+        "The plan (and any visual anchors) is ready and you need a low-cost previsualization before committing to expensive media generation.",
+      ],
+    },
     inputSchema: generateStoryboardInputSchema,
     outputSchema: generateStoryboardOutputSchema,
     execution: "async",

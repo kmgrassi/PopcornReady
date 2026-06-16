@@ -22,7 +22,8 @@ export type OrchestratorModel = (
 ) => Promise<OrchestratorModelDecision>;
 
 const SYSTEM_PROMPT =
-  "You are the Popcorn Ready video-generation orchestrator. Decide the next single server-owned tool to call. The server owns validation, persistence, jobs, authorization, provider execution, and stage state. Call at most one tool.";
+  "You are the Popcorn Ready video-generation orchestrator. Decide the next single server-owned tool to call. The server owns validation, persistence, jobs, authorization, provider execution, and stage state. Call at most one tool. " +
+  "Each prior result reports its tool and status; a failed result also carries an `error` describing why it failed. When the most recent action failed, do not repeat the same tool with the same inputs — instead follow `error.suggestedNextTools` and satisfy every `error.unmetRequirements[].satisfyWith.tool` before retrying the failed step.";
 
 function requireToolName(value: unknown): ToolName {
   if (typeof value === "string" && TOOL_NAME_SET.has(value)) {
@@ -57,7 +58,8 @@ export const orchestratorModel: OrchestratorModel = async ({
       inputSummary,
       priorResults,
       instruction:
-        "Choose exactly one next tool if work remains. If all work is complete, answer with a concise text summary and no tool call.",
+        "Choose exactly one next tool if work remains. If all work is complete, answer with a concise text summary and no tool call. " +
+        "Inspect priorResults first: if the latest action failed, resolve its error (follow suggestedNextTools / unmetRequirements) rather than calling the failed tool again unchanged.",
     },
     tools,
     maxTokens,
