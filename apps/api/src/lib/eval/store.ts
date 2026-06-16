@@ -22,6 +22,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getServiceSupabase } from "@/lib/v1/supabase-client";
 import { useSupabaseStorage } from "@/lib/supabase/storage";
 import { runQuery } from "@/lib/supabase/db-errors";
+import { deploymentMetadata } from "@/lib/api/v1/store-internal";
 import type {
   EvalFixtureArtifact,
   EvalFixtureCase,
@@ -154,6 +155,7 @@ interface RunRow {
   stop_after: EvalRun["stopAfter"] | null;
   git_sha: string;
   branch: string;
+  deploy_id: string | null;
   judge_models: EvalRun["judgeModels"];
   status: EvalRun["status"];
   aggregate: EvalRun["aggregate"] | null;
@@ -188,6 +190,7 @@ function runToRow(run: EvalRun): RunRow {
     stop_after: run.stopAfter ?? null,
     git_sha: run.gitSha,
     branch: run.branch,
+    deploy_id: deploymentMetadata().deploy_id,
     judge_models: run.judgeModels,
     status: run.status,
     aggregate: run.aggregate ?? null,

@@ -35,3 +35,18 @@ export function unmarkedJson(
   void _schema;
   return rest;
 }
+
+export function deploymentMetadata(): { deploy_id: string | null; git_sha: string | null } {
+  return {
+    deploy_id:
+      process.env.RAILWAY_DEPLOYMENT_ID ??
+      process.env.VERCEL_DEPLOYMENT_ID ??
+      process.env.DEPLOY_ID ??
+      null,
+    git_sha:
+      process.env.RAILWAY_GIT_COMMIT_SHA ??
+      process.env.VERCEL_GIT_COMMIT_SHA ??
+      process.env.GIT_SHA ??
+      null,
+  };
+}

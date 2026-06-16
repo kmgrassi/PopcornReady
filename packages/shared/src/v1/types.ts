@@ -28,6 +28,7 @@ export const SCHEMA = {
 // --- Project (PR1) ---------------------------------------------------------
 
 export type ProjectStatus = "active" | "deleted";
+export type ProjectVisibility = "public" | "private";
 
 export interface V1Project {
   id: string;
@@ -35,6 +36,9 @@ export interface V1Project {
   workspaceId: string;
   name: string;
   status: ProjectStatus;
+  visibility?: ProjectVisibility;
+  brief?: VideoBriefInput | null;
+  currentBriefVersionId?: string | null;
   hasStoryboard?: boolean;
   // Movie-poster thumbnail: the project-scoped 'poster' selection (falling
   // back to the project's newest ready image). Signed, short-lived URL.

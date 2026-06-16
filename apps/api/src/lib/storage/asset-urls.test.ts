@@ -13,6 +13,10 @@ const ENV_KEYS = [
   "S3_PUBLIC_URL_BASE",
   "AWS_ENDPOINT_URL_S3",
   "S3_FORCE_PATH_STYLE",
+  "RAILWAY_ENVIRONMENT",
+  "RAILWAY_SERVICE_ID",
+  "RAILWAY_PROJECT_ID",
+  "RAILWAY_PUBLIC_DOMAIN",
 ] as const;
 
 let previousEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
@@ -49,6 +53,32 @@ test("resolveAssetUrl passes through remote_url assets", async () => {
   });
 
   assert.equal(url, "https://media.example.com/source.mp4");
+});
+
+test("resolveAssetUrl does not expose hosted localhost remote_url assets", async () => {
+  process.env.RAILWAY_ENVIRONMENT = "production";
+
+  const url = await resolveAssetUrl({
+    remote_url: "http://localhost:8080/ws/proj/asset/clip.mp4",
+    storage_key: "ws/proj/asset/clip.mp4",
+    storage_bucket: "assets-public",
+    visibility: "public",
+  });
+
+  assert.equal(url, "https://cdn.example.com/assets/ws/proj/asset/clip.mp4");
+});
+
+test("resolveAssetUrl suppresses hosted .local remote_url placeholders", async () => {
+  process.env.RAILWAY_ENVIRONMENT = "production";
+
+  const url = await resolveAssetUrl({
+    remote_url: "https://popcornready.local/character-anchors/Newcomer",
+    storage_key: null,
+    storage_bucket: null,
+    visibility: "public",
+  });
+
+  assert.equal(url, undefined);
 });
 
 test("resolveAssetUrl returns stable unsigned public CDN URLs", async () => {

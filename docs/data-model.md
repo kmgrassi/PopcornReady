@@ -35,8 +35,10 @@ carries billing tier.
 → `auth_id` links to `auth.users` (null until signup). `tier` ∈ free|paid.
 
 **`workspaces`** — the tenancy boundary; everything a user owns hangs off a workspace.
-`id, schema_version, owner_id, name, created_at, updated_at`
+`id, schema_version, owner_id, name, purpose, expires_at, created_at, updated_at`
 → `owner_id` → `users` (null for the seeded local-dev workspace).
+`purpose` ∈ user|internal_test|fixture. Non-user workspaces are for isolated
+production smoke tests and durable fixtures, not customer surfaces.
 
 **`workspace_members`** — who can access a workspace, and their role (owner|admin|member).
 This join table is what RLS checks for access.
@@ -46,6 +48,14 @@ This join table is what RLS checks for access.
 **`workspace_invites`** — pending invitations into a workspace (by email + token).
 `id, workspace_id, email, role, invited_by, token, status, expires_at, accepted_by, accepted_at, created_at, updated_at`
 → `workspace_id` → `workspaces`, `invited_by`/`accepted_by` → `users`. `status` ∈ pending|accepted|revoked|expired.
+
+**`test_sandboxes`** — service-role-managed production E2E test roots.
+`id, workspace_id, project_id, created_by, purpose, git_sha, deploy_id, feature_set, status, expires_at, created_at, updated_at`
+→ `workspace_id` → `workspaces`, `project_id` → `projects`,
+`created_by` → `users`. The workspace must have `purpose='internal_test'`.
+Cleanup goes through `delete_test_sandbox(id)` or
+`delete_expired_test_sandboxes()` so only internal-test workspaces can be
+deleted by the harness.
 
 ---
 
@@ -79,8 +89,8 @@ consumer/derived asset → consumed/input asset. `relation` ∈ input|anchor|chi
 slot.
 
 **`actions`** — agent/tool decision log.
-`id, schema_version, project_id, run_id, tool, status, params, input_asset_ids, rationale, proposal, estimated_cost_usd, actual_cost_usd, job_ids, output_asset_ids, error, created_at, updated_at`
-→ `project_id` → `projects`, `run_id` → `generation_runs`. Decision fields are
+`id, schema_version, project_id, orchestrator_run_id, tool, status, params, input_asset_ids, rationale, proposal, estimated_cost_usd, actual_cost_usd, job_ids, output_asset_ids, error, created_at, updated_at`
+→ `project_id` → `projects`, `orchestrator_run_id` → `orchestrator_runs`. Decision fields are
 immutable; lifecycle/cost/output/error fields may update.
 
 **`saved_assets`** — user bookmarks pointing at public assets (no byte copy).
@@ -123,7 +133,7 @@ timeline tracks/items should become relational tables linked to composite
 assets, following the storyboard pattern.
 
 **`jobs`** — async work units (asset ingest/generation, composition, generation, revision, export, audio).
-`id, schema_version, workspace_id, project_id, request_id, type, status, progress, input, result, error, idempotency_key, created_at, updated_at`
+`id, schema_version, workspace_id, project_id, request_id, type, status, progress, input, result, error, idempotency_key, deploy_id, git_sha, created_at, updated_at`
 → `workspace_id` → `workspaces`, `project_id` → `projects`. `status` ∈ queued|running|succeeded|failed|canceled.
 
 ---
@@ -134,10 +144,15 @@ A **run** is one end-to-end generation session. Progress should be projected fro
 `actions`, `jobs`, storyboard rows, and assets rather than stored in legacy stage
 tables.
 
-**`generation_runs`** — one generation attempt for a project; the top-level progress aggregate.
-`id, project_id, status, progress_percent, message, error, created_at, updated_at, started_at, completed_at, budget_usd, gates`
-→ `project_id` → `projects`. `gates` is opt-in pause configuration; any v1 stage
-state stored there is a temporary compatibility bridge, not the target model.
+**`orchestrator_runs`** — one agent-driven generation attempt for a project; the
+top-level progress aggregate.
+`id, schema_version, project_id, status, input_summary, budget_usd, spent_usd, error, deploy_id, git_sha, created_at, updated_at, started_at, completed_at`
+→ `project_id` → `projects`. Gates live in relational
+`orchestrator_run_gates`; tool invocations link through `actions.orchestrator_run_id`.
+
+**`orchestrator_run_gates`** — selected stages where the run should pause.
+`id, orchestrator_run_id, stage, status, decided_by_action_id, decided_at, created_at, updated_at`
+→ `orchestrator_run_id` → `orchestrator_runs`, `decided_by_action_id` → `actions`.
 
 ---
 
@@ -157,13 +172,13 @@ Eval suite metadata/results are service-role only (`eval_suites`, `eval_cases`,
 → `suite_id` → `eval_suites`.
 
 **`eval_runs`** — one execution of a suite (or a manual workbench run), with config + aggregate scores.
-`id, source, suite_id, generation_mode, stop_after, git_sha, branch, judge_models, status, aggregate, created_at, completed_at`
+`id, source, suite_id, generation_mode, stop_after, git_sha, branch, deploy_id, judge_models, status, aggregate, created_at, completed_at`
 → `suite_id` → `eval_suites`. `source` ∈ suite|manual_workbench.
 
 **`judgments`** — append-only AI-judge verdict on one stage/item output. Covers **both**
 provenance sides: inline (set `generation_run_id`) and offline suite (set `eval_run_id`/`case_id`).
 `id, evaluator_id, rubric_version, judge_model, generation_run_id, eval_run_id, case_id, stage_id, item_id, artifact_id, asset_id, grades, verdict, rationale, recommended_action, evidence_ref, trigger, cost_usd, latency_ms, created_at`
-→ `generation_run_id` → `generation_runs`, `eval_run_id` → `eval_runs`, `case_id` → `eval_cases`.
+→ `generation_run_id` is the retired inline-run pointer, `eval_run_id` → `eval_runs`, `case_id` → `eval_cases`.
 `stage_id`/`item_id`/`artifact_id`/`asset_id` are **loose text pointers (not FKs)** — they may
 reference inline or offline artifacts. `verdict` ∈ pass|needs_review|fail. UPDATE/DELETE are revoked.
 
@@ -198,16 +213,17 @@ auth.users ─(auth_id)─ users ─(owner_id)─ workspaces ─< workspace_memb
                                          │     │  │              └──< storyboard_beats
                                          │     │  │                     └──< storyboard_panels
                                          │     │  ├──< jobs
-                                         │     │  └──< generation_runs
+                                         │     │  └──< orchestrator_runs
+                                         │     │          └──< orchestrator_run_gates
                                          ▼     ▼
                                     (publicly readable when visibility='public')
 
-eval_suites ──< eval_cases                judgments ── point at either a
-       └──────< eval_runs ──< expectation_results       generation_run (inline)
+eval_suites ──< eval_cases                judgments ── point at either an
+       └──────< eval_runs ──< expectation_results       inline run pointer
                                   └── judgments          OR an eval_run/case (offline)
 ```
 
-**How a generation flows:** `projects` → a `generation_runs` row and `actions`
+**How a generation flows:** `projects` → an `orchestrator_runs` row and `actions`
 for tool decisions → relational storyboard rows for user-facing story structure
 → `jobs` for async media work → generated `assets` linked by `asset_edges` and
 activated through `selections`. A `judgments` row may attach to a run or loose

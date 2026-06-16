@@ -23,6 +23,11 @@ function bridgeContext(context: OrchestratorContext): {
   auth: AuthContext;
   projectId?: string;
   orchestratorRunId?: string;
+  toolCallId?: string;
+  agentId?: string;
+  messageId?: string;
+  requestId?: string;
+  metadata?: Record<string, unknown>;
 } {
   const auth: AuthContext = {
     mode: "local",
@@ -34,6 +39,11 @@ function bridgeContext(context: OrchestratorContext): {
     auth,
     projectId: context.projectId,
     orchestratorRunId: context.orchestratorRunId,
+    toolCallId: context.toolCallId,
+    agentId: context.agentId,
+    messageId: context.messageId,
+    requestId: context.requestId,
+    metadata: context.metadata,
   };
 }
 

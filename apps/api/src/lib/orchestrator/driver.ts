@@ -3,11 +3,11 @@ import { randomUUID } from "node:crypto";
 import { isOrchestratorToolLoopEnabled } from "./feature-flag";
 import { orchestratorModel, OrchestratorModel } from "./model";
 import { createToolRegistry, executeRegisteredTool, ToolRegistry } from "./registry";
+import { createToolExecutionContext } from "./tool-context";
 import {
   OrchestratorRun,
   OrchestratorTurn,
   ToolCallResult,
-  ToolExecutionContext,
   ToolInvocation,
   ToolInvocationStatus,
 } from "./types";
@@ -28,7 +28,10 @@ export interface RunToolLoopTurnInput {
   run: OrchestratorRun;
   workspaceId: string;
   actorId?: string;
+  agentId?: string;
+  messageId?: string;
   requestId?: string;
+  metadata?: Record<string, unknown>;
   inputSummary: string;
   priorResults?: unknown[];
   registry?: ToolRegistry;
@@ -99,7 +102,10 @@ export async function runToolLoopTurn({
   run,
   workspaceId,
   actorId,
+  agentId,
+  messageId,
   requestId,
+  metadata,
   inputSummary,
   priorResults = [],
   registry = createToolRegistry(),
@@ -145,13 +151,16 @@ export async function runToolLoopTurn({
     };
   }
 
-  const context: ToolExecutionContext = {
+  const context = createToolExecutionContext({
     workspaceId,
     projectId: run.projectId,
     orchestratorRunId: run.id,
     actorId,
+    agentId,
+    messageId,
     requestId,
-  };
+    metadata,
+  });
   const result = await executeRegisteredTool({
     registry,
     toolName: decision.toolName,

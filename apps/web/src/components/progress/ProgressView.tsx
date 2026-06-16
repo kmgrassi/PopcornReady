@@ -8,6 +8,7 @@ import {
   type GenerationStage,
   type GenerationStageType,
   type GenerationStageItem,
+  type VideoBriefInput,
 } from "@popcorn/shared/v1/types";
 import { StageItemCard } from "../generation-progress/StageItemCard";
 import { JudgmentBadge } from "../evals/JudgmentBadge";
@@ -15,6 +16,7 @@ import {
   GenerationRunClient,
   GenerationRunRequestError,
 } from "../../lib/v1/generation-runs/client";
+import { v1Api } from "../../lib/api-client";
 import { StageRail } from "./StageRail";
 import { StatusBanner } from "./StatusBanner";
 import { TerminalState } from "./TerminalState";
@@ -116,6 +118,65 @@ function formatDateTime(value?: string) {
   }).format(new Date(value));
 }
 
+function formatBriefMeta(brief: VideoBriefInput): string {
+  return [
+    `${brief.targetLengthSec}s`,
+    brief.aspectRatio,
+    brief.platform,
+    brief.format,
+  ].filter(Boolean).join(" / ");
+}
+
+function BriefReviewOutput({
+  brief,
+  loading,
+}: {
+  brief: VideoBriefInput | null;
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className={styles.briefReviewCard}>
+        <span className="muted">Loading brief...</span>
+      </div>
+    );
+  }
+
+  if (!brief) return null;
+
+  const fields = [
+    ["Audience", brief.audience],
+    ["Style", brief.style],
+    ["Hook", brief.hookQuestion],
+    ["Big idea", brief.oneBigIdea],
+    ["Payoff", brief.payoff],
+    ["Caveat", brief.caveat],
+  ].filter((entry): entry is [string, string] => Boolean(entry[1]));
+
+  return (
+    <article className={styles.briefReviewCard}>
+      <div className={styles.briefReviewHeader}>
+        <span className={styles.briefReviewBadge}>Brief</span>
+        <span className={styles.briefReviewMeta}>{formatBriefMeta(brief)}</span>
+      </div>
+      <h3 className={styles.briefReviewGoal}>{brief.goal}</h3>
+      {brief.strongestVisual ? (
+        <p className={styles.briefReviewVisual}>{brief.strongestVisual}</p>
+      ) : null}
+      {fields.length > 0 ? (
+        <dl className={styles.briefReviewFields}>
+          {fields.map(([label, value]) => (
+            <div className={styles.briefReviewField} key={label}>
+              <dt>{label}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+    </article>
+  );
+}
+
 export function ProgressView({
   run,
   stages,
@@ -125,10 +186,13 @@ export function ProgressView({
   alternateRuns,
 }: ProgressViewProps) {
   const [detail, setDetail] = useState({ run, stages, stageItems });
+  const [projectBrief, setProjectBrief] = useState<VideoBriefInput | null>(null);
+  const [projectBriefLoading, setProjectBriefLoading] = useState(false);
   const [fallbackApproving, setFallbackApproving] = useState(false);
   const [fallbackError, setFallbackError] = useState<string | null>(null);
   const [fallbackFeedbackNote, setFallbackFeedbackNote] = useState("");
   const reviewGateKey = detail.run.reviewGate?.stageId ?? null;
+  const isBriefReviewGate = detail.run.reviewGate?.stageType === "brief_intake";
 
   useEffect(() => {
     setDetail({ run, stages, stageItems });
@@ -139,6 +203,32 @@ export function ProgressView({
   useEffect(() => {
     setFallbackFeedbackNote("");
   }, [reviewGateKey]);
+
+  useEffect(() => {
+    if (!isBriefReviewGate) {
+      setProjectBrief(null);
+      setProjectBriefLoading(false);
+      return;
+    }
+
+    let canceled = false;
+    setProjectBriefLoading(true);
+    v1Api
+      .getProject(detail.run.projectId)
+      .then(({ project }) => {
+        if (!canceled) setProjectBrief(project.brief ?? null);
+      })
+      .catch(() => {
+        if (!canceled) setProjectBrief(null);
+      })
+      .finally(() => {
+        if (!canceled) setProjectBriefLoading(false);
+      });
+
+    return () => {
+      canceled = true;
+    };
+  }, [detail.run.projectId, isBriefReviewGate]);
 
   const terminal = isTerminal(detail.run.status);
   const reviewStage = detail.run.reviewGate
@@ -352,7 +442,9 @@ export function ProgressView({
                   </div>
                 </dl>
               </div>
-              {reviewItems.length > 0 ? (
+              {isBriefReviewGate && (projectBrief || projectBriefLoading) ? (
+                <BriefReviewOutput brief={projectBrief} loading={projectBriefLoading} />
+              ) : reviewItems.length > 0 ? (
                 <div className={`${styles.itemGrid} ${styles.reviewOutputGrid}`}>
                   {reviewItems.map((item) => (
                     <StageItemCard key={item.itemId} item={item} />

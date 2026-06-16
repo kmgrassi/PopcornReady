@@ -97,6 +97,10 @@ Notes:
 - Keep provider API keys server-only. Do not rename them with `NEXT_PUBLIC_`.
 - Hosted deploys should use `AUTH_MODE=supabase`. `AUTH_MODE=local` is for
   local development and private demos only.
+- Hosted deploys must not emit `localhost` media URLs. If `STORAGE_BACKEND`
+  remains `local` temporarily, set `STORAGE_LOCAL_URL_BASE` to the public
+  Railway API origin, for example `https://<api-service>.up.railway.app`.
+  Durable production delivery should use the S3/CloudFront configuration below.
 
 ## Provisioned asset storage
 

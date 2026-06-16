@@ -15,47 +15,47 @@ interface StageRailProps {
 }
 
 const VISIBLE_STAGES: Array<{
-  type: GenerationStageType;
+  types: GenerationStageType[];
   label: string;
   description: string;
 }> = [
   {
-    type: "brief_intake",
+    types: ["brief_intake"],
     label: "Concept",
     description: "Project goal, audience, and creative direction.",
   },
   {
-    type: "creative_plan",
+    types: ["creative_plan"],
     label: "Brief",
     description: "Structured generation brief ready for approval.",
   },
   {
-    type: "storyboard",
+    types: ["storyboard"],
     label: "Script",
     description: "Narrative beats, voiceover, and scene intent.",
   },
   {
-    type: "storyboard",
+    types: ["storyboard"],
     label: "Storyboard",
     description: "Scene-by-scene visual plan.",
   },
   {
-    type: "asset_generation",
+    types: ["asset_generation"],
     label: "Shots",
     description: "Generated shot candidates and motion moments.",
   },
   {
-    type: "asset_generation",
+    types: ["audio_generation", "asset_generation"],
     label: "Assets",
     description: "Images, clips, voice, and supporting media.",
   },
   {
-    type: "timeline_assembly",
+    types: ["timeline_assembly"],
     label: "Timeline",
     description: "Deterministic edit assembly.",
   },
   {
-    type: "export",
+    types: ["quality_review", "export"],
     label: "Final Render",
     description: "Quality pass and finished video render.",
   },
@@ -102,10 +102,24 @@ export function StageRail({ stages, reviewGate }: StageRailProps) {
   return (
     <ol className={styles.stageRail} aria-label="Generation stages">
       {VISIBLE_STAGES.map((visibleStage, idx) => {
-        const occurrence = occurrenceCounts.get(visibleStage.type) ?? 0;
-        occurrenceCounts.set(visibleStage.type, occurrence + 1);
-        const matchingStages = stagesByType.get(visibleStage.type) ?? [];
-        const stage = matchingStages[occurrence] ?? matchingStages[0];
+        const matchingStages = visibleStage.types.flatMap((type) => {
+          const occurrence = occurrenceCounts.get(type) ?? 0;
+          return (stagesByType.get(type) ?? []).slice(occurrence);
+        });
+        const stage =
+          matchingStages.find((candidate) => reviewGate?.stageId === candidate.stageId) ??
+          matchingStages.find((candidate) => candidate.status === "running") ??
+          matchingStages.find((candidate) => candidate.status === "failed") ??
+          matchingStages.find((candidate) => candidate.status === "queued") ??
+          matchingStages[0];
+        if (stage) {
+          occurrenceCounts.set(
+            stage.type,
+            (stagesByType.get(stage.type) ?? []).findIndex(
+              (candidate) => candidate.stageId === stage.stageId,
+            ) + 1,
+          );
+        }
         const isLast = idx === VISIBLE_STAGES.length - 1;
         const status = stage?.status ?? "queued";
         const message = stage?.error?.message ?? stage?.message ?? visibleStage.description;

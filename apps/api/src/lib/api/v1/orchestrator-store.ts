@@ -7,7 +7,7 @@
 import { getServiceSupabase } from "../../supabase/clients";
 import { runQuery } from "../../supabase/db-errors";
 import { ApiError } from "./errors";
-import { iso, markedJson, unmarkedJson } from "./store-internal";
+import { deploymentMetadata, iso, markedJson, unmarkedJson } from "./store-internal";
 
 export type OrchestratorRunStatus =
   | "queued"
@@ -28,6 +28,8 @@ export interface OrchestratorRun {
   budgetUsd?: number;
   spentUsd: number;
   error?: Record<string, unknown>;
+  deployId?: string;
+  gitSha?: string;
   createdAt: string;
   updatedAt: string;
   startedAt?: string;
@@ -80,6 +82,8 @@ interface OrchestratorRunRow {
   budget_usd: number | null;
   spent_usd: number;
   error: Record<string, unknown> | null;
+  deploy_id: string | null;
+  git_sha: string | null;
   created_at: string;
   updated_at: string;
   started_at: string | null;
@@ -122,6 +126,8 @@ function mapRun(row: OrchestratorRunRow): OrchestratorRun {
   if (row.budget_usd != null) run.budgetUsd = row.budget_usd;
   const error = unmarkedJson(row.error);
   if (error) run.error = error;
+  if (row.deploy_id) run.deployId = row.deploy_id;
+  if (row.git_sha) run.gitSha = row.git_sha;
   if (row.started_at) run.startedAt = iso(row.started_at);
   if (row.completed_at) run.completedAt = iso(row.completed_at);
   return run;
@@ -172,6 +178,7 @@ export async function createOrchestratorRun(
         input_summary: input.inputSummary,
         budget_usd: input.budgetUsd ?? null,
         spent_usd: 0,
+        ...deploymentMetadata(),
         created_at: now,
         updated_at: now,
       })

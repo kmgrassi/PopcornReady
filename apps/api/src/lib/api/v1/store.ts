@@ -24,7 +24,7 @@
 import { randomUUID } from "crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { databaseError, runQuery } from "../../supabase/db-errors";
-import { iso, markedJson, unmarkedJson } from "./store-internal";
+import { deploymentMetadata, iso, markedJson, unmarkedJson } from "./store-internal";
 import {
   localDir,
   mediaAnalysisDir,
@@ -81,7 +81,7 @@ import {
 } from "./orchestrator-store";
 import { getRequestSupabase } from "../../supabase/clients";
 import { agentApiStore, type AgentApiStore } from "../../agent-api/jobs";
-import { resolveAssetUrl } from "../../storage/asset-urls";
+import { remoteAssetUrlForDelivery, resolveAssetUrl } from "../../storage/asset-urls";
 import {
   AgentAssetSource,
   AgentAssetContext,
@@ -384,6 +384,14 @@ export async function defaultVisibilityForWorkspace(
   db: SupabaseClient,
   workspaceId: string
 ): Promise<"public" | "private"> {
+  const workspace = await runQuery(
+    "store.defaultVisibilityForWorkspace workspace",
+    db.from("workspaces").select("purpose").eq("id", workspaceId).maybeSingle()
+  );
+  if ((workspace as { purpose?: string } | null)?.purpose !== "user") {
+    return "private";
+  }
+
   const data = await runQuery(
     "store.defaultVisibilityForWorkspace",
     db.rpc("owner_tier", { ws_id: workspaceId })
@@ -1260,6 +1268,7 @@ async function mapAsset(row: AssetRow): Promise<V1Asset> {
   const asset = mapAssetRow(row);
   const resolvedUrl = await resolveAssetUrl(row);
   if (resolvedUrl) asset.remoteUrl = resolvedUrl;
+  else delete asset.remoteUrl;
   return asset;
 }
 
@@ -2400,8 +2409,9 @@ export async function listPublicProjects(
     "store.listPublicProjects",
     db
       .from("projects")
-      .select("*")
+      .select("*, workspaces!inner(purpose)")
       .eq("visibility", "public")
+      .eq("workspaces.purpose", "user")
       .neq("status", "deleted")
   );
   const all = await Promise.all(
@@ -2934,7 +2944,12 @@ export async function listAssets(
 }
 
 interface AssetWithProjectRow extends AssetRow {
-  projects?: { id: string; visibility: "public" | "private"; status: "active" | "deleted" };
+  projects?: {
+    id: string;
+    visibility: "public" | "private";
+    status: "active" | "deleted";
+    workspaces?: { purpose: string };
+  };
 }
 
 // Workspace-scoped asset summary for the cross-project dashboard list.
@@ -2991,7 +3006,7 @@ export async function assetMediaUrlsForRow(
     try {
       url = (await resolveAssetUrl(row, { privateTtlSec: MEDIA_URL_EXPIRES_IN_SEC })) ?? null;
     } catch {
-      url = row.remote_url;
+      url = remoteAssetUrlForDelivery(row.remote_url) ?? null;
     }
   }
 
@@ -3305,15 +3320,15 @@ async function projectedAssetUrl(
         url:
           (await resolveAssetUrl(row, {
             privateTtlSec: expiresInSec,
-          })) ?? row.remote_url,
+          })) ?? remoteAssetUrlForDelivery(row.remote_url) ?? null,
         expiresAt: new Date(Date.now() + expiresInSec * 1000).toISOString(),
       };
     } catch {
-      return { url: row.remote_url };
+      return { url: remoteAssetUrlForDelivery(row.remote_url) ?? null };
     }
   }
 
-  return { url: row.remote_url };
+  return { url: remoteAssetUrlForDelivery(row.remote_url) ?? null };
 }
 
 async function selectedMediaAsset(
@@ -3527,9 +3542,10 @@ export async function listPublicAssets(
   const db = getServiceSupabase();
   let query = db
     .from("assets")
-    .select("*, projects!inner(id, visibility, status)")
+    .select("*, projects!inner(id, visibility, status, workspaces!inner(purpose))")
     .eq("visibility", "public")
     .eq("projects.visibility", "public")
+    .eq("projects.workspaces.purpose", "user")
     .neq("projects.status", "deleted")
     .neq("media", "data");
 
@@ -3681,6 +3697,8 @@ interface JobRow {
   result: unknown;
   error: Job["error"];
   idempotency_key: string | null;
+  deploy_id: string | null;
+  git_sha: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -3699,6 +3717,7 @@ function jobToRow(job: Job): JobRow {
     result: job.result,
     error: job.error,
     idempotency_key: job.idempotencyKey ?? null,
+    ...deploymentMetadata(),
     created_at: job.createdAt,
     updated_at: job.updatedAt,
   };
