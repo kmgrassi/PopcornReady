@@ -2,6 +2,8 @@ node_modules
 .next
 dist
 .turbo
+test-results
+playwright-report
 # pnpm is the package manager; npm/yarn lockfiles must not be tracked
 package-lock.json
 yarn.lock

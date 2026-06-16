@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "start": "vite preview",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@popcorn/eval": "workspace:*",
@@ -24,6 +25,7 @@
     "remotion": "^4.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.0",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "@vitejs/plugin-react": "^4.3.4",
