@@ -4,6 +4,7 @@ import test from "node:test";
 import type { AuthContext } from "@/lib/api/v1/auth";
 import type { VideoBrief } from "@/lib/api/v1/schemas";
 import type { EditPlan } from "@popcorn/shared/types";
+import { createBriefInputSchema } from "../create-or-load-brief";
 import { createDefaultToolRegistry } from "../default-registry";
 import {
   createPlanShotsTool,
@@ -76,6 +77,29 @@ test("default registry exposes plan_shots metadata", () => {
   assert.equal(definition.execution, "sync");
   assert.equal(definition.inputSchema.type, "object");
   assert.equal(definition.outputSchema.type, "object");
+});
+
+test("create_or_load_brief schema constrains enum fields to validator values", () => {
+  const platform = createBriefInputSchema.properties.platform as { enum: readonly string[] };
+  const format = createBriefInputSchema.properties.format as { enum: readonly string[] };
+
+  assert.deepEqual(platform.enum, [
+    "youtube",
+    "tiktok",
+    "reels",
+    "facebook",
+    "vimeo",
+    "general",
+  ]);
+  assert.deepEqual(format.enum, [
+    "mystery_to_model",
+    "visual_reveal",
+    "challenge",
+    "misconception",
+    "animated_explainer",
+    "classroom_demo",
+    "aesthetic_montage",
+  ]);
 });
 
 test("plan_shots output schema describes the post-processed plan ids", () => {
