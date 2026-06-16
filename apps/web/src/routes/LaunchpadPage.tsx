@@ -1,4 +1,7 @@
+import { ActiveRunsPanel } from "../components/home/ActiveRunsPanel";
+import { EmptyDashboard } from "../components/home/EmptyDashboard";
 import { HeroCard } from "../components/home/HeroCard";
+import { OverviewStats } from "../components/home/OverviewStats";
 import { RecentOutputsStrip } from "../components/home/RecentOutputsStrip";
 import { Button } from "../components/ui/Button";
 import { ErrorState } from "../components/ui/StateCard";
@@ -6,6 +9,8 @@ import { useAuth } from "../components/auth/AuthProvider";
 import { deriveNextAction } from "../lib/nextAction";
 import { useDashboardSummaryQuery } from "../lib/queryClient";
 import styles from "./LaunchpadPage.module.css";
+
+const EMPTY_COUNTS = { projects: 0, activeRuns: 0, outputs: 0 } as const;
 
 const DEV_AUTOPILOT = import.meta.env.DEV;
 
@@ -31,10 +36,16 @@ export function LaunchpadPage() {
       ) : null}
 
       {!loading && !error ? (
-        <>
-          <HeroCard action={action} />
-          <RecentOutputsStrip outputs={pulse?.recentOutputs ?? []} />
-        </>
+        action.type === "start" ? (
+          <EmptyDashboard action={action} />
+        ) : (
+          <>
+            <HeroCard action={action} />
+            <OverviewStats counts={pulse?.counts ?? EMPTY_COUNTS} />
+            <ActiveRunsPanel runs={pulse?.activeRuns ?? []} />
+            <RecentOutputsStrip outputs={pulse?.recentOutputs ?? []} />
+          </>
+        )
       ) : null}
     </div>
   );
