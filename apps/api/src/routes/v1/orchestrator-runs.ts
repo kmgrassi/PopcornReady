@@ -381,7 +381,22 @@ function projectStages(run: OrchestratorRun, actions: RunActionSummary[]): Gener
   return [...grouped.entries()]
     .map(([type, stageActions]) => {
       const latest = stageActions.at(-1);
-      const status = latest ? actionStatus(latest.status) : "queued";
+      const latestByTool = new Map<string, RunActionSummary>();
+      for (const action of stageActions) {
+        latestByTool.set(action.tool, action);
+      }
+      const latestFailed = [...stageActions]
+        .reverse()
+        .find(
+          (action) =>
+            action.status === "failed" && latestByTool.get(action.tool)?.id === action.id
+        );
+      const status = latestFailed
+        ? "failed"
+        : latest
+          ? actionStatus(latest.status)
+          : "queued";
+      const statusAction = latestFailed ?? latest;
       return {
         stageId: stageId(run.id, type),
         runId: run.id,
@@ -390,14 +405,15 @@ function projectStages(run: OrchestratorRun, actions: RunActionSummary[]): Gener
         order: GENERATION_STAGE_ORDER[type],
         status,
         progressPercent: status === "succeeded" ? 100 : status === "running" ? 50 : 0,
-        message: latest ? `${latest.tool} ${latest.status}.` : undefined,
+        message: statusAction ? `${statusAction.tool} ${statusAction.status}.` : undefined,
         startedAt: stageActions[0]?.createdAt,
-        completedAt: status === "succeeded" || status === "failed" ? latest?.createdAt : undefined,
+        completedAt:
+          status === "succeeded" || status === "failed" ? statusAction?.createdAt : undefined,
         jobIds: stageActions.flatMap((action) => action.jobIds),
         artifactIds: stageActions.flatMap((action) => action.outputAssetIds),
         createdAt: stageActions[0]?.createdAt ?? run.createdAt,
         updatedAt: latest?.createdAt ?? run.updatedAt,
-        error: latest?.status === "failed" ? toErrorSummary(latest.error) : undefined,
+        error: latestFailed ? toErrorSummary(latestFailed.error) : undefined,
       };
     })
     .sort((a, b) => a.order - b.order);

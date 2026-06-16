@@ -115,6 +115,36 @@ test("projects a regenerated stage from the latest action instead of stale failu
   assert.deepEqual(payload.stages[0]?.artifactIds, ["brief_asset_2"]);
 });
 
+test("keeps unresolved tool failures within a grouped stage", () => {
+  const payload = projectRunDetailFromParts(
+    runFixture({ status: "running" }),
+    [],
+    [
+      actionFixture("generate_keyframe", {
+        id: "failed_keyframe",
+        status: "failed",
+        error: {
+          kind: "invalid_input",
+          message: "Missing beat id.",
+          recoverable: true,
+        },
+        createdAt: "2026-06-15T00:00:01.000Z",
+      }),
+      actionFixture("generate_clip", {
+        id: "applied_clip",
+        status: "applied",
+        outputAssetIds: ["clip_asset_1"],
+        createdAt: "2026-06-15T00:00:02.000Z",
+      }),
+    ]
+  );
+
+  const stage = payload.stages.find((candidate) => candidate.type === "asset_generation");
+  assert.equal(stage?.status, "failed");
+  assert.equal(stage?.error?.message, "Missing beat id.");
+  assert.deepEqual(stage?.artifactIds, ["clip_asset_1"]);
+});
+
 test("resumeRunInBackground starts resume and returns before it settles", async () => {
   let resolveResume: (() => void) | undefined;
   let resumeStarted = false;
