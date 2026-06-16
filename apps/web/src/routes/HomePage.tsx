@@ -225,8 +225,8 @@ export function HomePage() {
         <section className="lp-hero">
           <span className="lp-eyebrow">The agent harness for video</span>
           <h1>
-            Codex writes the code.{" "}
-            <span className="lp-accent">Popcorn Ready makes the video.</span>
+            Like Claude Code,{" "}
+            <span className="lp-accent">but for video.</span>
           </h1>
           <p className="lp-lede">
             Coding harnesses turned software into something you direct instead of
