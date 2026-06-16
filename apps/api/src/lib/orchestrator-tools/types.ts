@@ -103,9 +103,27 @@ export interface ToolCostEstimate {
   notes?: string;
 }
 
+/**
+ * Optional, model-facing usage guidance for a tool. These short declarative
+ * strings are composed onto the tool's `description` (see composeToolDescription)
+ * so the orchestrator model can pick the right tool proactively — knowing what a
+ * tool needs, what it produces, and when to reach for it — instead of probing the
+ * pipeline by trial and error and only learning from failures.
+ */
+export interface ToolUsage {
+  /** What must already exist or be true before this tool can succeed. */
+  preconditions?: string[];
+  /** What the tool persists or produces on success. */
+  produces?: string[];
+  /** 1–2 "use this when…" situations that disambiguate it from sibling tools. */
+  useWhen?: string[];
+}
+
 export interface ToolDefinition<TInput = unknown, TOutput = unknown> {
   name: ToolName;
   description: string;
+  /** Optional structured usage guidance, composed onto `description` for the model. */
+  usage?: ToolUsage;
   inputSchema: JsonSchema;
   outputSchema: JsonSchema;
   execution: "sync" | "async" | "approval";
