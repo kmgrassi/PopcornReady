@@ -30,6 +30,7 @@ import { createToolExecutionContext } from "./tool-context";
 import type { ToolCallResult } from "./types";
 
 const DEFAULT_MAX_TURNS = 50;
+const DEFAULT_MODEL_TURN_TIMEOUT_MS = 60_000;
 
 export interface InvocationRecord {
   projectId: string;
@@ -86,6 +87,7 @@ export interface EngineDeps {
   registry?: ToolRegistry;
   jobs?: JobStatusReader;
   maxTurns?: number;
+  modelTurnTimeoutMs?: number;
 }
 
 export function defaultEngineStore(): OrchestratorEngineStore {
@@ -139,6 +141,7 @@ function resolved(deps: EngineDeps) {
     registry: deps.registry ?? defaultRegistry(),
     jobs: deps.jobs ?? { getJob: (id: string) => agentApiStore.getJob(id) },
     maxTurns: deps.maxTurns ?? DEFAULT_MAX_TURNS,
+    modelTurnTimeoutMs: deps.modelTurnTimeoutMs ?? DEFAULT_MODEL_TURN_TIMEOUT_MS,
     workspaceId: deps.workspaceId,
     actorId: deps.actorId,
     agentId: deps.agentId,
@@ -146,6 +149,25 @@ function resolved(deps: EngineDeps) {
     requestId: deps.requestId,
     metadata: deps.metadata,
   };
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string
+): Promise<T> {
+  if (timeoutMs <= 0) return promise;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 // Start a run and drive it to a terminal/parked state.
@@ -203,6 +225,12 @@ export async function resumeOrchestratorRun(
       status: "applied",
       outputAssetIds: jobAssetIds(job.result),
     });
+    const gates = await r.store.listRunGates(runId);
+    const gate = gates.find((g) => g.stage === parkingAction.tool);
+    if (gate?.status === "rejected") {
+      await r.store.markGateReached(runId, parkingAction.tool);
+      return park(run, r);
+    }
   }
   // Job done (or gate the caller resolved) → continue the loop.
   run = await r.store.updateOrchestratorRun(runId, { status: "running" });
@@ -257,46 +285,42 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       outputAssetIds: action.outputAssetIds,
     }));
 
-    const decision = await r.model({
-      projectId: run.projectId,
-      inputSummary: run.inputSummary,
-      priorResults,
-      registry: r.registry,
-    });
+    let decision;
+    try {
+      decision = await withTimeout(
+        r.model({
+          projectId: run.projectId,
+          inputSummary: run.inputSummary,
+          priorResults,
+          registry: r.registry,
+        }),
+        r.modelTurnTimeoutMs,
+        `orchestrator model turn exceeded ${r.modelTurnTimeoutMs}ms`
+      );
+    } catch (err) {
+      return finish(run, "failed", r, {
+        kind: "timeout",
+        message: err instanceof Error ? err.message : String(err),
+        recoverable: false,
+      });
+    }
 
     if (decision.type === "done") {
       return finish(run, "succeeded", r);
     }
 
-    // Gate handling. A user-rejected stage must NOT run and must NOT park forever:
-    // record a recoverable failure so the rejection lands in priorResults and the
-    // model picks a different step. A pending/reached gate pauses for the user; an
-    // approved gate falls through and executes.
+    // Gate handling. Pending/reached gates pause before executing. Approved gates
+    // fall through. Rejected gates also fall through once: that is the
+    // "regenerate this stage" path, and after the tool succeeds the gate is
+    // marked reached again for another review stop.
     const gates = await r.store.listRunGates(run.id);
     const gate = gates.find((g) => g.stage === decision.toolName);
-    if (gate && gate.status === "rejected") {
-      await r.store.recordInvocation({
-        projectId: run.projectId,
-        orchestratorRunId: run.id,
-        tool: decision.toolName,
-        status: "failed",
-        params: decision.input,
-        outputAssetIds: [],
-        jobIds: [],
-        error: {
-          kind: "approval_rejected",
-          message: `The ${decision.toolName} gate was rejected; choose a different step.`,
-          recoverable: true,
-        },
-      });
-      run = await r.store.getOrchestratorRun(run.id);
-      continue; // next turn — the model now sees the rejection
-    }
+    const regeneratingRejectedGate = gate?.status === "rejected";
     if (gate && gate.status !== "approved") {
       if (gate.status === "pending") {
         await r.store.markGateReached(run.id, decision.toolName);
       }
-      return park(run, r);
+      if (!regeneratingRejectedGate) return park(run, r);
     }
 
     // A wired tool may THROW (DB/provider exception) instead of returning a
@@ -359,6 +383,11 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       run = await r.store.updateOrchestratorRun(run.id, {
         spentUsd: run.spentUsd + result.costUsd,
       });
+    }
+
+    if (regeneratingRejectedGate && result.status === "succeeded") {
+      await r.store.markGateReached(run.id, decision.toolName);
+      return park(run, r);
     }
 
     if (result.status === "accepted" || result.status === "waiting_for_approval") {

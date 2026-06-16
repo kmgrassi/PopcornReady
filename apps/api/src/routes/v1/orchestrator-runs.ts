@@ -464,6 +464,20 @@ function startRun(workspaceId: string, runId: string, actorId: string): void {
   });
 }
 
+export function resumeRunInBackground(
+  workspaceId: string,
+  runId: string,
+  resume: typeof resumeOrchestratorRun = resumeOrchestratorRun,
+  logError: typeof console.error = console.error
+): void {
+  void resume(runId, {
+    workspaceId,
+    agentId: "orchestrator",
+  }).catch((err) => {
+    logError("orchestrator resume failed", err);
+  });
+}
+
 orchestratorRunsRouter.post(
   "/projects/:projectId/generation-entrypoints/prompt",
   mutation(async ({ auth, body, req }, params) => {
@@ -568,7 +582,7 @@ orchestratorRunsRouter.post(
     const gate = gates.find((candidate) => candidate.status === "reached");
     if (gate) {
       await resolveGate(gate.id, "approved");
-      await resumeOrchestratorRun(runId, { workspaceId: auth.workspaceId });
+      resumeRunInBackground(auth.workspaceId, runId);
     }
     return { status: 202, body: await assembleRunDetail(runId, projectId) };
   })
@@ -585,7 +599,7 @@ orchestratorRunsRouter.post(
     const gate = gates.find((candidate) => candidate.status === "reached");
     if (gate) {
       await resolveGate(gate.id, "rejected");
-      await resumeOrchestratorRun(runId, { workspaceId: auth.workspaceId });
+      resumeRunInBackground(auth.workspaceId, runId);
     }
     return { status: 202, body: await assembleRunDetail(runId, projectId) };
   })
