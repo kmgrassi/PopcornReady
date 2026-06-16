@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "./AuthProvider";
+import styles from "./AuthNavButton.module.css";
 
 export function AuthNavButton() {
   const { status, user } = useAuth();
@@ -14,7 +15,7 @@ export function AuthNavButton() {
   if (status === "authenticated" || status === "disabled") {
     return (
       <Link
-        className="web-shell-cta"
+        className={styles.cta}
         to="/dashboard"
         title={user?.email ?? "Go to dashboard"}
       >

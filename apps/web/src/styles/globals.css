@@ -164,22 +164,6 @@
   color: var(--accent-2);
 }
 
-/* Single primary call-to-action in the public header (Sign in / Open
-   dashboard). Overrides the plain nav-link color above via the extra class. */
-.web-shell-nav a.web-shell-cta {
-  padding: 7px 16px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: var(--button-text);
-  border: 1px solid var(--accent);
-  transition: filter 120ms ease;
-}
-
-.web-shell-nav a.web-shell-cta:hover {
-  color: var(--button-text);
-  filter: brightness(1.06);
-}
-
 .web-shell-main {
   width: min(920px, calc(100% - 32px));
   margin: 0 auto;
@@ -780,14 +764,10 @@
     grid-template-columns: 1fr auto;
   }
 
-  /* Keep the primary CTA reachable on mobile; drop only the secondary
-     marketing anchors so the header stays a single tidy row. */
+  /* Tighten the nav row on mobile. The CTA-vs-secondary-anchor visibility
+     rules live with the CTA in AuthNavButton.module.css. */
   .web-shell-nav {
     gap: 8px;
-  }
-
-  .web-shell-nav a:not(.web-shell-cta) {
-    display: none;
   }
 
   .dashboard-shell {

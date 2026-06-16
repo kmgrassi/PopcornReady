@@ -1,0 +1,24 @@
+/* Single primary call-to-action in the public header (Sign in / Open
+   dashboard). Scoped under the global .web-shell-nav so it overrides the
+   plain nav-link color defined in globals.css. */
+:global(.web-shell-nav) a.cta {
+  padding: 7px 16px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--button-text);
+  border: 1px solid var(--accent);
+  transition: filter 120ms ease;
+}
+
+:global(.web-shell-nav) a.cta:hover {
+  color: var(--button-text);
+  filter: brightness(1.06);
+}
+
+/* On mobile keep this CTA reachable and drop only the secondary marketing
+   anchors, so the header stays a single tidy row with a clear entry point. */
+@media (max-width: 760px) {
+  :global(.web-shell-nav) a:not(.cta) {
+    display: none;
+  }
+}
