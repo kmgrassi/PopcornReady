@@ -79,6 +79,10 @@ function RunProgress({
 
   const applyPayload = useCallback(
     (next: GenerationRunDetail) => {
+      if (next.run.status === "canceled") {
+        clearLastRunHint(projectId);
+        return;
+      }
       if (isTerminal(next.run.status)) {
         if (next.run.runId === runId) {
           writeLastRunHint(projectId, next.run);
