@@ -235,8 +235,21 @@
   align-items: center;
   justify-content: center;
   color: var(--muted);
-  font-size: 3rem;
+}
+
+.posterEmpty span {
+  display: inline-flex;
+  width: 48px;
+  height: 48px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: var(--title-md);
   font-weight: 800;
+  line-height: 1;
 }
 
 .outputMedia {
