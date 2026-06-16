@@ -7,8 +7,6 @@ export function RecentOutputsStrip({
 }: {
   outputs: readonly DashboardRecentOutput[];
 }) {
-  if (outputs.length === 0) return null;
-
   return (
     <section className={styles.section} aria-labelledby="recent-outputs-title">
       <div className={styles.header}>
@@ -16,33 +14,39 @@ export function RecentOutputsStrip({
         <Link to="/outputs">View all</Link>
       </div>
 
-      <div className={styles.strip}>
-        {outputs.slice(0, 4).map((output) => (
-          <Link
-            className={styles.output}
-            key={output.artifactId}
-            to={`/outputs?${new URLSearchParams({ projectId: output.projectId }).toString()}`}
-          >
-            {output.thumbnailUrl ? (
-              <img
-                className={styles.thumb}
-                src={output.thumbnailUrl}
-                alt=""
-                loading="lazy"
-              />
-            ) : (
-              <span className={`${styles.thumb} ${styles.emptyThumb}`}>Output</span>
-            )}
-            <span className={styles.outputBody}>
-              <span className={styles.title}>{output.projectName}</span>
-              <span className={styles.meta}>
-                {formatDate(output.createdAt)}
-                {output.durationSec ? ` - ${formatDuration(output.durationSec)}` : ""}
+      {outputs.length === 0 ? (
+        <p className={styles.empty}>
+          Your finished videos will appear here once a run exports its first cut.
+        </p>
+      ) : (
+        <div className={styles.strip}>
+          {outputs.slice(0, 8).map((output) => (
+            <Link
+              className={styles.output}
+              key={output.artifactId}
+              to={`/outputs?${new URLSearchParams({ projectId: output.projectId }).toString()}`}
+            >
+              {output.thumbnailUrl ? (
+                <img
+                  className={styles.thumb}
+                  src={output.thumbnailUrl}
+                  alt=""
+                  loading="lazy"
+                />
+              ) : (
+                <span className={`${styles.thumb} ${styles.emptyThumb}`}>Output</span>
+              )}
+              <span className={styles.outputBody}>
+                <span className={styles.title}>{output.projectName}</span>
+                <span className={styles.meta}>
+                  {formatDate(output.createdAt)}
+                  {output.durationSec ? ` - ${formatDuration(output.durationSec)}` : ""}
+                </span>
               </span>
-            </span>
-          </Link>
-        ))}
-      </div>
+            </Link>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

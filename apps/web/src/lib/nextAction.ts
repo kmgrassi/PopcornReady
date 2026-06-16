@@ -139,7 +139,7 @@ export function deriveNextAction(
   };
 }
 
-function runPath(run: Pick<DashboardActiveRunSummary, "projectId" | "runId">) {
+export function runPath(run: Pick<DashboardActiveRunSummary, "projectId" | "runId">) {
   return `/projects/${encodeURIComponent(run.projectId)}/runs/${encodeURIComponent(run.runId)}`;
 }
 
@@ -148,7 +148,7 @@ function outputPath(output: DashboardRecentOutput) {
   return `/outputs?${params.toString()}`;
 }
 
-function formatStage(stage: DashboardActiveRunSummary["currentStageType"]) {
+export function formatStage(stage: DashboardActiveRunSummary["currentStageType"]) {
   if (!stage) return "Preparing";
   return stage
     .replace(/_/g, " ")
