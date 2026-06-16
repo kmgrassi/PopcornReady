@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   GENERATION_STAGE_LABELS,
   type GateableGenerationStageType,
+  type GenerationRunStatus,
 } from "@popcorn/shared/v1/types";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../ui/Button";
@@ -34,6 +35,7 @@ import {
 import styles from "./StudioShell.module.css";
 
 const LOCAL_DRAFT_ID = "local";
+const TERMINAL_RECOVERABLE_RUN_STATUSES: GenerationRunStatus[] = ["failed", "canceled"];
 
 function studioDraftPath({
   draftId,
@@ -245,8 +247,10 @@ function StudioFlowView({
   }, [goToStep, initialStep]);
 
   if (flow.state === "generating") {
-    const items = buildChecklistItems(flow.stages, flow.run?.status ?? "queued");
+    const runStatus = flow.run?.status ?? "queued";
+    const items = buildChecklistItems(flow.stages, runStatus);
     const gate = flow.run?.reviewGate ?? null;
+    const canRecover = TERMINAL_RECOVERABLE_RUN_STATUSES.includes(runStatus);
     return (
       <main className={styles.shell}>
         <StudioStepper step={flow.step} />
@@ -264,7 +268,16 @@ function StudioFlowView({
               onReject={() => flow.rejectGate()}
             />
           ) : null}
-          {flow.error ? <p className="new-project-error">{flow.error}</p> : null}
+          {canRecover ? (
+            <RunRecoveryCard
+              status={runStatus}
+              error={flow.run?.error?.message ?? flow.error}
+              onRetry={() => flow.retryGeneration()}
+              onEdit={() => flow.resetGeneration("generate")}
+            />
+          ) : flow.error ? (
+            <p className="new-project-error">{flow.error}</p>
+          ) : null}
         </section>
       </main>
     );
@@ -383,6 +396,63 @@ function ActiveStep({
     default:
       return null;
   }
+}
+
+function RunRecoveryCard({
+  status,
+  error,
+  onRetry,
+  onEdit,
+}: {
+  status: GenerationRunStatus;
+  error?: string;
+  onRetry: () => Promise<unknown>;
+  onEdit: () => Promise<void>;
+}) {
+  const [retrying, setRetrying] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const busy = retrying || editing;
+  const heading =
+    status === "canceled" ? "This run was canceled." : "This run could not finish.";
+
+  async function retry() {
+    if (busy) return;
+    setRetrying(true);
+    try {
+      await onRetry();
+    } finally {
+      setRetrying(false);
+    }
+  }
+
+  async function edit() {
+    if (busy) return;
+    setEditing(true);
+    try {
+      await onEdit();
+    } finally {
+      setEditing(false);
+    }
+  }
+
+  return (
+    <div className={styles.recovery}>
+      <div className={styles.recoveryCopy}>
+        <p className={styles.recoveryHeading}>{heading}</p>
+        <p className={styles.recoveryText}>
+          {error ?? "You can start a fresh run from this draft or change the setup first."}
+        </p>
+      </div>
+      <div className={styles.recoveryActions}>
+        <Button variant="cta" onClick={() => void retry()} isLoading={retrying}>
+          Try again
+        </Button>
+        <Button variant="secondary" onClick={() => void edit()} isLoading={editing}>
+          Edit settings
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 /**
