@@ -9,7 +9,8 @@
     "start": "vite preview",
     "preview": "vite preview",
     "test:e2e": "playwright test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:e2e:headed": "playwright test --headed"
   },
   "dependencies": {
     "@popcorn/eval": "workspace:*",
