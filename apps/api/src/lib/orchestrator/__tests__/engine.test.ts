@@ -68,7 +68,9 @@ class FakeStore implements OrchestratorEngineStore {
     return this.gates.map((g) => ({ ...g }));
   }
   async markGateReached(_id: string, stage: string) {
-    const g = this.gates.find((x) => x.stage === stage && x.status === "pending");
+    const g = this.gates.find(
+      (x) => x.stage === stage && (x.status === "pending" || x.status === "rejected")
+    );
     if (!g) return null;
     g.status = "reached";
     return { ...g };
@@ -84,17 +86,19 @@ class FakeStore implements OrchestratorEngineStore {
       params: input.params,
       outputAssetIds: input.outputAssetIds,
       jobIds: input.jobIds,
+      error: input.error,
       createdAt: `t${this.actions.length + 1}`,
     });
   }
   async markInvocation(
     actionId: string,
-    patch: { status: "applied" | "failed"; outputAssetIds?: string[] }
+    patch: { status: "applied" | "failed"; outputAssetIds?: string[]; error?: Record<string, unknown> }
   ) {
     const action = this.actions.find((a) => a.id === actionId);
     if (!action) return;
     action.status = patch.status;
     if (patch.outputAssetIds) action.outputAssetIds = patch.outputAssetIds;
+    if (patch.error) action.error = patch.error;
   }
 }
 
@@ -294,9 +298,8 @@ test("parks before a gated stage and resumes once the gate is approved", async (
   assert.equal(store.actions.length, 1);
 });
 
-test("a rejected gate records a failure and lets the model continue (never parks forever)", async () => {
+test("a rejected gate regenerates the gated stage and parks for review again", async () => {
   const store = new FakeStore(runFixture(), [gateFixture("create_or_load_brief", "rejected")]);
-  // The model first tries the rejected tool, then (seeing it failed) finishes.
   const { model } = scriptedModel([
     { type: "tool_call", toolName: "create_or_load_brief" },
     { type: "done" },
@@ -305,9 +308,67 @@ test("a rejected gate records a failure and lets the model continue (never parks
 
   const run = await runOrchestratorToCompletion("run1", deps(store, model, registry));
 
-  assert.equal(run.status, "succeeded", "must not be left waiting on a rejected gate");
+  assert.equal(run.status, "waiting");
+  assert.equal(store.gates[0].status, "reached");
   assert.equal(store.actions.length, 1);
-  assert.equal(store.actions[0].status, "failed", "the rejected stage is recorded as a failure");
+  assert.equal(store.actions[0].tool, "create_or_load_brief");
+  assert.equal(store.actions[0].status, "applied");
+  assert.deepEqual(store.actions[0].outputAssetIds, ["asset_brief"]);
+  assert.equal(store.actions[0].error, undefined);
+});
+
+test("an async rejected gate parks on the job, then parks for review after job success", async () => {
+  const store = new FakeStore(runFixture(), [gateFixture("generate_keyframe", "rejected")]);
+  const { model } = scriptedModel([
+    { type: "tool_call", toolName: "generate_keyframe" },
+    { type: "done" },
+  ]);
+  const registry = fakeRegistry({
+    generate_keyframe: () => ({ status: "accepted", jobId: "job1", resumesWhen: "job_terminal" }),
+  });
+
+  const parkedOnJob = await runOrchestratorToCompletion("run1", deps(store, model, registry));
+  assert.equal(parkedOnJob.status, "waiting");
+  assert.equal(store.gates[0].status, "rejected", "review gate waits for the regenerated job");
+  assert.deepEqual([store.actions[0].tool, store.actions[0].status, store.actions[0].jobIds], [
+    "generate_keyframe",
+    "running",
+    ["job1"],
+  ]);
+
+  const parkedForReview = await resumeOrchestratorRun(
+    "run1",
+    deps(store, model, registry, {
+      jobs: { getJob: async () => ({ status: "succeeded", result: { assetIds: ["keyframe_1"] } }) },
+    })
+  );
+
+  assert.equal(parkedForReview.status, "waiting");
+  assert.equal(store.gates[0].status, "reached");
+  assert.equal(store.actions[0].status, "applied");
+  assert.deepEqual(store.actions[0].outputAssetIds, ["keyframe_1"]);
+});
+
+test("a model turn timeout marks the run failed instead of leaving it running", async () => {
+  const store = new FakeStore(runFixture());
+  let releaseModel: (() => void) | undefined;
+  const model: OrchestratorModel = async () => {
+    await new Promise<void>((resolve) => {
+      releaseModel = resolve;
+    });
+    return { type: "done", summary: "too late", model: "mock" };
+  };
+
+  const run = await runOrchestratorToCompletion(
+    "run1",
+    deps(store, model, fakeRegistry({}), { modelTurnTimeoutMs: 5 })
+  );
+  releaseModel?.();
+
+  assert.equal(run.status, "failed");
+  assert.equal((run.error as { kind?: string }).kind, "timeout");
+  assert.match((run.error as { message?: string }).message ?? "", /model turn exceeded 5ms/);
+  assert.equal(store.actions.length, 0);
 });
 
 test("a tool that throws marks the run failed with a persisted error", async () => {

@@ -46,6 +46,11 @@ export interface EvalRunCaseRef {
   label: string;
 }
 
+interface EvalRunCaseWire {
+  id: string;
+  label: string;
+}
+
 // The wire Judgment row only exposes opaque graph ids (`stageId`, `caseId`).
 // For the cases × stages grid the server resolves each judgment's grid
 // coordinates — the case it belongs to and the stage it judged — and echoes
@@ -64,7 +69,7 @@ export interface EvalRunResponse {
   // The prior eval run of the same suite, for the default diff ("did my change
   // regress?"). Null for the suite's first run.
   previousRunId: string | null;
-  cases: EvalRunCaseRef[];
+  cases: Array<EvalRunCaseRef | EvalRunCaseWire>;
   // Stages exercised, in canonical order; the grid columns.
   stages: GenerationStageType[];
   judgments: EvalRunJudgment[];
@@ -76,14 +81,16 @@ export interface EvalRunResponse {
 
 export interface VerdictFlip {
   caseId: string;
-  caseLabel: string;
-  stageType: GenerationStageType;
+  caseLabel?: string;
+  stageId?: string;
+  stageType?: GenerationStageType;
   before: JudgmentVerdict;
   after: JudgmentVerdict;
 }
 
 export interface RunDiffResponse {
-  runId: string;
+  runId?: string;
+  baseRunId?: string;
   againstRunId: string;
   flips: VerdictFlip[];
 }
@@ -149,7 +156,7 @@ export const evalApi = {
 // --- View mapping --------------------------------------------------------
 
 export function stageLabel(stageType: GenerationStageType): string {
-  return GENERATION_STAGE_LABELS[stageType] ?? stageType;
+  return (GENERATION_STAGE_LABELS as Partial<Record<string, string>>)[stageType] ?? stageType;
 }
 
 export interface EvalSuiteSummaryView {
@@ -238,6 +245,11 @@ export function toRunDetail(payload: EvalRunResponse): EvalRunDetailView {
     });
   }
 
+  const cases = payload.cases.map((evalCase) => ({
+    caseId: "caseId" in evalCase ? evalCase.caseId : evalCase.id,
+    label: evalCase.label,
+  }));
+
   return {
     runId: payload.evalRun.id,
     source: payload.evalRun.source,
@@ -248,7 +260,7 @@ export function toRunDetail(payload: EvalRunResponse): EvalRunDetailView {
     createdAt: payload.evalRun.createdAt,
     passRate: payload.passRate,
     previousRunId: payload.previousRunId,
-    cases: payload.cases,
+    cases,
     stages: payload.stages.map((stageType) => ({
       stageType,
       label: stageLabel(stageType),

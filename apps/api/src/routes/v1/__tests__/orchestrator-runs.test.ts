@@ -5,7 +5,10 @@ import type {
   OrchestratorRun,
   RunActionSummary,
 } from "@/lib/api/v1/orchestrator-store";
-import { projectRunDetailFromParts } from "../orchestrator-runs";
+import type { resumeOrchestratorRun } from "@/lib/orchestrator/engine";
+import { projectRunDetailFromParts, resumeRunInBackground } from "../orchestrator-runs";
+
+type Resume = typeof resumeOrchestratorRun;
 
 function runFixture(overrides: Partial<OrchestratorRun> = {}): OrchestratorRun {
   return {
@@ -74,4 +77,54 @@ test("surfaces orchestrator success as ready once export_video produced output",
       stageId: "run_1:export",
     },
   ]);
+});
+
+test("resumeRunInBackground starts resume and returns before it settles", async () => {
+  let resolveResume: (() => void) | undefined;
+  let resumeStarted = false;
+  let resumeSettled = false;
+  const resume: Resume = async (_runId, deps) => {
+    resumeStarted = true;
+    assert.equal(deps.workspaceId, "ws1");
+    assert.equal(deps.agentId, "orchestrator");
+    await new Promise<void>((resolve) => {
+      resolveResume = resolve;
+    });
+    resumeSettled = true;
+    return {
+      id: "run1",
+      schemaVersion: "orchestrator_run.v1",
+      projectId: "proj1",
+      status: "succeeded",
+      inputSummary: "done",
+      spentUsd: 0,
+      createdAt: "t0",
+      updatedAt: "t1",
+    };
+  };
+
+  resumeRunInBackground("ws1", "run1", resume);
+
+  assert.equal(resumeStarted, true);
+  assert.equal(resumeSettled, false, "caller must not wait for resume completion");
+  resolveResume?.();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(resumeSettled, true);
+});
+
+test("resumeRunInBackground logs background resume failures", async () => {
+  const error = new Error("model timeout");
+  const logged: unknown[][] = [];
+  const resume: Resume = async () => {
+    throw error;
+  };
+
+  resumeRunInBackground("ws1", "run1", resume, (...args: unknown[]) => {
+    logged.push(args);
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(logged.length, 1);
+  assert.equal(logged[0][0], "orchestrator resume failed");
+  assert.equal(logged[0][1], error);
 });

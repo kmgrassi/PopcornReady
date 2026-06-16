@@ -20,6 +20,18 @@ const suitesResponse = {
 };
 
 const runResponse = {
+  run: {
+    id: "evalrun_latest",
+    source: "suite",
+    suiteId: "suite_story_quality",
+    generationMode: "prompts_only",
+    gitSha: "abc1234",
+    branch: "codex/eval-dashboard-e2e",
+    judgeModels: { "story_arc.v1": "fixture-judge" },
+    status: "succeeded",
+    createdAt,
+    completedAt: createdAt,
+  },
   evalRun: {
     id: "evalrun_latest",
     source: "suite",
@@ -36,8 +48,34 @@ const runResponse = {
   passRate: 0.75,
   previousRunId: "evalrun_previous",
   cases: [
-    { caseId: "case_launch", label: "Launch announcement" },
-    { caseId: "case_bakery", label: "Bakery rebuild" },
+    {
+      id: "case_launch",
+      suiteId: "suite_story_quality",
+      label: "Launch announcement",
+      stimulus: {
+        kind: "brief",
+        goal: "Launch a product",
+        targetLengthSec: 30,
+        style: "documentary",
+        aspectRatio: "16:9",
+      },
+      stagesToRun: ["creative_plan", "timeline_assembly"],
+      artifacts: [],
+    },
+    {
+      id: "case_bakery",
+      suiteId: "suite_story_quality",
+      label: "Bakery rebuild",
+      stimulus: {
+        kind: "brief",
+        goal: "Tell a recovery story",
+        targetLengthSec: 45,
+        style: "warm documentary",
+        aspectRatio: "16:9",
+      },
+      stagesToRun: ["creative_plan", "timeline_assembly"],
+      artifacts: [],
+    },
   ],
   stages: ["creative_plan", "timeline_assembly"],
   judgments: [
@@ -80,6 +118,7 @@ const runResponse = {
       stageType: "timeline_assembly",
     },
   ],
+  expectationResults: [],
   calibration: {
     matchRate: 0.88,
     labeledCases: 8,
@@ -87,13 +126,15 @@ const runResponse = {
 };
 
 const diffResponse = {
-  runId: "evalrun_latest",
+  baseRunId: "evalrun_latest",
   againstRunId: "evalrun_previous",
   flips: [
     {
       caseId: "case_bakery",
       caseLabel: "Bakery rebuild",
+      stageId: "case_bakery:timeline_assembly",
       stageType: "timeline_assembly",
+      evaluatorId: "timeline_assembly.v1",
       before: "pass",
       after: "needs_review",
     },
