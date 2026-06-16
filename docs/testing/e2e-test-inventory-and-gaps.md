@@ -9,8 +9,9 @@ the split app unless a legacy regression directly blocks migration.
 
 ## Current Coverage Snapshot
 
-- There is no browser end-to-end test harness in the repo today: no Playwright
-  or Cypress config, no `*.e2e.*` tests, and no `apps/web` route/component tests.
+- A first `apps/web` Playwright harness now exists with
+  `e2e/storyboard-editor.spec.ts`, covering the storyboard editor's
+  write-then-reload path.
 - Existing automated coverage is mostly backend and package-level Node tests:
   80 `*.test.ts(x)` / `*.spec.ts(x)` files total, including 65 under `apps/api`.
 - `apps/api` tests cover many API/service units, route handlers, storage,
@@ -253,10 +254,18 @@ Primary API contracts involved:
 - Storyboard route-group endpoints for scenes, beats, and panels where richer
   editor flows start using them.
 
-Current gap:
+Current coverage:
 
-- API storyboards have tests, but the editor’s multi-step browser state and save
-  contract are uncovered.
+- `apps/web/e2e/storyboard-editor.spec.ts` loads a seeded storyboard, edits
+  scene and beat fields, adds a scene, adds/removes beats, moves a beat across
+  scenes, saves through the real `PUT /api/v1/projects/:projectId/storyboard`
+  client path, and reloads to verify persisted data renders.
+
+Remaining gap:
+
+- API storyboards have tests, and the editor has initial browser coverage, but
+  richer reorder permutations and Supabase-backed sandbox seeding are still not
+  covered.
 
 ### 8. Project Watch
 
@@ -359,8 +368,9 @@ Current gap:
 
 P0 gaps:
 
-- No e2e harness or CI job exists. Add Playwright, app/API startup orchestration,
-  deterministic env files, fixtures, and a smoke command.
+- The first `apps/web` Playwright harness exists, but CI coverage is still
+  missing. Add API startup orchestration, deterministic env files, broader
+  fixtures, and a required smoke command.
 - Browser e2e does not yet consume the new Supabase test-sandbox lifecycle.
   Extend the existing tool-test sandbox approach for web fixtures: create a
   sandbox row, seed real rows under its `internal_test` workspace/project, and
@@ -379,8 +389,9 @@ P1 gaps:
   terminal success, and recovery hint.
 - Library collections are uncovered: pagination, filters, media viewer,
   visibility mutation, media URL refresh, and output watch links.
-- Storyboard editing is uncovered despite being a user-editable persistence
-  surface.
+- Storyboard editing has initial Playwright coverage for load, edit,
+  add/remove, cross-scene beat movement, save, and reload; remaining work is
+  broader reorder permutations and Supabase-backed sandbox fixtures.
 - Review revision/export/watch is uncovered end to end.
 - Eval dashboard and judgment action are uncovered.
 
