@@ -15,6 +15,30 @@ import {
   type ToolRegistry as OrchestratorRegistry,
 } from "@/lib/orchestrator";
 import type { ToolRegistry as RealToolRegistry } from "./registry";
+import type { ToolUsage } from "./types";
+
+function bullets(items: string[]): string {
+  return items.map((item) => `- ${item}`).join("\n");
+}
+
+// Compose a tool's base description with its structured usage guidance into the
+// single description string the orchestrator model sees each turn. Keeping the
+// composition here (the one real→model bridge) means tools author guidance as
+// structured data and the model still receives plain, readable text.
+export function composeToolDescription(description: string, usage?: ToolUsage): string {
+  if (!usage) return description;
+  const sections = [description];
+  if (usage.preconditions?.length) {
+    sections.push(`Preconditions:\n${bullets(usage.preconditions)}`);
+  }
+  if (usage.produces?.length) {
+    sections.push(`Produces:\n${bullets(usage.produces)}`);
+  }
+  if (usage.useWhen?.length) {
+    sections.push(`Use this when:\n${bullets(usage.useWhen)}`);
+  }
+  return sections.join("\n\n");
+}
 
 // The driver/engine context carries a workspaceId + optional actorId; the real
 // tools expect a full AuthContext. Synthesize a local-mode identity (the
@@ -51,7 +75,7 @@ function bridgeTool(real: RealToolRegistry, name: ToolName): OrchestratorToolDef
   const definition = real.get(name);
   return {
     name,
-    description: definition.description,
+    description: composeToolDescription(definition.description, definition.usage),
     inputSchema: definition.inputSchema,
     outputSchema: definition.outputSchema,
     requiredResourceIds: [],

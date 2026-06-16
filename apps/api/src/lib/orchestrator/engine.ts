@@ -248,6 +248,37 @@ export async function resumeOrchestratorRun(
   return driveGuarded(run, r);
 }
 
+// Project a persisted action into the compact result the model sees each turn.
+// Successful actions report only their produced assets; FAILED actions also carry
+// the tool wrapper's recovery guidance (why it failed, which requirements are
+// unmet, and which tool to call next). Without this the model sees only
+// "<tool>: failed" with no explanation and tends to blindly retry the same tool
+// — the loop that otherwise burns the whole turn budget on a rejected or
+// precondition-unmet stage until the run times out.
+const ERROR_GUIDANCE_FIELDS = [
+  "kind",
+  "message",
+  "recoverable",
+  "unmetRequirements",
+  "suggestedNextTools",
+] as const;
+
+function toPriorResult(action: RunActionSummary): Record<string, unknown> {
+  const base: Record<string, unknown> = {
+    tool: action.tool,
+    status: action.status,
+    outputAssetIds: action.outputAssetIds,
+  };
+  if (action.status === "failed" && action.error) {
+    const guidance: Record<string, unknown> = {};
+    for (const field of ERROR_GUIDANCE_FIELDS) {
+      if (action.error[field] !== undefined) guidance[field] = action.error[field];
+    }
+    base.error = guidance;
+  }
+  return base;
+}
+
 // Async tool jobs report their produced assets as { assetIds: string[] }.
 function jobAssetIds(result: unknown): string[] {
   if (result && typeof result === "object" && "assetIds" in result) {
@@ -293,11 +324,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       r.store.listRunActions(run.id),
       r.store.listRunGates(run.id),
     ]);
-    const priorResults = prior.map((action) => ({
-      tool: action.tool,
-      status: action.status,
-      outputAssetIds: action.outputAssetIds,
-    }));
+    const priorResults = prior.map(toPriorResult);
     const turnRegistry = registryForRejectedGate(r.registry, gates);
 
     let decision;

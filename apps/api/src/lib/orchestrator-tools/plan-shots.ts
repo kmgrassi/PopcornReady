@@ -154,6 +154,14 @@ export function createPlanShotsTool(
     name: "plan_shots",
     description:
       "Plan ordered scenes and beats from the project's brief and persist them as the active plan. Requires a brief first.",
+    usage: {
+      preconditions: ["An active project brief exists (call create_or_load_brief first)."],
+      produces: ["An ordered list of scenes and beats with stable ids, persisted as the active plan."],
+      useWhen: [
+        "The brief is ready and the story needs to be broken into concrete scenes and beats.",
+        "A plan-stage review was rejected and the scenes/beats need revising (pass feedback).",
+      ],
+    },
     inputSchema: planShotsInputSchema,
     outputSchema: planShotsOutputSchema,
     execution: "sync",

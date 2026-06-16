@@ -221,6 +221,16 @@ export function createPlanVisualAnchorsTool(
     name: "plan_visual_anchors",
     description:
       "Identify reusable character, location, and style anchors from the active shot plan and persist a typed visual-anchor plan. Requires plan_shots first.",
+    usage: {
+      preconditions: ["An active shot plan exists (call plan_shots first)."],
+      produces: [
+        "A typed visual-anchor plan: recurring characters, locations, and style anchors derived from the plan.",
+      ],
+      useWhen: [
+        "Scenes share recurring characters or locations that need consistent visuals across beats.",
+        "Before generating the storyboard or keyframes, so anchors can be reused for continuity.",
+      ],
+    },
     inputSchema: planVisualAnchorsInputSchema,
     outputSchema: planVisualAnchorsOutputSchema,
     execution: "sync",

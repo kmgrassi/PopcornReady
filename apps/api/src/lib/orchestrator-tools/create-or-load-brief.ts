@@ -99,6 +99,16 @@ export function createBriefTool(
     name: "create_or_load_brief",
     description:
       "Create the project's video brief from the user's prompt: structured goal, target length, aspect ratio, and optional platform/audience/style. Persists the brief as the project's active brief.",
+    usage: {
+      preconditions: ["None — this is the first step of a new video; no prior stage is required."],
+      produces: [
+        "A persisted, versioned project brief (goal, target length, aspect ratio, style) set as the project's active brief.",
+      ],
+      useWhen: [
+        "Starting a new video and no active brief exists yet.",
+        "The user changed the goal, length, aspect ratio, or audience and the brief must be revised before re-planning (pass revisionInstruction).",
+      ],
+    },
     inputSchema: createBriefInputSchema,
     outputSchema: createBriefOutputSchema,
     execution: "sync",
