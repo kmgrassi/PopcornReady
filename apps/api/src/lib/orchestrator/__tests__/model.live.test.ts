@@ -1,3 +1,10 @@
+// Load repo-root env files (.env.local / .env.<NODE_ENV> / .env) before anything
+// reads process.env, so a locally-stored OPENAI_API_KEY/ANTHROPIC_API_KEY is
+// picked up under `pnpm test` (tsx --test does not auto-load env files). Must be
+// the first import — its dotenv side effect has to run before the skip check and
+// the provider call below. Real process.env still wins (dotenv never overrides).
+import "@/env";
+
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -13,7 +20,9 @@ import { TOOL_NAMES } from "../types";
 // place we confirm the model wiring actually round-trips a provider call.
 //
 // It is SKIPPED unless the active provider's API key is present, so the default
-// `pnpm test` run stays green in CI without secrets. To run it:
+// `pnpm test` run stays green in CI without secrets. To run it, put the key in a
+// repo-root .env / .env.local (loaded via the import below) or pass it inline:
+//   pnpm --filter @popcorn/api test            # uses repo-root .env(.local)
 //   OPENAI_API_KEY=... pnpm --filter @popcorn/api test
 //   LLM_PROVIDER=anthropic ANTHROPIC_API_KEY=... pnpm --filter @popcorn/api test
 function liveLlmSkipReason(env: NodeJS.ProcessEnv = process.env): string | false {
