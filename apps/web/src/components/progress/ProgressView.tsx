@@ -498,14 +498,24 @@ export function ProgressView({
               ) : null}
               <div className={styles.reviewActionRow}>
                 {reviewActions ? (
-                  <button
-                    type="button"
-                    className={styles.secondaryButton}
-                    onClick={() => reviewActions.onReject(feedbackNote)}
-                    disabled={!!pending}
-                  >
-                    {pending === "reject" ? "Requesting..." : "Request changes"}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      className={styles.reviewCancelButton}
+                      onClick={reviewActions.onCancel}
+                      disabled={!!pending}
+                    >
+                      {pending === "cancel" ? "Canceling..." : "Cancel generation"}
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.secondaryButton}
+                      onClick={() => reviewActions.onReject(feedbackNote)}
+                      disabled={!!pending}
+                    >
+                      {pending === "reject" ? "Requesting..." : "Request changes"}
+                    </button>
+                  </>
                 ) : null}
                 <button
                   type="button"
