@@ -134,7 +134,12 @@ Produce the edit plan.`;
     cachedSystem: sys,
     user,
     schema: planSchema,
-    maxTokens: 2000,
+    // The largest structured output we emit (a full multi-scene/beat plan) and
+    // our only high-effort call. On reasoning models the reasoning tokens draw
+    // from this same budget, so a tight cap can exhaust it before the model emits
+    // return_result (surfacing as "Model did not call required tool"). Give it
+    // headroom well above the medium-effort calls (selectClips uses 8000).
+    maxTokens: 16000,
     effort: "high", // creative planning: goal -> structured storyboard/beats
   });
   // Honor the user's explicit aspect ratio choice.

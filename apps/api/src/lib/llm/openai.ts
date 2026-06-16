@@ -56,6 +56,22 @@ export function toOpenAITool(spec: ToolSpec): Record<string, unknown> {
 
 const STRUCTURED_RESULT_TOOL = "return_result";
 
+// A forced tool call occasionally comes back with no (or malformed) tool call —
+// the model emits reasoning/text and never invokes return_result. This is a
+// transient provider hiccup, but it otherwise classifies as
+// provider_failed/recoverable:false and kills the whole run. Retry the call once
+// before surfacing it. Scoped to this failure class only — real schema/auth
+// errors still fail fast.
+const STRUCTURED_RETRY_ATTEMPTS = 2;
+export function isMissingStructuredResultError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return (
+    message.includes("did not call required tool") ||
+    message.includes("invalid tool arguments") ||
+    message.includes("invalid tool input")
+  );
+}
+
 // OpenAI's function tool parameters reject several JSON Schema keywords that
 // our schemas use (minLength, minimum, ...). With strict:false the model still
 // follows the schema; we strip unsupported keywords so requests are accepted
@@ -171,7 +187,7 @@ export function createOpenAiLlmClient(deps: OpenAiDeps): LlmClient {
       description: "Return the structured result for this task.",
       parameters: sanitizeForOpenAI(args.schema),
     });
-    const res = await ensureCreate()({
+    const requestParams = {
       model: callModel,
       messages: [
         { role: "system", content: args.cachedSystem },
@@ -182,11 +198,21 @@ export function createOpenAiLlmClient(deps: OpenAiDeps): LlmClient {
       parallel_tool_calls: false,
       max_completion_tokens: args.maxTokens ?? 8000,
       ...reasoningParams(callModel, args.effort),
-    });
-    return toolInputFromOpenAIMessage<T>(
-      res?.choices?.[0]?.message,
-      STRUCTURED_RESULT_TOOL
-    );
+    };
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < STRUCTURED_RETRY_ATTEMPTS; attempt += 1) {
+      const res = await ensureCreate()(requestParams);
+      try {
+        return toolInputFromOpenAIMessage<T>(
+          res?.choices?.[0]?.message,
+          STRUCTURED_RESULT_TOOL
+        );
+      } catch (err) {
+        if (!isMissingStructuredResultError(err)) throw err;
+        lastErr = err;
+      }
+    }
+    throw lastErr;
   };
 
   return {
