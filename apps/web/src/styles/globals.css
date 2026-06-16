@@ -764,8 +764,10 @@
     grid-template-columns: 1fr auto;
   }
 
+  /* Tighten the nav row on mobile. The CTA-vs-secondary-anchor visibility
+     rules live with the CTA in AuthNavButton.module.css. */
   .web-shell-nav {
-    display: none;
+    gap: 8px;
   }
 
   .dashboard-shell {
@@ -2389,81 +2391,6 @@ button.eval-card-link[aria-pressed="true"] {
   padding: 0 24px 80px;
 }
 
-.lp-nav {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  background: var(--nav-bg);
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid var(--border);
-  margin: 0 -24px;
-  padding: 0 24px;
-}
-
-.lp-nav-inner {
-  max-width: 1080px;
-  margin: 0 auto;
-  height: 60px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.lp-logo {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  font-size: 20px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-}
-
-.lp-logo-mark {
-  width: 28px;
-  height: 28px;
-  color: var(--accent);
-}
-
-.lp-nav-links {
-  display: flex;
-  align-items: center;
-  gap: 22px;
-}
-
-.lp-nav-links a {
-  color: var(--muted);
-  text-decoration: none;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.lp-nav-links a:hover {
-  color: var(--text);
-}
-
-.lp-nav-cta {
-  background: var(--accent);
-  color: var(--button-text) !important;
-  border-radius: 8px;
-  padding: 8px 14px;
-  font-weight: 700 !important;
-}
-
-.lp-nav-button {
-  appearance: none;
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  padding: 0;
-  font: inherit;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.lp-nav-button:hover {
-  color: var(--text);
-}
-
 .auth-page {
   min-height: 100vh;
   display: grid;
@@ -3183,112 +3110,11 @@ button.eval-card-link[aria-pressed="true"] {
   line-height: 1.4;
 }
 
-.lp-examples {
-  padding: 8px 0 30px;
-}
-
-.lp-examples-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: flex-end;
-  margin-bottom: 14px;
-}
-
-.lp-examples-head h2 {
-  margin: 0 0 4px;
-  color: var(--text);
-  font-size: 22px;
-  letter-spacing: 0;
-  text-transform: none;
-}
-
-.lp-examples-head p {
-  margin: 0;
-  color: var(--muted);
-}
-
-.lp-examples-head a {
-  color: var(--accent-2);
-  font-weight: 700;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.lp-example-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 34px;
-  max-width: 760px;
-  margin: 0 auto;
-}
-
-.lp-example-card {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--media-panel);
-  overflow: hidden;
-}
-
-.lp-example-video {
-  aspect-ratio: 1;
-  width: 100%;
-  display: block;
-  object-fit: cover;
-  background: var(--media-bg);
-}
-
-.lp-example-meta {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  border-top: 1px solid var(--border);
-}
-
-.lp-example-meta span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.lp-example-meta a {
-  flex: 0 0 auto;
-  color: var(--accent-2);
-  font-size: 13px;
-  font-weight: 700;
-  text-decoration: none;
-}
-
-@media (max-width: 900px) {
-  .lp-example-grid {
-    grid-template-columns: repeat(2, 1fr);
-    max-width: none;
-    gap: 24px;
-  }
-}
-
-@media (max-width: 560px) {
-  .lp-example-grid {
-    grid-template-columns: 1fr;
-    gap: 20px;
-  }
-}
-
-.lp-example-empty {
-  border: 1px dashed var(--border);
-  border-radius: 8px;
-  color: var(--muted);
-  text-align: center;
-  padding: 20px;
-}
-
 .lp-section {
   padding: 56px 0 0;
+  /* Keep anchored sections (#how, #pricing) clear of the sticky header when
+     jumped to from the nav. */
+  scroll-margin-top: 80px;
 }
 
 .lp-section-title {
@@ -3550,23 +3376,6 @@ button.eval-card-link[aria-pressed="true"] {
 .logo-mark-fill {
   fill: none;
   stroke-width: 8;
-}
-
-.lp-logo-mark .logo-mark-body {
-  opacity: 0.2;
-}
-
-.lp-logo-mark .logo-mark-shadow {
-  color: color-mix(in srgb, var(--accent) 42%, #000000);
-  opacity: 0.28;
-}
-
-.lp-logo-mark .logo-mark-highlight {
-  opacity: 0.34;
-}
-
-.lp-logo-mark .logo-mark-fill {
-  color: var(--accent);
 }
 
 .lp-heat-mark .logo-mark-shadow {
@@ -3911,28 +3720,6 @@ button.eval-card-link[aria-pressed="true"] {
   min-width: 180px;
 }
 
-.lp-footer {
-  margin-top: 56px;
-  padding-top: 24px;
-  border-top: 1px solid var(--border);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.lp-footer a {
-  color: var(--muted);
-  text-decoration: none;
-}
-
-.lp-footer a:hover {
-  color: var(--text);
-}
-
 @media (max-width: 860px) {
   .lp-hero h1 {
     font-size: 40px;
@@ -3941,9 +3728,6 @@ button.eval-card-link[aria-pressed="true"] {
   .lp-grid,
   .lp-pricing {
     grid-template-columns: 1fr 1fr;
-  }
-  .lp-nav-links {
-    gap: 14px;
   }
   .theme-option-full {
     display: none;
@@ -3954,25 +3738,6 @@ button.eval-card-link[aria-pressed="true"] {
 }
 
 @media (max-width: 560px) {
-  .lp-nav-inner {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    height: auto;
-    min-height: 60px;
-    gap: 8px;
-    padding: 8px 0;
-  }
-  .lp-logo {
-    align-self: center;
-    white-space: nowrap;
-  }
-  .lp-nav-links {
-    display: contents;
-  }
-  .lp-nav-cta {
-    grid-column: 2;
-    align-self: center;
-  }
   .theme-switcher {
     grid-column: 1 / -1;
     justify-self: end;
@@ -3998,9 +3763,6 @@ button.eval-card-link[aria-pressed="true"] {
   }
   .lp-template-generate {
     justify-self: center;
-  }
-  .lp-nav-links a:not(.lp-nav-cta) {
-    display: none;
   }
 }
 

@@ -225,8 +225,8 @@ export function HomePage() {
         <section className="lp-hero">
           <span className="lp-eyebrow">The agent harness for video</span>
           <h1>
-            Codex writes the code.{" "}
-            <span className="lp-accent">Popcorn Ready makes the video.</span>
+            Like Claude Code,{" "}
+            <span className="lp-accent">but for video.</span>
           </h1>
           <p className="lp-lede">
             Coding harnesses turned software into something you direct instead of
@@ -385,19 +385,6 @@ export function HomePage() {
           </p>
         </section>
 
-        <section className="lp-examples lp-section" aria-label="Example renders">
-          <div className="lp-examples-head">
-            <div>
-              <h2>Example renders</h2>
-              <p>Local videos created with this workspace.</p>
-            </div>
-            <Link to="/studio">Open studio</Link>
-          </div>
-          <div className="lp-example-empty">
-            Exports will appear here after the first local render.
-          </div>
-        </section>
-
         <section className="lp-cta">
           <h2>Open source. Run it yourself.</h2>
           <p>
@@ -425,13 +412,6 @@ export function HomePage() {
           </div>
         </section>
       </main>
-
-      <footer className="lp-footer">
-        <span>Popcorn Ready &mdash; the agent harness for video</span>
-        <a href={GITHUB_URL} target="_blank" rel="noreferrer">
-          {GITHUB_URL.replace("https://", "")}
-        </a>
-      </footer>
     </div>
   );
 }
