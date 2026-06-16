@@ -30,6 +30,15 @@ const apiPort = Number(e2eEnv.PLAYWRIGHT_API_PORT ?? e2eEnv.PORT ?? 4100);
 const baseURL = e2eEnv.PLAYWRIGHT_BASE_URL || `http://127.0.0.1:${webPort}`;
 const apiURL = e2eEnv.VITE_API_URL || `http://127.0.0.1:${apiPort}`;
 const { VITE_API_URL: _clientApiURL, ...webE2EEnv } = e2eEnv;
+const browserAuthDisabledEnv = {
+  VITE_SUPABASE_ENV: "",
+  VITE_SUPABASE_URL: "",
+  VITE_SUPABASE_ANON_KEY: "",
+  VITE_SUPABASE_DEV_URL: "",
+  VITE_SUPABASE_DEV_ANON_KEY: "",
+  VITE_SUPABASE_PROD_URL: "",
+  VITE_SUPABASE_PROD_ANON_KEY: "",
+};
 
 export default defineConfig({
   testDir: "./e2e",
@@ -59,6 +68,7 @@ export default defineConfig({
       cwd: repoRoot,
       env: {
         ...webE2EEnv,
+        ...browserAuthDisabledEnv,
         PLAYWRIGHT_BASE_URL: baseURL,
         PLAYWRIGHT_API_PORT: String(apiPort),
       },

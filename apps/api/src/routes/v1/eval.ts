@@ -5,7 +5,7 @@ import { bearerToken } from "@/lib/api/v1/auth";
 import type { HandlerCtx } from "@/lib/api/v1/handler";
 import {
   diffRuns,
-  getRunDetail,
+  getDashboardRunDetail,
   getSuiteDetail,
   judgeArtifact,
   listSuites,
@@ -115,7 +115,7 @@ evalRouter.get(
   route(async (ctx, params) => {
     await requireEvalAdmin(ctx);
     const runId = requireParam(params, "runId");
-    const detail = await getRunDetail(runId);
+    const detail = await getDashboardRunDetail(runId);
     return { status: 200, body: detail, headers: NO_STORE_HEADERS };
   })
 );
