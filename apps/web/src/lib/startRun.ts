@@ -132,12 +132,25 @@ async function registerSelectedFootage(
   return visualAssetIds;
 }
 
+function assertUploadDraftHasVisualFootage(draft: BriefDraft): void {
+  if (draft.footageChoice !== "upload") return;
+  const hasVisualFootage = draft.selectedFootage.some((selected) => {
+    const kind = assetKindForFile(selected.file);
+    return kind === "video" || kind === "image";
+  });
+  if (!hasVisualFootage) {
+    throw new Error("Select at least one video or image before generating with footage.");
+  }
+}
+
 /**
  * Create the project, kick off a prompt generation run, and return the ids the
  * shell needs to poll. Throws on any API failure or a missing run id so the
  * caller can surface the error.
  */
 export async function createAndStartRun(draft: BriefDraft): Promise<StartRunResult> {
+  assertUploadDraftHasVisualFootage(draft);
+
   const brief = briefInputFromDraft(draft);
   const reviewGates: GateableGenerationStageType[] = draft.reviewGates;
 
