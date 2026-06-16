@@ -80,9 +80,9 @@ const GENERATION_STAGE_TYPES: GenerationStageType[] = [
   "creative_plan",
   "storyboard",
   "asset_generation",
-  "clip_generation",
+  "audio_generation",
   "timeline_assembly",
-  "final_export",
+  "export",
 ];
 
 function isGenerationStageType(value: string): value is GenerationStageType {
