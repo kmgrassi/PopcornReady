@@ -381,8 +381,7 @@ function projectStages(run: OrchestratorRun, actions: RunActionSummary[]): Gener
   return [...grouped.entries()]
     .map(([type, stageActions]) => {
       const latest = stageActions.at(-1);
-      const failed = stageActions.find((action) => action.status === "failed");
-      const status = failed ? "failed" : latest ? actionStatus(latest.status) : "queued";
+      const status = latest ? actionStatus(latest.status) : "queued";
       return {
         stageId: stageId(run.id, type),
         runId: run.id,
@@ -398,7 +397,7 @@ function projectStages(run: OrchestratorRun, actions: RunActionSummary[]): Gener
         artifactIds: stageActions.flatMap((action) => action.outputAssetIds),
         createdAt: stageActions[0]?.createdAt ?? run.createdAt,
         updatedAt: latest?.createdAt ?? run.updatedAt,
-        error: toErrorSummary(failed?.error),
+        error: latest?.status === "failed" ? toErrorSummary(latest.error) : undefined,
       };
     })
     .sort((a, b) => a.order - b.order);
@@ -461,6 +460,20 @@ function startRun(workspaceId: string, runId: string, actorId: string): void {
     agentId: "orchestrator",
   }).catch((err) => {
     console.error("orchestrator run failed", err);
+  });
+}
+
+export function resumeRunInBackground(
+  workspaceId: string,
+  runId: string,
+  resume: typeof resumeOrchestratorRun = resumeOrchestratorRun,
+  logError: typeof console.error = console.error
+): void {
+  void resume(runId, {
+    workspaceId,
+    agentId: "orchestrator",
+  }).catch((err) => {
+    logError("orchestrator resume failed", err);
   });
 }
 
@@ -568,7 +581,7 @@ orchestratorRunsRouter.post(
     const gate = gates.find((candidate) => candidate.status === "reached");
     if (gate) {
       await resolveGate(gate.id, "approved");
-      await resumeOrchestratorRun(runId, { workspaceId: auth.workspaceId });
+      resumeRunInBackground(auth.workspaceId, runId);
     }
     return { status: 202, body: await assembleRunDetail(runId, projectId) };
   })
@@ -585,7 +598,7 @@ orchestratorRunsRouter.post(
     const gate = gates.find((candidate) => candidate.status === "reached");
     if (gate) {
       await resolveGate(gate.id, "rejected");
-      await resumeOrchestratorRun(runId, { workspaceId: auth.workspaceId });
+      resumeRunInBackground(auth.workspaceId, runId);
     }
     return { status: 202, body: await assembleRunDetail(runId, projectId) };
   })

@@ -264,8 +264,9 @@ export async function listRunGates(runId: string): Promise<OrchestratorRunGate[]
   return ((data as OrchestratorRunGateRow[]) ?? []).map(mapGate);
 }
 
-// Mark the pending gate for a stage as reached (the loop arrived at it). Returns
-// the gate, or null if there is no pending gate for that stage.
+// Mark the gate for a stage as reached (the loop arrived at it). Pending gates
+// reach their first review stop; rejected gates reach the review stop after a
+// regeneration pass.
 export async function markGateReached(
   runId: string,
   stage: string
@@ -278,7 +279,7 @@ export async function markGateReached(
       .update({ status: "reached", updated_at: new Date().toISOString() })
       .eq("orchestrator_run_id", runId)
       .eq("stage", stage)
-      .eq("status", "pending")
+      .in("status", ["pending", "rejected"])
       .select("*")
       .maybeSingle()
   );

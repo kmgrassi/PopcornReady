@@ -5,7 +5,10 @@ import type {
   OrchestratorRun,
   RunActionSummary,
 } from "@/lib/api/v1/orchestrator-store";
-import { projectRunDetailFromParts } from "../orchestrator-runs";
+import type { resumeOrchestratorRun } from "@/lib/orchestrator/engine";
+import { projectRunDetailFromParts, resumeRunInBackground } from "../orchestrator-runs";
+
+type Resume = typeof resumeOrchestratorRun;
 
 function runFixture(overrides: Partial<OrchestratorRun> = {}): OrchestratorRun {
   return {
@@ -74,4 +77,90 @@ test("surfaces orchestrator success as ready once export_video produced output",
       stageId: "run_1:export",
     },
   ]);
+});
+
+test("projects a regenerated stage from the latest action instead of stale failures", () => {
+  const payload = projectRunDetailFromParts(
+    runFixture({ status: "waiting" }),
+    [
+      {
+        id: "gate_1",
+        orchestratorRunId: "run_1",
+        stage: "create_or_load_brief",
+        status: "reached",
+        createdAt: "2026-06-15T00:00:00.000Z",
+        updatedAt: "2026-06-15T00:00:03.000Z",
+      },
+    ],
+    [
+      actionFixture("create_or_load_brief", {
+        id: "failed_brief",
+        status: "failed",
+        error: { kind: "invalid_input", message: "The request body is invalid.", recoverable: true },
+        createdAt: "2026-06-15T00:00:01.000Z",
+      }),
+      actionFixture("create_or_load_brief", {
+        id: "applied_brief",
+        status: "applied",
+        outputAssetIds: ["brief_asset_2"],
+        createdAt: "2026-06-15T00:00:02.000Z",
+      }),
+    ]
+  );
+
+  assert.equal(payload.run.status, "running");
+  assert.equal(payload.run.reviewGate?.stageType, "brief_intake");
+  assert.equal(payload.stages[0]?.status, "succeeded");
+  assert.equal(payload.stages[0]?.error, undefined);
+  assert.deepEqual(payload.stages[0]?.artifactIds, ["brief_asset_2"]);
+});
+
+test("resumeRunInBackground starts resume and returns before it settles", async () => {
+  let resolveResume: (() => void) | undefined;
+  let resumeStarted = false;
+  let resumeSettled = false;
+  const resume: Resume = async (_runId, deps) => {
+    resumeStarted = true;
+    assert.equal(deps.workspaceId, "ws1");
+    assert.equal(deps.agentId, "orchestrator");
+    await new Promise<void>((resolve) => {
+      resolveResume = resolve;
+    });
+    resumeSettled = true;
+    return {
+      id: "run1",
+      schemaVersion: "orchestrator_run.v1",
+      projectId: "proj1",
+      status: "succeeded",
+      inputSummary: "done",
+      spentUsd: 0,
+      createdAt: "t0",
+      updatedAt: "t1",
+    };
+  };
+
+  resumeRunInBackground("ws1", "run1", resume);
+
+  assert.equal(resumeStarted, true);
+  assert.equal(resumeSettled, false, "caller must not wait for resume completion");
+  resolveResume?.();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(resumeSettled, true);
+});
+
+test("resumeRunInBackground logs background resume failures", async () => {
+  const error = new Error("model timeout");
+  const logged: unknown[][] = [];
+  const resume: Resume = async () => {
+    throw error;
+  };
+
+  resumeRunInBackground("ws1", "run1", resume, (...args: unknown[]) => {
+    logged.push(args);
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(logged.length, 1);
+  assert.equal(logged[0][0], "orchestrator resume failed");
+  assert.equal(logged[0][1], error);
 });
