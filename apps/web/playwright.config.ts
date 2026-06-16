@@ -25,8 +25,18 @@ const e2eEnv = {
   ...process.env,
 };
 
-const webPort = Number(e2eEnv.PLAYWRIGHT_WEB_PORT ?? 3100);
-const apiPort = Number(e2eEnv.PLAYWRIGHT_API_PORT ?? e2eEnv.PORT ?? 4100);
+const webPort = Number(
+  e2eEnv.PLAYWRIGHT_WEB_PORT ?? e2eEnv.POPCORN_E2E_WEB_PORT ?? 3100,
+);
+const authMode = (
+  e2eEnv.POPCORN_E2E_AUTH_MODE ??
+  e2eEnv.AUTH_MODE ??
+  "local"
+).toLowerCase();
+const hostedAuthMode = authMode === "supabase";
+const apiPort = Number(
+  e2eEnv.POPCORN_E2E_API_PORT ?? e2eEnv.PLAYWRIGHT_API_PORT ?? e2eEnv.PORT ?? 4100,
+);
 const baseURL = e2eEnv.PLAYWRIGHT_BASE_URL || `http://127.0.0.1:${webPort}`;
 const apiURL = e2eEnv.VITE_API_URL || `http://127.0.0.1:${apiPort}`;
 const { VITE_API_URL: _clientApiURL, ...webE2EEnv } = e2eEnv;
@@ -39,6 +49,37 @@ const browserAuthDisabledEnv = {
   VITE_SUPABASE_PROD_URL: "",
   VITE_SUPABASE_PROD_ANON_KEY: "",
 };
+
+process.env.POPCORN_E2E_AUTH_MODE = authMode;
+process.env.POPCORN_E2E_API_PORT = String(apiPort);
+process.env.VITE_API_URL = apiURL;
+
+const apiServerEnv = {
+  ...e2eEnv,
+  AUTH_MODE: authMode,
+  PORT: String(apiPort),
+  VITE_API_URL: apiURL,
+};
+
+const webServerEnv = hostedAuthMode
+  ? {
+      ...e2eEnv,
+      AUTH_MODE: authMode,
+      PLAYWRIGHT_BASE_URL: baseURL,
+      PLAYWRIGHT_API_PORT: String(apiPort),
+      VITE_API_URL: apiURL,
+    }
+  : {
+      ...webE2EEnv,
+      ...browserAuthDisabledEnv,
+      AUTH_MODE: authMode,
+      PLAYWRIGHT_BASE_URL: baseURL,
+      PLAYWRIGHT_API_PORT: String(apiPort),
+    };
+
+const webCommand = hostedAuthMode
+  ? `pnpm --filter @popcorn/web exec vite build && pnpm --filter @popcorn/web exec vite preview --host 127.0.0.1 --port ${webPort} --strictPort`
+  : `pnpm --filter @popcorn/web exec vite --host 127.0.0.1 --port ${webPort} --strictPort`;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -55,23 +96,15 @@ export default defineConfig({
     {
       command: "pnpm --filter @popcorn/api start",
       cwd: repoRoot,
-      env: {
-        ...e2eEnv,
-        VITE_API_URL: apiURL,
-      },
+      env: apiServerEnv,
       url: `${apiURL}/api/v1/health`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },
     {
-      command: `pnpm --filter @popcorn/web exec vite --host 127.0.0.1 --port ${webPort} --strictPort`,
+      command: webCommand,
       cwd: repoRoot,
-      env: {
-        ...webE2EEnv,
-        ...browserAuthDisabledEnv,
-        PLAYWRIGHT_BASE_URL: baseURL,
-        PLAYWRIGHT_API_PORT: String(apiPort),
-      },
+      env: webServerEnv,
       url: baseURL,
       reuseExistingServer: false,
       timeout: 120_000,

@@ -9,6 +9,7 @@
     "start": "vite preview",
     "preview": "vite preview",
     "test:e2e": "playwright test",
+    "test:e2e:hosted": "POPCORN_E2E_AUTH_MODE=supabase playwright test e2e/auth-hosted.spec.ts",
     "typecheck": "tsc --noEmit",
     "test:e2e:headed": "playwright test --headed"
   },
