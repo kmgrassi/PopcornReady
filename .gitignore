@@ -19,5 +19,7 @@ yarn.lock
 /public/exports
 /public/generated
 *.log
+apps/web/playwright-report
+apps/web/test-results
 .DS_Store
 *.tsbuildinfo

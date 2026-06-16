@@ -26,6 +26,7 @@ interface ProgressViewProps {
   run: GenerationRun;
   stages: GenerationStage[];
   stageItems?: GenerationStageItem[];
+  studioReturnPath?: string | null;
   reviewActions?: {
     pending?: "approve" | "reject" | "cancel";
     error?: string | null;
@@ -181,6 +182,7 @@ export function ProgressView({
   run,
   stages,
   stageItems = [],
+  studioReturnPath,
   reviewActions,
   cancelAction,
   alternateRuns,
@@ -332,25 +334,30 @@ export function ProgressView({
             </button>
           </div>
         </div>
-        {alternateRuns && alternateRuns.length > 0 ? (
-          <nav className={styles.altRuns} aria-label="Other demo states">
-            <span className={styles.altRunsLabel}>View other states:</span>
-            <ul>
-              {alternateRuns.map((alt) => (
-                <li key={alt.runId}>
-                  <Link
-                    to={`/projects/${detail.run.projectId}/runs/${alt.runId}`}
-                    className={`${styles.altLink}${
-                      alt.runId === detail.run.runId ? ` ${styles.altLinkActive}` : ""
-                    }`}
-                  >
-                    {alt.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </nav>
-        ) : null}
+        <div className={styles.headerActions}>
+          <Link className={styles.secondaryButton} to={studioReturnPath ?? "/studio"}>
+            Back to studio
+          </Link>
+          {alternateRuns && alternateRuns.length > 0 ? (
+            <nav className={styles.altRuns} aria-label="Other demo states">
+              <span className={styles.altRunsLabel}>View other states:</span>
+              <ul>
+                {alternateRuns.map((alt) => (
+                  <li key={alt.runId}>
+                    <Link
+                      to={`/projects/${detail.run.projectId}/runs/${alt.runId}`}
+                      className={`${styles.altLink}${
+                        alt.runId === detail.run.runId ? ` ${styles.altLinkActive}` : ""
+                      }`}
+                    >
+                      {alt.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          ) : null}
+        </div>
       </header>
 
       <section className={styles.progressOverview} aria-label="Overall progress">

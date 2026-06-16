@@ -79,6 +79,10 @@ function RunProgress({
 
   const applyPayload = useCallback(
     (next: GenerationRunDetail) => {
+      if (next.run.status === "canceled") {
+        clearLastRunHint(projectId);
+        return;
+      }
       if (isTerminal(next.run.status)) {
         if (next.run.runId === runId) {
           writeLastRunHint(projectId, next.run);
@@ -156,6 +160,7 @@ function RunProgress({
       run={payload.run}
       stages={payload.stages}
       stageItems={payload.stageItems}
+      studioReturnPath={studioReturnPath}
       cancelAction={
         !payload.run.reviewGate && !isTerminal(payload.run.status)
           ? {
