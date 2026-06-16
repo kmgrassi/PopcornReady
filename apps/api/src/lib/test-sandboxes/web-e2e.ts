@@ -1,5 +1,6 @@
 import {
   assertDeletableSandboxName,
+  assertSandboxMatchesTeardownRequest,
   createTestSandbox,
   sweepTestSandboxes,
   teardownTestSandbox,
@@ -8,6 +9,8 @@ import {
 
 export const WEB_E2E_WORKSPACE_PREFIX = "__webe2e__";
 export const WEB_E2E_SANDBOX_PURPOSE = "web-e2e";
+
+export { assertSandboxMatchesTeardownRequest };
 
 export interface WebE2ESandbox extends TestSandbox {
   purpose: typeof WEB_E2E_SANDBOX_PURPOSE;
@@ -37,7 +40,11 @@ export function teardownWebE2ESandbox(sandbox: {
   workspaceId: string;
   workspaceName: string;
 }): Promise<boolean> {
-  return teardownTestSandbox({ ...sandbox, prefix: WEB_E2E_WORKSPACE_PREFIX });
+  return teardownTestSandbox({
+    ...sandbox,
+    prefix: WEB_E2E_WORKSPACE_PREFIX,
+    purpose: WEB_E2E_SANDBOX_PURPOSE,
+  });
 }
 
 export function sweepWebE2ESandboxes(): Promise<number> {

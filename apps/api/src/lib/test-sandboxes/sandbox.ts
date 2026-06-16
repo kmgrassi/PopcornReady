@@ -30,9 +30,55 @@ export interface SweepTestSandboxesOptions {
   purpose: string;
 }
 
+export interface TestSandboxTeardownRow {
+  workspace_id: string;
+  purpose: string;
+  workspaces:
+    | {
+        name: string;
+        purpose: string;
+      }
+    | {
+        name: string;
+        purpose: string;
+      }[];
+}
+
 export function assertDeletableSandboxName(prefix: string, name: string): void {
   if (!prefix || !name || !name.startsWith(prefix)) {
     throw new Error(`Refusing to delete workspace "${name}": not a ${prefix} sandbox.`);
+  }
+}
+
+export function assertSandboxMatchesTeardownRequest(
+  row: TestSandboxTeardownRow | null | undefined,
+  request: {
+    workspaceId: string;
+    workspaceName: string;
+    prefix: string;
+    purpose?: string;
+  }
+): void {
+  assertDeletableSandboxName(request.prefix, request.workspaceName);
+  if (!row) {
+    throw new Error("Refusing to delete sandbox: sandbox row was not found.");
+  }
+  const workspace = Array.isArray(row.workspaces) ? row.workspaces[0] : row.workspaces;
+  if (!workspace) {
+    throw new Error("Refusing to delete sandbox: workspace row was not found.");
+  }
+  if (row.workspace_id !== request.workspaceId) {
+    throw new Error("Refusing to delete sandbox: workspace id does not match sandbox row.");
+  }
+  if (workspace.name !== request.workspaceName) {
+    throw new Error("Refusing to delete sandbox: workspace name does not match sandbox row.");
+  }
+  if (workspace.purpose !== "internal_test") {
+    throw new Error("Refusing to delete sandbox: workspace is not internal_test.");
+  }
+  assertDeletableSandboxName(request.prefix, workspace.name);
+  if (request.purpose && row.purpose !== request.purpose) {
+    throw new Error("Refusing to delete sandbox: sandbox purpose does not match request.");
   }
 }
 
@@ -90,11 +136,22 @@ export async function teardownTestSandbox(sandbox: {
   workspaceId: string;
   workspaceName: string;
   prefix: string;
+  purpose?: string;
 }): Promise<boolean> {
   assertDeletableSandboxName(sandbox.prefix, sandbox.workspaceName);
   const db = getServiceSupabase();
 
   if (sandbox.sandboxId) {
+    const { data: row, error: rowError } = await db
+      .from("test_sandboxes")
+      .select("workspace_id,purpose,workspaces!inner(name,purpose)")
+      .eq("id", sandbox.sandboxId)
+      .maybeSingle();
+    if (rowError) {
+      throw new Error(`teardownTestSandbox failed to verify sandbox: ${rowError.message}`);
+    }
+    assertSandboxMatchesTeardownRequest(row as TestSandboxTeardownRow | null, sandbox);
+
     const { data, error } = await db.rpc("delete_test_sandbox", {
       p_sandbox_id: sandbox.sandboxId,
     });
