@@ -3,15 +3,21 @@
 // exercises only the routing decision (orchestratorModel.chooseTool) — no engine
 // loop, no tool execution, no DB. See docs/scopes/orchestrator-decision-evals.md.
 
+import { createDefaultToolRegistry } from "@/lib/orchestrator-tools/default-registry";
+import { toOrchestratorRegistry } from "@/lib/orchestrator-tools/to-orchestrator-registry";
 import { orchestratorModel, type OrchestratorModel } from "../model";
-import { createToolRegistry, type ToolRegistry } from "../registry";
+import { type ToolRegistry } from "../registry";
 import type { OrchestratorModelDecision, ToolName } from "../types";
 import type { DecisionScenario, SampleOutcome, ScenarioResult } from "./types";
 
-// Real tool descriptions/schemas (so the model reasons well), restricted to the
-// scenario's available tools. Execution is never invoked here.
+// Build the SAME registry production uses (engine.ts): the wired tools carry
+// their composed schema + precondition/usage guidance (e.g. plan_shots' "requires
+// a brief first"), so the model reasons over the real prompt surface rather than
+// generic stubs. `includeStubs` fills the rest of the 14-tool vocabulary so
+// scenarios can still route through not-yet-wired stages (clip, export, …).
+// Restricted to the scenario's available tools; execution is never invoked here.
 function registryFor(tools: ToolName[]): ToolRegistry {
-  const full = createToolRegistry();
+  const full = toOrchestratorRegistry(createDefaultToolRegistry(), { includeStubs: true });
   const map: ToolRegistry = new Map();
   for (const tool of tools) {
     const def = full.get(tool);
