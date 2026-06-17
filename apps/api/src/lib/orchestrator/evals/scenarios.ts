@@ -21,6 +21,7 @@ const script = applied("draft_script");
 const plan = applied("plan_shots", "plan_asset");
 const anchorPlan = applied("plan_visual_anchors");
 const anchor = applied("generate_anchor", "anchor_asset");
+const poster = applied("generate_poster", "poster_asset");
 const storyboard = applied("generate_storyboard");
 const keyframe = applied("generate_keyframe", "keyframe_asset");
 const clip = applied("generate_clip", "clip_asset");
@@ -46,17 +47,17 @@ export const FORWARD_CHAIN: DecisionScenario[] = [
   },
   {
     id: "step2_after_brief",
-    description: "Brief exists → move into story/plan development.",
+    description: "Brief exists → generate early poster art or move into story/plan development.",
     inputSummary: GOAL,
     priorResults: [brief],
     availableTools: ALL_TOOLS,
-    expect: { type: "tool_call", oneOf: ["develop_story_blueprint", "draft_script", "plan_shots"] },
+    expect: { type: "tool_call", oneOf: ["generate_poster", "develop_story_blueprint", "draft_script", "plan_shots"] },
   },
   {
     id: "step3_after_plan",
     description: "Plan exists → prepare the visual references.",
     inputSummary: GOAL,
-    priorResults: [brief, blueprint, script, plan],
+    priorResults: [brief, poster, blueprint, script, plan],
     availableTools: ALL_TOOLS,
     expect: { type: "tool_call", oneOf: ["plan_visual_anchors", "generate_anchor", "generate_storyboard"] },
   },
@@ -64,7 +65,7 @@ export const FORWARD_CHAIN: DecisionScenario[] = [
     id: "step4_after_anchors",
     description: "Anchors exist → storyboard / keyframes next.",
     inputSummary: GOAL,
-    priorResults: [brief, blueprint, script, plan, anchorPlan, anchor],
+    priorResults: [brief, poster, blueprint, script, plan, anchorPlan, anchor],
     availableTools: ALL_TOOLS,
     expect: { type: "tool_call", oneOf: ["generate_storyboard", "generate_keyframe", "generate_anchor"] },
   },
@@ -72,7 +73,7 @@ export const FORWARD_CHAIN: DecisionScenario[] = [
     id: "step5_after_keyframes",
     description: "Keyframes exist → generate the clips.",
     inputSummary: GOAL,
-    priorResults: [brief, blueprint, script, plan, anchorPlan, anchor, storyboard, keyframe],
+    priorResults: [brief, poster, blueprint, script, plan, anchorPlan, anchor, storyboard, keyframe],
     availableTools: ALL_TOOLS,
     expect: { type: "tool_call", oneOf: ["generate_keyframe", "generate_clip"] },
   },
@@ -80,7 +81,7 @@ export const FORWARD_CHAIN: DecisionScenario[] = [
     id: "step6_after_clips",
     description: "Clips exist, no audio yet → audio or assemble (or more clips).",
     inputSummary: GOAL,
-    priorResults: [brief, blueprint, script, plan, anchorPlan, anchor, storyboard, keyframe, clip],
+    priorResults: [brief, poster, blueprint, script, plan, anchorPlan, anchor, storyboard, keyframe, clip],
     availableTools: ALL_TOOLS,
     expect: { type: "tool_call", oneOf: ["generate_clip", "generate_audio", "assemble_timeline"] },
   },
@@ -88,7 +89,7 @@ export const FORWARD_CHAIN: DecisionScenario[] = [
     id: "step7_after_audio",
     description: "Clips + audio exist → assemble the timeline.",
     inputSummary: GOAL,
-    priorResults: [brief, blueprint, script, plan, anchorPlan, anchor, storyboard, keyframe, clip, audio],
+    priorResults: [brief, poster, blueprint, script, plan, anchorPlan, anchor, storyboard, keyframe, clip, audio],
     availableTools: ALL_TOOLS,
     expect: { type: "tool_call", oneOf: ["assemble_timeline", "generate_clip"] },
   },
@@ -96,7 +97,7 @@ export const FORWARD_CHAIN: DecisionScenario[] = [
     id: "step8_after_assemble",
     description: "Timeline assembled → critique or export.",
     inputSummary: GOAL,
-    priorResults: [brief, blueprint, script, plan, anchorPlan, anchor, storyboard, keyframe, clip, audio, timeline],
+    priorResults: [brief, poster, blueprint, script, plan, anchorPlan, anchor, storyboard, keyframe, clip, audio, timeline],
     availableTools: ALL_TOOLS,
     expect: { type: "tool_call", oneOf: ["critique_timeline", "export_video"] },
   },
@@ -104,7 +105,7 @@ export const FORWARD_CHAIN: DecisionScenario[] = [
     id: "step9_after_critique",
     description: "Cut critiqued → export the final video.",
     inputSummary: GOAL,
-    priorResults: [brief, blueprint, script, plan, anchorPlan, anchor, storyboard, keyframe, clip, audio, timeline, critique],
+    priorResults: [brief, poster, blueprint, script, plan, anchorPlan, anchor, storyboard, keyframe, clip, audio, timeline, critique],
     availableTools: ALL_TOOLS,
     expect: { type: "tool_call", oneOf: ["export_video"] },
   },
@@ -112,7 +113,7 @@ export const FORWARD_CHAIN: DecisionScenario[] = [
     id: "step10_after_export",
     description: "Video exported → the run is complete (no tool).",
     inputSummary: GOAL,
-    priorResults: [brief, blueprint, script, plan, anchorPlan, anchor, storyboard, keyframe, clip, audio, timeline, critique, exported],
+    priorResults: [brief, poster, blueprint, script, plan, anchorPlan, anchor, storyboard, keyframe, clip, audio, timeline, critique, exported],
     availableTools: ALL_TOOLS,
     expect: { type: "done" },
   },

@@ -7,6 +7,7 @@ export type ToolName =
   | "plan_shots"
   | "plan_visual_anchors"
   | "generate_anchor"
+  | "generate_poster"
   | "generate_storyboard"
   | "generate_keyframe"
   | "generate_clip"
@@ -227,6 +228,8 @@ export function toolForRejectedStage(stageType?: string): ToolName | undefined {
       return "plan_visual_anchors";
     case "storyboard":
       return "generate_storyboard";
+    case "poster":
+      return "generate_poster";
     case "keyframe":
     case "keyframes":
       return "generate_keyframe";
@@ -408,6 +411,7 @@ function chooseGenerationTool(failedTool: ToolName): ToolName {
     failedTool === "generate_keyframe" ||
     failedTool === "generate_audio" ||
     failedTool === "generate_anchor" ||
+    failedTool === "generate_poster" ||
     failedTool === "generate_storyboard"
   ) {
     return failedTool;

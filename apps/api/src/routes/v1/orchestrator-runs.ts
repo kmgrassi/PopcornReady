@@ -107,7 +107,7 @@ function requestedGateTools(body: unknown): string[] {
       case "storyboard":
         return ["generate_storyboard"];
       case "asset_generation":
-        return ["generate_anchor", "generate_keyframe", "generate_clip"];
+        return ["generate_anchor", "generate_poster", "generate_keyframe", "generate_clip"];
       case "audio_generation":
         return ["generate_audio"];
       case "timeline_assembly":
@@ -233,6 +233,7 @@ function toolStage(tool: string): GenerationStageType {
     case "generate_storyboard":
       return "storyboard";
     case "generate_anchor":
+    case "generate_poster":
     case "generate_keyframe":
     case "generate_clip":
       return "asset_generation";
