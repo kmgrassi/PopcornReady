@@ -45,6 +45,9 @@ export function PlanningWorkspace({
 }: PlanningWorkspaceProps) {
   const [submitting, setSubmitting] = useState(false);
   const appliedDecisionRef = useRef(false);
+  const appliedFallbackRef = useRef(false);
+  const hookTouchedRef = useRef(false);
+  const visualTouchedRef = useRef(false);
   const planningQuery = useStudioPlanningDecisionsQuery(draft, Boolean(draft.goal.trim()));
   const preview = planningQuery.data?.preview;
 
@@ -60,18 +63,28 @@ export function PlanningWorkspace({
     if (generatedFormat && generatedFormat !== draft.format) {
       patch.format = generatedFormat;
     }
-    if (!draft.hook.trim() && generatedHook) {
+    if (!hookTouchedRef.current && !draft.hook.trim() && generatedHook) {
       patch.hook = generatedHook;
     }
-    if (!draft.bestVisual.trim() && generatedVisual) {
+    if (!visualTouchedRef.current && !draft.bestVisual.trim() && generatedVisual) {
       patch.bestVisual = generatedVisual;
     }
     if (Object.keys(patch).length > 0) update(patch);
     appliedDecisionRef.current = true;
   }, [preview, draft, generatedFormat, generatedHook, generatedVisual, update]);
 
-  const hookValue = draft.hook || generatedHook || fallbackHook(draft.goal);
-  const visualValue = draft.bestVisual || generatedVisual || "";
+  useEffect(() => {
+    if (preview || appliedFallbackRef.current || hookTouchedRef.current || draft.hook.trim()) {
+      return;
+    }
+    const hook = fallbackHook(draft.goal);
+    if (!hook) return;
+    update({ hook });
+    appliedFallbackRef.current = true;
+  }, [draft.goal, draft.hook, preview, update]);
+
+  const hookValue = draft.hook;
+  const visualValue = draft.bestVisual;
   const storyReady = Boolean(draft.format);
   const hookReady = Boolean(hookValue.trim());
 
@@ -156,7 +169,10 @@ export function PlanningWorkspace({
             rows={5}
             value={hookValue}
             placeholder="Opening hook"
-            onChange={(event) => update({ hook: event.target.value })}
+            onChange={(event) => {
+              hookTouchedRef.current = true;
+              update({ hook: event.target.value });
+            }}
           />
           {preview?.source.missingInputs.length ? (
             <p className={styles.rationale}>
@@ -181,7 +197,10 @@ export function PlanningWorkspace({
             rows={4}
             value={visualValue}
             placeholder="Visual direction will appear here."
-            onChange={(event) => update({ bestVisual: event.target.value })}
+            onChange={(event) => {
+              visualTouchedRef.current = true;
+              update({ bestVisual: event.target.value });
+            }}
           />
           {preview?.poster.reason ? (
             <p className={styles.rationale}>{preview.poster.reason}</p>
