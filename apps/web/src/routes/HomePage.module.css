@@ -49,8 +49,44 @@
   height: auto;
 }
 
+.orchestrator {
+  display: grid;
+  align-items: center;
+  gap: var(--space-5);
+}
+
+.orchestratorCopy {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.orchestratorFrame {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow-lg);
+}
+
+.orchestratorFrame img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+@media (min-width: 900px) {
+  .orchestrator {
+    grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.2fr);
+  }
+}
+
 @media (max-width: 640px) {
   .overview {
+    gap: var(--space-4);
+  }
+
+  .orchestrator {
     gap: var(--space-4);
   }
 
@@ -58,7 +94,8 @@
     font-size: var(--title-lg);
   }
 
-  .overviewFrame {
+  .overviewFrame,
+  .orchestratorFrame {
     border-radius: var(--radius-md);
   }
 }

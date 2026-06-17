@@ -13,6 +13,7 @@ export function AuthForm({ mode }: AuthFormProps) {
   const navigate = useNavigate();
   const { status, error, configured, signIn, signUp, clearError } = useAuth();
   const [ready, setReady] = useState(false);
+  const [showSignupIntro, setShowSignupIntro] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const loading = status === "loading";
@@ -61,6 +62,20 @@ export function AuthForm({ mode }: AuthFormProps) {
     if (status === "authenticated") navigate("/dashboard", { replace: true });
   }, [navigate, status]);
 
+  useEffect(() => {
+    if (!isSignup) {
+      setShowSignupIntro(false);
+      return;
+    }
+
+    const query = window.matchMedia("(min-width: 1024px)");
+    const syncSignupIntro = () => setShowSignupIntro(query.matches);
+
+    syncSignupIntro();
+    query.addEventListener("change", syncSignupIntro);
+    return () => query.removeEventListener("change", syncSignupIntro);
+  }, [isSignup]);
+
   async function submit() {
     if (!ready || loading || !email.trim() || !password) return;
     if (isSignup) await signUp(email.trim(), password);
@@ -73,7 +88,7 @@ export function AuthForm({ mode }: AuthFormProps) {
 
   return (
     <main className={pageClassName}>
-      {isSignup && (
+      {showSignupIntro && (
         <aside className={styles.signupIntro} aria-label="Popcorn Ready overview">
           <Link to="/" className={styles.introBrand}>
             <LogoMark className={styles.introBrandMark} />
@@ -87,27 +102,14 @@ export function AuthForm({ mode }: AuthFormProps) {
               organized from prompt to final render.
             </p>
           </div>
-          <div
-            className={styles.previewImage}
-            role="img"
-            aria-label="A stylized project board with video frames, timeline tracks, and review notes"
-          >
-            <div className={styles.previewTopbar}>
-              <span />
-              <span />
-              <span />
-            </div>
-            <div className={styles.previewFrameGrid}>
-              <span />
-              <span />
-              <span />
-            </div>
-            <div className={styles.previewTimeline}>
-              <span />
-              <span />
-              <span />
-            </div>
-          </div>
+          <figure className={styles.previewImage}>
+            <img
+              src="/images/pc-ai-orchestrator-overview.png"
+              alt="Popcorn Ready orchestrator overview showing the brief, planning, generated assets, and render pipeline."
+              width="1535"
+              height="1024"
+            />
+          </figure>
         </aside>
       )}
 
