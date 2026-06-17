@@ -505,7 +505,13 @@ interface DataAssetRow {
 const CONTENT_SCHEMA_KEY = "schema_version";
 
 function markedContent(
-  kind: "brief" | "beat" | "plan" | "visual_anchor_plan" | "timeline",
+  kind:
+    | "brief"
+    | "beat"
+    | "plan"
+    | "visual_anchor_plan"
+    | "timeline"
+    | "critique",
   content: unknown
 ): Record<string, unknown> {
   return { [CONTENT_SCHEMA_KEY]: `${kind}.v1`, ...(content as Record<string, unknown>) };
@@ -972,8 +978,8 @@ async function insertDataAsset(input: {
   db: SupabaseClient;
   workspaceId: string;
   projectId: string;
-  kind: "brief" | "beat" | "plan" | "composite";
-  contentSchemaKind?: "brief" | "beat" | "plan" | "visual_anchor_plan" | "timeline";
+  kind: "brief" | "beat" | "plan" | "composite" | "critique";
+  contentSchemaKind?: "brief" | "beat" | "plan" | "visual_anchor_plan" | "timeline" | "critique";
   role: string;
   content: unknown;
   // Upstream asset snapshot. The DB trigger mirrors this into asset_edges, so the
@@ -1607,6 +1613,80 @@ export async function addProjectVisualAnchorPlan(input: {
     outputAssetIds: [asset.id],
   });
   return { visualAnchorPlanAssetId: asset.id };
+}
+
+export interface ActiveProjectTimelineAsset {
+  assetId: string;
+  contentHash: string;
+  timelineId: string;
+  timeline: unknown;
+}
+
+export async function getActiveProjectTimelineAsset(input: {
+  workspaceId: string;
+  projectId: string;
+}): Promise<ActiveProjectTimelineAsset | null> {
+  const db = getServiceSupabase();
+  await requireProjectRow(db, input.workspaceId, input.projectId);
+  const asset = await selectedDataAsset(
+    db,
+    input.projectId,
+    "cut",
+    "composite",
+    "timeline"
+  );
+  if (!asset) return null;
+  const timeline = unmarkedContent<unknown>(asset.content);
+  return {
+    assetId: asset.id,
+    contentHash: asset.content_hash ?? "",
+    timelineId: asset.id,
+    timeline,
+  };
+}
+
+export async function addProjectTimelineCritique(input: {
+  workspaceId: string;
+  projectId: string;
+  timelineAssetId: string;
+  timelineContentHash: string;
+  critique: unknown;
+}): Promise<{ critiqueAssetId: string }> {
+  const db = getServiceSupabase();
+  const graphInputs: GraphAssetInput[] = [
+    {
+      assetId: input.timelineAssetId,
+      relation: "input",
+      role: "timeline",
+      position: 0,
+      ...(input.timelineContentHash ? { contentHash: input.timelineContentHash } : {}),
+    },
+  ];
+  const action = await createAction({
+    projectId: input.projectId,
+    tool: "critique_timeline",
+    status: "running",
+    params: { source: "critique_timeline" },
+    inputAssetIds: [input.timelineAssetId],
+    rationale: "Persist the timeline critique as a graph asset linked to the active timeline.",
+  });
+  const asset = await insertDataAsset({
+    db,
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    kind: "critique",
+    contentSchemaKind: "critique",
+    role: "timeline_critique",
+    content: input.critique,
+    inputs: graphInputs,
+    createdByActionId: action.id,
+  });
+  await setActiveProjectScopedAssetSelection(db, input.projectId, "critique", asset.id, action.id);
+  await updateAction(action.id, {
+    status: "applied",
+    outputAssetIds: [asset.id],
+  });
+  return { critiqueAssetId: asset.id };
 }
 
 export interface ActiveProjectPlan {
