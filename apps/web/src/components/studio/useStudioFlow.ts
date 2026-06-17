@@ -1,10 +1,9 @@
 // useStudioFlow — the Studio wizard's state machine and shared contract.
 //
-// This is the seam wave-3 step PRs (Brief, Footage, Story, Generate, Review,
-// Export) build against. Steps never reach into siblings: they read/patch the
-// accumulated `BriefDraft` and call `next()`/`back()`. The hook owns the
-// `initial → generating → review` machine, the active step, run creation, and
-// the polling that drives the generation checklist + review handoff.
+// Steps never reach into siblings: they read/patch the accumulated `BriefDraft`
+// and call `next()`/`back()`. The hook owns the `initial → generating → review`
+// machine, the active step, run creation, and the polling that drives the
+// generation checklist + review handoff.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Clip, Project, Timeline, TimelineSegment } from "@popcorn/shared/types";
@@ -25,27 +24,18 @@ import {
   useStudioGenerationRunQuery,
   useStudioReviewCutQuery,
 } from "./studioQueries";
+import {
+  normalizeStudioStep,
+  STUDIO_SETUP_STEPS,
+  STUDIO_STEPS,
+  type StudioStep,
+} from "./studioSteps";
 
 // --- State / step vocabularies ---------------------------------------------
 
 export type StudioState = "initial" | "generating" | "review";
-export type StudioStep =
-  | "brief"
-  | "footage"
-  | "story"
-  | "generate"
-  | "review"
-  | "export";
-
-/** Ordered steps the stepper renders; index drives the active highlight. */
-export const STUDIO_STEPS: StudioStep[] = [
-  "brief",
-  "footage",
-  "story",
-  "generate",
-  "review",
-  "export",
-];
+export { normalizeStudioStep, STUDIO_SETUP_STEPS, STUDIO_STEPS };
+export type { StudioStep };
 
 // Reuse the shared brief vocabularies so steps stay aligned with the V1 brief.
 export type Platform = NonNullable<StoryContext["platform"]>;
@@ -232,7 +222,11 @@ export function useStudioFlow(options: UseStudioFlowOptions = {}): StudioFlow {
     restoredRun ? "generating" : "initial",
   );
   const [step, setStep] = useState<StudioStep>(
-    restoredRun ? "generate" : options.initialStep ?? options.initialPayload?.step ?? "brief",
+    restoredRun
+      ? "generate"
+      : normalizeStudioStep(options.initialStep ?? options.initialPayload?.step, {
+          hasRun: Boolean(restoredRun),
+        }),
   );
   const [brief, setBrief] = useState<BriefDraft>(() => ({
     ...EMPTY_BRIEF_DRAFT,
@@ -316,8 +310,9 @@ export function useStudioFlow(options: UseStudioFlowOptions = {}): StudioFlow {
   }, []);
 
   const goTo = useCallback((next: StudioStep) => {
-    setStep(next);
-    void persistDraft({ step: next });
+    const normalized = normalizeStudioStep(next, { hasRun: Boolean(runIdRef.current) });
+    setStep(normalized);
+    void persistDraft({ step: normalized });
   }, [persistDraft]);
 
   const next = useCallback(() => {
@@ -382,7 +377,8 @@ export function useStudioFlow(options: UseStudioFlowOptions = {}): StudioFlow {
     }
   }, [brief, persistDraft]);
 
-  const resetGeneration = useCallback(async (nextStep: StudioStep = "generate") => {
+  const resetGeneration = useCallback(async (nextStep: StudioStep = "plan") => {
+    const normalizedStep = normalizeStudioStep(nextStep);
     setError(undefined);
     setRun(undefined);
     setStages([]);
@@ -393,10 +389,10 @@ export function useStudioFlow(options: UseStudioFlowOptions = {}): StudioFlow {
     setReviewTimelineId(undefined);
     setReviewSegmentNotes({});
     setState("initial");
-    setStep(nextStep);
+    setStep(normalizedStep);
     if (!draftId) return;
     try {
-      await saveDraft(draftId, briefRef.current, nextStep);
+      await saveDraft(draftId, briefRef.current, normalizedStep);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Could not reset draft.");
       throw saveError;
@@ -404,7 +400,7 @@ export function useStudioFlow(options: UseStudioFlowOptions = {}): StudioFlow {
   }, [draftId]);
 
   const retryGeneration = useCallback(async () => {
-    await resetGeneration("generate");
+    await resetGeneration("plan");
     return startGeneration();
   }, [resetGeneration, startGeneration]);
 

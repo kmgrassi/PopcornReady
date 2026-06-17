@@ -1,17 +1,18 @@
 import { Stepper } from "../ui/Stepper";
-import { STUDIO_STEPS, type StudioStep } from "./useStudioFlow";
+import { STUDIO_SETUP_STEPS, type StudioStep } from "./studioSteps";
 
 /** Human labels for the wizard steps shown in the rail. */
 const STEP_LABELS: Record<StudioStep, string> = {
   brief: "Brief",
   footage: "Footage",
+  plan: "Footage",
   story: "Story",
   generate: "Checkpoints",
   review: "Review",
   export: "Export",
 };
 
-const STEPPER_STEPS = STUDIO_STEPS.map((id) => ({ id, label: STEP_LABELS[id] }));
+const STEPPER_STEPS = STUDIO_SETUP_STEPS.map((id) => ({ id, label: STEP_LABELS[id] }));
 
 export interface StudioStepperProps {
   /** The currently active step. */
@@ -32,9 +33,16 @@ export function StudioStepper({
   onStepClick,
   clickableThroughStep,
 }: StudioStepperProps) {
-  const activeIndex = STUDIO_STEPS.indexOf(step);
+  const activeIndex = Math.max(
+    0,
+    STUDIO_SETUP_STEPS.indexOf(STUDIO_SETUP_STEPS.includes(step) ? step : "footage"),
+  );
   const clickableThroughIndex = clickableThroughStep
-    ? STUDIO_STEPS.indexOf(clickableThroughStep)
+    ? STUDIO_SETUP_STEPS.indexOf(
+        STUDIO_SETUP_STEPS.includes(clickableThroughStep)
+          ? clickableThroughStep
+          : "footage",
+      )
     : activeIndex;
   return (
     <Stepper
@@ -43,7 +51,7 @@ export function StudioStepper({
       clickableThroughIndex={clickableThroughIndex}
       onStepClick={
         onStepClick
-          ? (index) => onStepClick(STUDIO_STEPS[index])
+          ? (index) => onStepClick(STUDIO_SETUP_STEPS[index])
           : undefined
       }
     />
