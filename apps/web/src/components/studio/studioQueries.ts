@@ -7,11 +7,13 @@ import {
   type StartTimelineExportInput,
 } from "../../lib/api-client";
 import { requestStudioPlanningDecisions } from "../../lib/studioPlanning";
+import type { StudioPlanningPreviewResponse } from "@popcorn/shared/v1/studio-planning";
 import type { GenerationRunResultArtifact } from "../../lib/v1/generation-runs/status";
 import type { BriefDraft } from "./useStudioFlow";
 
 const RUN_POLL_INTERVAL_MS = 2_000;
 const REVIEW_GATE_POLL_INTERVAL_MS = 15_000;
+const PLANNING_POLL_INTERVAL_MS = 5_000;
 
 const studioQueryKeys = {
   generationRun: (projectId: string, runId: string) =>
@@ -59,6 +61,15 @@ function isTimeline(value: unknown): value is Timeline {
   return Array.isArray(candidate.segments);
 }
 
+function shouldPollPlanningPreview(data: StudioPlanningPreviewResponse | undefined): boolean {
+  const poster = data?.preview.poster;
+  if (!poster || document.visibilityState === "hidden") return false;
+  if (poster.status === "pending_input") return false;
+
+  const runtimeStatus = poster.status as string;
+  return runtimeStatus === "pending" || runtimeStatus === "generating";
+}
+
 function timelineFromArtifactContent(content: unknown): Timeline | null {
   if (isTimeline(content)) return content;
   const nested = (content as { timeline?: unknown } | null)?.timeline;
@@ -91,6 +102,10 @@ export function useStudioPlanningDecisionsQuery(
     queryKey: studioQueryKeys.planningDecisions(draft),
     queryFn: ({ signal }) => requestStudioPlanningDecisions(draft, signal),
     enabled: enabled && Boolean(draft.goal.trim()),
+    refetchInterval: (query) =>
+      shouldPollPlanningPreview(query.state.data)
+        ? PLANNING_POLL_INTERVAL_MS
+        : false,
     retry: false,
   });
 }
