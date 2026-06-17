@@ -1681,6 +1681,66 @@ export async function selectGeneratedAnchorAsset(input: {
   return mapAsset(row);
 }
 
+export async function getActiveProjectScopedAsset(input: {
+  workspaceId: string;
+  projectId: string;
+  slotRole: string;
+  expectedRole?: string;
+}): Promise<V1Asset | null> {
+  const db = getServiceSupabase();
+  await requireProjectRow(db, input.workspaceId, input.projectId);
+  const selected = await runQuery(
+    `store.getActiveProjectScopedAsset ${input.slotRole}`,
+    db
+      .from("current_selections")
+      .select("active_asset_id")
+      .eq("project_id", input.projectId)
+      .eq("slot_role", input.slotRole)
+      .maybeSingle()
+  );
+  const assetId = (selected as CurrentSelectionRow | null)?.active_asset_id;
+  if (!assetId) return null;
+  const row = await getAssetRow(
+    db,
+    input.workspaceId,
+    input.projectId,
+    assetId,
+    "getActiveProjectScopedAsset"
+  );
+  if (input.expectedRole && row.role !== input.expectedRole) return null;
+  return mapAsset(row);
+}
+
+export async function selectGeneratedBeatKeyframeAsset(input: {
+  workspaceId: string;
+  projectId: string;
+  beatId: string;
+  assetId: string;
+}): Promise<V1Asset> {
+  const db = getServiceSupabase();
+  const row = await getAssetRow(
+    db,
+    input.workspaceId,
+    input.projectId,
+    input.assetId,
+    "selectGeneratedBeatKeyframeAsset"
+  );
+  if (row.media !== "image" || row.kind !== "keyframe" || row.role !== "beat_keyframe") {
+    throw new ApiError(
+      "asset_invalid",
+      `Generated keyframe asset ${input.assetId} is not a beat_keyframe image.`,
+      { assetIds: [input.assetId] }
+    );
+  }
+  await setActiveProjectScopedAssetSelection(
+    db,
+    input.projectId,
+    `beat_keyframe:${input.beatId}`,
+    input.assetId
+  );
+  return mapAsset(row);
+}
+
 export interface PersistedStoryboardTile {
   beatId: string;
   assetId: string;
@@ -1709,6 +1769,7 @@ export async function addStoryboardTiles(input: {
       workspaceId: input.workspaceId,
       projectId: input.projectId,
       kind: "image",
+      role: tile.role,
       filename: tile.media.filename,
       status: "ready",
       source: { type: "generated", generatedAssetId: "" },
