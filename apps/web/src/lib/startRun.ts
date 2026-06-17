@@ -59,7 +59,7 @@ function briefInputFromDraft(draft: BriefDraft): VideoBriefInput {
 /** Prompt-only vs. footage-backed runs map onto composition modes. */
 function compositionModeFromDraft(draft: BriefDraft): CompositionMode {
   if (draft.footageChoice === "upload") {
-    return draft.footageMode === "hybrid" ? "hybrid" : "asset_driven";
+    return "hybrid";
   }
   return "prompt_only";
 }
@@ -168,7 +168,7 @@ export async function createAndStartRun(draft: BriefDraft): Promise<StartRunResu
       briefVersionId: briefVersion.id,
       assetIds,
       mode: compositionModeFromDraft(draft),
-      allowGeneratedGapFill: draft.footageMode === "hybrid",
+      allowGeneratedGapFill: true,
       reviewGates,
       showCaptions: draft.showCaptions,
     });

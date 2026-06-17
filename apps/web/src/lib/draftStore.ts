@@ -37,7 +37,7 @@ const DEFAULT_BRIEF_DRAFT: BriefDraft = {
   aspectRatio: "9:16",
   projectName: "",
   footageChoice: "prompt_only",
-  footageMode: "asset_driven",
+  footageMode: "hybrid",
   selectedFootage: [],
   audience: "",
   platform: "tiktok",
@@ -112,13 +112,18 @@ function payloadFromUnknown(value: unknown): StudioDraftPayload | null {
   if (!isRecord(value) || value.v !== STUDIO_DRAFT_PAYLOAD_VERSION) return null;
   if (!isRecord(value.draft)) return null;
 
+  const draft = {
+    ...DEFAULT_BRIEF_DRAFT,
+    ...(value.draft as Partial<BriefDraft>),
+    selectedFootage: [],
+  };
+  if (draft.footageChoice === "upload") {
+    draft.footageMode = "hybrid";
+  }
+
   return {
     v: STUDIO_DRAFT_PAYLOAD_VERSION,
-    draft: {
-      ...DEFAULT_BRIEF_DRAFT,
-      ...(value.draft as Partial<BriefDraft>),
-      selectedFootage: [],
-    },
+    draft,
     step: normalizeStep(value.step),
     projectId: typeof value.projectId === "string" ? value.projectId : undefined,
     runId: typeof value.runId === "string" ? value.runId : undefined,

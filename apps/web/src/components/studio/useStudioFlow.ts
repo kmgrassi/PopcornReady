@@ -99,7 +99,7 @@ export const EMPTY_BRIEF_DRAFT: BriefDraft = {
   aspectRatio: "9:16",
   projectName: "",
   footageChoice: "prompt_only",
-  footageMode: "asset_driven",
+  footageMode: "hybrid",
   selectedFootage: [],
   audience: "",
   platform: "tiktok",

@@ -61,11 +61,10 @@ export function SourceFootageStep({ draft, update, next, back }: StepProps) {
 
   return (
     <StepShell
-      heading="How should we use your footage?"
-      description="Skip uploads for a fully generated cut, or bring source clips for the agent to edit."
+      heading="Do you have any of your own assets/footage to use for this video?"
       onNext={next}
       onBack={back}
-      nextLabel={isUploadMode ? "Continue with footage" : "Continue prompt-only"}
+      nextLabel="Continue"
       nextDisabled={isReading || (isUploadMode && !hasVisualFootage)}
     >
       <div className={styles.choiceGrid}>
@@ -76,17 +75,14 @@ export function SourceFootageStep({ draft, update, next, back }: StepProps) {
             checked={draft.footageChoice === "prompt_only"}
             onChange={selectPromptOnly}
           />
-          <span className={styles.choiceTitle}>Prompt only</span>
-          <p className={styles.choiceText}>
-            Generate the rough cut entirely from the brief. This is the fastest path.
-          </p>
+          <span className={styles.choiceTitle}>No</span>
         </label>
 
         <label className={styles.choiceCard}>
           <input
             type="radio"
             name="footage-choice"
-            checked={draft.footageChoice === "upload" && draft.footageMode === "hybrid"}
+            checked={draft.footageChoice === "upload"}
             onChange={() =>
               update({
                 footageChoice: "upload",
@@ -94,30 +90,7 @@ export function SourceFootageStep({ draft, update, next, back }: StepProps) {
               })
             }
           />
-          <span className={styles.choiceTitle}>Use my footage</span>
-          <p className={styles.choiceText}>
-            Start from uploaded clips and allow generated shots to fill missing moments.
-          </p>
-        </label>
-
-        <label className={styles.choiceCard}>
-          <input
-            type="radio"
-            name="footage-choice"
-            checked={
-              draft.footageChoice === "upload" && draft.footageMode === "asset_driven"
-            }
-            onChange={() =>
-              update({
-                footageChoice: "upload",
-                footageMode: "asset_driven",
-              })
-            }
-          />
-          <span className={styles.choiceTitle}>Edit uploaded footage</span>
-          <p className={styles.choiceText}>
-            Treat your clips as the source material and assemble the best cut from them.
-          </p>
+          <span className={styles.choiceTitle}>Yes</span>
         </label>
       </div>
 
@@ -158,33 +131,6 @@ export function SourceFootageStep({ draft, update, next, back }: StepProps) {
           )}
         </section>
       ) : null}
-
-      <section className={styles.outputPanel} aria-labelledby="footage-output-heading">
-        <div>
-          <h3 id="footage-output-heading" className={styles.outputTitle}>
-            Output preferences
-          </h3>
-          <p className={styles.outputHelp}>
-            These travel with the footage and brief when the agent builds the cut.
-          </p>
-        </div>
-        <label
-          className={`${styles.checkboxCard} ${
-            draft.showCaptions ? styles.checkboxCardChecked : ""
-          }`}
-        >
-          <input
-            className={styles.checkboxInput}
-            type="checkbox"
-            checked={draft.showCaptions}
-            onChange={(event) => update({ showCaptions: event.target.checked })}
-          />
-          <span className={styles.checkboxCopy}>
-            <strong>Generate captions</strong>
-            <small>Include caption text in the generated timeline.</small>
-          </span>
-        </label>
-      </section>
     </StepShell>
   );
 }
