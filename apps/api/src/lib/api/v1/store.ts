@@ -81,6 +81,7 @@ import {
 } from "./orchestrator-store";
 import { getRequestSupabase } from "../../supabase/clients";
 import { agentApiStore, type AgentApiStore } from "../../agent-api/jobs";
+import type { Artifact } from "../../agent-api/types";
 import { remoteAssetUrlForDelivery, resolveAssetUrl } from "../../storage/asset-urls";
 import {
   AgentAssetSource,
@@ -1141,6 +1142,7 @@ function assetKindToGraphKind(asset: V1Asset): GraphAssetKind {
     if (asset.role === "character_anchor" || asset.role === "scene_anchor") return "anchor";
     return asset.provenance ? "keyframe" : "anchor";
   }
+  if (asset.role === "export_video") return "render";
   return asset.provenance ? "clip" : "source_footage";
 }
 
@@ -1679,6 +1681,65 @@ export async function selectGeneratedAnchorAsset(input: {
     input.assetId
   );
   return mapAsset(row);
+}
+
+export async function addExportVideoAsset(input: {
+  workspaceId: string;
+  projectId: string;
+  artifact: Artifact;
+  jobId: string;
+  timelineId: string;
+  timelineContentHash: string;
+  orchestratorRunId?: string;
+}): Promise<V1Asset> {
+  const action = await createAction({
+    projectId: input.projectId,
+    ...(input.orchestratorRunId ? { orchestratorRunId: input.orchestratorRunId } : {}),
+    tool: "export_video",
+    status: "running",
+    params: {
+      artifactId: input.artifact.id,
+      timelineId: input.timelineId,
+      timelineContentHash: input.timelineContentHash,
+      status: input.artifact.status,
+    },
+    jobIds: [input.jobId],
+    rationale: "Record the rendered timeline export as the project's active output asset.",
+  });
+  const now = new Date().toISOString();
+  const asset = await addAsset(
+    {
+      id: "pending",
+      schemaVersion: SCHEMA_VERSIONS.asset,
+      workspaceId: input.workspaceId,
+      projectId: input.projectId,
+      kind: "video",
+      role: "export_video",
+      filename: `${input.artifact.id}.mp4`,
+      status: input.artifact.status === "ready" ? "ready" : "pending",
+      source: { type: "generated", generatedAssetId: input.artifact.id },
+      ...(input.artifact.url ? { remoteUrl: input.artifact.url } : {}),
+      ...(input.artifact.durationSec ? { durationSec: input.artifact.durationSec } : {}),
+      context: {
+        summary: `Export artifact for timeline ${input.timelineId}.`,
+      },
+      createdAt: now,
+      updatedAt: now,
+    },
+    { createdByActionId: action.id }
+  );
+  await setActiveProjectScopedAssetSelection(
+    getServiceSupabase(),
+    input.projectId,
+    "export_video",
+    asset.id,
+    action.id
+  );
+  await updateAction(action.id, {
+    status: "applied",
+    outputAssetIds: [asset.id],
+  });
+  return asset;
 }
 
 export interface PersistedStoryboardTile {
