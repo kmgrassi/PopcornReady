@@ -1,5 +1,6 @@
 import { createBriefTool, type CreateBriefDeps } from "./create-or-load-brief";
 import { createGenerateAnchorTool, type GenerateAnchorDeps } from "./generate-anchor";
+import { createGenerateAudioTool, type GenerateAudioDeps } from "./generate-audio";
 import { createGenerateClipTool, type GenerateClipDeps } from "./generate-clip";
 import {
   createGenerateKeyframeTool,
@@ -24,6 +25,7 @@ export interface DefaultToolRegistryDeps {
   planShots?: Partial<PlanShotsDeps>;
   createBrief?: Partial<CreateBriefDeps>;
   generateAnchor?: Partial<GenerateAnchorDeps>;
+  generateAudio?: Partial<GenerateAudioDeps>;
   generateKeyframe?: Partial<GenerateKeyframeDeps>;
   generateClip?: Partial<GenerateClipDeps>;
   generateStoryboard?: Partial<GenerateStoryboardDeps>;
@@ -39,6 +41,7 @@ export function createDefaultToolRegistry(
   registry.register(createPlanShotsTool(deps.planShots));
   registry.register(createPlanVisualAnchorsTool(deps.planVisualAnchors));
   registry.register(createGenerateAnchorTool(deps.generateAnchor));
+  registry.register(createGenerateAudioTool(deps.generateAudio));
   registry.register(createGenerateStoryboardTool(deps.generateStoryboard));
   registry.register(createGenerateKeyframeTool(deps.generateKeyframe));
   registry.register(createGenerateClipTool(deps.generateClip));
