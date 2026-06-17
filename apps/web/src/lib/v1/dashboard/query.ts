@@ -12,6 +12,8 @@ import type {
 import {
   v1Api,
   type AssetMediaResponse,
+  type GenerateProjectPosterResponse,
+  type ProjectResponse,
   type ProjectsResponse,
   type WorkspaceAsset,
   type WorkspaceAssetSource,
@@ -68,6 +70,32 @@ export const dashboardCollectionQueryKeys = {
 
 function assetKey(asset: WorkspaceAsset): string {
   return asset.assetId ?? asset.id;
+}
+
+function updateProjectPages(
+  data: InfiniteData<ProjectsResponse, PageCursor> | undefined,
+  project: V1Project,
+): InfiniteData<ProjectsResponse, PageCursor> | undefined {
+  if (!data) return data;
+  return {
+    ...data,
+    pages: data.pages.map((page) => ({
+      ...page,
+      projects: page.projects.map((item) =>
+        item.id === project.id ? project : item,
+      ),
+    })),
+  };
+}
+
+function updateMatchingProjectQueries(
+  queryClient: ReturnType<typeof useQueryClient>,
+  project: V1Project,
+) {
+  queryClient.setQueriesData<InfiniteData<ProjectsResponse, PageCursor>>(
+    { queryKey: ["dashboard", "projects"] },
+    (current) => updateProjectPages(current, project),
+  );
 }
 
 function updateAssetPages(
@@ -175,6 +203,44 @@ export function useDashboardProjectsQuery(authScope: string, limit: number) {
       void query.refetch();
     },
   };
+}
+
+export function useGenerateProjectPosterMutation(authScope: string) {
+  const queryClient = useQueryClient();
+  const meQuery = useMeQuery(authScope);
+
+  return useMutation({
+    mutationFn: (projectId: string) =>
+      v1Api.generateProjectPoster(projectId, { force: true }),
+    onSuccess: (payload: GenerateProjectPosterResponse) => {
+      updateMatchingProjectQueries(queryClient, payload.project);
+      queryClient.setQueryData(["projects", payload.project.id], {
+        project: payload.project,
+      } satisfies ProjectResponse);
+      void queryClient.invalidateQueries({ queryKey: ["dashboard", "projects"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["dashboard", "assets", meQuery.data?.workspaceId],
+      });
+    },
+  });
+}
+
+export function useSetDashboardProjectPosterMutation(authScope: string) {
+  const queryClient = useQueryClient();
+  const meQuery = useMeQuery(authScope);
+
+  return useMutation({
+    mutationFn: ({ projectId, assetId }: { projectId: string; assetId: string }) =>
+      v1Api.setProjectPoster(projectId, assetId),
+    onSuccess: (payload: ProjectResponse) => {
+      updateMatchingProjectQueries(queryClient, payload.project);
+      queryClient.setQueryData(["projects", payload.project.id], payload);
+      void queryClient.invalidateQueries({ queryKey: ["dashboard", "projects"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["dashboard", "assets", meQuery.data?.workspaceId],
+      });
+    },
+  });
 }
 
 export function useDashboardAssetsQuery(

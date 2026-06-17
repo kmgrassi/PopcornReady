@@ -183,6 +183,17 @@ export interface ProjectResponse {
   project: V1Project;
 }
 
+export interface GenerateProjectPosterResponse {
+  project: V1Project;
+  poster: {
+    assetId: string;
+    generated: boolean;
+    reused: boolean;
+    selected: boolean;
+    manuallyPinned: boolean;
+  };
+}
+
 export interface ProjectStoryboardResponse {
   storyboard: ProjectStoryboard | null;
 }
@@ -498,6 +509,11 @@ export const v1Api = {
     apiRequest<ProjectResponse>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/poster`,
       { method: "POST", body: { assetId } }
+    ),
+  generateProjectPoster: (projectId: string, input: { force?: boolean } = {}) =>
+    apiRequest<GenerateProjectPosterResponse>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/poster/generate`,
+      { method: "POST", body: input }
     ),
   getProjectStoryboard: (projectId: string, signal?: AbortSignal) =>
     apiRequest<ProjectStoryboardResponse>(

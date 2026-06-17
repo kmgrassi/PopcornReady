@@ -4,7 +4,10 @@ import type {
   StoryboardBeat,
   StoryboardScene,
 } from "@popcorn/shared/v1/types";
-import { useSaveProjectStoryboardMutation } from "../../lib/queryClient";
+import {
+  useGenerateProjectPosterMutation,
+  useSaveProjectStoryboardMutation,
+} from "../../lib/queryClient";
 import "./storyboard.css";
 
 type EditableBeat = Pick<
@@ -116,6 +119,7 @@ export function StoryboardEditor({
   initialStoryboard,
 }: StoryboardEditorProps) {
   const saveStoryboard = useSaveProjectStoryboardMutation(projectId);
+  const generatePoster = useGenerateProjectPosterMutation(projectId);
   const [storyboardId, setStoryboardId] = useState<string | null>(
     initialStoryboard?.id ?? null
   );
@@ -128,6 +132,7 @@ export function StoryboardEditor({
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [posterError, setPosterError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
 
   const update = useCallback((next: EditableScene[]) => {
@@ -215,6 +220,15 @@ export function StoryboardEditor({
     }
   }
 
+  async function regeneratePoster() {
+    setPosterError(null);
+    try {
+      await generatePoster.mutateAsync();
+    } catch (err) {
+      setPosterError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   return (
     <main className="sb-shell">
       <div className="sb-header">
@@ -226,6 +240,9 @@ export function StoryboardEditor({
           </p>
         </div>
         <div className="sb-actions">
+          {posterError ? (
+            <span className="sb-status sb-status-error">{posterError}</span>
+          ) : null}
           <span
             className={`sb-status ${
               saveError
@@ -245,8 +262,16 @@ export function StoryboardEditor({
                   ? "Unsaved changes"
                   : savedAt
                     ? "Saved"
-                    : ""}
+                  : ""}
           </span>
+          <button
+            type="button"
+            className="sb-btn"
+            onClick={() => void regeneratePoster()}
+            disabled={generatePoster.isPending}
+          >
+            {generatePoster.isPending ? "Regenerating..." : "Regenerate poster"}
+          </button>
           <button
             type="button"
             className="sb-btn sb-btn-primary"

@@ -233,6 +233,19 @@ export function useSetProjectPosterMutation(projectId: string) {
   });
 }
 
+export function useGenerateProjectPosterMutation(projectId: string) {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => v1Api.generateProjectPoster(projectId, { force: true }),
+    onSuccess: (data) => {
+      client.setQueryData(queryKeys.project(projectId), { project: data.project });
+      void client.invalidateQueries({ queryKey: ["projects"] });
+      void client.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
 export function useProjectStoryboardQuery(projectId: string, enabled = true) {
   return useQuery({
     queryKey: queryKeys.projectStoryboard(projectId),
