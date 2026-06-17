@@ -23,7 +23,25 @@ export function anthropicClient(): Anthropic {
   return _client;
 }
 
-type MessageCreate = (params: Record<string, unknown>) => Promise<any>;
+type MessageCreate = (params: Record<string, unknown>) => Promise<AnthropicMessageResponse>;
+
+interface AnthropicTextBlock {
+  type?: "text";
+  text?: string | null;
+}
+
+interface AnthropicToolUseBlock {
+  type?: "tool_use";
+  name?: string | null;
+  input?: unknown;
+}
+
+type AnthropicContentBlock = AnthropicTextBlock | AnthropicToolUseBlock | { type?: string };
+
+interface AnthropicMessageResponse {
+  model?: string | null;
+  content?: AnthropicContentBlock[] | null;
+}
 
 // Low-reasoning calls route to the cheaper fast model.
 const FAST_EFFORTS = new Set<LlmEffort>(["minimal", "low"]);
@@ -46,10 +64,19 @@ export function toAnthropicTool(spec: ToolSpec): Record<string, unknown> {
 
 const STRUCTURED_RESULT_TOOL = "return_result";
 
-function resultFromAnthropicToolUse<T>(res: any): T {
+function isToolUseBlock(block: AnthropicContentBlock): block is AnthropicToolUseBlock {
+  return block?.type === "tool_use";
+}
+
+function isTextBlock(block: AnthropicContentBlock): block is AnthropicTextBlock {
+  return block?.type === "text";
+}
+
+function resultFromAnthropicToolUse<T>(res: AnthropicMessageResponse): T {
   const content = Array.isArray(res?.content) ? res.content : [];
   const toolUse = content.find(
-    (block: any) => block?.type === "tool_use" && block?.name === STRUCTURED_RESULT_TOOL
+    (block): block is AnthropicToolUseBlock =>
+      isToolUseBlock(block) && block.name === STRUCTURED_RESULT_TOOL
   );
   if (!toolUse) {
     throw new Error(`Model did not call required tool: ${STRUCTURED_RESULT_TOOL}`);
@@ -63,12 +90,12 @@ function resultFromAnthropicToolUse<T>(res: any): T {
 
 // Pure response parsing — unit-tested without a network call.
 export function interpretAnthropicToolResponse(
-  res: any,
+  res: AnthropicMessageResponse,
   fallbackModel: string,
   allowed?: Set<string>
 ): ToolChoiceResult {
   const content = Array.isArray(res?.content) ? res.content : [];
-  const toolUses = content.filter((block: any) => block?.type === "tool_use");
+  const toolUses = content.filter(isToolUseBlock);
   const model = res?.model ?? fallbackModel;
 
   if (toolUses.length > 1) {
@@ -88,8 +115,8 @@ export function interpretAnthropicToolResponse(
   }
 
   const text = content
-    .filter((block: any) => block?.type === "text")
-    .map((block: any) => String(block.text || ""))
+    .filter(isTextBlock)
+    .map((block) => String(block.text || ""))
     .join("")
     .trim();
   return { type: "done", text: text || "No tool call requested.", model };
