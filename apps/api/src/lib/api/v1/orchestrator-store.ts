@@ -286,6 +286,33 @@ export async function markGateReached(
   return data ? mapGate(data as OrchestratorRunGateRow) : null;
 }
 
+export async function createReachedApprovalGate(input: {
+  runId: string;
+  stage: string;
+}): Promise<OrchestratorRunGate> {
+  const db = getServiceSupabase();
+  const now = new Date().toISOString();
+  const data = await runQuery(
+    "store.createReachedApprovalGate",
+    db
+      .from("orchestrator_run_gates")
+      .upsert(
+        {
+          orchestrator_run_id: input.runId,
+          stage: input.stage,
+          status: "reached",
+          decided_at: null,
+          decided_by_action_id: null,
+          updated_at: now,
+        },
+        { onConflict: "orchestrator_run_id,stage" }
+      )
+      .select("*")
+      .single()
+  );
+  return mapGate(data as OrchestratorRunGateRow);
+}
+
 export async function resolveGate(
   gateId: string,
   status: "approved" | "rejected",

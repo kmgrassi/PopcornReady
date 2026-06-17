@@ -9,6 +9,10 @@ import {
   type PlanVisualAnchorsDeps,
 } from "./plan-visual-anchors";
 import { createPlanShotsTool, type PlanShotsDeps } from "./plan-shots";
+import {
+  createRequestApprovalTool,
+  type RequestApprovalDeps,
+} from "./request-approval";
 import { ToolRegistry } from "./registry";
 
 export interface DefaultToolRegistryDeps {
@@ -17,6 +21,7 @@ export interface DefaultToolRegistryDeps {
   generateAnchor?: Partial<GenerateAnchorDeps>;
   generateStoryboard?: Partial<GenerateStoryboardDeps>;
   planVisualAnchors?: Partial<PlanVisualAnchorsDeps>;
+  requestApproval?: Partial<RequestApprovalDeps>;
 }
 
 export function createDefaultToolRegistry(
@@ -28,5 +33,6 @@ export function createDefaultToolRegistry(
   registry.register(createPlanVisualAnchorsTool(deps.planVisualAnchors));
   registry.register(createGenerateAnchorTool(deps.generateAnchor));
   registry.register(createGenerateStoryboardTool(deps.generateStoryboard));
+  registry.register(createRequestApprovalTool(deps.requestApproval));
   return registry;
 }

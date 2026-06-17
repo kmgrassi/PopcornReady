@@ -88,7 +88,7 @@ export async function runToolTestCase(
     });
     const run: OrchestratorRun = {
       id: persistedRun.id,
-      projectId: sandbox.projectId,
+      projectId: persistedRun.projectId,
       status: "running",
       createdAt: persistedRun.createdAt,
       updatedAt: persistedRun.updatedAt,
