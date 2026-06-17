@@ -1,0 +1,108 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import type { AuthContext } from "@/lib/api/v1/auth";
+import { createDefaultToolRegistry } from "../default-registry";
+import {
+  createRequestApprovalTool,
+  parseRequestApprovalInput,
+} from "../request-approval";
+
+const auth: AuthContext = {
+  mode: "local",
+  actor: { id: "local_dev", type: "local" },
+  workspaceId: "ws_1",
+  isLocal: true,
+};
+
+function reachedGate() {
+  return {
+    id: "gate_1",
+    orchestratorRunId: "run_1",
+    stage: "request_approval",
+    status: "reached" as const,
+    createdAt: "t0",
+    updatedAt: "t0",
+  };
+}
+
+test("request_approval parses the review step and preview artifacts", () => {
+  assert.deepEqual(
+    parseRequestApprovalInput({
+      step: "before_export",
+      previewArtifactIds: [" asset_1 "],
+      note: " Review framing. ",
+    }),
+    {
+      step: "before_export",
+      previewArtifactIds: ["asset_1"],
+      note: "Review framing.",
+    }
+  );
+});
+
+test("request_approval rejects malformed preview artifact ids", () => {
+  assert.throws(
+    () => parseRequestApprovalInput({ step: "before_export", previewArtifactIds: 42 }),
+    /previewArtifactIds must be an array/
+  );
+});
+
+test("default registry exposes request_approval as an approval tool", () => {
+  const registry = createDefaultToolRegistry({
+    requestApproval: {
+      createReachedApprovalGate: async () => reachedGate(),
+    },
+  });
+  const definition = registry.get("request_approval");
+
+  assert.equal(definition.name, "request_approval");
+  assert.equal(definition.execution, "approval");
+  assert.equal(definition.inputSchema.type, "object");
+  assert.equal(definition.outputSchema.type, "object");
+});
+
+test("request_approval creates a reached gate and parks on approval", async () => {
+  let createdWith: { runId: string; stage: string } | undefined;
+  const tool = createRequestApprovalTool({
+    createReachedApprovalGate: async (input) => {
+      createdWith = input;
+      return reachedGate();
+    },
+  });
+
+  const result = await tool.execute(
+    { step: "before_export", previewArtifactIds: ["artifact_1"] },
+    { auth, projectId: "proj_1", orchestratorRunId: "run_1" }
+  );
+
+  assert.deepEqual(createdWith, { runId: "run_1", stage: "request_approval" });
+  assert.equal(result.status, "waiting_for_approval");
+  if (result.status === "waiting_for_approval") {
+    assert.equal(result.gateId, "gate_1");
+    assert.equal(result.resumesWhen, "approval_terminal");
+    assert.deepEqual(result.previewArtifactIds, ["artifact_1"]);
+  }
+});
+
+test("request_approval fails before writing without an orchestrator run id", async () => {
+  let writes = 0;
+  const tool = createRequestApprovalTool({
+    createReachedApprovalGate: async () => {
+      writes += 1;
+      return reachedGate();
+    },
+  });
+
+  const result = await tool.execute(
+    { step: "before_export", previewArtifactIds: [] },
+    { auth, projectId: "proj_1" }
+  );
+
+  assert.equal(result.status, "failed");
+  if (result.status === "failed") {
+    assert.equal(result.error.kind, "precondition_unmet");
+    assert.equal(result.error.recoverable, false);
+  }
+  assert.equal(writes, 0);
+});
