@@ -201,16 +201,23 @@
   border-radius: var(--radius-pill);
 }
 
-@media (min-width: 900px) {
+@media (min-width: 1024px) {
   .signupPage {
     place-items: center;
-    grid-template-columns: minmax(0, 1fr) minmax(360px, 420px);
-    max-width: 1120px;
+    grid-template-columns: minmax(520px, 1fr) minmax(360px, 420px);
+    column-gap: clamp(80px, 8vw, 128px);
+    max-width: 1240px;
     margin: 0 auto;
   }
 
   .signupPage .card {
     justify-self: end;
+  }
+}
+
+@media (max-width: 1023px) {
+  .signupIntro {
+    display: none;
   }
 }
 
@@ -221,17 +228,5 @@
 
   .card {
     padding: var(--space-5);
-  }
-
-  .signupIntro {
-    gap: var(--space-4);
-  }
-
-  .introCopy h1 {
-    max-width: 12ch;
-  }
-
-  .previewImage {
-    display: none;
   }
 }
