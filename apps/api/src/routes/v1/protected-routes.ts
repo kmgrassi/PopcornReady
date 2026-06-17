@@ -11,6 +11,7 @@ import { planRouter } from "./plan.js";
 import { projectsRouter } from "./projects.js";
 import { storyboardsRouter } from "./storyboards.js";
 import { studioDraftsRouter } from "./studio-drafts.js";
+import { studioPlanningRouter } from "./studio-planning.js";
 import { timelinesRouter } from "./timelines.js";
 import { workspacesRouter } from "./workspaces.js";
 
@@ -27,6 +28,7 @@ export function mountProtectedV1Routes(v1: Router) {
   v1.use(storyboardsRouter);
   v1.use(orchestratorRunsRouter);
   v1.use(studioDraftsRouter);
+  v1.use(studioPlanningRouter);
   v1.use(timelinesRouter);
   v1.use(evalRouter);
 }
