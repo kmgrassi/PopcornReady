@@ -78,11 +78,11 @@
   --surface-2: var(--panel-2);
   --text-strong: var(--text);
 
-  /* Danger / error accent (burnt orange-red); overridden per theme below */
-  --danger: #ff6a4a;
-  --danger-text: #ffb1a0;
-  --danger-soft: rgba(255, 106, 61, 0.1);
-  --danger-border: rgba(255, 106, 61, 0.42);
+  /* Danger / error accent; tuned for the default Accent theme. */
+  --danger: #c0392b;
+  --danger-text: #a3271b;
+  --danger-soft: rgba(192, 57, 43, 0.08);
+  --danger-border: rgba(192, 57, 43, 0.32);
 
   /* Primary CTA (PR 0): the single popcorn-yellow call-to-action color and the
    * text color that sits on top of it. There is one CTA per screen — the

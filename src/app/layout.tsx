@@ -14,11 +14,12 @@ const themeInitScript = `
 (() => {
   try {
     const theme = window.localStorage.getItem("popcorn-ready-theme");
+    const defaultTheme = "popcorn";
     const validThemes = new Set(["popcorn", "popcorn-warm", "popcorn-night"]);
-    if (validThemes.has(theme)) {
-      document.documentElement.dataset.theme = theme;
-    }
-  } catch {}
+    document.documentElement.dataset.theme = validThemes.has(theme) ? theme : defaultTheme;
+  } catch {
+    document.documentElement.dataset.theme = "popcorn";
+  }
 })();
 `;
 

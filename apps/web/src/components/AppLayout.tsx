@@ -23,6 +23,7 @@ import { queryClient, useMeQuery } from "../lib/queryClient";
 import styles from "./AppLayout.module.css";
 
 const STORAGE_KEY = "popcorn-ready-theme";
+const DEFAULT_THEME = "popcorn";
 const VALID_THEMES = new Set(["popcorn", "popcorn-warm", "popcorn-night"]);
 
 // Primary workspace nav. Library groups the collection routes until PR 5 gives
@@ -43,10 +44,10 @@ function applyStoredTheme() {
     if (VALID_THEMES.has(theme ?? "")) {
       document.documentElement.dataset.theme = theme ?? "";
     } else {
-      delete document.documentElement.dataset.theme;
+      document.documentElement.dataset.theme = DEFAULT_THEME;
     }
   } catch {
-    delete document.documentElement.dataset.theme;
+    document.documentElement.dataset.theme = DEFAULT_THEME;
   }
 }
 
