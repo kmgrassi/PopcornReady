@@ -11,6 +11,7 @@ import {
   type ToolInvocationStatus,
   type ToolLoopTurnResult,
 } from "@/lib/orchestrator";
+import { createOrchestratorRun } from "@/lib/api/v1/orchestrator-store";
 import { createDefaultToolRegistry } from "@/lib/orchestrator-tools/default-registry";
 import type { ToolRegistry as RealToolRegistry } from "@/lib/orchestrator-tools/registry";
 import { getServiceSupabase } from "@/lib/supabase/clients";
@@ -80,12 +81,17 @@ export async function runToolTestCase(
       testCase.availableTools === "all" ? { includeStubs: true } : { only: battery.tool }
     );
 
+    const persistedRun = await createOrchestratorRun({
+      projectId: sandbox.projectId,
+      inputSummary: testCase.instruction,
+      status: "running",
+    });
     const run: OrchestratorRun = {
-      id: `orch_tooltest_${randomUUID()}`,
+      id: persistedRun.id,
       projectId: sandbox.projectId,
       status: "running",
-      createdAt: nowIso(),
-      updatedAt: nowIso(),
+      createdAt: persistedRun.createdAt,
+      updatedAt: persistedRun.updatedAt,
     };
 
     const turn = await runToolLoopTurn({

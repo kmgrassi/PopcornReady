@@ -11,6 +11,7 @@ import {
   persistedEditPlanSchema,
   type PlanShotsOutput,
 } from "../plan-shots";
+import { createRequestApprovalTool } from "../request-approval";
 import { ToolRegistry } from "../registry";
 import type { ToolCallResult } from "../types";
 
@@ -75,6 +76,28 @@ test("default registry exposes plan_shots metadata", () => {
 
   assert.equal(definition.name, "plan_shots");
   assert.equal(definition.execution, "sync");
+  assert.equal(definition.inputSchema.type, "object");
+  assert.equal(definition.outputSchema.type, "object");
+});
+
+test("default registry exposes request_approval as an approval tool", () => {
+  const registry = createDefaultToolRegistry({
+    planShots: planShotsDeps(),
+    requestApproval: {
+      createReachedGate: async () => ({
+        id: "gate_1",
+        orchestratorRunId: "run_1",
+        stage: "generate_storyboard",
+        status: "reached",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }),
+    },
+  });
+  const definition = registry.get("request_approval");
+
+  assert.equal(definition.name, "request_approval");
+  assert.equal(definition.execution, "approval");
   assert.equal(definition.inputSchema.type, "object");
   assert.equal(definition.outputSchema.type, "object");
 });
@@ -145,6 +168,70 @@ test("plan_shots validates input before reading the brief or calling the agent",
   }
   assert.equal(planCalls, 0);
   assert.equal(briefCalls, 0);
+});
+
+test("request_approval validates input before creating a gate", async () => {
+  let gateCalls = 0;
+  const tool = createRequestApprovalTool({
+    createReachedGate: async () => {
+      gateCalls += 1;
+      return {
+        id: "gate_1",
+        orchestratorRunId: "run_1",
+        stage: "generate_storyboard",
+        status: "reached",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    },
+  });
+
+  const registry = new ToolRegistry();
+  registry.register(tool);
+  const result = await registry.execute(
+    "request_approval",
+    { step: "generate_storyboard", previewArtifactIds: "storyboard_asset_1" },
+    { auth, projectId: "proj_1", orchestratorRunId: "run_1" }
+  );
+
+  assert.equal(result.status, "failed");
+  if (result.status === "failed") {
+    assert.equal(result.error.kind, "invalid_input");
+  }
+  assert.equal(gateCalls, 0);
+});
+
+test("request_approval creates a reached gate for the reviewed stage", async () => {
+  let seen: { runId: string; stage: string } | undefined;
+  const registry = new ToolRegistry();
+  registry.register(
+    createRequestApprovalTool({
+      createReachedGate: async (runId, stage) => {
+        seen = { runId, stage };
+        return {
+          id: "gate_1",
+          orchestratorRunId: runId,
+          stage,
+          status: "reached",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      },
+    })
+  );
+
+  const result = await registry.execute(
+    "request_approval",
+    { step: "generate_storyboard", previewArtifactIds: ["storyboard_asset_1"] },
+    { auth, projectId: "proj_1", orchestratorRunId: "run_1" }
+  );
+
+  assert.deepEqual(seen, { runId: "run_1", stage: "generate_storyboard" });
+  assert.equal(result.status, "waiting_for_approval");
+  if (result.status === "waiting_for_approval") {
+    assert.equal(result.gateId, "gate_1");
+    assert.deepEqual(result.previewArtifactIds, ["storyboard_asset_1"]);
+  }
 });
 
 test("plan_shots returns precondition_unmet (suggesting the brief) when none exists", async () => {
