@@ -8,6 +8,7 @@ import type {
   StudioDraftStep,
   UpdateStudioDraftRequest,
 } from "@popcorn/shared/v1/studio-drafts";
+import type { StudioPlanningPreviewRequest } from "@popcorn/shared/v1/studio-planning";
 import { ApiError, FieldError, validationError } from "./errors";
 
 export const SCHEMA_VERSIONS = {
@@ -53,6 +54,7 @@ const VIDEO_FORMATS: VideoFormat[] = [
   "classroom_demo",
   "aesthetic_montage",
 ];
+export const STORY_FORMATS = VIDEO_FORMATS;
 
 export type NarrationMode = "none" | "generate" | "provided_text" | "provided_asset";
 const NARRATION_MODES: NarrationMode[] = [
@@ -721,6 +723,47 @@ export function parseBrief(input: unknown, pathPrefix = "brief"): VideoBrief {
     narration,
     constraints,
   };
+}
+
+export function parseStudioPlanningPreviewRequest(
+  input: unknown
+): StudioPlanningPreviewRequest {
+  const fields: FieldError[] = [];
+  if (!isPlainObject(input)) {
+    throw validationError("The request body is invalid.", [
+      { path: "request", message: "Must be an object." },
+    ]);
+  }
+
+  const briefDraftValue = input.briefDraft;
+  if (!isPlainObject(briefDraftValue)) {
+    fields.push({ path: "briefDraft", message: "Must be an object." });
+  } else if (
+    briefDraftValue.format !== undefined &&
+    briefDraftValue.format !== null &&
+    (typeof briefDraftValue.format !== "string" ||
+      !VIDEO_FORMATS.includes(briefDraftValue.format as VideoFormat))
+  ) {
+    fields.push({
+      path: "briefDraft.format",
+      message: `Must be one of: ${VIDEO_FORMATS.join(", ")}.`,
+    });
+  }
+
+  const request = {
+    workspaceId: optionalString(input.workspaceId, "workspaceId", fields),
+    draftId: optionalString(input.draftId, "draftId", fields),
+    projectId: optionalString(input.projectId, "projectId", fields),
+    briefDraft: isPlainObject(briefDraftValue) ? briefDraftValue : {},
+    footageAssetIds: optionalStringArray(
+      input.footageAssetIds,
+      "footageAssetIds",
+      fields
+    ),
+  };
+
+  throwIfInvalid(fields);
+  return request;
 }
 
 export interface CreateProjectInput {
