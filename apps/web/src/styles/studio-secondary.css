@@ -18,14 +18,14 @@
   display: inline-flex;
   margin-bottom: 10px;
   color: var(--accent-2);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
   text-transform: uppercase;
 }
 
 .studio-secondary-hero h1 {
   margin: 0;
-  font-size: 36px;
+  font-size: 37px;
   line-height: 1.05;
 }
 
@@ -128,7 +128,7 @@
   padding: 5px 8px;
   background: var(--panel-2);
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -140,7 +140,7 @@
 .studio-brand-preview h2 {
   margin: 0;
   color: var(--text);
-  font-size: 18px;
+  font-size: 19px;
   letter-spacing: 0;
   text-transform: none;
 }
@@ -172,7 +172,7 @@
   background: var(--accent);
   color: var(--button-text);
   cursor: pointer;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 800;
 }
 
@@ -198,7 +198,7 @@
 }
 
 .studio-secondary-stats strong {
-  font-size: 22px;
+  font-size: 23px;
 }
 
 .studio-secondary-stats span {
@@ -293,7 +293,7 @@
   }
 
   .studio-secondary-hero h1 {
-    font-size: 30px;
+    font-size: 31px;
   }
 
   .studio-template-grid,
