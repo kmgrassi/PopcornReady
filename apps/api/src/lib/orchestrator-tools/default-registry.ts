@@ -39,9 +39,9 @@ export function createDefaultToolRegistry(
   registry.register(createPlanShotsTool(deps.planShots));
   registry.register(createPlanVisualAnchorsTool(deps.planVisualAnchors));
   registry.register(createGenerateAnchorTool(deps.generateAnchor));
-  registry.register(createGenerateClipTool(deps.generateClip));
   registry.register(createGenerateStoryboardTool(deps.generateStoryboard));
   registry.register(createGenerateKeyframeTool(deps.generateKeyframe));
+  registry.register(createGenerateClipTool(deps.generateClip));
   registry.register(createRequestApprovalTool(deps.requestApproval));
   return registry;
 }
