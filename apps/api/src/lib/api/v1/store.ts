@@ -304,6 +304,56 @@ export interface VisualAnchorPlan {
   anchors: VisualAnchorPlanItem[];
 }
 
+export interface StoryBlueprintCharacter {
+  id: string;
+  name: string;
+  role: string;
+  description: string;
+}
+
+export interface StoryBlueprintAct {
+  id: string;
+  title: string;
+  purpose: string;
+  summary: string;
+  targetDurationSec: number;
+}
+
+export interface StoryBlueprintScene {
+  id: string;
+  title: string;
+  summary: string;
+  actId: string;
+  targetDurationSec: number;
+}
+
+export interface StoryBlueprint {
+  schemaVersion: "storyBlueprint.v1";
+  premise: string;
+  logline: string;
+  tone: string;
+  audience?: string;
+  targetLengthSec: number;
+  aspectRatio: VideoBrief["aspectRatio"];
+  characters: StoryBlueprintCharacter[];
+  acts: StoryBlueprintAct[];
+  scenes: StoryBlueprintScene[];
+  ending: string;
+}
+
+export interface StoryBlueprintRecord {
+  id: string;
+  schemaVersion: "storyBlueprint.v1";
+  workspaceId: string;
+  projectId: string;
+  briefAssetId: string | null;
+  assetId: string | null;
+  status: "draft" | "approved" | "superseded";
+  content: StoryBlueprint;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type UpdateActionPatch = Partial<
   Pick<
     V1Action,
@@ -511,11 +561,13 @@ function markedContent(
     | "beat"
     | "plan"
     | "visual_anchor_plan"
+    | "story_blueprint"
     | "timeline"
     | "critique",
   content: unknown
 ): Record<string, unknown> {
-  return { [CONTENT_SCHEMA_KEY]: `${kind}.v1`, ...(content as Record<string, unknown>) };
+  const schema = kind === "story_blueprint" ? "storyBlueprint.v1" : `${kind}.v1`;
+  return { [CONTENT_SCHEMA_KEY]: schema, ...(content as Record<string, unknown>) };
 }
 
 function unmarkedContent<T>(content: unknown): T {
@@ -533,6 +585,34 @@ function mapBriefVersion(row: DataAssetRow): V1BriefVersion {
     projectId: row.project_id,
     brief: unmarkedContent<VideoBrief>(row.content),
     createdAt: iso(row.created_at),
+  };
+}
+
+interface StoryBlueprintRow {
+  id: string;
+  schema_version: "storyBlueprint.v1";
+  workspace_id: string;
+  project_id: string;
+  brief_asset_id: string | null;
+  asset_id: string | null;
+  status: "draft" | "approved" | "superseded";
+  snapshot: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+function mapStoryBlueprintRecord(row: StoryBlueprintRow): StoryBlueprintRecord {
+  return {
+    id: row.id,
+    schemaVersion: "storyBlueprint.v1",
+    workspaceId: row.workspace_id,
+    projectId: row.project_id,
+    briefAssetId: row.brief_asset_id,
+    assetId: row.asset_id,
+    status: row.status,
+    content: unmarkedContent<StoryBlueprint>(row.snapshot),
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
   };
 }
 
@@ -979,8 +1059,15 @@ async function insertDataAsset(input: {
   db: SupabaseClient;
   workspaceId: string;
   projectId: string;
-  kind: "brief" | "beat" | "plan" | "composite" | "critique";
-  contentSchemaKind?: "brief" | "beat" | "plan" | "visual_anchor_plan" | "timeline" | "critique";
+  kind: "brief" | "beat" | "plan" | "story_blueprint" | "composite" | "critique";
+  contentSchemaKind?:
+    | "brief"
+    | "beat"
+    | "plan"
+    | "visual_anchor_plan"
+    | "story_blueprint"
+    | "timeline"
+    | "critique";
   role: string;
   content: unknown;
   // Upstream asset snapshot. The DB trigger mirrors this into asset_edges, so the
@@ -1114,6 +1201,7 @@ type GraphAssetKind =
   | "narration_script"
   | "critique"
   | "plan"
+  | "story_blueprint"
   | "composite"
   | "render"
   | "poster";
@@ -1615,6 +1703,189 @@ export async function addProjectVisualAnchorPlan(input: {
     outputAssetIds: [asset.id],
   });
   return { visualAnchorPlanAssetId: asset.id };
+}
+
+export async function addProjectStoryBlueprint(input: {
+  workspaceId: string;
+  projectId: string;
+  blueprint: StoryBlueprint;
+  briefAssetId: string;
+  briefContentHash: string;
+}): Promise<{ storyBlueprintId: string; storyBlueprintAssetId: string }> {
+  const db = getServiceSupabase();
+  const graphInputs: GraphAssetInput[] = [
+    {
+      assetId: input.briefAssetId,
+      relation: "input",
+      role: "brief",
+      position: 0,
+      ...(input.briefContentHash ? { contentHash: input.briefContentHash } : {}),
+    },
+  ];
+  const action = await createAction({
+    projectId: input.projectId,
+    tool: "develop_story_blueprint",
+    status: "running",
+    params: { source: "develop_story_blueprint" },
+    inputAssetIds: [input.briefAssetId],
+    rationale: "Persist the story blueprint as a canonical story resource.",
+  });
+  const asset = await insertDataAsset({
+    db,
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    kind: "story_blueprint",
+    role: "current_story_blueprint",
+    content: input.blueprint,
+    inputs: graphInputs,
+    createdByActionId: action.id,
+  });
+  const storyBlueprint = await runQuery(
+    "store.addProjectStoryBlueprint insert",
+    db
+      .from("story_blueprints")
+      .insert({
+        schema_version: "storyBlueprint.v1",
+        workspace_id: input.workspaceId,
+        project_id: input.projectId,
+        brief_asset_id: input.briefAssetId,
+        asset_id: asset.id,
+        status: "draft",
+        snapshot: markedContent("story_blueprint", input.blueprint),
+        provenance: markedJson("story_blueprint_provenance.v1", {
+          inputAssetIds: [input.briefAssetId],
+          outputAssetId: asset.id,
+        }),
+        created_by: markedJson("story_blueprint_creator.v1", {
+          actionId: action.id,
+          tool: "develop_story_blueprint",
+        }),
+      })
+      .select("*")
+      .single()
+  );
+  const storyBlueprintId = (storyBlueprint as StoryBlueprintRow).id;
+  if (input.blueprint.characters.length > 0) {
+    await runQuery(
+      "store.addProjectStoryBlueprint characters",
+      db.from("story_blueprint_characters").insert(
+        input.blueprint.characters.map((character, index) => ({
+          story_blueprint_id: storyBlueprintId,
+          workspace_id: input.workspaceId,
+          project_id: input.projectId,
+          stable_id: character.id,
+          position: index,
+          name: character.name,
+          role: character.role,
+          description: character.description,
+        }))
+      )
+    );
+  }
+  const actRows = await runQuery(
+    "store.addProjectStoryBlueprint acts",
+    db
+      .from("story_blueprint_acts")
+      .insert(
+        input.blueprint.acts.map((act, index) => ({
+          story_blueprint_id: storyBlueprintId,
+          workspace_id: input.workspaceId,
+          project_id: input.projectId,
+          stable_id: act.id,
+          position: index,
+          title: act.title,
+          purpose: act.purpose,
+          summary: act.summary,
+          target_duration_sec: act.targetDurationSec,
+        }))
+      )
+      .select("id, stable_id")
+  );
+  const actIdByStableId = new Map(
+    ((actRows as Array<{ id: string; stable_id: string }>) ?? []).map((act) => [
+      act.stable_id,
+      act.id,
+    ])
+  );
+  if (input.blueprint.scenes.length > 0) {
+    await runQuery(
+      "store.addProjectStoryBlueprint scenes",
+      db.from("story_blueprint_scenes").insert(
+        input.blueprint.scenes.map((scene, index) => {
+          const actId = actIdByStableId.get(scene.actId);
+          if (!actId) {
+            throw new Error(`Story blueprint scene ${scene.id} references unknown act ${scene.actId}.`);
+          }
+          return {
+            story_blueprint_id: storyBlueprintId,
+            story_blueprint_act_id: actId,
+            workspace_id: input.workspaceId,
+            project_id: input.projectId,
+            stable_id: scene.id,
+            position: index,
+            title: scene.title,
+            summary: scene.summary,
+            target_duration_sec: scene.targetDurationSec,
+          };
+        })
+      )
+    );
+  }
+  await setActiveProjectScopedAssetSelection(
+    db,
+    input.projectId,
+    "story_blueprint",
+    asset.id,
+    action.id
+  );
+  await runQuery(
+    "store.addProjectStoryBlueprint current pointer",
+    db
+      .from("projects")
+      .update({ current_story_blueprint_id: storyBlueprintId })
+      .eq("id", input.projectId)
+  );
+  await updateAction(action.id, {
+    status: "applied",
+    outputAssetIds: [asset.id],
+  });
+  return {
+    storyBlueprintId,
+    storyBlueprintAssetId: asset.id,
+  };
+}
+
+export interface ActiveProjectStoryBlueprint {
+  storyBlueprint: StoryBlueprint;
+  storyBlueprintId: string;
+  assetId: string;
+  contentHash: string;
+}
+
+export async function getActiveProjectStoryBlueprint(
+  projectId: string
+): Promise<ActiveProjectStoryBlueprint | null> {
+  const db = getServiceSupabase();
+  const data = await runQuery(
+    "store.getActiveProjectStoryBlueprint",
+    db
+      .from("story_blueprints")
+      .select("*")
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+  );
+  const row = data as StoryBlueprintRow | null;
+  if (!row?.asset_id) return null;
+  const asset = await dataAssetById(db, row.asset_id);
+  return {
+    storyBlueprint: mapStoryBlueprintRecord(row).content,
+    storyBlueprintId: row.id,
+    assetId: row.asset_id,
+    contentHash: asset?.content_hash ?? "",
+  };
 }
 
 export interface ActiveProjectTimelineAsset {
