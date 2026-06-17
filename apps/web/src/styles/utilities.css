@@ -8,11 +8,11 @@
   color: #ffb4b4;
   padding: 8px 10px;
   border-radius: 8px;
-  font-size: 12px;
+  font-size: 13px;
   margin: 8px 0;
 }
 
 .ready {
   color: var(--good);
-  font-size: 12px;
+  font-size: 13px;
 }

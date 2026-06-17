@@ -18,12 +18,12 @@
 
 .sb-header h1 {
   margin: 0 0 4px;
-  font-size: 22px;
+  font-size: 23px;
 }
 
 .sb-header .muted {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .sb-actions {
@@ -38,7 +38,7 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 7px 12px;
-  font-size: 13px;
+  font-size: 14px;
   cursor: pointer;
   transition: border-color 0.12s ease, background 0.12s ease;
 }
@@ -70,11 +70,11 @@
 
 .sb-btn-xs {
   padding: 3px 8px;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .sb-status {
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .sb-status-dirty {
@@ -112,7 +112,7 @@
 }
 
 .sb-field label {
-  font-size: 11px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--muted);
@@ -124,7 +124,7 @@
   border-radius: 6px;
   color: var(--text);
   padding: 6px 8px;
-  font-size: 13px;
+  font-size: 14px;
   min-width: 120px;
 }
 
@@ -174,7 +174,7 @@
   align-items: center;
   justify-content: center;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .sb-tile img {
@@ -211,7 +211,7 @@
   border-radius: 6px;
   color: var(--text);
   padding: 6px 8px;
-  font-size: 13px;
+  font-size: 14px;
   resize: vertical;
   min-height: 48px;
   font-family: inherit;
@@ -224,7 +224,7 @@
 
 .sb-empty {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   padding: 8px 0;
 }
 

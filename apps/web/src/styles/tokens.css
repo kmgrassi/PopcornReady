@@ -39,16 +39,18 @@
   --shadow-lg: 0 26px 64px rgba(0, 0, 0, 0.45);
 
   /* Type scale */
-  --text-xs: 11px;
-  --text-sm: 12px;
-  --text-md: 13px;
-  --text-lg: 15px;
-  --title-sm: 18px;
-  --title-md: 22px;
-  --title-lg: 28px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-2xl: 26px;
+  --text-3xl: 34px;
+  --title-sm: 20px;
+  --title-md: 24px;
+  --title-lg: 30px;
   /* Page-title / step-heading scale for the guided studio (PR 0). Larger than
    * --title-lg so the active step / empty-state headline dominates the view. */
-  --title-xl: 36px;
+  --title-xl: 38px;
   --line-tight: 1.15;
   --line-heading: 1.2;
   --line-body: 1.5;

@@ -82,7 +82,7 @@
   width: 36px;
   height: 36px;
   flex: 0 0 auto;
-  font-size: 24px;
+  font-size: 25px;
   line-height: 1;
 }
 
@@ -149,7 +149,7 @@ video.visualMedia {
   width: 42px;
   height: 56px;
   transform: translateY(-50%);
-  font-size: 32px;
+  font-size: 33px;
 }
 
 .prevButton {
