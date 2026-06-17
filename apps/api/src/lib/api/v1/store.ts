@@ -1741,6 +1741,44 @@ export async function selectGeneratedBeatKeyframeAsset(input: {
   return mapAsset(row);
 }
 
+export async function selectGeneratedBeatClipAsset(input: {
+  workspaceId: string;
+  projectId: string;
+  beatId: string;
+  assetId: string;
+}): Promise<V1Asset> {
+  const db = getServiceSupabase();
+  const row = await getAssetRow(
+    db,
+    input.workspaceId,
+    input.projectId,
+    input.assetId,
+    "selectGeneratedBeatClipAsset"
+  );
+  if (row.media !== "video" || row.kind !== "clip" || row.role !== "beat_clip") {
+    throw new ApiError(
+      "asset_invalid",
+      `Generated clip asset ${input.assetId} is not a beat_clip video.`,
+      { assetIds: [input.assetId] }
+    );
+  }
+  const provenance = row.params?.provenance;
+  if (provenance?.beatId && provenance.beatId !== input.beatId) {
+    throw new ApiError(
+      "asset_invalid",
+      `Generated beat asset ${input.assetId} belongs to beat ${provenance.beatId}, not ${input.beatId}.`,
+      { assetIds: [input.assetId], beatId: input.beatId }
+    );
+  }
+  await setActiveProjectScopedAssetSelection(
+    db,
+    input.projectId,
+    `beat_clip:${input.beatId}`,
+    input.assetId
+  );
+  return mapAsset(row);
+}
+
 export interface PersistedStoryboardTile {
   beatId: string;
   assetId: string;
