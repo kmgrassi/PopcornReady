@@ -4,7 +4,7 @@ import { STUDIO_STEPS, type StudioStep } from "./useStudioFlow";
 /** Human labels for the wizard steps shown in the rail. */
 const STEP_LABELS: Record<StudioStep, string> = {
   brief: "Brief",
-  footage: "Footage",
+  footage: "Your Footage",
   story: "Story",
   generate: "Checkpoints",
   review: "Review",
