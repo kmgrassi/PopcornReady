@@ -87,27 +87,14 @@ export function AuthForm({ mode }: AuthFormProps) {
               organized from prompt to final render.
             </p>
           </div>
-          <div
-            className={styles.previewImage}
-            role="img"
-            aria-label="A stylized project board with video frames, timeline tracks, and review notes"
-          >
-            <div className={styles.previewTopbar}>
-              <span />
-              <span />
-              <span />
-            </div>
-            <div className={styles.previewFrameGrid}>
-              <span />
-              <span />
-              <span />
-            </div>
-            <div className={styles.previewTimeline}>
-              <span />
-              <span />
-              <span />
-            </div>
-          </div>
+          <figure className={styles.previewImage}>
+            <img
+              src="/images/pc-ai-orchestrator-overview.png"
+              alt="Popcorn Ready orchestrator overview showing the brief, planning, generated assets, and render pipeline."
+              width="1535"
+              height="1024"
+            />
+          </figure>
         </aside>
       )}
 

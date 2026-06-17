@@ -129,76 +129,19 @@
 }
 
 .previewImage {
-  position: relative;
   overflow: hidden;
-  aspect-ratio: 16 / 10;
-  width: min(100%, 520px);
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: var(--space-4);
-  padding: var(--space-5);
-  background:
-    linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--accent) 28%, var(--panel)),
-      color-mix(in srgb, var(--accent-2) 24%, var(--panel-2))
-    );
+  width: min(100%, 560px);
+  margin: 0;
+  background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-md);
 }
 
-.previewTopbar {
-  display: flex;
-  gap: var(--space-2);
-}
-
-.previewTopbar span {
-  width: 10px;
-  height: 10px;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--text) 72%, transparent);
-}
-
-.previewFrameGrid {
-  display: grid;
-  grid-template-columns: 1.4fr 1fr;
-  grid-template-rows: repeat(2, minmax(0, 1fr));
-  gap: var(--space-3);
-}
-
-.previewFrameGrid span,
-.previewTimeline span {
+.previewImage img {
   display: block;
-  border: 1px solid color-mix(in srgb, var(--text) 22%, transparent);
-  background: color-mix(in srgb, var(--panel) 54%, transparent);
-  box-shadow: var(--shadow-sm);
-}
-
-.previewFrameGrid span {
-  border-radius: var(--radius-sm);
-}
-
-.previewFrameGrid span:first-child {
-  grid-row: 1 / span 2;
-  background:
-    linear-gradient(
-      145deg,
-      color-mix(in srgb, var(--cta) 46%, transparent),
-      transparent 48%
-    ),
-    color-mix(in srgb, var(--panel) 62%, transparent);
-}
-
-.previewTimeline {
-  display: grid;
-  grid-template-columns: 1.35fr 0.85fr 1fr;
-  gap: var(--space-2);
-}
-
-.previewTimeline span {
-  height: 18px;
-  border-radius: var(--radius-pill);
+  width: 100%;
+  height: auto;
 }
 
 @media (min-width: 1024px) {

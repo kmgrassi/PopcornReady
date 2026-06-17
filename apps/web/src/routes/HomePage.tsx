@@ -258,6 +258,27 @@ export function HomePage() {
           </figure>
         </section>
 
+        <section className={`lp-section ${styles.orchestrator}`}>
+          <div className={styles.orchestratorCopy}>
+            <span className={styles.kicker}>AI orchestrator</span>
+            <h2 className={styles.title}>The agent coordinates every stage.</h2>
+            <p className={styles.body}>
+              Briefs, planning, asset generation, review, and rendering stay
+              connected as one inspectable system instead of scattered one-off
+              tools.
+            </p>
+          </div>
+          <figure className={styles.orchestratorFrame}>
+            <img
+              src="/images/pc-ai-orchestrator-overview.png"
+              alt="Popcorn Ready AI orchestrator overview showing the connected brief, planning, assets, and render pipeline."
+              loading="lazy"
+              width="1535"
+              height="1024"
+            />
+          </figure>
+        </section>
+
         <section id="how" className="lp-section">
           <h2 className="lp-section-title">How it works</h2>
           <p className="lp-section-sub">
