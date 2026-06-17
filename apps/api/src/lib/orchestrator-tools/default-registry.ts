@@ -7,6 +7,7 @@ import {
   createCritiqueTimelineTool,
   type CritiqueTimelineDeps,
 } from "./critique-timeline";
+import { createExportVideoTool, type ExportVideoDeps } from "./export-video";
 import { createGenerateAnchorTool, type GenerateAnchorDeps } from "./generate-anchor";
 import { createGenerateAudioTool, type GenerateAudioDeps } from "./generate-audio";
 import { createGenerateClipTool, type GenerateClipDeps } from "./generate-clip";
@@ -33,6 +34,7 @@ export interface DefaultToolRegistryDeps {
   planShots?: Partial<PlanShotsDeps>;
   createBrief?: Partial<CreateBriefDeps>;
   critiqueTimeline?: Partial<CritiqueTimelineDeps>;
+  exportVideo?: Partial<ExportVideoDeps>;
   generateAnchor?: Partial<GenerateAnchorDeps>;
   generateAudio?: Partial<GenerateAudioDeps>;
   generateKeyframe?: Partial<GenerateKeyframeDeps>;
@@ -56,6 +58,7 @@ export function createDefaultToolRegistry(
   registry.register(createGenerateKeyframeTool(deps.generateKeyframe));
   registry.register(createGenerateClipTool(deps.generateClip));
   registry.register(createCritiqueTimelineTool(deps.critiqueTimeline));
+  registry.register(createExportVideoTool(deps.exportVideo));
   registry.register(createRequestApprovalTool(deps.requestApproval));
   registry.register(createAssembleTimelineTool(deps.assembleTimeline));
   return registry;
