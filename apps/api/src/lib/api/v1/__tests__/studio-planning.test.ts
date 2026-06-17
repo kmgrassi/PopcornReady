@@ -75,6 +75,27 @@ test("createStudioPlanningPreview honors an existing story format and readies po
   assert.deepEqual(preview.source.missingInputs, []);
 });
 
+test("createStudioPlanningPreview reads persisted Studio draft aliases", () => {
+  const preview = createStudioPlanningPreview({
+    briefDraft: {
+      goal: "Explain correlation and causation for beginners",
+      hook: "Why do ice cream sales rise when more people swim?",
+      bestVisual: "two side-by-side charts moving together",
+      bigIdea: "moving together does not prove one thing caused the other",
+      format: "classroom_demo",
+    },
+  });
+
+  assert.equal(preview.storyDirection.format, "classroom_demo");
+  assert.equal(
+    preview.openingHook,
+    "Why do ice cream sales rise when more people swim?"
+  );
+  assert.equal(preview.poster.status, "ready_for_background");
+  assert.match(preview.poster.prompt ?? "", /two side-by-side charts/);
+  assert.deepEqual(preview.source.missingInputs, []);
+});
+
 test("createStudioPlanningPreview infers direction and reports poster blockers", () => {
   const preview = createStudioPlanningPreview({
     briefDraft: {

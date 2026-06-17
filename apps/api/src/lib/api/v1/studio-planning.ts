@@ -55,6 +55,17 @@ function textField(draft: Record<string, unknown>, key: string): string | undefi
   return trimmed === "" ? undefined : trimmed;
 }
 
+function textFieldAny(
+  draft: Record<string, unknown>,
+  keys: string[]
+): string | undefined {
+  for (const key of keys) {
+    const value = textField(draft, key);
+    if (value) return value;
+  }
+  return undefined;
+}
+
 function includesAny(value: string | undefined, terms: string[]): boolean {
   const lower = value?.toLowerCase() ?? "";
   return terms.some((term) => lower.includes(term));
@@ -75,11 +86,11 @@ function chooseStoryFormat(
   const requested = formatFromDraft(draft);
   if (requested) return requested;
 
-  const hookQuestion = textField(draft, "hookQuestion");
-  const strongestVisual = textField(draft, "strongestVisual");
+  const hookQuestion = textFieldAny(draft, ["hookQuestion", "hook"]);
+  const strongestVisual = textFieldAny(draft, ["strongestVisual", "bestVisual"]);
   const goal = textField(draft, "goal");
   const style = textField(draft, "style");
-  const oneBigIdea = textField(draft, "oneBigIdea");
+  const oneBigIdea = textFieldAny(draft, ["oneBigIdea", "bigIdea"]);
 
   if (hookQuestion?.endsWith("?")) return "mystery_to_model";
   if (strongestVisual) return "visual_reveal";
@@ -100,15 +111,15 @@ function stripTrailingPunctuation(value: string): string {
 }
 
 function createOpeningHook(draft: Record<string, unknown>): string {
-  const hookQuestion = textField(draft, "hookQuestion");
+  const hookQuestion = textFieldAny(draft, ["hookQuestion", "hook"]);
   if (hookQuestion) return hookQuestion;
 
-  const strongestVisual = textField(draft, "strongestVisual");
+  const strongestVisual = textFieldAny(draft, ["strongestVisual", "bestVisual"]);
   if (strongestVisual) {
     return `Start on ${stripTrailingPunctuation(strongestVisual)}.`;
   }
 
-  const oneBigIdea = textField(draft, "oneBigIdea");
+  const oneBigIdea = textFieldAny(draft, ["oneBigIdea", "bigIdea"]);
   if (oneBigIdea) {
     return `What if ${stripTrailingPunctuation(oneBigIdea).toLowerCase()}?`;
   }
@@ -127,7 +138,7 @@ function createPosterPrompt(input: {
 }): { prompt: string | null; visualDirection: string; missingInputs: string[] } {
   const { draft, format, openingHook, hasFootage } = input;
   const goal = textField(draft, "goal");
-  const strongestVisual = textField(draft, "strongestVisual");
+  const strongestVisual = textFieldAny(draft, ["strongestVisual", "bestVisual"]);
   const style = textField(draft, "style");
   const audience = textField(draft, "audience");
 
