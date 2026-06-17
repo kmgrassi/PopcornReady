@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { LogoMark } from "../components/LogoMark";
 import { PromptComposer } from "../components/PromptComposer";
+import styles from "./HomePage.module.css";
 
 const GITHUB_URL = "https://github.com/kmgrassi/popcornready";
 
@@ -235,6 +236,26 @@ export function HomePage() {
             The AI-first way video gets made.
           </p>
           <PromptComposer />
+        </section>
+
+        <section className={`lp-section ${styles.overview}`}>
+          <div className={styles.overviewCopy}>
+            <span className={styles.kicker}>Full run overview</span>
+            <h2 className={styles.title}>One directed run, visible end to end.</h2>
+            <p className={styles.body}>
+              Popcorn Ready keeps the brief, plan, generated assets, review
+              loop, and render output in one inspectable workspace.
+            </p>
+          </div>
+          <figure className={styles.overviewFrame}>
+            <img
+              src="/images/popcorn-ready-full-run-overview.png"
+              alt="Popcorn Ready full run overview showing the prompt, generated planning, review, and output workspace."
+              loading="lazy"
+              width="1536"
+              height="1024"
+            />
+          </figure>
         </section>
 
         <section id="how" className="lp-section">

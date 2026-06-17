@@ -184,7 +184,7 @@ function timelineRequired(): ToolCallResult<CritiqueTimelineOutput> {
         {
           requirement: "timeline",
           because:
-            "The critic reviews the assembled cut and needs the current_timeline graph asset.",
+            "The critic reviews the assembled cut and needs the active timeline graph asset.",
           satisfyWith: { tool: "assemble_timeline", inputHint: {} },
         },
       ],
@@ -204,7 +204,7 @@ export function createCritiqueTimelineTool(
       "Review the active assembled timeline graph asset and persist advisory critique notes. Requires assemble_timeline first.",
     usage: {
       preconditions: [
-        "An active current_timeline graph asset exists (call assemble_timeline first).",
+        "An active timeline graph asset exists (call assemble_timeline first).",
       ],
       produces: [
         "A persisted timeline_critique asset linked to the active timeline for downstream decisions.",

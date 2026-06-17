@@ -1,3 +1,7 @@
+import {
+  createAssembleTimelineTool,
+  type AssembleTimelineDeps,
+} from "./assemble-timeline";
 import { createBriefTool, type CreateBriefDeps } from "./create-or-load-brief";
 import {
   createCritiqueTimelineTool,
@@ -36,6 +40,7 @@ export interface DefaultToolRegistryDeps {
   generateStoryboard?: Partial<GenerateStoryboardDeps>;
   planVisualAnchors?: Partial<PlanVisualAnchorsDeps>;
   requestApproval?: Partial<RequestApprovalDeps>;
+  assembleTimeline?: Partial<AssembleTimelineDeps>;
 }
 
 export function createDefaultToolRegistry(
@@ -52,5 +57,6 @@ export function createDefaultToolRegistry(
   registry.register(createGenerateClipTool(deps.generateClip));
   registry.register(createCritiqueTimelineTool(deps.critiqueTimeline));
   registry.register(createRequestApprovalTool(deps.requestApproval));
+  registry.register(createAssembleTimelineTool(deps.assembleTimeline));
   return registry;
 }

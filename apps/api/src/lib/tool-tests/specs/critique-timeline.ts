@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { addAsset, addProjectTimelineAsset } from "@/lib/api/v1/store";
+import { addAsset, addProjectTimeline } from "@/lib/api/v1/store";
 import type { Timeline } from "@popcorn/shared/types";
 import type { ToolBattery } from "../types";
 
@@ -37,11 +37,11 @@ async function seedTimeline(sandbox: { workspaceId: string; projectId: string })
       },
     ],
   };
-  await addProjectTimelineAsset({
+  await addProjectTimeline({
     workspaceId: sandbox.workspaceId,
     projectId: sandbox.projectId,
-    timelineId: randomUUID(),
     timeline,
+    graphInputs: [],
   });
 }
 
