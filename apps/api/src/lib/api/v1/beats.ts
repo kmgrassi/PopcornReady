@@ -80,6 +80,7 @@ interface BeatMediaInput {
   prompt?: string;
   compositionId?: string;
   anchorIds: string[];
+  structuralReferenceAssetIds: string[];
   autocreate: boolean;
   // Everything else passes through to the generic generator (provider, model,
   // seed, durationSec, characterProfileIds, …) untouched.
@@ -99,6 +100,7 @@ function parseBeatBody(body: unknown): BeatMediaInput {
     // `referenceAssetIds` is derived from anchorIds below; drop a caller copy so
     // the two channels can't disagree.
     referenceAssetIds: _ignoredRefs,
+    structuralReferenceAssetIds,
     ...passthrough
   } = obj;
   return {
@@ -108,6 +110,7 @@ function parseBeatBody(body: unknown): BeatMediaInput {
         ? compositionId.trim()
         : undefined,
     anchorIds: parseStringArray(anchorIds),
+    structuralReferenceAssetIds: parseStringArray(structuralReferenceAssetIds),
     autocreate: autocreate === true,
     passthrough,
   };
@@ -190,7 +193,7 @@ async function buildBeatMediaBody(
       ...input.passthrough,
       kind: mediaKind === "keyframe" ? "image" : "video",
       prompt,
-      referenceAssetIds: input.anchorIds,
+      referenceAssetIds: [...input.anchorIds, ...input.structuralReferenceAssetIds],
       beatId,
       anchorIds: input.anchorIds,
     },
