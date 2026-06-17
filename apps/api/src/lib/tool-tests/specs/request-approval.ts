@@ -27,8 +27,8 @@ export const requestApprovalBattery: ToolBattery = {
         if (!gate) {
           failures.push("approval gate was not persisted");
         } else {
-          if (gate.stage !== "request_approval") {
-            failures.push(`gate stage expected request_approval, got ${gate.stage}`);
+          if (gate.stage === "request_approval") {
+            failures.push("gate stage must be the reviewed tool, not request_approval");
           }
           if (gate.status !== "reached") {
             failures.push(`gate status expected reached, got ${gate.status}`);

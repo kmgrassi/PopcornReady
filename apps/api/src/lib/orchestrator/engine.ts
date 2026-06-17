@@ -285,6 +285,12 @@ function toPriorResult(action: RunActionSummary): Record<string, unknown> {
   return base;
 }
 
+function invocationOutputAssetIds(result: ToolCallResult): string[] {
+  if (result.status === "succeeded") return result.resourceIds;
+  if (result.status === "waiting_for_approval") return result.previewArtifactIds;
+  return [];
+}
+
 // Async tool jobs report their produced assets as { assetIds: string[] }.
 function jobAssetIds(result: unknown): string[] {
   if (result && typeof result === "object" && "assetIds" in result) {
@@ -420,7 +426,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
             ? "failed"
             : "running",
       params: decision.input,
-      outputAssetIds: result.status === "succeeded" ? result.resourceIds : [],
+      outputAssetIds: invocationOutputAssetIds(result),
       jobIds: result.status === "accepted" ? [result.jobId] : [],
       costUsd: result.status === "succeeded" ? result.costUsd : undefined,
       error: result.status === "failed" ? { ...result.error } : undefined,

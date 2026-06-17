@@ -115,25 +115,27 @@ test("projects a regenerated stage from the latest action instead of stale failu
   assert.deepEqual(payload.stages[0]?.artifactIds, ["brief_asset_2"]);
 });
 
-test("projects a reached request_approval gate as a resolvable review gate", () => {
+test("projects a reached dynamic approval gate as a resolvable review gate", () => {
   const payload = projectRunDetailFromParts(
     runFixture({ status: "waiting" }),
     [
       {
-        id: "gate_request_approval",
+        id: "gate_export_video",
         orchestratorRunId: "run_1",
-        stage: "request_approval",
+        stage: "export_video",
         status: "reached",
         createdAt: "2026-06-15T00:00:00.000Z",
         updatedAt: "2026-06-15T00:00:03.000Z",
       },
     ],
-    [actionFixture("request_approval", { status: "running" })]
+    [actionFixture("request_approval", { status: "running", outputAssetIds: ["preview_1"] })]
   );
 
-  assert.equal(payload.run.reviewGate?.stageType, "quality_review");
+  assert.equal(payload.run.reviewGate?.stageType, "export");
   assert.equal(payload.run.reviewGate?.state, "awaiting_review");
-  assert.equal(payload.run.currentStageType, "quality_review");
+  assert.equal(payload.run.currentStageType, "export");
+  const qualityStage = payload.stages.find((stage) => stage.type === "quality_review");
+  assert.deepEqual(qualityStage?.artifactIds, ["preview_1"]);
 });
 
 test("keeps unresolved tool failures within a grouped stage", () => {

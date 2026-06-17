@@ -307,6 +307,33 @@ test("stays parked when the resume job is not yet terminal", async () => {
   assert.equal(stillParked.status, "waiting");
 });
 
+test("parks on an approval gate and persists preview artifacts on the action", async () => {
+  const store = new FakeStore(runFixture());
+  const { model } = scriptedModel([
+    {
+      type: "tool_call",
+      toolName: "request_approval",
+      input: { step: "export_video", previewArtifactIds: ["preview_1"] },
+    },
+  ]);
+  const registry = fakeRegistry({
+    request_approval: () => ({
+      status: "waiting_for_approval",
+      gateId: "gate_export_video",
+      resumesWhen: "approval_terminal",
+      previewArtifactIds: ["preview_1"],
+    }),
+  });
+
+  const parked = await runOrchestratorToCompletion("run1", deps(store, model, registry));
+
+  assert.equal(parked.status, "waiting");
+  assert.equal(store.actions.length, 1);
+  assert.equal(store.actions[0].tool, "request_approval");
+  assert.equal(store.actions[0].status, "running");
+  assert.deepEqual(store.actions[0].outputAssetIds, ["preview_1"]);
+});
+
 test("parks before a gated stage and resumes once the gate is approved", async () => {
   const store = new FakeStore(runFixture(), [gateFixture("create_or_load_brief")]);
   // Model wants the brief until one exists, then it's done.

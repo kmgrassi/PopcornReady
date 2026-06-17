@@ -1,16 +1,18 @@
 import { createReachedApprovalGate as realCreateReachedApprovalGate } from "@/lib/api/v1/orchestrator-store";
-import type { ToolCallResult, ToolDefinition } from "./types";
+import type { ToolCallResult, ToolDefinition, ToolName } from "./types";
 import { ToolInputError } from "./types";
 
+type ReviewableApprovalStep = Exclude<ToolName, "request_approval">;
+
 export interface RequestApprovalInput {
-  step: string;
+  step: ReviewableApprovalStep;
   previewArtifactIds: string[];
   note?: string;
 }
 
 export interface RequestApprovalOutput {
   gateId: string;
-  step: string;
+  step: ReviewableApprovalStep;
   previewArtifactIds: string[];
 }
 
@@ -22,6 +24,24 @@ const defaultDeps: RequestApprovalDeps = {
   createReachedApprovalGate: realCreateReachedApprovalGate,
 };
 
+const REVIEWABLE_APPROVAL_STEPS = [
+  "create_or_load_brief",
+  "develop_story_blueprint",
+  "draft_script",
+  "plan_shots",
+  "plan_visual_anchors",
+  "generate_anchor",
+  "generate_storyboard",
+  "generate_keyframe",
+  "generate_clip",
+  "generate_audio",
+  "assemble_timeline",
+  "critique_timeline",
+  "export_video",
+] as const satisfies readonly ReviewableApprovalStep[];
+
+const reviewableApprovalSteps = new Set<string>(REVIEWABLE_APPROVAL_STEPS);
+
 const str = { type: "string" } as const;
 
 export const requestApprovalInputSchema = {
@@ -30,7 +50,8 @@ export const requestApprovalInputSchema = {
   properties: {
     step: {
       type: "string",
-      description: "Short name for the stage or artifact set the user should review.",
+      enum: REVIEWABLE_APPROVAL_STEPS,
+      description: "Tool whose output the user should review and whose stage should rerun on reject.",
     },
     previewArtifactIds: {
       type: "array",
@@ -50,7 +71,7 @@ export const requestApprovalOutputSchema = {
   additionalProperties: false,
   properties: {
     gateId: str,
-    step: str,
+    step: { type: "string", enum: REVIEWABLE_APPROVAL_STEPS },
     previewArtifactIds: { type: "array", items: str },
   },
   required: ["gateId", "step", "previewArtifactIds"],
@@ -91,6 +112,13 @@ export function parseRequestApprovalInput(input: unknown): RequestApprovalInput 
       field: "step",
     });
   }
+  const step = input.step.trim();
+  if (!reviewableApprovalSteps.has(step)) {
+    throw new ToolInputError("request_approval step must name the tool being reviewed.", {
+      field: "step",
+      expected: REVIEWABLE_APPROVAL_STEPS,
+    });
+  }
 
   if (input.note !== undefined && typeof input.note !== "string") {
     throw new ToolInputError("request_approval note must be a string.", {
@@ -101,7 +129,7 @@ export function parseRequestApprovalInput(input: unknown): RequestApprovalInput 
   const previewArtifactIds = parseStringArray(input.previewArtifactIds, "previewArtifactIds");
   const note = typeof input.note === "string" && input.note.trim() ? input.note.trim() : undefined;
   return {
-    step: input.step.trim(),
+    step: step as ReviewableApprovalStep,
     previewArtifactIds,
     ...(note ? { note } : {}),
   };
@@ -131,8 +159,8 @@ export function createRequestApprovalTool(
       preconditions: ["A durable orchestrator run is active."],
       produces: ["A reached approval gate that the existing approve/reject routes can resolve."],
       useWhen: [
-        "The user should inspect previews or notes before the next expensive stage.",
-        "A generation policy or user setting asks for a manual review stop.",
+        "The user should inspect a tool's previews or notes before the next expensive stage.",
+        "A generation policy or user setting asks for a manual review stop; set step to the reviewed tool so reject can rerun it.",
       ],
     },
     inputSchema: requestApprovalInputSchema,
@@ -149,7 +177,7 @@ export function createRequestApprovalTool(
 
       const gate = await resolved.createReachedApprovalGate({
         runId: context.orchestratorRunId,
-        stage: "request_approval",
+        stage: input.step,
       });
 
       return {

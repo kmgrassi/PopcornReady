@@ -19,7 +19,7 @@ function reachedGate() {
   return {
     id: "gate_1",
     orchestratorRunId: "run_1",
-    stage: "request_approval",
+    stage: "export_video",
     status: "reached" as const,
     createdAt: "t0",
     updatedAt: "t0",
@@ -29,12 +29,12 @@ function reachedGate() {
 test("request_approval parses the review step and preview artifacts", () => {
   assert.deepEqual(
     parseRequestApprovalInput({
-      step: "before_export",
+      step: "export_video",
       previewArtifactIds: [" asset_1 "],
       note: " Review framing. ",
     }),
     {
-      step: "before_export",
+      step: "export_video",
       previewArtifactIds: ["asset_1"],
       note: "Review framing.",
     }
@@ -43,8 +43,15 @@ test("request_approval parses the review step and preview artifacts", () => {
 
 test("request_approval rejects malformed preview artifact ids", () => {
   assert.throws(
-    () => parseRequestApprovalInput({ step: "before_export", previewArtifactIds: 42 }),
+    () => parseRequestApprovalInput({ step: "export_video", previewArtifactIds: 42 }),
     /previewArtifactIds must be an array/
+  );
+});
+
+test("request_approval rejects a step that cannot rerun on rejection", () => {
+  assert.throws(
+    () => parseRequestApprovalInput({ step: "request_approval", previewArtifactIds: [] }),
+    /step must name the tool being reviewed/
   );
 });
 
@@ -72,11 +79,11 @@ test("request_approval creates a reached gate and parks on approval", async () =
   });
 
   const result = await tool.execute(
-    { step: "before_export", previewArtifactIds: ["artifact_1"] },
+    { step: "export_video", previewArtifactIds: ["artifact_1"] },
     { auth, projectId: "proj_1", orchestratorRunId: "run_1" }
   );
 
-  assert.deepEqual(createdWith, { runId: "run_1", stage: "request_approval" });
+  assert.deepEqual(createdWith, { runId: "run_1", stage: "export_video" });
   assert.equal(result.status, "waiting_for_approval");
   if (result.status === "waiting_for_approval") {
     assert.equal(result.gateId, "gate_1");
@@ -95,7 +102,7 @@ test("request_approval fails before writing without an orchestrator run id", asy
   });
 
   const result = await tool.execute(
-    { step: "before_export", previewArtifactIds: [] },
+    { step: "export_video", previewArtifactIds: [] },
     { auth, projectId: "proj_1" }
   );
 
