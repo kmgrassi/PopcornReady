@@ -198,6 +198,55 @@ export interface EditPlan {
   scenes: Scene[];
 }
 
+export type StoryDurationClass = "micro" | "short" | "medium" | "long" | "feature";
+
+export interface StoryDurationPlan {
+  targetLengthSec: number;
+  durationClass: StoryDurationClass;
+  expectedActCount: number;
+  expectedSceneCount: number;
+  expectedBeatCount: number;
+  planningGranularity:
+    | "beats_only"
+    | "scenes_and_beats"
+    | "acts_scenes_beats"
+    | "sequences_acts_scenes_beats";
+}
+
+export interface ScriptDialogueLine {
+  characterId?: string;
+  characterName?: string;
+  text: string;
+  delivery?: string;
+}
+
+export interface ScriptScene {
+  id: string;
+  title: string;
+  summary: string;
+  narration?: string;
+  dialogue: ScriptDialogueLine[];
+  visualIntent?: string;
+  durationSec?: number;
+}
+
+export interface ScriptDraft {
+  schemaVersion: "scriptDraft.v1";
+  id: string;
+  projectId: string;
+  briefAssetId: string;
+  storyBlueprintId: string;
+  targetLengthSec: number;
+  durationClass: StoryDurationClass;
+  durationPlan: StoryDurationPlan;
+  scenes: ScriptScene[];
+  narration?: string;
+  createdAt: string;
+  updatedAt: string;
+  supersedesId?: string;
+  status: "draft" | "approved" | "archived";
+}
+
 // Read-helper: flatten a plan's scenes into their ordered beats. Consumers that
 // only care about the beat sequence (timeline, edit-graph, storyboard tiles)
 // use this rather than reaching into `scene.beats` directly.
