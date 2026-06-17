@@ -107,7 +107,7 @@ export const exportVideoBattery: ToolBattery = {
 
         const { data: actions, error: actionError } = await db
           .from("actions")
-          .select("tool, status, output_asset_ids")
+          .select("tool, status, params, job_ids, output_asset_ids")
           .eq("project_id", sandbox.projectId)
           .eq("tool", "export_video");
         if (actionError) failures.push(`action query failed: ${actionError.message}`);
@@ -115,6 +115,15 @@ export const exportVideoBattery: ToolBattery = {
           failures.push("missing export_video action");
         } else if (actions[0].status !== "applied") {
           failures.push(`expected applied action, got ${actions[0].status}`);
+        } else {
+          const jobIds = (actions[0].job_ids as string[] | null) ?? [];
+          if (jobIds.length !== 0) {
+            failures.push("export_video action stored non-UUID agent job ids in job_ids");
+          }
+          const params = actions[0].params as { agentJobId?: unknown } | null;
+          if (typeof params?.agentJobId !== "string") {
+            failures.push("export_video action params did not retain the agent job id");
+          }
         }
 
         return failures;

@@ -1,6 +1,16 @@
+import {
+  createAssembleTimelineTool,
+  type AssembleTimelineDeps,
+} from "./assemble-timeline";
 import { createBriefTool, type CreateBriefDeps } from "./create-or-load-brief";
 import { createExportVideoTool, type ExportVideoDeps } from "./export-video";
 import { createGenerateAnchorTool, type GenerateAnchorDeps } from "./generate-anchor";
+import { createGenerateAudioTool, type GenerateAudioDeps } from "./generate-audio";
+import { createGenerateClipTool, type GenerateClipDeps } from "./generate-clip";
+import {
+  createGenerateKeyframeTool,
+  type GenerateKeyframeDeps,
+} from "./generate-keyframe";
 import {
   createGenerateStoryboardTool,
   type GenerateStoryboardDeps,
@@ -21,9 +31,13 @@ export interface DefaultToolRegistryDeps {
   createBrief?: Partial<CreateBriefDeps>;
   exportVideo?: Partial<ExportVideoDeps>;
   generateAnchor?: Partial<GenerateAnchorDeps>;
+  generateAudio?: Partial<GenerateAudioDeps>;
+  generateKeyframe?: Partial<GenerateKeyframeDeps>;
+  generateClip?: Partial<GenerateClipDeps>;
   generateStoryboard?: Partial<GenerateStoryboardDeps>;
   planVisualAnchors?: Partial<PlanVisualAnchorsDeps>;
   requestApproval?: Partial<RequestApprovalDeps>;
+  assembleTimeline?: Partial<AssembleTimelineDeps>;
 }
 
 export function createDefaultToolRegistry(
@@ -34,8 +48,12 @@ export function createDefaultToolRegistry(
   registry.register(createPlanShotsTool(deps.planShots));
   registry.register(createPlanVisualAnchorsTool(deps.planVisualAnchors));
   registry.register(createGenerateAnchorTool(deps.generateAnchor));
+  registry.register(createGenerateAudioTool(deps.generateAudio));
   registry.register(createGenerateStoryboardTool(deps.generateStoryboard));
+  registry.register(createGenerateKeyframeTool(deps.generateKeyframe));
+  registry.register(createGenerateClipTool(deps.generateClip));
   registry.register(createExportVideoTool(deps.exportVideo));
   registry.register(createRequestApprovalTool(deps.requestApproval));
+  registry.register(createAssembleTimelineTool(deps.assembleTimeline));
   return registry;
 }

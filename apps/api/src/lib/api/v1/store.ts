@@ -72,7 +72,7 @@ import {
   type StudioDraftStep,
   type StudioDraftSummary,
 } from "@popcorn/shared/v1/studio-drafts";
-import type { EditPlan } from "@popcorn/shared/types";
+import type { EditPlan, Timeline } from "@popcorn/shared/types";
 import type { Asset } from "@popcorn/shared/assets/types";
 import {
   getOrchestratorRun,
@@ -506,7 +506,7 @@ interface DataAssetRow {
 const CONTENT_SCHEMA_KEY = "schema_version";
 
 function markedContent(
-  kind: "brief" | "beat" | "plan" | "visual_anchor_plan",
+  kind: "brief" | "beat" | "plan" | "visual_anchor_plan" | "timeline",
   content: unknown
 ): Record<string, unknown> {
   return { [CONTENT_SCHEMA_KEY]: `${kind}.v1`, ...(content as Record<string, unknown>) };
@@ -825,7 +825,7 @@ async function mapProjectWithProjection(
 async function setActiveAssetSelection(
   db: SupabaseClient,
   projectId: string,
-  slotRole: "brief" | "plan" | "visual_anchors" | typeof POSTER_SLOT_ROLE,
+  slotRole: "brief" | "plan" | "visual_anchors" | "cut" | typeof POSTER_SLOT_ROLE,
   activeAssetId: string,
   setByActionId?: string
 ): Promise<void> {
@@ -973,8 +973,8 @@ async function insertDataAsset(input: {
   db: SupabaseClient;
   workspaceId: string;
   projectId: string;
-  kind: "brief" | "beat" | "plan";
-  contentSchemaKind?: "brief" | "beat" | "plan" | "visual_anchor_plan";
+  kind: "brief" | "beat" | "plan" | "composite";
+  contentSchemaKind?: "brief" | "beat" | "plan" | "visual_anchor_plan" | "timeline";
   role: string;
   content: unknown;
   // Upstream asset snapshot. The DB trigger mirrors this into asset_edges, so the
@@ -986,7 +986,9 @@ async function insertDataAsset(input: {
 }): Promise<DataAssetRow> {
   const now = new Date().toISOString();
   const visibility = await defaultVisibilityForWorkspace(input.db, input.workspaceId);
-  const content = markedContent(input.contentSchemaKind ?? input.kind, input.content);
+  const contentSchemaKind =
+    input.contentSchemaKind ?? (input.kind === "composite" ? "timeline" : input.kind);
+  const content = markedContent(contentSchemaKind, input.content);
   const inputs = input.inputs ?? [];
   const row: Record<string, unknown> = {
     schema_version: "asset.v2",
@@ -1013,6 +1015,11 @@ async function insertDataAsset(input: {
     input.db.from("assets").insert(row).select("*").single()
   );
   return data as DataAssetRow;
+}
+
+export interface ActiveAssetSelection {
+  slotRole: string;
+  asset: V1Asset;
 }
 
 // --- studio drafts ---------------------------------------------------------
@@ -1683,6 +1690,236 @@ export async function selectGeneratedAnchorAsset(input: {
   return mapAsset(row);
 }
 
+export async function getActiveProjectScopedAsset(input: {
+  workspaceId: string;
+  projectId: string;
+  slotRole: string;
+  expectedRole?: string;
+}): Promise<V1Asset | null> {
+  const db = getServiceSupabase();
+  await requireProjectRow(db, input.workspaceId, input.projectId);
+  const selected = await runQuery(
+    `store.getActiveProjectScopedAsset ${input.slotRole}`,
+    db
+      .from("current_selections")
+      .select("active_asset_id")
+      .eq("project_id", input.projectId)
+      .eq("slot_role", input.slotRole)
+      .maybeSingle()
+  );
+  const assetId = (selected as CurrentSelectionRow | null)?.active_asset_id;
+  if (!assetId) return null;
+  const row = await getAssetRow(
+    db,
+    input.workspaceId,
+    input.projectId,
+    assetId,
+    "getActiveProjectScopedAsset"
+  );
+  if (input.expectedRole && row.role !== input.expectedRole) return null;
+  return mapAsset(row);
+}
+
+export async function selectGeneratedBeatKeyframeAsset(input: {
+  workspaceId: string;
+  projectId: string;
+  beatId: string;
+  assetId: string;
+}): Promise<V1Asset> {
+  const db = getServiceSupabase();
+  const row = await getAssetRow(
+    db,
+    input.workspaceId,
+    input.projectId,
+    input.assetId,
+    "selectGeneratedBeatKeyframeAsset"
+  );
+  if (row.media !== "image" || row.kind !== "keyframe" || row.role !== "beat_keyframe") {
+    throw new ApiError(
+      "asset_invalid",
+      `Generated keyframe asset ${input.assetId} is not a beat_keyframe image.`,
+      { assetIds: [input.assetId] }
+    );
+  }
+  await setActiveProjectScopedAssetSelection(
+    db,
+    input.projectId,
+    `beat_keyframe:${input.beatId}`,
+    input.assetId
+  );
+  return mapAsset(row);
+}
+
+export async function selectGeneratedBeatClipAsset(input: {
+  workspaceId: string;
+  projectId: string;
+  beatId: string;
+  assetId: string;
+}): Promise<V1Asset> {
+  const db = getServiceSupabase();
+  const row = await getAssetRow(
+    db,
+    input.workspaceId,
+    input.projectId,
+    input.assetId,
+    "selectGeneratedBeatClipAsset"
+  );
+  if (row.media !== "video" || row.kind !== "clip" || row.role !== "beat_clip") {
+    throw new ApiError(
+      "asset_invalid",
+      `Generated clip asset ${input.assetId} is not a beat_clip video.`,
+      { assetIds: [input.assetId] }
+    );
+  }
+  const provenance = row.params?.provenance;
+  if (provenance?.beatId && provenance.beatId !== input.beatId) {
+    throw new ApiError(
+      "asset_invalid",
+      `Generated beat asset ${input.assetId} belongs to beat ${provenance.beatId}, not ${input.beatId}.`,
+      { assetIds: [input.assetId], beatId: input.beatId }
+    );
+  }
+  await setActiveProjectScopedAssetSelection(
+    db,
+    input.projectId,
+    `beat_clip:${input.beatId}`,
+    input.assetId
+  );
+  return mapAsset(row);
+}
+
+export async function selectGeneratedAudioAsset(input: {
+  workspaceId: string;
+  projectId: string;
+  assetId: string;
+  role: "soundtrack" | "voiceover";
+  slotKey: string;
+}): Promise<V1Asset> {
+  const db = getServiceSupabase();
+  const row = await getAssetRow(
+    db,
+    input.workspaceId,
+    input.projectId,
+    input.assetId,
+    "selectGeneratedAudioAsset"
+  );
+  if (row.media !== "audio" || row.kind !== "audio_track" || row.role !== input.role) {
+    throw new ApiError(
+      "asset_invalid",
+      `Generated audio asset ${input.assetId} is not a ${input.role}.`,
+      { assetIds: [input.assetId] }
+    );
+  }
+  await setActiveProjectScopedAssetSelection(
+    db,
+    input.projectId,
+    `${input.role}:${input.slotKey}`,
+    input.assetId
+  );
+  return mapAsset(row);
+}
+
+export async function selectProjectAssetSlot(input: {
+  workspaceId: string;
+  projectId: string;
+  assetId: string;
+  slotRole: string;
+  setByActionId?: string;
+}): Promise<V1Asset> {
+  const db = getServiceSupabase();
+  const row = await getAssetRow(
+    db,
+    input.workspaceId,
+    input.projectId,
+    input.assetId,
+    "selectProjectAssetSlot"
+  );
+  await setActiveProjectScopedAssetSelection(
+    db,
+    input.projectId,
+    input.slotRole,
+    input.assetId,
+    input.setByActionId
+  );
+  return mapAsset(row);
+}
+
+export async function listActiveProjectAssetSelections(input: {
+  workspaceId: string;
+  projectId: string;
+  slotRoles: string[];
+}): Promise<ActiveAssetSelection[]> {
+  const db = getServiceSupabase();
+  const slotRoles = [...new Set(input.slotRoles)].filter(Boolean);
+  if (slotRoles.length === 0) return [];
+
+  const selected = await runQuery(
+    "store.listActiveProjectAssetSelections selections",
+    db
+      .from("current_selections")
+      .select("slot_role, active_asset_id")
+      .eq("project_id", input.projectId)
+      .in("slot_role", slotRoles)
+  );
+  const selectionRows = (selected ?? []) as Array<{
+    slot_role: string;
+    active_asset_id: string;
+  }>;
+  const assetIds = [...new Set(selectionRows.map((row) => row.active_asset_id))];
+  if (assetIds.length === 0) return [];
+
+  const data = await runQuery(
+    "store.listActiveProjectAssetSelections assets",
+    db
+      .from("assets")
+      .select("*")
+      .eq("project_id", input.projectId)
+      .eq("workspace_id", input.workspaceId)
+      .eq("status", "ready")
+      .in("id", assetIds)
+  );
+  const assetsById = new Map(
+    (await mapAssets(data as AssetRow[])).map((asset) => [asset.id, asset])
+  );
+  const order = new Map(slotRoles.map((slotRole, index) => [slotRole, index]));
+
+  return selectionRows
+    .flatMap((row) => {
+      const asset = assetsById.get(row.active_asset_id);
+      return asset ? [{ slotRole: row.slot_role, asset }] : [];
+    })
+    .sort((a, b) => (order.get(a.slotRole) ?? 0) - (order.get(b.slotRole) ?? 0));
+}
+
+export async function addProjectTimeline(input: {
+  workspaceId: string;
+  projectId: string;
+  timeline: Timeline;
+  graphInputs: GraphAssetInput[];
+  createdByActionId?: string;
+}): Promise<{ timelineAssetId: string }> {
+  const db = getServiceSupabase();
+  const asset = await insertDataAsset({
+    db,
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    kind: "composite",
+    contentSchemaKind: "timeline",
+    role: "timeline",
+    content: input.timeline,
+    inputs: input.graphInputs,
+    createdByActionId: input.createdByActionId,
+  });
+  await setActiveAssetSelection(
+    db,
+    input.projectId,
+    "cut",
+    asset.id,
+    input.createdByActionId
+  );
+  return { timelineAssetId: asset.id };
+}
+
 export async function addExportVideoAsset(input: {
   workspaceId: string;
   projectId: string;
@@ -1698,15 +1935,16 @@ export async function addExportVideoAsset(input: {
     tool: "export_video",
     status: "running",
     params: {
+      agentJobId: input.jobId,
       artifactId: input.artifact.id,
       timelineId: input.timelineId,
       timelineContentHash: input.timelineContentHash,
       status: input.artifact.status,
     },
-    jobIds: [input.jobId],
     rationale: "Record the rendered timeline export as the project's active output asset.",
   });
   const now = new Date().toISOString();
+  const db = getServiceSupabase();
   const asset = await addAsset(
     {
       id: "pending",
@@ -1729,12 +1967,15 @@ export async function addExportVideoAsset(input: {
     { createdByActionId: action.id }
   );
   await setActiveProjectScopedAssetSelection(
-    getServiceSupabase(),
+    db,
     input.projectId,
     "export_video",
     asset.id,
     action.id
   );
+  if (asset.status === "ready") {
+    await setActiveAssetSelection(db, input.projectId, "cut", asset.id, action.id);
+  }
   await updateAction(action.id, {
     status: "applied",
     outputAssetIds: [asset.id],
@@ -1770,6 +2011,7 @@ export async function addStoryboardTiles(input: {
       workspaceId: input.workspaceId,
       projectId: input.projectId,
       kind: "image",
+      role: tile.role,
       filename: tile.media.filename,
       status: "ready",
       source: { type: "generated", generatedAssetId: "" },
