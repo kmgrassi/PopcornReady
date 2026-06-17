@@ -505,7 +505,14 @@ interface DataAssetRow {
 const CONTENT_SCHEMA_KEY = "schema_version";
 
 function markedContent(
-  kind: "brief" | "beat" | "plan" | "visual_anchor_plan",
+  kind:
+    | "brief"
+    | "beat"
+    | "plan"
+    | "visual_anchor_plan"
+    | "timeline"
+    | "critique"
+    | "composite",
   content: unknown
 ): Record<string, unknown> {
   return { [CONTENT_SCHEMA_KEY]: `${kind}.v1`, ...(content as Record<string, unknown>) };
@@ -972,8 +979,8 @@ async function insertDataAsset(input: {
   db: SupabaseClient;
   workspaceId: string;
   projectId: string;
-  kind: "brief" | "beat" | "plan";
-  contentSchemaKind?: "brief" | "beat" | "plan" | "visual_anchor_plan";
+  kind: "brief" | "beat" | "plan" | "composite" | "critique";
+  contentSchemaKind?: "brief" | "beat" | "plan" | "visual_anchor_plan" | "timeline" | "critique";
   role: string;
   content: unknown;
   // Upstream asset snapshot. The DB trigger mirrors this into asset_edges, so the
@@ -1600,6 +1607,108 @@ export async function addProjectVisualAnchorPlan(input: {
     outputAssetIds: [asset.id],
   });
   return { visualAnchorPlanAssetId: asset.id };
+}
+
+export interface ActiveProjectTimelineAsset {
+  assetId: string;
+  contentHash: string;
+}
+
+export async function ensureProjectTimelineAsset(input: {
+  workspaceId: string;
+  projectId: string;
+  timelineId: string;
+  timeline: unknown;
+}): Promise<ActiveProjectTimelineAsset> {
+  const db = getServiceSupabase();
+  const existing = await selectedDataAsset(
+    db,
+    input.projectId,
+    "timeline",
+    "composite",
+    "current_timeline"
+  );
+  const existingContent = existing ? unmarkedContent<{ timelineId?: string }>(existing.content) : null;
+  if (existing && existingContent?.timelineId === input.timelineId) {
+    return {
+      assetId: existing.id,
+      contentHash: existing.content_hash ?? "",
+    };
+  }
+
+  const action = await createAction({
+    projectId: input.projectId,
+    tool: "assemble_timeline",
+    status: "running",
+    params: { source: "critique_timeline_projection", timelineId: input.timelineId },
+    rationale: "Project the active timeline row into the asset graph for downstream provenance.",
+  });
+  const asset = await insertDataAsset({
+    db,
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    kind: "composite",
+    contentSchemaKind: "timeline",
+    role: "current_timeline",
+    content: {
+      timelineId: input.timelineId,
+      timeline: input.timeline,
+    },
+    createdByActionId: action.id,
+  });
+  await setActiveProjectScopedAssetSelection(db, input.projectId, "timeline", asset.id, action.id);
+  await updateAction(action.id, {
+    status: "applied",
+    outputAssetIds: [asset.id],
+  });
+  return {
+    assetId: asset.id,
+    contentHash: asset.content_hash ?? "",
+  };
+}
+
+export async function addProjectTimelineCritique(input: {
+  workspaceId: string;
+  projectId: string;
+  timelineAssetId: string;
+  timelineContentHash: string;
+  critique: unknown;
+}): Promise<{ critiqueAssetId: string }> {
+  const db = getServiceSupabase();
+  const graphInputs: GraphAssetInput[] = [
+    {
+      assetId: input.timelineAssetId,
+      relation: "input",
+      role: "timeline",
+      position: 0,
+      ...(input.timelineContentHash ? { contentHash: input.timelineContentHash } : {}),
+    },
+  ];
+  const action = await createAction({
+    projectId: input.projectId,
+    tool: "critique_timeline",
+    status: "running",
+    params: { source: "critique_timeline" },
+    inputAssetIds: [input.timelineAssetId],
+    rationale: "Persist the timeline critique as a graph asset linked to the active timeline.",
+  });
+  const asset = await insertDataAsset({
+    db,
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    kind: "critique",
+    contentSchemaKind: "critique",
+    role: "timeline_critique",
+    content: input.critique,
+    inputs: graphInputs,
+    createdByActionId: action.id,
+  });
+  await setActiveProjectScopedAssetSelection(db, input.projectId, "critique", asset.id, action.id);
+  await updateAction(action.id, {
+    status: "applied",
+    outputAssetIds: [asset.id],
+  });
+  return { critiqueAssetId: asset.id };
 }
 
 export interface ActiveProjectPlan {
