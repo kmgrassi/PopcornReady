@@ -136,6 +136,7 @@ export interface V1Asset {
   workspaceId: string;
   projectId: string;
   kind: AssetKind;
+  role?: string;
   filename: string;
   status: "ready" | "pending";
   source: AgentAssetSource;
@@ -839,6 +840,25 @@ async function setActiveAssetSelection(
   );
 }
 
+async function setActiveProjectScopedAssetSelection(
+  db: SupabaseClient,
+  projectId: string,
+  slotRole: string,
+  activeAssetId: string,
+  setByActionId?: string
+): Promise<void> {
+  await runQuery(
+    `store.setActiveProjectScopedAssetSelection ${slotRole}`,
+    db.from("selections").insert({
+      project_id: projectId,
+      slot_owner_lineage_id: null,
+      slot_role: slotRole,
+      active_asset_id: activeAssetId,
+      set_by_action_id: setByActionId ?? null,
+    })
+  );
+}
+
 export async function createAction(input: CreateActionInput): Promise<V1Action> {
   const db = getServiceSupabase();
   const data = await runQuery(
@@ -1094,6 +1114,7 @@ interface AssetRow {
   kind: GraphAssetKind;
   media: AssetMedia;
   status: "ready" | "pending";
+  role: string | null;
   filename: string;
   content: unknown | null;
   params: { schema_version?: string; provenance?: GeneratedAssetProvenance } | null;
@@ -1116,7 +1137,10 @@ interface AssetRow {
 
 function assetKindToGraphKind(asset: V1Asset): GraphAssetKind {
   if (asset.kind === "audio") return "audio_track";
-  if (asset.kind === "image") return asset.provenance ? "keyframe" : "anchor";
+  if (asset.kind === "image") {
+    if (asset.role === "character_anchor" || asset.role === "scene_anchor") return "anchor";
+    return asset.provenance ? "keyframe" : "anchor";
+  }
   return asset.provenance ? "clip" : "source_footage";
 }
 
@@ -1152,6 +1176,7 @@ function assetToRow(asset: V1Asset): AssetRow {
     kind: assetKindToGraphKind(asset),
     media: asset.kind,
     status: asset.status,
+    role: asset.role ?? null,
     filename: asset.filename,
     content: null,
     params,
@@ -1243,6 +1268,7 @@ function mapAssetRow(row: AssetRow): V1Asset {
   if (row.storage_key != null) asset.storageKey = row.storage_key;
   if (row.storage_bucket != null) asset.storageBucket = row.storage_bucket;
   if (row.duration_sec != null) asset.durationSec = row.duration_sec;
+  if (row.role != null) asset.role = row.role;
   if (envelope.context !== undefined) asset.context = envelope.context;
   if (envelope.userContext !== undefined) asset.userContext = envelope.userContext;
   if (envelope.agentContext !== undefined) asset.agentContext = envelope.agentContext;
@@ -1597,6 +1623,62 @@ export async function getActiveProjectPlan(
     assetId: planAsset.id,
     contentHash: planAsset.content_hash ?? "",
   };
+}
+
+export interface ActiveProjectVisualAnchorPlan {
+  visualAnchorPlan: VisualAnchorPlan;
+  assetId: string;
+  contentHash: string;
+}
+
+export async function getActiveProjectVisualAnchorPlan(
+  projectId: string
+): Promise<ActiveProjectVisualAnchorPlan | null> {
+  const db = getServiceSupabase();
+  const asset = await selectedDataAsset(
+    db,
+    projectId,
+    "visual_anchors",
+    "plan",
+    "visual_anchor_plan"
+  );
+  if (!asset) return null;
+  return {
+    visualAnchorPlan: unmarkedContent<VisualAnchorPlan>(asset.content),
+    assetId: asset.id,
+    contentHash: asset.content_hash ?? "",
+  };
+}
+
+export async function selectGeneratedAnchorAsset(input: {
+  workspaceId: string;
+  projectId: string;
+  assetId: string;
+  role: "character_anchor" | "scene_anchor";
+  anchorId: string;
+}): Promise<V1Asset> {
+  const db = getServiceSupabase();
+  const row = await getAssetRow(
+    db,
+    input.workspaceId,
+    input.projectId,
+    input.assetId,
+    "selectGeneratedAnchorAsset"
+  );
+  if (row.media !== "image" || row.kind !== "anchor" || row.role !== input.role) {
+    throw new ApiError(
+      "asset_invalid",
+      `Generated anchor asset ${input.assetId} is not a ${input.role}.`,
+      { assetIds: [input.assetId] }
+    );
+  }
+  await setActiveProjectScopedAssetSelection(
+    db,
+    input.projectId,
+    `${input.role}:${input.anchorId}`,
+    input.assetId
+  );
+  return mapAsset(row);
 }
 
 export interface PersistedStoryboardTile {
