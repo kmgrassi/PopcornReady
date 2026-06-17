@@ -4,11 +4,16 @@ import {
   type GateableGenerationStageType,
 } from "@popcorn/shared/v1/types";
 import { StudioShell } from "../components/studio/StudioShell";
-import type { BriefDraft, StudioStep } from "../components/studio/useStudioFlow";
+import type { BriefDraft } from "../components/studio/useStudioFlow";
+import {
+  normalizeStudioStep,
+  type StudioStep,
+} from "../components/studio/studioSteps";
 
 const STUDIO_STEP_SET = new Set<StudioStep>([
   "brief",
   "footage",
+  "plan",
   "story",
   "generate",
   "review",
@@ -17,7 +22,7 @@ const STUDIO_STEP_SET = new Set<StudioStep>([
 
 function parseStudioStep(value: string | null): StudioStep | undefined {
   return STUDIO_STEP_SET.has(value as StudioStep)
-    ? (value as StudioStep)
+    ? normalizeStudioStep(value)
     : undefined;
 }
 

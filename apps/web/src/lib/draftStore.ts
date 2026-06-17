@@ -1,10 +1,12 @@
 import { apiRequest, v1Api } from "./api-client";
 import type { BriefDraft, StudioStep } from "../components/studio/useStudioFlow";
+import { normalizeStudioStep } from "../components/studio/studioSteps";
 import type {
   CreateStudioDraftRequest,
   StudioDraftListResponse,
   StudioDraftPayload as WireStudioDraftPayload,
   StudioDraftResponse,
+  StudioDraftStep,
   UpdateStudioDraftRequest,
 } from "@popcorn/shared/v1/studio-drafts";
 
@@ -65,10 +67,7 @@ async function currentWorkspaceId(): Promise<string> {
 }
 
 function normalizeStep(value: unknown): StudioStep {
-  const steps: StudioStep[] = ["brief", "footage", "story", "generate", "review", "export"];
-  return typeof value === "string" && steps.includes(value as StudioStep)
-    ? (value as StudioStep)
-    : "brief";
+  return normalizeStudioStep(typeof value === "string" ? value : null);
 }
 
 function sanitizeDraftForJson(draft: BriefDraft): BriefDraft {
@@ -92,6 +91,10 @@ function buildPayload(
   };
 }
 
+function wireStepFromStudioStep(step: StudioStep): StudioDraftStep {
+  return step === "plan" ? "story" : step;
+}
+
 function buildWirePayload(
   draft: BriefDraft,
   step: StudioStep,
@@ -100,6 +103,7 @@ function buildWirePayload(
   const payload = buildPayload(draft, step, ids);
   return {
     ...payload,
+    step: wireStepFromStudioStep(payload.step),
     draft: payload.draft as unknown as Record<string, unknown>,
   };
 }
