@@ -8,6 +8,16 @@ import {
 } from "./anthropic";
 import type { ToolSpec } from "./types";
 
+type AnthropicRequest = Parameters<NonNullable<NonNullable<Parameters<typeof createAnthropicLlmClient>[0]>["createMessage"]>>[0];
+type AnthropicResponse = Awaited<
+  ReturnType<NonNullable<NonNullable<Parameters<typeof createAnthropicLlmClient>[0]>["createMessage"]>>
+>;
+type AnthropicToolSpec = {
+  name: string;
+  description: string;
+  input_schema: unknown;
+};
+
 const planShots: ToolSpec = {
   name: "plan_shots",
   description: "Plan scenes and beats.",
@@ -19,7 +29,7 @@ const planShots: ToolSpec = {
 };
 
 test("toAnthropicTool uses input_schema", () => {
-  const tool = toAnthropicTool(planShots) as any;
+  const tool = toAnthropicTool(planShots) as AnthropicToolSpec;
   assert.equal(tool.name, "plan_shots");
   assert.equal(tool.description, "Plan scenes and beats.");
   assert.deepEqual(tool.input_schema, planShots.parameters);
@@ -80,8 +90,8 @@ test("low/minimal effort routes chooseTool to the fast model", async () => {
   const client = createAnthropicLlmClient({
     model: "claude-x",
     fastModel: "claude-haiku",
-    createMessage: async (params: any) => {
-      seen.push(params.model);
+    createMessage: async (params): Promise<AnthropicResponse> => {
+      seen.push(String(params.model));
       return { content: [{ type: "text", text: "ok" }] };
     },
   });
@@ -108,8 +118,8 @@ test("structured routes to the fast model and delegates required tool-call helpe
   const client = createAnthropicLlmClient({
     model: "claude-x",
     fastModel: "claude-haiku",
-    createMessage: async (params: any) => {
-      seen.push(params.model);
+    createMessage: async (params): Promise<AnthropicResponse> => {
+      seen.push(String(params.model));
       return {
         content: [
           { type: "tool_use", name: "return_result", input: { ok: true } },
@@ -131,10 +141,10 @@ test("structured routes to the fast model and delegates required tool-call helpe
 });
 
 test("chooseTool sends input_schema tools + tool_choice auto and maps the result", async () => {
-  let sent: any;
+  let sent: AnthropicRequest | undefined;
   const client = createAnthropicLlmClient({
     model: "claude-x",
-    createMessage: async (params) => {
+    createMessage: async (params): Promise<AnthropicResponse> => {
       sent = params;
       return {
         model: "claude-x",
@@ -149,8 +159,10 @@ test("chooseTool sends input_schema tools + tool_choice auto and maps the result
     tools: [planShots],
   });
 
+  assert.ok(sent);
   assert.deepEqual(sent.tool_choice, { type: "auto" });
-  assert.equal(sent.tools[0].input_schema.type, "object");
+  const sentTools = sent.tools as Array<{ input_schema: { type?: string } }>;
+  assert.equal(sentTools[0]?.input_schema.type, "object");
   assert.equal(sent.max_tokens, 2000);
   assert.equal(decision.type, "tool_call");
   if (decision.type === "tool_call") assert.equal(decision.toolName, "plan_shots");
