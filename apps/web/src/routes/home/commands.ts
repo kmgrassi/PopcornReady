@@ -1,7 +1,12 @@
 import type { PaletteCommand } from "../../components/palette/Palette";
+import { newStudioDraftPath } from "../../lib/studioRoutes";
 
 function go(to: string): PaletteCommand["run"] {
   return (navigate) => navigate(to);
+}
+
+function startNewStudioDraft(): PaletteCommand["run"] {
+  return (navigate) => navigate(newStudioDraftPath());
 }
 
 export const homeCommands: PaletteCommand[] = [
@@ -17,6 +22,6 @@ export const homeCommands: PaletteCommand[] = [
     title: "New video",
     subtitle: "Start the guided Studio flow",
     keywords: ["create", "studio", "start", "rough cut"],
-    run: go("/studio?start=1"),
+    run: startNewStudioDraft(),
   },
 ];

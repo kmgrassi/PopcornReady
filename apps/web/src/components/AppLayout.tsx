@@ -18,8 +18,9 @@ import { AuthNavButton } from "./auth/AuthNavButton";
 import { LogoMark } from "./LogoMark";
 import { CommandPalette } from "./palette/Palette";
 import ThemeToggle from "./ThemeToggle";
-import { Button, ButtonLink } from "./ui/Button";
+import { Button } from "./ui/Button";
 import { queryClient, useMeQuery } from "../lib/queryClient";
+import { newStudioDraftPath } from "../lib/studioRoutes";
 import styles from "./AppLayout.module.css";
 
 const STORAGE_KEY = "popcorn-ready-theme";
@@ -132,6 +133,10 @@ export function AuthenticatedAppLayout() {
     navigate("/login", { replace: true });
   }
 
+  function startNewVideo() {
+    navigate(newStudioDraftPath());
+  }
+
   if (auth.status === "loading") {
     return (
       <div className="web-shell">
@@ -161,9 +166,9 @@ export function AuthenticatedAppLayout() {
           <span>Popcorn Ready</span>
         </Link>
 
-        <ButtonLink className={styles.newVideo} variant="primary" to="/studio?start=1">
+        <Button className={styles.newVideo} variant="primary" onClick={startNewVideo}>
           New video
-        </ButtonLink>
+        </Button>
 
         <nav className={styles.nav} aria-label="Dashboard">
           {PRIMARY_NAV.map((item) => (
