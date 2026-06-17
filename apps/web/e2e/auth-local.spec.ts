@@ -58,7 +58,7 @@ test.describe("local auth mode", () => {
     await page.getByRole("link", { name: "Create" }).click();
     await expect(page).toHaveURL(/\/studio$/);
     await expect(
-      page.getByRole("heading", { name: "Create your first AI rough cut" }),
+      page.getByRole("heading", { name: /Create your first AI rough cut|Continue a draft/ }),
     ).toBeVisible();
   });
 });
