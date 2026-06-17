@@ -499,6 +499,12 @@ async function runGeneration(
       kind: "video",
       ...baseRequest,
     });
+  } else if (parsed.provider === "gemini" && parsed.kind === "image") {
+    result = await provider.generateAsset({
+      provider: "gemini",
+      kind: "image",
+      ...baseRequest,
+    });
   } else if (parsed.provider === "runway" && parsed.kind === "video") {
     result = await provider.generateAsset({
       provider: "runway",

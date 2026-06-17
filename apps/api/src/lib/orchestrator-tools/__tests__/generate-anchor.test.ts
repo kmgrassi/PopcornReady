@@ -262,3 +262,46 @@ test("runGenerateAnchorJob routes anchors mentioning minors to Gemini by default
   assert.equal(provider, "gemini");
   assert.ok(!spy.calls.includes("fail"));
 });
+
+test("runGenerateAnchorJob keeps minor anchors on Gemini even when provider is overridden", async () => {
+  const spy = jobsSpy();
+  let provider: string | undefined;
+
+  await runGenerateAnchorJob(
+    {
+      jobId: "job_1",
+      workspaceId: "ws_1",
+      projectId: "proj_1",
+      provider: "openai",
+      visualAnchorPlan: {
+        schemaVersion: "visual_anchor_plan.v1",
+        anchors: [
+          {
+            id: "character_teen",
+            kind: "character",
+            label: "teen protagonist",
+            description: "A teenage lead character.",
+            sourceSceneIds: ["scene_1"],
+            sourceBeatIds: ["beat_1"],
+          },
+        ],
+      },
+      visualAnchorPlanAssetId: "vap_1",
+      visualAnchorPlanContentHash: "vap_hash",
+    },
+    {
+      jobs: spy.jobs,
+      generateCharacterAnchor: async (args) => {
+        provider = (args.body as { provider?: string }).provider;
+        return {
+          status: 202,
+          body: { job: { result: { assetIds: ["char_anchor_asset"] } } },
+        };
+      },
+      selectGeneratedAnchorAsset: async () => ({} as never),
+    }
+  );
+
+  assert.equal(provider, "gemini");
+  assert.ok(!spy.calls.includes("fail"));
+});

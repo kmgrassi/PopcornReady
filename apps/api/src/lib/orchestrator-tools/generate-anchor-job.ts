@@ -59,8 +59,8 @@ function providerForAnchor(
   anchor: VisualAnchorPlanItem,
   requestedProvider?: AnchorImageProvider
 ): AnchorImageProvider {
-  if (requestedProvider) return requestedProvider;
-  return mentionsMinor(anchor) ? "gemini" : "openai";
+  if (mentionsMinor(anchor)) return "gemini";
+  return requestedProvider ?? "openai";
 }
 
 function promptForAnchor(anchor: VisualAnchorPlanItem): string {

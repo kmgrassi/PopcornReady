@@ -337,7 +337,7 @@ dbTest("returns typed errors for unsupported and invalid requests", async () => 
     createGeneratedAsset({
       auth,
       projectId,
-      body: { kind: "image", provider: "gemini", prompt: "frame" },
+      body: { kind: "image", provider: "runway", prompt: "frame" },
     }),
     "validation_failed"
   );
