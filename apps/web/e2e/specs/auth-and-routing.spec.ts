@@ -69,6 +69,59 @@ test.describe("local auth and routing smoke", () => {
     await expect(page.getByRole("heading", { name: "Create your first AI rough cut" })).toHaveCount(0);
   });
 
+  test("does not create duplicate drafts from rapid first-video clicks", async ({ page }) => {
+    let createRequests = 0;
+    let releaseCreate: (() => void) | null = null;
+
+    await page.route(/\/api\/v1\/workspaces\/[^/]+\/studio-drafts(?:\?.*)?$/, async (route) => {
+      if (route.request().method() === "POST") {
+        createRequests += 1;
+        await new Promise<void>((resolve) => {
+          releaseCreate = resolve;
+        });
+        await route.fulfill({
+          status: 200,
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            draft: {
+              id: "draft-created",
+              schemaVersion: "studioDraft.v1",
+              workspaceId: "e2e_local_workspace",
+              displayExcerpt: "Untitled draft",
+              step: "brief",
+              createdAt: "2026-06-16T00:00:00.000Z",
+              updatedAt: "2026-06-16T12:00:00.000Z",
+              payload: { v: 1, draft: { goal: "" }, step: "brief" },
+            },
+          }),
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ drafts: [], pagination: { limit: 20, nextCursor: null } }),
+      });
+    });
+
+    await page.goto("/studio");
+
+    const createButton = page.getByRole("button", { name: "Create your first video" });
+    await expect(createButton).toBeVisible();
+
+    await createButton.evaluate((element) => {
+      element.click();
+      element.click();
+    });
+
+    await expect.poll(() => createRequests).toBe(1);
+    await expect(createButton).toBeDisabled();
+
+    releaseCreate?.();
+    await expect(page).toHaveURL(/\/studio\?draft=draft-created$/);
+  });
+
   test("keeps compatibility redirects and not-found route working", async ({ page }) => {
     await page.goto("/projects?source=smoke");
     await expect(page).toHaveURL(/\/library\/projects\?source=smoke$/);

@@ -7,6 +7,7 @@ export interface StudioEmptyStateProps {
   drafts?: StudioDraftSummary[];
   loading?: boolean;
   error?: string | null;
+  creating?: boolean;
   onCreate?: () => void;
   onResume?: (draftId: string) => void;
   onDelete?: (draftId: string) => void;
@@ -21,6 +22,7 @@ export function StudioEmptyState({
   drafts = [],
   loading = false,
   error = null,
+  creating = false,
   onCreate,
   onResume,
   onDelete,
@@ -39,6 +41,7 @@ export function StudioEmptyState({
               className={styles.firstVideoButton}
               variant="cta"
               size="lg"
+              isLoading={creating}
               onClick={onCreate}
             >
               Create your first video
