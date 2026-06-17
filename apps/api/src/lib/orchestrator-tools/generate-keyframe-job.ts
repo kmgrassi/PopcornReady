@@ -16,7 +16,7 @@ import type { Beat, EditPlan } from "@popcorn/shared/types";
 import { planBeats } from "@popcorn/shared/types";
 import type { ProjectStoryboard } from "@popcorn/shared/v1/types";
 
-type KeyframeImageProvider = "openai" | "gemini" | "mock" | "nanobanano";
+type KeyframeImageProvider = "openai" | "gemini" | "mock";
 
 export interface GenerateKeyframeJobDeps {
   getActiveProjectScopedAsset: typeof realGetActiveProjectScopedAsset;

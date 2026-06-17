@@ -244,6 +244,24 @@ test("generate_keyframe requires a storyboard", async () => {
   }
 });
 
+test("generate_keyframe rejects a storyboard for an older plan", async () => {
+  const tool = createGenerateKeyframeTool({
+    getActiveProjectPlan: async () => ({ ...activePlan, assetId: "new_plan_2" }),
+    getProjectStoryboard: async () => storyboard,
+    createJob: async () => {
+      throw new Error("must not create a job from a stale storyboard");
+    },
+    runGenerateKeyframeJob: async () => {},
+  });
+
+  const result = (await tool.execute({}, { auth, projectId: "proj_1" })) as ToolCallResult;
+  assert.equal(result.status, "failed");
+  if (result.status === "failed") {
+    assert.equal(result.error.kind, "precondition_unmet");
+    assert.equal(result.error.unmetRequirements?.[0]?.satisfyWith.tool, "generate_storyboard");
+  }
+});
+
 test("generate_keyframe accepts and kicks off the worker with plan and storyboard", async () => {
   let kicked:
     | {
@@ -292,6 +310,7 @@ test("generate_keyframe validates input before reading graph state", async () =>
   });
 
   assert.throws(() => tool.parseInput({ provider: "banana" }), ToolInputError);
+  assert.throws(() => tool.parseInput({ provider: "nanobanano" }), ToolInputError);
   assert.equal(planReads, 0);
 });
 
