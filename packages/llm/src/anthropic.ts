@@ -23,7 +23,30 @@ export function anthropicClient(): Anthropic {
   return _client;
 }
 
-type MessageCreate = (params: Record<string, unknown>) => Promise<any>;
+type AnthropicMessageResponse = {
+  model?: string;
+  content?: unknown;
+};
+
+type AnthropicToolUseBlock = {
+  type: "tool_use";
+  name?: string;
+  input?: unknown;
+};
+
+type AnthropicTextBlock = {
+  type: "text";
+  text?: unknown;
+};
+
+type AnthropicContentBlock =
+  | AnthropicToolUseBlock
+  | AnthropicTextBlock
+  | { type?: string; [key: string]: unknown };
+
+type MessageCreate = (
+  params: Record<string, unknown>
+) => Promise<AnthropicMessageResponse>;
 
 // Low-reasoning calls route to the cheaper fast model.
 const FAST_EFFORTS = new Set<LlmEffort>(["minimal", "low"]);
@@ -46,11 +69,27 @@ export function toAnthropicTool(spec: ToolSpec): Record<string, unknown> {
 
 const STRUCTURED_RESULT_TOOL = "return_result";
 
-function resultFromAnthropicToolUse<T>(res: any): T {
-  const content = Array.isArray(res?.content) ? res.content : [];
-  const toolUse = content.find(
-    (block: any) => block?.type === "tool_use" && block?.name === STRUCTURED_RESULT_TOOL
-  );
+function asContentBlocks(value: unknown): AnthropicContentBlock[] {
+  return Array.isArray(value) ? (value as AnthropicContentBlock[]) : [];
+}
+
+function isToolUseBlock(block: AnthropicContentBlock): block is AnthropicToolUseBlock {
+  return block.type === "tool_use";
+}
+
+function isTextBlock(block: AnthropicContentBlock): block is AnthropicTextBlock {
+  return block.type === "text";
+}
+
+function isStructuredResultToolUse(
+  block: AnthropicContentBlock
+): block is AnthropicToolUseBlock {
+  return isToolUseBlock(block) && block.name === STRUCTURED_RESULT_TOOL;
+}
+
+function resultFromAnthropicToolUse<T>(res: AnthropicMessageResponse): T {
+  const content = asContentBlocks(res.content);
+  const toolUse = content.find(isStructuredResultToolUse);
   if (!toolUse) {
     throw new Error(`Model did not call required tool: ${STRUCTURED_RESULT_TOOL}`);
   }
@@ -63,12 +102,12 @@ function resultFromAnthropicToolUse<T>(res: any): T {
 
 // Pure response parsing — unit-tested without a network call.
 export function interpretAnthropicToolResponse(
-  res: any,
+  res: AnthropicMessageResponse,
   fallbackModel: string,
   allowed?: Set<string>
 ): ToolChoiceResult {
-  const content = Array.isArray(res?.content) ? res.content : [];
-  const toolUses = content.filter((block: any) => block?.type === "tool_use");
+  const content = asContentBlocks(res.content);
+  const toolUses = content.filter(isToolUseBlock);
   const model = res?.model ?? fallbackModel;
 
   if (toolUses.length > 1) {
@@ -88,8 +127,8 @@ export function interpretAnthropicToolResponse(
   }
 
   const text = content
-    .filter((block: any) => block?.type === "text")
-    .map((block: any) => String(block.text || ""))
+    .filter(isTextBlock)
+    .map((block) => String(block.text || ""))
     .join("")
     .trim();
   return { type: "done", text: text || "No tool call requested.", model };
@@ -104,7 +143,7 @@ export function createAnthropicLlmClient(deps: AnthropicDeps = {}): LlmClient {
   const ensureCreate = (): MessageCreate => {
     if (createMessage) return createMessage;
     createMessage = ((params: Record<string, unknown>) =>
-      anthropicClient().messages.create(params as any)) as MessageCreate;
+      anthropicClient().messages.create(params as never)) as MessageCreate;
     return createMessage;
   };
   const structuredImpl = async <T>(
