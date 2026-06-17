@@ -201,6 +201,7 @@ export function StudioShell({
           drafts={drafts}
           loading={draftsLoading}
           error={draftsError}
+          onCreate={() => void startNewDraft("brief")}
           onResume={(id) => void openDraft(id)}
           onDelete={(id) => void removeDraft(id)}
         />

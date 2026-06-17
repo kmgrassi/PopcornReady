@@ -33,9 +33,40 @@ test.describe("local auth and routing smoke", () => {
 
     await page.goto("/studio");
     await expect(page.getByRole("heading", { name: "Create your first AI rough cut" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Create your first video" })).toBeVisible();
 
     await page.goto("/library/projects");
     await expect(page.getByRole("navigation", { name: "Library collections" })).toBeVisible();
+  });
+
+  test("shows saved studio drafts instead of the first-video prompt", async ({ page }) => {
+    await page.route(/\/api\/v1\/workspaces\/[^/]+\/studio-drafts(?:\?.*)?$/, (route) =>
+      route.fulfill({
+        status: 200,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          drafts: [
+            {
+              id: "draft-existing",
+              schemaVersion: "studioDraft.v1",
+              workspaceId: "e2e_local_workspace",
+              displayExcerpt: "Launch teaser for the summer drop",
+              step: "story",
+              createdAt: "2026-06-16T00:00:00.000Z",
+              updatedAt: "2026-06-16T12:00:00.000Z",
+            },
+          ],
+          pagination: { limit: 20, nextCursor: null },
+        }),
+      }),
+    );
+
+    await page.goto("/studio");
+
+    await expect(page.getByRole("heading", { name: "Continue a draft" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Launch teaser for the summer drop/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Create your first video" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Create your first AI rough cut" })).toHaveCount(0);
   });
 
   test("keeps compatibility redirects and not-found route working", async ({ page }) => {
