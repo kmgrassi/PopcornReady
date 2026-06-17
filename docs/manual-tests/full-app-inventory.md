@@ -186,6 +186,33 @@ where practical, keyboard focus, page refresh persistence, and direct URL entry.
 - Toggle captions on and off and verify the setting persists through later
   steps.
 
+### Progressive Planning Flow
+
+- Start from a new draft at `/studio?start=1`; fill the brief, choose either
+  prompt-only or a valid uploaded-footage option, and continue into the generated
+  planning workspace.
+- Verify the setup stepper shows only Brief and Footage. It should not show the
+  retired top-level Story, Checkpoints/Generate, Review, or Export steps during
+  setup.
+- Verify generated story direction and opening hook appear quickly, are
+  editable, and preserve edits when moving around the Studio workspace.
+- Verify poster/visual direction renders an explicit pending/loading state while
+  background planning is still running, then a ready state when available.
+- Verify full orchestrator/media generation is not started implicitly after
+  Footage: no project run should be created, no navigation to
+  `/projects/:projectId/runs/:runId` should occur, and network traffic should
+  not call the run-start endpoint until the user chooses the explicit full
+  generation action.
+- Refresh the draft and reopen `/studio?draft=:draftId`; story direction,
+  opening hook, poster/visual pending-or-ready state, and any edits should be
+  restored.
+- Open older draft URLs or records whose saved step is `story`, `generate`,
+  `review`, or `export`. They should route to a valid progressive Studio state
+  instead of blanking, looping, or failing draft validation.
+- Re-test the existing correlation/causation explainer draft/fixture. It should
+  resume with its original brief values, preserve existing planning decisions,
+  and still allow explicit full generation from the new planning workspace.
+
 ### Story Direction Step
 
 - Select every story format option.
