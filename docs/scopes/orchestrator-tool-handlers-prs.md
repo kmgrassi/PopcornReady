@@ -133,12 +133,32 @@ Then the PR:
   gateId, resumesWhen: "approval_terminal", previewArtifactIds }`. The engine
   already parks on this and resumes on gate resolution (and allows one
   regeneration on reject).
+- **Constraint — the parked gate must be UI-resolvable (`reached`), not
+  `pending`.** Today gates are only inserted by `createOrchestratorRun` (the
+  pre-selected set, as `pending`) in
+  [`orchestrator-store.ts`](../../apps/api/src/lib/api/v1/orchestrator-store.ts):198
+  — there is **no dynamic mid-run gate-insert helper yet**, so T0 must add one. The
+  approve/reject routes only act on gates whose status is `reached`
+  ([`routes/v1/orchestrator-runs.ts`](../../apps/api/src/routes/v1/orchestrator-runs.ts):
+  `gates.find((c) => c.status === "reached")`). The **static** pre-selected-gate
+  path transitions `pending → reached` via `markGateReached` when the model picks a
+  gated tool ([`engine.ts`](../../apps/api/src/lib/orchestrator/engine.ts):368),
+  **but the `waiting_for_approval` park branch (`engine.ts`:440) does not** — so a
+  `request_approval` that merely inserts a `pending` row parks the run on a gate
+  the UI can never approve or reject. Fix this **inside T0**: either (a —
+  recommended) have the tool create the gate already in `reached` status (the loop
+  *has* arrived — `reached` is the correct semantics), or (b) have the engine's
+  `waiting_for_approval` branch call `markGateReached` on the returned `gateId`
+  before parking. Do **not** widen the routes to resolve `pending` gates — that
+  would also expose not-yet-reached static gates.
 - **Why first / parallel:** depends only on the done engine + existing gate table
   — no upstream asset. Build it immediately alongside Track C. It's the mechanism
   the opt-in "stop at these steps" UX rides on.
-- **Done when:** a run that selects this tool parks on a relational gate row;
-  resolving the gate resumes the loop; rejecting it allows one regeneration. Real
-  harness battery (incl. schema-rejection) replaces the `pending` one.
+- **Done when:** a run that selects this tool parks on a gate row in `reached`
+  status; the existing approve/reject routes resolve it and the loop resumes;
+  rejecting it allows one regeneration. Real harness battery replaces the
+  `pending` one, **including a case asserting the parked gate is resolvable by the
+  approve route** (the regression Codex flagged), plus schema-rejection.
 
 ### PR T1 — `generate_anchor` *(Track C — depends on `plan_visual_anchors` ✅)*
 - **Files:** new `orchestrator-tools/generate-anchor.ts` + `generate-anchor-job.ts`.
