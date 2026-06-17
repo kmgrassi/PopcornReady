@@ -1,6 +1,19 @@
-/* Single primary call-to-action in the public header (Sign in / Open
-   dashboard). Scoped under the global .web-shell-nav so it overrides the
-   plain nav-link color defined in globals.css. */
+.authActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+:global(.web-shell-nav) a.secondary {
+  color: var(--muted);
+}
+
+:global(.web-shell-nav) a.secondary:hover {
+  color: var(--accent-2);
+}
+
+/* Primary auth call-to-action in the public header. Scoped under the global
+   .web-shell-nav so it overrides the plain nav-link color in globals.css. */
 :global(.web-shell-nav) a.cta {
   padding: 7px 16px;
   border-radius: 999px;
@@ -18,7 +31,8 @@
 /* On mobile keep this CTA reachable and drop only the secondary marketing
    anchors, so the header stays a single tidy row with a clear entry point. */
 @media (max-width: 760px) {
-  :global(.web-shell-nav) a:not(.cta) {
+  :global(.web-shell-nav > a),
+  .secondary {
     display: none;
   }
 }
