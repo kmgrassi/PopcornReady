@@ -81,6 +81,37 @@ test("keyframe: forwards an image request and records beatId/anchorIds provenanc
   assert.deepEqual(updated!.provenance!.anchorIds, ["anchor_hero"]);
 });
 
+test("keyframe: appends structural references without marking them as anchors", async () => {
+  const generatorBodies: unknown[] = [];
+  setBeatMediaDepsForTests({
+    createGeneratedAsset: async ({ body }) => {
+      generatorBodies.push(body);
+      return jobResult("asset_kf");
+    },
+    updateAsset: async (_ws, _proj, _id, updater) => {
+      const asset = { provenance: { provider: "mock", prompt: "x" } } as unknown as V1Asset;
+      updater(asset);
+      return asset;
+    },
+  });
+
+  await generateBeatKeyframe({
+    auth,
+    projectId: "proj_1",
+    beatId: "hook",
+    body: {
+      prompt: "petri dish hook",
+      anchorIds: ["anchor_hero"],
+      structuralReferenceAssetIds: ["storyboard_tile"],
+      provider: "mock",
+    },
+  });
+
+  const sent = generatorBodies[0] as Record<string, unknown>;
+  assert.deepEqual(sent.referenceAssetIds, ["anchor_hero", "storyboard_tile"]);
+  assert.deepEqual(sent.anchorIds, ["anchor_hero"]);
+});
+
 test("clip: narrows to a video request", async () => {
   const generatorBodies: unknown[] = [];
   setBeatMediaDepsForTests({
