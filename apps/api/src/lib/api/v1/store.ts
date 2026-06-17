@@ -1779,6 +1779,37 @@ export async function selectGeneratedBeatClipAsset(input: {
   return mapAsset(row);
 }
 
+export async function selectGeneratedAudioAsset(input: {
+  workspaceId: string;
+  projectId: string;
+  assetId: string;
+  role: "soundtrack" | "voiceover";
+  slotKey: string;
+}): Promise<V1Asset> {
+  const db = getServiceSupabase();
+  const row = await getAssetRow(
+    db,
+    input.workspaceId,
+    input.projectId,
+    input.assetId,
+    "selectGeneratedAudioAsset"
+  );
+  if (row.media !== "audio" || row.kind !== "audio_track" || row.role !== input.role) {
+    throw new ApiError(
+      "asset_invalid",
+      `Generated audio asset ${input.assetId} is not a ${input.role}.`,
+      { assetIds: [input.assetId] }
+    );
+  }
+  await setActiveProjectScopedAssetSelection(
+    db,
+    input.projectId,
+    `${input.role}:${input.slotKey}`,
+    input.assetId
+  );
+  return mapAsset(row);
+}
+
 export interface PersistedStoryboardTile {
   beatId: string;
   assetId: string;
