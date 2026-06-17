@@ -18,9 +18,7 @@ import {
 } from "./useStudioFlow";
 import { BriefStep } from "./steps/BriefStep";
 import { SourceFootageStep } from "./steps/SourceFootageStep";
-import { StoryDirectionStep } from "./steps/StoryDirectionStep";
-import { GenerateStep } from "./steps/GenerateStep";
-import { ReviewStep as ReviewSetupStep } from "./steps/ReviewStep";
+import { PlanningWorkspace } from "./PlanningWorkspace";
 import { ReviewStep } from "./ReviewStep";
 import { ExportStep } from "./steps/ExportStep";
 import {
@@ -281,7 +279,7 @@ function StudioFlowView({
               status={runStatus}
               error={flow.run?.error?.message ?? flow.error}
               onRetry={() => flow.retryGeneration()}
-              onEdit={() => flow.resetGeneration("generate")}
+              onEdit={() => flow.resetGeneration("plan")}
             />
           ) : flow.error ? (
             <p className="new-project-error">{flow.error}</p>
@@ -333,7 +331,7 @@ function StudioFlowView({
       <StudioStepper
         step={flow.step}
         onStepClick={flow.goTo}
-        clickableThroughStep="generate"
+        clickableThroughStep="footage"
       />
       <section className={styles.stepBody}>
         <ActiveStep
@@ -382,11 +380,13 @@ function ActiveStep({
       return <BriefStep {...stepProps} openPanel={openPanel} />;
     case "footage":
       return <SourceFootageStep {...stepProps} />;
+    case "plan":
     case "story":
-      return <StoryDirectionStep {...stepProps} />;
     case "generate":
+    case "review":
+    case "export":
       return (
-        <GenerateStep
+        <PlanningWorkspace
           {...stepProps}
           error={flow.error}
           onGenerate={async () => {
@@ -394,13 +394,9 @@ function ActiveStep({
             onGenerationStarted?.(result.projectId, result.runId);
           }}
           onEditBrief={() => flow.goTo("brief")}
-          openPanel={openPanel}
+          onEditFootage={() => flow.goTo("footage")}
         />
       );
-    case "review":
-      return <ReviewSetupStep {...stepProps} />;
-    case "export":
-      return <ExportStep {...stepProps} />;
     default:
       return null;
   }
