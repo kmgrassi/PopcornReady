@@ -22,6 +22,7 @@ import {
 } from "@popcorn/shared/generative/types";
 import type { GeneratedAssetCharacterBinding } from "@popcorn/shared/types";
 import { buildSemanticAnalysis } from "@/lib/edit-graph/semantic-analysis";
+import type { AssetInputRelation, GraphAssetInput } from "./asset-graph";
 import { sha256Hex } from "./asset-graph";
 import { randomUUID } from "crypto";
 import { AuthContext } from "./auth";
@@ -65,7 +66,7 @@ const PROVIDER_KIND_SUPPORT: Record<
   GenerativeAssetKind[]
 > = {
   openai: ["image", "video"],
-  gemini: ["video"],
+  gemini: ["image", "video"],
   runway: ["video"],
   ltx: ["video"],
   nvidia_api_catalog: ["video"],
@@ -121,6 +122,8 @@ interface ParsedRequest {
   negativePrompt?: string;
   resolution?: string;
   runId?: string;
+  assetRole?: string;
+  graphInputs?: GraphAssetInput[];
 }
 
 type ProgressItemKind = "image" | "video" | "audio" | "caption" | "timeline" | "export";
@@ -161,6 +164,27 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function parseStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
+}
+
+function parseAssetInputRelation(value: unknown): AssetInputRelation {
+  return value === "anchor" || value === "child" || value === "input" ? value : "input";
+}
+
+function parseGraphInputs(value: unknown): GraphAssetInput[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const inputs: GraphAssetInput[] = [];
+  for (let index = 0; index < value.length; index += 1) {
+    const item = value[index];
+    if (!isPlainObject(item) || typeof item.assetId !== "string") continue;
+    inputs.push({
+      assetId: item.assetId,
+      relation: parseAssetInputRelation(item.relation),
+      ...(typeof item.role === "string" ? { role: item.role } : {}),
+      position: typeof item.position === "number" ? item.position : index,
+      ...(typeof item.contentHash === "string" ? { contentHash: item.contentHash } : {}),
+    });
+  }
+  return inputs;
 }
 
 function compact<T extends object>(obj: T): T | undefined {
@@ -347,6 +371,8 @@ function parseGeneratedAssetRequest(body: unknown): ParsedRequest {
       : undefined,
     resolution: body.resolution ? String(body.resolution) : undefined,
     runId: body.runId ? String(body.runId) : undefined,
+    assetRole: body.assetRole ? String(body.assetRole) : undefined,
+    graphInputs: parseGraphInputs(body.graphInputs),
   };
 }
 
@@ -603,6 +629,7 @@ async function runGeneration(
     filename,
     status: "pending",
     source: { type: "generated", generatedAssetId: "" },
+    role: parsed.assetRole,
     durationSec,
     context,
     semanticAnalysis: buildSemanticAnalysis({
@@ -617,6 +644,7 @@ async function runGeneration(
       provenance,
     }),
     provenance,
+    graphInputs: parsed.graphInputs,
     contentHash: sha256Hex(result.bytes),
     createdAt: now,
     updatedAt: now,
