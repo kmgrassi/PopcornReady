@@ -11,14 +11,12 @@ import {
   type VideoBriefInput,
 } from "@popcorn/shared/v1/types";
 import { StageItemCard } from "../generation-progress/StageItemCard";
-import { JudgmentBadge } from "../evals/JudgmentBadge";
 import {
   GenerationRunClient,
   GenerationRunRequestError,
 } from "../../lib/v1/generation-runs/client";
 import { v1Api } from "../../lib/api-client";
 import { StageRail } from "./StageRail";
-import { StatusBanner } from "./StatusBanner";
 import { TerminalState } from "./TerminalState";
 import styles from "./ProgressView.module.css";
 
@@ -75,11 +73,6 @@ const VISIBLE_STAGE_INDEX: Record<GenerationStageType, number> = {
   ready: 8,
 };
 
-function titleForRun(run: GenerationRun): string {
-  if (run.projectId === "demo-project") return "Demo project";
-  return "Video generation run";
-}
-
 function shortId(id: string): string {
   if (id.length <= 18) return id;
   return `${id.slice(0, 8)}...${id.slice(-6)}`;
@@ -128,6 +121,29 @@ function formatBriefMeta(brief: VideoBriefInput): string {
   ].filter(Boolean).join(" / ");
 }
 
+function briefMetaItems(brief: VideoBriefInput): string[] {
+  return [
+    brief.targetLengthSec ? `${brief.targetLengthSec} seconds` : null,
+    brief.aspectRatio,
+    brief.platform,
+    brief.format,
+  ].filter((item): item is string => Boolean(item));
+}
+
+function reviewHeading(stageType: GenerationStageType): string {
+  if (stageType === "brief_intake") return "Concept ready for review";
+  return `${reviewStageLabel(stageType)} ready for review`;
+}
+
+function headerStatus(run: GenerationRun): string {
+  if (run.reviewGate) return "Ready for your approval";
+  if (run.status === "queued") return "Waiting to start";
+  if (run.status === "running") return "Generating";
+  if (run.status === "succeeded") return "Complete";
+  if (run.status === "failed") return "Failed";
+  return "Canceled";
+}
+
 function BriefReviewOutput({
   brief,
   loading,
@@ -138,7 +154,7 @@ function BriefReviewOutput({
   if (loading) {
     return (
       <div className={styles.briefReviewCard}>
-        <span className="muted">Loading brief...</span>
+        <span className={styles.briefReviewLoading}>Loading concept...</span>
       </div>
     );
   }
@@ -156,9 +172,10 @@ function BriefReviewOutput({
 
   return (
     <article className={styles.briefReviewCard}>
-      <div className={styles.briefReviewHeader}>
-        <span className={styles.briefReviewBadge}>Brief</span>
-        <span className={styles.briefReviewMeta}>{formatBriefMeta(brief)}</span>
+      <div className={styles.briefReviewMetaRow} aria-label={formatBriefMeta(brief)}>
+        {briefMetaItems(brief).map((item) => (
+          <span key={item}>{item}</span>
+        ))}
       </div>
       <h3 className={styles.briefReviewGoal}>{brief.goal}</h3>
       {brief.strongestVisual ? (
@@ -233,9 +250,6 @@ export function ProgressView({
   }, [detail.run.projectId, isBriefReviewGate]);
 
   const terminal = isTerminal(detail.run.status);
-  const reviewStage = detail.run.reviewGate
-    ? detail.stages.find((stage) => stage.stageId === detail.run.reviewGate?.stageId)
-    : undefined;
   const reviewItems = detail.run.reviewGate
     ? detail.stageItems.filter((item) => item.stageId === detail.run.reviewGate?.stageId)
     : [];
@@ -253,6 +267,9 @@ export function ProgressView({
     : detail.run.currentStageType
       ? reviewStageLabel(detail.run.currentStageType)
       : "Final render";
+  const currentStageDisplay = detail.run.reviewGate
+    ? `${currentStageLabel} review`
+    : currentStageLabel;
 
   async function approveFallback() {
     const reviewGate = detail.run.reviewGate;
@@ -320,8 +337,7 @@ export function ProgressView({
     <div className={styles.shell}>
       <header className={styles.header}>
         <div className={styles.headerCopy}>
-          <p className={styles.eyebrow}>Generation workspace</p>
-          <h1 className={styles.title}>{titleForRun(detail.run)}</h1>
+          <h1 className={styles.title}>Video generation run</h1>
           <div className={styles.runIdRow}>
             <span className={styles.runIdLabel}>Run ID</span>
             <code className={styles.runId} title={detail.run.runId}>{shortId(detail.run.runId)}</code>
@@ -335,6 +351,35 @@ export function ProgressView({
           </div>
         </div>
         <div className={styles.headerActions}>
+          <div className={styles.headerStatusPanel} aria-label="Current run status">
+            <div>
+              <span className={styles.statusLabel}>Current stage</span>
+              <strong>{currentStageDisplay}</strong>
+            </div>
+            <div>
+              <span className={styles.statusLabel}>Status</span>
+              <strong>{headerStatus(detail.run)}</strong>
+            </div>
+            <div>
+              <span className={styles.statusLabel}>Progress</span>
+              <strong>
+                Stage {progress.currentStage} of {VISIBLE_STAGE_COUNT}
+              </strong>
+            </div>
+            <div
+              className={styles.headerMeter}
+              role="progressbar"
+              aria-valuenow={progress.percent}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label={`${progress.percent}% complete`}
+            >
+              <div
+                className={styles.headerMeterFill}
+                style={{ width: `${Math.max(2, progress.percent)}%` }}
+              />
+            </div>
+          </div>
           <Link className={styles.secondaryButton} to={studioReturnPath ?? "/studio"}>
             Back to studio
           </Link>
@@ -360,33 +405,9 @@ export function ProgressView({
         </div>
       </header>
 
-      <section className={styles.progressOverview} aria-label="Overall progress">
-        <div>
-          <p className={styles.progressLabel}>
-            Stage {progress.currentStage} of {VISIBLE_STAGE_COUNT}
-          </p>
-          <p className={styles.progressTitle}>{currentStageLabel}</p>
-        </div>
-        <div className={styles.progressMeterWrap}>
-          <span className={styles.progressPercent}>{progress.percent}%</span>
-          <div
-            className={styles.progressMeter}
-            role="progressbar"
-            aria-valuenow={progress.percent}
-            aria-valuemin={0}
-            aria-valuemax={100}
-          >
-            <div
-              className={styles.progressMeterFill}
-              style={{ width: `${Math.max(2, progress.percent)}%` }}
-            />
-          </div>
-        </div>
-      </section>
-
       <div className={styles.body}>
         <section className={styles.main}>
-          {terminal ? <TerminalState run={detail.run} /> : <StatusBanner run={detail.run} />}
+          {terminal ? <TerminalState run={detail.run} /> : null}
 
           {showCancelAction ? (
             <section
@@ -399,6 +420,9 @@ export function ProgressView({
                   <h2 id="run-actions-heading" className={styles.cardHeading}>
                     Active generation
                   </h2>
+                  <p className={styles.activeRunMessage}>
+                    {detail.run.message ?? `${currentStageLabel} is in progress.`}
+                  </p>
                 </div>
                 <div className={styles.actions}>
                   <button
@@ -421,33 +445,19 @@ export function ProgressView({
 
           {detail.run.reviewGate ? (
             <section
-              className={`${styles.card} ${styles.reviewCard}`}
+              className={styles.reviewPanel}
               aria-labelledby="review-gate-heading"
             >
-              <div className={styles.reviewHeader}>
-                <div>
-                  <p className={styles.reviewStatus}>Needs your review</p>
-                  <h2 id="review-gate-heading" className={styles.reviewTitle}>
-                    {reviewStageLabel(detail.run.reviewGate.stageType)} ready.
-                  </h2>
-                </div>
-                <JudgmentBadge judgment={reviewStage?.judgment ?? null} />
-              </div>
-              <div className={styles.reviewSummary}>
-                <p>
-                  {reviewStage?.message ??
-                    "Inspect this stage's output before the next generation stage starts."}
+              <div className={styles.reviewIntro}>
+                <span className={styles.reviewBadge}>Needs review</span>
+                <h2 id="review-gate-heading" className={styles.reviewTitle}>
+                  {reviewHeading(detail.run.reviewGate.stageType)}
+                </h2>
+                <p className={styles.reviewDescription}>
+                  {detail.run.reviewGate.stageType === "brief_intake"
+                    ? "Review the concept brief before the run continues to script generation."
+                    : "Review this stage before the run continues to the next generation step."}
                 </p>
-                <dl className={styles.summaryGrid}>
-                  <div>
-                    <dt>Stage output</dt>
-                    <dd>{reviewItems.length > 0 ? `${reviewItems.length} item${reviewItems.length === 1 ? "" : "s"} ready` : "Summary only"}</dd>
-                  </div>
-                  <div>
-                    <dt>Next step</dt>
-                    <dd>Approve to continue the run</dd>
-                  </div>
-                </dl>
               </div>
               {isBriefReviewGate && (projectBrief || projectBriefLoading) ? (
                 <BriefReviewOutput brief={projectBrief} loading={projectBriefLoading} />
@@ -473,12 +483,12 @@ export function ProgressView({
                   className={styles.feedbackTextarea}
                   value={feedbackNote}
                   onChange={(event) => setFeedbackNote(event.target.value)}
-                  placeholder="Tell the generator what to change or carry forward."
+                  placeholder="Optional feedback before continuing..."
                   disabled={!!pending}
                   rows={4}
                 />
                 <p className={styles.feedbackHint}>
-                  Optional. Regenerate sends this feedback back to this step.
+                  Use this when you want the generator to revise this stage before continuing.
                 </p>
               </div>
               {actionError ? (
@@ -487,96 +497,67 @@ export function ProgressView({
                 </p>
               ) : null}
               <div className={styles.reviewActionRow}>
-                <button
-                  type="button"
-                  className={styles.primaryButton}
-                  onClick={onApprove}
-                  disabled={!!pending}
-                >
-                  {pending === "approve" ? "Approving..." : "Approve & continue"}
-                </button>
                 {reviewActions ? (
                   <>
+                    <button
+                      type="button"
+                      className={styles.reviewCancelButton}
+                      onClick={reviewActions.onCancel}
+                      disabled={!!pending}
+                    >
+                      {pending === "cancel" ? "Canceling..." : "Cancel generation"}
+                    </button>
                     <button
                       type="button"
                       className={styles.secondaryButton}
                       onClick={() => reviewActions.onReject(feedbackNote)}
                       disabled={!!pending}
                     >
-                      {pending === "reject"
-                        ? "Regenerating..."
-                        : "Regenerate with feedback"}
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.dangerButton}
-                      onClick={reviewActions.onCancel}
-                      disabled={!!pending}
-                    >
-                      {pending === "cancel" ? "Canceling..." : "Cancel generation"}
+                      {pending === "reject" ? "Requesting..." : "Request changes"}
                     </button>
                   </>
                 ) : null}
+                <button
+                  type="button"
+                  className={styles.primaryButton}
+                  onClick={onApprove}
+                  disabled={!!pending}
+                >
+                  {pending === "approve" ? "Approving..." : "Approve and continue"}
+                </button>
               </div>
             </section>
           ) : null}
 
-          <section
-            className={`${styles.card} ${styles.assetsCard}`}
-            aria-labelledby="generated-assets-heading"
-          >
-            <h2 id="generated-assets-heading" className={styles.cardHeading}>
-              Generated assets
-            </h2>
-            {generatedItems.length > 0 ? (
+          {generatedItems.length > 0 ? (
+            <section
+              className={`${styles.card} ${styles.assetsCard}`}
+              aria-labelledby="generated-assets-heading"
+            >
+              <h2 id="generated-assets-heading" className={styles.cardHeading}>
+                Generated assets
+              </h2>
               <div className={`${styles.itemGrid} ${styles.reviewOutputGrid}`}>
                 {generatedItems.map((item) => (
                   <StageItemCard key={item.itemId} item={item} />
                 ))}
               </div>
-            ) : (
-              <div className={styles.assetsEmpty}>
-                <p>No generated assets yet.</p>
-                <span>
-                  As the run advances, this area will collect storyboard frames,
-                  shot candidates, voice or audio items, timeline artifacts, and
-                  the final render for review.
-                </span>
-              </div>
-            )}
-          </section>
+            </section>
+          ) : null}
         </section>
 
         <aside className={styles.sidePanel} aria-label="Stage rail">
           <div className={styles.sidePanelHeader}>
             <div>
-              <p className={styles.eyebrow}>Run timeline</p>
-              <h2 className={styles.sidePanelHeading}>Stages</h2>
+              <p className={styles.eyebrow}>Pipeline</p>
+              <h2 className={styles.sidePanelHeading}>Remaining stages</h2>
             </div>
-            <span className={styles.sidePanelPercent}>{progress.percent}%</span>
           </div>
           <StageRail stages={detail.stages} reviewGate={detail.run.reviewGate} />
-          <div className={styles.metadataCard} aria-label="Run metadata">
-            <h3>Run metadata</h3>
-            <dl>
-              <div>
-                <dt>Project</dt>
-                <dd title={detail.run.projectId}>{shortId(detail.run.projectId)}</dd>
-              </div>
-              <div>
-                <dt>Status</dt>
-                <dd>{detail.run.reviewGate ? "Waiting for approval" : detail.run.status}</dd>
-              </div>
-              <div>
-                <dt>Started</dt>
-                <dd>{formatDateTime(detail.run.startedAt)}</dd>
-              </div>
-              <div>
-                <dt>Updated</dt>
-                <dd>{formatDateTime(detail.run.updatedAt)}</dd>
-              </div>
-            </dl>
-          </div>
+          <p className={styles.sidePanelMeta}>
+            Started {formatDateTime(detail.run.startedAt)}. Updated{" "}
+            {formatDateTime(detail.run.updatedAt)}.
+          </p>
         </aside>
       </div>
     </div>

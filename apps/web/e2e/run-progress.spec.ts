@@ -83,9 +83,7 @@ test("polls an active run, cancels it, and clears the recovery hint", async ({ p
   await page.goto(runPath);
 
   await expect(page.getByRole("heading", { name: "Active generation" })).toBeVisible();
-  const overallProgress = page
-    .getByRole("region", { name: "Overall progress" })
-    .getByRole("progressbar");
+  const overallProgress = page.getByRole("progressbar", { name: /complete/ });
   await expect(overallProgress).toHaveAttribute("aria-valuenow", "42");
   await expect
     .poll(() => overallProgress.getAttribute("aria-valuenow"))
@@ -152,15 +150,15 @@ test("submits review-gate approve and reject actions with notes", async ({ page 
 
   await page.goto(runPath);
 
-  await expect(page.getByText("Needs your review")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Approve & continue" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Regenerate with feedback" })).toBeVisible();
+  await expect(page.getByText("Needs review")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Approve and continue" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Request changes" })).toBeVisible();
 
   await page.getByLabel("Feedback").fill("Keep the close-up, simplify the transition.");
-  await page.getByRole("button", { name: "Approve & continue" }).click();
+  await page.getByRole("button", { name: "Approve and continue" }).click();
 
   await expect(page.getByLabel("Feedback")).toBeHidden();
-  await expect(page.getByText("Visuals — in progress")).toBeVisible();
+  await expect(page.getByText("Visuals are in progress.")).toBeVisible();
   expect(requests).toContainEqual({
     action: "approve",
     body: { note: "Keep the close-up, simplify the transition." },
@@ -180,10 +178,10 @@ test("submits review-gate approve and reject actions with notes", async ({ page 
   });
   await page.reload();
   await page.getByLabel("Feedback").fill("Make the ending less busy.");
-  await page.getByRole("button", { name: "Regenerate with feedback" }).click();
+  await page.getByRole("button", { name: "Request changes" }).click();
 
   await expect(page.getByLabel("Feedback")).toHaveValue("");
-  await expect(page.getByText("Needs your review")).toBeVisible();
+  await expect(page.getByText("Needs review")).toBeVisible();
   expect(requests).toContainEqual({
     action: "reject",
     body: { stageType: "storyboard", note: "Make the ending less busy." },
