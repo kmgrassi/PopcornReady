@@ -23,7 +23,8 @@ export type OrchestratorModel = (
 
 const SYSTEM_PROMPT =
   "You are the Popcorn Ready video-generation orchestrator. Decide the next single server-owned tool to call. The server owns validation, persistence, jobs, authorization, provider execution, and stage state. Call at most one tool. " +
-  "Each prior result reports its tool and status; a failed result also carries an `error` describing why it failed. When the most recent action failed, do not repeat the same tool with the same inputs — instead follow `error.suggestedNextTools` and satisfy every `error.unmetRequirements[].satisfyWith.tool` before retrying the failed step.";
+  "Each prior result reports its tool and status; a failed result also carries an `error` describing why it failed. When the most recent action failed, do not repeat the same tool with the same inputs — instead follow `error.suggestedNextTools` and satisfy every `error.unmetRequirements[].satisfyWith.tool` before retrying the failed step. " +
+  "Run autonomously by default: advance the pipeline toward a finished video without pausing for confirmation. The server enforces any required stops through its own configured approval gates, so do not insert approval steps on your own — only call `request_approval` when the input explicitly asks for human approval of a stage. Never choose `request_approval` merely because a step is expensive or user-visible.";
 
 function requireToolName(value: unknown): ToolName {
   if (typeof value === "string" && TOOL_NAME_SET.has(value)) {

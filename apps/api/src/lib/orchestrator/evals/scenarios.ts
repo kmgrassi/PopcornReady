@@ -172,4 +172,20 @@ export const RECOVERY: DecisionScenario[] = [
   },
 ];
 
-export const ALL_SCENARIOS: DecisionScenario[] = [...FORWARD_CHAIN, ...RECOVERY];
+// Approval gating is opt-in, not automatic. The forward chain already covers the
+// negative cases (step5/step9: nothing in the input asks to pause, so the model
+// must proceed to clips/export — never self-gate). This pins the positive case:
+// when the input explicitly asks for human approval, request_approval is correct.
+export const APPROVAL: DecisionScenario[] = [
+  {
+    id: "approval_when_explicitly_requested",
+    description:
+      "Input explicitly asks to pause for approval before export → request_approval, not export_video.",
+    inputSummary: `${GOAL} Pause and request my approval before exporting the final video.`,
+    priorResults: [brief, blueprint, script, plan, anchorPlan, anchor, storyboard, keyframe, clip, audio, timeline, critique],
+    availableTools: ALL_TOOLS,
+    expect: { type: "tool_call", oneOf: ["request_approval"] },
+  },
+];
+
+export const ALL_SCENARIOS: DecisionScenario[] = [...FORWARD_CHAIN, ...RECOVERY, ...APPROVAL];
