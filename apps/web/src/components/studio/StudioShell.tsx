@@ -68,6 +68,8 @@ export interface StudioShellProps {
   openPanel?: string;
   /** Optional saved draft id from `/studio?draft=:id`. */
   draftId?: string | null;
+  /** Unique route token requesting a fresh Studio draft. */
+  newDraftRequest?: string;
 }
 
 /**
@@ -84,6 +86,7 @@ export function StudioShell({
   initialStarted = false,
   openPanel,
   draftId,
+  newDraftRequest,
 }: StudioShellProps) {
   const navigate = useNavigate();
   const seededBrief = useMemo(
@@ -101,6 +104,7 @@ export function StudioShell({
   const [draftActionError, setDraftActionError] = useState<string | null>(null);
   const [flowKey, setFlowKey] = useState(0);
   const autoStartRequestedRef = useRef(false);
+  const handledNewDraftRequestRef = useRef<string | null>(null);
   const createDraftInFlightRef = useRef(false);
   const draftsQuery = useStudioDraftsQuery();
   const draftQuery = useStudioDraftQuery(pendingDraftRequest?.draftId ?? null);
@@ -180,10 +184,26 @@ export function StudioShell({
       autoStartRequestedRef.current = false;
       return;
     }
+    if (newDraftRequest) return;
     if (activeDraftId || autoStartRequestedRef.current) return;
     autoStartRequestedRef.current = true;
     void startNewDraft(initialStep ?? "brief");
-  }, [activeDraftId, draftId, initialStarted, initialStep, startNewDraft]);
+  }, [
+    activeDraftId,
+    draftId,
+    initialStarted,
+    initialStep,
+    newDraftRequest,
+    startNewDraft,
+  ]);
+
+  useEffect(() => {
+    if (!newDraftRequest || handledNewDraftRequestRef.current === newDraftRequest) {
+      return;
+    }
+    handledNewDraftRequestRef.current = newDraftRequest;
+    void startNewDraft(initialStep ?? "brief");
+  }, [initialStep, newDraftRequest, startNewDraft]);
 
   async function removeDraft(nextDraftId: string) {
     setDraftActionError(null);

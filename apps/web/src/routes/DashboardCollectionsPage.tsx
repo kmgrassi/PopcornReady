@@ -20,6 +20,7 @@ import {
   useDashboardProjectsQuery,
   useDashboardRunsQuery,
 } from "../lib/v1/dashboard/query";
+import { newStudioDraftPath } from "../lib/studioRoutes";
 import styles from "./DashboardCollections.module.css";
 
 const PAGE_SIZE = 24;
@@ -113,7 +114,7 @@ function DashboardFrame({ title, description, children }: { title: string; descr
         title={title}
         description={description}
         action={
-          <ButtonLink variant="primary" to="/studio">
+          <ButtonLink variant="primary" to={newStudioDraftPath()}>
             New video
           </ButtonLink>
         }

@@ -1,4 +1,5 @@
 import type { PaletteCommand } from "../palette/Palette";
+import { newStudioDraftPath } from "../../lib/studioRoutes";
 
 function studioPath(params: Record<string, string>) {
   const search = new URLSearchParams({ start: "1", ...params });
@@ -9,13 +10,17 @@ function go(to: string): PaletteCommand["run"] {
   return (navigate) => navigate(to);
 }
 
+function startNewStudioDraft(): PaletteCommand["run"] {
+  return (navigate) => navigate(newStudioDraftPath());
+}
+
 export const studioCommands: PaletteCommand[] = [
   {
     id: "studio.open",
     title: "Open Studio",
     subtitle: "Guided video creation",
     keywords: ["create", "wizard", "brief"],
-    run: go("/studio?start=1"),
+    run: startNewStudioDraft(),
   },
   {
     id: "studio.brief",
