@@ -1,5 +1,6 @@
 import { createBriefTool, type CreateBriefDeps } from "./create-or-load-brief";
 import { createGenerateAnchorTool, type GenerateAnchorDeps } from "./generate-anchor";
+import { createGenerateClipTool, type GenerateClipDeps } from "./generate-clip";
 import {
   createGenerateKeyframeTool,
   type GenerateKeyframeDeps,
@@ -24,6 +25,7 @@ export interface DefaultToolRegistryDeps {
   createBrief?: Partial<CreateBriefDeps>;
   generateAnchor?: Partial<GenerateAnchorDeps>;
   generateKeyframe?: Partial<GenerateKeyframeDeps>;
+  generateClip?: Partial<GenerateClipDeps>;
   generateStoryboard?: Partial<GenerateStoryboardDeps>;
   planVisualAnchors?: Partial<PlanVisualAnchorsDeps>;
   requestApproval?: Partial<RequestApprovalDeps>;
@@ -37,6 +39,7 @@ export function createDefaultToolRegistry(
   registry.register(createPlanShotsTool(deps.planShots));
   registry.register(createPlanVisualAnchorsTool(deps.planVisualAnchors));
   registry.register(createGenerateAnchorTool(deps.generateAnchor));
+  registry.register(createGenerateClipTool(deps.generateClip));
   registry.register(createGenerateStoryboardTool(deps.generateStoryboard));
   registry.register(createGenerateKeyframeTool(deps.generateKeyframe));
   registry.register(createRequestApprovalTool(deps.requestApproval));
