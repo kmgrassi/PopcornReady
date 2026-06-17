@@ -101,6 +101,7 @@ export function StudioShell({
   const [draftActionError, setDraftActionError] = useState<string | null>(null);
   const [flowKey, setFlowKey] = useState(0);
   const autoStartRequestedRef = useRef(false);
+  const createDraftInFlightRef = useRef(false);
   const draftsQuery = useStudioDraftsQuery();
   const draftQuery = useStudioDraftQuery(pendingDraftRequest?.draftId ?? null);
   const createDraftMutation = useCreateStudioDraftMutation();
@@ -147,6 +148,9 @@ export function StudioShell({
   }, [activeDraftId, draftId, openDraft]);
 
   const startNewDraft = useCallback(async (step: StudioStep = "brief") => {
+    if (createDraftInFlightRef.current) return;
+
+    createDraftInFlightRef.current = true;
     setDraftActionError(null);
     try {
       const record = await createDraftMutation.mutateAsync({
@@ -166,6 +170,8 @@ export function StudioShell({
       navigate(studioDraftPath({ step, openPanel, started: initialStarted }), {
         replace: true,
       });
+    } finally {
+      createDraftInFlightRef.current = false;
     }
   }, [createDraftMutation, initialStarted, navigate, openPanel, seededBrief]);
 
@@ -201,6 +207,8 @@ export function StudioShell({
           drafts={drafts}
           loading={draftsLoading}
           error={draftsError}
+          creating={createDraftMutation.isPending}
+          onCreate={() => void startNewDraft("brief")}
           onResume={(id) => void openDraft(id)}
           onDelete={(id) => void removeDraft(id)}
         />
