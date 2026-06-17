@@ -13,6 +13,7 @@ export function AuthForm({ mode }: AuthFormProps) {
   const navigate = useNavigate();
   const { status, error, configured, signIn, signUp, clearError } = useAuth();
   const [ready, setReady] = useState(false);
+  const [showSignupIntro, setShowSignupIntro] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const loading = status === "loading";
@@ -61,6 +62,20 @@ export function AuthForm({ mode }: AuthFormProps) {
     if (status === "authenticated") navigate("/dashboard", { replace: true });
   }, [navigate, status]);
 
+  useEffect(() => {
+    if (!isSignup) {
+      setShowSignupIntro(false);
+      return;
+    }
+
+    const query = window.matchMedia("(min-width: 1024px)");
+    const syncSignupIntro = () => setShowSignupIntro(query.matches);
+
+    syncSignupIntro();
+    query.addEventListener("change", syncSignupIntro);
+    return () => query.removeEventListener("change", syncSignupIntro);
+  }, [isSignup]);
+
   async function submit() {
     if (!ready || loading || !email.trim() || !password) return;
     if (isSignup) await signUp(email.trim(), password);
@@ -73,7 +88,7 @@ export function AuthForm({ mode }: AuthFormProps) {
 
   return (
     <main className={pageClassName}>
-      {isSignup && (
+      {showSignupIntro && (
         <aside className={styles.signupIntro} aria-label="Popcorn Ready overview">
           <Link to="/" className={styles.introBrand}>
             <LogoMark className={styles.introBrandMark} />
