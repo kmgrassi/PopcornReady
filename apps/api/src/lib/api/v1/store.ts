@@ -983,7 +983,7 @@ export async function getPosterGenerationContext(
   if (!projectData) throw notFound(`Project not found: ${projectId}`);
   const projectRow = projectData as ProjectRow;
   const [briefAsset, planAsset, heroAnchorAsset, selection] = await Promise.all([
-    selectedDataAsset(db, projectId, "brief", "brief", "brief"),
+    selectedDataAsset(db, projectId, "brief", "brief", "current_brief"),
     selectedDataAsset(db, projectId, "plan", "plan", "current_plan"),
     latestHeroAnchorAsset(db, projectId),
     currentPosterSelection(db, projectId),

@@ -111,6 +111,48 @@ test("generatePoster creates a poster asset and auto-selects it", async () => {
   );
 });
 
+test("generatePoster routes minor poster content through Gemini", async () => {
+  let sentBody: Record<string, unknown> | null = null;
+  await generatePoster(auth, "project_1", { provider: "openai" }, deps({
+    getPosterGenerationContext: async () => ({
+      project,
+      briefAsset: {
+        id: "brief_1",
+        contentHash: "brief_hash",
+        content: {
+          ...project.brief,
+          goal: "A child learns how correlation can mislead people.",
+        },
+      },
+      planAsset: null,
+      heroAnchorAsset: null,
+      currentPosterManuallyPinned: false,
+    }),
+    createGeneratedAsset: async ({ body }) => {
+      sentBody = body as Record<string, unknown>;
+      return deps().createGeneratedAsset({ auth, projectId: "project_1", body });
+    },
+  }));
+
+  assert.ok(sentBody);
+  const body = sentBody as Record<string, unknown>;
+  assert.equal(body.provider, "gemini");
+});
+
+test("generatePoster forwards run id into generated asset requests", async () => {
+  let sentBody: Record<string, unknown> | null = null;
+  await generatePoster(auth, "project_1", { provider: "mock", runId: "run_1" }, deps({
+    createGeneratedAsset: async ({ body }) => {
+      sentBody = body as Record<string, unknown>;
+      return deps().createGeneratedAsset({ auth, projectId: "project_1", body });
+    },
+  }));
+
+  assert.ok(sentBody);
+  const body = sentBody as Record<string, unknown>;
+  assert.equal(body.runId, "run_1");
+});
+
 test("generatePoster reuses a matching poster without generating", async () => {
   let generated = false;
   const result = await generatePoster(

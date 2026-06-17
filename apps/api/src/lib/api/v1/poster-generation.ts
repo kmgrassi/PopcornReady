@@ -17,6 +17,7 @@ import type { VideoBrief } from "./schemas";
 export interface GeneratePosterInput {
   force?: boolean;
   provider?: string;
+  runId?: string;
 }
 
 export interface GeneratePosterResult {
@@ -108,8 +109,36 @@ function jobAssetId(job: V1Job): string {
   return assetId;
 }
 
-function providerName(value: string | undefined): string {
-  return value?.trim() || "openai";
+const MINOR_RE = /\b(baby|boy|child|girl|kid|minor|teen|teenage|toddler|youth)\b/i;
+
+function textValues(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (!value || typeof value !== "object") return [];
+  if (Array.isArray(value)) return value.flatMap(textValues);
+  return Object.values(value as Record<string, unknown>).flatMap(textValues);
+}
+
+function mentionsMinor(input: {
+  brief: VideoBrief;
+  planAsset: PosterGenerationAssetRef | null;
+  heroAnchorAsset: PosterGenerationAssetRef | null;
+}): boolean {
+  const text = [
+    ...textValues(input.brief),
+    ...textValues(input.planAsset?.content),
+    input.heroAnchorAsset?.description ?? "",
+  ].join(" ");
+  return MINOR_RE.test(text);
+}
+
+function providerName(input: {
+  requestedProvider?: string;
+  brief: VideoBrief;
+  planAsset: PosterGenerationAssetRef | null;
+  heroAnchorAsset: PosterGenerationAssetRef | null;
+}): string {
+  if (mentionsMinor(input)) return "gemini";
+  return input.requestedProvider?.trim() || "openai";
 }
 
 export async function generatePoster(
@@ -133,7 +162,12 @@ export async function generatePoster(
     planSummary: summarizePlan(context.planAsset?.content),
     heroAnchorDescription: context.heroAnchorAsset?.description,
   });
-  const provider = providerName(input.provider);
+  const provider = providerName({
+    requestedProvider: input.provider,
+    brief,
+    planAsset: context.planAsset,
+    heroAnchorAsset: context.heroAnchorAsset,
+  });
   const graphInputs = graphInputsForPoster({
     briefAsset: context.briefAsset,
     planAsset: context.planAsset,
@@ -182,6 +216,7 @@ export async function generatePoster(
       referenceAssetIds: context.heroAnchorAsset ? [context.heroAnchorAsset.id] : [],
       anchorIds: context.heroAnchorAsset ? [context.heroAnchorAsset.id] : [],
       graphInputs,
+      ...(input.runId ? { runId: input.runId } : {}),
     },
   });
   const assetId = jobAssetId(result.body.job as V1Job);
