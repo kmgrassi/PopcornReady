@@ -1,42 +1,40 @@
 import {
   addProjectTimelineCritique as realAddProjectTimelineCritique,
-  ensureProjectTimelineAsset as realEnsureProjectTimelineAsset,
+  getActiveProjectTimelineAsset as realGetActiveProjectTimelineAsset,
+  listAssets as realListAssets,
+  type V1Asset,
 } from "@/lib/api/v1/store";
+import { critique as realCritique } from "@/lib/agent";
 import {
-  getStore as realGetStore,
-  type V1Store,
-} from "@/lib/v1/store";
-import {
-  runTimelineCritique as realRunTimelineCritique,
-  type CritiqueResult,
-} from "@/lib/v1/assemble";
-import type { VersionedTimeline } from "@popcorn/shared/v1/types";
+  type Clip,
+  type EditPlan,
+  singleSceneFromBeats,
+  type Timeline,
+} from "@popcorn/shared/types";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 
-export interface CritiqueTimelineInput {
-  feedback?: string;
-}
+export type CritiqueTimelineInput = Record<string, never>;
 
 export interface CritiqueTimelineOutput {
   timelineId: string;
   timelineAssetId: string;
   critiqueAssetId: string;
-  report: CritiqueResult["report"];
-  patches: CritiqueResult["patches"];
+  report: Awaited<ReturnType<typeof realCritique>>["report"];
+  patches: Awaited<ReturnType<typeof realCritique>>["patches"];
 }
 
 export interface CritiqueTimelineDeps {
-  getStore: typeof realGetStore;
-  runTimelineCritique: typeof realRunTimelineCritique;
-  ensureProjectTimelineAsset: typeof realEnsureProjectTimelineAsset;
+  getActiveProjectTimelineAsset: typeof realGetActiveProjectTimelineAsset;
+  listAssets: typeof realListAssets;
+  critique: typeof realCritique;
   addProjectTimelineCritique: typeof realAddProjectTimelineCritique;
 }
 
 const defaultDeps: CritiqueTimelineDeps = {
-  getStore: realGetStore,
-  runTimelineCritique: realRunTimelineCritique,
-  ensureProjectTimelineAsset: realEnsureProjectTimelineAsset,
+  getActiveProjectTimelineAsset: realGetActiveProjectTimelineAsset,
+  listAssets: realListAssets,
+  critique: realCritique,
   addProjectTimelineCritique: realAddProjectTimelineCritique,
 };
 
@@ -46,13 +44,7 @@ const num = { type: "number" } as const;
 export const critiqueTimelineInputSchema = {
   type: "object",
   additionalProperties: false,
-  properties: {
-    feedback: {
-      type: "string",
-      description:
-        "Optional user or model note about what to emphasize while reviewing the timeline.",
-    },
-  },
+  properties: {},
   required: [],
 } as const;
 
@@ -109,28 +101,65 @@ export function parseCritiqueTimelineInput(input: unknown): CritiqueTimelineInpu
       expected: critiqueTimelineInputSchema,
     });
   }
-  const allowed = new Set(["feedback"]);
-  const extra = Object.keys(input).filter((key) => !allowed.has(key));
+  const extra = Object.keys(input);
   if (extra.length > 0) {
     throw new ToolInputError("critique_timeline received unsupported fields.", {
       unsupportedFields: extra,
     });
   }
-  if (input.feedback !== undefined && typeof input.feedback !== "string") {
-    throw new ToolInputError("critique_timeline feedback must be a string.", {
-      field: "feedback",
-    });
-  }
-  const feedback = input.feedback?.trim();
-  return feedback ? { feedback } : {};
+  return {};
 }
 
-async function latestTimeline(
-  store: V1Store,
-  projectId: string
-): Promise<VersionedTimeline | null> {
-  const timelines = await store.listTimelinesForProject(projectId);
-  return timelines[0] ?? null;
+function isTimeline(value: unknown): value is Timeline {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.aspectRatio === "string" &&
+    typeof value.fps === "number" &&
+    Array.isArray(value.segments)
+  );
+}
+
+function planFromTimeline(timeline: Timeline): EditPlan {
+  const beatsByName = new Map<string, { id?: string; name: string; intent: string }>();
+  for (const segment of timeline.segments) {
+    const name = segment.role || segment.beatId || "beat";
+    if (!beatsByName.has(name)) {
+      beatsByName.set(name, {
+        ...(segment.beatId ? { id: segment.beatId } : {}),
+        name,
+        intent: segment.reason || "",
+      });
+    }
+  }
+  return {
+    targetLengthSec: 0,
+    style: "",
+    aspectRatio: timeline.aspectRatio,
+    scenes: singleSceneFromBeats(
+      [...beatsByName.values()].map((beat, index) => ({
+        id: beat.id ?? `beat_${index + 1}_${beat.name || "untitled"}`,
+        name: beat.name,
+        intent: beat.intent,
+        durationSec: 0,
+      }))
+    ),
+  };
+}
+
+function assetToClip(asset: V1Asset): Clip {
+  return {
+    id: asset.id,
+    filename: asset.filename,
+    url: asset.remoteUrl ?? "",
+    kind: asset.kind,
+    durationSec: asset.durationSec ?? 0,
+    description:
+      asset.clipUnderstanding?.combinedSummary ||
+      asset.assetKnowledge?.knowledgeSummary ||
+      asset.context?.summary ||
+      "",
+    source: asset.source.type === "generated" ? "generated" : "upload",
+  };
 }
 
 function missingProject(): ToolCallResult<CritiqueTimelineOutput> {
@@ -155,7 +184,7 @@ function timelineRequired(): ToolCallResult<CritiqueTimelineOutput> {
         {
           requirement: "timeline",
           because:
-            "The critic reviews the assembled cut and needs the current timeline asset as input.",
+            "The critic reviews the assembled cut and needs the current_timeline graph asset.",
           satisfyWith: { tool: "assemble_timeline", inputHint: {} },
         },
       ],
@@ -172,9 +201,11 @@ export function createCritiqueTimelineTool(
   return {
     name: "critique_timeline",
     description:
-      "Review the active assembled timeline and persist advisory critique notes. Requires assemble_timeline first.",
+      "Review the active assembled timeline graph asset and persist advisory critique notes. Requires assemble_timeline first.",
     usage: {
-      preconditions: ["An active assembled timeline exists (call assemble_timeline first)."],
+      preconditions: [
+        "An active current_timeline graph asset exists (call assemble_timeline first).",
+      ],
       produces: [
         "A persisted timeline_critique asset linked to the active timeline for downstream decisions.",
       ],
@@ -195,31 +226,37 @@ export function createCritiqueTimelineTool(
     async execute(_input, context) {
       if (!context.projectId) return missingProject();
 
-      const store = resolved.getStore();
-      const timeline = await latestTimeline(store, context.projectId);
-      if (!timeline) return timelineRequired();
-
-      const timelineAsset = await resolved.ensureProjectTimelineAsset({
+      const activeTimeline = await resolved.getActiveProjectTimelineAsset({
         workspaceId: context.auth.workspaceId,
         projectId: context.projectId,
-        timelineId: timeline.id,
-        timeline,
       });
+      if (!activeTimeline || !isTimeline(activeTimeline.timeline)) return timelineRequired();
 
-      const critique = await resolved.runTimelineCritique({
-        store,
-        workspaceId: context.auth.workspaceId,
-        projectId: context.projectId,
-        timelineId: timeline.id,
+      const referencedClipIds = new Set(activeTimeline.timeline.segments.map((s) => s.clipId));
+      const assetsPage = await resolved.listAssets(
+        context.auth.workspaceId,
+        context.projectId,
+        1000,
+        null
+      );
+      const clips = assetsPage.items
+        .filter((asset) => referencedClipIds.has(asset.id))
+        .map(assetToClip);
+
+      const critique = await resolved.critique({
+        plan: planFromTimeline(activeTimeline.timeline),
+        timeline: activeTimeline.timeline,
+        clips,
+        storyContext: null,
       });
 
       const { critiqueAssetId } = await resolved.addProjectTimelineCritique({
         workspaceId: context.auth.workspaceId,
         projectId: context.projectId,
-        timelineAssetId: timelineAsset.assetId,
-        timelineContentHash: timelineAsset.contentHash,
+        timelineAssetId: activeTimeline.assetId,
+        timelineContentHash: activeTimeline.contentHash,
         critique: {
-          timelineId: critique.timelineId,
+          timelineId: activeTimeline.timelineId,
           report: critique.report,
           patches: critique.patches,
         },
@@ -230,8 +267,8 @@ export function createCritiqueTimelineTool(
         resourceIds: [critiqueAssetId],
         artifactIds: [critiqueAssetId],
         output: {
-          timelineId: critique.timelineId,
-          timelineAssetId: timelineAsset.assetId,
+          timelineId: activeTimeline.timelineId,
+          timelineAssetId: activeTimeline.assetId,
           critiqueAssetId,
           report: critique.report,
           patches: critique.patches,

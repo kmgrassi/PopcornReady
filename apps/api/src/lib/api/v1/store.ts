@@ -1612,36 +1612,47 @@ export async function addProjectVisualAnchorPlan(input: {
 export interface ActiveProjectTimelineAsset {
   assetId: string;
   contentHash: string;
-}
-
-export async function ensureProjectTimelineAsset(input: {
-  workspaceId: string;
-  projectId: string;
   timelineId: string;
   timeline: unknown;
-}): Promise<ActiveProjectTimelineAsset> {
+}
+
+export async function getActiveProjectTimelineAsset(input: {
+  workspaceId: string;
+  projectId: string;
+}): Promise<ActiveProjectTimelineAsset | null> {
   const db = getServiceSupabase();
-  const existing = await selectedDataAsset(
+  await requireProjectRow(db, input.workspaceId, input.projectId);
+  const asset = await selectedDataAsset(
     db,
     input.projectId,
     "timeline",
     "composite",
     "current_timeline"
   );
-  const existingContent = existing ? unmarkedContent<{ timelineId?: string }>(existing.content) : null;
-  if (existing && existingContent?.timelineId === input.timelineId) {
-    return {
-      assetId: existing.id,
-      contentHash: existing.content_hash ?? "",
-    };
-  }
+  if (!asset) return null;
+  const content = unmarkedContent<{ timelineId?: unknown; timeline?: unknown }>(asset.content);
+  if (typeof content.timelineId !== "string" || content.timeline === undefined) return null;
+  return {
+    assetId: asset.id,
+    contentHash: asset.content_hash ?? "",
+    timelineId: content.timelineId,
+    timeline: content.timeline,
+  };
+}
 
+export async function addProjectTimelineAsset(input: {
+  workspaceId: string;
+  projectId: string;
+  timelineId: string;
+  timeline: unknown;
+}): Promise<ActiveProjectTimelineAsset> {
+  const db = getServiceSupabase();
   const action = await createAction({
     projectId: input.projectId,
     tool: "assemble_timeline",
     status: "running",
-    params: { source: "critique_timeline_projection", timelineId: input.timelineId },
-    rationale: "Project the active timeline row into the asset graph for downstream provenance.",
+    params: { source: "assemble_timeline", timelineId: input.timelineId },
+    rationale: "Persist the assembled timeline as the project's active timeline graph asset.",
   });
   const asset = await insertDataAsset({
     db,
@@ -1664,6 +1675,8 @@ export async function ensureProjectTimelineAsset(input: {
   return {
     assetId: asset.id,
     contentHash: asset.content_hash ?? "",
+    timelineId: input.timelineId,
+    timeline: input.timeline,
   };
 }
 
@@ -1790,6 +1803,135 @@ export async function selectGeneratedAnchorAsset(input: {
   return mapAsset(row);
 }
 
+export async function getActiveProjectScopedAsset(input: {
+  workspaceId: string;
+  projectId: string;
+  slotRole: string;
+  expectedRole?: string;
+}): Promise<V1Asset | null> {
+  const db = getServiceSupabase();
+  await requireProjectRow(db, input.workspaceId, input.projectId);
+  const selected = await runQuery(
+    `store.getActiveProjectScopedAsset ${input.slotRole}`,
+    db
+      .from("current_selections")
+      .select("active_asset_id")
+      .eq("project_id", input.projectId)
+      .eq("slot_role", input.slotRole)
+      .maybeSingle()
+  );
+  const assetId = (selected as CurrentSelectionRow | null)?.active_asset_id;
+  if (!assetId) return null;
+  const row = await getAssetRow(
+    db,
+    input.workspaceId,
+    input.projectId,
+    assetId,
+    "getActiveProjectScopedAsset"
+  );
+  if (input.expectedRole && row.role !== input.expectedRole) return null;
+  return mapAsset(row);
+}
+
+export async function selectGeneratedBeatKeyframeAsset(input: {
+  workspaceId: string;
+  projectId: string;
+  beatId: string;
+  assetId: string;
+}): Promise<V1Asset> {
+  const db = getServiceSupabase();
+  const row = await getAssetRow(
+    db,
+    input.workspaceId,
+    input.projectId,
+    input.assetId,
+    "selectGeneratedBeatKeyframeAsset"
+  );
+  if (row.media !== "image" || row.kind !== "keyframe" || row.role !== "beat_keyframe") {
+    throw new ApiError(
+      "asset_invalid",
+      `Generated keyframe asset ${input.assetId} is not a beat_keyframe image.`,
+      { assetIds: [input.assetId] }
+    );
+  }
+  await setActiveProjectScopedAssetSelection(
+    db,
+    input.projectId,
+    `beat_keyframe:${input.beatId}`,
+    input.assetId
+  );
+  return mapAsset(row);
+}
+
+export async function selectGeneratedBeatClipAsset(input: {
+  workspaceId: string;
+  projectId: string;
+  beatId: string;
+  assetId: string;
+}): Promise<V1Asset> {
+  const db = getServiceSupabase();
+  const row = await getAssetRow(
+    db,
+    input.workspaceId,
+    input.projectId,
+    input.assetId,
+    "selectGeneratedBeatClipAsset"
+  );
+  if (row.media !== "video" || row.kind !== "clip" || row.role !== "beat_clip") {
+    throw new ApiError(
+      "asset_invalid",
+      `Generated clip asset ${input.assetId} is not a beat_clip video.`,
+      { assetIds: [input.assetId] }
+    );
+  }
+  const provenance = row.params?.provenance;
+  if (provenance?.beatId && provenance.beatId !== input.beatId) {
+    throw new ApiError(
+      "asset_invalid",
+      `Generated beat asset ${input.assetId} belongs to beat ${provenance.beatId}, not ${input.beatId}.`,
+      { assetIds: [input.assetId], beatId: input.beatId }
+    );
+  }
+  await setActiveProjectScopedAssetSelection(
+    db,
+    input.projectId,
+    `beat_clip:${input.beatId}`,
+    input.assetId
+  );
+  return mapAsset(row);
+}
+
+export async function selectGeneratedAudioAsset(input: {
+  workspaceId: string;
+  projectId: string;
+  assetId: string;
+  role: "soundtrack" | "voiceover";
+  slotKey: string;
+}): Promise<V1Asset> {
+  const db = getServiceSupabase();
+  const row = await getAssetRow(
+    db,
+    input.workspaceId,
+    input.projectId,
+    input.assetId,
+    "selectGeneratedAudioAsset"
+  );
+  if (row.media !== "audio" || row.kind !== "audio_track" || row.role !== input.role) {
+    throw new ApiError(
+      "asset_invalid",
+      `Generated audio asset ${input.assetId} is not a ${input.role}.`,
+      { assetIds: [input.assetId] }
+    );
+  }
+  await setActiveProjectScopedAssetSelection(
+    db,
+    input.projectId,
+    `${input.role}:${input.slotKey}`,
+    input.assetId
+  );
+  return mapAsset(row);
+}
+
 export interface PersistedStoryboardTile {
   beatId: string;
   assetId: string;
@@ -1818,6 +1960,7 @@ export async function addStoryboardTiles(input: {
       workspaceId: input.workspaceId,
       projectId: input.projectId,
       kind: "image",
+      role: tile.role,
       filename: tile.media.filename,
       status: "ready",
       source: { type: "generated", generatedAssetId: "" },

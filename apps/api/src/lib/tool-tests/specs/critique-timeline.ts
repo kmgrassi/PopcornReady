@@ -1,33 +1,28 @@
 import { randomUUID } from "node:crypto";
 
-import { getStore } from "@/lib/v1/store";
-import { SCHEMA, type VersionedTimeline } from "@popcorn/shared/v1/types";
+import { addAsset, addProjectTimelineAsset } from "@/lib/api/v1/store";
+import type { Timeline } from "@popcorn/shared/types";
 import type { ToolBattery } from "../types";
 
 async function seedTimeline(sandbox: { workspaceId: string; projectId: string }) {
-  const store = getStore();
   const now = new Date().toISOString();
   const assetId = randomUUID();
-  await store.saveAsset({
+  await addAsset({
     id: assetId,
-    schemaVersion: SCHEMA.asset,
+    schemaVersion: "asset.v1",
     workspaceId: sandbox.workspaceId,
     projectId: sandbox.projectId,
     kind: "video",
     status: "ready",
     filename: "tool-test-clip.mp4",
-    url: "https://example.invalid/tool-test-clip.mp4",
+    remoteUrl: "https://example.invalid/tool-test-clip.mp4",
     durationSec: 4,
-    source: "generated",
+    source: { type: "generated", generatedAssetId: "tool_test_clip" },
     createdAt: now,
     updatedAt: now,
   });
 
-  const timeline: VersionedTimeline = {
-    id: randomUUID(),
-    schemaVersion: SCHEMA.timeline,
-    projectId: sandbox.projectId,
-    briefVersionId: randomUUID(),
+  const timeline: Timeline = {
     aspectRatio: "16:9",
     fps: 30,
     segments: [
@@ -41,17 +36,13 @@ async function seedTimeline(sandbox: { workspaceId: string; projectId: string })
         reason: "Open on the clearest generated visual.",
       },
     ],
-    provenance: {
-      briefVersionId: randomUUID(),
-      sourceAssetIds: [assetId],
-      generatedAssetJobIds: [],
-      criticReport: null,
-      appliedPatchCount: 0,
-    },
-    createdBy: { jobId: randomUUID() },
-    createdAt: now,
   };
-  await store.saveTimeline(timeline);
+  await addProjectTimelineAsset({
+    workspaceId: sandbox.workspaceId,
+    projectId: sandbox.projectId,
+    timelineId: randomUUID(),
+    timeline,
+  });
 }
 
 export const critiqueTimelineBattery: ToolBattery = {

@@ -4,6 +4,12 @@ import {
   type CritiqueTimelineDeps,
 } from "./critique-timeline";
 import { createGenerateAnchorTool, type GenerateAnchorDeps } from "./generate-anchor";
+import { createGenerateAudioTool, type GenerateAudioDeps } from "./generate-audio";
+import { createGenerateClipTool, type GenerateClipDeps } from "./generate-clip";
+import {
+  createGenerateKeyframeTool,
+  type GenerateKeyframeDeps,
+} from "./generate-keyframe";
 import {
   createGenerateStoryboardTool,
   type GenerateStoryboardDeps,
@@ -24,6 +30,9 @@ export interface DefaultToolRegistryDeps {
   createBrief?: Partial<CreateBriefDeps>;
   critiqueTimeline?: Partial<CritiqueTimelineDeps>;
   generateAnchor?: Partial<GenerateAnchorDeps>;
+  generateAudio?: Partial<GenerateAudioDeps>;
+  generateKeyframe?: Partial<GenerateKeyframeDeps>;
+  generateClip?: Partial<GenerateClipDeps>;
   generateStoryboard?: Partial<GenerateStoryboardDeps>;
   planVisualAnchors?: Partial<PlanVisualAnchorsDeps>;
   requestApproval?: Partial<RequestApprovalDeps>;
@@ -37,7 +46,10 @@ export function createDefaultToolRegistry(
   registry.register(createPlanShotsTool(deps.planShots));
   registry.register(createPlanVisualAnchorsTool(deps.planVisualAnchors));
   registry.register(createGenerateAnchorTool(deps.generateAnchor));
+  registry.register(createGenerateAudioTool(deps.generateAudio));
   registry.register(createGenerateStoryboardTool(deps.generateStoryboard));
+  registry.register(createGenerateKeyframeTool(deps.generateKeyframe));
+  registry.register(createGenerateClipTool(deps.generateClip));
   registry.register(createCritiqueTimelineTool(deps.critiqueTimeline));
   registry.register(createRequestApprovalTool(deps.requestApproval));
   return registry;

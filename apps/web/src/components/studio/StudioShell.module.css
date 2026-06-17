@@ -188,6 +188,12 @@
   font-size: var(--text-sm);
 }
 
+.firstVideoButton {
+  min-width: min(100%, 280px);
+  min-height: 56px;
+  font-size: var(--title-sm);
+}
+
 @media (max-width: 640px) {
   .draftRow {
     grid-template-columns: minmax(0, 1fr);
