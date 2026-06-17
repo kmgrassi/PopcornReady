@@ -1,24 +1,23 @@
 :root {
-  --bg: #0d0f12;
-  --panel: #15181d;
-  --panel-2: #1c2026;
-  /* Softer border — pulled toward --panel-2 so panels read as raised surfaces,
-   * not hard-outlined boxes (PR 0). */
-  --border: #232830;
-  --text: #f1f3f6;
-  --muted: #a8b0ba;
-  --accent: #ff6a3d;
-  --accent-2: #4da3ff;
-  --good: #4ad295;
-  --button-text: #1a0d07;
-  /* Primary CTA — popcorn-yellow + the text color on top of it (PR 0). */
-  --cta: #ffc23d;
-  --cta-contrast: #1a0d07;
-  --nav-bg: rgba(13, 15, 18, 0.82);
-  --accent-soft: rgba(255, 106, 61, 0.1);
-  --accent-border: rgba(255, 106, 61, 0.3);
-  --media-panel: rgba(10, 14, 20, 0.8);
-  --media-bg: #050608;
+  --bg: #f7f5ef;
+  --panel: #ffffff;
+  --panel-2: #f2eee4;
+  /* Softer border pulled toward --panel-2 to kill the brown-on-cream outlines. */
+  --border: #e3ddcf;
+  /* Lift contrast: near-black ink for body, deeper warm gray for muted. */
+  --text: #1a140d;
+  --muted: #5a5247;
+  --accent: #dca51b;
+  --accent-2: #be4b25;
+  --good: #1c9b62;
+  --button-text: #251600;
+  --cta: #f5b81e;
+  --cta-contrast: #2a1a00;
+  --nav-bg: rgba(247, 245, 239, 0.92);
+  --accent-soft: rgba(220, 165, 27, 0.14);
+  --accent-border: rgba(190, 75, 37, 0.18);
+  --media-panel: rgba(255, 255, 255, 0.94);
+  --media-bg: #2a1805;
 }
 
 :root[data-theme="popcorn"] {

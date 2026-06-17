@@ -1,28 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import styles from "./ThemeToggle.module.css";
 
-type Theme = "popcorn-ready" | "popcorn" | "popcorn-warm" | "popcorn-night";
+type Theme = "popcorn" | "popcorn-warm" | "popcorn-night";
 
 const STORAGE_KEY = "popcorn-ready-theme";
+const DEFAULT_THEME: Theme = "popcorn";
 
 const THEMES: { id: Theme; label: string }[] = [
-  { id: "popcorn-ready", label: "Popcorn Ready" },
   { id: "popcorn", label: "Accent" },
   { id: "popcorn-warm", label: "Warm" },
   { id: "popcorn-night", label: "Night" },
 ];
 
 function applyTheme(theme: Theme) {
-  const root = document.documentElement;
-  if (theme === "popcorn-ready") {
-    delete root.dataset.theme;
-  } else {
-    root.dataset.theme = theme;
-  }
+  document.documentElement.dataset.theme = theme;
 }
 
 function parseTheme(value: string | null): Theme {
-  return THEMES.some((theme) => theme.id === value) ? (value as Theme) : "popcorn-ready";
+  if (value === "popcorn-ready") return DEFAULT_THEME;
+  return THEMES.some((theme) => theme.id === value) ? (value as Theme) : DEFAULT_THEME;
 }
 
 /**
@@ -37,7 +33,7 @@ function parseTheme(value: string | null): Theme {
  * be the alternative.
  */
 export default function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>("popcorn-ready");
+  const [theme, setTheme] = useState<Theme>(DEFAULT_THEME);
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 

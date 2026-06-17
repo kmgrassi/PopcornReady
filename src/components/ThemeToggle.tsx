@@ -2,32 +2,28 @@
 
 import { useEffect, useState } from "react";
 
-type Theme = "popcorn-ready" | "popcorn" | "popcorn-warm" | "popcorn-night";
+type Theme = "popcorn" | "popcorn-warm" | "popcorn-night";
 
 const STORAGE_KEY = "popcorn-ready-theme";
+const DEFAULT_THEME: Theme = "popcorn";
 
 const THEMES: { id: Theme; label: string; shortLabel: string }[] = [
-  { id: "popcorn-ready", label: "Popcorn Ready", shortLabel: "PR" },
   { id: "popcorn", label: "Accent", shortLabel: "Ac" },
   { id: "popcorn-warm", label: "Warm", shortLabel: "W" },
   { id: "popcorn-night", label: "Night", shortLabel: "N" },
 ];
 
 function applyTheme(theme: Theme) {
-  const root = document.documentElement;
-  if (theme === "popcorn-ready") {
-    delete root.dataset.theme;
-  } else {
-    root.dataset.theme = theme;
-  }
+  document.documentElement.dataset.theme = theme;
 }
 
 function parseTheme(value: string | null): Theme {
-  return THEMES.some((theme) => theme.id === value) ? (value as Theme) : "popcorn-ready";
+  if (value === "popcorn-ready") return DEFAULT_THEME;
+  return THEMES.some((theme) => theme.id === value) ? (value as Theme) : DEFAULT_THEME;
 }
 
 export default function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>("popcorn-ready");
+  const [theme, setTheme] = useState<Theme>(DEFAULT_THEME);
 
   useEffect(() => {
     const initialTheme = parseTheme(window.localStorage.getItem(STORAGE_KEY));
