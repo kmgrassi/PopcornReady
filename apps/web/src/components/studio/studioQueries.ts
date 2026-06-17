@@ -43,6 +43,12 @@ const studioQueryKeys = {
       draft.aspectRatio,
       draft.footageChoice,
       draft.footageMode,
+      draft.format,
+      draft.hook,
+      draft.bestVisual,
+      draft.bigIdea,
+      draft.audience,
+      draft.style,
       draft.selectedFootage.map((footage) => `${footage.name}:${footage.sizeBytes}`).join("|"),
     ] as const,
 };

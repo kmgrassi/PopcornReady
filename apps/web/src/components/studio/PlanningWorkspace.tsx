@@ -66,12 +66,17 @@ export function PlanningWorkspace({
     if (!hookTouchedRef.current && !draft.hook.trim() && generatedHook) {
       patch.hook = generatedHook;
     }
-    if (!visualTouchedRef.current && !draft.bestVisual.trim() && generatedVisual) {
+    if (
+      posterReady &&
+      !visualTouchedRef.current &&
+      !draft.bestVisual.trim() &&
+      generatedVisual
+    ) {
       patch.bestVisual = generatedVisual;
     }
     if (Object.keys(patch).length > 0) update(patch);
     appliedDecisionRef.current = true;
-  }, [preview, draft, generatedFormat, generatedHook, generatedVisual, update]);
+  }, [preview, draft, generatedFormat, generatedHook, generatedVisual, posterReady, update]);
 
   useEffect(() => {
     if (preview || appliedFallbackRef.current || hookTouchedRef.current || draft.hook.trim()) {
