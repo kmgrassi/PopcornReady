@@ -4,6 +4,8 @@ import test from "node:test";
 import type { AuthContext } from "@/lib/api/v1/auth";
 import type { VideoBrief } from "@/lib/api/v1/schemas";
 import type { EditPlan } from "@popcorn/shared/types";
+import type { V1Action, V1Asset } from "@/lib/api/v1/store";
+import { createAssembleTimelineTool } from "../assemble-timeline";
 import { createBriefInputSchema } from "../create-or-load-brief";
 import { createDefaultToolRegistry } from "../default-registry";
 import {
@@ -47,6 +49,23 @@ const activeBrief = {
   brief: sampleBrief,
   assetId: "brief_asset_1",
   contentHash: "brief_hash_1",
+};
+
+const sampleVideoAsset: V1Asset = {
+  id: "clip_asset_1",
+  schemaVersion: "asset.v1",
+  workspaceId: auth.workspaceId,
+  projectId: "proj_1",
+  kind: "video",
+  role: "beat_clip",
+  filename: "clip_asset_1.mp4",
+  status: "ready",
+  source: { type: "generated", generatedAssetId: "clip_asset_1" },
+  remoteUrl: "https://example.com/clip_asset_1.mp4",
+  durationSec: 5,
+  contentHash: "clip_hash_1",
+  createdAt: "2026-06-17T00:00:00.000Z",
+  updatedAt: "2026-06-17T00:00:00.000Z",
 };
 
 // Deps that satisfy plan_shots without touching the DB.
@@ -226,4 +245,144 @@ test("registry parses input before running cost estimate hook", async () => {
 
   assert.equal(estimate.estimatedCostUsd, 0);
   assert.equal(estimate.unit, "model_call");
+});
+
+test("default registry exposes assemble_timeline metadata", () => {
+  const registry = createDefaultToolRegistry({
+    assembleTimeline: {
+      getActiveProjectPlan: async () => null,
+    },
+  });
+  const definition = registry.get("assemble_timeline");
+
+  assert.equal(definition.name, "assemble_timeline");
+  assert.equal(definition.execution, "sync");
+  assert.equal(definition.inputSchema.additionalProperties, false);
+  assert.equal(definition.outputSchema.type, "object");
+});
+
+test("assemble_timeline validates input before reading graph state", async () => {
+  let planReads = 0;
+  const registry = new ToolRegistry();
+  registry.register(
+    createAssembleTimelineTool({
+      getActiveProjectPlan: async () => {
+        planReads += 1;
+        return null;
+      },
+    })
+  );
+
+  const result = await registry.execute(
+    "assemble_timeline",
+    { unsupported: true },
+    { auth, projectId: "proj_1" }
+  );
+
+  assert.equal(result.status, "failed");
+  if (result.status === "failed") {
+    assert.equal(result.error.kind, "invalid_input");
+  }
+  assert.equal(planReads, 0);
+});
+
+test("assemble_timeline requires selected beat clips", async () => {
+  const registry = new ToolRegistry();
+  registry.register(
+    createAssembleTimelineTool({
+      getActiveProjectPlan: async () => ({
+        plan: samplePlan,
+        assetId: "plan_asset_1",
+        contentHash: "plan_hash_1",
+      }),
+      listActiveProjectAssetSelections: async () => [],
+      listAssets: async () => ({ items: [], nextCursor: null }),
+    })
+  );
+
+  const result = await registry.execute("assemble_timeline", {}, { auth, projectId: "proj_1" });
+
+  assert.equal(result.status, "failed");
+  if (result.status === "failed") {
+    assert.equal(result.error.kind, "precondition_unmet");
+    assert.equal(result.error.unmetRequirements?.[0]?.satisfyWith.tool, "generate_clip");
+  }
+});
+
+test("assemble_timeline persists a timeline asset with plan and clip provenance", async () => {
+  let selectedClipDescription = "";
+  let timelineInput:
+    | {
+        graphInputs: { assetId: string; role?: string; contentHash?: string }[];
+      }
+    | undefined;
+  let actionOutputIds: string[] | undefined;
+  const registry = new ToolRegistry();
+  registry.register(
+    createAssembleTimelineTool({
+      getActiveProjectPlan: async () => ({
+        plan: samplePlan,
+        assetId: "plan_asset_1",
+        contentHash: "plan_hash_1",
+      }),
+      listActiveProjectAssetSelections: async () => [
+        { slotRole: "beat_clip:beat_1", asset: sampleVideoAsset },
+      ],
+      listAssets: async () => ({ items: [], nextCursor: null }),
+      selectClips: async ({ plan, clips }) => {
+        selectedClipDescription = clips[0]?.description ?? "";
+        return {
+          aspectRatio: plan.aspectRatio,
+          fps: 30,
+          segments: [
+            {
+              id: "seg_1",
+              clipId: clips[0].id,
+              sourceInSec: 0,
+              sourceOutSec: 4,
+              role: "Hook",
+              beatId: "beat_1",
+              reason: "best clip",
+            },
+          ],
+        };
+      },
+      createAction: async () =>
+        ({
+          id: "action_1",
+          schemaVersion: "action.v1",
+          projectId: "proj_1",
+          tool: "assemble_timeline",
+          status: "running",
+          params: {},
+          inputAssetIds: [],
+          jobIds: [],
+          outputAssetIds: [],
+          createdAt: "",
+          updatedAt: "",
+        }) as V1Action,
+      updateAction: async (_id, patch) => {
+        actionOutputIds = patch.outputAssetIds;
+        return {} as V1Action;
+      },
+      addProjectTimeline: async (input) => {
+        timelineInput = input;
+        return { timelineAssetId: "timeline_asset_1" };
+      },
+    })
+  );
+
+  const result = await registry.execute("assemble_timeline", {}, { auth, projectId: "proj_1" });
+
+  assert.equal(result.status, "succeeded");
+  assert.match(selectedClipDescription, /role=beat_clip/);
+  assert.deepEqual(
+    timelineInput?.graphInputs.map((input) => input.assetId),
+    ["plan_asset_1", "clip_asset_1"]
+  );
+  assert.deepEqual(
+    timelineInput?.graphInputs.map((input) => input.contentHash),
+    ["plan_hash_1", "clip_hash_1"]
+  );
+  assert.deepEqual(actionOutputIds, ["timeline_asset_1"]);
 });
