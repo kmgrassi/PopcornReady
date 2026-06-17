@@ -1,3 +1,7 @@
+import {
+  createAssembleTimelineTool,
+  type AssembleTimelineDeps,
+} from "./assemble-timeline";
 import { createBriefTool, type CreateBriefDeps } from "./create-or-load-brief";
 import { createGenerateAnchorTool, type GenerateAnchorDeps } from "./generate-anchor";
 import {
@@ -22,6 +26,7 @@ export interface DefaultToolRegistryDeps {
   generateStoryboard?: Partial<GenerateStoryboardDeps>;
   planVisualAnchors?: Partial<PlanVisualAnchorsDeps>;
   requestApproval?: Partial<RequestApprovalDeps>;
+  assembleTimeline?: Partial<AssembleTimelineDeps>;
 }
 
 export function createDefaultToolRegistry(
@@ -34,5 +39,6 @@ export function createDefaultToolRegistry(
   registry.register(createGenerateAnchorTool(deps.generateAnchor));
   registry.register(createGenerateStoryboardTool(deps.generateStoryboard));
   registry.register(createRequestApprovalTool(deps.requestApproval));
+  registry.register(createAssembleTimelineTool(deps.assembleTimeline));
   return registry;
 }
