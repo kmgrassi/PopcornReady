@@ -223,7 +223,8 @@ export function createCritiqueTimelineTool(
       unit: "model_call",
       notes: "Timeline critique is a cheap structured agent call and does not spend media budget.",
     }),
-    async execute(_input, context) {
+    async execute(input, context) {
+      void input;
       if (!context.projectId) return missingProject();
 
       const activeTimeline = await resolved.getActiveProjectTimelineAsset({
