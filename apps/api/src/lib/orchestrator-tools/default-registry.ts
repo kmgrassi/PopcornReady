@@ -7,6 +7,10 @@ import {
   createCritiqueTimelineTool,
   type CritiqueTimelineDeps,
 } from "./critique-timeline";
+import {
+  createDevelopStoryBlueprintTool,
+  type DevelopStoryBlueprintDeps,
+} from "./develop-story-blueprint";
 import { createExportVideoTool, type ExportVideoDeps } from "./export-video";
 import { createGenerateAnchorTool, type GenerateAnchorDeps } from "./generate-anchor";
 import { createGenerateAudioTool, type GenerateAudioDeps } from "./generate-audio";
@@ -34,6 +38,7 @@ export interface DefaultToolRegistryDeps {
   planShots?: Partial<PlanShotsDeps>;
   createBrief?: Partial<CreateBriefDeps>;
   critiqueTimeline?: Partial<CritiqueTimelineDeps>;
+  developStoryBlueprint?: Partial<DevelopStoryBlueprintDeps>;
   exportVideo?: Partial<ExportVideoDeps>;
   generateAnchor?: Partial<GenerateAnchorDeps>;
   generateAudio?: Partial<GenerateAudioDeps>;
@@ -50,6 +55,7 @@ export function createDefaultToolRegistry(
 ): ToolRegistry {
   const registry = new ToolRegistry();
   registry.register(createBriefTool(deps.createBrief));
+  registry.register(createDevelopStoryBlueprintTool(deps.developStoryBlueprint));
   registry.register(createPlanShotsTool(deps.planShots));
   registry.register(createPlanVisualAnchorsTool(deps.planVisualAnchors));
   registry.register(createGenerateAnchorTool(deps.generateAnchor));
