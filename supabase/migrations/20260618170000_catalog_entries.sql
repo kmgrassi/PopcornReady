@@ -8,6 +8,18 @@ set check_function_bodies = off;
 create type public.catalog_entry_kind as enum ('character', 'story', 'image');
 create type public.catalog_entry_status as enum ('draft', 'published', 'archived');
 
+-- array_to_string() is only STABLE, so it cannot appear directly in an index
+-- expression (Postgres requires IMMUTABLE). Wrap it for the search GIN index and
+-- reuse it in the search RPC so the predicate matches the indexed expression.
+create or replace function public.catalog_entry_tags_search_text(input_tags text[])
+returns text
+language sql
+immutable
+parallel safe
+as $$
+  select coalesce(array_to_string(input_tags, ' '), '')
+$$;
+
 create table public.catalog_entries (
   id                         uuid primary key default gen_random_uuid(),
   schema_version             text not null default 'catalogEntry.v1',
@@ -48,7 +60,7 @@ create index catalog_entries_publisher_idx on public.catalog_entries (publisher_
 create index catalog_entries_search_idx on public.catalog_entries
   using gin (to_tsvector('english',
     coalesce(title, '') || ' ' || coalesce(summary, '') || ' ' ||
-    array_to_string(tags, ' ') || ' ' ||
+    public.catalog_entry_tags_search_text(tags) || ' ' ||
     coalesce(snapshot ->> 'searchText', '')))
   where status = 'published';
 
@@ -71,7 +83,7 @@ as $$
     and to_tsvector(
       'english',
       coalesce(e.title, '') || ' ' || coalesce(e.summary, '') || ' ' ||
-      array_to_string(e.tags, ' ') || ' ' ||
+      public.catalog_entry_tags_search_text(e.tags) || ' ' ||
       coalesce(e.snapshot ->> 'searchText', '')
     ) @@ plainto_tsquery('english', search_query)
   order by e.created_at desc, e.id desc

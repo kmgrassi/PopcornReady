@@ -1,56 +1,12 @@
--- Asset embedding search projection.
+-- Asset embedding project-scoped semantic search RPC.
 --
--- This is intentionally separate from the immutable asset graph: embeddings are
--- rebuildable search indexes, not provenance.
+-- The canonical public.asset_embeddings table, owner policy, and updated-at
+-- trigger live in 20260618120000_asset_embeddings.sql; this migration adds only
+-- the project-search index and RPC. (Consolidated from a parallel migration that
+-- re-created the table at this version.)
 
-create extension if not exists vector with schema extensions;
-
-create unique index if not exists projects_workspace_id_id_unique
-  on public.projects (workspace_id, id);
-
-create table public.asset_embeddings (
-  id uuid primary key default gen_random_uuid(),
-  workspace_id uuid not null,
-  project_id uuid not null,
-  asset_id uuid not null,
-  chunk_key text not null,
-  chunk_kind text not null,
-  embedding_model text not null,
-  embedding_dimensions integer not null,
-  source_hash text not null,
-  source_text text not null,
-  embedding extensions.vector(1536) not null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  constraint asset_embeddings_workspace_fk foreign key (workspace_id)
-    references public.workspaces(id) on delete cascade,
-  constraint asset_embeddings_project_fk foreign key (workspace_id, project_id)
-    references public.projects(workspace_id, id) on delete cascade,
-  constraint asset_embeddings_asset_fk foreign key (project_id, asset_id)
-    references public.assets(project_id, id) on delete cascade,
-  constraint asset_embeddings_dimensions_check check (embedding_dimensions = 1536),
-  constraint asset_embeddings_chunk_key_check check (length(trim(chunk_key)) > 0),
-  constraint asset_embeddings_chunk_kind_check check (length(trim(chunk_kind)) > 0),
-  constraint asset_embeddings_model_check check (length(trim(embedding_model)) > 0),
-  unique (asset_id, chunk_key, embedding_model)
-);
-
-create trigger asset_embeddings_set_updated_at
-  before update on public.asset_embeddings
-  for each row execute function public.set_updated_at();
-
-create index asset_embeddings_project_model_idx
+create index if not exists asset_embeddings_project_model_idx
   on public.asset_embeddings (workspace_id, project_id, embedding_model, asset_id);
-
-create index asset_embeddings_asset_idx
-  on public.asset_embeddings (asset_id);
-
-alter table public.asset_embeddings enable row level security;
-
-create policy asset_embeddings_owner on public.asset_embeddings
-  for all
-  using (public.owns_workspace(workspace_id) and public.owns_project(project_id))
-  with check (public.owns_workspace(workspace_id) and public.owns_project(project_id));
 
 -- Public discovery gets its own later RPC. Keep the first search path scoped to
 -- the authenticated workspace/project API.
