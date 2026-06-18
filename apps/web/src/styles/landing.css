@@ -39,6 +39,8 @@ html:has(.landing) {
   --lp-glow: 0 24px 70px rgba(0, 0, 0, 0.55);
   --lp-glow-accent: 0 18px 50px rgba(245, 120, 60, 0.18);
   --lp-violet: rgba(124, 92, 255, 0.16);
+  /* "Human" accent — distinguishes the user's input from the agent's amber. */
+  --lp-human: #7aa2ff;
 
   color-scheme: dark;
 }
@@ -337,6 +339,36 @@ html:has(.landing) {
   animation: lp-live-pulse 1.8s ease-out infinite;
 }
 
+/* The header dot signals whose turn it is: the user, the agent, or done. */
+.lp-run-dot-you {
+  background: var(--lp-human);
+  box-shadow: 0 0 0 0 rgba(122, 162, 255, 0.5);
+  animation: lp-human-pulse 1.8s ease-out infinite;
+}
+
+.lp-run-dot-agent {
+  background: var(--accent);
+  box-shadow: 0 0 0 0 rgba(245, 182, 42, 0.5);
+  animation: lp-agent-pulse 1.4s ease-out infinite;
+}
+
+.lp-run-dot-done {
+  background: var(--good);
+  animation: none;
+}
+
+@keyframes lp-human-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(122, 162, 255, 0.5); }
+  70% { box-shadow: 0 0 0 7px rgba(122, 162, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(122, 162, 255, 0); }
+}
+
+@keyframes lp-agent-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(245, 182, 42, 0.5); }
+  70% { box-shadow: 0 0 0 7px rgba(245, 182, 42, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 182, 42, 0); }
+}
+
 .lp-run-file {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 13px;
@@ -357,6 +389,14 @@ html:has(.landing) {
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+/* User-turn phases read in the cool "human" tone; agent phases stay amber. */
+.lp-run-status-typing,
+.lp-run-status-handoff {
+  background: color-mix(in srgb, var(--lp-human) 14%, transparent);
+  border-color: color-mix(in srgb, var(--lp-human) 40%, transparent);
+  color: var(--lp-human);
 }
 
 .lp-run-status-ready {
@@ -381,21 +421,169 @@ html:has(.landing) {
   100% { opacity: 0.3; }
 }
 
+/* Step 1 — the user's prompt input -------------------------------- */
+.lp-run-prompt {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px 4px;
+}
+
+.lp-run-actor {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.lp-run-actor-you {
+  background: color-mix(in srgb, var(--lp-human) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--lp-human) 40%, transparent);
+  color: var(--lp-human);
+}
+
+.lp-run-actor-agent {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+  color: var(--accent);
+}
+
+.lp-run-input {
+  display: flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--text);
+  overflow: hidden;
+}
+
+.lp-run-input.is-typing {
+  border-color: color-mix(in srgb, var(--lp-human) 45%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lp-human) 12%, transparent);
+}
+
+.lp-run-input-text {
+  white-space: nowrap;
+}
+
+.lp-run-caret-user {
+  background: var(--lp-human);
+}
+
+.lp-run-generate {
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.lp-run-generate.is-active {
+  background: linear-gradient(120deg, var(--accent), var(--accent-2));
+  border-color: transparent;
+  color: var(--cta-contrast);
+  box-shadow: 0 8px 22px rgba(245, 120, 60, 0.3);
+}
+
+/* Hand-off — the agent now drives everything ---------------------- */
+.lp-run-handoff {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  margin: 6px 16px 0;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.lp-run-handoff-arrow {
+  width: 16px;
+  height: 10px;
+  flex: 0 0 auto;
+  background: linear-gradient(90deg, var(--lp-human), var(--accent));
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 10'%3E%3Cpath d='M0 5h12M9 1l4 4-4 4' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 10'%3E%3Cpath d='M0 5h12M9 1l4 4-4 4' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+.lp-run-actor-agent.is-live {
+  box-shadow: 0 0 18px rgba(245, 182, 42, 0.25);
+}
+
+.lp-run-handoff-note {
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .lp-run-body {
   display: grid;
   grid-template-columns: 1.35fr 1fr;
   gap: 16px;
-  padding: 16px;
+  padding: 12px 16px 16px;
+}
+
+/* Step header — label on the left, "Stop here" on the active step. */
+.lp-run-step-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 22px;
+  margin-bottom: 10px;
 }
 
 .lp-run-section-label {
   display: block;
-  margin-bottom: 10px;
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--muted);
+}
+
+/* "Stop here" — illustrative control showing the human can interrupt. */
+.lp-run-stop {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: var(--text);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  animation: lp-stop-in 0.3s ease-out;
+}
+
+.lp-run-stop-glyph {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 2px;
+  background: var(--accent-2);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent-2) 60%, transparent);
+}
+
+@keyframes lp-stop-in {
+  from { opacity: 0; transform: translateX(4px); }
+  to { opacity: 1; transform: none; }
 }
 
 .lp-run-beats {
@@ -535,6 +723,14 @@ html:has(.landing) {
   .lp-run-tiles {
     grid-template-columns: repeat(5, 1fr);
   }
+  /* Stack the prompt row so the input never crowds the actor + button. */
+  .lp-run-prompt {
+    grid-template-columns: 1fr auto;
+  }
+  .lp-run-input {
+    grid-column: 1 / -1;
+    order: 3;
+  }
 }
 
 /* 7 — Reduced motion: hold everything still --------------------- */
@@ -543,7 +739,10 @@ html:has(.landing) {
   .web-shell:has(.landing) .lp-eyebrow::before,
   .web-shell:has(.landing) .lp-step + .lp-step::before,
   .lp-run-dot,
+  .lp-run-dot-you,
+  .lp-run-dot-agent,
   .lp-run-ellipsis,
+  .lp-run-stop,
   .lp-run-caret {
     animation: none;
   }
