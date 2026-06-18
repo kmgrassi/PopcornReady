@@ -31,6 +31,7 @@ const REVIEWABLE_APPROVAL_STEPS = [
   "plan_shots",
   "plan_visual_anchors",
   "generate_anchor",
+  "generate_poster",
   "generate_storyboard",
   "generate_keyframe",
   "generate_clip",

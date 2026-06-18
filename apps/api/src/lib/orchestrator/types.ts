@@ -5,6 +5,7 @@ export const TOOL_NAMES = [
   "plan_shots",
   "plan_visual_anchors",
   "generate_anchor",
+  "generate_poster",
   "generate_storyboard",
   "generate_keyframe",
   "generate_clip",

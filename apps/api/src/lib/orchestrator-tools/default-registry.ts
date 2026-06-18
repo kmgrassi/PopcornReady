@@ -20,6 +20,7 @@ import {
   createGenerateKeyframeTool,
   type GenerateKeyframeDeps,
 } from "./generate-keyframe";
+import { createGeneratePosterTool, type GeneratePosterDeps } from "./generate-poster";
 import {
   createGenerateStoryboardTool,
   type GenerateStoryboardDeps,
@@ -44,6 +45,7 @@ export interface DefaultToolRegistryDeps {
   exportVideo?: Partial<ExportVideoDeps>;
   generateAnchor?: Partial<GenerateAnchorDeps>;
   generateAudio?: Partial<GenerateAudioDeps>;
+  generatePoster?: Partial<GeneratePosterDeps>;
   generateKeyframe?: Partial<GenerateKeyframeDeps>;
   generateClip?: Partial<GenerateClipDeps>;
   generateStoryboard?: Partial<GenerateStoryboardDeps>;
@@ -62,6 +64,7 @@ export function createDefaultToolRegistry(
   registry.register(createPlanShotsTool(deps.planShots));
   registry.register(createPlanVisualAnchorsTool(deps.planVisualAnchors));
   registry.register(createGenerateAnchorTool(deps.generateAnchor));
+  registry.register(createGeneratePosterTool(deps.generatePoster));
   registry.register(createGenerateAudioTool(deps.generateAudio));
   registry.register(createGenerateStoryboardTool(deps.generateStoryboard));
   registry.register(createGenerateKeyframeTool(deps.generateKeyframe));

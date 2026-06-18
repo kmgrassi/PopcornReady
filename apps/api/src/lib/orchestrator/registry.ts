@@ -53,6 +53,7 @@ function defaultDefinition(name: ToolName): ToolDefinition {
 
 const mediaToolNames = new Set<ToolName>([
   "generate_anchor",
+  "generate_poster",
   "generate_storyboard",
   "generate_keyframe",
   "generate_clip",
@@ -74,6 +75,8 @@ function toolDescription(name: ToolName): string {
       return "Identify recurring characters, locations, props, and required visual anchors.";
     case "generate_anchor":
       return "Generate a reusable visual anchor asset for a character, location, or prop.";
+    case "generate_poster":
+      return "Generate selected poster key art for the project.";
     case "generate_storyboard":
       return "Generate storyboard or previsualization assets for planned beats.";
     case "generate_keyframe":
