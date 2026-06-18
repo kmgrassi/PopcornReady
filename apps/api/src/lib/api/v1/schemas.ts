@@ -116,36 +116,22 @@ const ASSET_MEDIA_TYPES: AssetMediaType[] = [
   "text",
   "reference",
 ];
-export type AssetEmbeddingMedia = "image" | "video" | "audio" | "data";
-const ASSET_EMBEDDING_MEDIA: AssetEmbeddingMedia[] = ["image", "video", "audio", "data"];
-export type AssetGraphKind =
+export type AssetEmbeddingMedia = "image" | "video" | "audio";
+const ASSET_EMBEDDING_MEDIA: AssetEmbeddingMedia[] = ["image", "video", "audio"];
+export type AssetSearchGraphKind =
   | "source_footage"
-  | "brief"
-  | "beat"
   | "anchor"
   | "keyframe"
   | "clip"
   | "audio_track"
-  | "narration_script"
-  | "critique"
-  | "plan"
-  | "story_blueprint"
-  | "composite"
   | "render"
   | "poster";
-const ASSET_GRAPH_KINDS: AssetGraphKind[] = [
+const ASSET_SEARCH_GRAPH_KINDS: AssetSearchGraphKind[] = [
   "source_footage",
-  "brief",
-  "beat",
   "anchor",
   "keyframe",
   "clip",
   "audio_track",
-  "narration_script",
-  "critique",
-  "plan",
-  "story_blueprint",
-  "composite",
   "render",
   "poster",
 ];
@@ -1481,9 +1467,9 @@ export interface AssetSemanticSearchInput {
   q: string;
   queryEmbedding: number[];
   limit: number;
-  embeddingModel?: string;
+  embeddingModel: string;
   media?: AssetEmbeddingMedia;
-  kind?: AssetGraphKind;
+  kind?: AssetSearchGraphKind;
   role?: string;
 }
 
@@ -1552,23 +1538,23 @@ export function parseAssetSemanticSearch(body: unknown): AssetSemanticSearchInpu
 
   const embeddingModel =
     typeof record.embeddingModel === "string" ? record.embeddingModel.trim() : undefined;
-  if (embeddingModel !== undefined && embeddingModel.length === 0) {
-    throw new ApiError("validation_failed", "embeddingModel must be non-empty.", {
-      fields: [{ path: "embeddingModel", message: "Must be non-empty when provided." }],
+  if (!embeddingModel) {
+    throw new ApiError("validation_failed", "embeddingModel is required.", {
+      fields: [{ path: "embeddingModel", message: "Must be a non-empty embedding model." }],
     });
   }
 
   const media = record.media;
   if (media !== undefined && !ASSET_EMBEDDING_MEDIA.includes(media as AssetEmbeddingMedia)) {
-    throw new ApiError("validation_failed", "media must be one of: image, video, audio, data.", {
-      fields: [{ path: "media", message: "Must be one of: image, video, audio, data." }],
+    throw new ApiError("validation_failed", "media must be one of: image, video, audio.", {
+      fields: [{ path: "media", message: "Must be one of: image, video, audio." }],
     });
   }
 
   const kind = record.kind;
-  if (kind !== undefined && !ASSET_GRAPH_KINDS.includes(kind as AssetGraphKind)) {
-    throw new ApiError("validation_failed", "kind is not a supported asset graph kind.", {
-      fields: [{ path: "kind", message: "Must be a supported asset graph kind." }],
+  if (kind !== undefined && !ASSET_SEARCH_GRAPH_KINDS.includes(kind as AssetSearchGraphKind)) {
+    throw new ApiError("validation_failed", "kind is not a supported searchable media asset kind.", {
+      fields: [{ path: "kind", message: "Must be a supported searchable media asset kind." }],
     });
   }
 
@@ -1583,9 +1569,9 @@ export function parseAssetSemanticSearch(body: unknown): AssetSemanticSearchInpu
     q,
     queryEmbedding: queryEmbedding as number[],
     limit,
-    ...(embeddingModel ? { embeddingModel } : {}),
+    embeddingModel,
     ...(media ? { media: media as AssetEmbeddingMedia } : {}),
-    ...(kind ? { kind: kind as AssetGraphKind } : {}),
+    ...(kind ? { kind: kind as AssetSearchGraphKind } : {}),
     ...(role ? { role } : {}),
   };
 }

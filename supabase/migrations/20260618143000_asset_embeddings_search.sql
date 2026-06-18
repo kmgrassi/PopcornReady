@@ -59,7 +59,7 @@ create or replace function public.search_project_asset_embeddings(
   p_project_id uuid,
   p_query text,
   p_query_embedding text,
-  p_embedding_model text default null,
+  p_embedding_model text,
   p_media_filter public.asset_media default null,
   p_kind_filter public.graph_asset_kind default null,
   p_role_filter text default null,
@@ -154,7 +154,8 @@ as $$
      and p.workspace_id = a.workspace_id
     where p.status <> 'deleted'
       and a.status = 'ready'
-      and (p_embedding_model is null or e.embedding_model = p_embedding_model)
+      and a.media <> 'data'
+      and e.embedding_model = p_embedding_model
       and (p_media_filter is null or a.media = p_media_filter)
       and (p_kind_filter is null or a.kind = p_kind_filter)
       and (p_role_filter is null or a.role = p_role_filter)

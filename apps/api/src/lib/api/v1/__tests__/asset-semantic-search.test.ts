@@ -36,7 +36,19 @@ test("parseAssetSemanticSearch requires the configured vector dimensions", () =>
     () =>
       parseAssetSemanticSearch({
         q: "poster",
+        embeddingModel: "text-embedding-3-small",
         queryEmbedding: [0.1, 0.2, 0.3],
+      }),
+    (error) => error instanceof ApiError && error.code === "validation_failed"
+  );
+});
+
+test("parseAssetSemanticSearch requires an embedding model", () => {
+  assert.throws(
+    () =>
+      parseAssetSemanticSearch({
+        q: "poster",
+        queryEmbedding: embedding(),
       }),
     (error) => error instanceof ApiError && error.code === "validation_failed"
   );
@@ -47,8 +59,9 @@ test("parseAssetSemanticSearch rejects invalid filters", () => {
     () =>
       parseAssetSemanticSearch({
         q: "voiceover",
+        embeddingModel: "text-embedding-3-small",
         queryEmbedding: embedding(),
-        media: "reference",
+        media: "data",
       }),
     (error) => error instanceof ApiError && error.code === "validation_failed"
   );
@@ -57,8 +70,9 @@ test("parseAssetSemanticSearch rejects invalid filters", () => {
     () =>
       parseAssetSemanticSearch({
         q: "voiceover",
+        embeddingModel: "text-embedding-3-small",
         queryEmbedding: embedding(),
-        kind: "unknown_kind",
+        kind: "brief",
       }),
     (error) => error instanceof ApiError && error.code === "validation_failed"
   );
