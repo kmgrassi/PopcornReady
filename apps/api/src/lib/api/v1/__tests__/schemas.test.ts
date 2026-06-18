@@ -6,10 +6,14 @@ import {
   parseAnalyzeAsset,
   parseBrief,
   parseCreateProject,
+  parseCatalogEntriesQuery,
+  parseCatalogSearchQuery,
   parseDiscoverSearchQuery,
   parsePagination,
+  parsePublishCatalogEntry,
   parseRegisterAsset,
   parseSetAssetVisibility,
+  parseUseCatalogEntry,
   parseUpdateAssetContext,
 } from "../schemas";
 
@@ -38,6 +42,65 @@ test("parseDiscoverSearchQuery rejects invalid semantic values", () => {
     () => parseDiscoverSearchQuery(new URLSearchParams("q=stage&semantic=maybe")),
     "validation_failed"
   );
+});
+
+test("catalog query parsers accept kind filters and search text", () => {
+  const list = parseCatalogEntriesQuery(new URLSearchParams("kind=character&limit=25"));
+  assert.equal(list.kind, "character");
+  assert.equal(list.limit, 25);
+
+  const search = parseCatalogSearchQuery(new URLSearchParams("q=space%20pilot&kind=story"));
+  assert.equal(search.q, "space pilot");
+  assert.equal(search.kind, "story");
+});
+
+test("catalog query parsers reject invalid kind and missing search text", () => {
+  expectApiError(
+    () => parseCatalogEntriesQuery(new URLSearchParams("kind=clip")),
+    "validation_failed"
+  );
+  expectApiError(
+    () => parseCatalogSearchQuery(new URLSearchParams("kind=image")),
+    "validation_failed"
+  );
+});
+
+test("parsePublishCatalogEntry enforces source column by kind", () => {
+  const image = parsePublishCatalogEntry({
+    kind: "image",
+    sourceAssetId: "asset_1",
+    title: "Neon alley",
+    tags: ["city", "night"],
+  });
+  assert.equal(image.kind, "image");
+  assert.equal(image.sourceAssetId, "asset_1");
+  assert.deepEqual(image.tags, ["city", "night"]);
+
+  const story = parsePublishCatalogEntry({
+    kind: "story",
+    sourceStoryBlueprintId: "story_1",
+    title: "Orbital rescue",
+  });
+  assert.equal(story.kind, "story");
+  assert.equal(story.sourceStoryBlueprintId, "story_1");
+
+  expectApiError(
+    () =>
+      parsePublishCatalogEntry({
+        kind: "character",
+        sourceStoryBlueprintId: "story_1",
+        title: "Wrong source",
+      }),
+    "validation_failed"
+  );
+});
+
+test("parseUseCatalogEntry requires a target project", () => {
+  assert.equal(
+    parseUseCatalogEntry({ targetProjectId: "project_1" }).targetProjectId,
+    "project_1"
+  );
+  expectApiError(() => parseUseCatalogEntry({}), "validation_failed");
 });
 
 function expectApiError(fn: () => unknown, code: string): ApiError {
