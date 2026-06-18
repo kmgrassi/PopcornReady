@@ -34,21 +34,6 @@
   line-height: var(--line-body);
 }
 
-.overviewFrame {
-  margin: 0;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--panel);
-  box-shadow: var(--shadow-lg);
-}
-
-.overviewFrame img {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
 .orchestrator {
   display: grid;
   align-items: center;
@@ -94,7 +79,6 @@
     font-size: var(--title-lg);
   }
 
-  .overviewFrame,
   .orchestratorFrame {
     border-radius: var(--radius-md);
   }
