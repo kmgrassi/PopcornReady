@@ -67,7 +67,9 @@ export async function writeAssetObject(input: {
     visibility: input.visibility,
     contentType,
   });
-  await writeCompatibilityCache(storageKey, input.bytes);
+  if (config.backend === "local") {
+    await writeCompatibilityCache(storageKey, input.bytes);
+  }
   return { storageKey, storageBucket: stored.bucket, contentType };
 }
 

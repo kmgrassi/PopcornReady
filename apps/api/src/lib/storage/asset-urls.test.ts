@@ -47,12 +47,26 @@ afterEach(() => {
 test("resolveAssetUrl passes through remote_url assets", async () => {
   const url = await resolveAssetUrl({
     remote_url: "https://media.example.com/source.mp4",
+    storage_key: null,
+    storage_bucket: null,
+    visibility: "private",
+  });
+
+  assert.equal(url, "https://media.example.com/source.mp4");
+});
+
+test("resolveAssetUrl ignores remote_url once managed storage exists", async () => {
+  const url = await resolveAssetUrl({
+    remote_url: "https://popcornready-production.up.railway.app/ws/proj/asset/source.mp4",
     storage_key: "ws/proj/asset/source.mp4",
     storage_bucket: "assets-private",
     visibility: "private",
   });
 
-  assert.equal(url, "https://media.example.com/source.mp4");
+  assert.ok(url);
+  const parsed = new URL(url);
+  assert.equal(parsed.pathname, "/assets-private/ws/proj/asset/source.mp4");
+  assert.equal(parsed.searchParams.get("X-Amz-Expires"), "300");
 });
 
 test("resolveAssetUrl does not expose hosted localhost remote_url assets", async () => {

@@ -85,6 +85,40 @@ test("writeAssetObject keeps a compatibility local cache for object-store writes
   }
 });
 
+test("writeAssetObject does not write compatibility cache for s3 backend", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "popcornready-storage-"));
+  try {
+    const store = mockObjectStore();
+    const result = await withLocalDir(tmpDir, () =>
+      writeAssetObject({
+        workspaceId: "ws_1",
+        projectId: "proj_1",
+        assetId: "asset_1",
+        filename: "clip.mp4",
+        bytes: Buffer.from("video-bytes"),
+        visibility: "public",
+        store,
+        config: {
+          backend: "s3",
+          localMediaDir: tmpDir,
+          localUrlBase: "https://api.example.com",
+          region: "us-east-1",
+          publicBucket: "assets-public",
+          privateBucket: "assets-private",
+          publicUrlBase: "https://cdn.example.com",
+          forcePathStyle: false,
+        },
+      })
+    );
+
+    assert.equal(store.puts.length, 1);
+    assert.equal(result.storageBucket, "assets-public");
+    await assert.rejects(() => fs.readFile(path.join(tmpDir, result.storageKey), "utf8"));
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
 function mockObjectStore(): ObjectStore & { puts: ObjectStorePut[] } {
   const puts: ObjectStorePut[] = [];
   return {
