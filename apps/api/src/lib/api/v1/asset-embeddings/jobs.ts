@@ -50,10 +50,8 @@ function vectorLiteral(values: number[]): string {
 
 async function existingSourceHashes(input: {
   asset: V1Asset;
-  chunks: AssetEmbeddingSourceChunk[];
   model: string;
 }): Promise<Map<string, string>> {
-  if (input.chunks.length === 0) return new Map();
   const db = getServiceSupabaseForStore();
   const { data, error } = await db
     .from("asset_embeddings")
@@ -61,11 +59,7 @@ async function existingSourceHashes(input: {
     .eq("asset_id", input.asset.id)
     .eq("project_id", input.asset.projectId)
     .eq("workspace_id", input.asset.workspaceId)
-    .eq("embedding_model", input.model)
-    .in(
-      "chunk_key",
-      input.chunks.map((chunk) => chunk.chunkKey)
-    );
+    .eq("embedding_model", input.model);
   if (error) throw error;
   return new Map(
     ((data ?? []) as Array<{ chunk_key: string; source_hash: string }>).map((row) => [
@@ -73,6 +67,32 @@ async function existingSourceHashes(input: {
       row.source_hash,
     ])
   );
+}
+
+export function staleAssetEmbeddingChunkKeys(
+  existingChunkKeys: Iterable<string>,
+  rebuiltChunks: AssetEmbeddingSourceChunk[]
+): string[] {
+  const rebuiltKeys = new Set(rebuiltChunks.map((chunk) => chunk.chunkKey));
+  return [...existingChunkKeys].filter((chunkKey) => !rebuiltKeys.has(chunkKey));
+}
+
+async function deleteStaleAssetEmbeddingChunks(input: {
+  asset: V1Asset;
+  model: string;
+  chunkKeys: string[];
+}): Promise<void> {
+  if (input.chunkKeys.length === 0) return;
+  const db = getServiceSupabaseForStore();
+  const { error } = await db
+    .from("asset_embeddings")
+    .delete()
+    .eq("asset_id", input.asset.id)
+    .eq("project_id", input.asset.projectId)
+    .eq("workspace_id", input.asset.workspaceId)
+    .eq("embedding_model", input.model)
+    .in("chunk_key", input.chunkKeys);
+  if (error) throw error;
 }
 
 function sourceHashes(chunks: AssetEmbeddingSourceChunk[]): Record<string, string> {
@@ -85,9 +105,15 @@ export async function enqueueAssetEmbeddingRefresh(
 ): Promise<Job | null> {
   const config = options.config ?? assetEmbeddingConfig();
   const chunks = buildAssetEmbeddingSourceChunks(asset);
+  const existing = await existingSourceHashes({ asset, model: config.model });
+  const staleChunkKeys = staleAssetEmbeddingChunkKeys(existing.keys(), chunks);
+  await deleteStaleAssetEmbeddingChunks({
+    asset,
+    model: config.model,
+    chunkKeys: staleChunkKeys,
+  });
   if (chunks.length === 0) return null;
 
-  const existing = await existingSourceHashes({ asset, chunks, model: config.model });
   const changed = chunks.filter((chunk) => existing.get(chunk.chunkKey) !== chunk.sourceHash);
   if (changed.length === 0) return null;
 
