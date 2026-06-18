@@ -31,6 +31,11 @@ June 18, 2026.
 - **Search:** ride the **asset embeddings** index, not a bespoke catalog index
   (see §1, §5). Anchors and story blueprints are already in the embeddings P0
   set, so catalog search is a query against work already underway.
+- **Publish materializes public bytes:** publishing copies the source bytes into
+  the existing **public bucket** (`assets-public`) under a neutral
+  `catalog/{entryId}/…` namespace via the storage layer's `copyObject`. Delivery
+  is decoupled from the publisher's project visibility — they never have to make
+  their project public. This grounds out former open question #1 (see §1, §3, §4).
 
 ## North Star alignment
 
@@ -82,11 +87,27 @@ them:
 - **Bookmarks already exist.** `saved_assets` (user_id, source_asset_id) with
   RLS that only allows bookmarking effectively-public assets. A catalog "save
   for later" can reuse this pattern (see §10).
-- **Managed storage + leak-safe URL resolution exist.**
-  `apps/api/src/lib/storage/asset-urls.ts` (`resolveAssetUrl`, presigned private
-  URLs, stable public CDN URLs) and `asset-write.ts`
-  (`{workspaceId}/{projectId}/{assetId}/{filename}` key format). Copy-into-
-  project reuses the write path so clones live under the consumer's namespace.
+- **Managed storage with a two-bucket public/private model already exists** and
+  gives the catalog its copy primitives almost for free
+  (`apps/api/src/lib/storage/`, local + S3 backends):
+  - **Two buckets** `assets-public` / `assets-private`, selected by visibility
+    (`config.ts` `resolveBucket`). `effectiveAssetVisibility()`
+    (`visibility-move.ts`) makes an object publicly deliverable **only when both
+    the asset and its owning project are public** — this is exactly why "just
+    flip the source asset public" is insufficient (it would force the
+    publisher's whole project public), and why publish copies bytes into a
+    neutral namespace instead.
+  - **`ObjectStore.copyObject`** (`object-store.ts`) does cross-bucket,
+    cross-visibility **server-side** S3 copies (no download/re-upload). This is
+    the single primitive behind both publish (source → public catalog namespace)
+    and use (public catalog object → consumer's project key).
+  - **`resolveAssetUrl`** (`asset-urls.ts`) serves a public-bucket object via a
+    stable unsigned CDN URL and private objects via presigned URLs, with the
+    leak-prevention fixes already landed. A catalog object in `assets-public`
+    gets a stable public URL automatically.
+  - **`writeAssetObject` / `assetStorageKey`** (`asset-write.ts`) place project
+    bytes at `{workspaceId}/{projectId}/{assetId}/{filename}`. Use clones write
+    here under the consumer's namespace.
 
 What does **not** exist yet (this scope):
 
@@ -131,9 +152,9 @@ create table public.catalog_entries (
   -- Publisher identity (domain id, never auth.uid()).
   publisher_user_id   uuid not null references public.users(id) on delete cascade,
 
-  -- Source lineage in the publisher's own project. The catalog points AT the
-  -- asset graph; it does not own bytes. Exactly one of source_asset_id /
-  -- source_story_blueprint_id is set, by kind.
+  -- Source LINEAGE in the publisher's own project (provenance only — delivery
+  -- does NOT depend on the source's or source project's visibility; see below).
+  -- Exactly one of source_asset_id / source_story_blueprint_id is set, by kind.
   source_workspace_id        uuid not null references public.workspaces(id) on delete cascade,
   source_project_id          uuid not null references public.projects(id)   on delete cascade,
   source_asset_id            uuid references public.assets(id),            -- character/image
@@ -143,7 +164,15 @@ create table public.catalog_entries (
   title               text not null,
   summary             text,
   tags                text[] not null default '{}',
-  preview_asset_id    uuid references public.assets(id),  -- thumbnail (effectively-public)
+
+  -- The entry's OWN public catalog object (a copy of the source bytes placed in
+  -- the public bucket under catalog/{id}/...). The entry owns these bytes
+  -- directly so delivery is decoupled from any project asset/visibility. Null
+  -- for a story entry rendered as a text card (an optional cover image may set
+  -- them later). Resolved via the same resolveAssetUrl public path.
+  preview_storage_key     text,
+  preview_storage_bucket  text,   -- = the configured public bucket
+  preview_content_type    text,
 
   -- Immutable presentation snapshot taken at publish time, so the catalog card
   -- is stable even if the publisher later edits/deletes the source.
@@ -210,14 +239,17 @@ Follow the identity rules in
   layer (the user-scoped client can read its own source; the publish handler
   verifies ownership before writing the entry).
 
-**Effective-public requirement for delivery.** A character/image entry can only
-render a preview if its `preview_asset_id` / `source_asset_id` is
-**effectively public** (`asset_is_effectively_public`). Publishing therefore
-either (a) requires the source asset already public, or (b) flips the source
-asset (and its owning project, or a dedicated published copy) to public as part
-of publish. Recommended: **publish copies the source bytes into a managed,
-publicly-readable catalog namespace** so the publisher is not forced to make
-their whole project public. See §4.
+**Delivery: a neutral public catalog object (decided).** The catalog does not
+depend on the publisher's project being public. The storage layer's
+`effectiveAssetVisibility()` only treats an object as publicly deliverable when
+*both* the asset and its project are public, so making just the source asset
+public would not serve it — and forcing the whole project public is exactly what
+we want to avoid. Instead, **publish copies the source bytes into the public
+bucket (`assets-public`) under a project-independent `catalog/{entryId}/…`
+key** via `ObjectStore.copyObject`, and stores that key/bucket on the entry
+(`preview_storage_*`). The entry owns its public bytes; `resolveAssetUrl` serves
+them as a stable unsigned CDN URL. `source_asset_id` is kept only as lineage.
+See §4 for the copy flow.
 
 ## 4. Copy-into-project & publish semantics
 
@@ -228,11 +260,14 @@ title, summary, tags }`:
 
 1. Verify the caller owns the source (user-scoped read).
 2. Build the typed `snapshot` from the relational source.
-3. **Materialize a deliverable preview.** For character/image: copy the source
-   image bytes into a managed, public catalog storage namespace (reuse
-   `asset-write.ts`; a `catalog/{entryId}/…` key in the public bucket) and set
-   `preview_asset_id`. This decouples catalog delivery from the publisher's
-   project visibility (they don't have to make their project public).
+3. **Materialize the public catalog object.** For character/image, server-side
+   copy the source bytes into the public bucket under `catalog/{entryId}/…` via
+   `ObjectStore.copyObject` (`sourceVisibility` = the source's current effective
+   visibility, `destinationVisibility = 'public'`). Record
+   `preview_storage_key` / `preview_storage_bucket` / `preview_content_type` on
+   the entry. This is a bucket-to-bucket copy — no download/re-upload — and
+   decouples catalog delivery from the publisher's project visibility. Story
+   entries skip this at launch (text card) unless a cover image is provided.
 4. Insert `catalog_entries` with `status = 'published'` — the entry is public
    immediately (no approval step at launch; see §6). A `draft` status exists for
    "save metadata without publishing yet," but the default publish action goes
@@ -246,10 +281,14 @@ title, summary, tags }`:
 1. Load the published entry (public read).
 2. Verify caller owns `targetProjectId`.
 3. **Character/image:** create a new `anchor` asset in the target project;
-   copy bytes from the catalog namespace into
-   `{targetWorkspace}/{targetProject}/{newAssetId}/…` via `asset-write.ts`;
-   stamp `source = { via: 'catalog', catalogEntryId, sourceAssetId }`. Return
-   the new asset.
+   server-side copy the entry's public catalog object
+   (`preview_storage_key` in `assets-public`) into the consumer's
+   `{targetWorkspace}/{targetProject}/{newAssetId}/…` key via
+   `ObjectStore.copyObject` (`destinationVisibility` = the target project's
+   effective default), and persist `storage_key`/`storage_bucket` on the new
+   asset; stamp `source = { via: 'catalog', catalogEntryId, sourceAssetId }`.
+   Return the new asset. (Bucket-to-bucket copy; the bytes never round-trip
+   through the API.)
 4. **Story:** clone the `story_blueprint` + its `acts`/`scenes`/`characters`
    into the target project (new rows, new ids, status `draft`), create the
    backing `brief`/`plan`/`story_blueprint` data assets, set the project's
@@ -379,17 +418,26 @@ Each PR is an open PR (no drafts, per CLAUDE.md), independently reviewable.
 Deferred (separate future scope, not numbered here): approval/moderation queue
 and takedown (§6).
 
-## 10. Open questions
+## 10. Resolved decisions & open questions
 
-1. **Publish visibility model:** copy source bytes into a dedicated public
-   catalog namespace (recommended — publisher keeps their project private) vs.
-   require the source asset to be made effectively public. The former is more
-   bytes but cleaner UX; confirm before PR2.
-2. **Story clone depth:** does a story anchor carry its character *images* (the
+**Resolved — publish visibility model.** Copy source bytes into a neutral public
+catalog namespace (the existing `assets-public` bucket under `catalog/{entryId}/…`),
+not by making the source asset/project public. The two-bucket storage layer +
+`ObjectStore.copyObject` already provide the mechanism; the entry owns its public
+bytes via `preview_storage_*` (§1, §3, §4). Publisher keeps their project private.
+
+Still open:
+
+1. **Story clone depth:** does a story anchor carry its character *images* (the
    `anchor` assets the blueprint references), or only the textual blueprint? If
    images, "use story" fans out into multiple byte-copies. Recommend
    text-blueprint-only at launch, with referenced character anchors offered as
    separate one-click adds.
+2. **Cleanup on archive:** when a publisher archives an entry, do we delete its
+   `catalog/{entryId}/…` public object (already-made clones are unaffected — they
+   live under consumer keys), or leave it for audit? Leaning delete on archive
+   via `ObjectStore.deleteObject` + a CloudFront invalidation (the
+   `invalidatePublicObject` path already exists in `visibility-move.ts`).
 3. **Bookmarks:** point `saved_assets` at catalog entries, or add a parallel
    `saved_catalog_entries`? Leaning a new table to avoid overloading the
    asset-bookmark semantics. (Post-launch.)
