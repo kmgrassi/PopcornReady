@@ -19,6 +19,20 @@ test("buildAssetEmbeddingSourceChunks skips pending assets", () => {
   assert.deepEqual(chunks, []);
 });
 
+test("buildAssetEmbeddingSourceChunks skips ready media with only identity fields", () => {
+  const chunks = buildAssetEmbeddingSourceChunks({
+    id: "asset_identity_only",
+    projectId: "project_1",
+    ref: "src_123abc",
+    kind: "source_footage",
+    media: "video",
+    status: "ready",
+    filename: "unreviewed-upload.mp4",
+  });
+
+  assert.deepEqual(chunks, []);
+});
+
 test("buildAssetEmbeddingSourceChunks builds typed media summary and transcript chunks", () => {
   const asset: AssetEmbeddingSourceAsset = {
     id: "asset_1",
@@ -88,6 +102,38 @@ test("buildAssetEmbeddingSourceChunks embeds planning data from allowed typed fi
   assert.match(chunks[0].sourceText, /Audience: Busy operators/);
   assert.match(chunks[0].sourceText, /Constraints:/);
   assert.doesNotMatch(chunks[0].sourceText, /rawCompletion/);
+});
+
+test("buildAssetEmbeddingSourceChunks does not recurse into provider payload blobs", () => {
+  const chunks = buildAssetEmbeddingSourceChunks({
+    id: "asset_provider_blob",
+    projectId: "project_1",
+    kind: "plan",
+    media: "data",
+    status: "ready",
+    content: {
+      summary: "Approved plan summary.",
+      providerPayload: {
+        text: "Raw completion text should not be embedded.",
+        prompt: "Raw nested prompt should not be embedded.",
+      },
+      auditSnapshot: {
+        summary: "Audit summary should not be embedded.",
+      },
+    },
+    params: {
+      providerResponse: {
+        prompt: "Raw provider response prompt should not be embedded.",
+      },
+    },
+  });
+
+  assert.equal(chunks.length, 1);
+  assert.match(chunks[0].sourceText, /Approved plan summary/);
+  assert.doesNotMatch(chunks[0].sourceText, /Raw completion text/);
+  assert.doesNotMatch(chunks[0].sourceText, /Raw nested prompt/);
+  assert.doesNotMatch(chunks[0].sourceText, /Audit summary/);
+  assert.doesNotMatch(chunks[0].sourceText, /Raw provider response prompt/);
 });
 
 test("assetEmbeddingSourceHash is deterministic and changes with source text", () => {

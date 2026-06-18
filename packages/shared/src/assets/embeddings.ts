@@ -127,6 +127,20 @@ const SEMANTIC_FIELD_LABELS: Record<string, string> = {
   semanticTags: "Semantic tags",
 };
 
+const RECURSION_BLOCKED_KEYS = new Set([
+  "audit",
+  "audits",
+  "auditsnapshot",
+  "cost",
+  "costusd",
+  "metadata",
+  "providerpayload",
+  "providerresponse",
+  "raw",
+  "rawcompletion",
+  "rawresponse",
+]);
+
 export function isAssetEmbeddingEligible(
   asset: AssetEmbeddingSourceAsset
 ): boolean {
@@ -153,8 +167,7 @@ export function buildAssetEmbeddingSourceChunks(
   ]);
 
   if (DATA_KINDS.has(asset.kind)) {
-    const lines = [
-      ...identity,
+    const semanticLines = [
       ...fieldLines(asset.content, PLANNING_FIELD_LABELS),
       ...fieldLines(asset.context, PLANNING_FIELD_LABELS),
       ...fieldLines(asset.semanticAnalysis, SEMANTIC_FIELD_LABELS),
@@ -166,12 +179,12 @@ export function buildAssetEmbeddingSourceChunks(
         asset.kind === "narration_script"
           ? "narration_script"
           : "planning_document",
-      lines,
+      identity,
+      lines: semanticLines,
     });
   }
 
   const summaryLines = [
-    ...identity,
     asset.description ? `Description: ${asset.description}` : undefined,
     ...fieldLines(asset.params, PARAM_FIELD_LABELS),
     ...fieldLines(asset.context, {
@@ -199,6 +212,7 @@ export function buildAssetEmbeddingSourceChunks(
     assetId: asset.id,
     chunkKey: "asset.summary",
     chunkKind: "media_description",
+    identity,
     lines: summaryLines,
   });
 
@@ -241,10 +255,12 @@ function chunkIfText(input: {
   assetId: string;
   chunkKey: string;
   chunkKind: AssetEmbeddingChunkKind;
+  identity?: Array<string | undefined>;
   lines: Array<string | undefined>;
 }): AssetEmbeddingSourceChunk[] {
-  const sourceText = normalizeLines(input.lines);
-  if (!sourceText) return [];
+  const semanticText = normalizeLines(input.lines);
+  if (!semanticText) return [];
+  const sourceText = normalizeLines([...(input.identity ?? []), semanticText]);
   return [
     {
       assetId: input.assetId,
@@ -284,7 +300,7 @@ function collectFields(
 
   const record = value as Record<string, unknown>;
   for (const [key, nested] of Object.entries(record)) {
-    if (options.excludeKeys?.has(key)) continue;
+    if (options.excludeKeys?.has(key) || shouldSkipRecursiveKey(key)) continue;
     const label = labels[key];
     if (label) {
       const text = scalarText(nested);
@@ -292,6 +308,10 @@ function collectFields(
     }
     collectFields(nested, labels, lines, options, depth + 1);
   }
+}
+
+function shouldSkipRecursiveKey(key: string): boolean {
+  return RECURSION_BLOCKED_KEYS.has(key.toLowerCase().replace(/[_-]/g, ""));
 }
 
 function scalarText(value: unknown): string | undefined {
