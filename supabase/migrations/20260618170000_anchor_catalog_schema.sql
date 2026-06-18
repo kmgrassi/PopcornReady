@@ -8,6 +8,15 @@ create extension if not exists vector with schema extensions;
 create type public.catalog_entry_kind as enum ('character', 'story', 'image');
 create type public.catalog_entry_status as enum ('draft', 'published', 'archived');
 
+create function public.catalog_entry_tags_search_text(input_tags text[])
+returns text
+language sql
+immutable
+parallel safe
+as $$
+  select coalesce(array_to_string(input_tags, ' '), '')
+$$;
+
 create table public.catalog_entries (
   id                         uuid primary key default gen_random_uuid(),
   schema_version             text not null default 'catalogEntry.v1',
@@ -85,7 +94,7 @@ create index catalog_entries_search_idx
       'english',
       coalesce(title, '') || ' ' ||
       coalesce(summary, '') || ' ' ||
-      array_to_string(tags, ' ') || ' ' ||
+      public.catalog_entry_tags_search_text(tags) || ' ' ||
       coalesce(snapshot ->> 'searchText', '')
     )
   )
