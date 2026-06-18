@@ -413,6 +413,10 @@ function getServiceSupabase(): SupabaseClient {
   return serviceClient;
 }
 
+export function getServiceSupabaseForStore(): SupabaseClient {
+  return getServiceSupabase();
+}
+
 function getRequestSupabaseOrService(): SupabaseClient {
   try {
     return getRequestSupabase();
@@ -5153,6 +5157,35 @@ export async function createJob(input: {
     "store.createJob",
     db.from("jobs").insert(row).select("*").single()
   );
+  return mapJob(data as JobRow);
+}
+
+export async function updateJob(
+  workspaceId: string,
+  projectId: string,
+  jobId: string,
+  patch: Partial<Pick<Job, "status" | "progress" | "result" | "error">>
+): Promise<Job> {
+  await getProject(workspaceId, projectId);
+  const db = getServiceSupabase();
+  const data = await runQuery(
+    "store.updateJob",
+    db
+      .from("jobs")
+      .update({
+        ...(patch.status !== undefined ? { status: patch.status } : {}),
+        ...(patch.progress !== undefined ? { progress: patch.progress } : {}),
+        ...(patch.result !== undefined ? { result: patch.result } : {}),
+        ...(patch.error !== undefined ? { error: patch.error } : {}),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", jobId)
+      .eq("project_id", projectId)
+      .eq("workspace_id", workspaceId)
+      .select("*")
+      .maybeSingle()
+  );
+  if (!data) throw notFound(`Job not found: ${jobId}`);
   return mapJob(data as JobRow);
 }
 

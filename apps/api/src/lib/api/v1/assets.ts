@@ -13,6 +13,7 @@ import { writeAssetObject } from "@/lib/storage/asset-write";
 import { AuthContext } from "./auth";
 import { sha256Hex } from "./asset-graph";
 import { buildSemanticAnalysis } from "../../edit-graph/semantic-analysis";
+import { enqueueAssetEmbeddingRefresh } from "./asset-embeddings/jobs";
 import { ApiError } from "./errors";
 import {
   AgentAssetContext,
@@ -370,6 +371,7 @@ async function writeBytesForAsset(input: {
     storageBucket: stored.storageBucket,
     contentType: stored.contentType,
   });
+  void enqueueAssetEmbeddingRefresh(updated, { reason: "asset_ready" }).catch(() => undefined);
   return updated;
 }
 
@@ -519,7 +521,7 @@ export async function updateAssetContext(
   input: UpdateAssetContextInput
 ): Promise<V1Asset> {
   await getProject(auth.workspaceId, projectId);
-  return updateStoredAsset(auth.workspaceId, projectId, assetId, (asset) => {
+  const updated = await updateStoredAsset(auth.workspaceId, projectId, assetId, (asset) => {
     if (input.context !== undefined) {
       asset.context = {
         ...(asset.context ?? {}),
@@ -544,6 +546,8 @@ export async function updateAssetContext(
     asset.clipUnderstanding = derived.clipUnderstanding;
     asset.semanticAnalysis = derived.semanticAnalysis;
   });
+  void enqueueAssetEmbeddingRefresh(updated, { reason: "metadata_changed" }).catch(() => undefined);
+  return updated;
 }
 
 function confidenceFor(asset: V1Asset): AssetKnowledgeSummary["confidence"] {
