@@ -11,14 +11,15 @@ landing experience to the productization phases already defined in
 
 ## Positioning (the value prop the copy leads with)
 
-**Popcorn Ready is the agent harness for video.** Coding harnesses (Codex,
-Claude Code) turned software into something you *direct* instead of hand-build;
-Popcorn Ready is that harness for video — describe what you want and the agent
-plans, generates, edits, and renders a finished cut. This is the public framing
-of the [North Star](../NORTH_STAR.md#0-what-popcorn-ready-is-the-positioning):
-the agent owns the whole flow, which is exactly what makes it a harness rather
-than an editor with AI bolted on. All landing/marketing copy should lead with
-this.
+> **Superseded.** The public framing has moved from "the agent harness for video"
+> to **"the production workflow for AI video."** See
+> [`landing-page-production-workflow.md`](./landing-page-production-workflow.md)
+> for the authoritative positioning, hero copy, and landing-page implementation.
+> The mechanism is unchanged — the agent still owns every stage
+> ([North Star](../NORTH_STAR.md#0-what-popcorn-ready-is-the-positioning)); only
+> the public framing shifts from "harness" to "the missing workflow around
+> generation." The pricing, two-track productization, and MVP→hosted pathway in
+> the sections below remain authoritative.
 
 ## What Ships First (in this repo today)
 
@@ -50,14 +51,14 @@ block) is the remaining Phase 3 hardening.
 
 ## Landing Page Content Model
 
-- **Hero**: the "agent harness for video" value prop (see Positioning above) +
-  the one-shot prompt form with template chips.
-- **How it works**: the four-step loop — brief, plan, editable timeline,
-  deterministic render — mirroring the README pipeline.
-- **What it does**: bring-or-generate footage, character consistency,
-  conversational revision, inspectable/safe rendering.
-- **Pricing**: self-host (free) plus hosted tiers (see below).
-- **Self-host CTA**: clone command + GitHub link.
+> **Superseded by
+> [`landing-page-production-workflow.md`](./landing-page-production-workflow.md).**
+> That doc owns the authoritative hero copy, section architecture, and
+> page-by-page implementation under the "production workflow for AI video"
+> framing. The original "agent harness" hero, four-step loop, and feature copy
+> that lived here have been retired — build the landing page from the new doc.
+> Hosted pricing and the self-host pathway remain accurate and are detailed in
+> this doc's sections below.
 
 ## Hosted Pricing (indicative launch tiers)
 
