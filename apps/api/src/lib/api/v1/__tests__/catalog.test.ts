@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildCatalogAssetSource, buildSearchText } from "../catalog";
+import { buildCatalogAssetSource, buildSearchText, searchCatalogEntries } from "../catalog";
 import { ApiError } from "../errors";
 import {
   parseCatalogEntriesQuery,
@@ -8,6 +8,66 @@ import {
   parseUseCatalogEntry,
   parseUpdateCatalogEntry,
 } from "../schemas";
+
+function fakeRpcDb() {
+  const calls: Array<{ name: string; params: Record<string, unknown> }> = [];
+  return {
+    calls,
+    db: {
+      rpc(name: string, params: Record<string, unknown>) {
+        calls.push({ name, params });
+        return Promise.resolve({ data: [], error: null });
+      },
+    },
+  };
+}
+
+test("searchCatalogEntries passes the curated-text query embedding to the RPC", async () => {
+  const prev = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "test-key";
+  try {
+    const { calls, db } = fakeRpcDb();
+    await searchCatalogEntries(
+      { q: "cyberpunk hero", limit: 10, cursor: null },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { db: db as any, embeddingProvider: { embed: async () => [0.1, 0.2, 0.3] } }
+    );
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].name, "search_public_catalog_entries");
+    assert.equal(calls[0].params.query_embedding, "[0.1,0.2,0.3]");
+    assert.equal(typeof calls[0].params.query_model, "string");
+  } finally {
+    if (prev === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = prev;
+  }
+});
+
+test("searchCatalogEntries falls back to full-text (null embedding) without an API key", async () => {
+  const prev = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  try {
+    const { calls, db } = fakeRpcDb();
+    let embedCalls = 0;
+    await searchCatalogEntries(
+      { q: "cyberpunk hero", limit: 10, cursor: null },
+      {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        db: db as any,
+        embeddingProvider: {
+          embed: async () => {
+            embedCalls += 1;
+            return [0.1, 0.2, 0.3];
+          },
+        },
+      }
+    );
+    assert.equal(embedCalls, 0, "must not embed without an API key");
+    assert.equal(calls[0].params.query_embedding, null);
+    assert.equal(calls[0].params.query_model, null);
+  } finally {
+    if (prev !== undefined) process.env.OPENAI_API_KEY = prev;
+  }
+});
 
 test("parsePublishCatalogEntry accepts image-backed entries", () => {
   assert.deepEqual(

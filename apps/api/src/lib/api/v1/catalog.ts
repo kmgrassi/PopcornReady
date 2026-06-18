@@ -11,6 +11,11 @@ import {
   type AssetVisibility,
 } from "@/lib/storage/config";
 import { createObjectStore, type ObjectStore } from "@/lib/storage/object-store";
+import { assetEmbeddingConfig } from "./asset-embeddings/config";
+import {
+  defaultAssetEmbeddingProvider,
+  type AssetEmbeddingProvider,
+} from "./asset-embeddings/provider";
 import { canonicalContentHash, inputsFingerprint } from "./asset-graph";
 import { ApiError, notFound } from "./errors";
 import { defaultVisibilityForWorkspace, type StoryBlueprint } from "./store";
@@ -145,10 +150,44 @@ export interface CatalogPage {
 export interface CatalogDeps {
   db?: SupabaseClient;
   store?: ObjectStore;
+  embeddingProvider?: AssetEmbeddingProvider;
 }
 
 function dbFrom(deps?: CatalogDeps): SupabaseClient {
   return deps?.db ?? getServiceSupabase();
+}
+
+interface CatalogSearchEmbedding {
+  literal: string;
+  model: string;
+  dims: number;
+}
+
+function vectorLiteral(values: number[]): string {
+  return `[${values.map((value) => String(value)).join(",")}]`;
+}
+
+// Builds the catalog-owned search vector from an entry's CURATED PUBLIC text
+// (title/summary/tags + snapshot.searchText) — never the source asset's own
+// embedding, which encodes private internal text. Degrades to null (full-text
+// only) when no OPENAI_API_KEY is set or the embed call fails, so publish/search
+// never hard-fail on the embedding path.
+async function embedCatalogSearchText(
+  text: string,
+  deps?: CatalogDeps
+): Promise<CatalogSearchEmbedding | null> {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  if (!process.env.OPENAI_API_KEY?.trim()) return null;
+  try {
+    const config = assetEmbeddingConfig();
+    const provider = deps?.embeddingProvider ?? defaultAssetEmbeddingProvider;
+    const vector = await provider.embed({ text: trimmed, config });
+    return { literal: vectorLiteral(vector), model: config.model, dims: config.dimensions };
+  } catch {
+    // Non-fatal: the full-text index still serves search without the vector.
+    return null;
+  }
 }
 
 function cursorOffset(cursor: string | null): number {
@@ -244,6 +283,10 @@ export async function searchCatalogEntries(input: {
 }, deps?: CatalogDeps): Promise<CatalogPage> {
   const db = dbFrom(deps);
   const offset = cursorOffset(input.cursor);
+  // Embed the query against the same model/curated-text space as the entries.
+  // When unavailable (no API key / embed failure) the RPC falls back to
+  // full-text via its null query_embedding default.
+  const queryEmbedding = await embedCatalogSearchText(input.q, deps);
   const rows = await runQuery(
     "catalog.searchCatalogEntries",
     db.rpc("search_public_catalog_entries", {
@@ -251,6 +294,8 @@ export async function searchCatalogEntries(input: {
       kind_filter: input.kind ?? null,
       limit_count: input.limit + 1,
       offset_count: offset,
+      query_embedding: queryEmbedding?.literal ?? null,
+      query_model: queryEmbedding?.model ?? null,
     })
   );
   return pageResult((rows as CatalogEntryRow[]) ?? [], input.limit, offset);
@@ -317,6 +362,13 @@ export async function publishCatalogEntry(input: {
         });
 
   const source = snapshot.source;
+  const searchText = buildSearchText([
+    input.body.title,
+    input.body.summary,
+    ...input.body.tags,
+    snapshot.searchText,
+  ]);
+  const embedding = await embedCatalogSearchText(searchText, deps);
   const row = await runQuery(
     "catalog.publishCatalogEntry",
     db
@@ -340,13 +392,11 @@ export async function publishCatalogEntry(input: {
         snapshot: {
           schema_version: "catalogEntrySnapshot.v1",
           ...snapshot.body,
-          searchText: buildSearchText([
-            input.body.title,
-            input.body.summary,
-            ...input.body.tags,
-            snapshot.searchText,
-          ]),
+          searchText,
         },
+        search_embedding: embedding?.literal ?? null,
+        search_model: embedding?.model ?? null,
+        search_dims: embedding?.dims ?? null,
       })
       .select("*")
       .single()
@@ -373,15 +423,22 @@ export async function updateCatalogEntry(input: {
   const nextTags = (patch.tags as string[] | undefined) ?? existing.tags ?? [];
   const { searchText: _oldSearchText, ...snapshotWithoutSearchText } = existing.snapshot;
   void _oldSearchText;
+  const searchText = buildSearchText([
+    nextTitle,
+    nextSummary ?? undefined,
+    ...nextTags,
+    JSON.stringify(snapshotWithoutSearchText),
+  ]);
   patch.snapshot = {
     ...snapshotWithoutSearchText,
-    searchText: buildSearchText([
-      nextTitle,
-      nextSummary ?? undefined,
-      ...nextTags,
-      JSON.stringify(snapshotWithoutSearchText),
-    ]),
+    searchText,
   };
+  // Re-embed the curated text so the vector tracks edits. Degrades to null
+  // (full-text only) when embedding is unavailable.
+  const embedding = await embedCatalogSearchText(searchText, deps);
+  patch.search_embedding = embedding?.literal ?? null;
+  patch.search_model = embedding?.model ?? null;
+  patch.search_dims = embedding?.dims ?? null;
 
   const row = await runQuery(
     "catalog.updateCatalogEntry",
