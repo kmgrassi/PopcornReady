@@ -178,8 +178,10 @@ neutral pose, plain background for clean re-use.
 ## Execution checklist
 
 ### Phase 0 — Auth & host setup
-- [ ] Obtain a prod JWT for the examples account (method A or B).
-- [ ] `GET /api/v1/me` → 200, note `workspaceId`.
+- [ ] Obtain a prod JWT for the **owner's own account** — grab the Supabase
+      `access_token` from the logged-in `popcornready.ai` browser session
+      (fallback: owner pastes it). Re-grab if it expires (~1h).
+- [ ] `GET /api/v1/me` → 200, note `workspaceId` (the owner's existing workspace).
 - [ ] `POST /api/v1/projects` `{ "name": "Catalog Examples" }` → note `projectId`.
 
 ### Phase 1 — Create source assets
@@ -214,8 +216,9 @@ neutral pose, plain background for clean re-use.
 
 ### Phase 4 — Verify copy-into-project
 - [ ] Create a throwaway project; `POST /api/v1/catalog/entries/:id/use`
-      `{ "targetProjectId": "…" }` for one image, one character, one story.
-- [ ] Confirm a new asset/blueprint is cloned into the target with
+      `{ "targetProjectId": "…" }` for **one image and one character** (this
+      round's kinds; story-`use` is verified in the story batch).
+- [ ] Confirm a new asset is cloned into the target with
       `source.type = "catalog"` provenance, and `entry.use_count` incremented.
 
 ### Phase 5 — Keep vs clean up
