@@ -19,6 +19,7 @@ import {
   setProjectPoster,
   setProjectVisibility,
 } from "@/lib/api/v1/store";
+import { generatePoster } from "@/lib/api/v1/poster-generation";
 import { getStoryboard, putStoryboard } from "@/lib/api/v1/storyboard";
 
 export const projectsRouter = Router();
@@ -96,6 +97,24 @@ projectsRouter.post(
     }
     const project = await setProjectPoster(auth.workspaceId, params.projectId, assetId);
     return { status: 200, body: { project } };
+  })
+);
+
+projectsRouter.post(
+  "/projects/:projectId/poster/generate",
+  mutation(async ({ auth, body }, params) => {
+    if (!params.projectId) {
+      throw new ApiError("validation_failed", "projectId is required.");
+    }
+    const record =
+      body && typeof body === "object" && !Array.isArray(body)
+        ? (body as Record<string, unknown>)
+        : {};
+    const result = await generatePoster(auth, params.projectId, {
+      force: record.force === true,
+      provider: typeof record.provider === "string" ? record.provider : undefined,
+    });
+    return { status: result.poster.generated ? 202 : 200, body: result };
   })
 );
 

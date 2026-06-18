@@ -625,6 +625,7 @@ function mapStoryBlueprintRecord(row: StoryBlueprintRow): StoryBlueprintRecord {
 
 interface CurrentSelectionRow {
   active_asset_id: string;
+  set_by_action_id?: string | null;
 }
 
 interface GraphAssetSummaryRow {
@@ -782,6 +783,12 @@ interface PosterAssetRow {
   id: string;
   media: AssetMedia;
   status: "ready" | "pending";
+  role: string | null;
+  description: string | null;
+  content_hash: string | null;
+  inputs: GraphAssetInput[];
+  inputs_fingerprint: string | null;
+  params: Record<string, unknown> | null;
   remote_url: string | null;
   storage_key: string | null;
   storage_bucket: string | null;
@@ -789,7 +796,7 @@ interface PosterAssetRow {
 }
 
 const POSTER_ASSET_COLUMNS =
-  "id, media, status, remote_url, storage_key, storage_bucket, visibility";
+  "id, media, status, role, description, content_hash, inputs, inputs_fingerprint, params, remote_url, storage_key, storage_bucket, visibility";
 
 interface PosterVisibilityOpts {
   publicOnly?: boolean;
@@ -862,6 +869,231 @@ async function projectPosterAsset(
     (await latestReadyImageAsset(db, projectId, "poster", opts)) ??
     (await latestReadyImageAsset(db, projectId, undefined, opts))
   );
+}
+
+export interface PosterGenerationAssetRef {
+  id: string;
+  contentHash: string | null;
+  inputsFingerprint?: string | null;
+  role?: string | null;
+  description?: string | null;
+  content?: unknown;
+}
+
+export interface PosterGenerationContext {
+  project: V1Project;
+  briefAsset: PosterGenerationAssetRef | null;
+  planAsset: PosterGenerationAssetRef | null;
+  heroAnchorAsset: PosterGenerationAssetRef | null;
+  currentPosterManuallyPinned: boolean;
+}
+
+function dataAssetRef<T = unknown>(row: DataAssetRow | null): PosterGenerationAssetRef | null {
+  if (!row) return null;
+  return {
+    id: row.id,
+    contentHash: row.content_hash,
+    inputsFingerprint: row.inputs_fingerprint,
+    role: row.role,
+    content: unmarkedContent<T>(row.content),
+  };
+}
+
+function imageAssetRef(row: PosterAssetRow | null): PosterGenerationAssetRef | null {
+  if (!row) return null;
+  return {
+    id: row.id,
+    contentHash: row.content_hash,
+    inputsFingerprint: row.inputs_fingerprint,
+    role: row.role,
+    description: row.description,
+  };
+}
+
+async function latestHeroAnchorAsset(
+  db: SupabaseClient,
+  projectId: string
+): Promise<PosterAssetRow | null> {
+  const data = await runQuery(
+    "store.latestHeroAnchorAsset",
+    db
+      .from("assets")
+      .select(POSTER_ASSET_COLUMNS)
+      .eq("project_id", projectId)
+      .eq("kind", "anchor")
+      .eq("media", "image")
+      .eq("status", "ready")
+      .in("role", ["character_anchor", "scene_anchor"])
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+  );
+  return (data as PosterAssetRow | null) ?? null;
+}
+
+async function currentPosterSelection(
+  db: SupabaseClient,
+  projectId: string
+): Promise<CurrentSelectionRow | null> {
+  const selected = await runQuery(
+    "store.currentPosterSelection",
+    db
+      .from("current_selections")
+      .select("active_asset_id,set_by_action_id")
+      .eq("project_id", projectId)
+      .is("slot_owner_lineage_id", null)
+      .eq("slot_role", POSTER_SLOT_ROLE)
+      .maybeSingle()
+  );
+  return (selected as CurrentSelectionRow | null) ?? null;
+}
+
+async function posterSelectionIsManual(
+  db: SupabaseClient,
+  selection: CurrentSelectionRow | null
+): Promise<boolean> {
+  if (!selection?.set_by_action_id) return false;
+  const action = await runQuery(
+    "store.posterSelectionIsManual action",
+    db
+      .from("actions")
+      .select("tool")
+      .eq("id", selection.set_by_action_id)
+      .maybeSingle()
+  );
+  return (action as Pick<ActionRow, "tool"> | null)?.tool === "set_poster";
+}
+
+export async function getPosterGenerationContext(
+  workspaceId: string,
+  projectId: string
+): Promise<PosterGenerationContext> {
+  const db = getServiceSupabase();
+  const projectData = await runQuery(
+    "store.getPosterGenerationContext project",
+    db
+      .from("projects")
+      .select("*")
+      .eq("id", projectId)
+      .eq("workspace_id", workspaceId)
+      .neq("status", "deleted")
+      .maybeSingle()
+  );
+  if (!projectData) throw notFound(`Project not found: ${projectId}`);
+  const projectRow = projectData as ProjectRow;
+  const [briefAsset, planAsset, heroAnchorAsset, selection] = await Promise.all([
+    selectedDataAsset(db, projectId, "brief", "brief", "current_brief"),
+    selectedDataAsset(db, projectId, "plan", "plan", "current_plan"),
+    latestHeroAnchorAsset(db, projectId),
+    currentPosterSelection(db, projectId),
+  ]);
+
+  return {
+    project: await mapProjectWithProjection(db, projectRow),
+    briefAsset: dataAssetRef<VideoBrief>(briefAsset),
+    planAsset: dataAssetRef(planAsset),
+    heroAnchorAsset: imageAssetRef(heroAnchorAsset),
+    currentPosterManuallyPinned: await posterSelectionIsManual(db, selection),
+  };
+}
+
+function inputIds(inputs: GraphAssetInput[]): string[] {
+  return [...new Set(inputs.map((input) => input.assetId).filter(Boolean))].sort();
+}
+
+function posterMatchesGeneration(
+  row: PosterAssetRow,
+  input: {
+    prompt: string;
+    provider: string;
+    inputAssetIds: string[];
+  }
+): boolean {
+  const params = unmarkedJson(row.params) as
+    | { provenance?: GeneratedAssetProvenance }
+    | null
+    | undefined;
+  const provenance = params?.provenance;
+  if (!provenance) return false;
+  if (provenance.prompt !== input.prompt) return false;
+  if (provenance.provider !== input.provider) return false;
+  return JSON.stringify(inputIds(row.inputs ?? [])) === JSON.stringify(input.inputAssetIds);
+}
+
+export async function findReusableGeneratedPoster(input: {
+  projectId: string;
+  prompt: string;
+  provider: string;
+  inputAssetIds: string[];
+}): Promise<PosterGenerationAssetRef | null> {
+  const db = getServiceSupabase();
+  const data = await runQuery(
+    "store.findReusableGeneratedPoster",
+    db
+      .from("assets")
+      .select(POSTER_ASSET_COLUMNS)
+      .eq("project_id", input.projectId)
+      .eq("kind", "poster")
+      .eq("media", "image")
+      .eq("status", "ready")
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(10)
+  );
+  const rows = (data as PosterAssetRow[]) ?? [];
+  const matched = rows.find((row) => posterMatchesGeneration(row, input)) ?? null;
+  return imageAssetRef(matched);
+}
+
+export async function selectGeneratedProjectPoster(input: {
+  workspaceId: string;
+  projectId: string;
+  assetId: string;
+}): Promise<V1Project> {
+  const db = getServiceSupabase();
+  const data = await runQuery(
+    "store.selectGeneratedProjectPoster project",
+    db
+      .from("projects")
+      .select("*")
+      .eq("id", input.projectId)
+      .eq("workspace_id", input.workspaceId)
+      .neq("status", "deleted")
+      .maybeSingle()
+  );
+  if (!data) throw notFound(`Project not found: ${input.projectId}`);
+  const projectRow = data as ProjectRow;
+
+  const asset = await readyImageAssetById(db, input.projectId, input.assetId);
+  if (!asset) {
+    throw new ApiError(
+      "validation_failed",
+      `Asset ${input.assetId} is not a ready image asset in project ${input.projectId}.`
+    );
+  }
+  const selection = await currentPosterSelection(db, input.projectId);
+  if (await posterSelectionIsManual(db, selection)) {
+    return mapProjectWithProjection(db, projectRow);
+  }
+
+  const action = await createAction({
+    projectId: input.projectId,
+    tool: "select_generated_poster",
+    status: "applied",
+    params: { assetId: input.assetId },
+    inputAssetIds: [input.assetId],
+    outputAssetIds: [input.assetId],
+    rationale: "Auto-select the generated project poster.",
+  });
+  await setActiveAssetSelection(
+    db,
+    input.projectId,
+    POSTER_SLOT_ROLE,
+    input.assetId,
+    action.id
+  );
+  return mapProjectWithProjection(db, projectRow);
 }
 
 // Browser-usable URL for a poster asset. Uses the same storage resolver as the
@@ -1256,6 +1488,7 @@ interface AssetRow {
 function assetKindToGraphKind(asset: V1Asset): GraphAssetKind {
   if (asset.kind === "audio") return "audio_track";
   if (asset.kind === "image") {
+    if (asset.role === "poster") return "poster";
     if (asset.role === "character_anchor" || asset.role === "scene_anchor") return "anchor";
     return asset.provenance ? "keyframe" : "anchor";
   }

@@ -376,9 +376,12 @@ function parseGeneratedAssetRequest(body: unknown): ParsedRequest {
   };
 }
 
-function actionToolForKind(kind: GenerativeAssetKind): string {
-  if (kind === "audio") return "generate_audio";
-  if (kind === "video") return "generate_clip";
+function actionToolForParsed(parsed: Pick<ParsedRequest, "kind" | "assetRole">): string {
+  if (parsed.kind === "image" && parsed.assetRole === "poster") {
+    return "generate_poster";
+  }
+  if (parsed.kind === "audio") return "generate_audio";
+  if (parsed.kind === "video") return "generate_clip";
   return "generate_keyframe";
 }
 
@@ -392,7 +395,7 @@ function buildGenerationActionProposal(args: {
     summary: `Generate ${args.parsed.kind} asset with ${args.parsed.provider}.`,
     plannedWork: [
       {
-        tool: actionToolForKind(args.parsed.kind),
+        tool: actionToolForParsed(args.parsed),
         provider: args.parsed.provider,
         kind: args.parsed.kind,
         durationSec: args.parsed.durationSec,
@@ -837,7 +840,7 @@ export async function runGeneratedAssetJob(args: {
     action = await createAction({
       projectId,
       orchestratorRunId: parsed.runId,
-      tool: actionToolForKind(parsed.kind),
+      tool: actionToolForParsed(parsed),
       status: "running",
       params: {
         provider: parsed.provider,
