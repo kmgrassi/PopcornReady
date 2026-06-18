@@ -1,9 +1,5 @@
-import { FormEvent, useEffect, useId, useMemo, useState } from "react";
-import {
-  type CatalogEntryKind,
-  type PublishCatalogEntryInput,
-  usePublishCatalogEntryMutation,
-} from "../../lib/catalog";
+import { useEffect, useId, useMemo, useState } from "react";
+import { type CatalogEntryKind } from "../../lib/catalog";
 import { Button } from "../ui/Button";
 import styles from "./PublishAnchorDialog.module.css";
 
@@ -49,7 +45,6 @@ function sourceSummary(source: PublishAnchorSource): string {
 
 export function PublishAnchorDialog({ source, onClose }: PublishAnchorDialogProps) {
   const titleId = useId();
-  const publishMutation = usePublishCatalogEntryMutation();
   const [kind, setKind] = useState<CatalogEntryKind>("image");
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
@@ -61,10 +56,6 @@ export function PublishAnchorDialog({ source, onClose }: PublishAnchorDialogProp
     setTitle(sourceTitle(source));
     setSummary(sourceSummary(source));
     setTags("");
-    publishMutation.reset();
-    // Reset only when the source changes; otherwise typing in the form would
-    // be overwritten by mutation state changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source]);
 
   const canSubmit = useMemo(() => Boolean(source && title.trim()), [source, title]);
@@ -78,23 +69,7 @@ export function PublishAnchorDialog({ source, onClose }: PublishAnchorDialogProp
           { value: "character" as const, label: "Character" },
         ];
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!source || !canSubmit) return;
-
-    const input: PublishCatalogEntryInput = {
-      kind,
-      title: title.trim(),
-      summary: summary.trim() || undefined,
-      tags: parseTags(tags),
-      ...(source.type === "asset"
-        ? { sourceAssetId: source.assetId }
-        : { sourceStoryBlueprintId: source.storyBlueprintId }),
-    };
-
-    await publishMutation.mutateAsync(input);
-    onClose();
-  }
+  const parsedTags = parseTags(tags);
 
   return (
     <div className={styles.backdrop} role="presentation" onMouseDown={onClose}>
@@ -102,7 +77,7 @@ export function PublishAnchorDialog({ source, onClose }: PublishAnchorDialogProp
         className={styles.dialog}
         aria-labelledby={titleId}
         onMouseDown={(event) => event.stopPropagation()}
-        onSubmit={(event) => void submit(event)}
+        onSubmit={(event) => event.preventDefault()}
       >
         <header className={styles.header}>
           <div>
@@ -163,11 +138,10 @@ export function PublishAnchorDialog({ source, onClose }: PublishAnchorDialogProp
           />
         </label>
 
-        {publishMutation.error ? (
-          <p className={styles.error}>
-            {publishMutation.error instanceof Error
-              ? publishMutation.error.message
-              : "Unable to publish this anchor."}
+        {canSubmit ? (
+          <p className={styles.pending}>
+            {title.trim()} will publish as a {kind} anchor
+            {parsedTags.length > 0 ? ` with ${parsedTags.length} tag${parsedTags.length === 1 ? "" : "s"}` : ""} once the catalog API lands.
           </p>
         ) : null}
 
@@ -175,8 +149,8 @@ export function PublishAnchorDialog({ source, onClose }: PublishAnchorDialogProp
           <Button variant="ghost" type="button" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" type="submit" disabled={!canSubmit || publishMutation.isPending}>
-            {publishMutation.isPending ? "Publishing..." : "Publish"}
+          <Button variant="primary" type="submit" disabled>
+            Publish pending API
           </Button>
         </footer>
       </form>
