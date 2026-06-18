@@ -19,8 +19,8 @@ const QUIET_LINKS = [
   },
   {
     label: "Anchors",
-    to: "/anchors/mine",
-    description: "Manage starting points you have published.",
+    to: "/anchors",
+    description: "Browse shared anchors and manage your published starting points.",
   },
   {
     label: "Brand kit",
