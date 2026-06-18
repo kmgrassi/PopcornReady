@@ -19,6 +19,8 @@ import {
   useDashboardOutputsQuery,
   useDashboardProjectsQuery,
   useDashboardRunsQuery,
+  useGenerateProjectPosterMutation,
+  useSetDashboardProjectPosterMutation,
 } from "../lib/v1/dashboard/query";
 import { newStudioDraftPath } from "../lib/studioRoutes";
 import styles from "./DashboardCollections.module.css";
@@ -234,7 +236,22 @@ function ProjectPoster({ name, posterUrl }: { name: string; posterUrl?: string |
 
 export function ProjectsPage() {
   const authScope = useDashboardAuthScope();
+  const [regeneratingPosterIds, setRegeneratingPosterIds] = useState<Set<string>>(() => new Set());
   const projectsQuery = useDashboardProjectsQuery(authScope, PAGE_SIZE);
+  const posterMutation = useGenerateProjectPosterMutation(authScope);
+
+  const regeneratePoster = useCallback(async (projectId: string) => {
+    setRegeneratingPosterIds((current) => new Set(current).add(projectId));
+    try {
+      await posterMutation.mutateAsync(projectId);
+    } finally {
+      setRegeneratingPosterIds((current) => {
+        const updated = new Set(current);
+        updated.delete(projectId);
+        return updated;
+      });
+    }
+  }, [posterMutation]);
 
   return (
     <DashboardFrame title="Projects" description="All active video projects in this workspace.">
@@ -294,6 +311,14 @@ export function ProjectsPage() {
                   >
                     Runs
                   </ButtonLink>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={regeneratingPosterIds.has(project.id)}
+                    onClick={() => void regeneratePoster(project.id)}
+                  >
+                    {regeneratingPosterIds.has(project.id) ? "Regenerating..." : "Regenerate poster"}
+                  </Button>
                 </div>
               </article>
             ))}
@@ -310,12 +335,14 @@ export function AssetsPage() {
   const [kind, setKind] = useState<AssetKindFilter>("all");
   const [source, setSource] = useState<AssetSourceFilter>("all");
   const [pendingIds, setPendingIds] = useState<Set<string>>(() => new Set());
+  const [posterPendingIds, setPosterPendingIds] = useState<Set<string>>(() => new Set());
   const [openingIds, setOpeningIds] = useState<Set<string>>(() => new Set());
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const assetFilters = { kind, source, limit: PAGE_SIZE };
   const assetsQuery = useDashboardAssetsQuery(authScope, assetFilters);
   const visibilityMutation = useAssetVisibilityMutation(authScope, assetFilters);
   const mediaMutation = useAssetMediaMutation(authScope, assetFilters);
+  const posterMutation = useSetDashboardProjectPosterMutation(authScope);
 
   const toggleVisibility = useCallback(async (asset: WorkspaceAsset) => {
     const id = asset.assetId ?? asset.id;
@@ -354,6 +381,20 @@ export function AssetsPage() {
       });
     }
   }, [mediaMutation]);
+
+  const useAsPoster = useCallback(async (asset: WorkspaceAsset) => {
+    const id = asset.assetId ?? asset.id;
+    setPosterPendingIds((current) => new Set(current).add(id));
+    try {
+      await posterMutation.mutateAsync({ projectId: asset.projectId, assetId: id });
+    } finally {
+      setPosterPendingIds((current) => {
+        const updated = new Set(current);
+        updated.delete(id);
+        return updated;
+      });
+    }
+  }, [posterMutation]);
 
   const selectedIndex = selectedAssetId
     ? assetsQuery.items.findIndex((asset) => (asset.assetId ?? asset.id) === selectedAssetId)
@@ -396,6 +437,7 @@ export function AssetsPage() {
             {assetsQuery.items.map((asset) => {
               const id = asset.assetId ?? asset.id;
               const isPrivate = asset.visibility === "private";
+              const canUseAsPoster = asset.kind === "image" && asset.status === "ready";
               return (
                 <div className={styles.card} key={id}>
                   <button
@@ -419,6 +461,16 @@ export function AssetsPage() {
                     >
                       Project
                     </ButtonLink>
+                    {canUseAsPoster ? (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={posterPendingIds.has(id)}
+                        onClick={() => void useAsPoster(asset)}
+                      >
+                        {posterPendingIds.has(id) ? "Setting..." : "Use as poster"}
+                      </Button>
+                    ) : null}
                     <span className={styles.visibilityLabel} data-private={isPrivate}>
                       {isPrivate ? "Private" : "Public"}
                     </span>
