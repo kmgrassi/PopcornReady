@@ -1,44 +1,43 @@
+/* Default "popcorn" (Accent) theme — the dark, AI-native aurora palette shared
+ * with the landing page: deep near-black violet surfaces, amber/coral accents.
+ * Kept in sync with the landing override in HomePage.module.css. */
 :root {
-  --bg: #f7f5ef;
-  --panel: #ffffff;
-  --panel-2: #f2eee4;
-  /* Softer border pulled toward --panel-2 to kill the brown-on-cream outlines. */
-  --border: #e3ddcf;
-  /* Lift contrast: near-black ink for body, deeper warm gray for muted. */
-  --text: #1a140d;
-  --muted: #5a5247;
-  --accent: #dca51b;
-  --accent-2: #be4b25;
-  --good: #1c9b62;
-  --button-text: #251600;
-  --cta: #f5b81e;
-  --cta-contrast: #2a1a00;
-  --nav-bg: rgba(247, 245, 239, 0.92);
-  --accent-soft: rgba(220, 165, 27, 0.14);
-  --accent-border: rgba(190, 75, 37, 0.18);
-  --media-panel: rgba(255, 255, 255, 0.94);
+  --bg: #0a0810;
+  --panel: #14111c;
+  --panel-2: #1c1827;
+  --border: #2a2440;
+  --text: #f6f2ff;
+  --muted: #a59bc0;
+  --accent: #f5b62a;
+  --accent-2: #ff7a4d;
+  --good: #5fd39a;
+  --button-text: #1a1206;
+  --cta: #f5b62a;
+  --cta-contrast: #1a1206;
+  --nav-bg: rgba(10, 8, 16, 0.66);
+  --accent-soft: rgba(245, 182, 42, 0.14);
+  --accent-border: rgba(245, 182, 42, 0.32);
+  --media-panel: rgba(20, 17, 28, 0.9);
   --media-bg: #2a1805;
 }
 
 :root[data-theme="popcorn"] {
-  --bg: #f7f5ef;
-  --panel: #ffffff;
-  --panel-2: #f2eee4;
-  /* Softer border pulled toward --panel-2 to kill the brown-on-cream outlines. */
-  --border: #e3ddcf;
-  /* Lift contrast: near-black ink for body, deeper warm gray for muted. */
-  --text: #1a140d;
-  --muted: #5a5247;
-  --accent: #dca51b;
-  --accent-2: #be4b25;
-  --good: #1c9b62;
-  --button-text: #251600;
-  --cta: #f5b81e;
-  --cta-contrast: #2a1a00;
-  --nav-bg: rgba(247, 245, 239, 0.92);
-  --accent-soft: rgba(220, 165, 27, 0.14);
-  --accent-border: rgba(190, 75, 37, 0.18);
-  --media-panel: rgba(255, 255, 255, 0.94);
+  --bg: #0a0810;
+  --panel: #14111c;
+  --panel-2: #1c1827;
+  --border: #2a2440;
+  --text: #f6f2ff;
+  --muted: #a59bc0;
+  --accent: #f5b62a;
+  --accent-2: #ff7a4d;
+  --good: #5fd39a;
+  --button-text: #1a1206;
+  --cta: #f5b62a;
+  --cta-contrast: #1a1206;
+  --nav-bg: rgba(10, 8, 16, 0.66);
+  --accent-soft: rgba(245, 182, 42, 0.14);
+  --accent-border: rgba(245, 182, 42, 0.32);
+  --media-panel: rgba(20, 17, 28, 0.9);
   --media-bg: #2a1805;
 }
 

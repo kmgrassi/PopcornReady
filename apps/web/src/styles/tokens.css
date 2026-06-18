@@ -80,11 +80,12 @@
   --surface-2: var(--panel-2);
   --text-strong: var(--text);
 
-  /* Danger / error accent; tuned for the default Accent theme. */
-  --danger: #c0392b;
-  --danger-text: #a3271b;
-  --danger-soft: rgba(192, 57, 43, 0.08);
-  --danger-border: rgba(192, 57, 43, 0.32);
+  /* Danger / error accent; tuned for the dark Accent theme — a clear red that
+   * stays distinct from the amber/coral accents and legible on dark surfaces. */
+  --danger: #ff6b6b;
+  --danger-text: #ffb3b3;
+  --danger-soft: rgba(255, 107, 107, 0.12);
+  --danger-border: rgba(255, 107, 107, 0.4);
 
   /* Primary CTA (PR 0): the single popcorn-yellow call-to-action color and the
    * text color that sits on top of it. There is one CTA per screen — the
@@ -98,10 +99,10 @@
 /* Per-theme danger tuning. Only the new tokens are declared here — the base
  * palette variants stay in globals.css until that migration lands. */
 :root[data-theme="popcorn"] {
-  --danger: #c0392b;
-  --danger-text: #a3271b;
-  --danger-soft: rgba(192, 57, 43, 0.08);
-  --danger-border: rgba(192, 57, 43, 0.32);
+  --danger: #ff6b6b;
+  --danger-text: #ffb3b3;
+  --danger-soft: rgba(255, 107, 107, 0.12);
+  --danger-border: rgba(255, 107, 107, 0.4);
 }
 
 :root[data-theme="popcorn-warm"] {
