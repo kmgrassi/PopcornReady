@@ -12,6 +12,7 @@ import { GenerationCardsPage } from "./routes/dev/GenerationCardsPage";
 import { DesignSystemPage } from "./routes/dev/DesignSystemPage";
 import { AdminPage } from "./routes/AdminPage";
 import { AdminEvalsPage } from "./routes/AdminEvalsPage";
+import { AnchorsMinePage } from "./routes/AnchorsMinePage";
 import { BrandKitPage } from "./routes/BrandKitPage";
 import { HomePage } from "./routes/HomePage";
 import { LaunchpadPage } from "./routes/LaunchpadPage";
@@ -49,6 +50,8 @@ export function App() {
           <Route path="/studio" element={<StudioPage />} />
           <Route path="/uploads" element={<UploadsPage />} />
           <Route path="/templates" element={<TemplatesPage />} />
+          <Route path="/anchors" element={<Navigate to="/anchors/mine" replace />} />
+          <Route path="/anchors/mine" element={<AnchorsMinePage />} />
           <Route path="/brand" element={<BrandKitPage />} />
           <Route path="/storyboard" element={<Navigate to="/library" replace />} />
           <Route
