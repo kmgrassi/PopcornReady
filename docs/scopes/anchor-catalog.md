@@ -28,9 +28,13 @@ June 18, 2026.
   into the caller's project as new asset-graph nodes with provenance back to the
   catalog source. **No cross-project live references** — that would violate the
   intra-project edge invariant and asset immutability (see §3).
-- **Search:** ride the **asset embeddings** index, not a bespoke catalog index
-  (see §1, §5). Anchors and story blueprints are already in the embeddings P0
-  set, so catalog search is a query against work already underway.
+- **Search:** index a **catalog-owned projection** of each entry's curated,
+  public fields (title/summary/tags + a flattened `snapshot.searchText`) — NOT
+  the source asset's embedding. An anchor may be published from a *private*
+  project, so riding the asset-embeddings public-discovery path would either
+  miss it (visibility join excludes private sources) or leak private source
+  metadata. Full-text GIN at launch; an optional catalog-snapshot embedding can
+  reuse the embeddings *infrastructure* later (see §5).
 - **Publish materializes public bytes:** publishing copies the source bytes into
   the existing **public bucket** (`assets-public`) under a neutral
   `catalog/{entryId}/…` namespace via the storage layer's `copyObject`. Delivery
@@ -79,11 +83,12 @@ them:
   index (`20260610120000_asset_graph_model.sql`).
 - **Embeddings search is being built now.** `docs/scopes/asset-embeddings.md`
   adds a vector search projection beside the asset graph, with **`anchor`,
-  `keyframe`, `poster`, `brief`, `plan`, and `story_blueprint` explicitly in the
-  P0 embed set** — exactly the kinds the catalog surfaces. Catalog search should
-  query that index (filtered to published entries) rather than standing up its
-  own full-text index. The existing `search_public_assets()` GIN path is the
-  interim fallback until embeddings land.
+  `keyframe`, `poster`, `brief`, `plan`, and `story_blueprint` in the P0 embed
+  set**. We reuse this *infrastructure* (embedding pipeline, vector column,
+  query helper) for an optional catalog-snapshot embedding later — but **not**
+  its public-discovery query path, which joins on asset/project effective-public
+  visibility. Catalog entries can be published from private projects, so search
+  runs over the catalog's own public projection instead (§5).
 - **Bookmarks already exist.** `saved_assets` (user_id, source_asset_id) with
   RLS that only allows bookmarking effectively-public assets. A catalog "save
   for later" can reuse this pattern (see §10).
@@ -154,11 +159,16 @@ create table public.catalog_entries (
 
   -- Source LINEAGE in the publisher's own project (provenance only — delivery
   -- does NOT depend on the source's or source project's visibility; see below).
-  -- Exactly one of source_asset_id / source_story_blueprint_id is set, by kind.
-  source_workspace_id        uuid not null references public.workspaces(id) on delete cascade,
-  source_project_id          uuid not null references public.projects(id)   on delete cascade,
-  source_asset_id            uuid references public.assets(id),            -- character/image
-  source_story_blueprint_id  uuid references public.story_blueprints(id),  -- story
+  -- ALL nullable with ON DELETE SET NULL: the entry owns its own public bytes
+  -- and snapshot, so it must SURVIVE deletion of the source asset/blueprint/
+  -- project/workspace — those links simply go null (lineage tombstone). The
+  -- publisher must be able to delete their source without nuking the public
+  -- anchor. Presence-by-kind is enforced at publish time in the API, not by a
+  -- permanent NOT NULL (which on-delete-set-null would violate).
+  source_workspace_id        uuid references public.workspaces(id)        on delete set null,
+  source_project_id          uuid references public.projects(id)          on delete set null,
+  source_asset_id            uuid references public.assets(id)            on delete set null,  -- character/image
+  source_story_blueprint_id  uuid references public.story_blueprints(id)  on delete set null,  -- story
 
   -- Curated, world-readable presentation (no project internals leak).
   title               text not null,
@@ -185,11 +195,12 @@ create table public.catalog_entries (
   created_at          timestamptz not null default now(),
   updated_at          timestamptz not null default now(),
 
+  -- Enforce the RIGHT source column per kind (mutual exclusivity), but allow
+  -- BOTH to be null so on-delete-set-null can tombstone lineage without
+  -- violating the constraint. Presence at publish time is enforced in the API.
   constraint catalog_entry_source_by_kind check (
-    (kind in ('character','image') and source_asset_id is not null
-       and source_story_blueprint_id is null)
-    or (kind = 'story' and source_story_blueprint_id is not null
-       and source_asset_id is null)
+    (kind in ('character','image') and source_story_blueprint_id is null)
+    or (kind = 'story' and source_asset_id is null)
   )
 );
 
@@ -199,15 +210,24 @@ create index catalog_entries_published_feed_idx
 create index catalog_entries_kind_idx on public.catalog_entries (kind)
   where status = 'published';
 create index catalog_entries_publisher_idx on public.catalog_entries (publisher_user_id);
+
+-- Search projection over the catalog's OWN curated, public fields (see §5 for
+-- why we cannot ride the source asset's embedding). Full-text at launch:
+create index catalog_entries_search_idx on public.catalog_entries
+  using gin (to_tsvector('english',
+    coalesce(title,'') || ' ' || coalesce(summary,'') || ' ' ||
+    array_to_string(tags, ' ') || ' ' ||
+    coalesce(snapshot ->> 'searchText', '')))
+  where status = 'published';
 ```
 
 `snapshot` is the only JSONB and holds a **typed, versioned presentation copy**
-(logline, act/scene titles, character names/descriptions, dimensions) — audit
-data, not product structure the UI edits. The editable truth stays in the
-relational source rows.
-
-No full-text/GIN index on `catalog_entries`: search rides the asset embeddings
-index (§1, §5), so the catalog only needs the feed/kind indexes above.
+(logline, act/scene titles, character names/descriptions, dimensions, plus a
+flattened `searchText` for indexing) — audit data, not product structure the UI
+edits. The editable truth stays in the relational source rows. Because the
+entry's bytes and snapshot are an immutable copy taken at publish time, the
+entry stays **stable and searchable even if the source asset/blueprint/project
+is later edited or deleted** (lineage links just go null).
 
 ### Provenance of clones
 
@@ -311,7 +331,7 @@ protected.
 | Method & path | Auth | Purpose |
 |---|---|---|
 | `GET /catalog/entries?kind=&limit=&cursor=` | public | Browse published anchors (paginated feed) |
-| `GET /catalog/search?q=&kind=` | public | Search published anchors (rides the asset embeddings index; GIN fallback until it lands) |
+| `GET /catalog/search?q=&kind=` | public | Search published anchors over the catalog's own projection (`catalog_entries_search_idx`); never joins the source asset's embedding/visibility |
 | `GET /catalog/entries/:id` | public | Entry detail (snapshot + resolved preview URL) |
 | `POST /catalog/entries` | user | Publish from an owned source asset/blueprint (goes live immediately) |
 | `PATCH /catalog/entries/:id` | publisher | Edit own entry metadata |
@@ -322,8 +342,19 @@ protected.
 Store functions land in `apps/api/src/lib/api/v1/` (e.g. a new `catalog.ts` +
 store helpers), following the `assets.ts` route → `lib/api/v1` handler → `store`
 flow. Preview URLs resolved via `resolveAssetUrl` so private/public delivery and
-leak-prevention are inherited for free. Search delegates to the embeddings query
-helper from the asset-embeddings work, scoped to `status = 'published'`.
+leak-prevention are inherited for free.
+
+**Search runs over the catalog's own public projection, not the source asset.**
+A `catalog_entries` row carries only curated, publish-time-copied fields
+(title/summary/tags + `snapshot`) and its own public bytes; the source asset may
+live in a private project. So `/catalog/search` queries
+`catalog_entries_search_idx` (full-text over those fields) filtered to
+`status = 'published'`. It must **not** route through the asset-embeddings
+public-discovery query, which enforces source asset/project effective-public
+visibility — doing so would drop private-source anchors or risk surfacing
+private source metadata. If we later want semantic search, embed the curated
+`snapshot.searchText` into a catalog-owned vector column using the embeddings
+*pipeline*, and query that column directly (no asset/project join).
 
 Schemas: add parsers (`parsePublishCatalogEntry`, `parseUseCatalogEntry`, …) in
 `apps/api/src/lib/api/v1/schemas.ts` alongside the existing asset parsers.
@@ -397,14 +428,18 @@ Components live under `apps/web/src/routes/anchors/` +
 Each PR is an open PR (no drafts, per CLAUDE.md), independently reviewable.
 
 1. **PR1 — schema.** `catalog_entries`, enums (`catalog_entry_kind`,
-   `catalog_entry_status` with launch states only), indexes, RLS
+   `catalog_entry_status` with launch states only), feed/kind/publisher indexes
+   + the `catalog_entries_search_idx` full-text projection, nullable
+   `on delete set null` source lineage FKs + the relaxed kind check, RLS
    (public-read-published, owner-all-statuses). Additive migration with a unique
    timestamp (verify against remote history per the
    migration-version-collisions convention). Pure DB; no app wiring yet.
-2. **PR2 — publish + read API.** `catalog.ts` router (GET feed/detail, POST
-   publish → live immediately, PATCH, DELETE/archive, GET mine) + store +
-   schemas + preview materialization into the public catalog namespace. Tests
-   via `node:test`.
+2. **PR2 — publish + read API.** `catalog.ts` router (GET feed/detail/search,
+   POST publish → live immediately, PATCH, DELETE/archive, GET mine) + store +
+   schemas + preview materialization into the public catalog namespace +
+   `snapshot.searchText` build. `/catalog/search` queries the catalog's own
+   full-text projection (not the asset-embeddings discovery path). Tests via
+   `node:test`.
 3. **PR3 — copy-into-project.** `POST /catalog/entries/:id/use` for all three
    kinds (asset byte-copy; blueprint deep-clone), provenance stamping, inline
    `use_count`. Tests cover immutability/provenance.
@@ -412,8 +447,11 @@ Each PR is an open PR (no drafts, per CLAUDE.md), independently reviewable.
    a project" with project picker; `catalog` query module; infinite feed.
 5. **PR5 — publish UI.** "Publish as anchor" dialog on asset/blueprint views +
    `/anchors/mine`.
-6. **PR6 — search.** Wire `GET /catalog/search` to the asset embeddings index
-   once that work lands (GIN fallback before then), plus search UI on `/anchors`.
+6. **PR6 — semantic search (optional).** Add a catalog-owned vector column,
+   embed `snapshot.searchText` via the asset-embeddings *pipeline*, and rank
+   `/catalog/search` by it (querying the catalog column directly — no
+   asset/project join). Full-text from PR2 is the baseline; this is a ranking
+   upgrade, plus search UI polish on `/anchors`.
 
 Deferred (separate future scope, not numbered here): approval/moderation queue
 and takedown (§6).
