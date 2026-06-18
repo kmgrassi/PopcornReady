@@ -34,7 +34,8 @@ export const generatePosterInputSchema = {
     provider: {
       type: "string",
       enum: ["openai", "gemini", "mock"],
-      description: "Optional image provider override. Omit to use OpenAI.",
+      description:
+        "Optional image provider override. Minor poster content is always routed to Gemini.",
     },
     force: {
       type: "boolean",

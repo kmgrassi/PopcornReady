@@ -87,6 +87,7 @@ export async function runGeneratePosterJob(
     const result = await d.generatePoster(localAuth(input.workspaceId), input.projectId, {
       ...(input.provider ? { provider: input.provider } : {}),
       ...(typeof input.force === "boolean" ? { force: input.force } : {}),
+      ...(input.orchestratorRunId ? { runId: input.orchestratorRunId } : {}),
     });
     await d.jobs.succeed(input.jobId, successPayload(result));
   } catch (err) {

@@ -157,6 +157,7 @@ test("runGeneratePosterJob marks generated posters as succeeded and resumes", as
       jobs: spy.jobs,
       generatePoster: async (_auth, _projectId, input) => {
         assert.equal(input?.provider, "mock");
+        assert.equal(input?.runId, "run_1");
         return result;
       },
       resumeOrchestratorRun: async (runId) => {
