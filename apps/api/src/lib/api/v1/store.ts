@@ -4968,7 +4968,14 @@ export async function listPublicAssets(
 
 export type DiscoverSearchItem =
   | { type: "project"; item: V1Project; id: string; createdAt: string }
-  | { type: "asset"; item: V1Asset; id: string; createdAt: string };
+  | {
+      type: "asset";
+      item: V1Asset;
+      id: string;
+      createdAt: string;
+      score?: number;
+      source?: "embedding";
+    };
 
 export async function searchPublicContent(
   searchQuery: string,
@@ -5008,6 +5015,44 @@ export async function searchPublicContent(
   }));
 
   return paginate([...projectItems, ...assetItems], limit, cursor);
+}
+
+export async function searchPublicAssetsSemantic(
+  input: AssetSemanticSearchInput
+): Promise<AssetSemanticSearchResponse> {
+  const db = getServiceSupabase();
+  const data = await runQuery(
+    "store.searchPublicAssetsSemantic",
+    db.rpc("search_public_asset_embeddings", {
+      p_query: input.q,
+      p_query_embedding: embeddingVectorLiteral(input.queryEmbedding),
+      p_embedding_model: input.embeddingModel,
+      p_media_filter: (input.media as AssetEmbeddingMedia | undefined) ?? null,
+      p_kind_filter: (input.kind as AssetSearchGraphKind | undefined) ?? null,
+      p_role_filter: input.role ?? null,
+      p_match_count: input.limit,
+    })
+  );
+  const rows = data as AssetSemanticSearchRpcRow[];
+  const items = await Promise.all(
+    rows.map(async (row) => ({
+      asset: await mapAsset(row),
+      score: {
+        hybrid: row.hybrid_score,
+        vector: row.vector_score,
+        text: row.text_score,
+      },
+      chunk: {
+        id: row.embedding_id,
+        key: row.chunk_key,
+        kind: row.chunk_kind,
+        embeddingModel: row.embedding_model,
+        sourceHash: row.source_hash,
+        sourceText: row.source_text,
+      },
+    }))
+  );
+  return { items };
 }
 
 function isCharacterAnchorAsset(asset: V1Asset): boolean {

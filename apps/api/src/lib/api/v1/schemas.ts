@@ -1448,6 +1448,7 @@ export function parseDiscoverSearchQuery(searchParams: URLSearchParams): {
   limit: number;
   cursor: string | null;
   kind?: AssetKind;
+  semantic?: boolean;
 } {
   const q = searchParams.get("q")?.trim();
   if (!q) {
@@ -1460,7 +1461,20 @@ export function parseDiscoverSearchQuery(searchParams: URLSearchParams): {
       fields: [{ path: "q", message: "Must be 200 characters or fewer." }],
     });
   }
-  return { q, ...parseDiscoverAssetsQuery(searchParams) };
+  const semanticParam = searchParams.get("semantic");
+  const semantic =
+    semanticParam === null
+      ? undefined
+      : semanticParam === "1" || semanticParam.toLowerCase() === "true";
+  if (
+    semanticParam !== null &&
+    !["1", "0", "true", "false"].includes(semanticParam.toLowerCase())
+  ) {
+    throw new ApiError("validation_failed", "semantic must be true or false.", {
+      fields: [{ path: "semantic", message: "Must be true or false." }],
+    });
+  }
+  return { q, semantic, ...parseDiscoverAssetsQuery(searchParams) };
 }
 
 export interface AssetSemanticSearchInput {

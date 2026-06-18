@@ -8,8 +8,8 @@ import {
 import {
   listPublicAssets,
   listPublicProjects,
-  searchPublicContent,
 } from "@/lib/api/v1/store";
+import { searchPublicDiscovery } from "@/lib/api/v1/asset-embedding-search";
 
 export const discoverRouter = Router();
 
@@ -64,8 +64,16 @@ discoverRouter.get(
 discoverRouter.get(
   "/discover/search",
   publicRoute(async (req) => {
-    const { q, limit, cursor, kind } = parseDiscoverSearchQuery(searchParamsFor(req));
-    const { items, nextCursor } = await searchPublicContent(q, limit, cursor, kind);
+    const { q, limit, cursor, kind, semantic } = parseDiscoverSearchQuery(
+      searchParamsFor(req)
+    );
+    const { items, nextCursor } = await searchPublicDiscovery({
+      query: q,
+      limit,
+      cursor,
+      kind,
+      semantic,
+    });
     return {
       status: 200,
       body: { results: items, pagination: { limit, nextCursor } },
