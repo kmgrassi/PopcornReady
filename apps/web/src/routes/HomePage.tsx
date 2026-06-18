@@ -226,16 +226,16 @@ export function HomePage() {
     <div className="landing">
       <main>
         <section className="lp-hero">
-          <span className="lp-eyebrow">The agent harness for video</span>
+          <span className="lp-eyebrow">New · AI-native video production</span>
           <h1>
-            Like Claude Code,{" "}
-            <span className="lp-accent">but for video.</span>
+            Prompt-to-video is{" "}
+            <span className="lp-accent">only step one.</span>
           </h1>
           <p className="lp-lede">
-            Coding harnesses turned software into something you direct instead of
-            hand-build. Popcorn Ready is that harness for video: you describe what
-            you want, and the agent plans, generates, and edits a finished cut.
-            The AI-first way video gets made.
+            Popcorn Ready gives AI video the missing workflow: it plans the
+            scenes, generates the shots, edits the sequence, checks continuity,
+            and refines the final cut — one AI-native production, not a pile of
+            clips.
           </p>
           <PromptComposer />
         </section>
@@ -279,7 +279,7 @@ export function HomePage() {
         </Reveal>
 
         <Reveal>
-          <section id="how" className="lp-section">
+          <section id="workflow" className="lp-section">
             <h2 className="lp-section-title">How it works</h2>
             <p className="lp-section-sub">
               You direct; the agent does the work: brief &rarr; plan &rarr;

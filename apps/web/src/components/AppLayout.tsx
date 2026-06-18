@@ -69,7 +69,7 @@ export function AppLayout() {
           <span>Popcorn Ready</span>
         </Link>
         <nav className="web-shell-nav" aria-label="Primary">
-          <a href="/#how">How it works</a>
+          <a href="/#workflow">Workflow</a>
           <a href="/#pricing">Pricing</a>
           <AuthNavButton />
         </nav>

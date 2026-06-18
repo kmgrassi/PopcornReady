@@ -3111,7 +3111,7 @@ button.eval-card-link[aria-pressed="true"] {
 
 .lp-section {
   padding: 56px 0 0;
-  /* Keep anchored sections (#how, #pricing) clear of the sticky header when
+  /* Keep anchored sections (#workflow, #pricing) clear of the sticky header when
      jumped to from the nav. */
   scroll-margin-top: 80px;
 }
