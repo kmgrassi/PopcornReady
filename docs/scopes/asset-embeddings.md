@@ -158,34 +158,50 @@ Backfills should be explicit jobs:
 Use a separate table so embeddings remain a rebuildable projection:
 
 ```sql
+create extension if not exists vector with schema extensions;
+
 create table public.asset_embeddings (
   id uuid primary key default gen_random_uuid(),
-  workspace_id uuid not null references public.workspaces(id) on delete cascade,
-  project_id uuid not null references public.projects(id) on delete cascade,
-  asset_id uuid not null references public.assets(id) on delete cascade,
+  workspace_id uuid not null,
+  project_id uuid not null,
+  asset_id uuid not null,
   chunk_key text not null,
   chunk_kind text not null,
   embedding_model text not null,
   embedding_dimensions integer not null,
   source_hash text not null,
   source_text text not null,
-  embedding vector, -- exact dimensions chosen in implementation PR
+  embedding extensions.vector(1536), -- exact dimensions chosen in implementation PR
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
+  constraint asset_embeddings_workspace_fk foreign key (workspace_id)
+    references public.workspaces(id) on delete cascade,
+  constraint asset_embeddings_project_fk foreign key (workspace_id, project_id)
+    references public.projects(workspace_id, id) on delete cascade,
+  constraint asset_embeddings_asset_fk foreign key (project_id, asset_id)
+    references public.assets(project_id, id) on delete cascade,
   unique (asset_id, chunk_key, embedding_model)
 );
 ```
 
 Notes:
 
+- The implementation migration may need to add
+  `projects(workspace_id, id)` as a unique constraint if it does not already
+  exist. `assets(project_id, id)` already exists for scoped asset references.
 - `chunk_key` should be stable, e.g. `asset.summary`, `asset.transcript`,
   `plan.scene.3`, or `storyboard.beat.<beat_id>`.
 - `chunk_kind` lets ranking distinguish media descriptions, transcript chunks,
   planning chunks, and storyboard chunks.
 - `source_text` is stored intentionally for debugging/rebuild transparency. If it
   becomes too large or privacy-sensitive, store a preview plus source hash.
-- If Supabase/production does not yet have pgvector enabled, the first migration
-  should add the extension and choose indexing separately from this planning PR.
+- Keep `workspace_id` and `project_id` denormalized for filtering, but enforce
+  them through composite FKs. A service-role enqueue/backfill bug must not be able
+  to attach an embedding for an asset in one project while labeling it as another
+  project/workspace.
+- If the chosen model is not 1536 dimensions, change the `extensions.vector(n)`
+  size before implementation. Do not use an unbounded vector column unless there
+  is a concrete reason.
 
 If we embed non-asset storyboard rows later, use a sibling table or generalize
 the owner columns:
@@ -197,6 +213,48 @@ owner_id uuid not null
 
 For the first implementation, prefer asset-only ownership to keep the blast
 radius small.
+
+## Supabase Pgvector Implementation Notes
+
+Supabase's AI and Vector docs are the starting point for the implementation:
+
+- [Vector columns](https://supabase.com/docs/guides/ai/vector-columns)
+- [Semantic search](https://supabase.com/docs/guides/ai/semantic-search)
+- [Hybrid search](https://supabase.com/docs/guides/ai/hybrid-search)
+- [Automatic embeddings](https://supabase.com/docs/guides/ai/automatic-embeddings)
+
+Implementation guidance to carry into code PRs:
+
+- Enable pgvector with `create extension if not exists vector with schema
+  extensions;` and reference columns as `extensions.vector(n)` so the migration
+  is explicit about the extension schema and dimensions.
+- Use a fixed vector dimension that matches the configured embedding model. The
+  docs examples use `vector(384)` for small examples; our implementation should
+  choose the production model first and set the column dimension to match it.
+- Store one row per searchable chunk, not one row per arbitrary JSON document.
+  Supabase's examples model searchable documents/chunks with content plus an
+  embedding; our source builders should do the same with typed asset chunks.
+- Expose search through Postgres functions/RPCs rather than letting callers hand
+  assemble vector SQL. The RPC should join back to `assets`/`projects`, enforce
+  workspace or public visibility, accept metadata filters, and return similarity
+  scores plus the asset row fields needed by the API.
+- Push filters inside the vector query. Workspace, project, visibility, media
+  type, graph kind, role, and readiness should be applied before/with ranking so
+  nearest-neighbor results never leak across authorization boundaries.
+- Add vector indexes only after the table shape and expected filters are known.
+  Supabase documents approximate nearest-neighbor indexes such as HNSW and
+  IVFFlat; the first implementation PR should choose one intentionally and
+  document the tradeoff. For small local/dev datasets, exact search without an
+  ANN index is acceptable.
+- Plan for hybrid search from the beginning. The existing public asset search is
+  full-text search over asset description/context/analysis; semantic search
+  should complement that with vector similarity instead of deleting the full-text
+  path.
+- Treat embedding generation as asynchronous and retryable. Supabase's automatic
+  embedding pattern uses database triggers/webhooks and Edge Functions; in this
+  repo we can use our existing job/worker shape, but the same principle applies:
+  normal asset writes enqueue embedding work, and failures do not block asset
+  creation.
 
 ## Source Text Rules
 
