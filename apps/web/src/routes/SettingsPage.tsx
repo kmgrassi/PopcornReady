@@ -20,7 +20,7 @@ const QUIET_LINKS = [
   {
     label: "Anchors",
     to: "/anchors",
-    description: "Browse shared characters, stories, and image references.",
+    description: "Browse shared anchors and manage your published starting points.",
   },
   {
     label: "Brand kit",

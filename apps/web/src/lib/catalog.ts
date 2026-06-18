@@ -1,10 +1,8 @@
 import {
   useInfiniteQuery,
-  useMutation,
   useQuery,
-  useQueryClient,
 } from "@tanstack/react-query";
-import type { V1Asset, V1Project } from "@popcorn/shared/v1/types";
+import type { V1Project } from "@popcorn/shared/v1/types";
 import { apiRequest, v1Api } from "./api-client";
 
 export type CatalogEntryKind = "character" | "story" | "image";
@@ -18,6 +16,29 @@ export interface CatalogEntrySnapshot {
   dimensions?: {
     width?: number;
     height?: number;
+  };
+  story?: {
+    logline?: string;
+    characters?: Array<{
+      id?: string;
+      name?: string;
+      role?: string;
+      description?: string;
+    }>;
+    acts?: Array<{
+      id?: string;
+      title?: string;
+      purpose?: string;
+      summary?: string;
+      targetDurationSec?: number;
+    }>;
+    scenes?: Array<{
+      id?: string;
+      title?: string;
+      summary?: string;
+      setting?: string;
+      targetDurationSec?: number;
+    }>;
   };
   characters?: Array<{
     id?: string;
@@ -43,6 +64,8 @@ export interface CatalogEntry {
   kind: CatalogEntryKind;
   status: CatalogEntryStatus;
   publisherUserId?: string;
+  sourceWorkspaceId?: string | null;
+  sourceProjectId?: string | null;
   sourceAssetId?: string | null;
   sourceStoryBlueprintId?: string | null;
   title: string;
@@ -50,11 +73,12 @@ export interface CatalogEntry {
   tags: string[];
   previewUrl?: string | null;
   previewStorageKey?: string | null;
+  previewStorageBucket?: string | null;
   previewContentType?: string | null;
-  snapshot: CatalogEntrySnapshot;
+  snapshot?: CatalogEntrySnapshot;
   useCount: number;
   createdAt: string;
-  updatedAt?: string;
+  updatedAt: string;
 }
 
 export interface CatalogEntriesResponse {
@@ -65,19 +89,37 @@ export interface CatalogEntriesResponse {
   };
 }
 
+interface CatalogSearchResponse {
+  results: CatalogEntry[];
+  pagination: {
+    limit: number;
+    nextCursor: string | null;
+  };
+}
+
+export interface CatalogMineResponse {
+  entries: CatalogEntry[];
+  pagination?: {
+    limit: number;
+    nextCursor: string | null;
+  };
+}
+
 export interface CatalogEntryResponse {
   entry: CatalogEntry;
 }
 
-export interface UseCatalogEntryInput {
-  targetProjectId: string;
+export interface PublishCatalogEntryInput {
+  kind: CatalogEntryKind;
+  sourceAssetId?: string;
+  sourceStoryBlueprintId?: string;
+  title: string;
+  summary?: string;
+  tags?: string[];
 }
 
-export interface UseCatalogEntryResponse {
+export interface PublishCatalogEntryResponse {
   entry: CatalogEntry;
-  project?: V1Project;
-  asset?: V1Asset;
-  storyBlueprint?: unknown;
 }
 
 export const catalogQueryKeys = {
@@ -121,7 +163,7 @@ export const catalogApi = {
       },
     }),
 
-  searchEntries: (
+  searchEntries: async (
     params: {
       q: string;
       kind?: CatalogEntryKind | "all";
@@ -129,14 +171,19 @@ export const catalogApi = {
       cursor?: string | null;
     },
     signal?: AbortSignal,
-  ) =>
-    apiRequest<CatalogEntriesResponse>(catalogPath("/search"), {
+  ): Promise<CatalogEntriesResponse> => {
+    const response = await apiRequest<CatalogSearchResponse>(catalogPath("/search"), {
       signal,
       searchParams: {
         ...params,
         kind: params.kind === "all" ? undefined : params.kind,
       },
-    }),
+    });
+    return {
+      entries: response.results,
+      pagination: response.pagination,
+    };
+  },
 
   getEntry: (entryId: string, signal?: AbortSignal) =>
     apiRequest<CatalogEntryResponse>(
@@ -144,14 +191,11 @@ export const catalogApi = {
       { signal },
     ),
 
-  useEntry: (entryId: string, input: UseCatalogEntryInput) =>
-    apiRequest<UseCatalogEntryResponse>(
-      catalogPath(`/entries/${encodeURIComponent(entryId)}/use`),
-      {
-        method: "POST",
-        body: input,
-      },
-    ),
+  listMine: (params: { limit?: number; cursor?: string | null } = {}, signal?: AbortSignal) =>
+    apiRequest<CatalogMineResponse>(catalogPath("/mine"), {
+      signal,
+      searchParams: params,
+    }),
 };
 
 export function useCatalogEntriesQuery(filters: {
@@ -204,24 +248,3 @@ export function useCatalogProjectPickerQuery(limit = 100) {
     queryFn: () => v1Api.listProjects({ limit }),
   });
 }
-
-export function useUseCatalogEntryMutation(entryId: string) {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (input: UseCatalogEntryInput) => catalogApi.useEntry(entryId, input),
-    onSuccess: (data, variables) => {
-      queryClient.setQueryData(catalogQueryKeys.entry(entryId), { entry: data.entry });
-      void queryClient.invalidateQueries({ queryKey: catalogQueryKeys.all });
-      void queryClient.invalidateQueries({ queryKey: ["projects"] });
-      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-      void queryClient.invalidateQueries({
-        queryKey: ["studio", "project", variables.targetProjectId],
-      });
-      void queryClient.invalidateQueries({
-        queryKey: ["projects", variables.targetProjectId],
-      });
-    },
-  });
-}
-

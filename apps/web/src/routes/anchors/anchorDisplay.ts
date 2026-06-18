@@ -25,10 +25,10 @@ export function formatUseCount(count: number): string {
 export function entrySummary(entry: CatalogEntry): string {
   return (
     entry.summary?.trim() ||
-    entry.snapshot.logline?.trim() ||
-    entry.snapshot.description?.trim() ||
-    entry.snapshot.searchText?.trim() ||
+    entry.snapshot?.story?.logline?.trim() ||
+    entry.snapshot?.logline?.trim() ||
+    entry.snapshot?.description?.trim() ||
+    entry.snapshot?.searchText?.trim() ||
     "No summary yet."
   );
 }
-

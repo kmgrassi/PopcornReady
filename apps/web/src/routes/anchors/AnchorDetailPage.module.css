@@ -169,6 +169,13 @@
   font-weight: 700;
 }
 
+.pending {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--line-body);
+}
+
 .section {
   grid-column: 1 / -1;
 }
@@ -253,4 +260,3 @@
     font-size: var(--title-lg);
   }
 }
-

@@ -14,6 +14,7 @@ import { AdminPage } from "./routes/AdminPage";
 import { AdminEvalsPage } from "./routes/AdminEvalsPage";
 import { AnchorDetailPage } from "./routes/anchors/AnchorDetailPage";
 import { AnchorsPage } from "./routes/anchors/AnchorsPage";
+import { AnchorsMinePage } from "./routes/AnchorsMinePage";
 import { BrandKitPage } from "./routes/BrandKitPage";
 import { HomePage } from "./routes/HomePage";
 import { LaunchpadPage } from "./routes/LaunchpadPage";
@@ -49,6 +50,7 @@ export function App() {
           <Route path="/assets" element={<RedirectWithSearch to="/library/assets" />} />
           <Route path="/outputs" element={<RedirectWithSearch to="/library/outputs" />} />
           <Route path="/anchors" element={<AnchorsPage />} />
+          <Route path="/anchors/mine" element={<AnchorsMinePage />} />
           <Route path="/anchors/:entryId" element={<AnchorDetailPage />} />
           <Route path="/studio" element={<StudioPage />} />
           <Route path="/uploads" element={<UploadsPage />} />

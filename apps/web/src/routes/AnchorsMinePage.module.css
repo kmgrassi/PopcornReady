@@ -1,0 +1,5 @@
+.page {
+  width: min(var(--content-max), calc(100% - var(--space-8)));
+  margin: 0 auto;
+  padding: var(--space-7) 0 var(--space-8);
+}

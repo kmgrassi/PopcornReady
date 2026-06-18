@@ -6,6 +6,7 @@ import {
   type WorkspaceAssetSource,
   type WorkspaceOutput,
 } from "../lib/api-client";
+import { PublishAnchorDialog } from "../components/anchors/PublishAnchorDialog";
 import { useAuth } from "../components/auth/AuthProvider";
 import { PageHeader } from "../components/ui/PageHeader";
 import { Toolbar, ToolbarField } from "../components/ui/Toolbar";
@@ -312,6 +313,7 @@ export function AssetsPage() {
   const [pendingIds, setPendingIds] = useState<Set<string>>(() => new Set());
   const [openingIds, setOpeningIds] = useState<Set<string>>(() => new Set());
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+  const [publishingAsset, setPublishingAsset] = useState<WorkspaceAsset | null>(null);
   const assetFilters = { kind, source, limit: PAGE_SIZE };
   const assetsQuery = useDashboardAssetsQuery(authScope, assetFilters);
   const visibilityMutation = useAssetVisibilityMutation(authScope, assetFilters);
@@ -419,6 +421,15 @@ export function AssetsPage() {
                     >
                       Project
                     </ButtonLink>
+                    {asset.kind === "image" ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setPublishingAsset(asset)}
+                      >
+                        Publish as anchor
+                      </Button>
+                    ) : null}
                     <span className={styles.visibilityLabel} data-private={isPrivate}>
                       {isPrivate ? "Private" : "Public"}
                     </span>
@@ -454,6 +465,20 @@ export function AssetsPage() {
         onRefresh={async (item) => {
           return mediaMutation.mutateAsync(item.id);
         }}
+      />
+      <PublishAnchorDialog
+        source={
+          publishingAsset
+            ? {
+                type: "asset",
+                assetId: publishingAsset.assetId ?? publishingAsset.id,
+                defaultKind: "image",
+                title: publishingAsset.title ?? publishingAsset.filename ?? null,
+                summary: publishingAsset.description ?? null,
+              }
+            : null
+        }
+        onClose={() => setPublishingAsset(null)}
       />
     </DashboardFrame>
   );

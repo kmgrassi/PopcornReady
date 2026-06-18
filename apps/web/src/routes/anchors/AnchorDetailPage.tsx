@@ -6,7 +6,6 @@ import { EmptyState, ErrorState } from "../../components/ui/StateCard";
 import {
   useCatalogEntryQuery,
   useCatalogProjectPickerQuery,
-  useUseCatalogEntryMutation,
   type CatalogEntry,
 } from "../../lib/catalog";
 import {
@@ -45,9 +44,10 @@ function ProjectOption({ project }: { project: V1Project }) {
 }
 
 function StorySnapshot({ entry }: { entry: CatalogEntry }) {
-  const acts = entry.snapshot.acts ?? [];
-  const scenes = entry.snapshot.scenes ?? [];
-  const characters = entry.snapshot.characters ?? [];
+  const acts = entry.snapshot?.story?.acts ?? entry.snapshot?.acts ?? [];
+  const scenes = entry.snapshot?.story?.scenes ?? entry.snapshot?.scenes ?? [];
+  const characters =
+    entry.snapshot?.story?.characters ?? entry.snapshot?.characters ?? [];
 
   if (entry.kind !== "story" || (!acts.length && !scenes.length && !characters.length)) {
     return null;
@@ -108,7 +108,6 @@ function UseAnchorPanel({
 }) {
   const navigate = useNavigate();
   const [selectedProjectId, setSelectedProjectId] = useState(projects[0]?.id ?? "");
-  const useMutation = useUseCatalogEntryMutation(entry.id);
 
   useEffect(() => {
     if (!selectedProjectId && projects[0]?.id) {
@@ -118,15 +117,6 @@ function UseAnchorPanel({
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedProjectId) return;
-    useMutation.mutate(
-      { targetProjectId: selectedProjectId },
-      {
-        onSuccess: () => {
-          navigate(`/library/projects?projectId=${encodeURIComponent(selectedProjectId)}`);
-        },
-      },
-    );
   }
 
   return (
@@ -151,20 +141,15 @@ function UseAnchorPanel({
             ))}
           </select>
           <Button
-            variant="primary"
+            variant="secondary"
             type="submit"
-            disabled={!selectedProjectId}
-            isLoading={useMutation.isPending}
+            disabled
           >
-            Use anchor
+            Use pending copy API
           </Button>
-          {useMutation.error ? (
-            <p className={styles.error} role="alert">
-              {useMutation.error instanceof Error
-                ? useMutation.error.message
-                : "Unable to use this anchor."}
-            </p>
-          ) : null}
+          <p className={styles.pending}>
+            Copying anchors into projects is waiting on the catalog use endpoint.
+          </p>
         </form>
       ) : (
         <EmptyState

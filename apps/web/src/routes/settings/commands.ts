@@ -48,6 +48,13 @@ export const settingsCommands: PaletteCommand[] = [
     run: go("/anchors"),
   },
   {
+    id: "settings.anchors-mine",
+    title: "Published Anchors",
+    subtitle: "Manage starting points you have published",
+    keywords: ["catalog", "publish", "mine", "shared"],
+    run: go("/anchors/mine"),
+  },
+  {
     id: "settings.brand",
     title: "Brand Kit",
     subtitle: "Workspace brand controls",
