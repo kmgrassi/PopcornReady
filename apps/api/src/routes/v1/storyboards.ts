@@ -19,11 +19,13 @@ import {
   parsePanelInput,
   parseSceneInput,
   parseStoryboardInput,
+  searchStoryboardChunks,
   updateBeat,
   updatePanel,
   updateScene,
   updateStoryboard,
 } from "@/lib/api/v1/storyboards";
+import { parsePagination } from "@/lib/api/v1/schemas";
 
 export const storyboardsRouter = Router();
 
@@ -58,6 +60,27 @@ storyboardsRouter.post(
       data: parseStoryboardInput(body),
     });
     return { status: 201, body: { storyboard } };
+  })
+);
+
+storyboardsRouter.get(
+  "/projects/:projectId/storyboards/search",
+  route(async ({ auth, req }, params) => {
+    const q = req.searchParams.get("q") ?? "";
+    if (!q.trim()) {
+      throw new ApiError("validation_failed", "q is required.", {
+        fields: [{ path: "q", message: "Search query is required." }],
+      });
+    }
+    const { limit } = parsePagination(req.searchParams);
+    const chunks = await searchStoryboardChunks({
+      auth,
+      projectId: requiredParam(params, "projectId"),
+      query: q,
+      storyboardId: req.searchParams.get("storyboardId"),
+      limit,
+    });
+    return { status: 200, body: { chunks } };
   })
 );
 

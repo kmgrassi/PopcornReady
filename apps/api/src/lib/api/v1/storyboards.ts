@@ -5,6 +5,7 @@ import { ApiError, notFound } from "./errors";
 import { getProject } from "./store";
 import { getServiceSupabase } from "@/lib/supabase/clients";
 import { runQuery } from "@/lib/supabase/db-errors";
+import type { StoryboardSearchChunkKind } from "./storyboard-search-chunks";
 
 type StoryboardStatus =
   | "draft"
@@ -102,6 +103,21 @@ interface BeatAssetRow {
   version: number;
 }
 
+interface StoryboardSearchChunkRow {
+  chunk_key: string;
+  chunk_kind: StoryboardSearchChunkKind;
+  source_hash: string;
+  source_text: string;
+  project_id: string;
+  storyboard_id: string;
+  scene_id: string | null;
+  beat_id: string | null;
+  scene_index: number | null;
+  beat_index: number | null;
+  linked_asset_id: string | null;
+  rank: number;
+}
+
 export interface Storyboard {
   id: string;
   projectId: string;
@@ -156,6 +172,21 @@ export interface StoryboardPanel {
   approvedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface StoryboardSearchResult {
+  chunkKey: string;
+  chunkKind: StoryboardSearchChunkKind;
+  sourceHash: string;
+  sourceText: string;
+  projectId: string;
+  storyboardId: string;
+  sceneId: string | null;
+  beatId: string | null;
+  sceneIndex: number | null;
+  beatIndex: number | null;
+  linkedAssetId: string | null;
+  rank: number;
 }
 
 interface StoryboardInput {
@@ -385,6 +416,23 @@ function mapPanel(row: StoryboardPanelRow): StoryboardPanel {
     approvedAt: row.approved_at ? iso(row.approved_at) : null,
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
+  };
+}
+
+function mapSearchChunk(row: StoryboardSearchChunkRow): StoryboardSearchResult {
+  return {
+    chunkKey: row.chunk_key,
+    chunkKind: row.chunk_kind,
+    sourceHash: row.source_hash,
+    sourceText: row.source_text,
+    projectId: row.project_id,
+    storyboardId: row.storyboard_id,
+    sceneId: row.scene_id,
+    beatId: row.beat_id,
+    sceneIndex: row.scene_index,
+    beatIndex: row.beat_index,
+    linkedAssetId: row.linked_asset_id,
+    rank: row.rank,
   };
 }
 
@@ -661,6 +709,31 @@ export async function listStoryboards(input: {
       .order("created_at", { ascending: false })
   );
   return (data as StoryboardRow[]).map(mapStoryboard);
+}
+
+export async function searchStoryboardChunks(input: {
+  auth: AuthContext;
+  projectId: string;
+  query: string;
+  storyboardId?: string | null;
+  limit: number;
+}): Promise<StoryboardSearchResult[]> {
+  const normalized = input.query.trim();
+  if (!normalized) return [];
+
+  await assertProject(input.auth, input.projectId);
+  const data = await runQuery(
+    "storyboards.searchStoryboardChunks",
+    getServiceSupabase().rpc("search_storyboard_chunks", {
+      p_workspace_id: input.auth.workspaceId,
+      p_project_id: input.projectId,
+      p_query: normalized,
+      p_storyboard_id: input.storyboardId ?? null,
+      p_limit: input.limit,
+    })
+  );
+
+  return (data as StoryboardSearchChunkRow[]).map(mapSearchChunk);
 }
 
 export async function createStoryboard(input: {

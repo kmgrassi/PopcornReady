@@ -318,6 +318,11 @@ Security requirements:
    Add storyboard scene/beat retrieval chunks only after asset-level search
    proves the gap.
 
+   Initial implementation note: storyboard chunks are exposed as typed source
+   text through `storyboard_search_chunks` and `search_storyboard_chunks` so they
+   can back full-text retrieval now and feed the embedding pipeline once PRs 1-4
+   add asset-level embedding infrastructure.
+
 ## Open Questions
 
 - Which embedding model and dimensions should we standardize on for production?
