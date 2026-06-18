@@ -10,6 +10,7 @@ import {
   publisherUserIdForWorkspace,
   searchCatalogEntries,
   updateCatalogEntry,
+  useCatalogEntry,
 } from "@/lib/api/v1/catalog";
 import {
   parseCatalogEntriesQuery,
@@ -17,6 +18,7 @@ import {
   parsePagination,
   parsePublishCatalogEntry,
   parseUpdateCatalogEntry,
+  parseUseCatalogEntry,
 } from "@/lib/api/v1/schemas";
 import { getServiceSupabase } from "@/lib/supabase/clients";
 
@@ -146,5 +148,17 @@ catalogProtectedRouter.delete(
       publisherUserId,
     });
     return { status: 200, body: { entry } };
+  })
+);
+
+catalogProtectedRouter.post(
+  "/catalog/entries/:id/use",
+  mutation(async ({ auth, body }, params) => {
+    const result = await useCatalogEntry({
+      authWorkspaceId: auth.workspaceId,
+      entryId: requiredParam(params, "id"),
+      body: parseUseCatalogEntry(body),
+    });
+    return { status: 201, body: result };
   })
 );

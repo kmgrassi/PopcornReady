@@ -239,7 +239,13 @@ export type AgentAssetSource =
   | { type: "remote_url"; url: string }
   | { type: "local_path"; path: string }
   | { type: "multipart_upload"; dataBase64?: string; mimeType?: string }
-  | { type: "generated"; generatedAssetId: string };
+  | { type: "generated"; generatedAssetId: string }
+  | {
+      type: "catalog";
+      catalogEntryId: string;
+      sourceAssetId?: string;
+      sourceStoryBlueprintId?: string;
+    };
 
 export interface AssetContext {
   summary?: string;
@@ -481,6 +487,10 @@ export interface UpdateCatalogEntryInput {
   summary?: string | null;
   tags?: string[];
   status?: CatalogEntryStatus;
+}
+
+export interface UseCatalogEntryInput {
+  targetProjectId: string;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -1626,6 +1636,18 @@ export function parseUpdateCatalogEntry(body: unknown): UpdateCatalogEntryInput 
     ...(tags !== undefined ? { tags } : {}),
     ...(status !== undefined ? { status } : {}),
   };
+}
+
+export function parseUseCatalogEntry(body: unknown): UseCatalogEntryInput {
+  const fields: FieldError[] = [];
+  if (!isPlainObject(body)) {
+    throw validationError("The request body is invalid.", [
+      { path: "$", message: "Must be an object." },
+    ]);
+  }
+  const targetProjectId = requireString(body.targetProjectId, "targetProjectId", fields);
+  throwIfInvalid(fields);
+  return { targetProjectId: targetProjectId! };
 }
 
 export interface AssetSemanticSearchInput {

@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildSearchText } from "../catalog";
+import { buildCatalogAssetSource, buildSearchText } from "../catalog";
 import { ApiError } from "../errors";
 import {
   parseCatalogEntriesQuery,
   parsePublishCatalogEntry,
+  parseUseCatalogEntry,
   parseUpdateCatalogEntry,
 } from "../schemas";
 
@@ -55,6 +56,19 @@ test("parsePublishCatalogEntry rejects draft status until private draft previews
   }
 });
 
+test("parsePublishCatalogEntry requires kind before publish side effects", () => {
+  try {
+    parsePublishCatalogEntry({
+      sourceAssetId: "asset_1",
+      title: "Missing kind",
+    });
+    assert.fail("Expected missing kind to fail.");
+  } catch (err) {
+    assert.ok(err instanceof ApiError);
+    assert.equal(err.details?.fields?.[0]?.path, "kind");
+  }
+});
+
 test("parseUpdateCatalogEntry allows archive status", () => {
   assert.deepEqual(parseUpdateCatalogEntry({ status: "archived" }), {
     status: "archived",
@@ -84,4 +98,39 @@ test("buildSearchText compacts whitespace and caps length", () => {
   const text = buildSearchText(["  Hero   anchor ", undefined, " cafe\nstory "]);
   assert.equal(text, "Hero anchor cafe story");
   assert.equal(buildSearchText(["x".repeat(6000)]).length, 5000);
+});
+
+test("parseUseCatalogEntry requires a target project", () => {
+  assert.deepEqual(parseUseCatalogEntry({ targetProjectId: "project_1" }), {
+    targetProjectId: "project_1",
+  });
+  assert.throws(() => parseUseCatalogEntry({}), { name: "ApiError" });
+});
+
+test("buildCatalogAssetSource stamps asset clone provenance in assets.source", () => {
+  assert.deepEqual(
+    buildCatalogAssetSource({
+      catalogEntryId: "entry_1",
+      sourceAssetId: "asset_source_1",
+    }),
+    {
+      type: "catalog",
+      catalogEntryId: "entry_1",
+      sourceAssetId: "asset_source_1",
+    }
+  );
+});
+
+test("buildCatalogAssetSource stamps story clone provenance without live references", () => {
+  assert.deepEqual(
+    buildCatalogAssetSource({
+      catalogEntryId: "entry_2",
+      sourceStoryBlueprintId: "story_source_1",
+    }),
+    {
+      type: "catalog",
+      catalogEntryId: "entry_2",
+      sourceStoryBlueprintId: "story_source_1",
+    }
+  );
 });

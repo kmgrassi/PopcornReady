@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getServiceSupabase } from "@/lib/supabase/clients";
 import { runQuery } from "@/lib/supabase/db-errors";
-import { contentTypeForFilename } from "@/lib/storage/asset-write";
+import { assetStorageKey, contentTypeForFilename } from "@/lib/storage/asset-write";
 import { resolveAssetUrl } from "@/lib/storage/asset-urls";
 import {
   readStorageConfig,
@@ -11,13 +11,16 @@ import {
   type AssetVisibility,
 } from "@/lib/storage/config";
 import { createObjectStore, type ObjectStore } from "@/lib/storage/object-store";
+import { canonicalContentHash, inputsFingerprint } from "./asset-graph";
 import { ApiError, notFound } from "./errors";
-import { iso } from "./store-internal";
+import { defaultVisibilityForWorkspace, type StoryBlueprint } from "./store";
+import { iso, markedJson } from "./store-internal";
 import type {
   CatalogEntryKind,
   CatalogEntryStatus,
   PublishCatalogEntryInput,
   UpdateCatalogEntryInput,
+  UseCatalogEntryInput,
 } from "./schemas";
 
 const CATALOG_SCHEMA_VERSION = "catalogEntry.v1";
@@ -87,6 +90,7 @@ interface StoryCharacterRow {
 }
 
 interface StoryActRow {
+  id: string;
   stable_id: string;
   position: number;
   title: string;
@@ -97,10 +101,17 @@ interface StoryActRow {
 
 interface StorySceneRow {
   stable_id: string;
+  story_blueprint_act_id: string;
   position: number;
   title: string;
   summary: string;
   target_duration_sec: number;
+}
+
+interface TargetProjectRow {
+  id: string;
+  workspace_id: string;
+  visibility: AssetVisibility;
 }
 
 export interface CatalogEntry {
@@ -399,6 +410,30 @@ export async function archiveCatalogEntry(input: {
   );
 }
 
+export async function useCatalogEntry(input: {
+  authWorkspaceId: string;
+  entryId: string;
+  body: UseCatalogEntryInput;
+}, deps?: CatalogDeps): Promise<{
+  catalogEntry: CatalogEntry;
+  asset?: Record<string, unknown>;
+  storyBlueprint?: Record<string, unknown>;
+}> {
+  const db = dbFrom(deps);
+  const entry = await publishedCatalogEntryRow(db, input.entryId);
+  const targetProject = await targetProjectRow(
+    db,
+    input.authWorkspaceId,
+    input.body.targetProjectId
+  );
+  const result =
+    entry.kind === "story"
+      ? await cloneStoryEntry(db, entry, targetProject)
+      : await cloneAssetEntry(db, entry, targetProject, deps);
+  const updated = await incrementUseCount(db, entry.id);
+  return { catalogEntry: await mapCatalogEntry(updated), ...result };
+}
+
 export async function publisherUserIdForWorkspace(
   db: SupabaseClient,
   workspaceId: string
@@ -443,6 +478,253 @@ async function ownedCatalogEntryRow(
   );
   if (!row) throw notFound(`Catalog entry not found: ${entryId}`);
   return row as CatalogEntryRow;
+}
+
+async function publishedCatalogEntryRow(
+  db: SupabaseClient,
+  entryId: string
+): Promise<CatalogEntryRow> {
+  const row = await runQuery(
+    "catalog.publishedCatalogEntryRow",
+    db
+      .from("catalog_entries")
+      .select("*")
+      .eq("id", entryId)
+      .eq("status", "published")
+      .maybeSingle()
+  );
+  if (!row) throw notFound(`Catalog entry not found: ${entryId}`);
+  return row as CatalogEntryRow;
+}
+
+async function targetProjectRow(
+  db: SupabaseClient,
+  workspaceId: string,
+  projectId: string
+): Promise<TargetProjectRow> {
+  const row = await runQuery(
+    "catalog.targetProjectRow",
+    db
+      .from("projects")
+      .select("id,workspace_id,visibility")
+      .eq("id", projectId)
+      .eq("workspace_id", workspaceId)
+      .neq("status", "deleted")
+      .maybeSingle()
+  );
+  if (!row) throw notFound(`Project not found: ${projectId}`);
+  return row as TargetProjectRow;
+}
+
+async function incrementUseCount(
+  db: SupabaseClient,
+  entryId: string
+): Promise<CatalogEntryRow> {
+  const current = await runQuery(
+    "catalog.incrementUseCount read",
+    db.from("catalog_entries").select("use_count").eq("id", entryId).single()
+  );
+  const next = ((current as { use_count: number }).use_count ?? 0) + 1;
+  return (await runQuery(
+    "catalog.incrementUseCount update",
+    db
+      .from("catalog_entries")
+      .update({ use_count: next })
+      .eq("id", entryId)
+      .select("*")
+      .single()
+  )) as CatalogEntryRow;
+}
+
+async function cloneAssetEntry(
+  db: SupabaseClient,
+  entry: CatalogEntryRow,
+  project: TargetProjectRow,
+  deps?: CatalogDeps
+): Promise<{ asset: Record<string, unknown> }> {
+  if (!entry.preview_storage_key || !entry.preview_storage_bucket) {
+    throw new ApiError("asset_invalid", "Catalog entry has no preview object to copy.");
+  }
+  const config = readStorageConfig();
+  const store = deps?.store ?? createObjectStore(config);
+  const assetId = randomUUID();
+  const filename = path.basename(
+    stringValue(recordValue(entry.snapshot.asset).filename) ?? `${entry.kind}-anchor.png`
+  );
+  const assetVisibility = await defaultVisibilityForWorkspace(db, project.workspace_id);
+  const destinationVisibility =
+    assetVisibility === "private" || project.visibility === "private" ? "private" : "public";
+  const copied = await store.copyObject({
+    sourceKey: entry.preview_storage_key,
+    sourceVisibility: visibilityForBucket(config, entry.preview_storage_bucket),
+    destinationKey: assetStorageKey({
+      workspaceId: project.workspace_id,
+      projectId: project.id,
+      assetId,
+      filename,
+    }),
+    destinationVisibility,
+    contentType: entry.preview_content_type ?? contentTypeForFilename(filename),
+  });
+  const now = new Date().toISOString();
+  const inserted = await runQuery(
+    "catalog.cloneAssetEntry",
+    db
+      .from("assets")
+      .insert({
+        id: assetId,
+        schema_version: "asset.v2",
+        workspace_id: project.workspace_id,
+        project_id: project.id,
+        kind: "anchor",
+        media: "image",
+        status: "ready",
+        role: entry.kind === "character" ? "character_anchor" : "scene_anchor",
+        filename,
+        storage_key: copied.key,
+        storage_bucket: copied.bucket,
+        source: buildCatalogAssetSource({
+          catalogEntryId: entry.id,
+          sourceAssetId: entry.source_asset_id,
+        }),
+        description: entry.summary,
+        context: {
+          userContext: {
+            title: entry.title,
+            description: entry.summary ?? undefined,
+            tags: entry.tags,
+            intendedUse:
+              entry.kind === "character"
+                ? ["character_reference"]
+                : ["style_reference"],
+          },
+        },
+        inputs: [],
+        inputs_fingerprint: inputsFingerprint([], null),
+        visibility: assetVisibility,
+        created_at: now,
+        updated_at: now,
+      })
+      .select("*")
+      .single()
+  );
+  return { asset: inserted as Record<string, unknown> };
+}
+
+async function cloneStoryEntry(
+  db: SupabaseClient,
+  entry: CatalogEntryRow,
+  project: TargetProjectRow
+): Promise<{ storyBlueprint: Record<string, unknown> }> {
+  const blueprint = storyBlueprintFromCatalogEntry(entry);
+  const action = await runQuery(
+    "catalog.cloneStoryEntry action",
+    db
+      .from("actions")
+      .insert({
+        schema_version: "action.v1",
+        project_id: project.id,
+        tool: "use_catalog_entry",
+        status: "running",
+        params: markedJson("action_params.v1", {
+          catalogEntryId: entry.id,
+          sourceStoryBlueprintId: entry.source_story_blueprint_id,
+        }),
+        input_asset_ids: [],
+        output_asset_ids: [],
+        rationale: "Clone a published story anchor into this project.",
+      })
+      .select("*")
+      .single()
+  );
+  const actionId = (action as { id: string }).id;
+  const content = { schema_version: "story_blueprint", ...blueprint };
+  const now = new Date().toISOString();
+  const storyAsset = await runQuery(
+    "catalog.cloneStoryEntry asset",
+    db
+      .from("assets")
+      .insert({
+        schema_version: "asset.v2",
+        workspace_id: project.workspace_id,
+        project_id: project.id,
+        kind: "story_blueprint",
+        media: "data",
+        status: "ready",
+        role: "current_story_blueprint",
+        content,
+        content_hash: canonicalContentHash(content),
+        inputs: [],
+        inputs_fingerprint: inputsFingerprint([], null),
+        source: buildCatalogAssetSource({
+          catalogEntryId: entry.id,
+          sourceStoryBlueprintId: entry.source_story_blueprint_id,
+        }),
+        visibility: await defaultVisibilityForWorkspace(db, project.workspace_id),
+        created_by_action_id: actionId,
+        created_at: now,
+        updated_at: now,
+      })
+      .select("*")
+      .single()
+  );
+  const storyAssetId = (storyAsset as { id: string }).id;
+  const cloned = await runQuery(
+    "catalog.cloneStoryEntry blueprint",
+    db
+      .from("story_blueprints")
+      .insert({
+        schema_version: "storyBlueprint.v1",
+        workspace_id: project.workspace_id,
+        project_id: project.id,
+        brief_asset_id: null,
+        asset_id: storyAssetId,
+        status: "draft",
+        snapshot: { schema_version: "story_blueprint", ...blueprint },
+        provenance: markedJson("story_blueprint_provenance.v1", {
+          via: "catalog",
+          catalogEntryId: entry.id,
+          sourceStoryBlueprintId: entry.source_story_blueprint_id,
+          outputAssetId: storyAssetId,
+        }),
+        created_by: markedJson("story_blueprint_creator.v1", {
+          actionId,
+          tool: "use_catalog_entry",
+        }),
+      })
+      .select("*")
+      .single()
+  );
+  const clonedBlueprintId = (cloned as { id: string }).id;
+  await cloneStoryChildrenFromSnapshot(
+    db,
+    blueprint,
+    clonedBlueprintId,
+    project.workspace_id,
+    project.id
+  );
+  await runQuery(
+    "catalog.cloneStoryEntry selection",
+    db.from("selections").insert({
+      project_id: project.id,
+      slot_owner_lineage_id: null,
+      slot_role: "story_blueprint",
+      active_asset_id: storyAssetId,
+      set_by_action_id: actionId,
+    })
+  );
+  await runQuery(
+    "catalog.cloneStoryEntry projectPointer",
+    db.from("projects").update({ current_story_blueprint_id: clonedBlueprintId }).eq("id", project.id)
+  );
+  await runQuery(
+    "catalog.cloneStoryEntry actionOutputs",
+    db
+      .from("actions")
+      .update({ status: "applied", output_asset_ids: [storyAssetId] })
+      .eq("id", actionId)
+  );
+  return { storyBlueprint: cloned as Record<string, unknown> };
 }
 
 async function sourceAssetRow(
@@ -562,7 +844,7 @@ async function storySnapshot(
       "catalog.storySnapshot acts",
       db
         .from("story_blueprint_acts")
-        .select("stable_id,position,title,purpose,summary,target_duration_sec")
+        .select("id,stable_id,position,title,purpose,summary,target_duration_sec")
         .eq("story_blueprint_id", row.id)
         .order("position", { ascending: true })
     ),
@@ -570,7 +852,7 @@ async function storySnapshot(
       "catalog.storySnapshot scenes",
       db
         .from("story_blueprint_scenes")
-        .select("stable_id,position,title,summary,target_duration_sec")
+        .select("stable_id,story_blueprint_act_id,position,title,summary,target_duration_sec")
         .eq("story_blueprint_id", row.id)
         .order("position", { ascending: true })
     ),
@@ -601,12 +883,18 @@ async function storySnapshot(
         summary: act.summary,
         targetDurationSec: act.target_duration_sec,
       })),
-      scenes: (scenes as StorySceneRow[]).map((scene) => ({
-        id: scene.stable_id,
-        title: scene.title,
-        summary: scene.summary,
-        targetDurationSec: scene.target_duration_sec,
-      })),
+      scenes: (scenes as StorySceneRow[]).map((scene) => {
+        const act = (acts as StoryActRow[]).find(
+          (candidate) => candidate.id === scene.story_blueprint_act_id
+        );
+        return {
+          id: scene.stable_id,
+          title: scene.title,
+          summary: scene.summary,
+          ...(act ? { actId: act.stable_id } : {}),
+          targetDurationSec: scene.target_duration_sec,
+        };
+      }),
     },
   };
   return {
@@ -663,6 +951,137 @@ async function materializePreview(input: {
   };
 }
 
+function storyBlueprintFromCatalogEntry(entry: CatalogEntryRow): StoryBlueprint {
+  const story = recordValue(entry.snapshot.story);
+  const snapshot = recordValue(story.snapshot);
+  return {
+    schemaVersion: "storyBlueprint.v1",
+    premise: stringValue(snapshot.premise) ?? stringValue(story.logline) ?? "",
+    logline: stringValue(snapshot.logline) ?? stringValue(story.logline) ?? "",
+    tone: stringValue(snapshot.tone) ?? "",
+    ...(stringValue(snapshot.audience)
+      ? { audience: stringValue(snapshot.audience) }
+      : {}),
+    targetLengthSec:
+      typeof snapshot.targetLengthSec === "number" ? snapshot.targetLengthSec : 0,
+    aspectRatio:
+      snapshot.aspectRatio === "16:9" ||
+      snapshot.aspectRatio === "9:16" ||
+      snapshot.aspectRatio === "1:1"
+        ? snapshot.aspectRatio
+        : "16:9",
+    characters: arrayValue(story.characters).map((character, index) => {
+      const row = recordValue(character);
+      return {
+        id: stringValue(row.id) ?? `character_${index + 1}`,
+        name: stringValue(row.name) ?? `Character ${index + 1}`,
+        role: stringValue(row.role) ?? "character",
+        description: stringValue(row.description) ?? "",
+      };
+    }),
+    acts: arrayValue(story.acts).map((act, index) => {
+      const row = recordValue(act);
+      return {
+        id: stringValue(row.id) ?? `act_${index + 1}`,
+        title: stringValue(row.title) ?? `Act ${index + 1}`,
+        purpose: stringValue(row.purpose) ?? "",
+        summary: stringValue(row.summary) ?? "",
+        targetDurationSec:
+          typeof row.targetDurationSec === "number" ? row.targetDurationSec : 0,
+      };
+    }),
+    scenes: arrayValue(story.scenes).map((scene, index) => {
+      const row = recordValue(scene);
+      return {
+        id: stringValue(row.id) ?? `scene_${index + 1}`,
+        title: stringValue(row.title) ?? `Scene ${index + 1}`,
+        summary: stringValue(row.summary) ?? "",
+        actId: stringValue(row.actId) ?? "act_1",
+        targetDurationSec:
+          typeof row.targetDurationSec === "number" ? row.targetDurationSec : 0,
+      };
+    }),
+    ending: stringValue(snapshot.ending) ?? "",
+  };
+}
+
+async function cloneStoryChildrenFromSnapshot(
+  db: SupabaseClient,
+  blueprint: StoryBlueprint,
+  targetBlueprintId: string,
+  targetWorkspaceId: string,
+  targetProjectId: string
+): Promise<void> {
+  if (blueprint.characters.length > 0) {
+    await runQuery(
+      "catalog.cloneStoryChildren characters write",
+      db.from("story_blueprint_characters").insert(
+        blueprint.characters.map((character, index) => ({
+          story_blueprint_id: targetBlueprintId,
+          workspace_id: targetWorkspaceId,
+          project_id: targetProjectId,
+          stable_id: character.id,
+          position: index,
+          name: character.name,
+          role: character.role,
+          description: character.description,
+        }))
+      )
+    );
+  }
+
+  const actIdByStableId = new Map<string, string>();
+  if (blueprint.acts.length > 0) {
+    const insertedActs = (await runQuery(
+      "catalog.cloneStoryChildren acts write",
+      db
+        .from("story_blueprint_acts")
+        .insert(
+          blueprint.acts.map((act, index) => ({
+            story_blueprint_id: targetBlueprintId,
+            workspace_id: targetWorkspaceId,
+            project_id: targetProjectId,
+            stable_id: act.id,
+            position: index,
+            title: act.title,
+            purpose: act.purpose,
+            summary: act.summary,
+            target_duration_sec: act.targetDurationSec,
+          }))
+        )
+        .select("id, stable_id")
+    )) as Array<{ id: string; stable_id: string }>;
+    for (const act of insertedActs) {
+      actIdByStableId.set(act.stable_id, act.id);
+    }
+  }
+
+  if (blueprint.scenes.length > 0) {
+    await runQuery(
+      "catalog.cloneStoryChildren scenes write",
+      db.from("story_blueprint_scenes").insert(
+        blueprint.scenes.map((scene, index) => {
+          const mappedActId = actIdByStableId.get(scene.actId);
+          if (!mappedActId) {
+            throw new Error(`Could not map scene ${scene.id} to a cloned act.`);
+          }
+          return {
+            story_blueprint_id: targetBlueprintId,
+            story_blueprint_act_id: mappedActId,
+            workspace_id: targetWorkspaceId,
+            project_id: targetProjectId,
+            stable_id: scene.id,
+            position: index,
+            title: scene.title,
+            summary: scene.summary,
+            target_duration_sec: scene.targetDurationSec,
+          };
+        })
+      )
+    );
+  }
+}
+
 function unmarked(value: Record<string, unknown> | null): Record<string, unknown> {
   if (!value) return {};
   const { schema_version: _schemaVersion, schema: _schema, ...rest } = value;
@@ -675,6 +1094,10 @@ function recordValue(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function arrayValue(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
 }
 
 function stringValue(value: unknown): string | undefined {
@@ -694,4 +1117,19 @@ export function buildSearchText(parts: Array<string | undefined>): string {
     .join(" ")
     .replace(/\s+/g, " ")
     .slice(0, 5000);
+}
+
+export function buildCatalogAssetSource(input: {
+  catalogEntryId: string;
+  sourceAssetId?: string | null;
+  sourceStoryBlueprintId?: string | null;
+}): Record<string, unknown> {
+  return {
+    type: "catalog",
+    catalogEntryId: input.catalogEntryId,
+    ...(input.sourceAssetId ? { sourceAssetId: input.sourceAssetId } : {}),
+    ...(input.sourceStoryBlueprintId
+      ? { sourceStoryBlueprintId: input.sourceStoryBlueprintId }
+      : {}),
+  };
 }
