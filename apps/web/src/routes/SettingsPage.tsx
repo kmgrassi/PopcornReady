@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../components/auth/AuthProvider";
+import { AccessTokenPanel } from "../components/settings/AccessTokenPanel";
 import ThemeToggle from "../components/ThemeToggle";
 import { Button } from "../components/ui/Button";
 import { useMeQuery } from "../lib/queryClient";
@@ -113,6 +114,8 @@ export function SettingsPage() {
           ) : null}
         </article>
       </section>
+
+      <AccessTokenPanel />
 
       <section className={styles.section} aria-labelledby="links-heading">
         <div>
