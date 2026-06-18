@@ -3,6 +3,10 @@ import { test } from "node:test";
 
 import { ApiError } from "../errors";
 import {
+  buildStoryboardBeatSearchChunk,
+  buildStoryboardSceneSearchChunk,
+} from "../storyboard-search-chunks";
+import {
   parseBeatInput,
   parsePanelInput,
   parseSceneInput,
@@ -64,5 +68,73 @@ test("storyboard parsers reject invalid request shapes", () => {
   assert.throws(
     () => parsePanelInput({ isSelected: "true" }),
     (err) => err instanceof ApiError && err.code === "validation_failed"
+  );
+});
+
+test("storyboard search chunks use typed labeled source text", () => {
+  const scene = buildStoryboardSceneSearchChunk({
+    id: "scene_1",
+    sceneIndex: 0,
+    title: "Opening",
+    summary: "A calm kitchen at sunrise.",
+    setting: "Kitchen",
+    mood: "Hopeful",
+    durationSec: 4.5,
+  });
+
+  assert.ok(scene);
+  assert.equal(scene.chunkKey, "storyboard.scene.scene_1");
+  assert.equal(scene.chunkKind, "storyboard_scene");
+  assert.equal(scene.sourceHash.length, 64);
+  assert.equal(
+    scene.sourceText,
+    [
+      "Scene 1",
+      "Title: Opening",
+      "Summary: A calm kitchen at sunrise.",
+      "Setting: Kitchen",
+      "Mood: Hopeful",
+      "Duration seconds: 4.5",
+    ].join("\n")
+  );
+
+  const beat = buildStoryboardBeatSearchChunk({
+    id: "beat_1",
+    beatIndex: 1,
+    sceneTitle: "Opening",
+    sceneSummary: "A calm kitchen at sunrise.",
+    intent: "Reveal the product.",
+    visualDescription: "Steam curls around the mug.",
+    dialogueSummary: "No dialogue.",
+    narration: "Start your morning ready.",
+    durationSec: 2,
+  });
+
+  assert.ok(beat);
+  assert.equal(beat.chunkKey, "storyboard.beat.beat_1");
+  assert.equal(beat.chunkKind, "storyboard_beat");
+  assert.equal(
+    beat.sourceText,
+    [
+      "Beat 2",
+      "Scene title: Opening",
+      "Scene summary: A calm kitchen at sunrise.",
+      "Intent: Reveal the product.",
+      "Visual description: Steam curls around the mug.",
+      "Dialogue summary: No dialogue.",
+      "Narration: Start your morning ready.",
+      "Duration seconds: 2",
+    ].join("\n")
+  );
+});
+
+test("storyboard search chunks skip rows without searchable meaning", () => {
+  assert.equal(
+    buildStoryboardSceneSearchChunk({ id: "scene_1", sceneIndex: 0 }),
+    null
+  );
+  assert.equal(
+    buildStoryboardBeatSearchChunk({ id: "beat_1", beatIndex: 0, intent: " " }),
+    null
   );
 });
