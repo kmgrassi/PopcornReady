@@ -31,6 +31,12 @@ import type {
 const CATALOG_SCHEMA_VERSION = "catalogEntry.v1";
 const LOCAL_CATALOG_EMAIL = "local-catalog@popcornready.local";
 
+// Public column projection: every catalog_entries column EXCEPT the heavy
+// search_embedding vector (and its model/dims metadata). Reads never need the
+// vector — ranking happens in SQL — so we avoid shipping 1536 floats per row.
+const CATALOG_COLUMNS =
+  "id, schema_version, kind, status, publisher_user_id, source_workspace_id, source_project_id, source_asset_id, source_story_blueprint_id, title, summary, tags, preview_storage_key, preview_storage_bucket, preview_content_type, snapshot, use_count, created_at, updated_at" as const;
+
 interface CatalogEntryRow {
   id: string;
   schema_version: string;
@@ -265,7 +271,7 @@ export async function listCatalogEntries(input: {
   const offset = cursorOffset(input.cursor);
   let query = db
     .from("catalog_entries")
-    .select("*")
+    .select(CATALOG_COLUMNS)
     .eq("status", "published")
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
@@ -310,7 +316,7 @@ export async function getCatalogEntry(
     "catalog.getCatalogEntry",
     db
       .from("catalog_entries")
-      .select("*")
+      .select(CATALOG_COLUMNS)
       .eq("id", entryId)
       .eq("status", "published")
       .maybeSingle()
@@ -330,7 +336,7 @@ export async function listMyCatalogEntries(input: {
     "catalog.listMyCatalogEntries",
     db
       .from("catalog_entries")
-      .select("*")
+      .select(CATALOG_COLUMNS)
       .eq("publisher_user_id", input.publisherUserId)
       .order("created_at", { ascending: false })
       .order("id", { ascending: false })
@@ -398,7 +404,7 @@ export async function publishCatalogEntry(input: {
         search_model: embedding?.model ?? null,
         search_dims: embedding?.dims ?? null,
       })
-      .select("*")
+      .select(CATALOG_COLUMNS)
       .single()
   );
   return mapCatalogEntry(row as CatalogEntryRow);
@@ -447,7 +453,7 @@ export async function updateCatalogEntry(input: {
       .update(patch)
       .eq("id", input.entryId)
       .eq("publisher_user_id", input.publisherUserId)
-      .select("*")
+      .select(CATALOG_COLUMNS)
       .single()
   );
   return mapCatalogEntry(row as CatalogEntryRow);
@@ -528,7 +534,7 @@ async function ownedCatalogEntryRow(
     "catalog.ownedCatalogEntryRow",
     db
       .from("catalog_entries")
-      .select("*")
+      .select(CATALOG_COLUMNS)
       .eq("id", entryId)
       .eq("publisher_user_id", publisherUserId)
       .maybeSingle()
@@ -545,7 +551,7 @@ async function publishedCatalogEntryRow(
     "catalog.publishedCatalogEntryRow",
     db
       .from("catalog_entries")
-      .select("*")
+      .select(CATALOG_COLUMNS)
       .eq("id", entryId)
       .eq("status", "published")
       .maybeSingle()
@@ -588,7 +594,7 @@ async function incrementUseCount(
       .from("catalog_entries")
       .update({ use_count: next })
       .eq("id", entryId)
-      .select("*")
+      .select(CATALOG_COLUMNS)
       .single()
   )) as CatalogEntryRow;
 }

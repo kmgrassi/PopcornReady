@@ -22,9 +22,14 @@ alter table public.catalog_entries
 --     using hnsw (search_embedding extensions.vector_cosine_ops)
 --     where status = 'published';
 
--- Replace the full-text-only RPC with a hybrid one. The two new params default
--- to null, so callers that omit them (e.g. an older API build mid-deploy) still
--- get the original full-text behavior.
+-- Replace the full-text-only RPC with a hybrid one.
+--   * Ranks by a BLENDED score (0.75 vector + 0.25 lexical) so a strong lexical
+--     match on an entry without an embedding still competes — it is not starved
+--     out by unrelated embedded rows (which score ~0 on the vector term).
+--   * Returns an explicit projection (NO search_embedding) so callers never
+--     transfer 1536 floats per row.
+--   * The two new params default to null, so a 4-arg caller (e.g. an older API
+--     build mid-deploy) still gets the original full-text behavior.
 drop function if exists public.search_public_catalog_entries(
   text, public.catalog_entry_kind, integer, integer
 );
@@ -37,7 +42,27 @@ create or replace function public.search_public_catalog_entries(
   query_embedding text default null,
   query_model text default null
 )
-returns setof public.catalog_entries
+returns table (
+  id uuid,
+  schema_version text,
+  kind public.catalog_entry_kind,
+  status public.catalog_entry_status,
+  publisher_user_id uuid,
+  source_workspace_id uuid,
+  source_project_id uuid,
+  source_asset_id uuid,
+  source_story_blueprint_id uuid,
+  title text,
+  summary text,
+  tags text[],
+  preview_storage_key text,
+  preview_storage_bucket text,
+  preview_content_type text,
+  snapshot jsonb,
+  use_count integer,
+  created_at timestamptz,
+  updated_at timestamptz
+)
 language sql
 stable
 security definer
@@ -50,43 +75,55 @@ as $$
         when query_embedding is null or btrim(query_embedding) = '' then null
         else query_embedding::extensions.vector(1536)
       end as qvec
+  ),
+  scored as (
+    select
+      e.*,
+      -- Cosine similarity in (0,1]; 0 when we have no comparable entry vector.
+      case
+        when q.qvec is not null
+         and e.search_embedding is not null
+         and (query_model is null or e.search_model = query_model)
+        then 1 - (e.search_embedding <=> q.qvec)
+        else 0
+      end as vscore,
+      -- Lexical relevance, capped to [0,1].
+      case
+        when q.qtext is not null
+        then least(
+          ts_rank_cd(
+            to_tsvector('english',
+              coalesce(e.title, '') || ' ' || coalesce(e.summary, '') || ' ' ||
+              public.catalog_entry_tags_search_text(e.tags) || ' ' ||
+              coalesce(e.snapshot ->> 'searchText', '')),
+            plainto_tsquery('english', q.qtext)),
+          1.0)
+        else 0
+      end as tscore,
+      case
+        when q.qtext is null then true
+        else to_tsvector('english',
+               coalesce(e.title, '') || ' ' || coalesce(e.summary, '') || ' ' ||
+               public.catalog_entry_tags_search_text(e.tags) || ' ' ||
+               coalesce(e.snapshot ->> 'searchText', ''))
+             @@ plainto_tsquery('english', q.qtext)
+      end as text_match
+    from public.catalog_entries e
+    cross join q
+    where e.status = 'published'
+      and (kind_filter is null or e.kind = kind_filter)
   )
-  select e.*
-  from public.catalog_entries e
-  cross join q
-  where e.status = 'published'
-    and (kind_filter is null or e.kind = kind_filter)
-    -- With a query vector we rank (not hard-filter) so semantically-close entries
-    -- surface even without a keyword match. Without one, fall back to full-text.
-    and (
-      q.qvec is not null
-      or q.qtext is null
-      or to_tsvector('english',
-           coalesce(e.title, '') || ' ' || coalesce(e.summary, '') || ' ' ||
-           public.catalog_entry_tags_search_text(e.tags) || ' ' ||
-           coalesce(e.snapshot ->> 'searchText', '')
-         ) @@ plainto_tsquery('english', q.qtext)
-    )
-  order by
-    -- Semantic distance first when we have a query vector and a comparable
-    -- (same-model) entry vector; entries without one sort last.
-    case
-      when q.qvec is not null
-       and e.search_embedding is not null
-       and (query_model is null or e.search_model = query_model)
-      then e.search_embedding <=> q.qvec
-    end asc nulls last,
-    -- Then lexical relevance, then recency.
-    case
-      when q.qtext is not null
-      then ts_rank_cd(
-        to_tsvector('english',
-          coalesce(e.title, '') || ' ' || coalesce(e.summary, '') || ' ' ||
-          public.catalog_entry_tags_search_text(e.tags) || ' ' ||
-          coalesce(e.snapshot ->> 'searchText', '')),
-        plainto_tsquery('english', q.qtext))
-    end desc nulls last,
-    e.created_at desc, e.id desc
+  select
+    s.id, s.schema_version, s.kind, s.status, s.publisher_user_id,
+    s.source_workspace_id, s.source_project_id, s.source_asset_id,
+    s.source_story_blueprint_id, s.title, s.summary, s.tags,
+    s.preview_storage_key, s.preview_storage_bucket, s.preview_content_type,
+    s.snapshot, s.use_count, s.created_at, s.updated_at
+  from scored s
+  -- Keep lexical matches (embedded or not) and semantically-relevant embedded
+  -- rows; drop unembedded non-matches and orthogonal embedded rows.
+  where s.text_match or s.vscore > 0
+  order by (s.vscore * 0.75 + s.tscore * 0.25) desc, s.created_at desc, s.id desc
   limit greatest(1, least(limit_count, 101))
   offset greatest(0, offset_count)
 $$;
