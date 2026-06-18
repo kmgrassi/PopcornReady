@@ -11,14 +11,15 @@ landing experience to the productization phases already defined in
 
 ## Positioning (the value prop the copy leads with)
 
-**Popcorn Ready is the agent harness for video.** Coding harnesses (Codex,
-Claude Code) turned software into something you *direct* instead of hand-build;
-Popcorn Ready is that harness for video — describe what you want and the agent
-plans, generates, edits, and renders a finished cut. This is the public framing
-of the [North Star](../NORTH_STAR.md#0-what-popcorn-ready-is-the-positioning):
-the agent owns the whole flow, which is exactly what makes it a harness rather
-than an editor with AI bolted on. All landing/marketing copy should lead with
-this.
+> **Superseded.** The public framing has moved from "the agent harness for video"
+> to **"the production workflow for AI video."** See
+> [`landing-page-production-workflow.md`](./landing-page-production-workflow.md)
+> for the authoritative positioning, hero copy, and landing-page implementation.
+> The mechanism is unchanged — the agent still owns every stage
+> ([North Star](../NORTH_STAR.md#0-what-popcorn-ready-is-the-positioning)); only
+> the public framing shifts from "harness" to "the missing workflow around
+> generation." The pricing, two-track productization, and MVP→hosted pathway in
+> the sections below remain authoritative.
 
 ## What Ships First (in this repo today)
 
