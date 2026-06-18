@@ -2,12 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  type OpenAiFunctionTool,
   createOpenAiLlmClient,
   interpretOpenAiToolResponse,
   sanitizeForOpenAI,
   toOpenAITool,
 } from "../openai";
 import type { ToolSpec } from "../types";
+
+type SchemaProperties = Record<string, Record<string, unknown>>;
 
 const planShots: ToolSpec = {
   name: "plan_shots",
@@ -20,14 +23,15 @@ const planShots: ToolSpec = {
 };
 
 test("toOpenAITool wraps the spec as an OpenAI function tool and sanitizes parameters", () => {
-  const tool = toOpenAITool(planShots) as any;
+  const tool = toOpenAITool(planShots);
+  const properties = tool.function.parameters.properties as SchemaProperties;
   assert.equal(tool.type, "function");
   assert.equal(tool.function.name, "plan_shots");
   assert.equal(tool.function.description, "Plan scenes and beats.");
   // Tool-call parameters must be sanitized like the structured path, or OpenAI
   // rejects the request before the model can call the tool.
-  assert.equal(tool.function.parameters.properties.goal.minLength, undefined);
-  assert.equal(tool.function.parameters.properties.goal.type, "string");
+  assert.equal(properties.goal?.minLength, undefined);
+  assert.equal(properties.goal?.type, "string");
   assert.deepEqual(tool.function.parameters.required, ["goal"]);
 });
 
@@ -39,13 +43,14 @@ test("sanitizeForOpenAI strips keywords OpenAI tool parameters reject", () => {
       n: { type: "number", minimum: 1, maximum: 600 },
     },
     required: ["goal"],
-  }) as any;
-  assert.equal(sanitized.properties.goal.minLength, undefined);
-  assert.equal(sanitized.properties.goal.maxLength, undefined);
-  assert.equal(sanitized.properties.n.minimum, undefined);
-  assert.equal(sanitized.properties.n.maximum, undefined);
+  });
+  const properties = sanitized.properties as SchemaProperties;
+  assert.equal(properties.goal?.minLength, undefined);
+  assert.equal(properties.goal?.maxLength, undefined);
+  assert.equal(properties.n?.minimum, undefined);
+  assert.equal(properties.n?.maximum, undefined);
   // structural keywords are preserved
-  assert.equal(sanitized.properties.goal.type, "string");
+  assert.equal(properties.goal.type, "string");
   assert.deepEqual(sanitized.required, ["goal"]);
 });
 
@@ -103,7 +108,7 @@ test("interpretOpenAiToolResponse returns done with text when no tool is called"
 });
 
 test("chooseTool sends function tools + tool_choice auto and uses max_completion_tokens", async () => {
-  let sent: any;
+  let sent: Record<string, unknown> | undefined;
   const client = createOpenAiLlmClient({
     model: "gpt-5",
     create: async (params) => {
@@ -127,10 +132,12 @@ test("chooseTool sends function tools + tool_choice auto and uses max_completion
     tools: [planShots],
   });
 
+  assert.ok(sent);
   assert.equal(sent.tool_choice, "auto");
   assert.equal(sent.parallel_tool_calls, false);
-  assert.equal(sent.tools[0].type, "function");
-  assert.equal(sent.tools[0].function.name, "plan_shots");
+  const tools = sent.tools as OpenAiFunctionTool[];
+  assert.equal(tools[0]?.type, "function");
+  assert.equal(tools[0]?.function.name, "plan_shots");
   assert.ok("max_completion_tokens" in sent);
   assert.ok(!("max_tokens" in sent));
   assert.equal(decision.type, "tool_call");
@@ -141,8 +148,8 @@ test("low/minimal effort routes to the fast model; medium/high/none use the prim
   const client = createOpenAiLlmClient({
     model: "gpt-5",
     fastModel: "gpt-5-mini",
-    create: async (params: any) => {
-      seen.push(params.model);
+    create: async (params) => {
+      seen.push(String(params.model));
       return {
         choices: [
           {
@@ -164,7 +171,7 @@ test("low/minimal effort routes to the fast model; medium/high/none use the prim
 });
 
 test("reasoning_effort is sent for reasoning models (gpt-5) and omitted for gpt-4o", async () => {
-  let reasoning: any;
+  let reasoning: Record<string, unknown> | undefined;
   const gpt5 = createOpenAiLlmClient({
     model: "gpt-5",
     create: async (params) => {
@@ -183,9 +190,10 @@ test("reasoning_effort is sent for reasoning models (gpt-5) and omitted for gpt-
     },
   });
   await gpt5.structured({ cachedSystem: "s", user: "u", schema: {}, effort: "minimal" });
+  assert.ok(reasoning);
   assert.equal(reasoning.reasoning_effort, "minimal");
 
-  let nonReasoning: any;
+  let nonReasoning: Record<string, unknown> | undefined;
   const gpt4o = createOpenAiLlmClient({
     model: "gpt-4o",
     create: async (params) => {
@@ -204,10 +212,11 @@ test("reasoning_effort is sent for reasoning models (gpt-5) and omitted for gpt-
     },
   });
   await gpt4o.structured({ cachedSystem: "s", user: "u", schema: {}, effort: "high" });
+  assert.ok(nonReasoning);
   assert.ok(!("reasoning_effort" in nonReasoning));
 
   // No effort -> no reasoning_effort (provider default).
-  let noEffort: any;
+  let noEffort: Record<string, unknown> | undefined;
   const gpt5b = createOpenAiLlmClient({
     model: "gpt-5",
     create: async (params) => {
@@ -226,6 +235,7 @@ test("reasoning_effort is sent for reasoning models (gpt-5) and omitted for gpt-
     },
   });
   await gpt5b.structured({ cachedSystem: "s", user: "u", schema: {} });
+  assert.ok(noEffort);
   assert.ok(!("reasoning_effort" in noEffort));
 });
 
@@ -260,7 +270,7 @@ test("structured requires return_result tool call and parses arguments", async (
 });
 
 test("structured sends a required return_result function tool", async () => {
-  let sent: any;
+  let sent: Record<string, unknown> | undefined;
   const client = createOpenAiLlmClient({
     model: "gpt-5",
     create: async (params) => {
@@ -285,9 +295,14 @@ test("structured sends a required return_result function tool", async () => {
     schema: { type: "object", properties: { ok: { type: "boolean" } } },
   });
 
-  assert.equal(sent.tool_choice.function.name, "return_result");
+  assert.ok(sent);
+  assert.deepEqual(sent.tool_choice, {
+    type: "function",
+    function: { name: "return_result" },
+  });
   assert.equal(sent.parallel_tool_calls, false);
-  assert.equal(sent.tools[0].function.name, "return_result");
+  const tools = sent.tools as OpenAiFunctionTool[];
+  assert.equal(tools[0]?.function.name, "return_result");
   assert.ok(!("response_format" in sent));
 });
 
