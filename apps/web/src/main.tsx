@@ -9,7 +9,6 @@ import "./styles/base.css";
 import "./styles/utilities.css";
 import "./styles/globals.css";
 import "./styles/studio-secondary.css";
-import "./styles/landing.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import styles from "./AgentRunPreview.module.css";
 
 /**
  * AgentRunPreview — a self-contained, looping animation of a run that makes the
@@ -174,13 +175,27 @@ function computeFrame(tick: number): Frame {
   };
 }
 
+const DOT_CLASS: Record<Actor, string> = {
+  you: styles.dotYou,
+  agent: styles.dotAgent,
+  done: styles.dotDone,
+};
+
+// Only user-turn + ready phases get a tinted status pill; agent phases keep
+// the base amber pill (no extra class).
+const STATUS_CLASS: Partial<Record<Phase, string>> = {
+  typing: styles.statusTyping,
+  handoff: styles.statusHandoff,
+  ready: styles.statusReady,
+};
+
 function StepHead({ label, active }: { label: string; active: boolean }) {
   return (
-    <span className="lp-run-step-head">
-      <span className="lp-run-section-label">{label}</span>
+    <span className={styles.stepHead}>
+      <span className={styles.sectionLabel}>{label}</span>
       {active && (
-        <span className="lp-run-stop">
-          <span className="lp-run-stop-glyph" aria-hidden="true" />
+        <span className={styles.stop}>
+          <span className={styles.stopGlyph} aria-hidden="true" />
           Stop here
         </span>
       )}
@@ -203,70 +218,70 @@ export function AgentRunPreview() {
 
   return (
     <div
-      className="lp-run"
+      className={styles.run}
       role="img"
       aria-label="Preview of a run: you type one short brief, then the agent autonomously plans the beats, generates keyframes, and assembles the timeline — and you can stop it at any step."
     >
-      <div className="lp-run-head">
-        <span className={`lp-run-dot lp-run-dot-${frame.actor}`} aria-hidden="true" />
-        <span className="lp-run-file">dream-montage.run</span>
-        <span className={`lp-run-status lp-run-status-${frame.phase}`}>
+      <div className={styles.head}>
+        <span className={`${styles.dot} ${DOT_CLASS[frame.actor]}`} aria-hidden="true" />
+        <span className={styles.file}>dream-montage.run</span>
+        <span className={`${styles.status}${STATUS_CLASS[frame.phase] ? ` ${STATUS_CLASS[frame.phase]}` : ""}`}>
           {PHASE_STATUS[frame.phase]}
           {frame.phase !== "ready" && (
-            <span className="lp-run-ellipsis" aria-hidden="true" />
+            <span className={styles.ellipsis} aria-hidden="true" />
           )}
         </span>
       </div>
 
       {/* Step 1 — the human types one brief */}
-      <div className="lp-run-prompt" aria-hidden="true">
-        <span className="lp-run-actor lp-run-actor-you">You</span>
-        <div className={`lp-run-input${frame.briefTyping ? " is-typing" : ""}`}>
-          <span className="lp-run-input-text">{frame.brief}</span>
-          {frame.briefTyping && <span className="lp-run-caret lp-run-caret-user" />}
+      <div className={styles.prompt} aria-hidden="true">
+        <span className={`${styles.actor} ${styles.actorYou}`}>You</span>
+        <div className={`${styles.input}${frame.briefTyping ? ` ${styles.inputTyping}` : ""}`}>
+          <span className={styles.inputText}>{frame.brief}</span>
+          {frame.briefTyping && <span className={`${styles.caret} ${styles.caretUser}`} />}
         </div>
-        <span className={`lp-run-generate${frame.submitted ? " is-active" : ""}`}>
+        <span className={`${styles.generate}${frame.submitted ? ` ${styles.generateActive}` : ""}`}>
           Generate
         </span>
       </div>
 
       {/* Hand-off — the agent now runs everything */}
-      <div className="lp-run-handoff" aria-hidden="true">
-        <span className="lp-run-handoff-arrow" />
+      <div className={styles.handoff} aria-hidden="true">
+        <span className={styles.handoffArrow} />
         <span
-          className={`lp-run-actor lp-run-actor-agent${agentRunning ? " is-live" : ""}`}
+          className={`${styles.actor} ${styles.actorAgent}${agentRunning ? ` ${styles.live}` : ""}`}
         >
           Agent
         </span>
-        <span className="lp-run-handoff-note">
+        <span className={styles.handoffNote}>
           {frame.phase === "ready"
             ? "Run complete"
             : "Running autonomously — step in at any step"}
         </span>
       </div>
 
-      <div className="lp-run-body">
-        <section className="lp-run-plan" aria-hidden="true">
+      <div className={styles.body}>
+        <section aria-hidden="true">
           <StepHead label="Plan" active={frame.activeStage === "plan"} />
-          <ul className="lp-run-beats">
+          <ul className={styles.beats}>
             {frame.beats.map((beat, index) => (
-              <li className="lp-run-beat" key={index}>
-                <span className="lp-run-beat-tag">{beat.tag}</span>
-                <span className="lp-run-beat-text">
+              <li className={styles.beat} key={index}>
+                <span className={styles.beatTag}>{beat.tag}</span>
+                <span className={styles.beatText}>
                   {beat.text}
-                  {beat.typing && <span className="lp-run-caret" />}
+                  {beat.typing && <span className={styles.caret} />}
                 </span>
               </li>
             ))}
           </ul>
         </section>
 
-        <section className="lp-run-assets" aria-hidden="true">
+        <section aria-hidden="true">
           <StepHead label="Keyframes" active={frame.activeStage === "keyframes"} />
-          <div className="lp-run-tiles">
+          <div className={styles.tiles}>
             {Array.from({ length: TILE_COUNT }, (_, index) => (
               <span
-                className={`lp-run-tile${index < frame.tiles ? " is-ready" : ""}`}
+                className={`${styles.tile}${index < frame.tiles ? ` ${styles.tileReady}` : ""}`}
                 data-tile={index}
                 key={index}
               />
@@ -275,21 +290,21 @@ export function AgentRunPreview() {
         </section>
       </div>
 
-      <section className="lp-run-timeline" aria-hidden="true">
+      <section className={styles.timeline} aria-hidden="true">
         <StepHead label="Timeline" active={frame.activeStage === "timeline"} />
-        <div className="lp-run-track">
+        <div className={styles.track}>
           {BEATS.map((_, index) => {
             const segStart = (index / BEATS.length) * 100;
             const filled = frame.timelinePct > segStart;
             return (
               <span
-                className={`lp-run-seg${filled ? " is-filled" : ""}`}
+                className={`${styles.seg}${filled ? ` ${styles.segFilled}` : ""}`}
                 key={index}
               />
             );
           })}
           <span
-            className="lp-run-playhead"
+            className={styles.playhead}
             style={{ left: `${frame.timelinePct}%` }}
           />
         </div>
