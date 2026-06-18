@@ -18,6 +18,11 @@ const QUIET_LINKS = [
     description: "Manage reusable creative starting points.",
   },
   {
+    label: "Anchors",
+    to: "/anchors",
+    description: "Browse shared characters, stories, and image references.",
+  },
+  {
     label: "Brand kit",
     to: "/brand",
     description: "Keep brand defaults ready for generation.",
