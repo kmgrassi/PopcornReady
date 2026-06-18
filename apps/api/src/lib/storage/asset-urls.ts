@@ -74,23 +74,31 @@ export async function resolveAssetUrl(
   asset: StoredAssetUrlFields,
   opts: { privateTtlSec?: number } = {}
 ): Promise<string | undefined> {
+  const config = readStorageConfig();
+  const hasManagedStorage = Boolean(asset.storage_key && asset.storage_bucket);
+  if (asset.storage_key && hasManagedStorage) {
+    if (config.backend === "local") return localPublicPath(asset.storage_key);
+
+    if (isPubliclyDeliverable(asset)) return stablePublicUrl(asset.storage_key);
+
+    return buildPresignedS3Url(
+      {
+        bucket: privateDeliveryBucket(config),
+        key: asset.storage_key,
+        expiresInSec: opts.privateTtlSec ?? 300,
+      },
+      getS3Client(config)
+    );
+  }
+
   const remoteUrl = remoteAssetUrlForDelivery(asset.remote_url);
   if (remoteUrl) return remoteUrl;
-  if (!asset.storage_key) return undefined;
 
-  const config = readStorageConfig();
-  if (config.backend === "local") return localPublicPath(asset.storage_key);
+  if (asset.storage_key && config.backend === "local") {
+    return localPublicPath(asset.storage_key);
+  }
 
-  if (isPubliclyDeliverable(asset)) return stablePublicUrl(asset.storage_key);
-
-  return buildPresignedS3Url(
-    {
-      bucket: privateDeliveryBucket(config),
-      key: asset.storage_key,
-      expiresInSec: opts.privateTtlSec ?? 300,
-    },
-    getS3Client(config)
-  );
+  return undefined;
 }
 
 export async function resolveAssetUrls<T extends StoredAssetUrlFields>(
