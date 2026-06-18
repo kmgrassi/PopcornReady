@@ -6,6 +6,7 @@ import {
   parseAnalyzeAsset,
   parseBrief,
   parseCreateProject,
+  parseDiscoverSearchQuery,
   parsePagination,
   parseRegisterAsset,
   parseSetAssetVisibility,
@@ -21,6 +22,22 @@ test("parseSetAssetVisibility rejects missing or invalid values", () => {
   expectApiError(() => parseSetAssetVisibility({}), "validation_failed");
   expectApiError(() => parseSetAssetVisibility({ visibility: "hidden" }), "validation_failed");
   expectApiError(() => parseSetAssetVisibility(null), "validation_failed");
+});
+
+test("parseDiscoverSearchQuery parses the semantic flag", () => {
+  const params = new URLSearchParams("q=stage%20launch&semantic=true&kind=video");
+  const parsed = parseDiscoverSearchQuery(params);
+
+  assert.equal(parsed.q, "stage launch");
+  assert.equal(parsed.semantic, true);
+  assert.equal(parsed.kind, "video");
+});
+
+test("parseDiscoverSearchQuery rejects invalid semantic values", () => {
+  expectApiError(
+    () => parseDiscoverSearchQuery(new URLSearchParams("q=stage&semantic=maybe")),
+    "validation_failed"
+  );
 });
 
 function expectApiError(fn: () => unknown, code: string): ApiError {
