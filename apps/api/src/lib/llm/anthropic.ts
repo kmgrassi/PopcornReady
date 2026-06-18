@@ -9,7 +9,30 @@ import {
   ToolSpec,
 } from "./types";
 
-type MessageCreate = (params: Record<string, unknown>) => Promise<any>;
+type AnthropicMessageResponse = {
+  model?: string;
+  content?: unknown;
+};
+
+type AnthropicToolUseBlock = {
+  type: "tool_use";
+  name?: string;
+  input?: unknown;
+};
+
+type AnthropicTextBlock = {
+  type: "text";
+  text?: unknown;
+};
+
+type AnthropicContentBlock =
+  | AnthropicToolUseBlock
+  | AnthropicTextBlock
+  | { type?: string; [key: string]: unknown };
+
+type MessageCreate = (
+  params: Record<string, unknown>
+) => Promise<AnthropicMessageResponse>;
 
 // Low-reasoning calls route to the cheaper fast model.
 const FAST_EFFORTS = new Set<LlmEffort>(["minimal", "low"]);
@@ -32,12 +55,8 @@ export function toAnthropicTool(spec: ToolSpec): Record<string, unknown> {
 
 const STRUCTURED_RESULT_TOOL = "return_result";
 
-// A forced tool call occasionally comes back with no (or malformed) tool call —
-// the model emits text/thinking and never invokes return_result. This is a
-// transient provider hiccup, but it otherwise classifies as
-// provider_failed/recoverable:false and kills the whole run. Retry the call once
-// before surfacing it. Scoped to this failure class only — real schema/auth
-// errors still fail fast.
+// A forced tool call occasionally comes back with no (or malformed) tool call.
+// Retry this provider hiccup once before surfacing it.
 const STRUCTURED_RETRY_ATTEMPTS = 2;
 export function isMissingStructuredResultError(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
@@ -48,11 +67,27 @@ export function isMissingStructuredResultError(err: unknown): boolean {
   );
 }
 
-function resultFromAnthropicToolUse<T>(res: any): T {
-  const content = Array.isArray(res?.content) ? res.content : [];
-  const toolUse = content.find(
-    (block: any) => block?.type === "tool_use" && block?.name === STRUCTURED_RESULT_TOOL
-  );
+function asContentBlocks(value: unknown): AnthropicContentBlock[] {
+  return Array.isArray(value) ? (value as AnthropicContentBlock[]) : [];
+}
+
+function isToolUseBlock(block: AnthropicContentBlock): block is AnthropicToolUseBlock {
+  return block.type === "tool_use";
+}
+
+function isTextBlock(block: AnthropicContentBlock): block is AnthropicTextBlock {
+  return block.type === "text";
+}
+
+function isStructuredResultToolUse(
+  block: AnthropicContentBlock
+): block is AnthropicToolUseBlock {
+  return isToolUseBlock(block) && block.name === STRUCTURED_RESULT_TOOL;
+}
+
+function resultFromAnthropicToolUse<T>(res: AnthropicMessageResponse): T {
+  const content = asContentBlocks(res.content);
+  const toolUse = content.find(isStructuredResultToolUse);
   if (!toolUse) {
     throw new Error(`Model did not call required tool: ${STRUCTURED_RESULT_TOOL}`);
   }
@@ -63,35 +98,35 @@ function resultFromAnthropicToolUse<T>(res: any): T {
   return input as T;
 }
 
-// Pure response parsing — unit-tested without a network call.
+// Pure response parsing - unit-tested without a network call.
 export function interpretAnthropicToolResponse(
-  res: any,
+  res: AnthropicMessageResponse,
   fallbackModel: string,
   allowed?: Set<string>
 ): ToolChoiceResult {
-  const content = Array.isArray(res?.content) ? res.content : [];
-  const toolUses = content.filter((block: any) => block?.type === "tool_use");
-  const model = res?.model ?? fallbackModel;
+  const content = asContentBlocks(res.content);
+  const toolUses = content.filter(isToolUseBlock);
+  const model = res.model ?? fallbackModel;
 
   if (toolUses.length > 1) {
     throw new Error("Orchestrator model returned more than one tool call.");
   }
   if (toolUses.length === 1) {
     const toolUse = toolUses[0];
-    const name = String(toolUse?.name ?? "");
+    const name = String(toolUse.name ?? "");
     if (allowed && !allowed.has(name)) {
       throw new Error(`Model requested an unknown tool: ${name}`);
     }
     const input =
-      toolUse?.input && typeof toolUse.input === "object" && !Array.isArray(toolUse.input)
+      toolUse.input && typeof toolUse.input === "object" && !Array.isArray(toolUse.input)
         ? (toolUse.input as Record<string, unknown>)
         : {};
     return { type: "tool_call", toolName: name, input, model };
   }
 
   const text = content
-    .filter((block: any) => block?.type === "text")
-    .map((block: any) => String(block.text || ""))
+    .filter(isTextBlock)
+    .map((block) => String(block.text || ""))
     .join("")
     .trim();
   return { type: "done", text: text || "No tool call requested.", model };
@@ -106,9 +141,10 @@ export function createAnthropicLlmClient(deps: AnthropicDeps = {}): LlmClient {
   const ensureCreate = (): MessageCreate => {
     if (createMessage) return createMessage;
     createMessage = ((params: Record<string, unknown>) =>
-      anthropicClient().messages.create(params as any)) as MessageCreate;
+      anthropicClient().messages.create(params as never)) as MessageCreate;
     return createMessage;
   };
+
   const structuredImpl = async <T>(
     args: StructuredArgs,
     userContent: unknown
@@ -182,9 +218,7 @@ export function createAnthropicLlmClient(deps: AnthropicDeps = {}): LlmClient {
         system: args.system,
         tools: args.tools.map(toAnthropicTool),
         tool_choice: { type: "auto" },
-        messages: [
-          { role: "user", content: JSON.stringify(args.userPayload) },
-        ],
+        messages: [{ role: "user", content: JSON.stringify(args.userPayload) }],
       });
       return interpretAnthropicToolResponse(res, callModel, allowed);
     },

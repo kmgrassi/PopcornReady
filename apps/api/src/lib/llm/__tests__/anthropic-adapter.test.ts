@@ -19,7 +19,11 @@ const planShots: ToolSpec = {
 };
 
 test("toAnthropicTool uses input_schema", () => {
-  const tool = toAnthropicTool(planShots) as any;
+  const tool = toAnthropicTool(planShots) as {
+    name: string;
+    description: string;
+    input_schema: ToolSpec["parameters"];
+  };
   assert.equal(tool.name, "plan_shots");
   assert.equal(tool.description, "Plan scenes and beats.");
   assert.deepEqual(tool.input_schema, planShots.parameters);
@@ -80,8 +84,8 @@ test("low/minimal effort routes chooseTool to the fast model", async () => {
   const client = createAnthropicLlmClient({
     model: "claude-x",
     fastModel: "claude-haiku",
-    createMessage: async (params: any) => {
-      seen.push(params.model);
+    createMessage: async (params) => {
+      seen.push(String(params.model));
       return { content: [{ type: "text", text: "ok" }] };
     },
   });
@@ -95,8 +99,8 @@ test("structured routes to the fast model and delegates required tool-call helpe
   const client = createAnthropicLlmClient({
     model: "claude-x",
     fastModel: "claude-haiku",
-    createMessage: async (params: any) => {
-      seen.push(params.model);
+    createMessage: async (params) => {
+      seen.push(String(params.model));
       return {
         content: [
           { type: "tool_use", name: "return_result", input: { ok: true } },
@@ -156,7 +160,7 @@ test("structured retries at most once, then surfaces the empty-tool error", asyn
 });
 
 test("chooseTool sends input_schema tools + tool_choice auto and maps the result", async () => {
-  let sent: any;
+  let sent: Record<string, unknown> | undefined;
   const client = createAnthropicLlmClient({
     model: "claude-x",
     createMessage: async (params) => {
@@ -174,9 +178,10 @@ test("chooseTool sends input_schema tools + tool_choice auto and maps the result
     tools: [planShots],
   });
 
-  assert.deepEqual(sent.tool_choice, { type: "auto" });
-  assert.equal(sent.tools[0].input_schema.type, "object");
-  assert.equal(sent.max_tokens, 2000);
+  assert.deepEqual(sent?.tool_choice, { type: "auto" });
+  const tools = sent?.tools as Array<{ input_schema: { type: string } }> | undefined;
+  assert.equal(tools?.[0]?.input_schema.type, "object");
+  assert.equal(sent?.max_tokens, 2000);
   assert.equal(decision.type, "tool_call");
   if (decision.type === "tool_call") assert.equal(decision.toolName, "plan_shots");
 });
