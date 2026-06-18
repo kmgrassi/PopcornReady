@@ -67,10 +67,24 @@ export async function writeAssetObject(input: {
     visibility: input.visibility,
     contentType,
   });
-  if (config.backend === "local") {
+  if (shouldWriteCompatibilityCache(config)) {
     await writeCompatibilityCache(storageKey, input.bytes);
   }
   return { storageKey, storageBucket: stored.bucket, contentType };
+}
+
+function shouldWriteCompatibilityCache(config: StorageConfig): boolean {
+  if (config.backend === "local") return true;
+  return !isHostedRuntime();
+}
+
+function isHostedRuntime(): boolean {
+  return Boolean(
+    process.env.RAILWAY_ENVIRONMENT ||
+      process.env.RAILWAY_SERVICE_ID ||
+      process.env.RAILWAY_PROJECT_ID ||
+      process.env.RAILWAY_PUBLIC_DOMAIN
+  );
 }
 
 async function writeCompatibilityCache(key: string, bytes: Buffer): Promise<void> {
