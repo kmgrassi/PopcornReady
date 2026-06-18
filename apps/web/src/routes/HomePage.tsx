@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
+import { AgentRunPreview } from "../components/AgentRunPreview";
 import { LogoMark } from "../components/LogoMark";
 import { PromptComposer } from "../components/PromptComposer";
+import { Reveal } from "../components/Reveal";
 import styles from "./HomePage.module.css";
 
 const GITHUB_URL = "https://github.com/kmgrassi/popcornready";
@@ -238,76 +240,78 @@ export function HomePage() {
           <PromptComposer />
         </section>
 
-        <section className={`lp-section ${styles.overview}`}>
-          <div className={styles.overviewCopy}>
-            <span className={styles.kicker}>Full run overview</span>
-            <h2 className={styles.title}>One directed run, visible end to end.</h2>
-            <p className={styles.body}>
-              Popcorn Ready keeps the brief, plan, generated assets, review
-              loop, and render output in one inspectable workspace.
+        <Reveal>
+          <section className={`lp-section ${styles.overview}`}>
+            <div className={styles.overviewCopy}>
+              <span className={styles.kicker}>Full run overview</span>
+              <h2 className={styles.title}>One directed run, visible end to end.</h2>
+              <p className={styles.body}>
+                Watch the agent work: it turns the brief into beats, generates a
+                keyframe per beat, and assembles the timeline — every step
+                inspectable in one workspace.
+              </p>
+            </div>
+            <AgentRunPreview />
+          </section>
+        </Reveal>
+
+        <Reveal>
+          <section className={`lp-section ${styles.orchestrator}`}>
+            <div className={styles.orchestratorCopy}>
+              <span className={styles.kicker}>AI orchestrator</span>
+              <h2 className={styles.title}>The agent coordinates every stage.</h2>
+              <p className={styles.body}>
+                Briefs, planning, asset generation, review, and rendering stay
+                connected as one inspectable system instead of scattered one-off
+                tools.
+              </p>
+            </div>
+            <figure className={styles.orchestratorFrame}>
+              <img
+                src="/images/pc-ai-orchestrator-overview.png"
+                alt="Popcorn Ready AI orchestrator overview showing the connected brief, planning, assets, and render pipeline."
+                loading="lazy"
+                width="1535"
+                height="1024"
+              />
+            </figure>
+          </section>
+        </Reveal>
+
+        <Reveal>
+          <section id="how" className="lp-section">
+            <h2 className="lp-section-title">How it works</h2>
+            <p className="lp-section-sub">
+              You direct; the agent does the work: brief &rarr; plan &rarr;
+              timeline &rarr; render.
             </p>
-          </div>
-          <figure className={styles.overviewFrame}>
-            <img
-              src="/images/popcorn-ready-full-run-overview.png"
-              alt="Popcorn Ready full run overview showing the prompt, generated planning, review, and output workspace."
-              loading="lazy"
-              width="1536"
-              height="1024"
-            />
-          </figure>
-        </section>
+            <div className="lp-steps">
+              {STEPS.map((step) => (
+                <div className="lp-step" key={step.n}>
+                  <span className="lp-step-n">{step.n}</span>
+                  <h3>{step.title}</h3>
+                  <p>{step.body}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        </Reveal>
 
-        <section className={`lp-section ${styles.orchestrator}`}>
-          <div className={styles.orchestratorCopy}>
-            <span className={styles.kicker}>AI orchestrator</span>
-            <h2 className={styles.title}>The agent coordinates every stage.</h2>
-            <p className={styles.body}>
-              Briefs, planning, asset generation, review, and rendering stay
-              connected as one inspectable system instead of scattered one-off
-              tools.
-            </p>
-          </div>
-          <figure className={styles.orchestratorFrame}>
-            <img
-              src="/images/pc-ai-orchestrator-overview.png"
-              alt="Popcorn Ready AI orchestrator overview showing the connected brief, planning, assets, and render pipeline."
-              loading="lazy"
-              width="1535"
-              height="1024"
-            />
-          </figure>
-        </section>
+        <Reveal>
+          <section className="lp-section">
+            <h2 className="lp-section-title">What it does</h2>
+            <div className="lp-grid">
+              {FEATURES.map((feature) => (
+                <div className="lp-card" key={feature.title}>
+                  <h3>{feature.title}</h3>
+                  <p>{feature.body}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        </Reveal>
 
-        <section id="how" className="lp-section">
-          <h2 className="lp-section-title">How it works</h2>
-          <p className="lp-section-sub">
-            You direct; the agent does the work: brief &rarr; plan &rarr;
-            timeline &rarr; render.
-          </p>
-          <div className="lp-steps">
-            {STEPS.map((step) => (
-              <div className="lp-step" key={step.n}>
-                <span className="lp-step-n">{step.n}</span>
-                <h3>{step.title}</h3>
-                <p>{step.body}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="lp-section">
-          <h2 className="lp-section-title">What it does</h2>
-          <div className="lp-grid">
-            {FEATURES.map((feature) => (
-              <div className="lp-card" key={feature.title}>
-                <h3>{feature.title}</h3>
-                <p>{feature.body}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
+        <Reveal>
         <section className="lp-section" aria-label="Competitive feature heatmap">
           <h2 className="lp-section-title">Where it fits</h2>
           <p className="lp-section-sub">
@@ -380,7 +384,9 @@ export function HomePage() {
             </div>
           </div>
         </section>
+        </Reveal>
 
+        <Reveal>
         <section id="pricing" className="lp-section">
           <h2 className="lp-section-title">Hosted pricing</h2>
           <p className="lp-section-sub">
@@ -426,7 +432,9 @@ export function HomePage() {
             full control? Self-hosting is always free.
           </p>
         </section>
+        </Reveal>
 
+        <Reveal>
         <section className="lp-cta">
           <h2>Open source. Run it yourself.</h2>
           <p>
@@ -453,6 +461,7 @@ export function HomePage() {
             </Link>
           </div>
         </section>
+        </Reveal>
       </main>
     </div>
   );

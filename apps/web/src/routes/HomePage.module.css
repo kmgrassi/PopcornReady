@@ -34,21 +34,6 @@
   line-height: var(--line-body);
 }
 
-.overviewFrame {
-  margin: 0;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--panel);
-  box-shadow: var(--shadow-lg);
-}
-
-.overviewFrame img {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
 .orchestrator {
   display: grid;
   align-items: center;
@@ -94,8 +79,317 @@
     font-size: var(--title-lg);
   }
 
-  .overviewFrame,
   .orchestratorFrame {
     border-radius: var(--radius-md);
+  }
+}
+
+/* ================================================================
+ * Landing route — modern, AI-native theme + overrides
+ * ----------------------------------------------------------------
+ * These hook the pre-existing GLOBAL chrome/landing classes
+ * (`.web-shell`, `.landing`, `.lp-*`) that HomePage still consumes from
+ * globals.css, so each selector is wrapped in `:global(...)` and scoped to the
+ * marketing surface via `.web-shell:has(.landing)` / `.landing`. They never
+ * leak into the dashboard, login, or signup. New self-contained pieces
+ * (AgentRunPreview, Reveal) are proper scoped modules instead.
+ *
+ * `@keyframes` below are module-scoped; postcss-modules rewrites the matching
+ * `animation` references file-wide, so the names stay linked. (Even if a name
+ * failed to link, the effect is only a missing decorative animation.)
+ * ================================================================ */
+
+/* 1 — Dark marketing palette: the landing always renders dark, independent of
+ * the user's chosen app theme. */
+:global(html:has(.landing)) {
+  background: #08070a;
+}
+
+:global(.web-shell:has(.landing)) {
+  --bg: #0a0810;
+  --panel: #14111c;
+  --panel-2: #1c1827;
+  --border: #2a2440;
+  --text: #f6f2ff;
+  --muted: #a59bc0;
+  --accent: #f5b62a;
+  --accent-2: #ff7a4d;
+  --good: #5fd39a;
+  --button-text: #1a1206;
+  --cta: #f5b62a;
+  --cta-contrast: #1a1206;
+  --nav-bg: rgba(10, 8, 16, 0.66);
+  --accent-soft: rgba(245, 182, 42, 0.14);
+  --accent-border: rgba(245, 182, 42, 0.32);
+
+  /* Landing-only design helpers (consumed here + by the AgentRunPreview
+   * module, which inherits them as a descendant). */
+  --lp-glass: rgba(255, 255, 255, 0.04);
+  --lp-edge: rgba(255, 255, 255, 0.1);
+  --lp-edge-soft: rgba(255, 255, 255, 0.03);
+  --lp-glow: 0 24px 70px rgba(0, 0, 0, 0.55);
+  --lp-glow-accent: 0 18px 50px rgba(245, 120, 60, 0.18);
+  --lp-violet: rgba(124, 92, 255, 0.16);
+  /* "Human" accent — distinguishes the user's input from the agent's amber. */
+  --lp-human: #7aa2ff;
+
+  color-scheme: dark;
+}
+
+:global(.web-shell:has(.landing) .web-shell-header) {
+  border-bottom-color: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(18px) saturate(120%);
+}
+
+:global(.web-shell:has(.landing) .web-shell-footer) {
+  background: transparent;
+  border-top-color: rgba(255, 255, 255, 0.06);
+}
+
+/* 2 — Generative hero backdrop: aurora glow + masked dot grid sit behind the
+ * page top. `isolation` keeps the z-index:-1 layers behind the content but in
+ * front of the shell. */
+:global(.landing) {
+  position: relative;
+  isolation: isolate;
+}
+
+:global(.landing)::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: -140px;
+  left: 50%;
+  width: 100vw;
+  height: 1240px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  background:
+    radial-gradient(58% 50% at 50% 2%, rgba(245, 182, 42, 0.2), transparent 70%),
+    radial-gradient(42% 42% at 78% 12%, rgba(255, 122, 77, 0.18), transparent 72%),
+    radial-gradient(46% 44% at 20% 18%, var(--lp-violet), transparent 72%);
+  filter: blur(12px);
+  animation: lp-aurora 20s ease-in-out infinite alternate;
+}
+
+:global(.landing)::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  left: 50%;
+  width: 100vw;
+  height: 960px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 30px 30px;
+  -webkit-mask-image: radial-gradient(70% 58% at 50% 0%, #000 28%, transparent 76%);
+  mask-image: radial-gradient(70% 58% at 50% 0%, #000 28%, transparent 76%);
+}
+
+@keyframes lp-aurora {
+  0% {
+    transform: translateX(-50%) scale(1);
+    opacity: 0.85;
+  }
+  100% {
+    transform: translateX(-52%) scale(1.12);
+    opacity: 1;
+  }
+}
+
+/* 3 — Hero typography */
+:global(.web-shell:has(.landing) .lp-eyebrow) {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--accent-border);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 20px rgba(245, 182, 42, 0.12);
+  backdrop-filter: blur(6px);
+}
+
+:global(.web-shell:has(.landing) .lp-eyebrow)::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--good);
+  box-shadow: 0 0 0 0 rgba(95, 211, 154, 0.55);
+  animation: lp-live-pulse 1.8s ease-out infinite;
+}
+
+@keyframes lp-live-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(95, 211, 154, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 7px rgba(95, 211, 154, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(95, 211, 154, 0);
+  }
+}
+
+:global(.web-shell:has(.landing) .lp-hero h1) {
+  letter-spacing: -0.035em;
+  background: linear-gradient(180deg, #ffffff 30%, #cfc6e6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+:global(.web-shell:has(.landing) .lp-accent) {
+  background: linear-gradient(120deg, var(--accent) 10%, var(--accent-2) 90%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+:global(.web-shell:has(.landing) .lp-section-title) {
+  letter-spacing: -0.025em;
+}
+
+/* 4 — Glass surfaces + depth: gradient hairline borders via the
+ * padding-box / border-box clip trick, an inner top highlight, hover lift. */
+:global(.web-shell:has(.landing) .lp-card),
+:global(.web-shell:has(.landing) .lp-step),
+:global(.web-shell:has(.landing) .lp-price-card),
+:global(.web-shell:has(.landing) .lp-prompt),
+:global(.web-shell:has(.landing) .lp-heatmap-wrap),
+:global(.web-shell:has(.landing) .lp-cta) {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(180deg, var(--lp-glass), transparent 60%) padding-box,
+    linear-gradient(var(--panel), var(--panel)) padding-box,
+    linear-gradient(135deg, var(--lp-edge), var(--lp-edge-soft) 40%, var(--accent-border)) border-box;
+  box-shadow:
+    var(--lp-glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(8px);
+}
+
+:global(.web-shell:has(.landing) .lp-card),
+:global(.web-shell:has(.landing) .lp-step),
+:global(.web-shell:has(.landing) .lp-price-card) {
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+
+:global(.web-shell:has(.landing) .lp-card:hover),
+:global(.web-shell:has(.landing) .lp-step:hover),
+:global(.web-shell:has(.landing) .lp-price-card:hover) {
+  transform: translateY(-4px);
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.6),
+    var(--lp-glow-accent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+:global(.web-shell:has(.landing) .lp-price-card.featured) {
+  background:
+    linear-gradient(180deg, rgba(245, 182, 42, 0.1), transparent 55%) padding-box,
+    linear-gradient(var(--panel), var(--panel)) padding-box,
+    linear-gradient(135deg, var(--accent), var(--accent-2)) border-box;
+  box-shadow:
+    var(--lp-glow),
+    var(--lp-glow-accent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+:global(.web-shell:has(.landing) .lp-badge) {
+  box-shadow: 0 6px 20px rgba(245, 120, 60, 0.4);
+}
+
+:global(.web-shell:has(.landing) .lp-step-n) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  box-shadow:
+    inset 0 0 0 1px var(--accent-border),
+    0 0 18px rgba(245, 182, 42, 0.14);
+}
+
+/* Primary CTA — gradient fill + glow */
+:global(.web-shell:has(.landing) .lp-prompt-submit),
+:global(.web-shell:has(.landing) .lp-submit-config-toggle) {
+  background: linear-gradient(120deg, var(--accent), var(--accent-2));
+  color: var(--cta-contrast);
+}
+
+:global(.web-shell:has(.landing) .lp-prompt-submit) {
+  box-shadow: 0 12px 30px rgba(245, 120, 60, 0.28);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    filter 0.15s ease;
+}
+
+:global(.web-shell:has(.landing) .lp-prompt-submit:hover:not(:disabled)) {
+  transform: translateY(-1px);
+  filter: brightness(1.04);
+  box-shadow: 0 16px 40px rgba(245, 120, 60, 0.38);
+}
+
+/* 5 — "How it works" connected pipeline. Each card needs its own positioned
+ * context so the connector pseudo-elements anchor to that card (not the grid
+ * container) and bridge the gap between consecutive steps. */
+:global(.web-shell:has(.landing) .lp-steps) {
+  position: relative;
+}
+
+:global(.web-shell:has(.landing) .lp-step) {
+  position: relative;
+}
+
+@media (min-width: 861px) {
+  :global(.web-shell:has(.landing) .lp-step + .lp-step)::before {
+    content: "";
+    position: absolute;
+    top: 35px;
+    left: -17px;
+    width: 18px;
+    height: 2px;
+    background: linear-gradient(
+      90deg,
+      var(--accent-border),
+      var(--accent) 50%,
+      var(--accent-2)
+    );
+    background-size: 200% 100%;
+    animation: lp-flow 2.4s linear infinite;
+  }
+
+  :global(.web-shell:has(.landing) .lp-step + .lp-step)::after {
+    content: "";
+    position: absolute;
+    top: 31px;
+    left: -6px;
+    border: 5px solid transparent;
+    border-left-color: var(--accent-2);
+  }
+}
+
+@keyframes lp-flow {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+/* 6 — Reduced motion: hold the decorative animations still. */
+@media (prefers-reduced-motion: reduce) {
+  :global(.landing)::before,
+  :global(.web-shell:has(.landing) .lp-eyebrow)::before,
+  :global(.web-shell:has(.landing) .lp-step + .lp-step)::before {
+    animation: none;
   }
 }
