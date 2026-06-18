@@ -11,6 +11,7 @@ import { writeAssetObject } from "@/lib/storage/asset-write";
 import { parseConsistencyMode } from "@/lib/generative/character-context";
 import { measureAudioDurationSec } from "@/lib/generative/audio-duration";
 import { withDerivedAssetKnowledge } from "./assets";
+import { enqueueAssetEmbeddingRefresh } from "./asset-embeddings/jobs";
 import { preflightGenerationContent } from "@/lib/generative/preflight";
 import { providerFor } from "@/lib/generative/providers";
 import { estimateCostUsd } from "@/lib/generative/pricing";
@@ -708,6 +709,7 @@ async function runGeneration(
     },
     outputAssetIds: [updated.id],
   });
+  void enqueueAssetEmbeddingRefresh(updated, { reason: "asset_ready" }).catch(() => undefined);
   await updateAction(action.id, {
     status: "applied",
     outputAssetIds: [updated.id],

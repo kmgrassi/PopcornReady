@@ -433,6 +433,7 @@ export interface CompositionPlan {
 export type JobType =
   | "asset_ingest"
   | "asset_generation"
+  | "asset_embedding"
   | "composition"
   | "generation"
   | "revision"
