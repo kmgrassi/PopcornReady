@@ -4,6 +4,7 @@ import type {
   StoryboardBeat,
   StoryboardScene,
 } from "@popcorn/shared/v1/types";
+import { PublishAnchorDialog } from "../anchors/PublishAnchorDialog";
 import { useSaveProjectStoryboardMutation } from "../../lib/queryClient";
 import "./storyboard.css";
 
@@ -129,6 +130,7 @@ export function StoryboardEditor({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [publishOpen, setPublishOpen] = useState(false);
 
   const update = useCallback((next: EditableScene[]) => {
     setScenes(next);
@@ -254,6 +256,14 @@ export function StoryboardEditor({
             disabled={saving || !dirty}
           >
             Save storyboard
+          </button>
+          <button
+            type="button"
+            className="sb-btn"
+            onClick={() => setPublishOpen(true)}
+            disabled={!storyboardId || dirty || saving}
+          >
+            Publish as anchor
           </button>
         </div>
       </div>
@@ -453,6 +463,19 @@ export function StoryboardEditor({
       <button type="button" className="sb-btn" onClick={addScene}>
         Add scene
       </button>
+      <PublishAnchorDialog
+        source={
+          publishOpen && storyboardId
+            ? {
+                type: "story",
+                storyBlueprintId: storyboardId,
+                title: scenes[0]?.title ?? "Story anchor",
+                summary: scenes[0]?.summary ?? null,
+              }
+            : null
+        }
+        onClose={() => setPublishOpen(false)}
+      />
     </main>
   );
 }
