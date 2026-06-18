@@ -40,13 +40,15 @@ create table public.catalog_entries (
 
   snapshot                   jsonb not null default '{}'::jsonb,
 
-  -- Catalog-owned semantic-search vector: a COPY of the source asset's
-  -- embedding taken at publish (from public.asset_embeddings). Querying this
-  -- column needs no asset/project join, so private-source anchors stay
-  -- searchable without a visibility leak. Snapshot semantics: it reflects what
-  -- was published and drifts independently if the source later changes. Null
-  -- until copied/backfilled (the full-text index covers that gap). Dimension
-  -- matches asset_embeddings.
+  -- Catalog-owned semantic-search vector, built at publish by embedding ONLY the
+  -- curated public text (snapshot.searchText + title/summary/tags) — NOT copied
+  -- from the source asset's embedding, whose source text includes private prompt
+  -- intent / context / semantic-analysis the catalog never exposes (copying it
+  -- would let public search rank on private terms). Querying this column needs no
+  -- asset/project join, so private-source anchors stay searchable without a leak.
+  -- Snapshot semantics: reflects what was published; re-embedded only on
+  -- re-publish. Null until embedded (the full-text index covers that gap).
+  -- Type/dimension match public.asset_embeddings (extensions.vector(1536)).
   search_embedding           extensions.vector(1536),
   search_model               text,
   search_dims                integer,
@@ -61,7 +63,7 @@ create table public.catalog_entries (
     (kind in ('character', 'image') and source_story_blueprint_id is null)
     or (kind = 'story' and source_asset_id is null)
   ),
-  -- A copied vector is only comparable when its model/dims match the source.
+  -- A stored vector must record the model/dims it was built with (dim 1536).
   constraint catalog_entries_search_embedding_complete check (
     search_embedding is null
     or (
