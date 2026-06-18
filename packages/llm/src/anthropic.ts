@@ -23,30 +23,28 @@ export function anthropicClient(): Anthropic {
   return _client;
 }
 
-type AnthropicMessageResponse = {
-  model?: string;
-  content?: unknown;
-};
+interface AnthropicTextBlock {
+  type?: "text";
+  text?: string | null;
+}
 
-type AnthropicToolUseBlock = {
-  type: "tool_use";
-  name?: string;
+interface AnthropicToolUseBlock {
+  type?: "tool_use";
+  name?: string | null;
   input?: unknown;
-};
-
-type AnthropicTextBlock = {
-  type: "text";
-  text?: unknown;
-};
+}
 
 type AnthropicContentBlock =
-  | AnthropicToolUseBlock
   | AnthropicTextBlock
+  | AnthropicToolUseBlock
   | { type?: string; [key: string]: unknown };
 
-type MessageCreate = (
-  params: Record<string, unknown>
-) => Promise<AnthropicMessageResponse>;
+interface AnthropicMessageResponse {
+  model?: string | null;
+  content?: AnthropicContentBlock[] | null;
+}
+
+type MessageCreate = (params: Record<string, unknown>) => Promise<AnthropicMessageResponse>;
 
 // Low-reasoning calls route to the cheaper fast model.
 const FAST_EFFORTS = new Set<LlmEffort>(["minimal", "low"]);
@@ -74,11 +72,11 @@ function asContentBlocks(value: unknown): AnthropicContentBlock[] {
 }
 
 function isToolUseBlock(block: AnthropicContentBlock): block is AnthropicToolUseBlock {
-  return block.type === "tool_use";
+  return block?.type === "tool_use";
 }
 
 function isTextBlock(block: AnthropicContentBlock): block is AnthropicTextBlock {
-  return block.type === "text";
+  return block?.type === "text";
 }
 
 function isStructuredResultToolUse(
