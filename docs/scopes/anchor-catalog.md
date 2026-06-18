@@ -28,13 +28,18 @@ June 18, 2026.
   into the caller's project as new asset-graph nodes with provenance back to the
   catalog source. **No cross-project live references** — that would violate the
   intra-project edge invariant and asset immutability (see §3).
-- **Search:** index a **catalog-owned projection** of each entry's curated,
-  public fields (title/summary/tags + a flattened `snapshot.searchText`) — NOT
-  the source asset's embedding. An anchor may be published from a *private*
-  project, so riding the asset-embeddings public-discovery path would either
-  miss it (visibility join excludes private sources) or leak private source
-  metadata. Full-text GIN at launch; an optional catalog-snapshot embedding can
-  reuse the embeddings *infrastructure* later (see §5).
+- **Search:** everything stays **catalog-owned**. Full-text GIN over the entry's
+  curated public fields (title/summary/tags + `snapshot.searchText`) is the
+  baseline. For semantic ranking, **embed only that curated public text into a
+  catalog-owned vector column at publish time** (reusing the asset-embeddings
+  model/pipeline). We do **not** copy the source asset's embedding: its source
+  text includes private prompt intent / context / semantic-analysis the catalog
+  never exposes, so ranking on it would let public search surface an entry via
+  private terms absent from the public card. Embedding the curated text both
+  sidesteps the visibility problem (no asset-index join, so private-source
+  anchors stay searchable) and honors the public/private promise. Snapshot
+  semantics: the vector reflects what was published and is re-embedded only on
+  re-publish. See §5.
 - **Publish materializes public bytes:** publishing copies the source bytes into
   the existing **public bucket** (`assets-public`) under a neutral
   `catalog/{entryId}/…` namespace via the storage layer's `copyObject`. Delivery
@@ -84,11 +89,13 @@ them:
 - **Embeddings search is being built now.** `docs/scopes/asset-embeddings.md`
   adds a vector search projection beside the asset graph, with **`anchor`,
   `keyframe`, `poster`, `brief`, `plan`, and `story_blueprint` in the P0 embed
-  set**. We reuse this *infrastructure* (embedding pipeline, vector column,
-  query helper) for an optional catalog-snapshot embedding later — but **not**
-  its public-discovery query path, which joins on asset/project effective-public
-  visibility. Catalog entries can be published from private projects, so search
-  runs over the catalog's own public projection instead (§5).
+  set**. The catalog reuses the shared pieces (pgvector extension,
+  model/dimension settings, the query helper) to **embed its own curated public
+  text** into a catalog-owned column at publish (§5) — it does not reuse the
+  asset embeddings themselves (they encode private internal text) or the asset
+  public-discovery query path (which joins on asset/project effective-public
+  visibility). Because catalog entries can be published from private projects,
+  the catalog queries its own vector with no asset/project join.
 - **Bookmarks already exist.** `saved_assets` (user_id, source_asset_id) with
   RLS that only allows bookmarking effectively-public assets. A catalog "save
   for later" can reuse this pattern (see §10).
@@ -188,6 +195,18 @@ create table public.catalog_entries (
   -- is stable even if the publisher later edits/deletes the source.
   snapshot            jsonb not null default '{}'::jsonb,
 
+  -- Catalog-OWNED search vector, built at publish by embedding ONLY the curated
+  -- public text (snapshot.searchText + title/summary/tags) — NOT copied from the
+  -- source asset's embedding, whose source text includes private prompt intent /
+  -- context / semantic-analysis the catalog never exposes (ranking on it would
+  -- leak private terms). No asset/project join at query time → no visibility
+  -- leak. Snapshot semantics: reflects what was published; re-embedded only on
+  -- re-publish. Null until embedded (full-text covers that gap). Type/dimension
+  -- match public.asset_embeddings (pgvector enabled there, dim 1536).
+  search_embedding    extensions.vector(1536),
+  search_model        text,
+  search_dims         integer,   -- = 1536 when search_embedding is set
+
   -- Lightweight popularity counter, incremented inline on /use. No separate
   -- per-use table at launch (provenance lives on the cloned asset's `source`).
   use_count           integer not null default 0,
@@ -219,6 +238,12 @@ create index catalog_entries_search_idx on public.catalog_entries
     array_to_string(tags, ' ') || ' ' ||
     coalesce(snapshot ->> 'searchText', '')))
   where status = 'published';
+-- ANN index on the catalog-owned search vector is DEFERRED to match
+-- public.asset_embeddings (which also ships without a vector index): exact
+-- cosine scan is fine for the launch-size catalog. A later search PR adds:
+-- create index catalog_entries_embedding_idx on public.catalog_entries
+--   using hnsw (search_embedding extensions.vector_cosine_ops)
+--   where status = 'published';
 ```
 
 `snapshot` is the only JSONB and holds a **typed, versioned presentation copy**
@@ -288,7 +313,12 @@ title, summary, tags }`:
    the entry. This is a bucket-to-bucket copy — no download/re-upload — and
    decouples catalog delivery from the publisher's project visibility. Story
    entries skip this at launch (text card) unless a cover image is provided.
-4. Insert `catalog_entries` with `status = 'published'` — the entry is public
+4. **Embed the curated public text.** Embed `snapshot.searchText` (+
+   title/summary/tags) with the shared embedding model into `search_embedding`,
+   and record `search_model` / `search_dims`. Embed only this public text —
+   never the source asset's embedding — so search can't rank on private source
+   content. On failure, leave null (full-text covers the gap; backfill later).
+5. Insert `catalog_entries` with `status = 'published'` — the entry is public
    immediately (no approval step at launch; see §6). A `draft` status exists for
    "save metadata without publishing yet," but the default publish action goes
    straight to `published`.
@@ -331,7 +361,7 @@ protected.
 | Method & path | Auth | Purpose |
 |---|---|---|
 | `GET /catalog/entries?kind=&limit=&cursor=` | public | Browse published anchors (paginated feed) |
-| `GET /catalog/search?q=&kind=` | public | Search published anchors over the catalog's own projection (`catalog_entries_search_idx`); never joins the source asset's embedding/visibility |
+| `GET /catalog/search?q=&kind=` | public | Search published anchors over the catalog's own state: full-text (`catalog_entries_search_idx`) + the `search_embedding` of curated public text when present; never joins the source asset's embedding/visibility |
 | `GET /catalog/entries/:id` | public | Entry detail (snapshot + resolved preview URL) |
 | `POST /catalog/entries` | user | Publish from an owned source asset/blueprint (goes live immediately) |
 | `PATCH /catalog/entries/:id` | publisher | Edit own entry metadata |
@@ -344,17 +374,31 @@ store helpers), following the `assets.ts` route → `lib/api/v1` handler → `st
 flow. Preview URLs resolved via `resolveAssetUrl` so private/public delivery and
 leak-prevention are inherited for free.
 
-**Search runs over the catalog's own public projection, not the source asset.**
-A `catalog_entries` row carries only curated, publish-time-copied fields
-(title/summary/tags + `snapshot`) and its own public bytes; the source asset may
-live in a private project. So `/catalog/search` queries
-`catalog_entries_search_idx` (full-text over those fields) filtered to
-`status = 'published'`. It must **not** route through the asset-embeddings
-public-discovery query, which enforces source asset/project effective-public
-visibility — doing so would drop private-source anchors or risk surfacing
-private source metadata. If we later want semantic search, embed the curated
-`snapshot.searchText` into a catalog-owned vector column using the embeddings
-*pipeline*, and query that column directly (no asset/project join).
+**Search runs over the catalog's own curated state, never the source asset.** A
+`catalog_entries` row carries only curated, publish-time state (title/summary/
+tags + `snapshot`, its own public bytes, and a `search_embedding` built from that
+curated public text); the source asset may live in a private project.
+`/catalog/search`:
+
+- **Full-text (baseline):** query `catalog_entries_search_idx` over the curated
+  fields, filtered to `status = 'published'`.
+- **Semantic (when present):** rank by the catalog-owned `search_embedding`
+  column, built at publish by **embedding the curated public text**
+  (`snapshot.searchText` + title/summary/tags) with the shared model
+  (recorded in `search_model`/`search_dims`). Querying our own column needs
+  **no asset/project join**, so private-source anchors stay searchable with no
+  visibility leak — and because the vector encodes only public text, ranking
+  can't surface an entry via private source terms. It is a snapshot: re-embedded
+  only on re-publish.
+
+We deliberately do **not** copy the source asset's embedding: its source text
+includes private prompt intent / context / semantic-analysis the catalog never
+exposes, so a copied vector would let public search rank on private content. And
+search must **not** route through the asset-embeddings public-discovery query
+(which joins on asset/project effective-public visibility) — that would drop
+private-source anchors or surface private metadata. If embedding fails or is
+deferred at publish, leave the column null; full-text covers the gap and a
+backfill re-embeds the curated text later.
 
 Schemas: add parsers (`parsePublishCatalogEntry`, `parseUseCatalogEntry`, …) in
 `apps/api/src/lib/api/v1/schemas.ts` alongside the existing asset parsers.
@@ -431,15 +475,21 @@ Each PR is an open PR (no drafts, per CLAUDE.md), independently reviewable.
    `catalog_entry_status` with launch states only), feed/kind/publisher indexes
    + the `catalog_entries_search_idx` full-text projection, nullable
    `on delete set null` source lineage FKs + the relaxed kind check, RLS
-   (public-read-published, owner-all-statuses). Additive migration with a unique
-   timestamp (verify against remote history per the
+   (public-read-published, owner-all-statuses). Includes the catalog-owned
+   `search_embedding extensions.vector(1536)` + `search_model`/`search_dims`
+   columns (the asset-embeddings migration already enabled pgvector at dim
+   1536); the ANN index is deferred to a later search PR to match
+   `public.asset_embeddings`, which also ships without one. Additive migration
+   with a unique timestamp (verify against remote history per the
    migration-version-collisions convention). Pure DB; no app wiring yet.
 2. **PR2 — publish + read API.** `catalog.ts` router (GET feed/detail/search,
    POST publish → live immediately, PATCH, DELETE/archive, GET mine) + store +
    schemas + preview materialization into the public catalog namespace +
-   `snapshot.searchText` build. `/catalog/search` queries the catalog's own
-   full-text projection (not the asset-embeddings discovery path). Tests via
-   `node:test`.
+   `snapshot.searchText` build. Publish **embeds the curated public text**
+   (`snapshot.searchText` + title/summary/tags) into `search_embedding` with the
+   shared model. `/catalog/search` queries the catalog's own full-text
+   projection, ranking by that vector when present (never copying the asset
+   embedding, never the asset-embeddings discovery path). Tests via `node:test`.
 3. **PR3 — copy-into-project.** `POST /catalog/entries/:id/use` for all three
    kinds (asset byte-copy; blueprint deep-clone), provenance stamping, inline
    `use_count`. Tests cover immutability/provenance.
@@ -447,11 +497,12 @@ Each PR is an open PR (no drafts, per CLAUDE.md), independently reviewable.
    a project" with project picker; `catalog` query module; infinite feed.
 5. **PR5 — publish UI.** "Publish as anchor" dialog on asset/blueprint views +
    `/anchors/mine`.
-6. **PR6 — semantic search (optional).** Add a catalog-owned vector column,
-   embed `snapshot.searchText` via the asset-embeddings *pipeline*, and rank
-   `/catalog/search` by it (querying the catalog column directly — no
-   asset/project join). Full-text from PR2 is the baseline; this is a ranking
-   upgrade, plus search UI polish on `/anchors`.
+6. **PR6 — search backfill + polish (optional).** Re-embed the curated public
+   text for entries whose `search_embedding` is null (publish-time embed failed)
+   or stale (model upgrade), tune ranking, and add search UI polish on
+   `/anchors`. Only meaningful once the catalog is large enough that full-text
+   falls short — may be deferred indefinitely. (Semantic ranking itself rides
+   along in PR1/PR2; this is just coverage + tuning, not a new pipeline.)
 
 Deferred (separate future scope, not numbered here): approval/moderation queue
 and takedown (§6).
