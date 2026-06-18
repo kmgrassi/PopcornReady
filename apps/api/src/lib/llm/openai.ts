@@ -26,7 +26,39 @@ function reasoningParams(
 // Loose typing on the wire call keeps us resilient to SDK type-version drift and
 // lets us pass reasoning-model params (max_completion_tokens) the strict types
 // may not yet expose — mirrors the `as any` pattern in lib/anthropic.ts.
-type ChatCreate = (params: Record<string, unknown>) => Promise<any>;
+interface OpenAiFunctionCallPayload {
+  name?: string | null;
+  arguments?: string | null;
+}
+
+interface OpenAiToolCall {
+  function?: OpenAiFunctionCallPayload | null;
+}
+
+interface OpenAiMessageLike {
+  content?: string | null;
+  tool_calls?: OpenAiToolCall[] | null;
+}
+
+interface OpenAiChoiceLike {
+  message?: OpenAiMessageLike | null;
+}
+
+interface OpenAiCompletionLike {
+  model?: string | null;
+  choices?: OpenAiChoiceLike[] | null;
+}
+
+export interface OpenAiFunctionTool {
+  type: "function";
+  function: {
+    name: string;
+    description: string;
+    parameters: JsonSchema;
+  };
+}
+
+type ChatCreate = (params: Record<string, unknown>) => Promise<OpenAiCompletionLike>;
 
 // Low-reasoning calls route to the cheaper fast model.
 const FAST_EFFORTS = new Set<LlmEffort>(["minimal", "low"]);
@@ -39,7 +71,7 @@ export interface OpenAiDeps {
   create?: ChatCreate;
 }
 
-export function toOpenAITool(spec: ToolSpec): Record<string, unknown> {
+export function toOpenAITool(spec: ToolSpec): OpenAiFunctionTool {
   return {
     type: "function",
     function: {
@@ -106,12 +138,12 @@ export function sanitizeForOpenAI(schema: JsonSchema): JsonSchema {
 }
 
 function toolInputFromOpenAIMessage<T>(
-  message: any,
+  message: OpenAiMessageLike | null | undefined,
   expectedTool: string
 ): T {
   const calls = Array.isArray(message?.tool_calls) ? message.tool_calls : [];
   const call = calls.find(
-    (candidate: any) => candidate?.function?.name === expectedTool
+    (candidate) => candidate?.function?.name === expectedTool
   );
   const raw = call?.function?.arguments;
   if (typeof raw !== "string" || !raw.trim()) {
@@ -128,7 +160,7 @@ function toolInputFromOpenAIMessage<T>(
 
 // Pure response parsing — unit-tested without a network call.
 export function interpretOpenAiToolResponse(
-  res: any,
+  res: OpenAiCompletionLike,
   fallbackModel: string
 ): ToolChoiceResult {
   const message = res?.choices?.[0]?.message;
