@@ -67,8 +67,8 @@ the agent, not the user, doing the editing.
 | Surface | File | Disposition |
 |---|---|---|
 | Landing route `/` | [`apps/web/src/routes/HomePage.tsx`](../../apps/web/src/routes/HomePage.tsx) | **Rewrite** sections in place; keep as the home route. |
-| Landing module CSS | `apps/web/src/routes/HomePage.module.css` | Extend for new section layouts. |
-| Global landing styles | `apps/web/src/styles/globals.css` (`.landing`, `.lp-*`) | Reuse; add `.lp-*` for new sections. |
+| Landing module CSS | `apps/web/src/routes/HomePage.module.css` | Extend for `HomePage`-level layout; per-section styles live in the section component's own module. |
+| Global landing styles | `apps/web/src/styles/globals.css` (`.landing`, `.lp-*`) | **Frozen for new work.** Keep existing `.lp-*` only while code still uses them; migrate styles into co-located modules as sections are rewritten — do not add new `.lp-*` rules here (AGENTS.md styling rule). |
 | Design tokens / themes | `apps/web/src/styles/tokens.css` + `globals.css` (`popcorn`, `popcorn-warm`, `popcorn-night`) | **Reuse as-is.** See "Visual system" below. |
 | Prompt entry | [`apps/web/src/components/PromptComposer.tsx`](../../apps/web/src/components/PromptComposer.tsx) | Keep; it stays the hero CTA (prompt → `/studio?autostart=1`). |
 | Logo | `apps/web/src/components/LogoMark.tsx`, `/public/brand/popcorn-ready-logo.svg` | Reuse. |
@@ -169,10 +169,15 @@ Avoid (off-positioning now): anything implying a manual editor, drag-to-trim, or
 - Consume `tokens.css` + the three popcorn themes. The brief's dark-with-warm-
   accent direction is already satisfied by `popcorn-night` (dark) and the default
   `popcorn` theme. **Do not** add the brief's literal hex variables.
-- New section styles: add `.lp-*` selectors to `globals.css` (matching the
-  existing landing convention) or co-locate in `HomePage.module.css`. Never inline
-  hex/px — reference tokens (`--accent`, `--cta`, `--space-*`, `--radius-*`,
-  `--shadow-*`).
+- New section styles go in **co-located CSS Modules** (`HeroProduction.module.css`
+  next to `HeroProduction.tsx`, etc.), per the AGENTS.md styling rule — **do not**
+  add new `.lp-*` rules to `globals.css` or any legacy global sheet; that monolith
+  is the biggest styling merge hotspot and is frozen for new work. The existing
+  `.lp-*` selectors in `globals.css` stay only for code still on those classes;
+  when a section is rewritten, migrate its styles into the section's module rather
+  than extending the global block. Never inline hex/px — reference tokens
+  (`--accent`, `--cta`, `--space-*`, `--radius-*`, `--shadow-*`) from the global
+  token layer.
 - Reuse `LogoMark`, `Button` (`cta` variant for the one CTA per screen),
   `Card`, `StatusChecklist`, `Stepper`.
 
@@ -206,7 +211,7 @@ One PR per row. Open PRs only (no drafts). Each PR body links back to this scope
 |----|-------|--------|-----------|
 | 1 | **Hero + nav re-positioning.** Replace hero copy (eyebrow/headline/subhead/CTAs), keep `PromptComposer`, update `AppLayout` nav labels. Retire all "agent harness / Like Claude Code" copy. | ⬜ todo | — |
 | 2 | **Hero product mockup panel.** Static prompt→plan→preview→checkpoint panel using `StatusChecklist`; tokens only. | ⬜ todo | PR 1 |
-| 3 | **Problem/contrast section.** New `ProblemContrast` + `.lp-*` styles. | ⬜ todo | PR 1 |
+| 3 | **Problem/contrast section.** New `ProblemContrast` + co-located `ProblemContrast.module.css`. | ⬜ todo | PR 1 |
 | 4 | **Workflow stages section.** Replace "How it works" with Plan·Generate·Edit·Review·Publish (AI-first copy, loop-back visual). | ⬜ todo | PR 1 |
 | 5 | **Re-frame product-moment + heatmap intros.** Re-caption the two screenshot sections and the heatmap intro to the new contrast. | ⬜ todo | PR 1 |
 | 6 | **Final CTA reframe.** "Give it an idea. Get a production." + self-host block. | ⬜ todo | PR 1 |

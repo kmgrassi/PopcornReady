@@ -51,14 +51,14 @@ block) is the remaining Phase 3 hardening.
 
 ## Landing Page Content Model
 
-- **Hero**: the "agent harness for video" value prop (see Positioning above) +
-  the one-shot prompt form with template chips.
-- **How it works**: the four-step loop — brief, plan, editable timeline,
-  deterministic render — mirroring the README pipeline.
-- **What it does**: bring-or-generate footage, character consistency,
-  conversational revision, inspectable/safe rendering.
-- **Pricing**: self-host (free) plus hosted tiers (see below).
-- **Self-host CTA**: clone command + GitHub link.
+> **Superseded by
+> [`landing-page-production-workflow.md`](./landing-page-production-workflow.md).**
+> That doc owns the authoritative hero copy, section architecture, and
+> page-by-page implementation under the "production workflow for AI video"
+> framing. The original "agent harness" hero, four-step loop, and feature copy
+> that lived here have been retired — build the landing page from the new doc.
+> Hosted pricing and the self-host pathway remain accurate and are detailed in
+> this doc's sections below.
 
 ## Hosted Pricing (indicative launch tiers)
 
