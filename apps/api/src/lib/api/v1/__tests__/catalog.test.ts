@@ -40,10 +40,35 @@ test("parsePublishCatalogEntry rejects story entries without a blueprint source"
   }
 });
 
+test("parsePublishCatalogEntry rejects draft status until private draft previews exist", () => {
+  try {
+    parsePublishCatalogEntry({
+      kind: "image",
+      sourceAssetId: "asset_1",
+      title: "Draft image",
+      status: "draft",
+    });
+    assert.fail("Expected draft publish validation to fail.");
+  } catch (err) {
+    assert.ok(err instanceof ApiError);
+    assert.equal(err.details?.fields?.[0]?.path, "status");
+  }
+});
+
 test("parseUpdateCatalogEntry allows archive status", () => {
   assert.deepEqual(parseUpdateCatalogEntry({ status: "archived" }), {
     status: "archived",
   });
+});
+
+test("parseUpdateCatalogEntry rejects draft status", () => {
+  try {
+    parseUpdateCatalogEntry({ status: "draft" });
+    assert.fail("Expected draft update validation to fail.");
+  } catch (err) {
+    assert.ok(err instanceof ApiError);
+    assert.equal(err.details?.fields?.[0]?.path, "status");
+  }
 });
 
 test("parseCatalogEntriesQuery validates catalog kind", () => {

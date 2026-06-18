@@ -54,7 +54,9 @@ create index catalog_entries_search_idx on public.catalog_entries
 
 create or replace function public.search_public_catalog_entries(
   search_query text,
-  kind_filter public.catalog_entry_kind default null
+  kind_filter public.catalog_entry_kind default null,
+  limit_count integer default 51,
+  offset_count integer default 0
 )
 returns setof public.catalog_entries
 language sql
@@ -73,11 +75,21 @@ as $$
       coalesce(e.snapshot ->> 'searchText', '')
     ) @@ plainto_tsquery('english', search_query)
   order by e.created_at desc, e.id desc
+  limit greatest(1, least(limit_count, 101))
+  offset greatest(0, offset_count)
 $$;
-revoke all on function public.search_public_catalog_entries(text, public.catalog_entry_kind)
-  from public;
-grant execute on function public.search_public_catalog_entries(text, public.catalog_entry_kind)
-  to anon, authenticated, service_role;
+revoke all on function public.search_public_catalog_entries(
+  text,
+  public.catalog_entry_kind,
+  integer,
+  integer
+) from public;
+grant execute on function public.search_public_catalog_entries(
+  text,
+  public.catalog_entry_kind,
+  integer,
+  integer
+) to anon, authenticated, service_role;
 
 alter table public.catalog_entries enable row level security;
 

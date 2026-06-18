@@ -1560,8 +1560,11 @@ export function parsePublishCatalogEntry(body: unknown): PublishCatalogEntryInpu
   const summary = optionalString(body.summary, "summary", fields);
   const tags = optionalStringArray(body.tags, "tags", fields) ?? [];
   const status = optionalString(body.status, "status", fields) ?? "published";
-  if (status !== "draft" && status !== "published") {
-    fields.push({ path: "status", message: 'Must be "draft" or "published".' });
+  if (status !== "published") {
+    fields.push({
+      path: "status",
+      message: 'Publishing catalog entries must use "published". Draft previews are not supported yet.',
+    });
   }
   if (kind === "story") {
     if (!sourceStoryBlueprintId) {
@@ -1613,8 +1616,8 @@ export function parseUpdateCatalogEntry(body: unknown): UpdateCatalogEntryInput 
   const status = optionalString(body.status, "status", fields) as
     | CatalogEntryStatus
     | undefined;
-  if (status && !CATALOG_ENTRY_STATUSES.includes(status)) {
-    fields.push({ path: "status", message: "Must be one of: draft, published, archived." });
+  if (status && (!CATALOG_ENTRY_STATUSES.includes(status) || status === "draft")) {
+    fields.push({ path: "status", message: 'Must be "published" or "archived".' });
   }
   throwIfInvalid(fields);
   return {

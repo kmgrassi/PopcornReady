@@ -238,10 +238,11 @@ export async function searchCatalogEntries(input: {
     db.rpc("search_public_catalog_entries", {
       search_query: input.q,
       kind_filter: input.kind ?? null,
+      limit_count: input.limit + 1,
+      offset_count: offset,
     })
   );
-  const sorted = ((rows as CatalogEntryRow[]) ?? []).slice(offset, offset + input.limit + 1);
-  return pageResult(sorted, input.limit, offset);
+  return pageResult((rows as CatalogEntryRow[]) ?? [], input.limit, offset);
 }
 
 export async function getCatalogEntry(
