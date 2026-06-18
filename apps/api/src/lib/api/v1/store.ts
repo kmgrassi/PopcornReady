@@ -87,9 +87,12 @@ import {
   AgentAssetSource,
   AgentAssetContext,
   AgentClipContext,
+  AssetEmbeddingMedia,
+  AssetGraphKind,
   AssetContext,
   AssetKnowledge,
   AssetKind,
+  AssetSemanticSearchInput,
   SCHEMA_VERSIONS,
   UserAssetContext,
   VideoBrief,
@@ -4262,6 +4265,86 @@ export async function listAssets(
   );
   const all = await mapAssets(data as AssetRow[]);
   return paginate(all, limit, cursor);
+}
+
+interface AssetSemanticSearchRpcRow extends AssetRow {
+  embedding_id: string;
+  chunk_key: string;
+  chunk_kind: string;
+  embedding_model: string;
+  source_hash: string;
+  source_text: string;
+  vector_score: number;
+  text_score: number;
+  hybrid_score: number;
+}
+
+export interface AssetSemanticSearchResult {
+  asset: V1Asset;
+  score: {
+    hybrid: number;
+    vector: number;
+    text: number;
+  };
+  chunk: {
+    id: string;
+    key: string;
+    kind: string;
+    embeddingModel: string;
+    sourceHash: string;
+    sourceText: string;
+  };
+}
+
+export interface AssetSemanticSearchResponse {
+  items: AssetSemanticSearchResult[];
+}
+
+function embeddingVectorLiteral(values: number[]): string {
+  return `[${values.map((value) => String(value)).join(",")}]`;
+}
+
+export async function searchProjectAssetsSemantic(
+  workspaceId: string,
+  projectId: string,
+  input: AssetSemanticSearchInput
+): Promise<AssetSemanticSearchResponse> {
+  await getProject(workspaceId, projectId);
+  const db = getServiceSupabase();
+  const data = await runQuery(
+    "store.searchProjectAssetsSemantic",
+    db.rpc("search_project_asset_embeddings", {
+      p_workspace_id: workspaceId,
+      p_project_id: projectId,
+      p_query: input.q,
+      p_query_embedding: embeddingVectorLiteral(input.queryEmbedding),
+      p_embedding_model: input.embeddingModel ?? null,
+      p_media_filter: (input.media as AssetEmbeddingMedia | undefined) ?? null,
+      p_kind_filter: (input.kind as AssetGraphKind | undefined) ?? null,
+      p_role_filter: input.role ?? null,
+      p_match_count: input.limit,
+    })
+  );
+  const rows = data as AssetSemanticSearchRpcRow[];
+  const items = await Promise.all(
+    rows.map(async (row) => ({
+      asset: await mapAsset(row),
+      score: {
+        hybrid: row.hybrid_score,
+        vector: row.vector_score,
+        text: row.text_score,
+      },
+      chunk: {
+        id: row.embedding_id,
+        key: row.chunk_key,
+        kind: row.chunk_kind,
+        embeddingModel: row.embedding_model,
+        sourceHash: row.source_hash,
+        sourceText: row.source_text,
+      },
+    }))
+  );
+  return { items };
 }
 
 interface AssetWithProjectRow extends AssetRow {

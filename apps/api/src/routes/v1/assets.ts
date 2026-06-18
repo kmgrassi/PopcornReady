@@ -8,6 +8,7 @@ import {
 } from "@/lib/api/v1/assets";
 import {
   parseAssetInventory,
+  parseAssetSemanticSearch,
   parsePagination,
   parseRegisterAsset,
   parseSetAssetVisibility,
@@ -17,6 +18,7 @@ import {
   getAsset,
   getAssetMediaUrls,
   listAssets,
+  searchProjectAssetsSemantic,
   setAssetVisibility,
 } from "@/lib/api/v1/store";
 
@@ -58,6 +60,16 @@ assetsRouter.get(
       status: 200,
       body: { assets: items, pagination: { limit, nextCursor } },
     };
+  })
+);
+
+assetsRouter.post(
+  "/projects/:projectId/assets/search",
+  mutation(async ({ auth, body }, params) => {
+    const projectId = requiredParam(params, "projectId");
+    const input = parseAssetSemanticSearch(body);
+    const result = await searchProjectAssetsSemantic(auth.workspaceId, projectId, input);
+    return { status: 200, body: result };
   })
 );
 
