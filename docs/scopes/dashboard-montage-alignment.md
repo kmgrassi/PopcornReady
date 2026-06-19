@@ -24,6 +24,29 @@ This scope documents where the two surfaces differ and how to move the
 dashboard creation flow toward the landing montage without faking capabilities
 or adding a second generation model.
 
+## Product Direction From Review
+
+The product should have **one creation interface** that can start from scratch,
+resume an in-flight run, edit an existing video, or enter at any appropriate
+stage based on the user's inputs. The current distinction between `/studio`,
+`/projects/:projectId/runs/:runId`, and review/export routes is mostly an
+implementation and deep-linking concern from building quickly; it should not read
+as separate product functions.
+
+Users should be able to:
+
+- start from a prompt, uploaded footage, uploaded images, or existing generated
+  assets;
+- enter the flow at the most appropriate stage for those inputs;
+- stop, start, revise, or continue from any stage;
+- see the same core interface whether they are creating a new video or editing an
+  existing one.
+
+The landing-page behavior is the target interaction model: stage boundaries
+should expose a `Stop here` control, but the default path remains autonomous. If
+the user does nothing, the run should automatically continue after a short delay
+around five seconds.
+
 ## Source Surfaces
 
 | Surface | Path | Current role |
@@ -82,6 +105,7 @@ or adding a second generation model.
 | The plan recedes to a recap during production. | The active brief/planning context is not persistently summarized in the progress page. | Users lose the thread of what the agent is making and why. |
 | The next step is named before it starts. | Stage rail has detailed stage labels, but the main content does not always preview what comes next. | The run can feel opaque between visible artifacts. |
 | Landing copy says "step in at any step." | Real gates are optional and stage-specific; ungated stages mostly allow cancel only. | The promise is directionally true but stronger than the default UI affordances. |
+| Creation and editing should share one interface. | Starting, run progress, and review/editing currently appear as different route states. | Users may learn separate workflows for what should be one directable agent workspace. |
 
 ## Target Experience
 
@@ -92,11 +116,18 @@ language and hierarchy while staying wired to the real v1 run model:
 2. **Plan** - the agent produces a readable plan card with hook, beats, format,
    visual direction, and any missing inputs.
 3. **Continue / revise** - user can accept the plan, edit the brief, edit
-   footage, or request plan changes before expensive generation.
+   footage, request plan changes, or let the countdown continue automatically
+   after roughly five seconds.
 4. **Produce** - the agent generates storyboard/keyframes, media assets, audio,
    timeline, quality review, and export according to the run's actual stages.
 5. **Review** - user reviews the cut, gives feedback, requests targeted
    revisions, then exports.
+
+The same flow should support editing and continuation. A project with existing
+images should be able to enter at storyboard/keyframe selection; a project with a
+finished storyboard should be able to enter at shots/timeline; a completed video
+should re-enter at review/revision without making the user restart from a blank
+brief.
 
 This does not require copying `AgentRunPreview` into the app. The landing
 component is product theatre. The dashboard should reuse its information
@@ -169,6 +200,8 @@ Target:
 
 - Replace generic `Start generating` copy on the plan screen with
   `Continue to production`.
+- Show `Stop here` at the stage boundary.
+- If the user does nothing, auto-continue after about five seconds.
 - On click, show a compact handoff state:
   - `Agent running autonomously`
   - current plan recap
@@ -215,6 +248,10 @@ The landing montage's keyframes are persuasive because they read as the emerging
 movie. The current generated item grid treats outputs uniformly, which is useful
 but not cinematic.
 
+Decision: move toward **StoryboardBoard as the primary user interaction model**
+for visual generation stages. This is a UI positioning and workflow change first;
+it does not need to wait on a database redesign.
+
 Target:
 
 - Detect storyboard/keyframe stage items and render them in a `StoryboardBoard`
@@ -230,8 +267,9 @@ Data gap:
 - `GenerationStageItem.kind` only says `image`, `video`, `audio`, `caption`,
   `timeline`, or `export`. To reliably group storyboard/keyframes, the API
   should expose either a stage type, role, or artifact purpose on each item
-  (`storyboard_frame`, `keyframe`, `shot`, etc.). Do not infer this from labels
-  long-term.
+  (`storyboard_frame`, `keyframe`, `shot`, etc.). This is not required for the
+  first UI pass if the parent stage provides enough context, but do not infer
+  this from labels long-term.
 
 Implementation seam:
 
@@ -241,7 +279,7 @@ Implementation seam:
 - Optional shared CSS pattern adapted from `AgentRunPreview.module.css`, using
   scoped modules and existing tokens.
 
-### 6. Unify Studio And Progress Continuity
+### 6. Make Studio, Progress, And Editing One Interface
 
 The real flow currently transitions:
 
@@ -249,7 +287,10 @@ The real flow currently transitions:
 - `/projects/:projectId/runs/:runId?studioDraft=...` progress
 - `/studio?draft=...&step=review` review
 
-This is technically sound, but the user experience should feel like one run.
+This is technically sound for resumability and deep links, but it is not a
+product distinction. The user experience should feel like one directable agent
+workspace, regardless of whether the underlying route is a draft, run, review, or
+project-edit URL.
 
 Target:
 
@@ -262,13 +303,19 @@ Target:
     feel expected with matching headings.
 - Ensure drafts that have an active run resume directly into the stage they last
   reached, with visible status.
+- Support "enter at stage" behavior from available inputs:
+  - prompt-only starts at brief/plan;
+  - uploaded footage can start at source selection or plan with footage attached;
+  - uploaded images can start at storyboard/keyframe selection;
+  - an existing storyboard can start at shots/timeline;
+  - a completed video can start at review/revision/export.
 
 ## API / Data Requirements
 
 This scope should avoid new legacy surfaces and stay aligned with the immutable
 asset graph direction. Any new fields should be typed and versioned.
 
-Required or strongly recommended additions:
+Recommended additions, in priority order:
 
 - Planning preview includes structured beats:
   - `beats: Array<{ id: string; label: string; text: string; role?: "hook" | "beat" | "payoff" }>`
@@ -281,9 +328,12 @@ Required or strongly recommended additions:
 - Run detail exposes the next queued stage or enough ordered stage data to derive
   it without duplicating status logic.
 
-Do not add untyped JSONB for storyboard, scene, beat, or panel structure. If the
-UI renders the plan or storyboard as first-class product structure, model it as
-typed response fields now and relational graph-backed rows when persisted.
+The first StoryboardBoard UI pass can be driven by existing run/stage context if
+that is enough to group frames cleanly. Do not block the UX direction on a
+database migration. When the data model is updated, avoid untyped JSONB for
+storyboard, scene, beat, or panel structure. If the UI renders the plan or
+storyboard as first-class product structure, model it as typed response fields
+now and relational graph-backed rows when persisted.
 
 ## Non-Goals
 
@@ -303,26 +353,25 @@ typed response fields now and relational graph-backed rows when persisted.
 | 2 | **Plan summary card.** Rework `PlanningWorkspace` so the agent-created plan is the dominant artifact; keep existing editable decision controls secondary. | Gives users a real "Act One" before expensive generation. |
 | 3 | **Planning preview beats contract.** Add typed beat outline to the planning preview API/client and render it in the plan card. | Replaces landing hardcoded beats with real planning data. |
 | 4 | **Progress header and plan recap.** Update `ProgressView` to read as `Produce`, show plan/project context, and move debug run details lower. | Keeps continuity after the route transition. |
-| 5 | **Storyboard board.** Add a scoped `StoryboardBoard` for storyboard/keyframe items and fall back to `StageItemCard` for everything else. | Makes generated visuals feel like the movie, not a generic asset list. |
-| 6 | **Artifact purpose metadata.** Add typed purpose/role fields to stage items so the board is data-driven instead of label-driven. | Makes UI grouping robust and asset-graph-ready. |
-| 7 | **Stop/continue affordances.** Attach cancel/reject/approve controls to active stages with landing-consistent "Stop here" / "Continue" language. | Makes human intervention a first-class workflow, not error handling. |
-| 8 | **Review continuity polish.** Carry plan recap and stage history into the review/export handoff; make successful progress-to-review transition feel intentional. | Completes the end-to-end story. |
+| 5 | **Storyboard board.** Add a scoped `StoryboardBoard` for storyboard/keyframe items and fall back to `StageItemCard` for everything else. Use existing stage context first; typed purpose metadata can follow. | Makes generated visuals feel like the movie, not a generic asset list. |
+| 6 | **Stop/continue affordances.** Attach cancel/reject/approve controls to active stages with landing-consistent `Stop here` / `Continue` language and roughly five-second auto-continue where safe. | Makes human intervention a first-class workflow while preserving autonomous default runs. |
+| 7 | **Unified workspace continuity.** Make setup, progress, review, and edit states read as one directable agent interface even if routes remain deep-linkable. | Avoids teaching separate workflows for create vs edit vs resume. |
+| 8 | **Artifact purpose metadata.** Add typed purpose/role fields to stage items so the board is data-driven instead of label-driven. | Makes UI grouping robust and asset-graph-ready, but is not a blocker for the first board pass. |
+| 9 | **Review continuity polish.** Carry plan recap and stage history into the review/export handoff; make successful progress-to-review transition feel intentional. | Completes the end-to-end story. |
 
 Each PR should be independently reviewable and avoid touching broad aggregation
 files unless the surrounding route registration requires it.
 
 ## Open Decisions
 
-- Should `/studio` keep routing to `/projects/:projectId/runs/:runId` during
-  generation, or should progress render inline inside `/studio` while preserving
-  the deep link? The current route is healthier for resumability; inline rendering
-  may feel smoother but risks duplicating progress logic.
-- Does the product want review gates enabled by default at the plan/storyboard
-  boundary, or should the default stay autonomous and expose `Stop here` as an
-  optional interrupt?
-- Are storyboard frames, keyframes, and shots distinct user-facing artifact
-  roles, or should the UI collapse them into one `Frames` board until the asset
-  graph is richer?
+- What is the right stage-entry heuristic for user-provided images: do they land
+  in storyboard selection, keyframe selection, or a more general "visual inputs"
+  stage?
+- Which stage boundaries should auto-continue after five seconds by default, and
+  which should require explicit approval because of cost, quality, or safety?
+- Should storyboard frames, keyframes, and generated shots be distinct labels in
+  the UI, or should the first pass collapse them into one `Frames` board until
+  users need more specificity?
 - Should the landing `AgentRunPreview` share a presentational `StoryboardBoard`
   with progress once the real board exists, or remain intentionally separate as
   marketing theatre?
@@ -336,6 +385,10 @@ files unless the surrounding route registration requires it.
 - Storyboard/keyframe outputs are grouped as an emerging video, not only generic
   asset cards.
 - Stop, continue, approve, reject, and cancel affordances use consistent language
-  and are visible at the stage where they matter.
+  and are visible at the stage where they matter; default autonomous stages
+  continue after a short delay when the user does not stop them.
+- Creating from scratch, resuming a run, editing an existing video, and entering
+  with user-provided assets all use the same underlying directable workspace
+  model.
 - All implementation uses the v1 run model, TanStack Query hooks, typed API
   contracts, co-located CSS Modules, and existing design tokens.
