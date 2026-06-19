@@ -17,6 +17,9 @@ export interface StartRunResult {
   runId: string;
 }
 
+export const LONG_VIDEO_PLANNING_REVIEW_THRESHOLD_SEC = 30;
+const LONG_VIDEO_REQUIRED_REVIEW_GATE: GateableGenerationStageType = "creative_plan";
+
 /** Derive a human project name from the brief goal when none was supplied. */
 export function deriveProjectName(goal: string): string {
   const trimmed = goal.trim();
@@ -143,6 +146,14 @@ function assertUploadDraftHasVisualFootage(draft: BriefDraft): void {
   }
 }
 
+export function reviewGatesForDraft(draft: BriefDraft): GateableGenerationStageType[] {
+  const reviewGates = new Set<GateableGenerationStageType>(draft.reviewGates);
+  if (draft.targetLengthSec > LONG_VIDEO_PLANNING_REVIEW_THRESHOLD_SEC) {
+    reviewGates.add(LONG_VIDEO_REQUIRED_REVIEW_GATE);
+  }
+  return [...reviewGates];
+}
+
 /**
  * Create the project, kick off a prompt generation run, and return the ids the
  * shell needs to poll. Throws on any API failure or a missing run id so the
@@ -152,7 +163,7 @@ export async function createAndStartRun(draft: BriefDraft): Promise<StartRunResu
   assertUploadDraftHasVisualFootage(draft);
 
   const brief = briefInputFromDraft(draft);
-  const reviewGates: GateableGenerationStageType[] = draft.reviewGates;
+  const reviewGates = reviewGatesForDraft(draft);
 
   const { project, briefVersion } = await v1Api.createProject({
     name: draft.projectName.trim() || deriveProjectName(draft.goal),

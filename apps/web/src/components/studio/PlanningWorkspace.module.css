@@ -190,6 +190,22 @@
   grid-column: 1 / -1;
 }
 
+.boundaryCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  border-color: color-mix(in srgb, var(--cta) 32%, var(--border));
+}
+
+.boundaryActions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
 .panelHeader {
   display: flex;
   align-items: flex-start;
@@ -309,6 +325,15 @@
 
   .planMeta {
     justify-content: flex-start;
+  }
+
+  .boundaryCard {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .boundaryActions {
+    justify-content: stretch;
   }
 
   .grid,

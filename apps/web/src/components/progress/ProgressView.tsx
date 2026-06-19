@@ -627,7 +627,7 @@ export function ProgressView({
                     {detail.run.message ??
                       `${currentStageLabel} is in progress.${
                         nextStageLabel ? ` Next step: ${nextStageLabel}.` : ""
-                      }`}
+                      }`} You can stop here and return to the draft instead of letting the run continue.
                   </p>
                 </div>
                 <div className={styles.actions}>
@@ -637,7 +637,7 @@ export function ProgressView({
                     onClick={cancelAction.onCancel}
                     disabled={cancelAction.pending}
                   >
-                    {cancelAction.pending ? "Canceling..." : "Stop here"}
+                    {cancelAction.pending ? "Stopping..." : "Stop here"}
                   </button>
                 </div>
               </div>
@@ -662,7 +662,7 @@ export function ProgressView({
                 <p className={styles.reviewDescription}>
                   {detail.run.reviewGate.stageType === "brief_intake"
                     ? "Review the concept brief before the run continues to script generation."
-                    : "Review this stage before the run continues to the next generation step."}
+                    : "Review this stage before the run continues to the next generation step. Stop here if you do not want the agent to keep producing from this boundary."}
                 </p>
               </div>
               {isBriefReviewGate && (project?.brief || projectLoading) ? (
@@ -720,7 +720,7 @@ export function ProgressView({
                       onClick={reviewActions.onCancel}
                       disabled={!!pending}
                     >
-                      {pending === "cancel" ? "Canceling..." : "Cancel generation"}
+                      {pending === "cancel" ? "Stopping..." : "Stop here"}
                     </button>
                     <button
                       type="button"
