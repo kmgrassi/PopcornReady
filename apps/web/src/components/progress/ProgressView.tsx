@@ -8,6 +8,8 @@ import {
   type GenerationStage,
   type GenerationStageType,
   type GenerationStageItem,
+  type BoardRevisionTarget,
+  type ProjectStoryboard,
   type VideoBriefInput,
 } from "@popcorn/shared/v1/types";
 import { StageItemCard } from "../generation-progress/StageItemCard";
@@ -17,6 +19,10 @@ import {
 } from "../../lib/v1/generation-runs/client";
 import { v1Api } from "../../lib/api-client";
 import { StageRail } from "./StageRail";
+import {
+  StoryboardBoard,
+  storyboardFeedbackTargetKey,
+} from "./StoryboardBoard";
 import { TerminalState } from "./TerminalState";
 import styles from "./ProgressView.module.css";
 
@@ -195,6 +201,10 @@ function BriefReviewOutput({
   );
 }
 
+function isVisualItem(item: GenerationStageItem): boolean {
+  return item.kind === "image" || item.kind === "video";
+}
+
 export function ProgressView({
   run,
   stages,
@@ -207,9 +217,12 @@ export function ProgressView({
   const [detail, setDetail] = useState({ run, stages, stageItems });
   const [projectBrief, setProjectBrief] = useState<VideoBriefInput | null>(null);
   const [projectBriefLoading, setProjectBriefLoading] = useState(false);
+  const [projectStoryboard, setProjectStoryboard] = useState<ProjectStoryboard | null>(null);
   const [fallbackApproving, setFallbackApproving] = useState(false);
   const [fallbackError, setFallbackError] = useState<string | null>(null);
   const [fallbackFeedbackNote, setFallbackFeedbackNote] = useState("");
+  const [boardFeedbackPendingKey, setBoardFeedbackPendingKey] = useState<string | null>(null);
+  const [boardFeedbackError, setBoardFeedbackError] = useState<string | null>(null);
   const reviewGateKey = detail.run.reviewGate?.stageId ?? null;
   const isBriefReviewGate = detail.run.reviewGate?.stageType === "brief_intake";
 
@@ -256,6 +269,30 @@ export function ProgressView({
   const generatedItems = detail.run.reviewGate
     ? detail.stageItems.filter((item) => item.stageId !== detail.run.reviewGate?.stageId)
     : detail.stageItems;
+  const generatedVisualItems = generatedItems.filter(isVisualItem);
+  const generatedFallbackItems = generatedItems.filter((item) => !isVisualItem(item));
+
+  useEffect(() => {
+    if (generatedVisualItems.length === 0) {
+      setProjectStoryboard(null);
+      return;
+    }
+
+    let canceled = false;
+    v1Api
+      .getProjectStoryboard(detail.run.projectId)
+      .then(({ storyboard }) => {
+        if (!canceled) setProjectStoryboard(storyboard ?? null);
+      })
+      .catch(() => {
+        if (!canceled) setProjectStoryboard(null);
+      });
+
+    return () => {
+      canceled = true;
+    };
+  }, [detail.run.projectId, generatedVisualItems.length]);
+
   const pending = reviewActions?.pending ?? (fallbackApproving ? "approve" : undefined);
   const actionError = reviewActions?.error ?? fallbackError;
   const showCancelAction = !terminal && !detail.run.reviewGate && !!cancelAction;
@@ -332,6 +369,25 @@ export function ProgressView({
   const onApprove = reviewActions
     ? () => reviewActions.onApprove(feedbackNote)
     : approveFallback;
+
+  async function submitBoardFeedback(input: {
+    message: string;
+    target: BoardRevisionTarget;
+  }) {
+    const key = storyboardFeedbackTargetKey(input.target);
+    setBoardFeedbackPendingKey(key);
+    setBoardFeedbackError(null);
+    try {
+      await v1Api.createRunBoardRevision(detail.run.projectId, detail.run.runId, input);
+    } catch (err) {
+      setBoardFeedbackError(
+        err instanceof Error ? err.message : "Could not send board feedback.",
+      );
+      throw err;
+    } finally {
+      setBoardFeedbackPendingKey(null);
+    }
+  }
 
   return (
     <div className={styles.shell}>
@@ -537,11 +593,23 @@ export function ProgressView({
               <h2 id="generated-assets-heading" className={styles.cardHeading}>
                 Generated assets
               </h2>
-              <div className={`${styles.itemGrid} ${styles.reviewOutputGrid}`}>
-                {generatedItems.map((item) => (
-                  <StageItemCard key={item.itemId} item={item} />
-                ))}
-              </div>
+              {generatedVisualItems.length > 0 ? (
+                <StoryboardBoard
+                  runId={detail.run.runId}
+                  items={generatedVisualItems}
+                  storyboard={projectStoryboard}
+                  pendingTargetKey={boardFeedbackPendingKey}
+                  error={boardFeedbackError}
+                  onFeedback={submitBoardFeedback}
+                />
+              ) : null}
+              {generatedFallbackItems.length > 0 ? (
+                <div className={`${styles.itemGrid} ${styles.reviewOutputGrid}`}>
+                  {generatedFallbackItems.map((item) => (
+                    <StageItemCard key={item.itemId} item={item} />
+                  ))}
+                </div>
+              ) : null}
             </section>
           ) : null}
         </section>

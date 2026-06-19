@@ -709,6 +709,36 @@ export interface GenerationStageItem {
   judgment?: GenerationJudgmentSummary;
 }
 
+export interface BoardRevisionTarget {
+  scope: "board" | "tile";
+  runId?: string;
+  stageId?: string;
+  itemId?: string;
+  storyboardId?: string;
+  sceneId?: string;
+  beatId?: string;
+  panelId?: string;
+  keyframeAssetId?: string;
+  clipAssetId?: string;
+  assetId?: string;
+  artifactId?: string;
+  label?: string;
+}
+
+export interface BoardRevisionRequest {
+  message: string;
+  target: BoardRevisionTarget;
+}
+
+export interface BoardRevisionResponse {
+  revision: {
+    id: string;
+    message: string;
+    target: BoardRevisionTarget;
+    createdAt: string;
+  };
+}
+
 // Canonical order and default labels for the stage rail. Individual runs may
 // skip stages they do not need; the rail orders whatever it is given by this
 // position.

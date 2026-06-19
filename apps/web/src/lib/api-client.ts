@@ -1,6 +1,8 @@
 import type {
   AssetKind,
   AssetStatus,
+  BoardRevisionRequest,
+  BoardRevisionResponse,
   BriefVersion,
   CompositionMode,
   JobStatus,
@@ -354,6 +356,8 @@ export interface RejectGenerationRunInput {
   note?: string;
 }
 
+export type CreateTimelineRevisionInput = string | BoardRevisionRequest;
+
 export interface StartGenerationRunInput {
   brief: VideoBriefInput;
   mode?: CompositionMode;
@@ -623,13 +627,25 @@ export const v1Api = {
   createTimelineRevision: (
     projectId: string,
     timelineId: string,
-    message: string
+    input: CreateTimelineRevisionInput
   ) =>
     apiRequest<{ job: unknown }>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/timelines/${encodeURIComponent(timelineId)}/revisions`,
       {
         method: "POST",
-        body: { message },
+        body: typeof input === "string" ? { message: input } : input,
+      }
+    ),
+  createRunBoardRevision: (
+    projectId: string,
+    runId: string,
+    input: BoardRevisionRequest
+  ) =>
+    apiRequest<BoardRevisionResponse>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/generation-runs/${encodeURIComponent(runId)}/board-revisions`,
+      {
+        method: "POST",
+        body: input,
       }
     ),
   startPromptGenerationRun: (
