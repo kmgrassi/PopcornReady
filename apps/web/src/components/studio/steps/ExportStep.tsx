@@ -178,6 +178,21 @@ export function ExportStep({ back, draft, projectId, completeDraft }: StepProps)
       onBack={back}
     >
       <div className={styles.form}>
+        <section className={styles.context} aria-label="Export context">
+          <div>
+            <span>Review complete</span>
+            <strong>{draft.projectName || draft.goal || "Untitled video"}</strong>
+          </div>
+          <div>
+            <span>Target</span>
+            <strong>{draft.platform} · {draft.aspectRatio}</strong>
+          </div>
+          <div>
+            <span>Current cut</span>
+            <strong>{duration ?? "No timeline loaded"}</strong>
+          </div>
+        </section>
+
         <fieldset className={styles.group} disabled={exportBusy}>
           <legend>Format</legend>
           <label className={styles.option}>
@@ -248,8 +263,12 @@ export function ExportStep({ back, draft, projectId, completeDraft }: StepProps)
         </fieldset>
 
         <div className={styles.summary}>
-          <span>Current cut</span>
-          <strong>{duration ?? "No timeline loaded"}</strong>
+          <span>Export source</span>
+          <strong>
+            {timeline?.segments.length
+              ? `${timeline.segments.length} reviewed segments`
+              : "No timeline loaded"}
+          </strong>
         </div>
 
         {timelineLoading ? <p className={styles.status}>Loading the current cut...</p> : null}
@@ -272,7 +291,7 @@ export function ExportStep({ back, draft, projectId, completeDraft }: StepProps)
             <strong>Export created</strong>
             <span>
               {directUrl
-                ? "Your MP4 is ready to open."
+                ? "Your reviewed MP4 is ready to open."
                 : "The export is recorded in Outputs. Rendering may still be pending."}
             </span>
             <div className={styles.actions}>

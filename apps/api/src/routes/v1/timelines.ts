@@ -26,6 +26,7 @@ import {
   type Job as V1Job,
   type JobType as V1JobType,
   SCHEMA,
+  type BoardRevisionTarget,
   type VersionedTimeline,
 } from "@popcorn/shared/v1/types";
 
@@ -87,6 +88,53 @@ function parseRevisionMessage(body: unknown): string {
     throw new AgentApiError("invalid_request", 400, "A revision `message` is required.");
   }
   return message;
+}
+
+function optionalTargetString(
+  input: Record<string, unknown>,
+  key: keyof BoardRevisionTarget
+): string | undefined {
+  const value = input[key];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function parseRevisionTarget(body: unknown): BoardRevisionTarget | undefined {
+  const raw = bodyRecord(body).target;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const target = raw as Record<string, unknown>;
+  const scope = target.scope === "board" || target.scope === "tile" ? target.scope : undefined;
+  if (!scope) {
+    throw new AgentApiError("invalid_request", 400, "`target.scope` must be board or tile.");
+  }
+
+  const parsed: BoardRevisionTarget = { scope };
+  for (const key of [
+    "runId",
+    "stageId",
+    "itemId",
+    "storyboardId",
+    "sceneId",
+    "beatId",
+    "panelId",
+    "keyframeAssetId",
+    "clipAssetId",
+    "assetId",
+    "artifactId",
+    "label",
+  ] as const) {
+    const value = optionalTargetString(target, key);
+    if (value) parsed[key] = value;
+  }
+  return parsed;
+}
+
+function messageWithRevisionTarget(message: string, target?: BoardRevisionTarget): string {
+  if (!target) return message;
+  const fields = Object.entries(target)
+    .filter(([, value]) => typeof value === "string" && value.trim())
+    .map(([key, value]) => `${key}: ${value}`)
+    .join("\n");
+  return `Targeted board revision:\n${fields}\n\nUser request:\n${message}`;
 }
 
 function parseExportOptions(body: unknown): ExportOptions {
@@ -176,6 +224,7 @@ async function createRevision(
     const projectId = param(params, "projectId");
     const timelineId = param(params, "timelineId");
     const message = parseRevisionMessage(body);
+    const target = parseRevisionTarget(body);
 
     const { job, created } = await agentApiStore.createOrGetJob({
       type: "revision",
@@ -189,7 +238,11 @@ async function createRevision(
     try {
       await agentApiStore.setStep(job.id, "planning_timeline");
       const project = await loadProject(projectId);
-      const result = await runRevisionJob({ project, timelineId, message });
+      const result = await runRevisionJob({
+        project,
+        timelineId,
+        message: messageWithRevisionTarget(message, target),
+      });
       const finished = await agentApiStore.succeed(job.id, result);
       return { status: 201, body: { job: finished } };
     } catch (workerErr) {

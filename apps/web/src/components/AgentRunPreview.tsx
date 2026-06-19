@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import styles from "./AgentRunPreview.module.css";
 
 /**
@@ -36,6 +36,8 @@ const KEYFRAME_SRCS: (string | null)[] = [
   "/images/keyframe-4.jpg", // premiere — arrival
   "/images/keyframe-5.jpg", // payoff — best picture
 ];
+const KEYFRAME_PRELOAD_SRCS = KEYFRAME_SRCS.filter(Boolean) as string[];
+const preloadedKeyframes = new Set<string>();
 
 // Cadence, in ticks (1 tick = TICK_MS). Tuned so the full cycle reads in ~20s.
 const TICK_MS = 90;
@@ -51,7 +53,8 @@ const CONTINUE_TICKS = CONTINUE_LEAD_TICKS + COUNT_TICKS * 3 + ACTION_TICKS;
 const KEYFRAME_TICKS = 30;
 // The post-keyframes beat reuses the same clapperboard action as the first one,
 // plus a little hold on "ACTION" before the cycle loops.
-const ADVANCE_TICKS = CONTINUE_TICKS + 8;
+const FINAL_STORYBOARD_HOLD_TICKS = 54;
+const ADVANCE_TICKS = CONTINUE_TICKS + FINAL_STORYBOARD_HOLD_TICKS;
 
 // Phase boundaries (cumulative tick offsets within one cycle).
 const T_HANDOFF = TYPE_TICKS;
@@ -88,6 +91,19 @@ function prefersReducedMotion() {
     typeof window !== "undefined" &&
     window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
   );
+}
+
+function preloadKeyframes() {
+  if (typeof window === "undefined") return;
+
+  for (const src of KEYFRAME_PRELOAD_SRCS) {
+    if (preloadedKeyframes.has(src)) continue;
+    preloadedKeyframes.add(src);
+
+    const image = new Image();
+    image.decoding = "async";
+    image.src = src;
+  }
 }
 
 interface Frame {
@@ -320,20 +336,64 @@ function Clapper({
 }
 
 export function AgentRunPreview() {
+  const runRef = useRef<HTMLDivElement | null>(null);
+  const wasMontageActiveRef = useRef(false);
   const [tick, setTick] = useState(0);
+  const [montageActive, setMontageActive] = useState(false);
   const [reduced] = useState(prefersReducedMotion);
 
   useEffect(() => {
+    preloadKeyframes();
+  }, []);
+
+  useEffect(() => {
     if (reduced) return;
+    const node = runRef.current;
+    if (!node) return;
+
+    if (typeof IntersectionObserver === "undefined") {
+      setMontageActive(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        const viewportHeight =
+          window.innerHeight || document.documentElement.clientHeight;
+        const fullyFramed =
+          entry.isIntersecting &&
+          entry.intersectionRatio >= 0.98 &&
+          entry.boundingClientRect.top >= 0 &&
+          entry.boundingClientRect.bottom <= viewportHeight;
+        const visible =
+          entry.isIntersecting &&
+          entry.boundingClientRect.bottom > 0 &&
+          entry.boundingClientRect.top < viewportHeight;
+        const nextActive = wasMontageActiveRef.current ? visible : fullyFramed;
+
+        if (!wasMontageActiveRef.current && nextActive) setTick(0);
+        wasMontageActiveRef.current = nextActive;
+        setMontageActive(nextActive);
+      },
+      { threshold: [0, 0.1, 0.98, 1] },
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [reduced]);
+
+  useEffect(() => {
+    if (reduced || !montageActive) return;
     const id = window.setInterval(() => setTick((value) => value + 1), TICK_MS);
     return () => window.clearInterval(id);
-  }, [reduced]);
+  }, [montageActive, reduced]);
 
   const frame = reduced ? FINAL_FRAME : computeFrame(tick);
   const agentRunning = frame.actor === "agent";
 
   return (
     <div
+      ref={runRef}
       className={styles.run}
       role="img"
       aria-label="Preview of a run: you type one short brief, the agent writes the plan, then on your go-ahead it generates the keyframes and assembles the timeline — and you can stop it at any step."
@@ -430,7 +490,13 @@ export function AgentRunPreview() {
                       key={index}
                     >
                       {ready && src && (
-                        <img className={styles.tileImg} src={src} alt="" loading="lazy" />
+                        <img
+                          className={styles.tileImg}
+                          src={src}
+                          alt=""
+                          decoding="async"
+                          loading="eager"
+                        />
                       )}
                     </span>
                   );

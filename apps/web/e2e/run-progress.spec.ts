@@ -83,7 +83,7 @@ test("polls an active run, cancels it, and clears the recovery hint", async ({ p
 
   await page.goto(runPath);
 
-  await expect(page.getByRole("heading", { name: "Active generation" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Stop here or keep producing" })).toBeVisible();
   const overallProgress = page.getByRole("progressbar", { name: /complete/ });
   await expect(overallProgress).toHaveAttribute("aria-valuenow", "42");
   await expect
@@ -333,6 +333,7 @@ function runDetail(options: MockRunOptions = {}) {
             itemId: "item-storyboard-1",
             stageId: options.reviewGate.stageId,
             kind: "image",
+            purpose: "storyboard_frame",
             label: "Opening storyboard frame",
             status: "succeeded",
             provider: "fixture",

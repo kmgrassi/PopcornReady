@@ -1,3 +1,4 @@
+import { LandingSection } from "./LandingSection";
 import styles from "./WorkflowStages.module.css";
 
 // The five stages the agent runs. Copy is AI-first: every stage is something the
@@ -34,13 +35,11 @@ const STAGES = [
 
 export function WorkflowStages() {
   return (
-    <section id="workflow" className="lp-section">
-      <h2 className="lp-section-title">The production workflow</h2>
-      <p className="lp-section-sub">
-        You direct; the agent does the work — plan, generate, edit, review, and
-        publish. It runs autonomously, and you step in at any point.
-      </p>
-
+    <LandingSection
+      id="workflow"
+      title="The production workflow"
+      subtitle="You direct; the agent does the work — plan, generate, edit, review, and publish. It runs autonomously, and you step in at any point."
+    >
       <ol className={styles.stages}>
         {STAGES.map((stage) => (
           <li className={styles.stage} key={stage.n}>
@@ -58,6 +57,6 @@ export function WorkflowStages() {
         Not a one-way pipeline: the agent can re-enter any stage. Change one
         thing and only the affected shots recompute.
       </p>
-    </section>
+    </LandingSection>
   );
 }

@@ -334,10 +334,12 @@ function StudioFlowView({
           </section>
         ) : (
           <ReviewStep
+            draft={flow.brief}
             project={flow.reviewProject}
             timeline={flow.reviewTimeline}
             timelineId={flow.reviewTimelineId}
             clips={flow.reviewClips}
+            stages={flow.stages}
             segmentNotes={flow.reviewSegmentNotes}
             loading={flow.reviewLoading}
             error={flow.reviewError ?? flow.error}

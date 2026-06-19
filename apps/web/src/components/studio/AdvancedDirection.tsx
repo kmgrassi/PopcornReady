@@ -1,5 +1,5 @@
 import { Disclosure } from "../ui/Disclosure";
-import { formatOptions, platformOptions, studioCopy } from "./copy";
+import { aspectOptions, formatOptions, platformOptions, studioCopy } from "./copy";
 import type { StepProps } from "./useStudioFlow";
 import styles from "./AdvancedDirection.module.css";
 
@@ -41,6 +41,24 @@ export function AdvancedDirection({
             ))}
           </select>
         </label>
+
+        <fieldset className={styles.field}>
+          <legend className={styles.label}>{studioCopy.brief.aspectLabel}</legend>
+          <div className={styles.segmented}>
+            {aspectOptions.map((option) => (
+              <label className={styles.option} key={option.value}>
+                <input
+                  className={styles.optionInput}
+                  type="radio"
+                  name="brief-aspect"
+                  checked={draft.aspectRatio === option.value}
+                  onChange={() => update({ aspectRatio: option.value })}
+                />
+                <span className={styles.optionLabel}>{option.label}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
 
         <label className={styles.field}>
           <span className={styles.label}>{studioCopy.advanced.format}</span>

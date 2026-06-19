@@ -3,6 +3,7 @@ import type { Project, Timeline } from "@popcorn/shared/types";
 import type { GenerationRun } from "@popcorn/shared/v1/types";
 import {
   v1Api,
+  type CreateTimelineRevisionInput,
   type ExportJobResponse,
   type StartTimelineExportInput,
 } from "../../lib/api-client";
@@ -192,8 +193,8 @@ export function useStudioCreateTimelineRevisionMutation(
   timelineId: string,
 ) {
   return useMutation({
-    mutationFn: (message: string) =>
-      v1Api.createTimelineRevision(projectId, timelineId, message),
+    mutationFn: (input: CreateTimelineRevisionInput) =>
+      v1Api.createTimelineRevision(projectId, timelineId, input),
   });
 }
 

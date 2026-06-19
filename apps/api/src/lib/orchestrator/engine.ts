@@ -275,6 +275,9 @@ function toPriorResult(action: RunActionSummary): Record<string, unknown> {
     status: action.status,
     outputAssetIds: action.outputAssetIds,
   };
+  if (action.tool === "board_feedback") {
+    base.request = action.params;
+  }
   if (action.status === "failed" && action.error) {
     const guidance: Record<string, unknown> = {};
     for (const field of ERROR_GUIDANCE_FIELDS) {

@@ -72,11 +72,41 @@ test("surfaces orchestrator success as ready once export_video produced output",
   assert.deepEqual(payload.resultArtifacts, [
     {
       kind: "export",
+      purpose: "export",
       artifactId: "export_asset_1",
       assetId: "export_asset_1",
       stageId: "run_1:export",
     },
   ]);
+});
+
+test("keeps board feedback actions out of generation progress projections", () => {
+  const payload = projectRunDetailFromParts(
+    runFixture({ status: "running" }),
+    [],
+    [
+      actionFixture("generate_storyboard", { outputAssetIds: ["storyboard_asset"] }),
+      actionFixture("board_feedback", {
+        id: "feedback_1",
+        status: "proposed",
+        params: {
+          message: "Make this frame moodier.",
+          target: { scope: "tile", beatId: "beat_1", assetId: "storyboard_asset" },
+        },
+        createdAt: "2026-06-15T00:00:02.000Z",
+      }),
+    ]
+  );
+
+  assert.equal(payload.run.currentStageType, "storyboard");
+  assert.deepEqual(
+    payload.stages.map((stage) => stage.type),
+    ["storyboard"]
+  );
+  assert.deepEqual(
+    payload.stageItems.map((item) => item.assetId),
+    ["storyboard_asset"]
+  );
 });
 
 test("projects a regenerated stage from the latest action instead of stale failures", () => {
@@ -166,6 +196,50 @@ test("keeps unresolved tool failures within a grouped stage", () => {
   assert.equal(stage?.status, "failed");
   assert.equal(stage?.error?.message, "Missing beat id.");
   assert.deepEqual(stage?.artifactIds, ["clip_asset_1"]);
+});
+
+test("projects stage item purpose metadata from orchestrator tools", () => {
+  const payload = projectRunDetailFromParts(
+    runFixture({ status: "running" }),
+    [],
+    [
+      actionFixture("generate_storyboard", {
+        id: "storyboard_action",
+        outputAssetIds: ["storyboard_asset_1"],
+      }),
+      actionFixture("generate_keyframe", {
+        id: "keyframe_action",
+        outputAssetIds: ["keyframe_asset_1"],
+      }),
+      actionFixture("generate_clip", {
+        id: "clip_action",
+        outputAssetIds: ["clip_asset_1"],
+      }),
+      actionFixture("generate_audio", {
+        id: "audio_action",
+        outputAssetIds: ["audio_asset_1"],
+      }),
+      actionFixture("assemble_timeline", {
+        id: "timeline_action",
+        outputAssetIds: ["timeline_asset_1"],
+      }),
+    ]
+  );
+
+  assert.deepEqual(
+    payload.stageItems.map((item) => ({
+      kind: item.kind,
+      purpose: item.purpose,
+      assetId: item.assetId,
+    })),
+    [
+      { kind: "image", purpose: "storyboard_frame", assetId: "storyboard_asset_1" },
+      { kind: "image", purpose: "keyframe", assetId: "keyframe_asset_1" },
+      { kind: "video", purpose: "shot", assetId: "clip_asset_1" },
+      { kind: "audio", purpose: "audio", assetId: "audio_asset_1" },
+      { kind: "timeline", purpose: "timeline", assetId: "timeline_asset_1" },
+    ]
+  );
 });
 
 test("resumeRunInBackground starts resume and returns before it settles", async () => {

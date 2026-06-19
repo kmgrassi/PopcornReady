@@ -18,7 +18,7 @@ test.describe("run progress actions", () => {
     const routes = await installRunProgressRoutes(page, { detail: active });
 
     await page.goto(`/projects/${e2eProjectId}/runs/${active.run.runId}`);
-    await expect(page.getByRole("heading", { name: "Active generation" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Stop here or keep producing" })).toBeVisible();
 
     await expect(
       page.evaluate((projectId) => {

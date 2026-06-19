@@ -278,6 +278,7 @@ function makeStageItems(stageId: string): GenerationStageItem[] {
       itemId: "quality-summary",
       stageId,
       kind: "timeline",
+      purpose: "timeline",
       label: "Continuity report",
       status: "succeeded",
       createdAt: now,

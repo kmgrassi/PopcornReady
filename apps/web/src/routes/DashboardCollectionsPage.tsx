@@ -1,4 +1,4 @@
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import type { GenerationRunStatus } from "@popcorn/shared/v1/types";
 import {
@@ -79,6 +79,16 @@ function statusChipClass(status: string) {
 
 function StatusChip({ status }: { status: GenerationRunStatus | WorkspaceAsset["status"] }) {
   return <span className={`${styles.chip} ${statusChipClass(status)}`}>{titleCase(status)}</span>;
+}
+
+function VisibilityBadge({ visibility }: { visibility?: WorkspaceAsset["visibility"] }) {
+  const isPrivate = visibility === "private";
+  return (
+    <span className={styles.visibilityBadge} data-private={isPrivate}>
+      <span className={styles.visibilityIcon} aria-hidden="true" />
+      <span>{isPrivate ? "Private" : "Public"}</span>
+    </span>
+  );
 }
 
 function assetViewerItem(asset: WorkspaceAsset): MediaViewerItem {
@@ -307,6 +317,7 @@ export function ProjectsPage() {
 }
 
 export function AssetsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const authScope = useDashboardAuthScope();
   const [kind, setKind] = useState<AssetKindFilter>("all");
   const [source, setSource] = useState<AssetSourceFilter>("all");
@@ -318,6 +329,12 @@ export function AssetsPage() {
   const assetsQuery = useDashboardAssetsQuery(authScope, assetFilters);
   const visibilityMutation = useAssetVisibilityMutation(authScope, assetFilters);
   const mediaMutation = useAssetMediaMutation(authScope, assetFilters);
+  const setSelectedAsset = useCallback((assetId: string) => {
+    setSelectedAssetId(assetId);
+    const next = new URLSearchParams(searchParams);
+    next.set("assetId", assetId);
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const toggleVisibility = useCallback(async (asset: WorkspaceAsset) => {
     const id = asset.assetId ?? asset.id;
@@ -338,16 +355,16 @@ export function AssetsPage() {
   const openAsset = useCallback(async (asset: WorkspaceAsset) => {
     const id = asset.assetId ?? asset.id;
     if (asset.url || asset.thumbnailUrl) {
-      setSelectedAssetId(id);
+      setSelectedAsset(id);
       return;
     }
 
     setOpeningIds((current) => new Set(current).add(id));
     try {
       await mediaMutation.mutateAsync(id);
-      setSelectedAssetId(id);
+      setSelectedAsset(id);
     } catch {
-      setSelectedAssetId(id);
+      setSelectedAsset(id);
     } finally {
       setOpeningIds((current) => {
         const updated = new Set(current);
@@ -361,6 +378,24 @@ export function AssetsPage() {
     ? assetsQuery.items.findIndex((asset) => (asset.assetId ?? asset.id) === selectedAssetId)
     : -1;
   const selectedAsset = selectedIndex >= 0 ? assetsQuery.items[selectedIndex] : null;
+  const requestedAssetId = searchParams.get("assetId");
+
+  useEffect(() => {
+    if (!requestedAssetId || selectedAssetId) return;
+    const requestedAsset = assetsQuery.items.find(
+      (asset) => (asset.assetId ?? asset.id) === requestedAssetId,
+    );
+    if (!requestedAsset) return;
+    void openAsset(requestedAsset);
+  }, [assetsQuery.items, openAsset, requestedAssetId, selectedAssetId]);
+
+  const closeAssetViewer = useCallback(() => {
+    setSelectedAssetId(null);
+    if (!searchParams.has("assetId")) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete("assetId");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   return (
     <DashboardFrame title="Assets" description="Generated and uploaded media across all projects in this workspace.">
@@ -410,14 +445,19 @@ export function AssetsPage() {
                     <AssetPreview asset={asset} />
                     <div className={styles.cardBody}>
                       <div><span className={styles.rowTitle}>{asset.title ?? asset.filename ?? asset.id}</span><span className={styles.rowSub}>{asset.projectName}</span></div>
-                      <div className={styles.cardMeta}><span>{titleCase(asset.kind)}</span><span>{titleCase(asset.source === "upload" ? "uploaded" : asset.source)}</span><StatusChip status={asset.status} /></div>
+                      <div className={styles.cardMeta}>
+                        <span>{titleCase(asset.kind)}</span>
+                        <span>{titleCase(asset.source === "upload" ? "uploaded" : asset.source)}</span>
+                        <VisibilityBadge visibility={asset.visibility} />
+                        <StatusChip status={asset.status} />
+                      </div>
                     </div>
                   </button>
                   <div className={styles.cardActions}>
                     <ButtonLink
                       variant="ghost"
                       size="sm"
-                      to={projectCollectionPath(asset.projectId, { assetId: id })}
+                      to={projectCollectionPath(asset.projectId)}
                     >
                       Project
                     </ButtonLink>
@@ -430,9 +470,6 @@ export function AssetsPage() {
                         Publish as anchor
                       </Button>
                     ) : null}
-                    <span className={styles.visibilityLabel} data-private={isPrivate}>
-                      {isPrivate ? "Private" : "Public"}
-                    </span>
                     <Button
                       variant="secondary"
                       size="sm"
@@ -453,13 +490,15 @@ export function AssetsPage() {
         item={selectedAsset ? assetViewerItem(selectedAsset) : null}
         hasPrevious={selectedIndex > 0}
         hasNext={selectedIndex >= 0 && selectedIndex < assetsQuery.items.length - 1}
-        onClose={() => setSelectedAssetId(null)}
+        onClose={closeAssetViewer}
         onPrevious={() => {
-          if (selectedIndex > 0) setSelectedAssetId(assetsQuery.items[selectedIndex - 1].assetId ?? assetsQuery.items[selectedIndex - 1].id);
+          if (selectedIndex > 0) {
+            setSelectedAsset(assetsQuery.items[selectedIndex - 1].assetId ?? assetsQuery.items[selectedIndex - 1].id);
+          }
         }}
         onNext={() => {
           if (selectedIndex >= 0 && selectedIndex < assetsQuery.items.length - 1) {
-            setSelectedAssetId(assetsQuery.items[selectedIndex + 1].assetId ?? assetsQuery.items[selectedIndex + 1].id);
+            setSelectedAsset(assetsQuery.items[selectedIndex + 1].assetId ?? assetsQuery.items[selectedIndex + 1].id);
           }
         }}
         onRefresh={async (item) => {

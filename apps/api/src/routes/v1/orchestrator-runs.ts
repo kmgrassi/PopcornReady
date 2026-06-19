@@ -15,7 +15,8 @@ import {
   type OrchestratorRunGate,
   type RunActionSummary,
 } from "@/lib/api/v1/orchestrator-store";
-import { createBriefVersion, getProject } from "@/lib/api/v1/store";
+import { createAction, createBriefVersion, getProject } from "@/lib/api/v1/store";
+import { startPosterGenerationInBackground } from "@/lib/api/v1/poster-background";
 import { parseBrief } from "@/lib/api/v1/schemas";
 import { runOrchestratorToCompletion, resumeOrchestratorRun } from "@/lib/orchestrator/engine";
 import {
@@ -23,14 +24,18 @@ import {
   GENERATION_STAGE_ORDER,
   GATEABLE_GENERATION_STAGE_TYPES,
   type GateableGenerationStageType,
+  type BoardRevisionTarget,
   type GenerationRun,
   type GenerationRunStatus,
   type GenerationStage,
   type GenerationStageItem,
+  type GenerationStageItemKind,
+  type GenerationStageItemPurpose,
   type GenerationStageType,
 } from "@popcorn/shared/v1/types";
 
 const NO_STORE_HEADERS = { "Cache-Control": "no-store" };
+const BOARD_FEEDBACK_TOOL = "board_feedback";
 
 export const orchestratorRunsRouter = Router();
 
@@ -40,6 +45,7 @@ interface GenerationRunDetail {
   stageItems: GenerationStageItem[];
   resultArtifacts?: Array<{
     kind: GenerationStageItem["kind"];
+    purpose: GenerationStageItem["purpose"];
     artifactId: string;
     assetId?: string;
     stageId: string;
@@ -62,6 +68,66 @@ async function requireProjectAccess(workspaceId: string, projectId: string): Pro
 
 function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
+}
+
+function optionalStringField(
+  input: Record<string, unknown>,
+  key: keyof BoardRevisionTarget
+): string | undefined {
+  const value = input[key];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function parseBoardRevisionTarget(body: unknown, runId: string): BoardRevisionTarget {
+  if (!isRecord(body)) {
+    throw new ApiError("validation_failed", "Request body must be an object.");
+  }
+  const target = isRecord(body.target) ? body.target : {};
+  const scope = target.scope === "board" || target.scope === "tile" ? target.scope : undefined;
+  if (!scope) {
+    throw new ApiError("validation_failed", "target.scope must be board or tile.", {
+      fields: [{ path: "target.scope", message: "Expected board or tile." }],
+    });
+  }
+
+  const parsed: BoardRevisionTarget = { scope, runId };
+  for (const key of [
+    "stageId",
+    "itemId",
+    "storyboardId",
+    "sceneId",
+    "beatId",
+    "panelId",
+    "keyframeAssetId",
+    "clipAssetId",
+    "assetId",
+    "artifactId",
+    "label",
+  ] as const) {
+    const value = optionalStringField(target, key);
+    if (value) parsed[key] = value;
+  }
+  return parsed;
+}
+
+function parseBoardRevisionRequest(body: unknown, runId: string) {
+  if (!isRecord(body)) {
+    throw new ApiError("validation_failed", "Request body must be an object.");
+  }
+  const message = typeof body.message === "string" ? body.message.trim() : "";
+  if (!message) {
+    throw new ApiError("validation_failed", "A feedback message is required.", {
+      fields: [{ path: "message", message: "Required." }],
+    });
+  }
+  return {
+    message,
+    target: parseBoardRevisionTarget(body, runId),
+  };
+}
+
+function generationActions(actions: RunActionSummary[]): RunActionSummary[] {
+  return actions.filter((action) => action.tool !== BOARD_FEEDBACK_TOOL);
 }
 
 function promptBriefFromBody(body: unknown) {
@@ -226,6 +292,12 @@ function budgetUsd(body: unknown): number | undefined {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
+function requestedProvider(body: unknown): string | undefined {
+  if (!isRecord(body) || typeof body.provider !== "string") return undefined;
+  const trimmed = body.provider.trim();
+  return trimmed || undefined;
+}
+
 function toolStage(tool: string): GenerationStageType {
   switch (tool) {
     case "create_or_load_brief":
@@ -250,13 +322,59 @@ function toolStage(tool: string): GenerationStageType {
   }
 }
 
+function toolItemKind(tool: string): GenerationStageItemKind {
+  switch (tool) {
+    case "generate_clip":
+      return "video";
+    case "generate_audio":
+      return "audio";
+    case "assemble_timeline":
+      return "timeline";
+    case "export_video":
+      return "export";
+    default:
+      return "image";
+  }
+}
+
+function toolItemPurpose(tool: string): GenerationStageItemPurpose {
+  switch (tool) {
+    case "create_or_load_brief":
+      return "brief";
+    case "develop_story_blueprint":
+    case "draft_script":
+    case "plan_shots":
+    case "plan_visual_anchors":
+      return "plan";
+    case "generate_storyboard":
+      return "storyboard_frame";
+    case "generate_anchor":
+      return "visual_anchor";
+    case "generate_keyframe":
+      return "keyframe";
+    case "generate_clip":
+      return "shot";
+    case "generate_audio":
+      return "audio";
+    case "assemble_timeline":
+      return "timeline";
+    case "critique_timeline":
+    case "request_approval":
+      return "quality_review";
+    case "export_video":
+      return "export";
+    default:
+      return "unknown";
+  }
+}
+
 function runStatus(status: OrchestratorRun["status"]): GenerationRunStatus {
   if (status === "waiting") return "running";
   return status;
 }
 
 function hasFinishedVideo(actions: RunActionSummary[]): boolean {
-  return actions.some(
+  return generationActions(actions).some(
     (action) =>
       action.tool === "export_video" &&
       action.status === "applied" &&
@@ -326,8 +444,11 @@ function projectRun(
         enteredAt: reachedGate.updatedAt,
       }
     : null;
-  const latestRunningAction = [...actions].reverse().find((action) => action.status === "running");
-  const latestAction = [...actions].reverse()[0];
+  const projectedActions = generationActions(actions);
+  const latestRunningAction = [...projectedActions]
+    .reverse()
+    .find((action) => action.status === "running");
+  const latestAction = [...projectedActions].reverse()[0];
   const currentStageType =
     status === "succeeded"
       ? "ready"
@@ -364,6 +485,7 @@ function projectResultArtifacts(
     .flatMap((action) =>
       action.outputAssetIds.map((assetId) => ({
         kind: "export" as const,
+        purpose: "export" as const,
         artifactId: assetId,
         assetId,
         stageId: stageId(run.id, "export"),
@@ -373,7 +495,7 @@ function projectResultArtifacts(
 
 function projectStages(run: OrchestratorRun, actions: RunActionSummary[]): GenerationStage[] {
   const grouped = new Map<GenerationStageType, RunActionSummary[]>();
-  for (const action of actions) {
+  for (const action of generationActions(actions)) {
     const type = toolStage(action.tool);
     grouped.set(type, [...(grouped.get(type) ?? []), action]);
   }
@@ -420,12 +542,13 @@ function projectStages(run: OrchestratorRun, actions: RunActionSummary[]): Gener
 }
 
 function projectStageItems(run: OrchestratorRun, actions: RunActionSummary[]): GenerationStageItem[] {
-  return actions.flatMap((action) => {
+  return generationActions(actions).flatMap((action) => {
     const type = toolStage(action.tool);
     return action.outputAssetIds.map((assetId, index) => ({
       itemId: `${action.id}:${assetId}`,
       stageId: stageId(run.id, type),
-      kind: type === "audio_generation" ? "audio" : type === "export" ? "export" : "image",
+      kind: toolItemKind(action.tool),
+      purpose: toolItemPurpose(action.tool),
       label: `${action.tool} output ${index + 1}`,
       status: actionStatus(action.status),
       assetId,
@@ -513,7 +636,12 @@ orchestratorRunsRouter.post(
       budgetUsd: budget,
       body,
     });
-    if (!replayed) startRun(auth.workspaceId, run.id, auth.actor.id);
+    if (!replayed) {
+      startPosterGenerationInBackground(auth, projectId, {
+        provider: requestedProvider(body),
+      });
+      startRun(auth.workspaceId, run.id, auth.actor.id);
+    }
     return { status: 202, body: { runId: run.id } };
   })
 );
@@ -632,6 +760,63 @@ orchestratorRunsRouter.post(
       completedAt: new Date().toISOString(),
     });
     return { status: 200, body: await assembleRunDetail(runId, projectId) };
+  })
+);
+
+orchestratorRunsRouter.post(
+  "/projects/:projectId/generation-runs/:runId/board-revisions",
+  mutation(async ({ auth, body }, params) => {
+    const projectId = requireParam(params, "projectId");
+    const runId = requireParam(params, "runId");
+    await requireProjectAccess(auth.workspaceId, projectId);
+    const run = await requireProjectRun(runId, projectId);
+    if (run.status === "failed" || run.status === "canceled") {
+      throw new ApiError(
+        "validation_failed",
+        "Board feedback cannot revise a failed or canceled generation run."
+      );
+    }
+    const request = parseBoardRevisionRequest(body, runId);
+    const action = await createAction({
+      projectId,
+      orchestratorRunId: runId,
+      tool: BOARD_FEEDBACK_TOOL,
+      status: "applied",
+      params: {
+        schemaVersion: "board_revision_request.v1",
+        message: request.message,
+        target: request.target,
+      },
+      inputAssetIds: [
+        request.target.clipAssetId,
+        request.target.keyframeAssetId,
+        request.target.assetId,
+      ].filter((id): id is string => Boolean(id)),
+      rationale: "User requested an AI-mediated board or tile revision.",
+      proposal: {
+        message: request.message,
+        target: request.target,
+      },
+    });
+    if (run.status === "queued" || run.status === "succeeded") {
+      await updateOrchestratorRun(runId, {
+        status: "running",
+        startedAt: run.startedAt ?? new Date().toISOString(),
+      });
+    }
+    resumeRunInBackground(auth.workspaceId, runId);
+
+    return {
+      status: 202,
+      body: {
+        revision: {
+          id: action.id,
+          message: request.message,
+          target: request.target,
+          createdAt: action.createdAt,
+        },
+      },
+    };
   })
 );
 

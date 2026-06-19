@@ -4,10 +4,13 @@ import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import {
   GENERATION_STAGE_LABELS,
+  GENERATION_STAGE_ORDER,
   type GenerationRun,
   type GenerationStage,
   type GenerationStageType,
   type GenerationStageItem,
+  type BoardRevisionTarget,
+  type ProjectStoryboard,
   type V1Project,
   type VideoBriefInput,
 } from "@popcorn/shared/v1/types";
@@ -16,9 +19,15 @@ import {
   GenerationRunClient,
   GenerationRunRequestError,
 } from "../../lib/v1/generation-runs/client";
+import { useProjectQuery } from "../../lib/queryClient";
 import { v1Api } from "../../lib/api-client";
 import { StageRail } from "./StageRail";
+import {
+  StoryboardBoard as FeedbackStoryboardBoard,
+  storyboardFeedbackTargetKey,
+} from "./StoryboardBoard";
 import { TerminalState } from "./TerminalState";
+import { StoryboardBoard as ReadonlyStoryboardBoard } from "../studio/StoryboardBoard";
 import styles from "./ProgressView.module.css";
 
 interface ProgressViewProps {
@@ -49,6 +58,10 @@ function isTerminal(status: GenerationRun["status"]): boolean {
 }
 
 const VISIBLE_STAGE_COUNT = 8;
+
+const ORDERED_STAGE_TYPES = Object.entries(GENERATION_STAGE_ORDER)
+  .sort(([, a], [, b]) => a - b)
+  .map(([type]) => type as GenerationStageType);
 
 const REVIEW_STAGE_LABELS: Record<GenerationStageType, string> = {
   brief_intake: "Concept",
@@ -105,12 +118,65 @@ function progressSummary(run: GenerationRun, stages: GenerationStage[]) {
   };
 }
 
+function currentRunStage(
+  run: GenerationRun,
+  stages: GenerationStage[],
+): GenerationStage | undefined {
+  return (
+    stages.find((stage) => run.reviewGate?.stageId === stage.stageId) ??
+    stages.find((stage) => stage.status === "running") ??
+    stages.find((stage) => stage.status === "failed") ??
+    stages.find((stage) => stage.status === "queued")
+  );
+}
+
+function nextQueuedStage(
+  run: GenerationRun,
+  stages: GenerationStage[],
+): GenerationStage | undefined {
+  const ordered = [...stages].sort((a, b) => a.order - b.order);
+  const active = currentRunStage(run, ordered);
+  const minOrder = active?.order ?? -1;
+  return ordered.find(
+    (stage) =>
+      stage.order > minOrder &&
+      (stage.status === "queued" || stage.status === "running"),
+  );
+}
+
+function nextStageType(
+  run: GenerationRun,
+  stages: GenerationStage[],
+): GenerationStageType | undefined {
+  if (isTerminal(run.status)) return undefined;
+
+  const queued = nextQueuedStage(run, stages);
+  if (queued) return queued.type;
+
+  const currentType =
+    run.reviewGate?.stageType ?? currentRunStage(run, stages)?.type ?? run.currentStageType;
+  if (!currentType) return undefined;
+
+  const currentOrder = GENERATION_STAGE_ORDER[currentType];
+  return ORDERED_STAGE_TYPES.find(
+    (type) => GENERATION_STAGE_ORDER[type] > currentOrder,
+  );
+}
+
 function formatDateTime(value?: string) {
   if (!value) return "Not started";
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+function formatLength(seconds?: number): string | null {
+  if (!seconds) return null;
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
 }
 
 function formatBriefMeta(brief: VideoBriefInput): string {
@@ -120,6 +186,15 @@ function formatBriefMeta(brief: VideoBriefInput): string {
     brief.platform,
     brief.format,
   ].filter(Boolean).join(" / ");
+}
+
+function planMetaItems(brief: VideoBriefInput): string[] {
+  return [
+    formatLength(brief.targetLengthSec),
+    brief.aspectRatio,
+    brief.platform,
+    brief.format,
+  ].filter((item): item is string => Boolean(item));
 }
 
 function briefMetaItems(brief: VideoBriefInput): string[] {
@@ -133,6 +208,7 @@ function briefMetaItems(brief: VideoBriefInput): string[] {
 
 function reviewHeading(stageType: GenerationStageType): string {
   if (stageType === "brief_intake") return "Concept ready for review";
+  if (stageType === "storyboard") return "Plan ready for review";
   return `${reviewStageLabel(stageType)} ready for review`;
 }
 
@@ -158,6 +234,44 @@ function workspaceReturnLabel({
   if (hasStudioDraft && terminal) return "View draft";
   if (hasStudioDraft) return "View draft";
   return "Open Studio";
+}
+
+const BOARD_STAGE_TYPES = new Set<GenerationStageType>([
+  "storyboard",
+  "asset_generation",
+]);
+
+const ASSET_BOARD_TOOL_LABELS = ["generate_keyframe", "generate_clip"];
+
+function isStoryboardBoardItem(
+  item: GenerationStageItem,
+  stageById: Map<string, GenerationStage>,
+): boolean {
+  if (item.kind !== "image" && item.kind !== "video") return false;
+  const stage = stageById.get(item.stageId);
+  if (!stage || !BOARD_STAGE_TYPES.has(stage.type)) return false;
+  if (stage.type === "storyboard") return true;
+
+  const label = item.label.toLowerCase();
+  return ASSET_BOARD_TOOL_LABELS.some((tool) => label.startsWith(tool));
+}
+
+function splitStoryboardItems(
+  items: GenerationStageItem[],
+  stageById: Map<string, GenerationStage>,
+) {
+  const boardItems: GenerationStageItem[] = [];
+  const genericItems: GenerationStageItem[] = [];
+
+  for (const item of items) {
+    if (isStoryboardBoardItem(item, stageById)) {
+      boardItems.push(item);
+    } else {
+      genericItems.push(item);
+    }
+  }
+
+  return { boardItems, genericItems };
 }
 
 function BriefReviewOutput({
@@ -211,6 +325,68 @@ function BriefReviewOutput({
   );
 }
 
+function PlanRecap({
+  project,
+  loading,
+}: {
+  project: V1Project | null;
+  loading: boolean;
+}) {
+  const brief = project?.brief ?? null;
+  const requiredBeats = brief?.constraints?.requiredBeats ?? [];
+
+  return (
+    <section className={styles.planRecap} aria-labelledby="plan-recap-heading">
+      <div className={styles.planRecapHeader}>
+        <div>
+          <p className={styles.eyebrow}>Approved plan</p>
+          <h2 id="plan-recap-heading" className={styles.planRecapTitle}>
+            {project?.name ?? "Project plan"}
+          </h2>
+        </div>
+        {brief ? (
+          <div className={styles.planRecapMeta} aria-label={formatBriefMeta(brief)}>
+            {planMetaItems(brief).map((item) => (
+              <span key={item}>{item}</span>
+            ))}
+          </div>
+        ) : null}
+      </div>
+      {loading ? (
+        <p className={styles.planRecapLoading}>Loading plan context...</p>
+      ) : brief ? (
+        <>
+          <p className={styles.planRecapGoal}>{brief.goal}</p>
+          <dl className={styles.planRecapFacts}>
+            {brief.hookQuestion ? (
+              <div>
+                <dt>Hook</dt>
+                <dd>{brief.hookQuestion}</dd>
+              </div>
+            ) : null}
+            {requiredBeats.length > 0 ? (
+              <div>
+                <dt>Beat count</dt>
+                <dd>{requiredBeats.length} planned beats</dd>
+              </div>
+            ) : null}
+            {brief.strongestVisual ? (
+              <div>
+                <dt>Visual direction</dt>
+                <dd>{brief.strongestVisual}</dd>
+              </div>
+            ) : null}
+          </dl>
+        </>
+      ) : (
+        <p className={styles.planRecapLoading}>
+          Plan details are unavailable for this run, but production is continuing from the saved project context.
+        </p>
+      )}
+    </section>
+  );
+}
+
 export function ProgressView({
   run,
   stages,
@@ -221,13 +397,17 @@ export function ProgressView({
   alternateRuns,
 }: ProgressViewProps) {
   const [detail, setDetail] = useState({ run, stages, stageItems });
-  const [project, setProject] = useState<V1Project | null>(null);
-  const [projectLoading, setProjectLoading] = useState(false);
+  const [projectStoryboard, setProjectStoryboard] = useState<ProjectStoryboard | null>(null);
   const [fallbackApproving, setFallbackApproving] = useState(false);
   const [fallbackError, setFallbackError] = useState<string | null>(null);
   const [fallbackFeedbackNote, setFallbackFeedbackNote] = useState("");
+  const [boardFeedbackPendingKey, setBoardFeedbackPendingKey] = useState<string | null>(null);
+  const [boardFeedbackError, setBoardFeedbackError] = useState<string | null>(null);
   const reviewGateKey = detail.run.reviewGate?.stageId ?? null;
   const isBriefReviewGate = detail.run.reviewGate?.stageType === "brief_intake";
+  const projectQuery = useProjectQuery(detail.run.projectId);
+  const project = projectQuery.data?.project ?? null;
+  const projectLoading = projectQuery.isLoading;
 
   useEffect(() => {
     setDetail({ run, stages, stageItems });
@@ -239,26 +419,6 @@ export function ProgressView({
     setFallbackFeedbackNote("");
   }, [reviewGateKey]);
 
-  useEffect(() => {
-    let canceled = false;
-    setProjectLoading(true);
-    v1Api
-      .getProject(detail.run.projectId)
-      .then(({ project }) => {
-        if (!canceled) setProject(project);
-      })
-      .catch(() => {
-        if (!canceled) setProject(null);
-      })
-      .finally(() => {
-        if (!canceled) setProjectLoading(false);
-      });
-
-    return () => {
-      canceled = true;
-    };
-  }, [detail.run.projectId]);
-
   const terminal = isTerminal(detail.run.status);
   const reviewItems = detail.run.reviewGate
     ? detail.stageItems.filter((item) => item.stageId === detail.run.reviewGate?.stageId)
@@ -266,12 +426,39 @@ export function ProgressView({
   const generatedItems = detail.run.reviewGate
     ? detail.stageItems.filter((item) => item.stageId !== detail.run.reviewGate?.stageId)
     : detail.stageItems;
+  const stageById = new Map(detail.stages.map((stage) => [stage.stageId, stage]));
+  const reviewOutputGroups = splitStoryboardItems(reviewItems, stageById);
+  const generatedOutputGroups = splitStoryboardItems(generatedItems, stageById);
+
+  useEffect(() => {
+    if (generatedOutputGroups.boardItems.length === 0) {
+      setProjectStoryboard(null);
+      return;
+    }
+
+    let canceled = false;
+    v1Api
+      .getProjectStoryboard(detail.run.projectId)
+      .then(({ storyboard }) => {
+        if (!canceled) setProjectStoryboard(storyboard ?? null);
+      })
+      .catch(() => {
+        if (!canceled) setProjectStoryboard(null);
+      });
+
+    return () => {
+      canceled = true;
+    };
+  }, [detail.run.projectId, generatedOutputGroups.boardItems.length]);
+
   const pending = reviewActions?.pending ?? (fallbackApproving ? "approve" : undefined);
   const actionError = reviewActions?.error ?? fallbackError;
   const showCancelAction = !terminal && !detail.run.reviewGate && !!cancelAction;
   const feedbackNote = reviewActions?.feedbackNote ?? fallbackFeedbackNote;
   const setFeedbackNote = reviewActions?.onFeedbackNoteChange ?? setFallbackFeedbackNote;
   const progress = progressSummary(detail.run, detail.stages);
+  const nextType = nextStageType(detail.run, detail.stages);
+  const nextStageLabel = nextType ? reviewStageLabel(nextType) : null;
   const currentStageLabel = detail.run.reviewGate
     ? reviewStageLabel(detail.run.reviewGate.stageType)
     : detail.run.currentStageType
@@ -350,6 +537,25 @@ export function ProgressView({
     ? () => reviewActions.onApprove(feedbackNote)
     : approveFallback;
 
+  async function submitBoardFeedback(input: {
+    message: string;
+    target: BoardRevisionTarget;
+  }) {
+    const key = storyboardFeedbackTargetKey(input.target);
+    setBoardFeedbackPendingKey(key);
+    setBoardFeedbackError(null);
+    try {
+      await v1Api.createRunBoardRevision(detail.run.projectId, detail.run.runId, input);
+    } catch (err) {
+      setBoardFeedbackError(
+        err instanceof Error ? err.message : "Could not send board feedback.",
+      );
+      throw err;
+    } finally {
+      setBoardFeedbackPendingKey(null);
+    }
+  }
+
   return (
     <div className={styles.shell}>
       <header className={styles.header}>
@@ -371,6 +577,12 @@ export function ProgressView({
               <span className={styles.statusLabel}>Status</span>
               <strong>{headerStatus(detail.run)}</strong>
             </div>
+            {nextStageLabel ? (
+              <div>
+                <span className={styles.statusLabel}>Next step</span>
+                <strong>{nextStageLabel}</strong>
+              </div>
+            ) : null}
             <div>
               <span className={styles.statusLabel}>Progress</span>
               <strong>
@@ -418,43 +630,9 @@ export function ProgressView({
 
       <div className={styles.body}>
         <section className={styles.main}>
-          {projectBrief || projectLoading ? (
-            <section className={styles.workspaceRecap} aria-labelledby="workspace-recap-heading">
-              <div>
-                <p className={styles.eyebrow}>Approved plan</p>
-                <h2 id="workspace-recap-heading" className={styles.cardHeading}>
-                  {projectBrief?.goal ?? (projectLoading ? "Loading plan context..." : "Plan context")}
-                </h2>
-              </div>
-              {projectBrief ? (
-                <>
-                  <div className={styles.briefReviewMetaRow} aria-label={formatBriefMeta(projectBrief)}>
-                    {briefMetaItems(projectBrief).map((item) => (
-                      <span key={item}>{item}</span>
-                    ))}
-                  </div>
-                  {projectBrief.hookQuestion || projectBrief.strongestVisual ? (
-                    <dl className={styles.recapFields}>
-                      {projectBrief.hookQuestion ? (
-                        <div>
-                          <dt>Hook</dt>
-                          <dd>{projectBrief.hookQuestion}</dd>
-                        </div>
-                      ) : null}
-                      {projectBrief.strongestVisual ? (
-                        <div>
-                          <dt>Visual direction</dt>
-                          <dd>{projectBrief.strongestVisual}</dd>
-                        </div>
-                      ) : null}
-                    </dl>
-                  ) : null}
-                </>
-              ) : null}
-            </section>
-          ) : null}
-
           {terminal ? <TerminalState run={detail.run} /> : null}
+
+          <PlanRecap project={project} loading={projectLoading} />
 
           {showCancelAction ? (
             <section
@@ -465,10 +643,13 @@ export function ProgressView({
                 <div>
                   <p className={styles.eyebrow}>Run controls</p>
                   <h2 id="run-actions-heading" className={styles.cardHeading}>
-                    Active generation
+                    Stop here or keep producing
                   </h2>
                   <p className={styles.activeRunMessage}>
-                    {detail.run.message ?? `${currentStageLabel} is in progress.`}
+                    {detail.run.message ??
+                      `${currentStageLabel} is in progress.${
+                        nextStageLabel ? ` Next step: ${nextStageLabel}.` : ""
+                      }`} You can stop here and return to the draft instead of letting the run continue.
                   </p>
                 </div>
                 <div className={styles.actions}>
@@ -503,16 +684,27 @@ export function ProgressView({
                 <p className={styles.reviewDescription}>
                   {detail.run.reviewGate.stageType === "brief_intake"
                     ? "Review the concept brief before the run continues to script generation."
-                    : "Review this stage before the run continues to the next generation step."}
+                    : detail.run.reviewGate.stageType === "storyboard"
+                      ? "Review the plan before the agent starts storyboard, keyframe, or clip generation. Stop here if you do not want the agent to keep producing from this boundary."
+                      : "Review this stage before the run continues to the next generation step. Stop here if you do not want the agent to keep producing from this boundary."}
                 </p>
               </div>
               {isBriefReviewGate && (projectBrief || projectLoading) ? (
                 <BriefReviewOutput brief={projectBrief} loading={projectLoading} />
               ) : reviewItems.length > 0 ? (
-                <div className={`${styles.itemGrid} ${styles.reviewOutputGrid}`}>
-                  {reviewItems.map((item) => (
-                    <StageItemCard key={item.itemId} item={item} />
-                  ))}
+                <div className={styles.reviewOutputs}>
+                  <ReadonlyStoryboardBoard
+                    items={reviewOutputGroups.boardItems}
+                    title="Review the storyboard"
+                    description="Visual outputs from this checkpoint are grouped as beat tiles before the run continues."
+                  />
+                  {reviewOutputGroups.genericItems.length > 0 ? (
+                    <div className={`${styles.itemGrid} ${styles.reviewOutputGrid}`}>
+                      {reviewOutputGroups.genericItems.map((item) => (
+                        <StageItemCard key={item.itemId} item={item} />
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <div className={styles.reviewOutputEmpty}>
@@ -584,10 +776,22 @@ export function ProgressView({
               <h2 id="generated-assets-heading" className={styles.cardHeading}>
                 Generated assets
               </h2>
-              <div className={`${styles.itemGrid} ${styles.reviewOutputGrid}`}>
-                {generatedItems.map((item) => (
-                  <StageItemCard key={item.itemId} item={item} />
-                ))}
+              <div className={styles.generatedOutputs}>
+                <FeedbackStoryboardBoard
+                  runId={detail.run.runId}
+                  items={generatedOutputGroups.boardItems}
+                  storyboard={projectStoryboard}
+                  pendingTargetKey={boardFeedbackPendingKey}
+                  error={boardFeedbackError}
+                  onFeedback={submitBoardFeedback}
+                />
+                {generatedOutputGroups.genericItems.length > 0 ? (
+                  <div className={`${styles.itemGrid} ${styles.reviewOutputGrid}`}>
+                    {generatedOutputGroups.genericItems.map((item) => (
+                      <StageItemCard key={item.itemId} item={item} />
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </section>
           ) : null}
