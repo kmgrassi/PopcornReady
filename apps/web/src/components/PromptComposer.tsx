@@ -5,6 +5,7 @@ import {
   GENERATION_STAGE_LABELS,
   type GateableGenerationStageType,
 } from "@popcorn/shared/v1/types";
+import styles from "./PromptComposer.module.css";
 
 const FEATURED_TEMPLATE = {
   icon: "PR",
@@ -143,28 +144,28 @@ export function PromptComposer() {
   return (
     <div className="lp-prompt">
       {IS_LOCALHOST && !featuredDismissed && (
-        <div className="lp-featured-template">
+        <div className={styles.featuredTemplate}>
           <button
             type="button"
-            className="lp-featured-template-main"
+            className={styles.featuredMain}
             onClick={() => setValue(FEATURED_TEMPLATE.prompt)}
             disabled={submitting}
             title={FEATURED_TEMPLATE.prompt}
           >
-            <span className="lp-featured-template-icon" aria-hidden="true">
+            <span className={styles.featuredIcon} aria-hidden="true">
               {FEATURED_TEMPLATE.icon}
             </span>
-            <span className="lp-featured-template-copy">
-              <span className="lp-featured-template-label">{FEATURED_TEMPLATE.label}</span>
-              <span className="lp-featured-template-text">{FEATURED_TEMPLATE.text}</span>
+            <span className={styles.featuredCopy}>
+              <span className={styles.featuredLabel}>{FEATURED_TEMPLATE.label}</span>
+              <span className={styles.featuredText}>{FEATURED_TEMPLATE.text}</span>
             </span>
-            <span className="lp-featured-template-cta" aria-hidden="true">
+            <span className={styles.featuredCta} aria-hidden="true">
               Use this
             </span>
           </button>
           <button
             type="button"
-            className="lp-featured-template-dismiss"
+            className={styles.featuredDismiss}
             onClick={() => setFeaturedDismissed(true)}
             aria-label="Hide featured template"
             title="Hide featured template"
@@ -321,15 +322,15 @@ export function PromptComposer() {
           </div>
         )}
       </div>
-      <div className="lp-templates">
-        <span className="lp-template-roller" aria-label="Video templates">
+      <div className={styles.templates}>
+        <span className={styles.templateRoller} aria-label="Video templates">
           <span
             key={activeTemplate.label}
-            className="lp-template-item"
+            className={styles.templateItem}
             title={activeTemplate.prompt}
           >
-            <span className="lp-template-eyebrow">Template idea</span>
-            <span className="lp-template-icon" aria-hidden="true">
+            <span className={styles.templateEyebrow}>Template idea</span>
+            <span className={styles.templateIcon} aria-hidden="true">
               {activeTemplate.icon}
             </span>
             {activeTemplate.text}
@@ -337,7 +338,7 @@ export function PromptComposer() {
         </span>
         <button
           type="button"
-          className="lp-template-generate"
+          className={styles.templateGenerate}
           onClick={() => setValue(activeTemplate.prompt)}
           disabled={submitting}
         >
