@@ -8,6 +8,7 @@ import {
   type GenerationStage,
   type GenerationStageType,
   type GenerationStageItem,
+  type V1Project,
   type VideoBriefInput,
 } from "@popcorn/shared/v1/types";
 import { StageItemCard } from "../generation-progress/StageItemCard";
@@ -15,7 +16,7 @@ import {
   GenerationRunClient,
   GenerationRunRequestError,
 } from "../../lib/v1/generation-runs/client";
-import { v1Api } from "../../lib/api-client";
+import { useProjectQuery } from "../../lib/queryClient";
 import { StageRail } from "./StageRail";
 import { TerminalState } from "./TerminalState";
 import styles from "./ProgressView.module.css";
@@ -104,12 +105,46 @@ function progressSummary(run: GenerationRun, stages: GenerationStage[]) {
   };
 }
 
+function currentRunStage(
+  run: GenerationRun,
+  stages: GenerationStage[],
+): GenerationStage | undefined {
+  return (
+    stages.find((stage) => run.reviewGate?.stageId === stage.stageId) ??
+    stages.find((stage) => stage.status === "running") ??
+    stages.find((stage) => stage.status === "failed") ??
+    stages.find((stage) => stage.status === "queued")
+  );
+}
+
+function nextQueuedStage(
+  run: GenerationRun,
+  stages: GenerationStage[],
+): GenerationStage | undefined {
+  const ordered = [...stages].sort((a, b) => a.order - b.order);
+  const active = currentRunStage(run, ordered);
+  const minOrder = active?.order ?? -1;
+  return ordered.find(
+    (stage) =>
+      stage.order > minOrder &&
+      (stage.status === "queued" || stage.status === "running"),
+  );
+}
+
 function formatDateTime(value?: string) {
   if (!value) return "Not started";
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+function formatLength(seconds?: number): string | null {
+  if (!seconds) return null;
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
 }
 
 function formatBriefMeta(brief: VideoBriefInput): string {
@@ -119,6 +154,15 @@ function formatBriefMeta(brief: VideoBriefInput): string {
     brief.platform,
     brief.format,
   ].filter(Boolean).join(" / ");
+}
+
+function planMetaItems(brief: VideoBriefInput): string[] {
+  return [
+    formatLength(brief.targetLengthSec),
+    brief.aspectRatio,
+    brief.platform,
+    brief.format,
+  ].filter((item): item is string => Boolean(item));
 }
 
 function briefMetaItems(brief: VideoBriefInput): string[] {
@@ -195,6 +239,68 @@ function BriefReviewOutput({
   );
 }
 
+function PlanRecap({
+  project,
+  loading,
+}: {
+  project: V1Project | null;
+  loading: boolean;
+}) {
+  const brief = project?.brief ?? null;
+  const requiredBeats = brief?.constraints?.requiredBeats ?? [];
+
+  return (
+    <section className={styles.planRecap} aria-labelledby="plan-recap-heading">
+      <div className={styles.planRecapHeader}>
+        <div>
+          <p className={styles.eyebrow}>Approved plan</p>
+          <h2 id="plan-recap-heading" className={styles.planRecapTitle}>
+            {project?.name ?? "Project plan"}
+          </h2>
+        </div>
+        {brief ? (
+          <div className={styles.planRecapMeta} aria-label={formatBriefMeta(brief)}>
+            {planMetaItems(brief).map((item) => (
+              <span key={item}>{item}</span>
+            ))}
+          </div>
+        ) : null}
+      </div>
+      {loading ? (
+        <p className={styles.planRecapLoading}>Loading plan context...</p>
+      ) : brief ? (
+        <>
+          <p className={styles.planRecapGoal}>{brief.goal}</p>
+          <dl className={styles.planRecapFacts}>
+            {brief.hookQuestion ? (
+              <div>
+                <dt>Hook</dt>
+                <dd>{brief.hookQuestion}</dd>
+              </div>
+            ) : null}
+            {requiredBeats.length > 0 ? (
+              <div>
+                <dt>Beat count</dt>
+                <dd>{requiredBeats.length} planned beats</dd>
+              </div>
+            ) : null}
+            {brief.strongestVisual ? (
+              <div>
+                <dt>Visual direction</dt>
+                <dd>{brief.strongestVisual}</dd>
+              </div>
+            ) : null}
+          </dl>
+        </>
+      ) : (
+        <p className={styles.planRecapLoading}>
+          Plan details are unavailable for this run, but production is continuing from the saved project context.
+        </p>
+      )}
+    </section>
+  );
+}
+
 export function ProgressView({
   run,
   stages,
@@ -205,13 +311,14 @@ export function ProgressView({
   alternateRuns,
 }: ProgressViewProps) {
   const [detail, setDetail] = useState({ run, stages, stageItems });
-  const [projectBrief, setProjectBrief] = useState<VideoBriefInput | null>(null);
-  const [projectBriefLoading, setProjectBriefLoading] = useState(false);
   const [fallbackApproving, setFallbackApproving] = useState(false);
   const [fallbackError, setFallbackError] = useState<string | null>(null);
   const [fallbackFeedbackNote, setFallbackFeedbackNote] = useState("");
   const reviewGateKey = detail.run.reviewGate?.stageId ?? null;
   const isBriefReviewGate = detail.run.reviewGate?.stageType === "brief_intake";
+  const projectQuery = useProjectQuery(detail.run.projectId);
+  const project = projectQuery.data?.project ?? null;
+  const projectLoading = projectQuery.isLoading;
 
   useEffect(() => {
     setDetail({ run, stages, stageItems });
@@ -222,32 +329,6 @@ export function ProgressView({
   useEffect(() => {
     setFallbackFeedbackNote("");
   }, [reviewGateKey]);
-
-  useEffect(() => {
-    if (!isBriefReviewGate) {
-      setProjectBrief(null);
-      setProjectBriefLoading(false);
-      return;
-    }
-
-    let canceled = false;
-    setProjectBriefLoading(true);
-    v1Api
-      .getProject(detail.run.projectId)
-      .then(({ project }) => {
-        if (!canceled) setProjectBrief(project.brief ?? null);
-      })
-      .catch(() => {
-        if (!canceled) setProjectBrief(null);
-      })
-      .finally(() => {
-        if (!canceled) setProjectBriefLoading(false);
-      });
-
-    return () => {
-      canceled = true;
-    };
-  }, [detail.run.projectId, isBriefReviewGate]);
 
   const terminal = isTerminal(detail.run.status);
   const reviewItems = detail.run.reviewGate
@@ -262,6 +343,8 @@ export function ProgressView({
   const feedbackNote = reviewActions?.feedbackNote ?? fallbackFeedbackNote;
   const setFeedbackNote = reviewActions?.onFeedbackNoteChange ?? setFallbackFeedbackNote;
   const progress = progressSummary(detail.run, detail.stages);
+  const nextStage = nextQueuedStage(detail.run, detail.stages);
+  const nextStageLabel = nextStage ? reviewStageLabel(nextStage.type) : "Review";
   const currentStageLabel = detail.run.reviewGate
     ? reviewStageLabel(detail.run.reviewGate.stageType)
     : detail.run.currentStageType
@@ -337,18 +420,14 @@ export function ProgressView({
     <div className={styles.shell}>
       <header className={styles.header}>
         <div className={styles.headerCopy}>
-          <h1 className={styles.title}>Video generation run</h1>
-          <div className={styles.runIdRow}>
-            <span className={styles.runIdLabel}>Run ID</span>
-            <code className={styles.runId} title={detail.run.runId}>{shortId(detail.run.runId)}</code>
-            <button
-              type="button"
-              className={styles.copyButton}
-              onClick={() => void navigator.clipboard?.writeText(detail.run.runId)}
-            >
-              Copy
-            </button>
-          </div>
+          <p className={styles.eyebrow}>Act Two / Produce</p>
+          <h1 className={styles.title}>Producing your video</h1>
+          <p className={styles.headerDescription}>
+            {project?.brief?.goal ??
+              project?.name ??
+              detail.run.message ??
+              "The agent is turning the approved plan into production assets, timeline, review, and export."}
+          </p>
         </div>
         <div className={styles.headerActions}>
           <div className={styles.headerStatusPanel} aria-label="Current run status">
@@ -359,6 +438,10 @@ export function ProgressView({
             <div>
               <span className={styles.statusLabel}>Status</span>
               <strong>{headerStatus(detail.run)}</strong>
+            </div>
+            <div>
+              <span className={styles.statusLabel}>Next step</span>
+              <strong>{nextStageLabel}</strong>
             </div>
             <div>
               <span className={styles.statusLabel}>Progress</span>
@@ -409,6 +492,8 @@ export function ProgressView({
         <section className={styles.main}>
           {terminal ? <TerminalState run={detail.run} /> : null}
 
+          <PlanRecap project={project} loading={projectLoading} />
+
           {showCancelAction ? (
             <section
               className={`${styles.card} ${styles.activeRunCard}`}
@@ -418,10 +503,11 @@ export function ProgressView({
                 <div>
                   <p className={styles.eyebrow}>Run controls</p>
                   <h2 id="run-actions-heading" className={styles.cardHeading}>
-                    Active generation
+                    Stop here or keep producing
                   </h2>
                   <p className={styles.activeRunMessage}>
-                    {detail.run.message ?? `${currentStageLabel} is in progress.`}
+                    {detail.run.message ??
+                      `${currentStageLabel} is in progress. Next step: ${nextStageLabel}.`}
                   </p>
                 </div>
                 <div className={styles.actions}>
@@ -431,7 +517,7 @@ export function ProgressView({
                     onClick={cancelAction.onCancel}
                     disabled={cancelAction.pending}
                   >
-                    {cancelAction.pending ? "Canceling..." : "Cancel generation"}
+                    {cancelAction.pending ? "Canceling..." : "Stop here"}
                   </button>
                 </div>
               </div>
@@ -459,8 +545,8 @@ export function ProgressView({
                     : "Review this stage before the run continues to the next generation step."}
                 </p>
               </div>
-              {isBriefReviewGate && (projectBrief || projectBriefLoading) ? (
-                <BriefReviewOutput brief={projectBrief} loading={projectBriefLoading} />
+              {isBriefReviewGate && (project?.brief || projectLoading) ? (
+                <BriefReviewOutput brief={project?.brief ?? null} loading={projectLoading} />
               ) : reviewItems.length > 0 ? (
                 <div className={`${styles.itemGrid} ${styles.reviewOutputGrid}`}>
                   {reviewItems.map((item) => (
@@ -558,6 +644,17 @@ export function ProgressView({
             Started {formatDateTime(detail.run.startedAt)}. Updated{" "}
             {formatDateTime(detail.run.updatedAt)}.
           </p>
+          <div className={styles.diagnosticsRow}>
+            <span className={styles.statusLabel}>Run ID</span>
+            <code className={styles.runId} title={detail.run.runId}>{shortId(detail.run.runId)}</code>
+            <button
+              type="button"
+              className={styles.copyButton}
+              onClick={() => void navigator.clipboard?.writeText(detail.run.runId)}
+            >
+              Copy
+            </button>
+          </div>
         </aside>
       </div>
     </div>
