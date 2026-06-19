@@ -44,6 +44,18 @@ the audio" — the agent decides the **minimal set of work to redo**. That might
 audio-only, or it might ripple *back* and re-do a couple of shots. We must not
 trap ourselves in the old, forward-only "edit the timeline with patches" model.
 
+**End-to-end is the happy path, not the enemy.** Running cleanly forward — plan,
+generate, edit, review, publish, in order, untouched — is the **default** and a
+first-class outcome; that is exactly what "autonomous by default" (§2.2) means,
+and there should always be a way to get a finished video from a single prompt in
+one pass. What we reject is forward-**only**: a pipeline that can *only* go
+forward, where the sole way to change anything is to start over (the
+all-or-nothing conveyor belt of §3). "Non-one-directional" **adds** a capability;
+it does not remove the straight-through run. So the same engine supports both a
+full end-to-end pass *and* surgical edits the user injects at any stage — the
+second is just the first with the ability to step back in and recompute only what
+that change touches.
+
 ## 2. Principles (the mental-model shift)
 
 1. **The agent owns the flow; stages are tools.** `brief → plan → anchors →
