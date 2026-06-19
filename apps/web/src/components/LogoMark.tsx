@@ -3,9 +3,7 @@ interface LogoMarkProps {
 }
 
 // Popcorn-box mark (V3): a wireframe carton with a popcorn mound on top. The
-// geometry is stroke-based and tinted entirely by currentColor via the
-// logo-mark-* classes, so it inherits the active theme/accent color and gains
-// its soft fill, drop shadow, and highlight from CSS.
+// geometry is stroke-based and tinted by currentColor via the logo-mark-* classes.
 export function LogoMark({ className }: LogoMarkProps) {
   return (
     <svg
@@ -16,23 +14,32 @@ export function LogoMark({ className }: LogoMarkProps) {
     >
       <g className="logo-mark-body">
         <path d="M27 53 L38 102 L82 102 L93 53 L60 48 Z" />
-        <path d="M31 54 C22 50 22 39 31 35 C28 24 43 21 48 29 C52 18 67 18 71 28 C78 21 90 27 86 37 C93 42 90 53 83 54 Z" />
+        <path
+          className="logo-mark-popcorn"
+          d="M31 54 C22 50 22 39 31 35 C28 24 43 21 48 29 C52 18 67 18 71 28 C78 21 90 27 86 37 C93 42 90 53 83 54 Z"
+        />
       </g>
       <path
-        className="logo-mark-highlight"
+        className="logo-mark-highlight logo-mark-popcorn"
         d="M31 35 C28 24 43 21 48 29 C52 18 67 18 71 28 C78 21 90 27 86 37"
       />
       <g className="logo-mark-shadow">
         <path d="M27 53 L38 102 L82 102 L93 53" />
         <path d="M27 53 L60 48 L93 53" />
         <path d="M60 48 L60 102" />
-        <path d="M31 54 C22 50 22 39 31 35 C28 24 43 21 48 29 C52 18 67 18 71 28 C78 21 90 27 86 37 C93 42 90 53 83 54" />
+        <path
+          className="logo-mark-popcorn"
+          d="M31 54 C22 50 22 39 31 35 C28 24 43 21 48 29 C52 18 67 18 71 28 C78 21 90 27 86 37 C93 42 90 53 83 54"
+        />
       </g>
       <g className="logo-mark-fill">
         <path d="M27 53 L38 102 L82 102 L93 53" />
         <path d="M27 53 L60 48 L93 53" />
         <path d="M60 48 L60 102" />
-        <path d="M31 54 C22 50 22 39 31 35 C28 24 43 21 48 29 C52 18 67 18 71 28 C78 21 90 27 86 37 C93 42 90 53 83 54" />
+        <path
+          className="logo-mark-popcorn"
+          d="M31 54 C22 50 22 39 31 35 C28 24 43 21 48 29 C52 18 67 18 71 28 C78 21 90 27 86 37 C93 42 90 53 83 54"
+        />
       </g>
     </svg>
   );
