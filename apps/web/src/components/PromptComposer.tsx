@@ -5,6 +5,7 @@ import {
   GENERATION_STAGE_LABELS,
   type GateableGenerationStageType,
 } from "@popcorn/shared/v1/types";
+import styles from "./PromptComposer.module.css";
 
 const FEATURED_TEMPLATE = {
   icon: "PR",
@@ -14,37 +15,43 @@ const FEATURED_TEMPLATE = {
     'Create a 30-second cinematic story. Open on a 10-year-old movie-loving boy in his bedroom late at night, hunched over a computer running traditional video editing software - the screen is a cluttered, complex timeline crammed with dozens of video clips he is struggling to splice together. He looks frustrated and overwhelmed as the edit fights him. Then he discovers the website "Popcorn Ready," and everything changes. Build a montage with gradually rising orchestral music as he creates a movie, goes from idea to production, and sees it released to adoring fans. Show him as a famous filmmaker at a packed premiere, then at an awards show selected for Best Picture as he walks up to the microphone and begins, "I would like to thank...". End where it began: he is slumped asleep over his desk, then stirs, lifts his head, and looks up to see the Popcorn Ready screen glowing on his computer - the movie of his dreams can now be made.',
 };
 
+// The featured template is a local-only demo affordance — it should never ship
+// to the production site, only show up when developing against localhost.
+const IS_LOCALHOST =
+  typeof window !== "undefined" &&
+  /^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(window.location.hostname);
+
 const TEMPLATES = [
   {
-    icon: "01",
+    icon: "🍃",
     label: "Leaf blower cleanup",
     text: "Generate a video of a homeowner clearing a leaf-covered driveway into a clean outdoor space.",
     prompt:
       "A homeowner uses a leaf blower to turn a messy driveway covered in leaves into a clean, satisfying outdoor space. Start with the frustrating mess, show the tool in action, and end with a crisp before-and-after reveal.",
   },
   {
-    icon: "02",
+    icon: "🍞",
     label: "Bakery morning rush",
     text: "Generate a video of a small bakery preparing for the morning rush.",
     prompt:
       "A small bakery prepares for the morning rush. Show the quiet early morning, the baking process, customers arriving, and end with a warm moment of someone enjoying a fresh pastry.",
   },
   {
-    icon: "03",
+    icon: "🎧",
     label: "Headphones focus",
     text: "Generate a video of a student finding focus in a chaotic coffee shop with noise-canceling headphones.",
     prompt:
       "A student uses noise-canceling headphones to get focused in a chaotic coffee shop. Start with distraction, show the moment the headphones go on, and end with the student finishing their work confidently.",
   },
   {
-    icon: "04",
+    icon: "🎾",
     label: "Park fetch launcher",
     text: "Generate a video of a dog owner making fetch easier with an automatic ball launcher.",
     prompt:
       "A dog owner uses an automatic ball launcher at the park. Begin with an energetic dog begging to play, show the launcher making fetch easier, and end with both the dog and owner happy and tired.",
   },
   {
-    icon: "05",
+    icon: "🌿",
     label: "Backyard trimmer",
     text: "Generate a video of an overgrown backyard becoming guest-ready with a cordless trimmer.",
     prompt:
@@ -85,6 +92,7 @@ export function PromptComposer() {
   const [lengthSec, setLengthSec] = useState(30);
   const [configOpen, setConfigOpen] = useState(false);
   const [referenceImageName, setReferenceImageName] = useState<string | null>(null);
+  const [featuredDismissed, setFeaturedDismissed] = useState(false);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -135,24 +143,50 @@ export function PromptComposer() {
 
   return (
     <div className="lp-prompt">
-      <button
-        type="button"
-        className="lp-featured-template"
-        onClick={() => setValue(FEATURED_TEMPLATE.prompt)}
-        disabled={submitting}
-        title={FEATURED_TEMPLATE.prompt}
-      >
-        <span className="lp-featured-template-icon" aria-hidden="true">
-          {FEATURED_TEMPLATE.icon}
-        </span>
-        <span className="lp-featured-template-copy">
-          <span className="lp-featured-template-label">{FEATURED_TEMPLATE.label}</span>
-          <span className="lp-featured-template-text">{FEATURED_TEMPLATE.text}</span>
-        </span>
-        <span className="lp-featured-template-cta" aria-hidden="true">
-          Use this
-        </span>
-      </button>
+      {IS_LOCALHOST && !featuredDismissed && (
+        <div className={styles.featuredTemplate}>
+          <button
+            type="button"
+            className={styles.featuredMain}
+            onClick={() => setValue(FEATURED_TEMPLATE.prompt)}
+            disabled={submitting}
+            title={FEATURED_TEMPLATE.prompt}
+          >
+            <span className={styles.featuredIcon} aria-hidden="true">
+              {FEATURED_TEMPLATE.icon}
+            </span>
+            <span className={styles.featuredCopy}>
+              <span className={styles.featuredLabel}>{FEATURED_TEMPLATE.label}</span>
+              <span className={styles.featuredText}>{FEATURED_TEMPLATE.text}</span>
+            </span>
+            <span className={styles.featuredCta} aria-hidden="true">
+              Use this
+            </span>
+          </button>
+          <button
+            type="button"
+            className={styles.featuredDismiss}
+            onClick={() => setFeaturedDismissed(true)}
+            aria-label="Hide featured template"
+            title="Hide featured template"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              aria-hidden="true"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M18 6 6 18" />
+              <path d="m6 6 12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
       <label htmlFor="goal" className="lp-prompt-label">
         What&apos;s your video?
       </label>
@@ -167,29 +201,6 @@ export function PromptComposer() {
           if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) start();
         }}
       />
-      <div className="lp-templates">
-        <span className="lp-templates-label">Template idea</span>
-        <div className="lp-template-roller" aria-label="Video templates">
-          <div
-            key={activeTemplate.label}
-            className="lp-template-item"
-            title={activeTemplate.prompt}
-          >
-            <span className="lp-template-icon" aria-hidden="true">
-              {activeTemplate.icon}
-            </span>
-            <span className="lp-template-text">{activeTemplate.text}</span>
-          </div>
-        </div>
-        <button
-          type="button"
-          className="lp-template-generate"
-          onClick={() => setValue(activeTemplate.prompt)}
-          disabled={submitting}
-        >
-          Use template
-        </button>
-      </div>
       <div className="lp-submit">
         <div className="lp-submit-split">
           <button
@@ -310,6 +321,29 @@ export function PromptComposer() {
             </section>
           </div>
         )}
+      </div>
+      <div className={styles.templates}>
+        <span className={styles.templateRoller} aria-label="Video templates">
+          <span
+            key={activeTemplate.label}
+            className={styles.templateItem}
+            title={activeTemplate.prompt}
+          >
+            <span className={styles.templateEyebrow}>Template idea</span>
+            <span className={styles.templateIcon} aria-hidden="true">
+              {activeTemplate.icon}
+            </span>
+            {activeTemplate.text}
+          </span>
+        </span>
+        <button
+          type="button"
+          className={styles.templateGenerate}
+          onClick={() => setValue(activeTemplate.prompt)}
+          disabled={submitting}
+        >
+          Use template
+        </button>
       </div>
       {submitting && (
         <div className="lp-generation-progress" aria-live="polite">
