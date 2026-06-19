@@ -173,6 +173,60 @@
   isolation: isolate;
 }
 
+:global(.landing > main) {
+  display: grid;
+  gap: clamp(104px, 12vw, 176px);
+}
+
+:global(.landing .lp-hero) {
+  padding: clamp(88px, 10vw, 132px) 0 clamp(88px, 10vw, 132px);
+}
+
+:global(.landing .lp-section) {
+  position: relative;
+  padding: 0;
+}
+
+:global(.landing .lp-section)::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: -44px;
+  bottom: -44px;
+  left: 50%;
+  width: 100vw;
+  transform: translateX(-50%);
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgba(255, 255, 255, 0.026) 42%,
+    transparent
+  );
+}
+
+:global(.landing .lp-section-title) {
+  margin-bottom: var(--space-3);
+}
+
+:global(.landing .lp-section-sub) {
+  margin-bottom: clamp(var(--space-7), 5vw, var(--space-8));
+}
+
+:global(.landing .lp-grid),
+:global(.landing .lp-pricing) {
+  gap: clamp(var(--space-5), 2.5vw, var(--space-7));
+}
+
+:global(.landing .lp-card),
+:global(.landing .lp-price-card) {
+  padding: clamp(var(--space-6), 3vw, var(--space-7));
+}
+
+:global(.landing .lp-cta) {
+  margin-top: 0;
+}
+
 :global(.landing)::before {
   content: "";
   position: absolute;
@@ -401,6 +455,21 @@
   }
   100% {
     background-position: -100% 0;
+  }
+}
+
+@media (max-width: 640px) {
+  :global(.landing > main) {
+    gap: 88px;
+  }
+
+  :global(.landing .lp-hero) {
+    padding: 64px 0 64px;
+  }
+
+  :global(.landing .lp-section)::before {
+    top: -28px;
+    bottom: -28px;
   }
 }
 
