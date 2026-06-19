@@ -288,22 +288,24 @@ function Clapper({
 }) {
   return (
     <div className={styles.clapRow}>
-      <div
-        className={`${styles.clap}${clapped ? ` ${styles.clapShut}` : ""}`}
-        data-state={clapState ?? undefined}
-      >
-        <span className={styles.clapStick} aria-hidden="true" />
-        <span className={styles.clapBody}>
-          <span className={styles.clapText} key={`${clapState}-${countdown ?? ""}`}>
-            {clapState === "action"
-              ? "ACTION"
-              : clapState === "count"
-                ? countdown
-                : "CUT"}
+      <div className={styles.clapMain}>
+        <div
+          className={`${styles.clap}${clapped ? ` ${styles.clapShut}` : ""}`}
+          data-state={clapState ?? undefined}
+        >
+          <span className={styles.clapStick} aria-hidden="true" />
+          <span className={styles.clapBody}>
+            <span className={styles.clapText} key={`${clapState}-${countdown ?? ""}`}>
+              {clapState === "action"
+                ? "ACTION"
+                : clapState === "count"
+                  ? countdown
+                  : "CUT"}
+            </span>
           </span>
-        </span>
+        </div>
+        <span className={styles.clapCaption}>{caption}</span>
       </div>
-      <span className={styles.clapCaption}>{caption}</span>
       <button
         type="button"
         className={styles.clapStop}
@@ -338,7 +340,6 @@ export function AgentRunPreview() {
     >
       <div className={styles.head}>
         <span className={`${styles.dot} ${DOT_CLASS[frame.actor]}`} aria-hidden="true" />
-        <span className={styles.file}>dream-montage.run</span>
         <span className={`${styles.status}${STATUS_CLASS[frame.phase] ? ` ${STATUS_CLASS[frame.phase]}` : ""}`}>
           {PHASE_STATUS[frame.phase]}
           <span className={styles.ellipsis} aria-hidden="true" />

@@ -78,7 +78,6 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-left: auto;
   padding: 4px 10px;
   border-radius: 999px;
   background: var(--accent-soft);
@@ -158,16 +157,17 @@
 
 .input {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   min-height: 38px;
-  padding: 8px 12px;
+  padding: 12px 14px;
   border-radius: 10px;
   background: var(--panel-2);
   border: 1px solid rgba(255, 255, 255, 0.07);
-  font-size: 13.5px;
-  line-height: 1.4;
+  /* Brief reads big — same scale as the plan's hook line. */
+  font-size: 22px;
+  line-height: 1.35;
+  font-weight: 500;
   color: var(--text);
-  overflow: hidden;
 }
 
 .input.inputTyping {
@@ -176,7 +176,7 @@
 }
 
 .inputText {
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .caretUser {
@@ -361,16 +361,27 @@
 
 /* The continue beat — a clapperboard that reads CUT → 3 · 2 · 1 → ACTION,
    snapping shut on "action" like a real slate. */
+/* A cohesive little control: the clapperboard + caption sit together on top,
+   the Stop button below — inside a faint panel so it reads as intentional, not
+   loose pieces. Generous top room clears the raised clap-stick. */
 .clapRow {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 12px;
-  /* Extra top room so the raised, rotated clap-stick clears the plan card above
-     it instead of overlapping it. */
-  margin-top: 46px;
-  padding-top: 8px;
+  gap: 14px;
+  width: fit-content;
+  margin: 40px auto 6px;
+  padding: 26px 22px 18px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
   animation: beatIn 0.3s ease-out;
+}
+
+.clapMain {
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 
 .clap {
