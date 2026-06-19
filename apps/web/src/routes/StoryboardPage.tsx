@@ -1,10 +1,15 @@
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { StoryboardEditor } from "../components/storyboard/StoryboardEditor";
+import { StoryboardOverview } from "../components/storyboard/StoryboardOverview";
 import { useStoryboardPageQuery } from "../lib/project-queries";
+import { useProjectQuery } from "../lib/queryClient";
 
-// Storyboard editing surface for a project. The project-specific route loads
-// the requested project; the dashboard route falls back to the current studio
-// project selector until the project list has first-class storyboard links.
+// Storyboard surface for a project. The default view is a read-first overview
+// (poster + process state + high-level scene/beat assets); editing the
+// structure is a deliberate switch into the dense StoryboardEditor. The
+// project-specific route loads the requested project; the dashboard route
+// falls back to the current studio project selector.
 
 export function StoryboardPage() {
   const { projectId: routeProjectId } = useParams();
@@ -12,6 +17,10 @@ export function StoryboardPage() {
   const projectId = storyboardQuery.data?.projectId ?? null;
   const storyboard = storyboardQuery.data?.storyboard ?? null;
   const hasLoadedData = storyboardQuery.data !== undefined;
+  const [editing, setEditing] = useState(false);
+
+  const projectQuery = useProjectQuery(projectId ?? "", Boolean(projectId));
+
   const error = !hasLoadedData && storyboardQuery.error
     ? storyboardQuery.error instanceof Error
       ? storyboardQuery.error.message
@@ -43,5 +52,22 @@ export function StoryboardPage() {
     );
   }
 
-  return <StoryboardEditor projectId={projectId} initialStoryboard={storyboard} />;
+  if (editing) {
+    return (
+      <StoryboardEditor
+        projectId={projectId}
+        initialStoryboard={storyboard}
+        onBack={() => setEditing(false)}
+      />
+    );
+  }
+
+  return (
+    <StoryboardOverview
+      projectId={projectId}
+      project={projectQuery.data?.project}
+      storyboard={storyboard}
+      onEdit={() => setEditing(true)}
+    />
+  );
 }

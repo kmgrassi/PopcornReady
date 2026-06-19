@@ -16,6 +16,20 @@
   margin-bottom: 20px;
 }
 
+.sb-back {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 0;
+  margin-bottom: 6px;
+  cursor: pointer;
+}
+
+.sb-back:hover {
+  color: var(--text);
+}
+
 .sb-header h1 {
   margin: 0 0 4px;
   font-size: 23px;

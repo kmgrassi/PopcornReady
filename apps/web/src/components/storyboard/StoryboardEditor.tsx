@@ -110,11 +110,14 @@ function move<T>(list: T[], from: number, to: number): T[] {
 export interface StoryboardEditorProps {
   projectId: string;
   initialStoryboard: ProjectStoryboard | null;
+  /** When provided, render a "Back to overview" control in the header. */
+  onBack?: () => void;
 }
 
 export function StoryboardEditor({
   projectId,
   initialStoryboard,
+  onBack,
 }: StoryboardEditorProps) {
   const saveStoryboard = useSaveProjectStoryboardMutation(projectId);
   const [storyboardId, setStoryboardId] = useState<string | null>(
@@ -221,7 +224,12 @@ export function StoryboardEditor({
     <main className="sb-shell">
       <div className="sb-header">
         <div>
-          <h1>Storyboard</h1>
+          {onBack ? (
+            <button type="button" className="sb-back" onClick={onBack}>
+              ← Overview
+            </button>
+          ) : null}
+          <h1>Edit storyboard</h1>
           <p className="muted">
             {scenes.length} scene{scenes.length === 1 ? "" : "s"} ·{" "}
             {scenes.reduce((n, s) => n + s.beats.length, 0)} beats · ~{totalDuration}s
