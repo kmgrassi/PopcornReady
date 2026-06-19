@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { AgentRunPreview } from "../components/AgentRunPreview";
-import { LogoMark } from "../components/LogoMark";
+import { HeatLogoMark } from "../components/HeatLogoMark";
 import { PromptComposer } from "../components/PromptComposer";
 import { Reveal } from "../components/Reveal";
 import {
@@ -197,7 +197,7 @@ function HeatLogoScale({ score }: { score: number }) {
   return (
     <span className={`lp-heat-scale count-${score}`} aria-hidden="true">
       {Array.from({ length: score }, (_, index) => (
-        <LogoMark className="lp-heat-mark" key={index} />
+        <HeatLogoMark className="lp-heat-mark" key={index} />
       ))}
     </span>
   );
@@ -325,22 +325,22 @@ export function HomePage() {
                 </span>
                 <span>
                   <span className="lp-heat-scale count-1">
-                    <LogoMark className="lp-heat-mark" />
+                    <HeatLogoMark className="lp-heat-mark" />
                   </span>
                   Light
                 </span>
                 <span>
                   <span className="lp-heat-scale count-2">
-                    <LogoMark className="lp-heat-mark" />
-                    <LogoMark className="lp-heat-mark" />
+                    <HeatLogoMark className="lp-heat-mark" />
+                    <HeatLogoMark className="lp-heat-mark" />
                   </span>
                   Medium
                 </span>
                 <span>
                   <span className="lp-heat-scale count-3">
-                    <LogoMark className="lp-heat-mark" />
-                    <LogoMark className="lp-heat-mark" />
-                    <LogoMark className="lp-heat-mark" />
+                    <HeatLogoMark className="lp-heat-mark" />
+                    <HeatLogoMark className="lp-heat-mark" />
+                    <HeatLogoMark className="lp-heat-mark" />
                   </span>
                   Strong
                 </span>

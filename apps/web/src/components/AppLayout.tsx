@@ -64,9 +64,11 @@ export function AppLayout() {
   return (
     <div className="web-shell">
       <header className="web-shell-header">
-        <Link className="web-shell-brand" to="/">
-          <LogoMark className="web-shell-logo" />
-          <span>Popcorn Ready</span>
+        <Link className={`web-shell-brand ${styles.publicBrand}`} to="/">
+          <LogoMark
+            className={`web-shell-logo ${styles.publicLogo} ${styles.logoStyleGlow} ${styles.logoColorPopcornYellow}`}
+          />
+          <span className={styles.wordmarkRounded}>Popcorn Ready</span>
         </Link>
         <nav className="web-shell-nav" aria-label="Primary">
           <a href="/#workflow">Workflow</a>
@@ -80,7 +82,9 @@ export function AppLayout() {
         <Outlet />
       </div>
       <footer className="web-shell-footer">
-        <span className="web-shell-footer-brand">Popcorn Ready</span>
+        <span className={`web-shell-footer-brand ${styles.footerWordmark}`}>
+          Popcorn Ready
+        </span>
         <ThemeToggle />
       </footer>
     </div>
