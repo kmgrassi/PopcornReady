@@ -311,6 +311,27 @@ stage context and generated items; later it can bind to relational storyboard
 rows, keyframe assets, shot assets, selections, and actions without changing the
 surface users learned.
 
+The board should be **AI-mediated**, not a manual form editor. The current
+storyboard editor exposes scene/beat fields directly and saves the user's typed
+changes as structured data. That is useful scaffolding, but it is not the target
+interaction. The target interaction is: the user selects a board/tile/beat/scene
+and tells the AI what to change; the request includes the selected ids and the
+surrounding board context, and the AI decides whether to update the beat text,
+regenerate a storyboard panel, regenerate the keyframe, regenerate the shot,
+adjust the timeline, or propose a broader change.
+
+Timeline-level revision can stay as the backend operation. The important product
+requirement is that a timeline-level request carries enough board/tile targeting
+context for the AI to apply the change at the right level. For example:
+
+```text
+target: { storyboardId, sceneId, beatId, panelId?, keyframeAssetId?, clipAssetId? }
+message: "Make this tile feel more like a tense night discovery."
+```
+
+The agent can then map the human request to the right tool calls while the user
+continues interacting with the storyboard board.
+
 ### 6. Make Studio, Progress, And Editing One Interface
 
 The real flow currently transitions:
@@ -388,10 +409,11 @@ now and relational graph-backed rows when persisted.
 | 3 | **Planning preview beats contract.** Add typed beat outline to the planning preview API/client and render it in the plan card. | Replaces landing hardcoded beats with real planning data. |
 | 4 | **Progress header and plan recap.** Update `ProgressView` to read as `Produce`, show plan/project context, and move debug run details lower. | Keeps continuity after the route transition. |
 | 5 | **Storyboard board.** Add a scoped `StoryboardBoard` for storyboard/keyframe items and fall back to `StageItemCard` for everything else. Use existing stage context first; typed purpose metadata can follow. | Makes generated visuals feel like the movie, not a generic asset list. |
-| 6 | **Stop/continue affordances.** Attach cancel/reject/approve controls to active stages with landing-consistent `Stop here` / `Continue` language. Auto-continue after roughly five seconds by default; hard stop after planning only for videos over 30 seconds before image/video assets are generated. | Makes human intervention a first-class workflow while preserving autonomous default runs. |
-| 7 | **Unified workspace continuity.** Make setup, progress, review, and edit states read as one directable agent interface even if routes remain deep-linkable. | Avoids teaching separate workflows for create vs edit vs resume. |
-| 8 | **Artifact purpose metadata.** Add typed purpose/role fields to stage items so the board is data-driven instead of label-driven. | Makes UI grouping robust and asset-graph-ready, but is not a blocker for the first board pass. |
-| 9 | **Review continuity polish.** Carry plan recap and stage history into the review/export handoff; make successful progress-to-review transition feel intentional. | Completes the end-to-end story. |
+| 6 | **AI-mediated board edits.** Add board/tile-level feedback affordances that pass selected storyboard/scene/beat/panel/asset ids into the existing AI revision path or a new board revision endpoint. | Keeps the user on the storyboard surface while letting the AI decide whether to update text, panel, keyframe, shot, or timeline. |
+| 7 | **Stop/continue affordances.** Attach cancel/reject/approve controls to active stages with landing-consistent `Stop here` / `Continue` language. Auto-continue after roughly five seconds by default; hard stop after planning only for videos over 30 seconds before image/video assets are generated. | Makes human intervention a first-class workflow while preserving autonomous default runs. |
+| 8 | **Unified workspace continuity.** Make setup, progress, review, and edit states read as one directable agent interface even if routes remain deep-linkable. | Avoids teaching separate workflows for create vs edit vs resume. |
+| 9 | **Artifact purpose metadata.** Add typed purpose/role fields to stage items so the board is data-driven instead of label-driven. | Makes UI grouping robust and asset-graph-ready, but is not a blocker for the first board pass. |
+| 10 | **Review continuity polish.** Carry plan recap and stage history into the review/export handoff; make successful progress-to-review transition feel intentional. | Completes the end-to-end story. |
 
 Each PR should be independently reviewable and avoid touching broad aggregation
 files unless the surrounding route registration requires it.
