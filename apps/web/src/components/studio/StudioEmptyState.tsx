@@ -92,9 +92,9 @@ function stepLabel(step: StudioDraftSummary["step"]): string {
   const labels: Record<StudioDraftSummary["step"], string> = {
     brief: "Brief",
     footage: "Footage",
-    plan: "Planning",
+    plan: "Plan",
     story: "Story",
-    generate: "Checkpoints",
+    generate: "Produce",
     review: "Review",
     export: "Export",
   };

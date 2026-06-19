@@ -18,7 +18,7 @@ export const STUDIO_STEPS: StudioStep[] = [
   "export",
 ];
 
-export const STUDIO_SETUP_STEPS: StudioStep[] = ["brief", "footage"];
+export const STUDIO_SETUP_STEPS: StudioStep[] = ["brief", "footage", "plan"];
 
 export function normalizeStudioStep(
   value: StudioStep | string | null | undefined,
