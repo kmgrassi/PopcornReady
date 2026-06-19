@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import {
   GENERATION_STAGE_LABELS,
+  GENERATION_STAGE_ORDER,
   type GenerationRun,
   type GenerationStage,
   type GenerationStageType,
@@ -49,6 +50,10 @@ function isTerminal(status: GenerationRun["status"]): boolean {
 }
 
 const VISIBLE_STAGE_COUNT = 8;
+
+const ORDERED_STAGE_TYPES = Object.entries(GENERATION_STAGE_ORDER)
+  .sort(([, a], [, b]) => a - b)
+  .map(([type]) => type as GenerationStageType);
 
 const REVIEW_STAGE_LABELS: Record<GenerationStageType, string> = {
   brief_intake: "Concept",
@@ -128,6 +133,25 @@ function nextQueuedStage(
     (stage) =>
       stage.order > minOrder &&
       (stage.status === "queued" || stage.status === "running"),
+  );
+}
+
+function nextStageType(
+  run: GenerationRun,
+  stages: GenerationStage[],
+): GenerationStageType | undefined {
+  if (isTerminal(run.status)) return undefined;
+
+  const queued = nextQueuedStage(run, stages);
+  if (queued) return queued.type;
+
+  const currentType =
+    run.reviewGate?.stageType ?? currentRunStage(run, stages)?.type ?? run.currentStageType;
+  if (!currentType) return undefined;
+
+  const currentOrder = GENERATION_STAGE_ORDER[currentType];
+  return ORDERED_STAGE_TYPES.find(
+    (type) => GENERATION_STAGE_ORDER[type] > currentOrder,
   );
 }
 
@@ -343,8 +367,8 @@ export function ProgressView({
   const feedbackNote = reviewActions?.feedbackNote ?? fallbackFeedbackNote;
   const setFeedbackNote = reviewActions?.onFeedbackNoteChange ?? setFallbackFeedbackNote;
   const progress = progressSummary(detail.run, detail.stages);
-  const nextStage = nextQueuedStage(detail.run, detail.stages);
-  const nextStageLabel = nextStage ? reviewStageLabel(nextStage.type) : "Review";
+  const nextType = nextStageType(detail.run, detail.stages);
+  const nextStageLabel = nextType ? reviewStageLabel(nextType) : null;
   const currentStageLabel = detail.run.reviewGate
     ? reviewStageLabel(detail.run.reviewGate.stageType)
     : detail.run.currentStageType
@@ -425,7 +449,6 @@ export function ProgressView({
           <p className={styles.headerDescription}>
             {project?.brief?.goal ??
               project?.name ??
-              detail.run.message ??
               "The agent is turning the approved plan into production assets, timeline, review, and export."}
           </p>
         </div>
@@ -439,10 +462,12 @@ export function ProgressView({
               <span className={styles.statusLabel}>Status</span>
               <strong>{headerStatus(detail.run)}</strong>
             </div>
-            <div>
-              <span className={styles.statusLabel}>Next step</span>
-              <strong>{nextStageLabel}</strong>
-            </div>
+            {nextStageLabel ? (
+              <div>
+                <span className={styles.statusLabel}>Next step</span>
+                <strong>{nextStageLabel}</strong>
+              </div>
+            ) : null}
             <div>
               <span className={styles.statusLabel}>Progress</span>
               <strong>
@@ -507,7 +532,9 @@ export function ProgressView({
                   </h2>
                   <p className={styles.activeRunMessage}>
                     {detail.run.message ??
-                      `${currentStageLabel} is in progress. Next step: ${nextStageLabel}.`}
+                      `${currentStageLabel} is in progress.${
+                        nextStageLabel ? ` Next step: ${nextStageLabel}.` : ""
+                      }`}
                   </p>
                 </div>
                 <div className={styles.actions}>
