@@ -69,6 +69,30 @@ test("createStudioPlanningPreview honors an existing story format and readies po
   assert.equal(preview.storyDirection.format, "misconception");
   assert.equal(preview.storyDirection.label, "Misconception");
   assert.equal(preview.openingHook, "Why do rough cuts still feel slow?");
+  assert.deepEqual(preview.beats, [
+    {
+      id: "beat_hook",
+      label: "Assumption",
+      text: "Why do rough cuts still feel slow?",
+      role: "hook",
+    },
+    {
+      id: "beat_evidence",
+      label: "Evidence",
+      text: "Use a split screen of chaotic notes becoming a clean timeline as the visual proof point.",
+    },
+    {
+      id: "beat_reframe",
+      label: "Reframe",
+      text: "Open on the common wrong assumption, then replace it with the useful takeaway.",
+    },
+    {
+      id: "beat_payoff",
+      label: "Takeaway",
+      text: "Resolve the video back to Show why the new workflow matters.",
+      role: "payoff",
+    },
+  ]);
   assert.equal(preview.poster.status, "ready_for_background");
   assert.equal(preview.poster.backgroundReady, true);
   assert.match(preview.poster.prompt ?? "", /Story format: Misconception/);
@@ -91,6 +115,9 @@ test("createStudioPlanningPreview reads persisted Studio draft aliases", () => {
     preview.openingHook,
     "Why do ice cream sales rise when more people swim?"
   );
+  assert.equal(preview.beats[0]?.id, "beat_hook");
+  assert.equal(preview.beats[0]?.role, "hook");
+  assert.equal(preview.beats.at(-1)?.role, "payoff");
   assert.equal(preview.poster.status, "ready_for_background");
   assert.match(preview.poster.prompt ?? "", /two side-by-side charts/);
   assert.deepEqual(preview.source.missingInputs, []);
@@ -107,6 +134,14 @@ test("createStudioPlanningPreview infers direction and reports poster blockers",
   assert.equal(
     preview.openingHook,
     "What if every edit can be a structured decision?"
+  );
+  assert.deepEqual(
+    preview.beats.map((beat) => beat.label),
+    ["Idea", "Context", "Model", "Example", "Payoff"]
+  );
+  assert.equal(
+    preview.beats.find((beat) => beat.label === "Example")?.text,
+    "Generate visuals that make this idea concrete: every edit can be a structured decision."
   );
   assert.equal(preview.poster.status, "pending_input");
   assert.equal(preview.poster.backgroundReady, false);

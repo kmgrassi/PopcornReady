@@ -1,4 +1,5 @@
 import type {
+  StudioPlanningBeatOutlineItem,
   StudioPlanningPreview,
   StudioPlanningPreviewRequest,
   StudioPlanningStoryFormat,
@@ -110,6 +111,12 @@ function stripTrailingPunctuation(value: string): string {
   return value.replace(/[.!?]+$/u, "");
 }
 
+function sentence(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  return /[.!?]$/u.test(trimmed) ? trimmed : `${trimmed}.`;
+}
+
 function createOpeningHook(draft: Record<string, unknown>): string {
   const hookQuestion = textFieldAny(draft, ["hookQuestion", "hook"]);
   if (hookQuestion) return hookQuestion;
@@ -128,6 +135,104 @@ function createOpeningHook(draft: Record<string, unknown>): string {
   if (goal) return `Here is the fastest way to understand ${goal}.`;
 
   return "Open with the clearest uploaded moment, then name what the viewer is about to learn.";
+}
+
+function beat(
+  id: string,
+  label: string,
+  text: string,
+  role?: StudioPlanningBeatOutlineItem["role"]
+): StudioPlanningBeatOutlineItem {
+  return role ? { id, label, text: sentence(text), role } : { id, label, text: sentence(text) };
+}
+
+function createBeatOutline(input: {
+  draft: Record<string, unknown>;
+  format: StudioPlanningStoryFormat;
+  openingHook: string;
+  hasFootage: boolean;
+}): StudioPlanningBeatOutlineItem[] {
+  const { draft, format, openingHook, hasFootage } = input;
+  const goal = textField(draft, "goal");
+  const oneBigIdea = textFieldAny(draft, ["oneBigIdea", "bigIdea"]);
+  const payoff = textField(draft, "payoff");
+  const callToAction = textField(draft, "callToAction");
+  const strongestVisual = textFieldAny(draft, ["strongestVisual", "bestVisual"]);
+
+  const setupText =
+    goal ??
+    oneBigIdea ??
+    "Establish the viewer's problem and the specific idea this video will resolve.";
+  const generatedVisualSubject =
+    goal ??
+    oneBigIdea ??
+    STORY_FORMAT_COPY[format].label.toLowerCase();
+  const visualText = strongestVisual
+    ? `Use ${stripTrailingPunctuation(strongestVisual)} as the visual proof point`
+    : hasFootage
+      ? "Select the strongest uploaded moment as the proof point"
+      : `Generate visuals that make this idea concrete: ${stripTrailingPunctuation(generatedVisualSubject)}`;
+  const ideaText =
+    oneBigIdea ??
+    STORY_FORMAT_COPY[format].rationale;
+  const payoffText =
+    payoff ??
+    callToAction ??
+    (goal ? `Resolve the video back to ${stripTrailingPunctuation(goal)}` : "End with the clearest takeaway.");
+
+  switch (format) {
+    case "mystery_to_model":
+      return [
+        beat("beat_hook", "Hook", openingHook, "hook"),
+        beat("beat_clue", "Clue", visualText),
+        beat("beat_model", "Model", ideaText),
+        beat("beat_payoff", "Payoff", payoffText, "payoff"),
+      ];
+    case "challenge":
+      return [
+        beat("beat_hook", "Challenge", openingHook, "hook"),
+        beat("beat_setup", "Setup", setupText),
+        beat("beat_attempt", "Attempt", visualText),
+        beat("beat_result", "Result", payoffText, "payoff"),
+      ];
+    case "misconception":
+      return [
+        beat("beat_hook", "Assumption", openingHook, "hook"),
+        beat("beat_evidence", "Evidence", visualText),
+        beat("beat_reframe", "Reframe", ideaText),
+        beat("beat_payoff", "Takeaway", payoffText, "payoff"),
+      ];
+    case "animated_explainer":
+      return [
+        beat("beat_hook", "Idea", openingHook, "hook"),
+        beat("beat_context", "Context", setupText),
+        beat("beat_model", "Model", ideaText),
+        beat("beat_example", "Example", visualText),
+        beat("beat_payoff", "Payoff", payoffText, "payoff"),
+      ];
+    case "classroom_demo":
+      return [
+        beat("beat_hook", "Setup", openingHook, "hook"),
+        beat("beat_demo", "Demo", visualText),
+        beat("beat_explain", "Explain", ideaText),
+        beat("beat_payoff", "Takeaway", payoffText, "payoff"),
+      ];
+    case "aesthetic_montage":
+      return [
+        beat("beat_hook", "Mood", openingHook, "hook"),
+        beat("beat_texture", "Texture", visualText),
+        beat("beat_rhythm", "Rhythm", setupText),
+        beat("beat_payoff", "Landing", payoffText, "payoff"),
+      ];
+    case "visual_reveal":
+    default:
+      return [
+        beat("beat_hook", "Reveal", openingHook, "hook"),
+        beat("beat_context", "Context", setupText),
+        beat("beat_proof", "Proof", visualText),
+        beat("beat_payoff", "Payoff", payoffText, "payoff"),
+      ];
+  }
 }
 
 function createPosterPrompt(input: {
@@ -182,6 +287,12 @@ export function createStudioPlanningPreview(
     openingHook,
     hasFootage: (request.footageAssetIds?.length ?? 0) > 0,
   });
+  const beats = createBeatOutline({
+    draft: request.briefDraft,
+    format,
+    openingHook,
+    hasFootage: (request.footageAssetIds?.length ?? 0) > 0,
+  });
 
   return {
     storyDirection: {
@@ -190,6 +301,7 @@ export function createStudioPlanningPreview(
       rationale: STORY_FORMAT_COPY[format].rationale,
     },
     openingHook,
+    beats,
     poster: {
       status:
         poster.missingInputs.length === 0
