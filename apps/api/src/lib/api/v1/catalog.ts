@@ -35,7 +35,7 @@ const LOCAL_CATALOG_EMAIL = "local-catalog@popcornready.local";
 // search_embedding vector (and its model/dims metadata). Reads never need the
 // vector — ranking happens in SQL — so we avoid shipping 1536 floats per row.
 const CATALOG_COLUMNS =
-  "id, schema_version, kind, status, publisher_user_id, source_workspace_id, source_project_id, source_asset_id, source_story_blueprint_id, title, summary, tags, preview_storage_key, preview_storage_bucket, preview_content_type, snapshot, use_count, created_at, updated_at" as const;
+  "id, schema_version, kind, status, publisher_user_id, source_workspace_id, source_project_id, source_asset_id, source_story_blueprint_id, title, summary, tags, preview_storage_key, preview_storage_bucket, preview_content_type, snapshot, use_count, like_count, created_at, updated_at" as const;
 
 interface CatalogEntryRow {
   id: string;
@@ -55,6 +55,7 @@ interface CatalogEntryRow {
   preview_content_type: string | null;
   snapshot: Record<string, unknown>;
   use_count: number;
+  like_count: number;
   created_at: string;
   updated_at: string;
 }
@@ -144,6 +145,8 @@ export interface CatalogEntry {
   previewContentType: string | null;
   snapshot: Record<string, unknown>;
   useCount: number;
+  likeCount: number;
+  viewerHasLiked?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -205,7 +208,10 @@ function cursorOffset(cursor: string | null): number {
   return parsed;
 }
 
-async function mapCatalogEntry(row: CatalogEntryRow): Promise<CatalogEntry> {
+async function mapCatalogEntry(
+  row: CatalogEntryRow,
+  options: { viewerLikedEntryIds?: Set<string> } = {}
+): Promise<CatalogEntry> {
   const entry: CatalogEntry = {
     id: row.id,
     schemaVersion: CATALOG_SCHEMA_VERSION,
@@ -224,6 +230,8 @@ async function mapCatalogEntry(row: CatalogEntryRow): Promise<CatalogEntry> {
     previewContentType: row.preview_content_type,
     snapshot: row.snapshot ?? {},
     useCount: row.use_count,
+    likeCount: row.like_count,
+    viewerHasLiked: options.viewerLikedEntryIds?.has(row.id),
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
   };
@@ -242,8 +250,11 @@ async function resolveCatalogPreviewUrl(row: CatalogEntryRow): Promise<string | 
   });
 }
 
-async function mapCatalogEntries(rows: CatalogEntryRow[]): Promise<CatalogEntry[]> {
-  return Promise.all(rows.map(mapCatalogEntry));
+async function mapCatalogEntries(
+  rows: CatalogEntryRow[],
+  options: { viewerLikedEntryIds?: Set<string> } = {}
+): Promise<CatalogEntry[]> {
+  return Promise.all(rows.map((row) => mapCatalogEntry(row, options)));
 }
 
 function pageFromRows(rows: CatalogEntryRow[], limit: number, offset: number): CatalogPage {
@@ -343,6 +354,63 @@ export async function listMyCatalogEntries(input: {
       .range(offset, offset + input.limit)
   );
   return pageResult((rows as CatalogEntryRow[]) ?? [], input.limit, offset);
+}
+
+export async function listLikedCatalogEntryIds(input: {
+  userId: string;
+  entryIds: string[];
+}, deps?: CatalogDeps): Promise<string[]> {
+  const uniqueEntryIds = Array.from(new Set(input.entryIds)).filter(Boolean);
+  if (uniqueEntryIds.length === 0) return [];
+
+  const rows = await runQuery(
+    "catalog.listLikedCatalogEntryIds",
+    dbFrom(deps)
+      .from("catalog_entry_likes")
+      .select("catalog_entry_id")
+      .eq("user_id", input.userId)
+      .in("catalog_entry_id", uniqueEntryIds)
+  );
+  return ((rows as Array<{ catalog_entry_id: string }>) ?? []).map(
+    (row) => row.catalog_entry_id
+  );
+}
+
+export async function likeCatalogEntry(input: {
+  entryId: string;
+  userId: string;
+}, deps?: CatalogDeps): Promise<CatalogEntry> {
+  const db = dbFrom(deps);
+  await publishedCatalogEntryRow(db, input.entryId);
+  await runQuery(
+    "catalog.likeCatalogEntry",
+    db.from("catalog_entry_likes").upsert(
+      {
+        catalog_entry_id: input.entryId,
+        user_id: input.userId,
+      },
+      { onConflict: "catalog_entry_id,user_id", ignoreDuplicates: true }
+    )
+  );
+  const row = await publishedCatalogEntryRow(db, input.entryId);
+  return mapCatalogEntry(row, { viewerLikedEntryIds: new Set([input.entryId]) });
+}
+
+export async function unlikeCatalogEntry(input: {
+  entryId: string;
+  userId: string;
+}, deps?: CatalogDeps): Promise<CatalogEntry> {
+  const db = dbFrom(deps);
+  await runQuery(
+    "catalog.unlikeCatalogEntry",
+    db
+      .from("catalog_entry_likes")
+      .delete()
+      .eq("catalog_entry_id", input.entryId)
+      .eq("user_id", input.userId)
+  );
+  const row = await publishedCatalogEntryRow(db, input.entryId);
+  return mapCatalogEntry(row, { viewerLikedEntryIds: new Set() });
 }
 
 export async function publishCatalogEntry(input: {

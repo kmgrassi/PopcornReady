@@ -19,6 +19,7 @@
 }
 
 .backLink:focus-visible,
+.likeButton:focus-visible,
 .useForm select:focus-visible {
   outline: none;
   box-shadow: var(--ring);
@@ -123,6 +124,32 @@
 .usePanel p {
   color: var(--muted);
   line-height: var(--line-body);
+}
+
+.likeButton {
+  width: fit-content;
+  min-height: 38px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.likeButton:hover:not(:disabled),
+.liked {
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.likeButton:disabled {
+  cursor: wait;
+  opacity: 0.72;
 }
 
 .tags {
