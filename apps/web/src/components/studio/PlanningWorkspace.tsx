@@ -4,6 +4,7 @@ import type { StoryFormat } from "./useStudioFlow";
 import type { StepProps } from "./useStudioFlow";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
+import { LONG_VIDEO_PLANNING_REVIEW_THRESHOLD_SEC } from "../../lib/startRun";
 import { formatOptions, platformOptions } from "./copy";
 import { useStudioPlanningDecisionsQuery } from "./studioQueries";
 import styles from "./PlanningWorkspace.module.css";
@@ -11,7 +12,6 @@ import styles from "./PlanningWorkspace.module.css";
 const formatLabels = new Map(formatOptions.map((option) => [option.value, option.label]));
 const platformLabels = new Map(platformOptions.map((option) => [option.value, option.label]));
 const AUTO_CONTINUE_DELAY_MS = 5_000;
-const AUTO_CONTINUE_MAX_LENGTH_SEC = 30;
 
 function fallbackHook(goal: string): string {
   const trimmed = goal.trim();
@@ -81,6 +81,7 @@ export function PlanningWorkspace({
   );
   const appliedDecisionRef = useRef(false);
   const appliedFallbackRef = useRef(false);
+  const autoContinueStartedRef = useRef(false);
   const hookTouchedRef = useRef(false);
   const visualTouchedRef = useRef(false);
   const planningQuery = useStudioPlanningDecisionsQuery(draft, Boolean(draft.goal.trim()));
@@ -127,7 +128,7 @@ export function PlanningWorkspace({
   const visualValue = draft.bestVisual;
   const storyReady = Boolean(draft.format);
   const hookReady = Boolean(hookValue.trim());
-  const isLongVideo = draft.targetLengthSec > AUTO_CONTINUE_MAX_LENGTH_SEC;
+  const isLongVideo = draft.targetLengthSec > LONG_VIDEO_PLANNING_REVIEW_THRESHOLD_SEC;
   const hasMissingInputs = Boolean(preview?.source.missingInputs.length);
   const missingInputs = preview?.source.missingInputs ?? [];
   const visualSummary =
@@ -148,6 +149,7 @@ export function PlanningWorkspace({
     `${draft.targetLengthSec}s`,
     draft.aspectRatio,
   ].filter(Boolean);
+  const requiresPlanApproval = isLongVideo;
 
   const planIsReady = !planningQuery.isLoading && !planningQuery.isFetching;
   const planningStatus = useMemo(() => {
@@ -159,6 +161,7 @@ export function PlanningWorkspace({
 
   const generate = useCallback(async () => {
     if (submitting) return;
+    autoContinueStartedRef.current = true;
     setSubmitting(true);
     try {
       await onGenerate();
@@ -174,6 +177,7 @@ export function PlanningWorkspace({
   }
 
   useEffect(() => {
+    autoContinueStartedRef.current = false;
     setAutoContinueStopped(false);
     setAutoContinueSeconds(AUTO_CONTINUE_DELAY_MS / 1_000);
   }, [draft.goal, draft.targetLengthSec, draft.aspectRatio, draft.platform, draft.format]);
@@ -370,6 +374,37 @@ export function PlanningWorkspace({
         </Card>
       </div>
 
+      <Card padding="lg" elevated className={styles.boundaryCard}>
+        <div>
+          <p className={styles.kicker}>Stage boundary</p>
+          <h3 className={styles.panelTitle}>
+            {requiresPlanApproval ? "Approval required before production" : "Production can start next"}
+          </h3>
+          <p className={styles.rationale}>
+            {requiresPlanApproval
+              ? `This is a ${draft.targetLengthSec}-second video, so the run will stop after planning and wait for approval before image or video assets are generated.`
+              : autoContinueStopped
+                ? "Stopped at the plan. Continue whenever you are ready."
+                : `The agent will continue to production in ${autoContinueSeconds}s unless you stop here.`}
+          </p>
+        </div>
+        <div className={styles.boundaryActions}>
+          {!requiresPlanApproval && !autoContinueStopped ? (
+            <Button variant="secondary" onClick={() => setAutoContinueStopped(true)} disabled={submitting}>
+              Stop here
+            </Button>
+          ) : null}
+          <Button
+            variant="cta"
+            onClick={() => void generate()}
+            disabled={!draft.goal.trim() || submitting}
+            isLoading={submitting}
+          >
+            Continue to production
+          </Button>
+        </div>
+      </Card>
+
       {planningQuery.error ? (
         <p className={styles.notice}>
           Planning service is not available yet. You can edit these decisions and continue.
@@ -388,11 +423,6 @@ export function PlanningWorkspace({
           <Button variant="secondary" onClick={onEditFootage}>
             Edit footage
           </Button>
-          {!isLongVideo && !autoContinueStopped ? (
-            <Button variant="ghost" onClick={() => setAutoContinueStopped(true)}>
-              Stop here
-            </Button>
-          ) : null}
         </div>
         <Button
           variant="cta"

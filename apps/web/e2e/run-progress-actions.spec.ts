@@ -57,7 +57,7 @@ test.describe("run progress actions", () => {
     await page.goto(`/projects/${e2eProjectId}/runs/${gated.run.runId}`);
     await expect(page.getByRole("heading", { name: "Concept ready for review" })).toBeVisible();
 
-    await page.getByRole("button", { name: "Cancel generation" }).click();
+    await page.getByRole("button", { name: "Stop here" }).click();
 
     await expect.poll(() => routes.actionBodies[0]).toEqual({
       action: "cancel",
