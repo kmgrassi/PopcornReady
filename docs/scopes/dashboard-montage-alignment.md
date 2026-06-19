@@ -400,23 +400,199 @@ now and relational graph-backed rows when persisted.
 - No additions to `globals.css` or legacy global route styles. New visual work
   uses co-located CSS Modules and existing tokens.
 
-## Suggested PR Sequence
+## Implementation PR Plan
 
-| PR | Scope | Why |
-| --- | --- | --- |
-| 1 | **Planning language and stepper alignment.** Rename planning actions around `Plan` and `Continue to production`; add `Plan` to setup stepper. | Small copy/IA change that makes the real flow match the landing model. |
-| 2 | **Plan summary card.** Rework `PlanningWorkspace` so the agent-created plan is the dominant artifact; keep existing editable decision controls secondary. | Gives users a real "Act One" before expensive generation. |
-| 3 | **Planning preview beats contract.** Add typed beat outline to the planning preview API/client and render it in the plan card. | Replaces landing hardcoded beats with real planning data. |
-| 4 | **Progress header and plan recap.** Update `ProgressView` to read as `Produce`, show plan/project context, and move debug run details lower. | Keeps continuity after the route transition. |
-| 5 | **Storyboard board.** Add a scoped `StoryboardBoard` for storyboard/keyframe items and fall back to `StageItemCard` for everything else. Use existing stage context first; typed purpose metadata can follow. | Makes generated visuals feel like the movie, not a generic asset list. |
-| 6 | **AI-mediated board edits.** Add board/tile-level feedback affordances that pass selected storyboard/scene/beat/panel/asset ids into the existing AI revision path or a new board revision endpoint. | Keeps the user on the storyboard surface while letting the AI decide whether to update text, panel, keyframe, shot, or timeline. |
-| 7 | **Stop/continue affordances.** Attach cancel/reject/approve controls to active stages with landing-consistent `Stop here` / `Continue` language. Auto-continue after roughly five seconds by default; hard stop after planning only for videos over 30 seconds before image/video assets are generated. | Makes human intervention a first-class workflow while preserving autonomous default runs. |
-| 8 | **Unified workspace continuity.** Make setup, progress, review, and edit states read as one directable agent interface even if routes remain deep-linkable. | Avoids teaching separate workflows for create vs edit vs resume. |
-| 9 | **Artifact purpose metadata.** Add typed purpose/role fields to stage items so the board is data-driven instead of label-driven. | Makes UI grouping robust and asset-graph-ready, but is not a blocker for the first board pass. |
-| 10 | **Review continuity polish.** Carry plan recap and stage history into the review/export handoff; make successful progress-to-review transition feel intentional. | Completes the end-to-end story. |
+Each PR should be independently reviewable and avoid broad aggregation files
+unless the surrounding route registration requires it. Keep styling in
+co-located CSS Modules and keep API-owned state in TanStack Query hooks.
 
-Each PR should be independently reviewable and avoid touching broad aggregation
-files unless the surrounding route registration requires it.
+### PR 1 — Planning IA And Language
+
+Goal: make `/studio` read as `Brief -> Footage -> Plan -> Produce`, matching the
+landing montage before any deeper data work.
+
+Scope:
+
+- Update `StudioStepper` / `studioSteps` so `Plan` is a visible setup milestone.
+- Rename `PlanningWorkspace` actions from `Start generating` to
+  `Continue to production`.
+- Update copy around the agent handoff: "Agent is writing the plan",
+  "Plan ready", "Continue to production".
+- No backend changes.
+
+Definition of done:
+
+- A fresh `/studio` draft visibly reaches a `Plan` step before generation.
+- Existing draft resume behavior still works.
+- Typecheck/build pass.
+
+### PR 2 — Plan Summary Card
+
+Goal: make the plan the first major agent artifact instead of a grid of editable
+decisions.
+
+Scope:
+
+- Rework `PlanningWorkspace` to lead with a plan summary card.
+- Include brief recap, format/platform/length, opening hook, visual direction,
+  and missing inputs/caveats from existing planning preview data.
+- Keep existing story direction, hook, and visual controls secondary.
+- Add the >30s rule at the UI level: videos over 30 seconds stop after planning
+  and require explicit user approval before image/video asset generation.
+
+Definition of done:
+
+- For <=30s drafts, the plan can auto-continue after the configured delay unless
+  the user stops.
+- For >30s drafts, the user must approve before production starts.
+- No real image/video asset generation starts before the >30s approval.
+
+### PR 3 — Planning Preview Beat Outline
+
+Goal: replace hardcoded landing-style beats with real structured planning data.
+
+Scope:
+
+- Extend the studio planning preview contract with a typed beat outline:
+  `beats: Array<{ id, label, text, role? }>` or equivalent.
+- Populate beats from the planning service / existing plan data.
+- Render those beats in the plan summary card.
+- Preserve backwards-compatible fallback when the planning service omits beats.
+
+Definition of done:
+
+- The plan screen shows real beat rows for a generated plan.
+- Beat ids are stable enough to use as UI keys and future board targets.
+
+### PR 4 — Produce Progress Header And Plan Recap
+
+Goal: make run progress feel like the second act of the same workspace, not a
+diagnostic run page.
+
+Scope:
+
+- Update `ProgressView` heading/copy to `Producing your video`.
+- Add a compact approved-plan recap at the top of progress.
+- Surface "Next step" from the next queued stage.
+- Move run id/copy/debug details lower or into a less prominent diagnostics row.
+- Keep the current deep-link route; treat routing as implementation plumbing.
+
+Definition of done:
+
+- A user moving from plan to progress keeps the same project/plan context.
+- The current stage and next stage are understandable without reading run ids.
+
+### PR 5 — StoryboardBoard Read Model
+
+Goal: introduce the board/tile UI as the primary visual-generation surface.
+
+Scope:
+
+- Add `apps/web/src/components/progress/StoryboardBoard.tsx` plus module CSS.
+- Group available storyboard/keyframe/shot-like items into beat/scene tiles using
+  existing stage/run context first.
+- Each tile shows best available media: shot thumbnail/video, else keyframe, else
+  storyboard panel, else placeholder.
+- Keep `StageItemCard` fallback for audio, captions, timeline, export, and
+  unknown assets.
+
+Definition of done:
+
+- Generated visual outputs appear as beat/scene board tiles.
+- The user can still inspect status, failures, and generic assets.
+- No database migration is required for this first pass.
+
+### PR 6 — AI-Mediated Board/Tile Feedback
+
+Goal: let the user direct the AI from the board instead of editing storyboard
+fields manually.
+
+Scope:
+
+- Add a feedback affordance on a board tile and scene/board-level feedback.
+- Include target context in the request:
+  `storyboardId`, `sceneId`, `beatId`, `panelId?`, `keyframeAssetId?`,
+  `clipAssetId?`, and the user message.
+- Initially route through the existing timeline revision path if sufficient, or
+  add a narrow board revision endpoint if the existing endpoint cannot carry the
+  target context cleanly.
+- Do not remove the existing storyboard editor yet; treat it as scaffolding.
+
+Definition of done:
+
+- A user can select a beat/tile and ask the AI to change it.
+- The backend receives both the freeform message and stable target ids.
+- The agent has enough context to decide whether to update beat text, panel,
+  keyframe, shot, timeline, or propose a broader change.
+
+### PR 7 — Stop / Continue Controls
+
+Goal: make stage intervention first-class while keeping the autonomous default.
+
+Scope:
+
+- Add `Stop here` controls to active stage boundaries.
+- Add a roughly five-second auto-continue countdown on default-autonomous stages.
+- Enforce the hard stop after planning for videos over 30 seconds before
+  image/video assets are generated.
+- Reuse existing approve/reject/cancel run actions where possible.
+
+Definition of done:
+
+- Default runs continue without requiring approval for <=30s videos.
+- Users can stop at a visible stage boundary.
+- >30s videos require approval before expensive visual generation.
+
+### PR 8 — Unified Workspace Continuity
+
+Goal: make setup, progress, review, and editing feel like one directable agent
+workspace even if routes remain deep-linkable.
+
+Scope:
+
+- Normalize titles, project names, plan recaps, and navigation labels across
+  `/studio`, run progress, and review/export.
+- Make "Back to studio" context-specific and less route-centric.
+- Ensure drafts with active runs resume to the correct stage with visible status.
+- Avoid duplicating progress logic; reuse existing progress/query hooks.
+
+Definition of done:
+
+- The user does not have to learn separate workflows for create, resume, and
+  edit.
+- Deep links still work for run progress and review.
+
+### PR 9 — Artifact Purpose Metadata
+
+Goal: make StoryboardBoard grouping data-driven rather than inferred.
+
+Scope:
+
+- Add typed purpose/role metadata to stage items or their resolved artifacts:
+  `storyboard_frame`, `keyframe`, `shot`, `audio`, `timeline`, `export`, etc.
+- Thread purpose through API types and client mapping.
+- Update `StoryboardBoard` grouping to use purpose metadata.
+
+Definition of done:
+
+- Board grouping does not depend on labels or brittle kind inference.
+- Existing generic asset rendering still works.
+
+### PR 10 — Review / Export Continuity Polish
+
+Goal: carry the board-first model through final review and export.
+
+Scope:
+
+- Show plan recap and stage history on review.
+- Let review feedback target whole cut, scene, or beat/tile where possible.
+- Make successful progress-to-review transition feel intentional.
+- Keep export controls unchanged except for context/copy polish.
+
+Definition of done:
+
+- Review feels like the continuation of the same board/workspace.
+- Users can give both whole-cut and targeted feedback from review.
 
 ## Open Decisions
 
