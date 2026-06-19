@@ -20,6 +20,7 @@ import {
 import { useProjectQuery } from "../../lib/queryClient";
 import { StageRail } from "./StageRail";
 import { TerminalState } from "./TerminalState";
+import { StoryboardBoard } from "../studio/StoryboardBoard";
 import styles from "./ProgressView.module.css";
 
 interface ProgressViewProps {
@@ -212,6 +213,44 @@ function headerStatus(run: GenerationRun): string {
   return "Canceled";
 }
 
+const BOARD_STAGE_TYPES = new Set<GenerationStageType>([
+  "storyboard",
+  "asset_generation",
+]);
+
+const ASSET_BOARD_TOOL_LABELS = ["generate_keyframe", "generate_clip"];
+
+function isStoryboardBoardItem(
+  item: GenerationStageItem,
+  stageById: Map<string, GenerationStage>,
+): boolean {
+  if (item.kind !== "image" && item.kind !== "video") return false;
+  const stage = stageById.get(item.stageId);
+  if (!stage || !BOARD_STAGE_TYPES.has(stage.type)) return false;
+  if (stage.type === "storyboard") return true;
+
+  const label = item.label.toLowerCase();
+  return ASSET_BOARD_TOOL_LABELS.some((tool) => label.startsWith(tool));
+}
+
+function splitStoryboardItems(
+  items: GenerationStageItem[],
+  stageById: Map<string, GenerationStage>,
+) {
+  const boardItems: GenerationStageItem[] = [];
+  const genericItems: GenerationStageItem[] = [];
+
+  for (const item of items) {
+    if (isStoryboardBoardItem(item, stageById)) {
+      boardItems.push(item);
+    } else {
+      genericItems.push(item);
+    }
+  }
+
+  return { boardItems, genericItems };
+}
+
 function BriefReviewOutput({
   brief,
   loading,
@@ -369,6 +408,9 @@ export function ProgressView({
   const progress = progressSummary(detail.run, detail.stages);
   const nextType = nextStageType(detail.run, detail.stages);
   const nextStageLabel = nextType ? reviewStageLabel(nextType) : null;
+  const stageById = new Map(detail.stages.map((stage) => [stage.stageId, stage]));
+  const reviewOutputGroups = splitStoryboardItems(reviewItems, stageById);
+  const generatedOutputGroups = splitStoryboardItems(generatedItems, stageById);
   const currentStageLabel = detail.run.reviewGate
     ? reviewStageLabel(detail.run.reviewGate.stageType)
     : detail.run.currentStageType
@@ -575,10 +617,19 @@ export function ProgressView({
               {isBriefReviewGate && (project?.brief || projectLoading) ? (
                 <BriefReviewOutput brief={project?.brief ?? null} loading={projectLoading} />
               ) : reviewItems.length > 0 ? (
-                <div className={`${styles.itemGrid} ${styles.reviewOutputGrid}`}>
-                  {reviewItems.map((item) => (
-                    <StageItemCard key={item.itemId} item={item} />
-                  ))}
+                <div className={styles.reviewOutputs}>
+                  <StoryboardBoard
+                    items={reviewOutputGroups.boardItems}
+                    title="Review the storyboard"
+                    description="Visual outputs from this checkpoint are grouped as beat tiles before the run continues."
+                  />
+                  {reviewOutputGroups.genericItems.length > 0 ? (
+                    <div className={`${styles.itemGrid} ${styles.reviewOutputGrid}`}>
+                      {reviewOutputGroups.genericItems.map((item) => (
+                        <StageItemCard key={item.itemId} item={item} />
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <div className={styles.reviewOutputEmpty}>
@@ -650,10 +701,19 @@ export function ProgressView({
               <h2 id="generated-assets-heading" className={styles.cardHeading}>
                 Generated assets
               </h2>
-              <div className={`${styles.itemGrid} ${styles.reviewOutputGrid}`}>
-                {generatedItems.map((item) => (
-                  <StageItemCard key={item.itemId} item={item} />
-                ))}
+              <div className={styles.generatedOutputs}>
+                <StoryboardBoard
+                  items={generatedOutputGroups.boardItems}
+                  title="Storyboard and keyframes"
+                  description="Visual generation is grouped into beat tiles first. Audio, captions, timeline, export, and unknown outputs stay in the asset list."
+                />
+                {generatedOutputGroups.genericItems.length > 0 ? (
+                  <div className={`${styles.itemGrid} ${styles.reviewOutputGrid}`}>
+                    {generatedOutputGroups.genericItems.map((item) => (
+                      <StageItemCard key={item.itemId} item={item} />
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </section>
           ) : null}
