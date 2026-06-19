@@ -156,7 +156,7 @@ export interface StudioFlow {
   /** Reject the active run's review gate (regenerate the gated stage). No-op when not gated. */
   rejectGate(note?: string): Promise<void>;
   /** Sends review feedback to the timeline revision endpoint when a timeline exists. */
-  requestRevision(note: string): Promise<void>;
+  requestRevision(note: string, target?: ReviewFeedbackTarget): Promise<void>;
   /** Applies inline review edits to the loaded timeline so preview/export use the current cut. */
   updateReviewSegment(segmentId: string, patch: Partial<TimelineSegment>): void;
   /** Stores per-segment review notes next to the timeline editor. */
@@ -178,6 +178,13 @@ export interface StepProps {
   next(): void;
   back(): void;
   completeDraft?(): Promise<void>;
+}
+
+export interface ReviewFeedbackTarget {
+  scope: "whole_cut" | "segment";
+  segmentId?: string;
+  beatId?: string;
+  label?: string;
 }
 
 /**
@@ -483,12 +490,23 @@ export function useStudioFlow(options: UseStudioFlowOptions = {}): StudioFlow {
   ]);
 
   const requestRevision = useCallback(
-    async (note: string) => {
+    async (note: string, target?: ReviewFeedbackTarget) => {
       const message = note.trim();
       if (!message || !projectId || !reviewTimelineId) return;
       setError(undefined);
       try {
-        await createRevision.mutateAsync(message);
+        if (target?.scope !== "segment") {
+          await createRevision.mutateAsync(message);
+          return;
+        }
+
+        const targetLines = [
+          "Target: beat/timeline segment",
+          target.segmentId ? `Segment id: ${target.segmentId}` : null,
+          target.beatId ? `Beat id: ${target.beatId}` : null,
+          target.label ? `Label: ${target.label}` : null,
+        ].filter(Boolean);
+        await createRevision.mutateAsync(`${targetLines.join("\n")}\n\nFeedback: ${message}`);
       } catch (revisionError) {
         setError(
           revisionError instanceof Error
