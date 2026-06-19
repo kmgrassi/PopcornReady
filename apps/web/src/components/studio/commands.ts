@@ -25,16 +25,16 @@ export const studioCommands: PaletteCommand[] = [
   {
     id: "studio.brief",
     title: "Edit brief",
-    subtitle: "Goal, length, and aspect ratio",
+    subtitle: "Goal and length",
     keywords: ["prompt", "goal", "duration", "format"],
     run: go(studioPath({ step: "brief" })),
   },
   {
     id: "studio.aspect-ratio",
     title: "Aspect ratio",
-    subtitle: "Studio brief option",
+    subtitle: "Advanced creative direction option",
     keywords: ["vertical", "wide", "square", "format", "9:16", "16:9", "1:1"],
-    run: go(studioPath({ step: "brief", focus: "aspect" })),
+    run: go(studioPath({ step: "brief", panel: "advanced" })),
   },
   {
     id: "studio.length",

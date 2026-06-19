@@ -34,12 +34,6 @@
   box-shadow: var(--ring);
 }
 
-.optionGroups {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--section-gap-loose);
-}
-
 .segmented {
   display: flex;
   flex-wrap: wrap;
@@ -86,10 +80,4 @@
 
 .optionInput:focus-visible + .optionLabel {
   box-shadow: var(--ring);
-}
-
-@media (max-width: 720px) {
-  .optionGroups {
-    grid-template-columns: 1fr;
-  }
 }
