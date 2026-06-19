@@ -28,12 +28,11 @@ const BEATS = [
 
 const TILE_COUNT = 5;
 
-// Storyboard keyframes, one per beat of the dream-montage. `null` = not generated
-// yet (shows the placeholder tile) — keyframe 3 (the montage) is still pending.
+// Storyboard keyframes, one per beat of the dream-montage.
 const KEYFRAME_SRCS: (string | null)[] = [
   "/images/keyframe-1.jpg", // hook — the struggle
   "/images/keyframe-2.jpg", // discovery — the turn
-  null, // montage — pending
+  "/images/keyframe-3.jpg", // montage — momentum
   "/images/keyframe-4.jpg", // premiere — arrival
   "/images/keyframe-5.jpg", // payoff — best picture
 ];
