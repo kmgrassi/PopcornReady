@@ -44,6 +44,7 @@ export interface GenerationRunDetail {
 
 export interface GenerationRunResultArtifact {
   kind: GenerationStageItem["kind"];
+  purpose: GenerationStageItem["purpose"];
   artifactId: string;
   assetId?: string;
   stageId: string;

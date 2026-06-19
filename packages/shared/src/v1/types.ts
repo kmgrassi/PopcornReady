@@ -691,10 +691,25 @@ export type GenerationStageItemKind =
   | "timeline"
   | "export";
 
+export type GenerationStageItemPurpose =
+  | "brief"
+  | "plan"
+  | "storyboard_frame"
+  | "visual_anchor"
+  | "keyframe"
+  | "shot"
+  | "audio"
+  | "caption"
+  | "timeline"
+  | "quality_review"
+  | "export"
+  | "unknown";
+
 export interface GenerationStageItem {
   itemId: string;
   stageId: string;
   kind: GenerationStageItemKind;
+  purpose: GenerationStageItemPurpose;
   label: string;
   status: GenerationRunStatus;
   progressPercent?: number;
