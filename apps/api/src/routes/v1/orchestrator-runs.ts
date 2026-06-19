@@ -16,6 +16,7 @@ import {
   type RunActionSummary,
 } from "@/lib/api/v1/orchestrator-store";
 import { createBriefVersion, getProject } from "@/lib/api/v1/store";
+import { startPosterGenerationInBackground } from "@/lib/api/v1/poster-background";
 import { parseBrief } from "@/lib/api/v1/schemas";
 import { runOrchestratorToCompletion, resumeOrchestratorRun } from "@/lib/orchestrator/engine";
 import {
@@ -224,6 +225,12 @@ function budgetUsd(body: unknown): number | undefined {
   if (!isRecord(body) || body.budgetUsd === undefined) return undefined;
   const parsed = Number(body.budgetUsd);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function requestedProvider(body: unknown): string | undefined {
+  if (!isRecord(body) || typeof body.provider !== "string") return undefined;
+  const trimmed = body.provider.trim();
+  return trimmed || undefined;
 }
 
 function toolStage(tool: string): GenerationStageType {
@@ -513,7 +520,13 @@ orchestratorRunsRouter.post(
       budgetUsd: budget,
       body,
     });
-    if (!replayed) startRun(auth.workspaceId, run.id, auth.actor.id);
+    if (!replayed) {
+      startPosterGenerationInBackground(auth, projectId, {
+        runId: run.id,
+        provider: requestedProvider(body),
+      });
+      startRun(auth.workspaceId, run.id, auth.actor.id);
+    }
     return { status: 202, body: { runId: run.id } };
   })
 );

@@ -1,0 +1,34 @@
+import type { AuthContext } from "./auth";
+import { generatePoster } from "./poster-generation";
+
+export interface PosterBackgroundOptions {
+  provider?: string;
+  runId?: string;
+}
+
+export interface PosterBackgroundDeps {
+  generatePoster: typeof generatePoster;
+  logError: typeof console.error;
+}
+
+const defaultDeps: PosterBackgroundDeps = {
+  generatePoster,
+  logError: console.error,
+};
+
+export function startPosterGenerationInBackground(
+  auth: AuthContext,
+  projectId: string,
+  options: PosterBackgroundOptions = {},
+  deps: Partial<PosterBackgroundDeps> = {}
+): void {
+  const resolved = { ...defaultDeps, ...deps };
+  void resolved
+    .generatePoster(auth, projectId, {
+      provider: options.provider,
+      runId: options.runId,
+    })
+    .catch((err) => {
+      resolved.logError("poster generation failed", err);
+    });
+}
