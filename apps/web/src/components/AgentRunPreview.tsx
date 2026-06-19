@@ -20,8 +20,8 @@ import styles from "./AgentRunPreview.module.css";
 const BRIEF = "A movie-loving kid discovers Popcorn Ready and wins Best Picture.";
 
 const BEATS = [
-  { tag: "HOOK", text: "Late-night editor drowns in a tangled timeline." },
-  { tag: "BEAT", text: "Discovers Popcorn Ready — the agent takes the wheel." },
+  { tag: "HOOK", text: "A boy drowns in a tangled timeline, late at night." },
+  { tag: "BEAT", text: "Discovers Popcorn Ready — the boy takes the wheel." },
   { tag: "BEAT", text: "Idea to finished cut in one rising montage." },
   { tag: "PAYOFF", text: "Best Picture: “I’d like to thank Popcorn Ready.”" },
 ];
@@ -49,8 +49,7 @@ const COUNT_TICKS = 9; // each of 3 · 2 · 1
 const ACTION_TICKS = 10; // clapperboard snaps shut → "ACTION"
 const CONTINUE_TICKS = CONTINUE_LEAD_TICKS + COUNT_TICKS * 3 + ACTION_TICKS;
 const KEYFRAME_TICKS = 30;
-const TIMELINE_TICKS = 26;
-const HOLD_TICKS = 30;
+const WRAP_TICKS = 36; // clapperboard snaps "CUT", holds, then the cycle loops
 
 // Phase boundaries (cumulative tick offsets within one cycle).
 const T_HANDOFF = TYPE_TICKS;
@@ -58,9 +57,8 @@ const T_PLAN = T_HANDOFF + HANDOFF_TICKS;
 const T_PLAN_DONE = T_PLAN + PLAN_TICKS;
 const T_CONTINUE = T_PLAN_DONE + PLAN_HOLD_TICKS;
 const T_KEYFRAMES = T_CONTINUE + CONTINUE_TICKS;
-const T_TIMELINE = T_KEYFRAMES + KEYFRAME_TICKS;
-const T_READY = T_TIMELINE + TIMELINE_TICKS;
-const CYCLE = T_READY + HOLD_TICKS;
+const T_WRAP = T_KEYFRAMES + KEYFRAME_TICKS;
+const CYCLE = T_WRAP + WRAP_TICKS;
 
 type Phase =
   | "typing"
@@ -68,12 +66,11 @@ type Phase =
   | "planning"
   | "continue"
   | "keyframes"
-  | "timeline"
-  | "ready";
+  | "wrap";
 type Actor = "you" | "agent" | "done";
 type Act = "plan" | "produce";
-type Stage = "plan" | "keyframes" | "timeline" | null;
-type ClapState = "ask" | "count" | "action" | null;
+type Stage = "plan" | "keyframes" | null;
+type ClapState = "ask" | "count" | "action" | "cut" | null;
 
 const PHASE_STATUS: Record<Phase, string> = {
   typing: "You · writing the brief",
@@ -81,8 +78,7 @@ const PHASE_STATUS: Record<Phase, string> = {
   planning: "Agent · writing the plan",
   continue: "Plan ready · continuing",
   keyframes: "Agent · generating keyframes",
-  timeline: "Agent · assembling timeline",
-  ready: "Render ready",
+  wrap: "Cut · take complete",
 };
 
 function prefersReducedMotion() {
@@ -104,12 +100,11 @@ interface Frame {
   clapState: ClapState;
   clapped: boolean;
   tiles: number;
-  timelinePct: number;
   activeStage: Stage;
 }
 
 const FINAL_FRAME: Frame = {
-  phase: "ready",
+  phase: "wrap",
   actor: "done",
   act: "produce",
   brief: BRIEF,
@@ -117,10 +112,9 @@ const FINAL_FRAME: Frame = {
   submitted: true,
   beats: BEATS.map((beat) => ({ ...beat, typing: false })),
   countdown: null,
-  clapState: null,
-  clapped: false,
+  clapState: "cut",
+  clapped: true,
   tiles: TILE_COUNT,
-  timelinePct: 100,
   activeStage: null,
 };
 
@@ -152,14 +146,11 @@ function computeFrame(tick: number): Frame {
   } else if (t < T_KEYFRAMES) {
     phase = "continue";
     actor = "agent";
-  } else if (t < T_TIMELINE) {
+  } else if (t < T_WRAP) {
     phase = "keyframes";
     actor = "agent";
-  } else if (t < T_READY) {
-    phase = "timeline";
-    actor = "agent";
   } else {
-    phase = "ready";
+    phase = "wrap";
     actor = "done";
   }
 
@@ -195,22 +186,19 @@ function computeFrame(tick: number): Frame {
       clapState = "action"; // arm snaps shut, slate reads "ACTION"
       clapped = true;
     }
+  } else if (phase === "wrap") {
+    clapState = "cut"; // the take is done — director calls "cut"
+    clapped = true;
   }
 
-  // --- Agent: keyframes pop, then timeline assembles --------------
+  // --- Agent: keyframes pop in one by one -------------------------
   let tiles = 0;
-  let timelinePct = 0;
   if (t >= T_KEYFRAMES) {
     const kf = t - T_KEYFRAMES;
     tiles = Math.min(TILE_COUNT, Math.floor(kf / (KEYFRAME_TICKS / TILE_COUNT)) + 1);
   }
-  if (t >= T_TIMELINE) {
+  if (t >= T_WRAP) {
     tiles = TILE_COUNT;
-    timelinePct = Math.min(100, ((t - T_TIMELINE) / TIMELINE_TICKS) * 100);
-  }
-  if (t >= T_READY) {
-    tiles = TILE_COUNT;
-    timelinePct = 100;
   }
 
   const activeStage: Stage =
@@ -218,9 +206,7 @@ function computeFrame(tick: number): Frame {
       ? "plan"
       : phase === "keyframes"
         ? "keyframes"
-        : phase === "timeline"
-          ? "timeline"
-          : null;
+        : null;
 
   return {
     phase,
@@ -234,7 +220,6 @@ function computeFrame(tick: number): Frame {
     clapState,
     clapped,
     tiles,
-    timelinePct,
     activeStage,
   };
 }
@@ -250,7 +235,7 @@ const DOT_CLASS: Record<Actor, string> = {
 const STATUS_CLASS: Partial<Record<Phase, string>> = {
   typing: styles.statusTyping,
   handoff: styles.statusHandoff,
-  ready: styles.statusReady,
+  wrap: styles.statusReady,
 };
 
 function StepHead({ label, active }: { label: string; active: boolean }) {
@@ -291,7 +276,7 @@ export function AgentRunPreview() {
         <span className={styles.file}>dream-montage.run</span>
         <span className={`${styles.status}${STATUS_CLASS[frame.phase] ? ` ${STATUS_CLASS[frame.phase]}` : ""}`}>
           {PHASE_STATUS[frame.phase]}
-          {frame.phase !== "ready" && (
+          {frame.phase !== "wrap" && (
             <span className={styles.ellipsis} aria-hidden="true" />
           )}
         </span>
@@ -320,8 +305,8 @@ export function AgentRunPreview() {
             Agent
           </span>
           <span className={styles.handoffNote}>
-            {frame.phase === "ready"
-              ? "Run complete"
+            {frame.phase === "wrap"
+              ? "That's a cut — run complete"
               : "Running autonomously — step in at any step"}
           </span>
         </div>
@@ -412,25 +397,17 @@ export function AgentRunPreview() {
               </div>
             </div>
 
-            <div className={styles.timeline}>
-              <StepHead label="Timeline" active={frame.activeStage === "timeline"} />
-              <div className={styles.track}>
-                {BEATS.map((_, index) => {
-                  const segStart = (index / BEATS.length) * 100;
-                  const filled = frame.timelinePct > segStart;
-                  return (
-                    <span
-                      className={`${styles.seg}${filled ? ` ${styles.segFilled}` : ""}`}
-                      key={index}
-                    />
-                  );
-                })}
-                <span
-                  className={styles.playhead}
-                  style={{ left: `${frame.timelinePct}%` }}
-                />
+            {frame.phase === "wrap" && (
+              <div className={styles.clapRow}>
+                <div className={`${styles.clap} ${styles.clapShut}`} data-state="cut">
+                  <span className={styles.clapStick} aria-hidden="true" />
+                  <span className={styles.clapBody}>
+                    <span className={styles.clapText}>CUT</span>
+                  </span>
+                </div>
+                <span className={styles.clapCaption}>That&apos;s a cut.</span>
               </div>
-            </div>
+            )}
           </div>
         </section>
       )}

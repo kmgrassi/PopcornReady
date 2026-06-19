@@ -599,40 +599,6 @@
     var(--panel-2);
 }
 
-.timeline {
-  margin-top: 16px;
-}
-
-.track {
-  position: relative;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 4px;
-  height: 26px;
-}
-
-.seg {
-  border-radius: 5px;
-  background: var(--panel-2);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  transition: background 0.3s ease, box-shadow 0.3s ease;
-}
-
-.seg.segFilled {
-  background: linear-gradient(90deg, var(--accent), var(--accent-2));
-  box-shadow: 0 0 16px rgba(245, 120, 60, 0.3);
-}
-
-.playhead {
-  position: absolute;
-  top: -3px;
-  bottom: -3px;
-  width: 2px;
-  background: #fff;
-  box-shadow: 0 0 10px rgba(255, 255, 255, 0.7);
-  transition: left 0.12s linear;
-}
-
 @media (max-width: 560px) {
   /* Stack the prompt row so the input never crowds the actor + button. */
   .prompt {
