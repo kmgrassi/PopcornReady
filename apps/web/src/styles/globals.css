@@ -2496,7 +2496,7 @@ button.eval-card-link[aria-pressed="true"] {
 
 .lp-hero {
   text-align: center;
-  padding: 72px 0 40px;
+  padding: 80px 0 64px;
 }
 
 .lp-eyebrow {
@@ -2544,78 +2544,71 @@ button.eval-card-link[aria-pressed="true"] {
   padding: 20px;
 }
 
+/* A quiet inspiration hint below the primary CTA — deliberately low-emphasis so
+   it never competes with the textarea or the "Create my video" button. */
 .lp-templates {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  display: flex;
   align-items: center;
-  gap: 12px;
-  margin: 16px 0 18px;
-  padding: 12px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--accent-soft) 45%, transparent);
-}
-
-.lp-templates-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--accent);
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  white-space: nowrap;
+  gap: 10px;
+  margin: 12px 0 0;
+  padding: 6px 2px 0;
 }
 
 .lp-template-icon {
-  display: inline-grid;
-  flex: 0 0 22px;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  background: var(--accent-soft);
-  border: 1px solid var(--accent-border);
-  font-size: 14px;
+  flex: 0 0 auto;
+  margin-right: 6px;
+  font-size: 15px;
   line-height: 1;
-  letter-spacing: 0;
+}
+
+.lp-template-eyebrow {
+  margin-right: 8px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 .lp-template-roller {
   position: relative;
+  flex: 1 1 auto;
   min-width: 0;
-  height: 58px;
+  height: 38px;
   overflow: hidden;
   background: transparent;
 }
 
 .lp-template-item {
   position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 0;
+  inset: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 0;
+  color: color-mix(in srgb, var(--text) 55%, var(--muted));
+  font-size: 14px;
+  line-height: 1.3;
+  font-weight: 500;
   animation: lp-template-roll 440ms ease-out;
   backface-visibility: hidden;
 }
 
-.lp-template-text {
-  color: var(--text);
-  font-size: 14px;
-  line-height: 1.35;
-  font-weight: 600;
-}
-
 .lp-template-generate {
-  border-radius: 8px;
-  padding: 10px 12px;
-  font-size: 13px;
+  flex: 0 0 auto;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 700;
   line-height: 1;
   white-space: nowrap;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.lp-template-generate:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent-border);
 }
 
 .lp-template-generate:disabled {
@@ -2657,13 +2650,20 @@ button.eval-card-link[aria-pressed="true"] {
 }
 
 .lp-featured-template {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  margin: 0 0 16px;
+}
+
+.lp-featured-template-main {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   text-align: left;
-  margin: 0 0 16px;
   padding: 12px 14px;
   border-radius: 12px;
   border: 1px solid var(--accent-border);
@@ -2672,16 +2672,36 @@ button.eval-card-link[aria-pressed="true"] {
   transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
 }
 
-.lp-featured-template:hover {
+.lp-featured-template-main:hover {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent-soft) 80%, transparent);
   transform: translateY(-1px);
 }
 
-.lp-featured-template:disabled {
+.lp-featured-template-main:disabled {
   cursor: wait;
   opacity: 0.65;
   transform: none;
+}
+
+.lp-featured-template-dismiss {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  padding: 0;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.lp-featured-template-dismiss:hover {
+  color: var(--text);
+  border-color: var(--accent-border);
+  background: var(--panel-2);
 }
 
 .lp-featured-template-icon {
@@ -3111,7 +3131,7 @@ button.eval-card-link[aria-pressed="true"] {
 }
 
 .lp-section {
-  padding: 56px 0 0;
+  padding: 150px 0 0;
   /* Keep anchored sections (#workflow, #pricing) clear of the sticky header when
      jumped to from the nav. */
   scroll-margin-top: 80px;
@@ -3668,7 +3688,7 @@ button.eval-card-link[aria-pressed="true"] {
 }
 
 .lp-cta {
-  margin-top: 64px;
+  margin-top: 150px;
   text-align: center;
   background: var(--panel);
   border: 1px solid var(--border);
@@ -3721,8 +3741,17 @@ button.eval-card-link[aria-pressed="true"] {
 }
 
 @media (max-width: 860px) {
+  .lp-hero {
+    padding: 56px 0 44px;
+  }
   .lp-hero h1 {
     font-size: 41px;
+  }
+  .lp-section {
+    padding-top: 96px;
+  }
+  .lp-cta {
+    margin-top: 96px;
   }
   .lp-steps,
   .lp-grid,
@@ -3751,18 +3780,13 @@ button.eval-card-link[aria-pressed="true"] {
     font-size: 35px;
   }
   .lp-templates {
-    grid-template-columns: 1fr;
     gap: 8px;
   }
   .lp-template-roller {
-    height: 96px;
+    height: 46px;
   }
   .lp-template-item {
     align-items: flex-start;
-    padding: 6px 0 4px;
-  }
-  .lp-template-generate {
-    justify-self: center;
   }
 }
 
