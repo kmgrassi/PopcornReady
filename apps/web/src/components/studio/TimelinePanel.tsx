@@ -10,9 +10,11 @@ import styles from "./TimelinePanel.module.css";
 interface TimelinePanelProps {
   timeline: Timeline;
   clips: Clip[];
+  selectedSegmentId?: string;
   segmentNotes: Record<string, string>;
   onSegmentChange(segmentId: string, patch: Partial<TimelineSegment>): void;
   onSegmentNoteChange(segmentId: string, note: string): void;
+  onSelectSegment?(segmentId: string): void;
 }
 
 function segmentLabel(segment: TimelineSegment, clip?: Clip): string {
@@ -22,9 +24,11 @@ function segmentLabel(segment: TimelineSegment, clip?: Clip): string {
 export function TimelinePanel({
   timeline,
   clips,
+  selectedSegmentId,
   segmentNotes,
   onSegmentChange,
   onSegmentNoteChange,
+  onSelectSegment,
 }: TimelinePanelProps) {
   const clipById = useMemo(
     () => Object.fromEntries(clips.map((clip) => [clip.id, clip])),
@@ -47,13 +51,27 @@ export function TimelinePanel({
         {timeline.segments.map((segment, index) => {
           const clip = clipById[segment.clipId];
           return (
-            <li className={styles.segment} key={segment.id}>
+            <li
+              className={`${styles.segment} ${
+                selectedSegmentId === segment.id ? styles.segmentSelected : ""
+              }`}
+              key={segment.id}
+            >
               <span className={styles.index}>{index + 1}</span>
               <div className={styles.segmentBody}>
                 <div className={styles.segmentTop}>
                   <strong>{segment.role}</strong>
                   <span>{segmentDurationSec(segment).toFixed(1)}s</span>
                 </div>
+                {onSelectSegment ? (
+                  <button
+                    className={styles.targetButton}
+                    type="button"
+                    onClick={() => onSelectSegment(segment.id)}
+                  >
+                    Target feedback here
+                  </button>
+                ) : null}
                 <p className={styles.clipName}>{segmentLabel(segment, clip)}</p>
                 <div className={styles.trim}>
                   <span>In {segment.sourceInSec.toFixed(1)}s</span>

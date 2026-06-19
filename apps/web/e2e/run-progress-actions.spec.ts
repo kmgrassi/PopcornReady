@@ -18,7 +18,7 @@ test.describe("run progress actions", () => {
     const routes = await installRunProgressRoutes(page, { detail: active });
 
     await page.goto(`/projects/${e2eProjectId}/runs/${active.run.runId}`);
-    await expect(page.getByRole("heading", { name: "Active generation" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Stop here or keep producing" })).toBeVisible();
 
     await expect(
       page.evaluate((projectId) => {
@@ -33,11 +33,11 @@ test.describe("run progress actions", () => {
       }, e2eProjectId),
     ).resolves.toBeUndefined();
 
-    await page.getByRole("button", { name: "Cancel generation" }).click();
+    await page.getByRole("button", { name: "Stop here" }).click();
 
     await expect.poll(() => routes.actionBodies).toEqual([{ action: "cancel", body: {} }]);
     await expect(page.getByText("Generation was canceled.")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Cancel generation" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Stop here" })).toHaveCount(0);
     await expect(
       page.evaluate((projectId) =>
         window.sessionStorage.getItem(`popcornReady:lastRunHint:${projectId}`),

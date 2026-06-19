@@ -11,6 +11,7 @@ import type { AssetKind, GenerationRun } from "@popcorn/shared/v1/types";
 import {
   ApiClientError,
   v1Api,
+  type CreateTimelineRevisionInput,
   type CreateProjectInput,
   type MeResponse,
   type RejectGenerationRunInput,
@@ -421,8 +422,8 @@ export function useStartUploadedFootageGenerationRunMutation(projectId: string) 
 
 export function useCreateTimelineRevisionMutation(projectId: string, timelineId: string) {
   return useMutation({
-    mutationFn: (message: string) =>
-      v1Api.createTimelineRevision(projectId, timelineId, message),
+    mutationFn: (input: CreateTimelineRevisionInput) =>
+      v1Api.createTimelineRevision(projectId, timelineId, input),
   });
 }
 

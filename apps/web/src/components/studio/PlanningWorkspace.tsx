@@ -1,13 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { StudioPlanningBeatOutlineItem } from "@popcorn/shared/v1/studio-planning";
 import type { StoryFormat } from "./useStudioFlow";
 import type { StepProps } from "./useStudioFlow";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
-import { formatOptions } from "./copy";
+import { formatOptions, platformOptions } from "./copy";
 import { useStudioPlanningDecisionsQuery } from "./studioQueries";
 import styles from "./PlanningWorkspace.module.css";
 
 const formatLabels = new Map(formatOptions.map((option) => [option.value, option.label]));
+const platformLabels = new Map(platformOptions.map((option) => [option.value, option.label]));
+const AUTO_CONTINUE_DELAY_MS = 5_000;
+const AUTO_CONTINUE_MAX_LENGTH_SEC = 30;
 
 function fallbackHook(goal: string): string {
   const trimmed = goal.trim();
@@ -27,6 +31,33 @@ function posterStatusLabel({
   return "Loading";
 }
 
+function fallbackBeatOutline(draft: StepProps["draft"]): StudioPlanningBeatOutlineItem[] {
+  const beats: StudioPlanningBeatOutlineItem[] = [];
+  const hook = draft.hook.trim() || fallbackHook(draft.goal);
+  if (hook) {
+    beats.push({ id: "fallback_hook", label: "Hook", text: hook, role: "hook" });
+  }
+  if (draft.goal.trim()) {
+    beats.push({ id: "fallback_context", label: "Context", text: draft.goal.trim() });
+  }
+  if (draft.bestVisual.trim()) {
+    beats.push({
+      id: "fallback_visual",
+      label: "Visual proof",
+      text: draft.bestVisual.trim(),
+    });
+  }
+  if (draft.payoff.trim()) {
+    beats.push({
+      id: "fallback_payoff",
+      label: "Payoff",
+      text: draft.payoff.trim(),
+      role: "payoff",
+    });
+  }
+  return beats;
+}
+
 export interface PlanningWorkspaceProps extends StepProps {
   error?: string;
   onGenerate: () => Promise<void>;
@@ -44,6 +75,10 @@ export function PlanningWorkspace({
   onEditFootage,
 }: PlanningWorkspaceProps) {
   const [submitting, setSubmitting] = useState(false);
+  const [autoContinueStopped, setAutoContinueStopped] = useState(false);
+  const [autoContinueSeconds, setAutoContinueSeconds] = useState(
+    AUTO_CONTINUE_DELAY_MS / 1_000,
+  );
   const appliedDecisionRef = useRef(false);
   const appliedFallbackRef = useRef(false);
   const hookTouchedRef = useRef(false);
@@ -92,14 +127,37 @@ export function PlanningWorkspace({
   const visualValue = draft.bestVisual;
   const storyReady = Boolean(draft.format);
   const hookReady = Boolean(hookValue.trim());
+  const isLongVideo = draft.targetLengthSec > AUTO_CONTINUE_MAX_LENGTH_SEC;
+  const hasMissingInputs = Boolean(preview?.source.missingInputs.length);
+  const missingInputs = preview?.source.missingInputs ?? [];
+  const visualSummary =
+    visualValue.trim() ||
+    generatedVisual ||
+    "The agent will derive the visual direction from the brief and selected footage.";
+  const hookSummary =
+    hookValue.trim() ||
+    generatedHook ||
+    "The agent will open with the strongest hook it can infer from the brief.";
+  const planBeats = useMemo(() => {
+    if (preview?.beats?.length) return preview.beats;
+    return fallbackBeatOutline(draft);
+  }, [draft, preview?.beats]);
+  const planMetadata = [
+    formatLabels.get(draft.format),
+    platformLabels.get(draft.platform) ?? draft.platform,
+    `${draft.targetLengthSec}s`,
+    draft.aspectRatio,
+  ].filter(Boolean);
 
+  const planIsReady = !planningQuery.isLoading && !planningQuery.isFetching;
   const planningStatus = useMemo(() => {
-    if (planningQuery.isLoading || planningQuery.isFetching) return "Agent is writing the plan";
+    if (!planIsReady) return "Agent is writing the plan";
     if (planningQuery.error) return "Draft plan ready";
     return "Plan ready";
-  }, [planningQuery.error, planningQuery.isFetching, planningQuery.isLoading]);
+  }, [planIsReady, planningQuery.error]);
+  const canContinue = Boolean(draft.goal.trim()) && planIsReady && !submitting;
 
-  async function generate() {
+  const generate = useCallback(async () => {
     if (submitting) return;
     setSubmitting(true);
     try {
@@ -109,11 +167,36 @@ export function PlanningWorkspace({
     } finally {
       setSubmitting(false);
     }
-  }
+  }, [onGenerate, submitting]);
 
   function selectFormat(format: StoryFormat) {
     update({ format });
   }
+
+  useEffect(() => {
+    setAutoContinueStopped(false);
+    setAutoContinueSeconds(AUTO_CONTINUE_DELAY_MS / 1_000);
+  }, [draft.goal, draft.targetLengthSec, draft.aspectRatio, draft.platform, draft.format]);
+
+  useEffect(() => {
+    if (!planIsReady || isLongVideo || autoContinueStopped || error || !canContinue) return;
+
+    const startedAt = Date.now();
+    const interval = window.setInterval(() => {
+      const elapsedMs = Date.now() - startedAt;
+      const remainingMs = Math.max(0, AUTO_CONTINUE_DELAY_MS - elapsedMs);
+      setAutoContinueSeconds(Math.ceil(remainingMs / 1_000));
+    }, 250);
+    const timer = window.setTimeout(() => {
+      setAutoContinueStopped(true);
+      void generate();
+    }, AUTO_CONTINUE_DELAY_MS);
+
+    return () => {
+      window.clearInterval(interval);
+      window.clearTimeout(timer);
+    };
+  }, [autoContinueStopped, canContinue, error, generate, isLongVideo, planIsReady]);
 
   return (
     <div className={styles.workspace}>
@@ -131,6 +214,80 @@ export function PlanningWorkspace({
           </Button>
         </div>
       </header>
+
+      <Card padding="lg" elevated className={styles.planCard}>
+        <div className={styles.planHeader}>
+          <div>
+            <p className={styles.kicker}>Plan outline</p>
+            <h3 className={styles.planTitle}>
+              {draft.goal.trim() || "Draft video plan"}
+            </h3>
+          </div>
+          <div className={styles.planMeta} aria-label="Plan metadata">
+            {planMetadata.map((item) => (
+              <span key={item}>{item}</span>
+            ))}
+            <span className={planIsReady ? styles.ready : styles.pending}>
+              {planIsReady ? "Ready" : "Writing"}
+            </span>
+          </div>
+        </div>
+        {planBeats.length > 0 ? (
+          <ol className={styles.beatList}>
+            {planBeats.map((beat, index) => (
+              <li className={styles.beatRow} key={beat.id}>
+                <span className={styles.beatNumber}>{index + 1}</span>
+                <div>
+                  <div className={styles.beatLabelRow}>
+                    <span className={styles.beatLabel}>{beat.label}</span>
+                    {beat.role ? <span className={styles.beatRole}>{beat.role}</span> : null}
+                  </div>
+                  <p className={styles.beatText}>{beat.text}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className={styles.rationale}>
+            Add a brief goal to generate the beat outline.
+          </p>
+        )}
+        <div className={styles.planSections}>
+          <section>
+            <p className={styles.summaryLabel}>Opening hook</p>
+            <p className={styles.summaryText}>{hookSummary}</p>
+          </section>
+          <section>
+            <p className={styles.summaryLabel}>Visual direction</p>
+            <p className={styles.summaryText}>{visualSummary}</p>
+          </section>
+        </div>
+
+        <div className={styles.caveat}>
+          <p className={styles.summaryLabel}>
+            {hasMissingInputs ? "Missing inputs / caveats" : "Caveats"}
+          </p>
+          <p className={styles.summaryText}>
+            {hasMissingInputs
+              ? missingInputs.join(", ")
+              : "No blocking inputs found. You can still revise the plan before production."}
+          </p>
+        </div>
+        <div className={isLongVideo ? styles.approvalNotice : styles.autoNotice}>
+          {isLongVideo ? (
+            <p>
+              This is longer than 30 seconds, so production will not start until you
+              explicitly approve the plan.
+            </p>
+          ) : autoContinueStopped ? (
+            <p>Auto-continue is stopped. Production will wait for your approval.</p>
+          ) : planIsReady ? (
+            <p>Production starts automatically in {autoContinueSeconds}s unless you stop here.</p>
+          ) : (
+            <p>Production will wait until the plan finishes.</p>
+          )}
+        </div>
+      </Card>
 
       <div className={styles.grid}>
         <Card padding="lg" elevated className={styles.panel}>
@@ -221,13 +378,26 @@ export function PlanningWorkspace({
       {error ? <p className="new-project-error">{error}</p> : null}
 
       <footer className={styles.footer}>
-        <Button variant="secondary" onClick={back}>
-          Back
-        </Button>
+        <div className={styles.footerSecondary}>
+          <Button variant="secondary" onClick={back}>
+            Back
+          </Button>
+          <Button variant="secondary" onClick={onEditBrief}>
+            Edit brief
+          </Button>
+          <Button variant="secondary" onClick={onEditFootage}>
+            Edit footage
+          </Button>
+          {!isLongVideo && !autoContinueStopped ? (
+            <Button variant="ghost" onClick={() => setAutoContinueStopped(true)}>
+              Stop here
+            </Button>
+          ) : null}
+        </div>
         <Button
           variant="cta"
           onClick={() => void generate()}
-          disabled={!draft.goal.trim() || submitting}
+          disabled={!canContinue}
           isLoading={submitting}
         >
           Produce
