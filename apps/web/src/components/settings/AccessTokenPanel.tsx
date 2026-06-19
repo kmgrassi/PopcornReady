@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { getSupabaseClient } from "../../lib/supabase/browser";
+import { getSupabaseAccessToken } from "../../lib/supabase/browser";
 import { Button } from "../ui/Button";
 import { useAuth } from "../auth/AuthProvider";
 import styles from "./AccessTokenPanel.module.css";
@@ -24,14 +24,10 @@ export function AccessTokenPanel() {
   const available = auth.configured && auth.status === "authenticated";
 
   const fetchToken = useCallback(async (): Promise<string | null> => {
-    if (token) return token;
     setBusy(true);
     setError(null);
     try {
-      const { data, error: sessionError } = await getSupabaseClient().auth.getSession();
-      if (sessionError) throw sessionError;
-      const value = data.session?.access_token ?? null;
-      if (!value) throw new Error("No active session token — try signing in again.");
+      const value = await getSupabaseAccessToken();
       setToken(value);
       return value;
     } catch (err) {
@@ -40,7 +36,7 @@ export function AccessTokenPanel() {
     } finally {
       setBusy(false);
     }
-  }, [token]);
+  }, []);
 
   const onToggleReveal = useCallback(async () => {
     if (revealed) {
