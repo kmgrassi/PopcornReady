@@ -329,6 +329,12 @@ export function AssetsPage() {
   const assetsQuery = useDashboardAssetsQuery(authScope, assetFilters);
   const visibilityMutation = useAssetVisibilityMutation(authScope, assetFilters);
   const mediaMutation = useAssetMediaMutation(authScope, assetFilters);
+  const setSelectedAsset = useCallback((assetId: string) => {
+    setSelectedAssetId(assetId);
+    const next = new URLSearchParams(searchParams);
+    next.set("assetId", assetId);
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const toggleVisibility = useCallback(async (asset: WorkspaceAsset) => {
     const id = asset.assetId ?? asset.id;
@@ -349,16 +355,16 @@ export function AssetsPage() {
   const openAsset = useCallback(async (asset: WorkspaceAsset) => {
     const id = asset.assetId ?? asset.id;
     if (asset.url || asset.thumbnailUrl) {
-      setSelectedAssetId(id);
+      setSelectedAsset(id);
       return;
     }
 
     setOpeningIds((current) => new Set(current).add(id));
     try {
       await mediaMutation.mutateAsync(id);
-      setSelectedAssetId(id);
+      setSelectedAsset(id);
     } catch {
-      setSelectedAssetId(id);
+      setSelectedAsset(id);
     } finally {
       setOpeningIds((current) => {
         const updated = new Set(current);
@@ -375,7 +381,7 @@ export function AssetsPage() {
   const requestedAssetId = searchParams.get("assetId");
 
   useEffect(() => {
-    if (!requestedAssetId || selectedAssetId === requestedAssetId) return;
+    if (!requestedAssetId || selectedAssetId) return;
     const requestedAsset = assetsQuery.items.find(
       (asset) => (asset.assetId ?? asset.id) === requestedAssetId,
     );
@@ -486,11 +492,13 @@ export function AssetsPage() {
         hasNext={selectedIndex >= 0 && selectedIndex < assetsQuery.items.length - 1}
         onClose={closeAssetViewer}
         onPrevious={() => {
-          if (selectedIndex > 0) setSelectedAssetId(assetsQuery.items[selectedIndex - 1].assetId ?? assetsQuery.items[selectedIndex - 1].id);
+          if (selectedIndex > 0) {
+            setSelectedAsset(assetsQuery.items[selectedIndex - 1].assetId ?? assetsQuery.items[selectedIndex - 1].id);
+          }
         }}
         onNext={() => {
           if (selectedIndex >= 0 && selectedIndex < assetsQuery.items.length - 1) {
-            setSelectedAssetId(assetsQuery.items[selectedIndex + 1].assetId ?? assetsQuery.items[selectedIndex + 1].id);
+            setSelectedAsset(assetsQuery.items[selectedIndex + 1].assetId ?? assetsQuery.items[selectedIndex + 1].id);
           }
         }}
         onRefresh={async (item) => {
