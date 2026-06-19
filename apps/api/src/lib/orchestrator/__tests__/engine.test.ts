@@ -503,6 +503,36 @@ test("a pending stop gate parks for review after an async job succeeds", async (
   assert.deepEqual(store.actions[0].outputAssetIds, ["keyframe_1"]);
 });
 
+test("a stop request after a sync step prevents the live loop from starting the next tool", async () => {
+  const store = new FakeStore(runFixture());
+  const { model } = scriptedModel([
+    { type: "tool_call", toolName: "create_or_load_brief" },
+    { type: "tool_call", toolName: "plan_shots" },
+    { type: "done" },
+  ]);
+  let planShotsExecuted = false;
+  const registry = fakeRegistry({
+    create_or_load_brief: () => {
+      store.run = { ...store.run, status: "waiting" };
+      store.gates.push(gateFixture("create_or_load_brief", "reached"));
+      return ok(["asset_brief"]);
+    },
+    plan_shots: () => {
+      planShotsExecuted = true;
+      return ok(["asset_plan"]);
+    },
+  });
+
+  const stopped = await runOrchestratorToCompletion("run1", deps(store, model, registry));
+
+  assert.equal(stopped.status, "waiting");
+  assert.equal(planShotsExecuted, false);
+  assert.deepEqual(
+    store.actions.map((action) => action.tool),
+    ["create_or_load_brief"]
+  );
+});
+
 test("a model turn timeout marks the run failed instead of leaving it running", async () => {
   const store = new FakeStore(runFixture());
   let releaseModel: (() => void) | undefined;

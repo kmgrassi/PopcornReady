@@ -328,6 +328,9 @@ async function driveGuarded(run: OrchestratorRun, r: Resolved): Promise<Orchestr
 
 async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<OrchestratorRun> {
   for (let turn = 0; turn < r.maxTurns; turn += 1) {
+    run = await r.store.getOrchestratorRun(run.id);
+    if (run.status !== "running") return run;
+
     if (run.budgetUsd != null && run.spentUsd >= run.budgetUsd) {
       return finish(run, "failed", r, {
         kind: "budget_exceeded",
@@ -365,6 +368,9 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
     if (decision.type === "done") {
       return finish(run, "succeeded", r);
     }
+
+    run = await r.store.getOrchestratorRun(run.id);
+    if (run.status !== "running") return run;
 
     // Gate handling. Pending/reached gates pause before executing. Approved gates
     // fall through. Rejected gates also fall through once: that is the
