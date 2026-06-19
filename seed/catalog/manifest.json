@@ -11,7 +11,7 @@
       "generation": {
         "provider": "openai",
         "model": "gpt-image-2",
-        "size": "1536x1024",
+        "size": "1536x864",
         "quality": "high"
       },
       "prompt": "A rain-slicked downtown street at night, neo-noir style. Wet asphalt reflecting saturated neon signage in magenta, cyan, and amber; steam rising from a manhole; tall glass-and-steel towers fading into blue fog; one flickering streetlight; cinematic anamorphic look, shallow depth of field, high contrast, moody low-key lighting, subtle 35mm grain. No people, no text."
