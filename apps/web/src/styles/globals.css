@@ -3780,13 +3780,21 @@ button.eval-card-link[aria-pressed="true"] {
     font-size: 35px;
   }
   .lp-templates {
-    gap: 8px;
+    flex-wrap: wrap;
+    gap: 6px 10px;
   }
+  /* Give the hint the full row and drop the button below it so longer ideas
+     can wrap to a few lines instead of being clipped by the fixed-height,
+     overflow-hidden roller. */
   .lp-template-roller {
-    height: 46px;
+    flex-basis: 100%;
+    height: 60px;
   }
   .lp-template-item {
     align-items: flex-start;
+  }
+  .lp-template-generate {
+    margin-left: auto;
   }
 }
 
