@@ -285,20 +285,23 @@ export function AgentRunPreview() {
         </span>
       </div>
 
-      {/* Hand-off — the agent now runs everything */}
-      <div className={styles.handoff} aria-hidden="true">
-        <span className={styles.handoffArrow} />
-        <span
-          className={`${styles.actor} ${styles.actorAgent}${agentRunning ? ` ${styles.live}` : ""}`}
-        >
-          Agent
-        </span>
-        <span className={styles.handoffNote}>
-          {frame.phase === "ready"
-            ? "Run complete"
-            : "Running autonomously — step in at any step"}
-        </span>
-      </div>
+      {/* Hand-off — only after "Generate" is clicked (the brief is submitted);
+          while the user is still typing there is no agent line yet. */}
+      {frame.submitted && (
+        <div className={styles.handoff} aria-hidden="true">
+          <span className={styles.handoffArrow} />
+          <span
+            className={`${styles.actor} ${styles.actorAgent}${agentRunning ? ` ${styles.live}` : ""}`}
+          >
+            Agent
+          </span>
+          <span className={styles.handoffNote}>
+            {frame.phase === "ready"
+              ? "Run complete"
+              : "Running autonomously — step in at any step"}
+          </span>
+        </div>
+      )}
 
       {frame.act === "plan" ? (
         /* ACT ONE — the plan, large and on its own */
