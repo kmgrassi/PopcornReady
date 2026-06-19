@@ -653,6 +653,23 @@
     var(--panel-2);
 }
 
+@media (min-width: 1180px) {
+  .run {
+    max-width: 1040px;
+  }
+
+  .tiles {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    max-width: none;
+  }
+
+  .tile:nth-child(5) {
+    grid-column: auto;
+    justify-self: stretch;
+    width: auto;
+  }
+}
+
 @media (max-width: 560px) {
   /* Stack the prompt row so the input never crowds the actor + button. */
   .prompt {
