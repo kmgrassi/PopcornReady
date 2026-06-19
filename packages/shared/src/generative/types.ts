@@ -18,8 +18,10 @@ export type GenerativeAssetKind = "image" | "video" | "audio";
 export type AudioGenerationMode = "speech" | "dialogue" | "sound_effect" | "music";
 
 export type OpenAIImageModel =
-  | "gpt-image-1"
+  | "gpt-image-2"
+  | "gpt-image-2-2026-04-21"
   | "gpt-image-1.5"
+  | "gpt-image-1"
   | "gpt-image-1-mini"
   | "dall-e-2"
   | "dall-e-3";
