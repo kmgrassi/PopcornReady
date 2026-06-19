@@ -23,10 +23,11 @@ import { useProjectQuery } from "../../lib/queryClient";
 import { v1Api } from "../../lib/api-client";
 import { StageRail } from "./StageRail";
 import {
-  StoryboardBoard,
+  StoryboardBoard as FeedbackStoryboardBoard,
   storyboardFeedbackTargetKey,
 } from "./StoryboardBoard";
 import { TerminalState } from "./TerminalState";
+import { StoryboardBoard as ReadonlyStoryboardBoard } from "../studio/StoryboardBoard";
 import styles from "./ProgressView.module.css";
 
 interface ProgressViewProps {
@@ -219,6 +220,44 @@ function headerStatus(run: GenerationRun): string {
   return "Canceled";
 }
 
+const BOARD_STAGE_TYPES = new Set<GenerationStageType>([
+  "storyboard",
+  "asset_generation",
+]);
+
+const ASSET_BOARD_TOOL_LABELS = ["generate_keyframe", "generate_clip"];
+
+function isStoryboardBoardItem(
+  item: GenerationStageItem,
+  stageById: Map<string, GenerationStage>,
+): boolean {
+  if (item.kind !== "image" && item.kind !== "video") return false;
+  const stage = stageById.get(item.stageId);
+  if (!stage || !BOARD_STAGE_TYPES.has(stage.type)) return false;
+  if (stage.type === "storyboard") return true;
+
+  const label = item.label.toLowerCase();
+  return ASSET_BOARD_TOOL_LABELS.some((tool) => label.startsWith(tool));
+}
+
+function splitStoryboardItems(
+  items: GenerationStageItem[],
+  stageById: Map<string, GenerationStage>,
+) {
+  const boardItems: GenerationStageItem[] = [];
+  const genericItems: GenerationStageItem[] = [];
+
+  for (const item of items) {
+    if (isStoryboardBoardItem(item, stageById)) {
+      boardItems.push(item);
+    } else {
+      genericItems.push(item);
+    }
+  }
+
+  return { boardItems, genericItems };
+}
+
 function BriefReviewOutput({
   brief,
   loading,
@@ -268,10 +307,6 @@ function BriefReviewOutput({
       ) : null}
     </article>
   );
-}
-
-function isVisualItem(item: GenerationStageItem): boolean {
-  return item.kind === "image" || item.kind === "video";
 }
 
 function PlanRecap({
@@ -375,11 +410,12 @@ export function ProgressView({
   const generatedItems = detail.run.reviewGate
     ? detail.stageItems.filter((item) => item.stageId !== detail.run.reviewGate?.stageId)
     : detail.stageItems;
-  const generatedVisualItems = generatedItems.filter(isVisualItem);
-  const generatedFallbackItems = generatedItems.filter((item) => !isVisualItem(item));
+  const stageById = new Map(detail.stages.map((stage) => [stage.stageId, stage]));
+  const reviewOutputGroups = splitStoryboardItems(reviewItems, stageById);
+  const generatedOutputGroups = splitStoryboardItems(generatedItems, stageById);
 
   useEffect(() => {
-    if (generatedVisualItems.length === 0) {
+    if (generatedOutputGroups.boardItems.length === 0) {
       setProjectStoryboard(null);
       return;
     }
@@ -397,7 +433,7 @@ export function ProgressView({
     return () => {
       canceled = true;
     };
-  }, [detail.run.projectId, generatedVisualItems.length]);
+  }, [detail.run.projectId, generatedOutputGroups.boardItems.length]);
 
   const pending = reviewActions?.pending ?? (fallbackApproving ? "approve" : undefined);
   const actionError = reviewActions?.error ?? fallbackError;
@@ -632,10 +668,19 @@ export function ProgressView({
               {isBriefReviewGate && (project?.brief || projectLoading) ? (
                 <BriefReviewOutput brief={project?.brief ?? null} loading={projectLoading} />
               ) : reviewItems.length > 0 ? (
-                <div className={`${styles.itemGrid} ${styles.reviewOutputGrid}`}>
-                  {reviewItems.map((item) => (
-                    <StageItemCard key={item.itemId} item={item} />
-                  ))}
+                <div className={styles.reviewOutputs}>
+                  <ReadonlyStoryboardBoard
+                    items={reviewOutputGroups.boardItems}
+                    title="Review the storyboard"
+                    description="Visual outputs from this checkpoint are grouped as beat tiles before the run continues."
+                  />
+                  {reviewOutputGroups.genericItems.length > 0 ? (
+                    <div className={`${styles.itemGrid} ${styles.reviewOutputGrid}`}>
+                      {reviewOutputGroups.genericItems.map((item) => (
+                        <StageItemCard key={item.itemId} item={item} />
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <div className={styles.reviewOutputEmpty}>
@@ -707,23 +752,23 @@ export function ProgressView({
               <h2 id="generated-assets-heading" className={styles.cardHeading}>
                 Generated assets
               </h2>
-              {generatedVisualItems.length > 0 ? (
-                <StoryboardBoard
+              <div className={styles.generatedOutputs}>
+                <FeedbackStoryboardBoard
                   runId={detail.run.runId}
-                  items={generatedVisualItems}
+                  items={generatedOutputGroups.boardItems}
                   storyboard={projectStoryboard}
                   pendingTargetKey={boardFeedbackPendingKey}
                   error={boardFeedbackError}
                   onFeedback={submitBoardFeedback}
                 />
-              ) : null}
-              {generatedFallbackItems.length > 0 ? (
-                <div className={`${styles.itemGrid} ${styles.reviewOutputGrid}`}>
-                  {generatedFallbackItems.map((item) => (
-                    <StageItemCard key={item.itemId} item={item} />
-                  ))}
-                </div>
-              ) : null}
+                {generatedOutputGroups.genericItems.length > 0 ? (
+                  <div className={`${styles.itemGrid} ${styles.reviewOutputGrid}`}>
+                    {generatedOutputGroups.genericItems.map((item) => (
+                      <StageItemCard key={item.itemId} item={item} />
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             </section>
           ) : null}
         </section>
