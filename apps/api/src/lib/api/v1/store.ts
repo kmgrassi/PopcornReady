@@ -101,6 +101,7 @@ import {
   reconcileAssetStorage,
   type VisibilityObjectStore,
 } from "../../storage/visibility-move";
+import { projectDisplayName } from "./naming";
 
 export interface V1Workspace {
   id: string;
@@ -1751,12 +1752,16 @@ export function ensureUserWorkspace(
 // ---------------------------------------------------------------------------
 export async function createProject(input: {
   workspaceId: string;
-  name: string;
+  name?: string;
   brief?: VideoBrief;
 }): Promise<{ project: V1Project; briefVersion: V1BriefVersion | null }> {
   const db = getServiceSupabase();
   const now = new Date().toISOString();
   const visibility = await defaultVisibilityForWorkspace(db, input.workspaceId);
+  const name = await projectDisplayName({
+    explicitName: input.name,
+    brief: input.brief,
+  });
 
   const insertedProject = await runQuery(
     "store.createProject insert project",
@@ -1765,7 +1770,7 @@ export async function createProject(input: {
       .insert({
         schema_version: SCHEMA_VERSIONS.project,
         workspace_id: input.workspaceId,
-        name: input.name,
+        name,
         status: "active",
         visibility,
         created_at: now,

@@ -29,6 +29,7 @@ import { randomUUID } from "crypto";
 import { AuthContext } from "./auth";
 import { ApiError, ApiErrorCode, FieldError, validationError } from "./errors";
 import { createJob, getJob, updateJob, V1Job } from "./jobs";
+import { generatedAssetDisplayName } from "./naming";
 import {
   GeneratedAssetProvenance,
   GeneratedAssetProviderSettings,
@@ -124,6 +125,7 @@ interface ParsedRequest {
   resolution?: string;
   runId?: string;
   assetRole?: string;
+  displayName?: string;
   graphInputs?: GraphAssetInput[];
 }
 
@@ -373,6 +375,14 @@ function parseGeneratedAssetRequest(body: unknown): ParsedRequest {
     resolution: body.resolution ? String(body.resolution) : undefined,
     runId: body.runId ? String(body.runId) : undefined,
     assetRole: body.assetRole ? String(body.assetRole) : undefined,
+    displayName:
+      typeof body.displayName === "string"
+        ? body.displayName
+        : typeof body.title === "string"
+          ? body.title
+          : typeof body.name === "string"
+            ? body.name
+            : undefined,
     graphInputs: parseGraphInputs(body.graphInputs),
   };
 }
@@ -627,6 +637,14 @@ async function runGeneration(
   };
 
   const now = new Date().toISOString();
+  const displayName = await generatedAssetDisplayName({
+    explicitName: parsed.displayName,
+    kind: parsed.kind,
+    provider: parsed.provider,
+    prompt: preflight.finalPrompt || parsed.prompt,
+    description: parsed.description,
+    role: parsed.assetRole,
+  });
   const context = parsed.description ? { summary: parsed.description } : undefined;
   const asset: V1Asset = {
     // Placeholder; addAsset omits it on insert and the DB assigns the real id,
@@ -642,6 +660,10 @@ async function runGeneration(
     role: parsed.assetRole,
     durationSec,
     context,
+    userContext: {
+      title: displayName,
+      ...(parsed.description ? { description: parsed.description } : {}),
+    },
     semanticAnalysis: buildSemanticAnalysis({
       // Seed for the in-JSON segment/word ids (exempt in-document keys). The
       // top-level assetId pointer is patched to the DB row id after insert.
@@ -849,6 +871,7 @@ export async function runGeneratedAssetJob(args: {
         kind: parsed.kind,
         model: parsed.model,
         prompt: parsed.prompt,
+        displayName: parsed.displayName,
         durationSec: parsed.durationSec,
         referenceAssetIds: parsed.referenceAssetIds,
         beatId: parsed.beatId,

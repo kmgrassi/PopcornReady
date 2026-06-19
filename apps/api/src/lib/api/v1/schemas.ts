@@ -822,8 +822,9 @@ export function parseStudioPlanningPreviewRequest(
 }
 
 export interface CreateProjectInput {
-  name: string;
+  name?: string;
   brief?: VideoBrief;
+  posterProvider?: string;
 }
 
 export function parseCreateProject(input: unknown): CreateProjectInput {
@@ -833,7 +834,8 @@ export function parseCreateProject(input: unknown): CreateProjectInput {
     ]);
   }
   const fields: FieldError[] = [];
-  const name = requireString(input.name, "name", fields);
+  const name = optionalString(input.name, "name", fields);
+  const posterProvider = optionalString(input.posterProvider, "posterProvider", fields);
   throwIfInvalid(fields);
 
   const brief =
@@ -841,7 +843,11 @@ export function parseCreateProject(input: unknown): CreateProjectInput {
       ? parseBrief(input.brief)
       : undefined;
 
-  return { name: name as string, brief };
+  return {
+    ...(name ? { name } : {}),
+    ...(brief ? { brief } : {}),
+    ...(posterProvider ? { posterProvider } : {}),
+  };
 }
 
 function parseStudioDraftPayload(input: unknown, path: string): StudioDraftPayload {

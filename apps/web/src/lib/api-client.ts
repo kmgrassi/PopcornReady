@@ -315,8 +315,9 @@ export interface GenerationRunArtifactResponse {
 }
 
 export interface CreateProjectInput {
-  name: string;
+  name?: string;
   brief?: VideoBriefInput;
+  posterProvider?: string;
 }
 
 export interface CreateProjectResponse extends ProjectResponse {
@@ -360,6 +361,7 @@ export type CreateTimelineRevisionInput = string | BoardRevisionRequest;
 
 export interface StartGenerationRunInput {
   brief: VideoBriefInput;
+  briefVersionId?: string;
   mode?: CompositionMode;
   allowGeneratedGapFill?: boolean;
   assetIds?: string[];

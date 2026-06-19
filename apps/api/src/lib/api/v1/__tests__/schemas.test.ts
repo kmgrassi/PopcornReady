@@ -204,13 +204,18 @@ test("parseBrief validates nested narration mode", () => {
   );
 });
 
-test("parseCreateProject requires a name and parses an optional brief", () => {
-  expectApiError(() => parseCreateProject({}), "validation_failed");
+test("parseCreateProject accepts an AI-named project request", () => {
+  assert.deepEqual(parseCreateProject({}), {});
+});
+
+test("parseCreateProject parses an explicit name and optional brief", () => {
   const input = parseCreateProject({
     name: "Demo",
+    posterProvider: "mock",
     brief: { goal: "g", targetLengthSec: 10, aspectRatio: "16:9" },
   });
   assert.equal(input.name, "Demo");
+  assert.equal(input.posterProvider, "mock");
   assert.equal(input.brief?.aspectRatio, "16:9");
 });
 

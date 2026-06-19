@@ -15,7 +15,12 @@ import {
   type OrchestratorRunGate,
   type RunActionSummary,
 } from "@/lib/api/v1/orchestrator-store";
-import { createAction, createBriefVersion, getProject } from "@/lib/api/v1/store";
+import {
+  createAction,
+  createBriefVersion,
+  getActiveProjectBrief,
+  getProject,
+} from "@/lib/api/v1/store";
 import { startPosterGenerationInBackground } from "@/lib/api/v1/poster-background";
 import { parseBrief } from "@/lib/api/v1/schemas";
 import { runOrchestratorToCompletion, resumeOrchestratorRun } from "@/lib/orchestrator/engine";
@@ -621,8 +626,21 @@ orchestratorRunsRouter.post(
   mutation(async ({ auth, body, req }, params) => {
     const projectId = requireParam(params, "projectId");
     await requireProjectAccess(auth.workspaceId, projectId);
-    const brief = promptBriefFromBody(body);
-    await createBriefVersion(auth.workspaceId, projectId, brief);
+    const providedBriefVersionId =
+      isRecord(body) && typeof body.briefVersionId === "string"
+        ? body.briefVersionId.trim()
+        : "";
+    let brief: ReturnType<typeof promptBriefFromBody>;
+    if (providedBriefVersionId) {
+      const activeBrief = await getActiveProjectBrief(projectId);
+      if (!activeBrief || activeBrief.assetId !== providedBriefVersionId) {
+        throw new ApiError("not_found", `Brief version not found: ${providedBriefVersionId}`);
+      }
+      brief = activeBrief.brief;
+    } else {
+      brief = promptBriefFromBody(body);
+      await createBriefVersion(auth.workspaceId, projectId, brief);
+    }
     const gates = requestedGateTools(body);
     const budget = budgetUsd(body);
     const { run, replayed } = await createEntrypointRun({
