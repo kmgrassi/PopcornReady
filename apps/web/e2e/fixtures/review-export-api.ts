@@ -139,6 +139,7 @@ function runDetail() {
         itemId: "item-timeline",
         stageId: "stage-timeline",
         kind: "timeline",
+        purpose: "timeline",
         label: "Rough cut timeline",
         status: "succeeded",
         progressPercent: 100,
@@ -150,6 +151,7 @@ function runDetail() {
     resultArtifacts: [
       {
         kind: "timeline",
+        purpose: "timeline",
         artifactId: timelineArtifactId,
         stageId: "stage-timeline",
         itemId: "item-timeline",

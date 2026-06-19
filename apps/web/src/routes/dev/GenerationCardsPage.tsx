@@ -2,7 +2,10 @@ import { useState } from "react";
 import StageItemCard, {
   type StageItemAsset,
 } from "../../components/generation-progress/StageItemCard";
-import type { GenerationStageItem } from "@popcorn/shared/v1/types";
+import type {
+  GenerationStageItem,
+  GenerationStageItemPurpose,
+} from "@popcorn/shared/v1/types";
 
 const imagePoster =
   "data:image/svg+xml;utf8," +
@@ -37,10 +40,27 @@ interface DemoEntry {
 }
 
 type DemoSeedEntry = Omit<DemoEntry, "item"> & {
-  item: Omit<GenerationStageItem, "createdAt" | "updatedAt">;
+  item: Omit<GenerationStageItem, "createdAt" | "updatedAt" | "purpose"> & {
+    purpose?: GenerationStageItemPurpose;
+  };
 };
 
 const demoTimestamp = "2026-05-31T09:00:00.000Z";
+
+function defaultPurposeForKind(kind: GenerationStageItem["kind"]): GenerationStageItemPurpose {
+  switch (kind) {
+    case "audio":
+      return "audio";
+    case "caption":
+      return "caption";
+    case "timeline":
+      return "timeline";
+    case "export":
+      return "export";
+    default:
+      return "unknown";
+  }
+}
 
 const rawSeedItems: DemoSeedEntry[] = [
   {
@@ -235,6 +255,7 @@ const seedItems: DemoEntry[] = rawSeedItems.map(({ item, ...entry }) => ({
   ...entry,
   item: {
     ...item,
+    purpose: item.purpose ?? defaultPurposeForKind(item.kind),
     createdAt: demoTimestamp,
     updatedAt: demoTimestamp,
   },

@@ -4,7 +4,10 @@ import React, { useState } from "react";
 import StageItemCard, {
   StageItemAsset,
 } from "@/components/generation-progress/StageItemCard";
-import type { GenerationStageItem } from "@/lib/v1/types";
+import type {
+  GenerationStageItem,
+  GenerationStageItemPurpose,
+} from "@/lib/v1/types";
 
 // Dev harness for the PR 7 progressive asset/audio cards from
 // docs/scopes/generation-progress-ui.md. The canonical GenerationRun /
@@ -49,10 +52,27 @@ interface DemoEntry {
 }
 
 type DemoSeedEntry = Omit<DemoEntry, "item"> & {
-  item: Omit<GenerationStageItem, "createdAt" | "updatedAt">;
+  item: Omit<GenerationStageItem, "createdAt" | "updatedAt" | "purpose"> & {
+    purpose?: GenerationStageItemPurpose;
+  };
 };
 
 const demoTimestamp = "2026-05-31T09:00:00.000Z";
+
+function defaultPurposeForKind(kind: GenerationStageItem["kind"]): GenerationStageItemPurpose {
+  switch (kind) {
+    case "audio":
+      return "audio";
+    case "caption":
+      return "caption";
+    case "timeline":
+      return "timeline";
+    case "export":
+      return "export";
+    default:
+      return "unknown";
+  }
+}
 
 const rawSeedItems: DemoSeedEntry[] = [
   {
@@ -247,6 +267,7 @@ const seedItems: DemoEntry[] = rawSeedItems.map(({ item, ...entry }) => ({
   ...entry,
   item: {
     ...item,
+    purpose: item.purpose ?? defaultPurposeForKind(item.kind),
     createdAt: demoTimestamp,
     updatedAt: demoTimestamp,
   },

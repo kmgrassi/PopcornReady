@@ -295,6 +295,7 @@ function runDetail(options: MockRunOptions = {}) {
             itemId: "item-storyboard-1",
             stageId: options.reviewGate.stageId,
             kind: "image",
+            purpose: "storyboard_frame",
             label: "Opening storyboard frame",
             status: "succeeded",
             provider: "fixture",
