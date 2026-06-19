@@ -191,14 +191,17 @@
     flex-wrap: wrap;
     gap: 6px 10px;
   }
-  /* Give the hint the full row and drop the button below it so longer ideas
-     can wrap to a few lines instead of being clipped by the fixed-height,
-     overflow-hidden roller. */
+  /* Give the hint the full row and drop the button below it. On narrow phones
+     the longest ideas wrap past three lines, so let the roller size to its
+     content (only one item is ever mounted) instead of clipping at a fixed
+     height. */
   .templateRoller {
     flex-basis: 100%;
-    height: 60px;
+    height: auto;
+    overflow: visible;
   }
   .templateItem {
+    position: static;
     align-items: flex-start;
   }
   .templateGenerate {
