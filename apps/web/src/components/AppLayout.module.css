@@ -42,6 +42,82 @@
   flex: 0 0 auto;
 }
 
+.publicBrand,
+.publicBrand:hover {
+  color: var(--text) !important;
+}
+
+.publicLogo,
+.publicBrand:hover .publicLogo,
+.publicBrand:focus .publicLogo,
+.publicBrand:focus-visible .publicLogo {
+  color: var(--text) !important;
+}
+
+.logoColorPopcornYellow :global(.logo-mark-popcorn) {
+  color: var(--cta);
+  stroke: currentColor;
+}
+
+.logoColorPopcornYellow :global(.logo-mark-body.logo-mark-popcorn) {
+  fill: currentColor;
+}
+
+.logoColorPopcornYellow :global(.logo-mark-body .logo-mark-popcorn) {
+  fill: currentColor;
+  stroke: none;
+}
+
+.wordmarkRounded,
+.footerWordmark {
+  display: inline-block;
+  color: var(--text-strong);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.wordmarkRounded {
+  font-family:
+    ui-rounded,
+    "SF Pro Rounded",
+    system-ui,
+    sans-serif;
+  font-size: 16px;
+  font-weight: 850;
+  letter-spacing: 0;
+}
+
+.footerWordmark {
+  font-family:
+    ui-rounded,
+    "SF Pro Rounded",
+    system-ui,
+    sans-serif;
+  font-size: 14px;
+  font-weight: 850;
+  letter-spacing: 0;
+}
+
+.logoStyleGlow {
+  filter: drop-shadow(0 0 7px color-mix(in srgb, var(--accent) 42%, transparent));
+}
+
+.logoStyleGlow :global(.logo-mark-body) {
+  opacity: 0.24;
+}
+
+.logoStyleGlow :global(.logo-mark-highlight) {
+  opacity: 0.4;
+}
+
+.logoStyleGlow :global(.logo-mark-shadow) {
+  opacity: 0;
+}
+
+.logoStyleGlow :global(.logo-mark-fill) {
+  stroke-width: 8;
+}
+
 /* New video — the one prominent sidebar CTA, sitting just under the brand. */
 .newVideo {
   width: 100%;
