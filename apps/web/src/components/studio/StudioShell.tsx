@@ -281,11 +281,17 @@ function StudioFlowView({
       <main className={styles.shell}>
         <StudioStepper step={flow.step} />
         <section className={styles.generating}>
-          <h2 className={styles.generatingHeading}>Generating your rough cut</h2>
-          <p className="muted">
-            This runs autonomously — we'll surface a preview to review as soon as
-            it's ready.
-          </p>
+          <div className={styles.workspaceIntro}>
+            <p className={styles.workspaceEyebrow}>Produce</p>
+            <h2 className={styles.generatingHeading}>Producing your video</h2>
+            <p className={styles.workspaceGoal}>
+              {flow.brief.projectName || flow.brief.goal || "Your Studio draft"}
+            </p>
+            <p className="muted">
+              The agent is running autonomously. You can stop at a checkpoint,
+              then review the rough cut in this same workspace.
+            </p>
+          </div>
           <StatusChecklist items={items} />
           {gate ? (
             <GateCard

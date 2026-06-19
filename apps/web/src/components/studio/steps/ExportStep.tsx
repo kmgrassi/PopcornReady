@@ -78,7 +78,7 @@ function formatDuration(seconds?: number) {
  * the latest v1 project timeline internally, then starts the mounted v1 timeline
  * export route and resolves the resulting artifact for the done state.
  */
-export function ExportStep({ back, projectId, completeDraft }: StepProps) {
+export function ExportStep({ back, draft, projectId, completeDraft }: StepProps) {
   const [quality, setQuality] = useState<ExportQuality>("standard");
   const [showCaptions, setShowCaptions] = useState(true);
   const [durationPolicy, setDurationPolicy] =
@@ -169,8 +169,12 @@ export function ExportStep({ back, projectId, completeDraft }: StepProps) {
 
   return (
     <StepShell
-      heading="Export"
-      description="Render the approved cut as an MP4 and send it to Outputs."
+      heading="Export your video"
+      description={
+        draft.goal
+          ? `Render the reviewed cut for: ${draft.goal}`
+          : "Render the reviewed Studio cut as an MP4 and send it to Outputs."
+      }
       onBack={back}
     >
       <div className={styles.form}>

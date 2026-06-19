@@ -25,6 +25,14 @@
   font-size: var(--title-lg);
 }
 
+.planRecap {
+  max-width: 720px;
+  margin: var(--space-2) 0 0;
+  color: var(--muted);
+  font-size: var(--text-md);
+  line-height: var(--line-body);
+}
+
 .layout {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);

@@ -40,11 +40,4 @@ export const libraryCommands: PaletteCommand[] = [
     keywords: ["quality", "admin", "tests"],
     run: go("/evals"),
   },
-  {
-    id: "library.storyboard",
-    title: "Storyboard",
-    subtitle: "Open the storyboard surface",
-    keywords: ["project", "beats", "scenes"],
-    run: go("/storyboard"),
-  },
 ];

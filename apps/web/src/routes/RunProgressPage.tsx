@@ -134,7 +134,7 @@ function RunProgress({
     return (
       <main className="progress-shell">
         <div className="progress-empty-card">
-          <h1 className="progress-title">Starting generation</h1>
+          <h1 className="progress-title">Opening production workspace</h1>
           <p className={`muted${error ? " lp-prompt-error" : ""}`}>
             {error ?? "Preparing your progress view."}
           </p>
@@ -144,7 +144,7 @@ function RunProgress({
             </p>
           ) : null}
           <Link className="secondary compact" to={studioReturnPath ?? "/studio"}>
-            Back to studio
+            {studioReturnPath ? "View draft" : "Open Studio"}
           </Link>
         </div>
       </main>

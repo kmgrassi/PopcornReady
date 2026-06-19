@@ -68,7 +68,7 @@ export function StudioEmptyState({
                   >
                     <span className={styles.draftTitle}>{draft.excerpt}</span>
                     <span className={styles.draftMeta}>
-                      {stepLabel(draft.step)} - updated {formatUpdatedAt(draft.updatedAt)}
+                      {stepLabel(draft)} - updated {formatUpdatedAt(draft.updatedAt)}
                     </span>
                   </button>
                   <Button
@@ -88,17 +88,19 @@ export function StudioEmptyState({
   );
 }
 
-function stepLabel(step: StudioDraftSummary["step"]): string {
+function stepLabel(draft: StudioDraftSummary): string {
   const labels: Record<StudioDraftSummary["step"], string> = {
     brief: "Brief",
     footage: "Footage",
-    plan: "Planning",
+    plan: "Plan",
     story: "Story",
-    generate: "Checkpoints",
+    generate: "Produce",
     review: "Review",
     export: "Export",
   };
-  return labels[step];
+  if (draft.runId && draft.step === "generate") return "Active run - Produce";
+  if (draft.runId && draft.step === "review") return "Rough cut ready - Review";
+  return labels[draft.step];
 }
 
 function formatUpdatedAt(value: string): string {

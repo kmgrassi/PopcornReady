@@ -26,6 +26,29 @@
   color: var(--text);
 }
 
+.workspaceIntro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.workspaceEyebrow {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.workspaceGoal {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  line-height: var(--line-caption);
+}
+
 .review {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);

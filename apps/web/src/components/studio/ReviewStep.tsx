@@ -65,6 +65,9 @@ export function ReviewStep({
           <h2 id="studio-review-heading" className={styles.heading}>
             Your rough cut is ready
           </h2>
+          {project?.goal ? (
+            <p className={styles.planRecap}>{project.goal}</p>
+          ) : null}
         </div>
         <Button variant="cta" onClick={onExport} disabled={!hasTimeline}>
           Continue to export

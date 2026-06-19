@@ -8,6 +8,7 @@ import {
   type GenerationStage,
   type GenerationStageType,
   type GenerationStageItem,
+  type V1Project,
   type VideoBriefInput,
 } from "@popcorn/shared/v1/types";
 import { StageItemCard } from "../generation-progress/StageItemCard";
@@ -138,10 +139,25 @@ function reviewHeading(stageType: GenerationStageType): string {
 function headerStatus(run: GenerationRun): string {
   if (run.reviewGate) return "Ready for your approval";
   if (run.status === "queued") return "Waiting to start";
-  if (run.status === "running") return "Generating";
+  if (run.status === "running") return "Producing";
   if (run.status === "succeeded") return "Complete";
   if (run.status === "failed") return "Failed";
   return "Canceled";
+}
+
+function workspaceReturnLabel({
+  hasStudioDraft,
+  terminal,
+  succeeded,
+}: {
+  hasStudioDraft: boolean;
+  terminal: boolean;
+  succeeded: boolean;
+}): string {
+  if (hasStudioDraft && succeeded) return "Review in Studio";
+  if (hasStudioDraft && terminal) return "View draft";
+  if (hasStudioDraft) return "View draft";
+  return "Open Studio";
 }
 
 function BriefReviewOutput({
@@ -205,8 +221,8 @@ export function ProgressView({
   alternateRuns,
 }: ProgressViewProps) {
   const [detail, setDetail] = useState({ run, stages, stageItems });
-  const [projectBrief, setProjectBrief] = useState<VideoBriefInput | null>(null);
-  const [projectBriefLoading, setProjectBriefLoading] = useState(false);
+  const [project, setProject] = useState<V1Project | null>(null);
+  const [projectLoading, setProjectLoading] = useState(false);
   const [fallbackApproving, setFallbackApproving] = useState(false);
   const [fallbackError, setFallbackError] = useState<string | null>(null);
   const [fallbackFeedbackNote, setFallbackFeedbackNote] = useState("");
@@ -224,30 +240,24 @@ export function ProgressView({
   }, [reviewGateKey]);
 
   useEffect(() => {
-    if (!isBriefReviewGate) {
-      setProjectBrief(null);
-      setProjectBriefLoading(false);
-      return;
-    }
-
     let canceled = false;
-    setProjectBriefLoading(true);
+    setProjectLoading(true);
     v1Api
       .getProject(detail.run.projectId)
       .then(({ project }) => {
-        if (!canceled) setProjectBrief(project.brief ?? null);
+        if (!canceled) setProject(project);
       })
       .catch(() => {
-        if (!canceled) setProjectBrief(null);
+        if (!canceled) setProject(null);
       })
       .finally(() => {
-        if (!canceled) setProjectBriefLoading(false);
+        if (!canceled) setProjectLoading(false);
       });
 
     return () => {
       canceled = true;
     };
-  }, [detail.run.projectId, isBriefReviewGate]);
+  }, [detail.run.projectId]);
 
   const terminal = isTerminal(detail.run.status);
   const reviewItems = detail.run.reviewGate
@@ -270,6 +280,13 @@ export function ProgressView({
   const currentStageDisplay = detail.run.reviewGate
     ? `${currentStageLabel} review`
     : currentStageLabel;
+  const projectBrief = project?.brief ?? null;
+  const projectTitle = project?.name?.trim() || "your video";
+  const returnLabel = workspaceReturnLabel({
+    hasStudioDraft: Boolean(studioReturnPath),
+    terminal,
+    succeeded: detail.run.status === "succeeded",
+  });
 
   async function approveFallback() {
     const reviewGate = detail.run.reviewGate;
@@ -337,18 +354,12 @@ export function ProgressView({
     <div className={styles.shell}>
       <header className={styles.header}>
         <div className={styles.headerCopy}>
-          <h1 className={styles.title}>Video generation run</h1>
-          <div className={styles.runIdRow}>
-            <span className={styles.runIdLabel}>Run ID</span>
-            <code className={styles.runId} title={detail.run.runId}>{shortId(detail.run.runId)}</code>
-            <button
-              type="button"
-              className={styles.copyButton}
-              onClick={() => void navigator.clipboard?.writeText(detail.run.runId)}
-            >
-              Copy
-            </button>
-          </div>
+          <p className={styles.eyebrow}>Unified workspace</p>
+          <h1 className={styles.title}>Producing {projectTitle}</h1>
+          <p className={styles.headerDescription}>
+            The plan, generated assets, review checkpoints, and final export stay
+            attached to this workspace.
+          </p>
         </div>
         <div className={styles.headerActions}>
           <div className={styles.headerStatusPanel} aria-label="Current run status">
@@ -381,7 +392,7 @@ export function ProgressView({
             </div>
           </div>
           <Link className={styles.secondaryButton} to={studioReturnPath ?? "/studio"}>
-            Back to studio
+            {returnLabel}
           </Link>
           {alternateRuns && alternateRuns.length > 0 ? (
             <nav className={styles.altRuns} aria-label="Other demo states">
@@ -407,6 +418,42 @@ export function ProgressView({
 
       <div className={styles.body}>
         <section className={styles.main}>
+          {projectBrief || projectLoading ? (
+            <section className={styles.workspaceRecap} aria-labelledby="workspace-recap-heading">
+              <div>
+                <p className={styles.eyebrow}>Approved plan</p>
+                <h2 id="workspace-recap-heading" className={styles.cardHeading}>
+                  {projectBrief?.goal ?? (projectLoading ? "Loading plan context..." : "Plan context")}
+                </h2>
+              </div>
+              {projectBrief ? (
+                <>
+                  <div className={styles.briefReviewMetaRow} aria-label={formatBriefMeta(projectBrief)}>
+                    {briefMetaItems(projectBrief).map((item) => (
+                      <span key={item}>{item}</span>
+                    ))}
+                  </div>
+                  {projectBrief.hookQuestion || projectBrief.strongestVisual ? (
+                    <dl className={styles.recapFields}>
+                      {projectBrief.hookQuestion ? (
+                        <div>
+                          <dt>Hook</dt>
+                          <dd>{projectBrief.hookQuestion}</dd>
+                        </div>
+                      ) : null}
+                      {projectBrief.strongestVisual ? (
+                        <div>
+                          <dt>Visual direction</dt>
+                          <dd>{projectBrief.strongestVisual}</dd>
+                        </div>
+                      ) : null}
+                    </dl>
+                  ) : null}
+                </>
+              ) : null}
+            </section>
+          ) : null}
+
           {terminal ? <TerminalState run={detail.run} /> : null}
 
           {showCancelAction ? (
@@ -431,7 +478,7 @@ export function ProgressView({
                     onClick={cancelAction.onCancel}
                     disabled={cancelAction.pending}
                   >
-                    {cancelAction.pending ? "Canceling..." : "Cancel generation"}
+                    {cancelAction.pending ? "Stopping..." : "Stop here"}
                   </button>
                 </div>
               </div>
@@ -459,8 +506,8 @@ export function ProgressView({
                     : "Review this stage before the run continues to the next generation step."}
                 </p>
               </div>
-              {isBriefReviewGate && (projectBrief || projectBriefLoading) ? (
-                <BriefReviewOutput brief={projectBrief} loading={projectBriefLoading} />
+              {isBriefReviewGate && (projectBrief || projectLoading) ? (
+                <BriefReviewOutput brief={projectBrief} loading={projectLoading} />
               ) : reviewItems.length > 0 ? (
                 <div className={`${styles.itemGrid} ${styles.reviewOutputGrid}`}>
                   {reviewItems.map((item) => (
@@ -505,7 +552,7 @@ export function ProgressView({
                       onClick={reviewActions.onCancel}
                       disabled={!!pending}
                     >
-                      {pending === "cancel" ? "Canceling..." : "Cancel generation"}
+                      {pending === "cancel" ? "Stopping..." : "Stop here"}
                     </button>
                     <button
                       type="button"
@@ -558,6 +605,17 @@ export function ProgressView({
             Started {formatDateTime(detail.run.startedAt)}. Updated{" "}
             {formatDateTime(detail.run.updatedAt)}.
           </p>
+          <div className={styles.diagnostics}>
+            <span className={styles.runIdLabel}>Run ID</span>
+            <code className={styles.runId} title={detail.run.runId}>{shortId(detail.run.runId)}</code>
+            <button
+              type="button"
+              className={styles.copyButton}
+              onClick={() => void navigator.clipboard?.writeText(detail.run.runId)}
+            >
+              Copy
+            </button>
+          </div>
         </aside>
       </div>
     </div>
