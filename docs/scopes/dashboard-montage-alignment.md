@@ -339,11 +339,25 @@ The real flow currently transitions:
 - `/studio?draft=...` setup
 - `/projects/:projectId/runs/:runId?studioDraft=...` progress
 - `/studio?draft=...&step=review` review
+- `/projects/:projectId/storyboard` standalone storyboard editing
 
 This is technically sound for resumability and deep links, but it is not a
 product distinction. The user experience should feel like one directable agent
 workspace, regardless of whether the underlying route is a draft, run, review, or
 project-edit URL.
+
+Surface decision:
+
+- **Build the target experience in Studio / the unified workspace.** `StudioShell`
+  is the right place for creation, progress, review, and editing to converge.
+- **Reuse the storyboard data model and any useful editor logic**, but do not
+  keep `StoryboardEditor` as a second user-facing editor. It is scaffolding until
+  the board-first Studio surface exists.
+- **Keep run progress deep links**, but make them feel like the same workspace
+  and reuse the same board/progress components.
+- **Retire duplicate editing routes after migration.** Once Studio owns the
+  board-first edit surface, `/projects/:projectId/storyboard` should redirect to
+  the Studio/project workspace or be removed from app navigation.
 
 Target:
 
@@ -394,6 +408,8 @@ now and relational graph-backed rows when persisted.
 - No fake interactive landing animation inside the dashboard.
 - No manual timeline editor or drag-to-trim surface.
 - No broad dashboard shell rewrite beyond the creation-flow surfaces named here.
+- No permanent second editor. The standalone storyboard route can exist during
+  migration, but the end state is one Studio/workspace editing surface.
 - No uploaded-image intake flow in this pass. Future scope: when users bring
   images, the AI should ask what the images are and what role each should play
   before deciding the right entry stage.
@@ -488,13 +504,16 @@ Goal: introduce the board/tile UI as the primary visual-generation surface.
 
 Scope:
 
-- Add `apps/web/src/components/progress/StoryboardBoard.tsx` plus module CSS.
+- Add `apps/web/src/components/studio/StoryboardBoard.tsx` plus module CSS
+  (or a similarly shared Studio/workspace component path if reuse requires it).
 - Group available storyboard/keyframe/shot-like items into beat/scene tiles using
   existing stage/run context first.
 - Each tile shows best available media: shot thumbnail/video, else keyframe, else
   storyboard panel, else placeholder.
 - Keep `StageItemCard` fallback for audio, captions, timeline, export, and
   unknown assets.
+- Render the board inside the Studio/review/progress workspace, not as a new
+  standalone editing page.
 
 Definition of done:
 
@@ -516,7 +535,8 @@ Scope:
 - Initially route through the existing timeline revision path if sufficient, or
   add a narrow board revision endpoint if the existing endpoint cannot carry the
   target context cleanly.
-- Do not remove the existing storyboard editor yet; treat it as scaffolding.
+- Do not remove the existing standalone storyboard editor in this PR; treat it as
+  scaffolding until Studio has parity.
 
 Definition of done:
 
@@ -554,13 +574,16 @@ Scope:
   `/studio`, run progress, and review/export.
 - Make "Back to studio" context-specific and less route-centric.
 - Ensure drafts with active runs resume to the correct stage with visible status.
+- Move project storyboard entry points toward the Studio/project workspace; do
+  not send users into a separate editor for normal creation/editing.
 - Avoid duplicating progress logic; reuse existing progress/query hooks.
 
 Definition of done:
 
 - The user does not have to learn separate workflows for create, resume, and
   edit.
-- Deep links still work for run progress and review.
+- Deep links still work for run progress and review, but route users back into
+  the unified workspace language.
 
 ### PR 9 — Artifact Purpose Metadata
 
@@ -593,6 +616,30 @@ Definition of done:
 
 - Review feels like the continuation of the same board/workspace.
 - Users can give both whole-cut and targeted feedback from review.
+
+### PR 11 — Retire Duplicate Editing Surfaces
+
+Goal: delete or redirect the older editing surfaces once Studio owns the
+board-first edit workflow.
+
+Scope:
+
+- Remove normal app navigation to `/projects/:projectId/storyboard`.
+- Redirect `/projects/:projectId/storyboard` to the relevant Studio/project
+  workspace route, or delete the route once no deep links depend on it.
+- Delete `StoryboardEditor` and its global `storyboard.css` after the
+  `StoryboardBoard` + AI-mediated edit workflow has parity.
+- Audit legacy Next-era editor files under `src/components/editor/*` and
+  `src/components/Editor.tsx`; delete them in this PR only if they are no longer
+  imported by active legacy routes/tests, otherwise document the remaining owner
+  and create a separate cleanup issue.
+
+Definition of done:
+
+- There is one user-facing editing workspace in the authenticated app.
+- Storyboard editing no longer uses a separate form-style editor page.
+- Dead legacy editor files are removed or explicitly documented as still owned by
+  legacy Next surfaces.
 
 ## Open Decisions
 
