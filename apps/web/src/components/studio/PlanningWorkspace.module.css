@@ -122,6 +122,57 @@
   line-height: 1.5;
 }
 
+.caveat {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  background: var(--panel-2);
+}
+
+.summaryLabel {
+  margin: 0 0 var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.summaryText {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.planSections {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-4);
+}
+
+.planSections section {
+  min-width: 0;
+}
+
+.autoNotice,
+.approvalNotice {
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.autoNotice {
+  background: color-mix(in srgb, var(--cta) 14%, var(--panel));
+  color: var(--text);
+}
+
+.approvalNotice {
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+  color: var(--text);
+}
+
+.autoNotice p,
+.approvalNotice p {
+  margin: 0;
+}
 .grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -240,6 +291,12 @@
   gap: var(--space-3);
 }
 
+.footerSecondary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
 @media (max-width: 780px) {
   .header {
     align-items: stretch;
@@ -255,6 +312,7 @@
   }
 
   .grid,
+  .planSections,
   .formatGrid {
     grid-template-columns: 1fr;
   }
