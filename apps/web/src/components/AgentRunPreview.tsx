@@ -36,6 +36,8 @@ const KEYFRAME_SRCS: (string | null)[] = [
   "/images/keyframe-4.jpg", // premiere — arrival
   "/images/keyframe-5.jpg", // payoff — best picture
 ];
+const KEYFRAME_PRELOAD_SRCS = KEYFRAME_SRCS.filter(Boolean) as string[];
+const preloadedKeyframes = new Set<string>();
 
 // Cadence, in ticks (1 tick = TICK_MS). Tuned so the full cycle reads in ~20s.
 const TICK_MS = 90;
@@ -89,6 +91,19 @@ function prefersReducedMotion() {
     typeof window !== "undefined" &&
     window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
   );
+}
+
+function preloadKeyframes() {
+  if (typeof window === "undefined") return;
+
+  for (const src of KEYFRAME_PRELOAD_SRCS) {
+    if (preloadedKeyframes.has(src)) continue;
+    preloadedKeyframes.add(src);
+
+    const image = new Image();
+    image.decoding = "async";
+    image.src = src;
+  }
 }
 
 interface Frame {
@@ -328,6 +343,10 @@ export function AgentRunPreview() {
   const [reduced] = useState(prefersReducedMotion);
 
   useEffect(() => {
+    preloadKeyframes();
+  }, []);
+
+  useEffect(() => {
     if (reduced) return;
     const node = runRef.current;
     if (!node) return;
@@ -471,7 +490,13 @@ export function AgentRunPreview() {
                       key={index}
                     >
                       {ready && src && (
-                        <img className={styles.tileImg} src={src} alt="" loading="lazy" />
+                        <img
+                          className={styles.tileImg}
+                          src={src}
+                          alt=""
+                          decoding="async"
+                          loading="eager"
+                        />
                       )}
                     </span>
                   );
