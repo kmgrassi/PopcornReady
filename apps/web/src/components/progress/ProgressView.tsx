@@ -9,6 +9,8 @@ import {
   type GenerationStage,
   type GenerationStageType,
   type GenerationStageItem,
+  type BoardRevisionTarget,
+  type ProjectStoryboard,
   type V1Project,
   type VideoBriefInput,
 } from "@popcorn/shared/v1/types";
@@ -18,9 +20,14 @@ import {
   GenerationRunRequestError,
 } from "../../lib/v1/generation-runs/client";
 import { useProjectQuery } from "../../lib/queryClient";
+import { v1Api } from "../../lib/api-client";
 import { StageRail } from "./StageRail";
+import {
+  StoryboardBoard as FeedbackStoryboardBoard,
+  storyboardFeedbackTargetKey,
+} from "./StoryboardBoard";
 import { TerminalState } from "./TerminalState";
-import { StoryboardBoard } from "../studio/StoryboardBoard";
+import { StoryboardBoard as ReadonlyStoryboardBoard } from "../studio/StoryboardBoard";
 import styles from "./ProgressView.module.css";
 
 interface ProgressViewProps {
@@ -374,9 +381,12 @@ export function ProgressView({
   alternateRuns,
 }: ProgressViewProps) {
   const [detail, setDetail] = useState({ run, stages, stageItems });
+  const [projectStoryboard, setProjectStoryboard] = useState<ProjectStoryboard | null>(null);
   const [fallbackApproving, setFallbackApproving] = useState(false);
   const [fallbackError, setFallbackError] = useState<string | null>(null);
   const [fallbackFeedbackNote, setFallbackFeedbackNote] = useState("");
+  const [boardFeedbackPendingKey, setBoardFeedbackPendingKey] = useState<string | null>(null);
+  const [boardFeedbackError, setBoardFeedbackError] = useState<string | null>(null);
   const reviewGateKey = detail.run.reviewGate?.stageId ?? null;
   const isBriefReviewGate = detail.run.reviewGate?.stageType === "brief_intake";
   const projectQuery = useProjectQuery(detail.run.projectId);
@@ -400,6 +410,31 @@ export function ProgressView({
   const generatedItems = detail.run.reviewGate
     ? detail.stageItems.filter((item) => item.stageId !== detail.run.reviewGate?.stageId)
     : detail.stageItems;
+  const stageById = new Map(detail.stages.map((stage) => [stage.stageId, stage]));
+  const reviewOutputGroups = splitStoryboardItems(reviewItems, stageById);
+  const generatedOutputGroups = splitStoryboardItems(generatedItems, stageById);
+
+  useEffect(() => {
+    if (generatedOutputGroups.boardItems.length === 0) {
+      setProjectStoryboard(null);
+      return;
+    }
+
+    let canceled = false;
+    v1Api
+      .getProjectStoryboard(detail.run.projectId)
+      .then(({ storyboard }) => {
+        if (!canceled) setProjectStoryboard(storyboard ?? null);
+      })
+      .catch(() => {
+        if (!canceled) setProjectStoryboard(null);
+      });
+
+    return () => {
+      canceled = true;
+    };
+  }, [detail.run.projectId, generatedOutputGroups.boardItems.length]);
+
   const pending = reviewActions?.pending ?? (fallbackApproving ? "approve" : undefined);
   const actionError = reviewActions?.error ?? fallbackError;
   const showCancelAction = !terminal && !detail.run.reviewGate && !!cancelAction;
@@ -408,9 +443,6 @@ export function ProgressView({
   const progress = progressSummary(detail.run, detail.stages);
   const nextType = nextStageType(detail.run, detail.stages);
   const nextStageLabel = nextType ? reviewStageLabel(nextType) : null;
-  const stageById = new Map(detail.stages.map((stage) => [stage.stageId, stage]));
-  const reviewOutputGroups = splitStoryboardItems(reviewItems, stageById);
-  const generatedOutputGroups = splitStoryboardItems(generatedItems, stageById);
   const currentStageLabel = detail.run.reviewGate
     ? reviewStageLabel(detail.run.reviewGate.stageType)
     : detail.run.currentStageType
@@ -481,6 +513,25 @@ export function ProgressView({
   const onApprove = reviewActions
     ? () => reviewActions.onApprove(feedbackNote)
     : approveFallback;
+
+  async function submitBoardFeedback(input: {
+    message: string;
+    target: BoardRevisionTarget;
+  }) {
+    const key = storyboardFeedbackTargetKey(input.target);
+    setBoardFeedbackPendingKey(key);
+    setBoardFeedbackError(null);
+    try {
+      await v1Api.createRunBoardRevision(detail.run.projectId, detail.run.runId, input);
+    } catch (err) {
+      setBoardFeedbackError(
+        err instanceof Error ? err.message : "Could not send board feedback.",
+      );
+      throw err;
+    } finally {
+      setBoardFeedbackPendingKey(null);
+    }
+  }
 
   return (
     <div className={styles.shell}>
@@ -618,7 +669,7 @@ export function ProgressView({
                 <BriefReviewOutput brief={project?.brief ?? null} loading={projectLoading} />
               ) : reviewItems.length > 0 ? (
                 <div className={styles.reviewOutputs}>
-                  <StoryboardBoard
+                  <ReadonlyStoryboardBoard
                     items={reviewOutputGroups.boardItems}
                     title="Review the storyboard"
                     description="Visual outputs from this checkpoint are grouped as beat tiles before the run continues."
@@ -702,10 +753,13 @@ export function ProgressView({
                 Generated assets
               </h2>
               <div className={styles.generatedOutputs}>
-                <StoryboardBoard
+                <FeedbackStoryboardBoard
+                  runId={detail.run.runId}
                   items={generatedOutputGroups.boardItems}
-                  title="Storyboard and keyframes"
-                  description="Visual generation is grouped into beat tiles first. Audio, captions, timeline, export, and unknown outputs stay in the asset list."
+                  storyboard={projectStoryboard}
+                  pendingTargetKey={boardFeedbackPendingKey}
+                  error={boardFeedbackError}
+                  onFeedback={submitBoardFeedback}
                 />
                 {generatedOutputGroups.genericItems.length > 0 ? (
                   <div className={`${styles.itemGrid} ${styles.reviewOutputGrid}`}>

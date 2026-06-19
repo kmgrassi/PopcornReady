@@ -231,6 +231,39 @@ test("reconstructs priorResults from persisted actions for each model turn", asy
   ]);
 });
 
+test("threads board feedback target context into the next model turn", async () => {
+  const store = new FakeStore(runFixture());
+  store.actions.push({
+    id: "feedback_1",
+    tool: "board_feedback",
+    status: "applied",
+    params: {
+      schemaVersion: "board_revision_request.v1",
+      message: "Make this tile feel colder.",
+      target: { scope: "tile", beatId: "beat_1", keyframeAssetId: "asset_1" },
+    },
+    outputAssetIds: [],
+    jobIds: [],
+    createdAt: "t1",
+  });
+  const { model, calls } = scriptedModel([{ type: "done" }]);
+
+  await runOrchestratorToCompletion("run1", deps(store, model, fakeRegistry({})));
+
+  assert.deepEqual(calls[0], [
+    {
+      tool: "board_feedback",
+      status: "applied",
+      outputAssetIds: [],
+      request: {
+        schemaVersion: "board_revision_request.v1",
+        message: "Make this tile feel colder.",
+        target: { scope: "tile", beatId: "beat_1", keyframeAssetId: "asset_1" },
+      },
+    },
+  ]);
+});
+
 test("threads a failed action's recovery guidance into the next model turn", async () => {
   const store = new FakeStore(runFixture());
   const { model, calls } = scriptedModel([
