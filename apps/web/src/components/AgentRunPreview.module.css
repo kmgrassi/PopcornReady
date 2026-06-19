@@ -78,7 +78,6 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-left: auto;
   padding: 4px 10px;
   border-radius: 999px;
   background: var(--accent-soft);
@@ -158,16 +157,17 @@
 
 .input {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   min-height: 38px;
-  padding: 8px 12px;
+  padding: 12px 14px;
   border-radius: 10px;
   background: var(--panel-2);
   border: 1px solid rgba(255, 255, 255, 0.07);
-  font-size: 13.5px;
-  line-height: 1.4;
+  /* Brief reads big — same scale as the plan's hook line. */
+  font-size: 22px;
+  line-height: 1.35;
+  font-weight: 500;
   color: var(--text);
-  overflow: hidden;
 }
 
 .input.inputTyping {
@@ -176,7 +176,7 @@
 }
 
 .inputText {
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .caretUser {
@@ -228,11 +228,25 @@
   color: var(--muted);
 }
 
-.body {
-  display: grid;
-  grid-template-columns: 1.35fr 1fr;
-  gap: 16px;
-  padding: 12px 16px 16px;
+/* The two acts share a min-height so switching between them doesn't jump the
+   card's height. Each fades/lifts in so the transition reads as a deliberate
+   step, not a swap. */
+.planStage,
+.produceStage {
+  padding: 12px 16px 18px;
+  min-height: 208px;
+  animation: stageIn 0.4s ease-out;
+}
+
+@keyframes stageIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* Step header — label on the left, "Stop here" on the active step. */
@@ -285,22 +299,53 @@
   to { opacity: 1; transform: none; }
 }
 
-.beats {
+/* ACT ONE — the plan, large and in its own card so it dominates the view. */
+.planCard {
+  margin-top: 8px;
+  padding: 20px 22px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 60%), var(--panel-2);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  animation: beatIn 0.35s ease-out;
+}
+
+.planList {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 8px;
-  min-height: 132px;
+  gap: 14px;
   align-content: start;
 }
 
-.beat {
+.planHook,
+.planStep {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 8px;
-  align-items: start;
+  gap: 12px;
+  align-items: baseline;
   animation: beatIn 0.3s ease-out;
+}
+
+/* The hook reads as the headline of the plan; steps sit a notch quieter. */
+.planHook {
+  padding-bottom: 14px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.planHook .beatText {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+.planStep .beatText {
+  font-size: 16.5px;
+  line-height: 1.45;
+  color: var(--muted);
 }
 
 @keyframes beatIn {
@@ -312,6 +357,189 @@
     opacity: 1;
     transform: none;
   }
+}
+
+/* The continue beat — a clapperboard that reads CUT → 3 · 2 · 1 → ACTION,
+   snapping shut on "action" like a real slate. */
+/* A cohesive little control: the clapperboard + caption sit together on top,
+   the Stop button below — inside a faint panel so it reads as intentional, not
+   loose pieces. Generous top room clears the raised clap-stick. */
+.clapRow {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: fit-content;
+  margin: 40px auto 6px;
+  padding: 26px 22px 18px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  animation: beatIn 0.3s ease-out;
+}
+
+.clapMain {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.clap {
+  position: relative;
+  flex: 0 0 auto;
+  width: 78px;
+}
+
+/* The hinged clap-stick: diagonal black/white stripes, raised while open. */
+.clapStick {
+  position: absolute;
+  top: -11px;
+  left: 0;
+  right: 0;
+  height: 14px;
+  border-radius: 3px;
+  background: repeating-linear-gradient(58deg, #f6f2ff 0 8px, #15121d 8px 16px);
+  transform-origin: 5px 100%;
+  transform: rotate(-24deg);
+  transition: transform 0.16s cubic-bezier(0.2, 0.9, 0.3, 1.4);
+}
+
+.clapShut .clapStick {
+  transform: rotate(0deg);
+}
+
+.clapBody {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 56px;
+  border-radius: 6px;
+  background: #15121d;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+/* Thin striped strip along the body's top edge (where the stick meets it). */
+.clapBody::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 8px;
+  background: repeating-linear-gradient(58deg, #f6f2ff 0 8px, #15121d 8px 16px);
+}
+
+.clapText {
+  margin-top: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--text);
+  animation: countPop 0.25s ease-out;
+}
+
+.clap[data-state="action"] .clapText {
+  color: var(--accent);
+}
+
+.clapShut {
+  animation: clapShake 0.26s ease-out;
+}
+
+@keyframes clapShake {
+  0% { transform: translateX(0) rotate(0); }
+  35% { transform: translateX(-2px) rotate(-1.2deg); }
+  65% { transform: translateX(2px) rotate(0.6deg); }
+  100% { transform: none; }
+}
+
+@keyframes countPop {
+  from { opacity: 0; transform: scale(0.6); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.clapCaption {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.clap[data-state="action"] + .clapCaption {
+  color: var(--accent);
+}
+
+/* A small stop button beside the clapperboard — reads as something the user
+   could click to step in. Decorative here (aria-hidden), but styled live. */
+.clapStop {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease;
+}
+
+.clapStop:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.clapStopGlyph {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 2px;
+  background: var(--accent-2);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent-2) 60%, transparent);
+}
+
+/* ACT TWO — the plan recedes to a one-line recap above the production. */
+.planRecap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  animation: beatIn 0.35s ease-out;
+}
+
+.recapCheck {
+  flex: 0 0 auto;
+  color: var(--good);
+  font-weight: 800;
+  font-size: 12px;
+}
+
+.recapText {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.recapCount {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .beatTag {
@@ -346,13 +574,40 @@
   50% { opacity: 0; }
 }
 
+/* Act two's feature: the keyframes get their own card and become the big,
+   prominent thing once the plan recedes. */
+.keyframesCard {
+  padding: 18px 20px 20px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 60%), var(--panel-2);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  animation: beatIn 0.35s ease-out;
+}
+
+/* Prominent in act two: a row of widescreen frames, like a shot strip. */
+/* Storyboard board: a 2-column grid so the five frames read 2 / 2 / 1, with the
+   last frame centered on its own row. Capped + centered so it stays a tidy board
+   on wide screens and shrinks to fit on narrow ones. */
 .tiles {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  max-width: 440px;
+  margin: 0 auto;
+}
+
+/* The 5th frame spans the row but keeps a single tile's width, centered. */
+.tile:nth-child(5) {
+  grid-column: 1 / -1;
+  justify-self: center;
+  width: calc((100% - 14px) / 2);
 }
 
 .tile {
+  position: relative;
+  overflow: hidden;
+  /* Square to match the storyboard frames (1254×1254). */
   aspect-ratio: 1;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -362,6 +617,23 @@
   opacity: 0.35;
   transform: scale(0.94);
   transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+/* The generated storyboard frame fades in once its tile is "ready". */
+.tileImg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: inherit;
+  animation: tileImgIn 0.4s ease-out;
+}
+
+@keyframes tileImgIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .tile.tileReady {
@@ -381,47 +653,7 @@
     var(--panel-2);
 }
 
-.timeline {
-  padding: 4px 16px 18px;
-}
-
-.track {
-  position: relative;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 4px;
-  height: 26px;
-}
-
-.seg {
-  border-radius: 5px;
-  background: var(--panel-2);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  transition: background 0.3s ease, box-shadow 0.3s ease;
-}
-
-.seg.segFilled {
-  background: linear-gradient(90deg, var(--accent), var(--accent-2));
-  box-shadow: 0 0 16px rgba(245, 120, 60, 0.3);
-}
-
-.playhead {
-  position: absolute;
-  top: -3px;
-  bottom: -3px;
-  width: 2px;
-  background: #fff;
-  box-shadow: 0 0 10px rgba(255, 255, 255, 0.7);
-  transition: left 0.12s linear;
-}
-
 @media (max-width: 560px) {
-  .body {
-    grid-template-columns: 1fr;
-  }
-  .tiles {
-    grid-template-columns: repeat(5, 1fr);
-  }
   /* Stack the prompt row so the input never crowds the actor + button. */
   .prompt {
     grid-template-columns: 1fr auto;
