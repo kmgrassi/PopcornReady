@@ -364,8 +364,12 @@
 .clapRow {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 12px;
-  margin-top: 18px;
+  /* Extra top room so the raised, rotated clap-stick clears the plan card above
+     it instead of overlapping it. */
+  margin-top: 46px;
+  padding-top: 8px;
   animation: beatIn 0.3s ease-out;
 }
 
