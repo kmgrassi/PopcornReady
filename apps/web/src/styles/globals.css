@@ -2533,7 +2533,9 @@ button.eval-card-link[aria-pressed="true"] {
 }
 
 .lp-prompt {
-  max-width: 640px;
+  /* Wide at baseline so a real prompt has room — and matches the run-preview
+     card below it (728px) for a consistent hero → overview rhythm. */
+  max-width: 728px;
   margin: 36px auto 0;
   text-align: left;
   background: var(--panel);
