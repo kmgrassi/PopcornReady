@@ -28,6 +28,16 @@ const BEATS = [
 
 const TILE_COUNT = 5;
 
+// Storyboard keyframes, one per beat of the dream-montage. `null` = not generated
+// yet (shows the placeholder tile) — keyframe 3 (the montage) is still pending.
+const KEYFRAME_SRCS: (string | null)[] = [
+  "/images/keyframe-1.jpg", // hook — the struggle
+  "/images/keyframe-2.jpg", // discovery — the turn
+  null, // montage — pending
+  "/images/keyframe-4.jpg", // premiere — arrival
+  "/images/keyframe-5.jpg", // payoff — best picture
+];
+
 // Cadence, in ticks (1 tick = TICK_MS). Tuned so the full cycle reads in ~20s.
 const TICK_MS = 90;
 const TYPE_TICKS = 30; // user types the brief
@@ -385,13 +395,21 @@ export function AgentRunPreview() {
             <div className={styles.keyframesCard}>
               <StepHead label="Keyframes" active={frame.activeStage === "keyframes"} />
               <div className={styles.tiles}>
-                {Array.from({ length: TILE_COUNT }, (_, index) => (
-                  <span
-                    className={`${styles.tile}${index < frame.tiles ? ` ${styles.tileReady}` : ""}`}
-                    data-tile={index}
-                    key={index}
-                  />
-                ))}
+                {Array.from({ length: TILE_COUNT }, (_, index) => {
+                  const ready = index < frame.tiles;
+                  const src = KEYFRAME_SRCS[index];
+                  return (
+                    <span
+                      className={`${styles.tile}${ready ? ` ${styles.tileReady}` : ""}`}
+                      data-tile={index}
+                      key={index}
+                    >
+                      {ready && src && (
+                        <img className={styles.tileImg} src={src} alt="" loading="lazy" />
+                      )}
+                    </span>
+                  );
+                })}
               </div>
             </div>
 

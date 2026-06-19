@@ -551,7 +551,10 @@
 }
 
 .tile {
-  aspect-ratio: 16 / 9;
+  position: relative;
+  overflow: hidden;
+  /* Square to match the storyboard frames (1254×1254). */
+  aspect-ratio: 1;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background:
@@ -560,6 +563,23 @@
   opacity: 0.35;
   transform: scale(0.94);
   transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+/* The generated storyboard frame fades in once its tile is "ready". */
+.tileImg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: inherit;
+  animation: tileImgIn 0.4s ease-out;
+}
+
+@keyframes tileImgIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .tile.tileReady {
