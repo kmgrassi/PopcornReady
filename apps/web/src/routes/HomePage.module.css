@@ -1,5 +1,9 @@
 .overview {
   display: grid;
+  /* Explicit stretching column so the run-preview card fills the width and stays
+     a stable size. Without it, the implicit `auto` track sizes to content, so the
+     card visibly grows as the agent's brief auto-types in. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-5);
 }
 
