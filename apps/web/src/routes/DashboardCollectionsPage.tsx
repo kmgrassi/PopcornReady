@@ -1,4 +1,4 @@
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import type { GenerationRunStatus } from "@popcorn/shared/v1/types";
 import {
@@ -307,6 +307,7 @@ export function ProjectsPage() {
 }
 
 export function AssetsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const authScope = useDashboardAuthScope();
   const [kind, setKind] = useState<AssetKindFilter>("all");
   const [source, setSource] = useState<AssetSourceFilter>("all");
@@ -361,6 +362,24 @@ export function AssetsPage() {
     ? assetsQuery.items.findIndex((asset) => (asset.assetId ?? asset.id) === selectedAssetId)
     : -1;
   const selectedAsset = selectedIndex >= 0 ? assetsQuery.items[selectedIndex] : null;
+  const requestedAssetId = searchParams.get("assetId");
+
+  useEffect(() => {
+    if (!requestedAssetId || selectedAssetId === requestedAssetId) return;
+    const requestedAsset = assetsQuery.items.find(
+      (asset) => (asset.assetId ?? asset.id) === requestedAssetId,
+    );
+    if (!requestedAsset) return;
+    void openAsset(requestedAsset);
+  }, [assetsQuery.items, openAsset, requestedAssetId, selectedAssetId]);
+
+  const closeAssetViewer = useCallback(() => {
+    setSelectedAssetId(null);
+    if (!searchParams.has("assetId")) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete("assetId");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   return (
     <DashboardFrame title="Assets" description="Generated and uploaded media across all projects in this workspace.">
@@ -417,7 +436,7 @@ export function AssetsPage() {
                     <ButtonLink
                       variant="ghost"
                       size="sm"
-                      to={projectCollectionPath(asset.projectId, { assetId: id })}
+                      to={projectCollectionPath(asset.projectId)}
                     >
                       Project
                     </ButtonLink>
@@ -453,7 +472,7 @@ export function AssetsPage() {
         item={selectedAsset ? assetViewerItem(selectedAsset) : null}
         hasPrevious={selectedIndex > 0}
         hasNext={selectedIndex >= 0 && selectedIndex < assetsQuery.items.length - 1}
-        onClose={() => setSelectedAssetId(null)}
+        onClose={closeAssetViewer}
         onPrevious={() => {
           if (selectedIndex > 0) setSelectedAssetId(assetsQuery.items[selectedIndex - 1].assetId ?? assetsQuery.items[selectedIndex - 1].id);
         }}
