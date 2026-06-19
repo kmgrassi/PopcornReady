@@ -42,27 +42,31 @@ function labelFor(value: string) {
 function WorkerSprite({
   direction,
   action,
-  frameWidth,
-  frameHeight,
+  cellWidth,
+  cellHeight,
+  cropWidth,
+  cropHeight,
   offsetX,
   offsetY,
   scale,
 }: {
   direction: Direction;
   action: Action;
-  frameWidth: number;
-  frameHeight: number;
+  cellWidth: number;
+  cellHeight: number;
+  cropWidth: number;
+  cropHeight: number;
   offsetX: number;
   offsetY: number;
   scale: number;
 }) {
   const row = rowByDirection[direction];
   const col = colByAction[action];
-  const x = offsetX + col * frameWidth;
-  const y = offsetY + row * frameHeight;
+  const x = offsetX + col * cellWidth;
+  const y = offsetY + row * cellHeight;
   const style = {
-    "--frame-width": `${frameWidth}px`,
-    "--frame-height": `${frameHeight}px`,
+    "--frame-width": `${cropWidth}px`,
+    "--frame-height": `${cropHeight}px`,
     "--sprite-scale": scale,
     backgroundImage: `url("${SPRITE_URL}")`,
     backgroundPosition: `-${x}px -${y}px`,
@@ -82,8 +86,9 @@ export function SpritePage() {
   const [direction, setDirection] = useState<Direction>("right");
   const [action, setAction] = useState<Action>("idle");
   const [position, setPosition] = useState({ x: 230, y: 150 });
-  const [frameWidth, setFrameWidth] = useState(280);
-  const [frameHeight, setFrameHeight] = useState(280);
+  const [cellWidth, setCellWidth] = useState(280);
+  const [cellHeight, setCellHeight] = useState(280);
+  const [cropHeight, setCropHeight] = useState(230);
   const [offsetX, setOffsetX] = useState(0);
   const [offsetY, setOffsetY] = useState(0);
   const [scale, setScale] = useState(0.75);
@@ -96,8 +101,8 @@ export function SpritePage() {
   const activeAction = isPlaying ? cycle[frameIndex % cycle.length] : action;
   const row = rowByDirection[direction];
   const col = colByAction[activeAction];
-  const x = offsetX + col * frameWidth;
-  const y = offsetY + row * frameHeight;
+  const x = offsetX + col * cellWidth;
+  const y = offsetY + row * cellHeight;
 
   useEffect(() => {
     if (!isPlaying) return undefined;
@@ -180,18 +185,18 @@ export function SpritePage() {
     () =>
       directions.flatMap((rowDirection) =>
         actions.map((rowAction) => {
-          const atlasX = offsetX + colByAction[rowAction] * frameWidth;
-          const atlasY = offsetY + rowByDirection[rowDirection] * frameHeight;
+          const atlasX = offsetX + colByAction[rowAction] * cellWidth;
+          const atlasY = offsetY + rowByDirection[rowDirection] * cellHeight;
           return {
             name: `${rowDirection}_${rowAction}`,
             x: atlasX,
             y: atlasY,
-            w: frameWidth,
-            h: frameHeight,
+            w: cellWidth,
+            h: cropHeight,
           };
         }),
       ),
-    [frameHeight, frameWidth, offsetX, offsetY],
+    [cellHeight, cellWidth, cropHeight, offsetX, offsetY],
   );
 
   return (
@@ -210,8 +215,10 @@ export function SpritePage() {
             <WorkerSprite
               direction={direction}
               action={activeAction}
-              frameWidth={frameWidth}
-              frameHeight={frameHeight}
+              cellWidth={cellWidth}
+              cellHeight={cellHeight}
+              cropWidth={cellWidth}
+              cropHeight={cropHeight}
               offsetX={offsetX}
               offsetY={offsetY}
               scale={scale}
@@ -356,22 +363,34 @@ export function SpritePage() {
             type="range"
             min="240"
             max="300"
-            value={frameWidth}
-            onChange={(event) => setFrameWidth(Number(event.target.value))}
+            value={cellWidth}
+            onChange={(event) => setCellWidth(Number(event.target.value))}
           />
-          <span>{frameWidth}px</span>
+          <span>{cellWidth}px</span>
         </label>
 
         <label>
-          Frame height
+          Cell height
           <input
             type="range"
             min="240"
             max="300"
-            value={frameHeight}
-            onChange={(event) => setFrameHeight(Number(event.target.value))}
+            value={cellHeight}
+            onChange={(event) => setCellHeight(Number(event.target.value))}
           />
-          <span>{frameHeight}px</span>
+          <span>{cellHeight}px</span>
+        </label>
+
+        <label>
+          Crop height
+          <input
+            type="range"
+            min="180"
+            max="280"
+            value={cropHeight}
+            onChange={(event) => setCropHeight(Number(event.target.value))}
+          />
+          <span>{cropHeight}px</span>
         </label>
 
         <label>
