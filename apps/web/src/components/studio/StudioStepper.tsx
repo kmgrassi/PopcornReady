@@ -4,10 +4,10 @@ import { STUDIO_SETUP_STEPS, type StudioStep } from "./studioSteps";
 /** Human labels for the wizard steps shown in the rail. */
 const STEP_LABELS: Record<StudioStep, string> = {
   brief: "Brief",
-  footage: "Your Footage",
-  plan: "Your Footage",
+  footage: "Footage",
+  plan: "Plan",
   story: "Story",
-  generate: "Checkpoints",
+  generate: "Produce",
   review: "Review",
   export: "Export",
 };
@@ -33,15 +33,16 @@ export function StudioStepper({
   onStepClick,
   clickableThroughStep,
 }: StudioStepperProps) {
+  const setupStep = STUDIO_SETUP_STEPS.includes(step) ? step : "plan";
   const activeIndex = Math.max(
     0,
-    STUDIO_SETUP_STEPS.indexOf(STUDIO_SETUP_STEPS.includes(step) ? step : "footage"),
+    STUDIO_SETUP_STEPS.indexOf(setupStep),
   );
   const clickableThroughIndex = clickableThroughStep
     ? STUDIO_SETUP_STEPS.indexOf(
         STUDIO_SETUP_STEPS.includes(clickableThroughStep)
           ? clickableThroughStep
-          : "footage",
+          : "plan",
       )
     : activeIndex;
   return (
