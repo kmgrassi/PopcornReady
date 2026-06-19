@@ -313,7 +313,8 @@ surface users learned.
 
 The board should be **AI-mediated**, not a manual form editor. The current
 storyboard editor exposes scene/beat fields directly and saves the user's typed
-changes as structured data. That is useful scaffolding, but it is not the target
+changes as structured data. That proved the storyboard data shape, but it should
+be retired before implementation starts so it does not compete with the target
 interaction. The target interaction is: the user selects a board/tile/beat/scene
 and tells the AI what to change; the request includes the selected ids and the
 surrounding board context, and the AI decides whether to update the beat text,
@@ -351,13 +352,13 @@ Surface decision:
 - **Build the target experience in Studio / the unified workspace.** `StudioShell`
   is the right place for creation, progress, review, and editing to converge.
 - **Reuse the storyboard data model and any useful editor logic**, but do not
-  keep `StoryboardEditor` as a second user-facing editor. It is scaffolding until
-  the board-first Studio surface exists.
+  keep `StoryboardEditor` as a second user-facing editor. Retire the standalone
+  page first so implementation work is not split between two editing surfaces.
 - **Keep run progress deep links**, but make them feel like the same workspace
   and reuse the same board/progress components.
-- **Retire duplicate editing routes after migration.** Once Studio owns the
-  board-first edit surface, `/projects/:projectId/storyboard` should redirect to
-  the Studio/project workspace or be removed from app navigation.
+- **Retire duplicate editing routes up front.** `/projects/:projectId/storyboard`
+  should redirect to Studio (or another non-editing project destination) before
+  new board work begins.
 
 Target:
 
@@ -408,8 +409,9 @@ now and relational graph-backed rows when persisted.
 - No fake interactive landing animation inside the dashboard.
 - No manual timeline editor or drag-to-trim surface.
 - No broad dashboard shell rewrite beyond the creation-flow surfaces named here.
-- No permanent second editor. The standalone storyboard route can exist during
-  migration, but the end state is one Studio/workspace editing surface.
+- No permanent second editor. Retire the standalone storyboard route/editor at
+  the start of implementation so the remaining work targets one
+  Studio/workspace editing surface.
 - No uploaded-image intake flow in this pass. Future scope: when users bring
   images, the AI should ask what the images are and what role each should play
   before deciding the right entry stage.
@@ -422,22 +424,34 @@ Each PR should be independently reviewable and avoid broad aggregation files
 unless the surrounding route registration requires it. Keep styling in
 co-located CSS Modules and keep API-owned state in TanStack Query hooks.
 
-### PR 1 — Planning IA And Language
+### PR 1 — Retire Standalone Storyboard Editor + Planning IA
 
 Goal: make `/studio` read as `Brief -> Footage -> Plan -> Produce`, matching the
-landing montage before any deeper data work.
+landing montage before any deeper data work, and remove the confusing separate
+storyboard editing surface before new board work starts.
 
 Scope:
 
+- Redirect `/projects/:projectId/storyboard` to `/studio` or a non-editing
+  project destination; remove normal navigation links that invite users into the
+  standalone storyboard editor.
+- Delete `StoryboardEditor` and its route-specific global `storyboard.css` if no
+  active imports remain after the redirect.
+- If the legacy Next-era editor files under `src/components/editor/*` and
+  `src/components/Editor.tsx` are not imported by active routes/tests, delete
+  them too; otherwise leave a short cleanup note naming the remaining owner.
 - Update `StudioStepper` / `studioSteps` so `Plan` is a visible setup milestone.
 - Rename `PlanningWorkspace` actions from `Start generating` to
   `Continue to production`.
 - Update copy around the agent handoff: "Agent is writing the plan",
   "Plan ready", "Continue to production".
-- No backend changes.
+- No backend changes unless route cleanup requires removing dead storyboard-page
+  client calls.
 
 Definition of done:
 
+- There is no standalone storyboard editing page reachable from app navigation.
+- `/projects/:projectId/storyboard` does not render `StoryboardEditor`.
 - A fresh `/studio` draft visibly reaches a `Plan` step before generation.
 - Existing draft resume behavior still works.
 - Typecheck/build pass.
@@ -535,8 +549,8 @@ Scope:
 - Initially route through the existing timeline revision path if sufficient, or
   add a narrow board revision endpoint if the existing endpoint cannot carry the
   target context cleanly.
-- Do not remove the existing standalone storyboard editor in this PR; treat it as
-  scaffolding until Studio has parity.
+- Do not reintroduce a standalone storyboard editor; all user-facing board
+  feedback belongs in Studio/the unified workspace.
 
 Definition of done:
 
@@ -617,29 +631,6 @@ Definition of done:
 - Review feels like the continuation of the same board/workspace.
 - Users can give both whole-cut and targeted feedback from review.
 
-### PR 11 — Retire Duplicate Editing Surfaces
-
-Goal: delete or redirect the older editing surfaces once Studio owns the
-board-first edit workflow.
-
-Scope:
-
-- Remove normal app navigation to `/projects/:projectId/storyboard`.
-- Redirect `/projects/:projectId/storyboard` to the relevant Studio/project
-  workspace route, or delete the route once no deep links depend on it.
-- Delete `StoryboardEditor` and its global `storyboard.css` after the
-  `StoryboardBoard` + AI-mediated edit workflow has parity.
-- Audit legacy Next-era editor files under `src/components/editor/*` and
-  `src/components/Editor.tsx`; delete them in this PR only if they are no longer
-  imported by active legacy routes/tests, otherwise document the remaining owner
-  and create a separate cleanup issue.
-
-Definition of done:
-
-- There is one user-facing editing workspace in the authenticated app.
-- Storyboard editing no longer uses a separate form-style editor page.
-- Dead legacy editor files are removed or explicitly documented as still owned by
-  legacy Next surfaces.
 
 ## Open Decisions
 
