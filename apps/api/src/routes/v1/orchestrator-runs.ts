@@ -522,7 +522,6 @@ orchestratorRunsRouter.post(
     });
     if (!replayed) {
       startPosterGenerationInBackground(auth, projectId, {
-        runId: run.id,
         provider: requestedProvider(body),
       });
       startRun(auth.workspaceId, run.id, auth.actor.id);

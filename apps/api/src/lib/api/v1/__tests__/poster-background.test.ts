@@ -34,6 +34,7 @@ test("startPosterGenerationInBackground returns before poster generation settles
     generatePoster: async (_auth, projectId, input) => {
       assert.equal(projectId, "project_1");
       assert.equal(input?.provider, "mock");
+      assert.equal(input?.runId, undefined);
       return posterPromise;
     },
   });

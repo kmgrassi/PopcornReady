@@ -3,7 +3,6 @@ import { generatePoster } from "./poster-generation";
 
 export interface PosterBackgroundOptions {
   provider?: string;
-  runId?: string;
 }
 
 export interface PosterBackgroundDeps {
@@ -26,7 +25,6 @@ export function startPosterGenerationInBackground(
   void resolved
     .generatePoster(auth, projectId, {
       provider: options.provider,
-      runId: options.runId,
     })
     .catch((err) => {
       resolved.logError("poster generation failed", err);
