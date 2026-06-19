@@ -228,11 +228,25 @@
   color: var(--muted);
 }
 
-.body {
-  display: grid;
-  grid-template-columns: 1.35fr 1fr;
-  gap: 16px;
-  padding: 12px 16px 16px;
+/* The two acts share a min-height so switching between them doesn't jump the
+   card's height. Each fades/lifts in so the transition reads as a deliberate
+   step, not a swap. */
+.planStage,
+.produceStage {
+  padding: 12px 16px 18px;
+  min-height: 208px;
+  animation: stageIn 0.4s ease-out;
+}
+
+@keyframes stageIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* Step header — label on the left, "Stop here" on the active step. */
@@ -285,22 +299,41 @@
   to { opacity: 1; transform: none; }
 }
 
-.beats {
+/* ACT ONE — the plan, large and on its own. */
+.planList {
   list-style: none;
-  margin: 0;
+  margin: 6px 0 0;
   padding: 0;
   display: grid;
-  gap: 8px;
-  min-height: 132px;
+  gap: 10px;
   align-content: start;
 }
 
-.beat {
+.planHook,
+.planStep {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 8px;
+  gap: 10px;
   align-items: start;
   animation: beatIn 0.3s ease-out;
+}
+
+/* The hook reads as the headline of the plan; steps sit a notch quieter. */
+.planHook {
+  padding-bottom: 10px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.planHook .beatText {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.planStep .beatText {
+  font-size: 14px;
+  color: var(--muted);
 }
 
 @keyframes beatIn {
@@ -312,6 +345,107 @@
     opacity: 1;
     transform: none;
   }
+}
+
+/* The "Want to continue on?" indicator + 3 · 2 · 1 countdown. */
+.continue {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 16px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+  animation: beatIn 0.3s ease-out;
+}
+
+.continueSpinner {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  border: 2px solid var(--accent-border);
+  border-top-color: var(--accent);
+  animation: continueSpin 0.7s linear infinite;
+}
+
+@keyframes continueSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.continueText {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--accent);
+  animation: countPop 0.3s ease-out;
+}
+
+@keyframes countPop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ACT TWO — the plan recedes to a one-line recap above the production. */
+.planRecap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  animation: beatIn 0.35s ease-out;
+}
+
+.recapCheck {
+  flex: 0 0 auto;
+  color: var(--good);
+  font-weight: 800;
+  font-size: 12px;
+}
+
+.recapText {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.recapCount {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .beatTag {
@@ -346,14 +480,15 @@
   50% { opacity: 0; }
 }
 
+/* Prominent in act two: a row of widescreen frames, like a shot strip. */
 .tiles {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
 }
 
 .tile {
-  aspect-ratio: 1;
+  aspect-ratio: 16 / 9;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background:
@@ -382,7 +517,7 @@
 }
 
 .timeline {
-  padding: 4px 16px 18px;
+  margin-top: 16px;
 }
 
 .track {
@@ -416,12 +551,6 @@
 }
 
 @media (max-width: 560px) {
-  .body {
-    grid-template-columns: 1fr;
-  }
-  .tiles {
-    grid-template-columns: repeat(5, 1fr);
-  }
   /* Stack the prompt row so the input never crowds the actor + button. */
   .prompt {
     grid-template-columns: 1fr auto;

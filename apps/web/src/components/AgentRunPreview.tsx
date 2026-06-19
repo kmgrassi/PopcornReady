@@ -2,16 +2,19 @@ import { useEffect, useState } from "react";
 import styles from "./AgentRunPreview.module.css";
 
 /**
- * AgentRunPreview — a self-contained, looping animation of a run that makes the
- * division of labor explicit: the *user* types one short brief into an input,
- * then the *agent* takes over and does everything else (plan beats, keyframes,
- * timeline). A "Stop here" control travels with the active agent stage to show
- * the human can step in at any step while the agent runs autonomously.
+ * AgentRunPreview — a self-contained, looping animation of a run, staged so the
+ * viewer reads one idea at a time instead of a single cluttered dump:
  *
- * It is purely decorative product theatre (no real generation), so it derives
- * every frame from a single tick counter — easy to reason about, resets
- * cleanly, and tears down on unmount. Honors prefers-reduced-motion by
- * rendering the finished state with no interval.
+ *   1. You type one short brief, the agent takes over.
+ *   2. ACT ONE — PLAN: the agent writes the plan (hook + steps), shown large and
+ *      on its own.
+ *   3. A tiny "Want to continue on?" indicator counts 3 · 2 · 1.
+ *   4. ACT TWO — PRODUCE: the plan demotes to a compact recap and the keyframes
+ *      + timeline take over, now the prominent thing on screen.
+ *
+ * Purely decorative product theatre (no real generation): every frame derives
+ * from a single tick counter, so it resets cleanly and tears down on unmount.
+ * Honors prefers-reduced-motion by rendering the finished state with no interval.
  */
 
 const BRIEF = "A movie-loving kid discovers Popcorn Ready and wins Best Picture.";
@@ -25,32 +28,47 @@ const BEATS = [
 
 const TILE_COUNT = 5;
 
-// Cadence, in ticks (1 tick = TICK_MS). Tuned so the full cycle reads in ~16s.
+// Cadence, in ticks (1 tick = TICK_MS). Tuned so the full cycle reads in ~20s.
 const TICK_MS = 90;
-const TYPE_TICKS = 32; // user types the brief
+const TYPE_TICKS = 30; // user types the brief
 const HANDOFF_TICKS = 8; // brief locks, agent takes over
-const TICKS_PER_BEAT = 16;
-const PLAN_TICKS = BEATS.length * TICKS_PER_BEAT;
-const KEYFRAME_TICKS = 26;
-const TIMELINE_TICKS = 24;
-const HOLD_TICKS = 26;
+const TICKS_PER_BEAT = 14;
+const PLAN_TICKS = BEATS.length * TICKS_PER_BEAT; // beats stream in
+const PLAN_HOLD_TICKS = 12; // finished plan breathes before the prompt
+const CONTINUE_LEAD_TICKS = 14; // "Want to continue on?"
+const COUNT_TICKS = 9; // each of 3 · 2 · 1
+const CONTINUE_TICKS = CONTINUE_LEAD_TICKS + COUNT_TICKS * 3;
+const KEYFRAME_TICKS = 30;
+const TIMELINE_TICKS = 26;
+const HOLD_TICKS = 30;
 
 // Phase boundaries (cumulative tick offsets within one cycle).
 const T_HANDOFF = TYPE_TICKS;
 const T_PLAN = T_HANDOFF + HANDOFF_TICKS;
-const T_KEYFRAMES = T_PLAN + PLAN_TICKS;
+const T_PLAN_DONE = T_PLAN + PLAN_TICKS;
+const T_CONTINUE = T_PLAN_DONE + PLAN_HOLD_TICKS;
+const T_KEYFRAMES = T_CONTINUE + CONTINUE_TICKS;
 const T_TIMELINE = T_KEYFRAMES + KEYFRAME_TICKS;
 const T_READY = T_TIMELINE + TIMELINE_TICKS;
 const CYCLE = T_READY + HOLD_TICKS;
 
-type Phase = "typing" | "handoff" | "planning" | "keyframes" | "timeline" | "ready";
+type Phase =
+  | "typing"
+  | "handoff"
+  | "planning"
+  | "continue"
+  | "keyframes"
+  | "timeline"
+  | "ready";
 type Actor = "you" | "agent" | "done";
+type Act = "plan" | "produce";
 type Stage = "plan" | "keyframes" | "timeline" | null;
 
 const PHASE_STATUS: Record<Phase, string> = {
   typing: "You · writing the brief",
   handoff: "Handing to the agent",
-  planning: "Agent · planning beats",
+  planning: "Agent · writing the plan",
+  continue: "Plan ready · continuing",
   keyframes: "Agent · generating keyframes",
   timeline: "Agent · assembling timeline",
   ready: "Render ready",
@@ -66,10 +84,12 @@ function prefersReducedMotion() {
 interface Frame {
   phase: Phase;
   actor: Actor;
+  act: Act;
   brief: string;
   briefTyping: boolean;
   submitted: boolean;
   beats: { tag: string; text: string; typing: boolean }[];
+  countdown: number | null;
   tiles: number;
   timelinePct: number;
   activeStage: Stage;
@@ -78,10 +98,12 @@ interface Frame {
 const FINAL_FRAME: Frame = {
   phase: "ready",
   actor: "done",
+  act: "produce",
   brief: BRIEF,
   briefTyping: false,
   submitted: true,
   beats: BEATS.map((beat) => ({ ...beat, typing: false })),
+  countdown: null,
   tiles: TILE_COUNT,
   timelinePct: 100,
   activeStage: null,
@@ -109,8 +131,11 @@ function computeFrame(tick: number): Frame {
   } else if (t < T_PLAN) {
     phase = "handoff";
     actor = "agent";
-  } else if (t < T_KEYFRAMES) {
+  } else if (t < T_CONTINUE) {
     phase = "planning";
+    actor = "agent";
+  } else if (t < T_KEYFRAMES) {
+    phase = "continue";
     actor = "agent";
   } else if (t < T_TIMELINE) {
     phase = "keyframes";
@@ -123,10 +148,13 @@ function computeFrame(tick: number): Frame {
     actor = "done";
   }
 
+  // Act one (plan) runs until the keyframes start; then act two (produce).
+  const act: Act = t < T_KEYFRAMES ? "plan" : "produce";
+
   // --- Agent: plan beats stream in --------------------------------
   const planLocal = t - T_PLAN;
   const beats = BEATS.map((beat, index) => {
-    if (t >= T_KEYFRAMES) return { ...beat, typing: false };
+    if (t >= T_PLAN_DONE) return { ...beat, typing: false };
     const local = planLocal - index * TICKS_PER_BEAT;
     if (local <= 0) return null;
     const fraction = Math.min(1, local / (TICKS_PER_BEAT - 3));
@@ -136,6 +164,16 @@ function computeFrame(tick: number): Frame {
       typing: fraction < 1,
     };
   }).filter(Boolean) as Frame["beats"];
+
+  // --- The "Want to continue on?" countdown -----------------------
+  let countdown: number | null = null;
+  if (phase === "continue") {
+    const cl = t - T_CONTINUE;
+    if (cl >= CONTINUE_LEAD_TICKS) {
+      const step = Math.floor((cl - CONTINUE_LEAD_TICKS) / COUNT_TICKS);
+      countdown = Math.max(1, 3 - step); // 3 · 2 · 1
+    }
+  }
 
   // --- Agent: keyframes pop, then timeline assembles --------------
   let tiles = 0;
@@ -165,10 +203,12 @@ function computeFrame(tick: number): Frame {
   return {
     phase,
     actor,
+    act,
     brief,
     briefTyping,
     submitted,
     beats,
+    countdown,
     tiles,
     timelinePct,
     activeStage,
@@ -220,7 +260,7 @@ export function AgentRunPreview() {
     <div
       className={styles.run}
       role="img"
-      aria-label="Preview of a run: you type one short brief, then the agent autonomously plans the beats, generates keyframes, and assembles the timeline — and you can stop it at any step."
+      aria-label="Preview of a run: you type one short brief, the agent writes the plan, then on your go-ahead it generates the keyframes and assembles the timeline — and you can stop it at any step."
     >
       <div className={styles.head}>
         <span className={`${styles.dot} ${DOT_CLASS[frame.actor]}`} aria-hidden="true" />
@@ -260,12 +300,16 @@ export function AgentRunPreview() {
         </span>
       </div>
 
-      <div className={styles.body}>
-        <section aria-hidden="true">
+      {frame.act === "plan" ? (
+        /* ACT ONE — the plan, large and on its own */
+        <section className={styles.planStage} aria-hidden="true">
           <StepHead label="Plan" active={frame.activeStage === "plan"} />
-          <ul className={styles.beats}>
+          <ul className={styles.planList}>
             {frame.beats.map((beat, index) => (
-              <li className={styles.beat} key={index}>
+              <li
+                className={beat.tag === "HOOK" ? styles.planHook : styles.planStep}
+                key={index}
+              >
                 <span className={styles.beatTag}>{beat.tag}</span>
                 <span className={styles.beatText}>
                   {beat.text}
@@ -274,41 +318,69 @@ export function AgentRunPreview() {
               </li>
             ))}
           </ul>
-        </section>
 
-        <section aria-hidden="true">
-          <StepHead label="Keyframes" active={frame.activeStage === "keyframes"} />
-          <div className={styles.tiles}>
-            {Array.from({ length: TILE_COUNT }, (_, index) => (
-              <span
-                className={`${styles.tile}${index < frame.tiles ? ` ${styles.tileReady}` : ""}`}
-                data-tile={index}
-                key={index}
-              />
-            ))}
+          {frame.phase === "continue" && (
+            <div className={styles.continue}>
+              <span className={styles.continueSpinner} aria-hidden="true" />
+              {frame.countdown == null ? (
+                <span className={styles.continueText}>Want to continue on?</span>
+              ) : (
+                <span className={styles.continueText}>
+                  Continuing in
+                  <strong className={styles.count} key={frame.countdown}>
+                    {frame.countdown}
+                  </strong>
+                </span>
+              )}
+            </div>
+          )}
+        </section>
+      ) : (
+        /* ACT TWO — plan recedes to a recap; keyframes + timeline take over */
+        <section className={styles.produceStage} aria-hidden="true">
+          <div className={styles.planRecap}>
+            <span className={styles.sectionLabel}>Plan</span>
+            <span className={styles.recapCheck} aria-hidden="true">
+              ✓
+            </span>
+            <span className={styles.recapText}>{BEATS[0].text}</span>
+            <span className={styles.recapCount}>+{BEATS.length - 1} beats</span>
+          </div>
+
+          <div className={styles.produceMain}>
+            <StepHead label="Keyframes" active={frame.activeStage === "keyframes"} />
+            <div className={styles.tiles}>
+              {Array.from({ length: TILE_COUNT }, (_, index) => (
+                <span
+                  className={`${styles.tile}${index < frame.tiles ? ` ${styles.tileReady}` : ""}`}
+                  data-tile={index}
+                  key={index}
+                />
+              ))}
+            </div>
+
+            <div className={styles.timeline}>
+              <StepHead label="Timeline" active={frame.activeStage === "timeline"} />
+              <div className={styles.track}>
+                {BEATS.map((_, index) => {
+                  const segStart = (index / BEATS.length) * 100;
+                  const filled = frame.timelinePct > segStart;
+                  return (
+                    <span
+                      className={`${styles.seg}${filled ? ` ${styles.segFilled}` : ""}`}
+                      key={index}
+                    />
+                  );
+                })}
+                <span
+                  className={styles.playhead}
+                  style={{ left: `${frame.timelinePct}%` }}
+                />
+              </div>
+            </div>
           </div>
         </section>
-      </div>
-
-      <section className={styles.timeline} aria-hidden="true">
-        <StepHead label="Timeline" active={frame.activeStage === "timeline"} />
-        <div className={styles.track}>
-          {BEATS.map((_, index) => {
-            const segStart = (index / BEATS.length) * 100;
-            const filled = frame.timelinePct > segStart;
-            return (
-              <span
-                className={`${styles.seg}${filled ? ` ${styles.segFilled}` : ""}`}
-                key={index}
-              />
-            );
-          })}
-          <span
-            className={styles.playhead}
-            style={{ left: `${frame.timelinePct}%` }}
-          />
-        </div>
-      </section>
+      )}
     </div>
   );
 }
