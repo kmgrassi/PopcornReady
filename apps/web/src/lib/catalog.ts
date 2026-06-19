@@ -1,6 +1,8 @@
 import {
   useInfiniteQuery,
+  useMutation,
   useQuery,
+  useQueryClient,
 } from "@tanstack/react-query";
 import type { V1Project } from "@popcorn/shared/v1/types";
 import { apiRequest, v1Api } from "./api-client";
@@ -77,6 +79,8 @@ export interface CatalogEntry {
   previewContentType?: string | null;
   snapshot?: CatalogEntrySnapshot;
   useCount: number;
+  likeCount: number;
+  viewerHasLiked?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -109,6 +113,10 @@ export interface CatalogEntryResponse {
   entry: CatalogEntry;
 }
 
+export interface CatalogLikesResponse {
+  likedEntryIds: string[];
+}
+
 export interface PublishCatalogEntryInput {
   kind: CatalogEntryKind;
   sourceAssetId?: string;
@@ -139,6 +147,8 @@ export const catalogQueryKeys = {
       },
     ] as const,
   entry: (entryId: string) => ["catalog", "entry", entryId] as const,
+  likes: (entryIds: string[]) =>
+    ["catalog", "likes", Array.from(new Set(entryIds)).sort()] as const,
   projects: ["catalog", "projects"] as const,
 };
 
@@ -196,6 +206,24 @@ export const catalogApi = {
       signal,
       searchParams: params,
     }),
+
+  listLikedEntryIds: (entryIds: string[], signal?: AbortSignal) =>
+    apiRequest<CatalogLikesResponse>(catalogPath("/likes"), {
+      signal,
+      searchParams: { entryIds: Array.from(new Set(entryIds)).join(",") },
+    }),
+
+  likeEntry: (entryId: string) =>
+    apiRequest<CatalogEntryResponse>(
+      catalogPath(`/entries/${encodeURIComponent(entryId)}/like`),
+      { method: "POST" },
+    ),
+
+  unlikeEntry: (entryId: string) =>
+    apiRequest<CatalogEntryResponse>(
+      catalogPath(`/entries/${encodeURIComponent(entryId)}/like`),
+      { method: "DELETE" },
+    ),
 };
 
 export function useCatalogEntriesQuery(filters: {
@@ -239,6 +267,34 @@ export function useCatalogEntryQuery(entryId: string) {
     queryKey: catalogQueryKeys.entry(entryId),
     queryFn: ({ signal }) => catalogApi.getEntry(entryId, signal),
     enabled: Boolean(entryId),
+  });
+}
+
+export function useCatalogLikesQuery(entryIds: string[]) {
+  const normalizedIds = Array.from(new Set(entryIds)).filter(Boolean).sort();
+  return useQuery({
+    queryKey: catalogQueryKeys.likes(normalizedIds),
+    queryFn: ({ signal }) => catalogApi.listLikedEntryIds(normalizedIds, signal),
+    enabled: normalizedIds.length > 0,
+    staleTime: 30_000,
+  });
+}
+
+export function useCatalogLikeMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { entryId: string; shouldLike: boolean }) =>
+      input.shouldLike
+        ? catalogApi.likeEntry(input.entryId)
+        : catalogApi.unlikeEntry(input.entryId),
+    onSuccess: (response) => {
+      queryClient.setQueryData<CatalogEntryResponse>(
+        catalogQueryKeys.entry(response.entry.id),
+        response,
+      );
+      void queryClient.invalidateQueries({ queryKey: catalogQueryKeys.all });
+    },
   });
 }
 

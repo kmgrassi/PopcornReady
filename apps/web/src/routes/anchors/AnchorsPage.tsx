@@ -5,6 +5,8 @@ import { EmptyState, ErrorState } from "../../components/ui/StateCard";
 import { PageHeader } from "../../components/ui/PageHeader";
 import {
   useCatalogEntriesQuery,
+  useCatalogLikeMutation,
+  useCatalogLikesQuery,
   type CatalogEntry,
   type CatalogEntryKind,
 } from "../../lib/catalog";
@@ -52,24 +54,73 @@ function AnchorPreview({ entry }: { entry: CatalogEntry }) {
   );
 }
 
-function AnchorCard({ entry }: { entry: CatalogEntry }) {
+function formatLikeCount(count: number) {
+  return `${count} ${count === 1 ? "like" : "likes"}`;
+}
+
+function AnchorLikeButton({
+  entry,
+  liked,
+  pending,
+  onToggle,
+}: {
+  entry: CatalogEntry;
+  liked: boolean;
+  pending: boolean;
+  onToggle: (entryId: string, shouldLike: boolean) => void;
+}) {
   return (
-    <Link className={styles.card} to={`/anchors/${encodeURIComponent(entry.id)}`}>
-      <div className={styles.preview}>
-        <AnchorPreview entry={entry} />
-        <span className={styles.kind}>{kindLabel(entry.kind)}</span>
-      </div>
-      <div className={styles.cardBody}>
-        <h2>{entry.title}</h2>
-        <p>{entrySummary(entry)}</p>
-        <div className={styles.meta}>
-          <span>{formatUseCount(entry.useCount)}</span>
-          {entry.tags.slice(0, 3).map((tag) => (
-            <span key={tag}>{tag}</span>
-          ))}
+    <button
+      className={`${styles.likeButton} ${liked ? styles.liked : ""}`}
+      type="button"
+      aria-pressed={liked}
+      disabled={pending}
+      onClick={() => onToggle(entry.id, !liked)}
+    >
+      <span>{liked ? "Liked" : "Like"}</span>
+      <span>{formatLikeCount(entry.likeCount)}</span>
+    </button>
+  );
+}
+
+function AnchorCard({
+  entry,
+  liked,
+  pending,
+  onToggleLike,
+}: {
+  entry: CatalogEntry;
+  liked: boolean;
+  pending: boolean;
+  onToggleLike: (entryId: string, shouldLike: boolean) => void;
+}) {
+  return (
+    <article className={styles.card}>
+      <Link className={styles.cardLink} to={`/anchors/${encodeURIComponent(entry.id)}`}>
+        <div className={styles.preview}>
+          <AnchorPreview entry={entry} />
+          <span className={styles.kind}>{kindLabel(entry.kind)}</span>
         </div>
+        <div className={styles.cardBody}>
+          <h2>{entry.title}</h2>
+          <p>{entrySummary(entry)}</p>
+          <div className={styles.meta}>
+            <span>{formatUseCount(entry.useCount)}</span>
+            {entry.tags.slice(0, 3).map((tag) => (
+              <span key={tag}>{tag}</span>
+            ))}
+          </div>
+        </div>
+      </Link>
+      <div className={styles.cardActions}>
+        <AnchorLikeButton
+          entry={entry}
+          liked={liked}
+          pending={pending}
+          onToggle={onToggleLike}
+        />
       </div>
-    </Link>
+    </article>
   );
 }
 
@@ -89,6 +140,17 @@ export function AnchorsPage() {
     () => entriesQuery.data?.pages.flatMap((page) => page.entries) ?? [],
     [entriesQuery.data?.pages],
   );
+  const entryIds = useMemo(() => entries.map((entry) => entry.id), [entries]);
+  const likesQuery = useCatalogLikesQuery(entryIds);
+  const likedEntryIds = useMemo(
+    () => new Set(likesQuery.data?.likedEntryIds ?? []),
+    [likesQuery.data?.likedEntryIds],
+  );
+  const likeMutation = useCatalogLikeMutation();
+
+  function toggleLike(entryId: string, shouldLike: boolean) {
+    likeMutation.mutate({ entryId, shouldLike });
+  }
 
   function updateFilters(next: { kind?: CatalogEntryKind | "all"; q?: string }) {
     const params = new URLSearchParams(searchParams);
@@ -175,7 +237,15 @@ export function AnchorsPage() {
         <>
           <div className={styles.grid}>
             {entries.map((entry) => (
-              <AnchorCard entry={entry} key={entry.id} />
+              <AnchorCard
+                entry={entry}
+                key={entry.id}
+                liked={entry.viewerHasLiked ?? likedEntryIds.has(entry.id)}
+                pending={
+                  likeMutation.isPending && likeMutation.variables?.entryId === entry.id
+                }
+                onToggleLike={toggleLike}
+              />
             ))}
           </div>
           {entriesQuery.hasNextPage ? (

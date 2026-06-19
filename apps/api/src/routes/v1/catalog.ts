@@ -4,11 +4,14 @@ import { ApiError } from "@/core/errors";
 import {
   archiveCatalogEntry,
   getCatalogEntry,
+  likeCatalogEntry,
   listCatalogEntries,
+  listLikedCatalogEntryIds,
   listMyCatalogEntries,
   publishCatalogEntry,
   publisherUserIdForWorkspace,
   searchCatalogEntries,
+  unlikeCatalogEntry,
   updateCatalogEntry,
   useCatalogEntry,
 } from "@/lib/api/v1/catalog";
@@ -55,6 +58,16 @@ function publicRoute(
 
 function searchParamsFor(req: Parameters<RequestHandler>[0]): URLSearchParams {
   return new URL(req.originalUrl, "http://localhost").searchParams;
+}
+
+function parseEntryIdsParam(searchParams: URLSearchParams): string[] {
+  const rawValues = searchParams.getAll("entryIds");
+  const values = rawValues.length ? rawValues : [searchParams.get("entryIds") ?? ""];
+  return values
+    .flatMap((value) => value.split(","))
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .slice(0, 100);
 }
 
 catalogPublicRouter.get(
@@ -105,6 +118,18 @@ catalogProtectedRouter.get(
       status: 200,
       body: { entries: items, pagination: { limit: query.limit, nextCursor } },
     };
+  })
+);
+
+catalogProtectedRouter.get(
+  "/catalog/likes",
+  route(async ({ auth, req }) => {
+    const userId = await publisherUserIdForWorkspace(getServiceSupabase(), auth.workspaceId);
+    const likedEntryIds = await listLikedCatalogEntryIds({
+      userId,
+      entryIds: parseEntryIdsParam(req.searchParams),
+    });
+    return { status: 200, body: { likedEntryIds } };
   })
 );
 
@@ -160,5 +185,29 @@ catalogProtectedRouter.post(
       body: parseUseCatalogEntry(body),
     });
     return { status: 201, body: result };
+  })
+);
+
+catalogProtectedRouter.post(
+  "/catalog/entries/:id/like",
+  mutation(async ({ auth }, params) => {
+    const userId = await publisherUserIdForWorkspace(getServiceSupabase(), auth.workspaceId);
+    const entry = await likeCatalogEntry({
+      entryId: requiredParam(params, "id"),
+      userId,
+    });
+    return { status: 200, body: { entry } };
+  })
+);
+
+catalogProtectedRouter.delete(
+  "/catalog/entries/:id/like",
+  mutation(async ({ auth }, params) => {
+    const userId = await publisherUserIdForWorkspace(getServiceSupabase(), auth.workspaceId);
+    const entry = await unlikeCatalogEntry({
+      entryId: requiredParam(params, "id"),
+      userId,
+    });
+    return { status: 200, body: { entry } };
   })
 );

@@ -5,6 +5,8 @@ import { Button } from "../../components/ui/Button";
 import { EmptyState, ErrorState } from "../../components/ui/StateCard";
 import {
   useCatalogEntryQuery,
+  useCatalogLikeMutation,
+  useCatalogLikesQuery,
   useCatalogProjectPickerQuery,
   type CatalogEntry,
 } from "../../lib/catalog";
@@ -25,6 +27,10 @@ function DetailPreview({ entry }: { entry: CatalogEntry }) {
       <span>{entry.title.trim().charAt(0).toUpperCase() || "A"}</span>
     </div>
   );
+}
+
+function formatLikeCount(count: number) {
+  return `${count} ${count === 1 ? "like" : "likes"}`;
 }
 
 function ProjectOption({ project }: { project: V1Project }) {
@@ -171,10 +177,19 @@ export function AnchorDetailPage() {
   const entryQuery = useCatalogEntryQuery(entryId ?? "");
   const projectsQuery = useCatalogProjectPickerQuery();
   const entry = entryQuery.data?.entry ?? null;
+  const likesQuery = useCatalogLikesQuery(entryId ? [entryId] : []);
+  const likedEntryIds = useMemo(
+    () => new Set(likesQuery.data?.likedEntryIds ?? []),
+    [likesQuery.data?.likedEntryIds],
+  );
+  const likeMutation = useCatalogLikeMutation();
   const projects = useMemo(
     () => projectsQuery.data?.projects ?? [],
     [projectsQuery.data?.projects],
   );
+  const viewerHasLiked = entry
+    ? entry.viewerHasLiked ?? likedEntryIds.has(entry.id)
+    : false;
 
   if (!entryId) return <Navigate to="/anchors" replace />;
 
@@ -211,9 +226,24 @@ export function AnchorDetailPage() {
               <div className={styles.kickerRow}>
                 <span>{kindLabel(entry.kind)}</span>
                 <span>{formatUseCount(entry.useCount)}</span>
+                <span>{formatLikeCount(entry.likeCount)}</span>
               </div>
               <h1>{entry.title}</h1>
               <p className={styles.summary}>{entrySummary(entry)}</p>
+              <button
+                className={`${styles.likeButton} ${viewerHasLiked ? styles.liked : ""}`}
+                type="button"
+                aria-pressed={viewerHasLiked}
+                disabled={likeMutation.isPending}
+                onClick={() =>
+                  likeMutation.mutate({
+                    entryId: entry.id,
+                    shouldLike: !viewerHasLiked,
+                  })
+                }
+              >
+                {viewerHasLiked ? "Liked" : "Like this anchor"}
+              </button>
               {entry.tags.length ? (
                 <div className={styles.tags} aria-label="Tags">
                   {entry.tags.map((tag) => (
