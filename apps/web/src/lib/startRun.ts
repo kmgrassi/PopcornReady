@@ -165,10 +165,11 @@ export async function createAndStartRun(draft: BriefDraft): Promise<StartRunResu
   const brief = briefInputFromDraft(draft);
   const reviewGates = reviewGatesForDraft(draft);
 
-  const { project, briefVersion } = await v1Api.createProject({
+  const projectInput = {
     name: draft.projectName.trim() || deriveProjectName(draft.goal),
-    brief,
-  });
+    ...(draft.footageChoice === "upload" ? { brief } : {}),
+  };
+  const { project, briefVersion } = await v1Api.createProject(projectInput);
 
   if (draft.footageChoice === "upload") {
     if (!briefVersion?.id) {

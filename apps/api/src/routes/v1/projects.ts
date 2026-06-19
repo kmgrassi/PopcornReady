@@ -20,6 +20,7 @@ import {
   setProjectVisibility,
 } from "@/lib/api/v1/store";
 import { generatePoster } from "@/lib/api/v1/poster-generation";
+import { startPosterGenerationInBackground } from "@/lib/api/v1/poster-background";
 import { getStoryboard, putStoryboard } from "@/lib/api/v1/storyboard";
 
 export const projectsRouter = Router();
@@ -45,6 +46,9 @@ projectsRouter.post(
       name: input.name,
       brief: input.brief,
     });
+    if (briefVersion) {
+      startPosterGenerationInBackground(auth, project.id);
+    }
     return {
       status: 201,
       body: {
