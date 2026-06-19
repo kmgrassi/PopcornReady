@@ -6,10 +6,11 @@ type Action = "idle" | "walk1" | "walk2" | "repair1" | "repair2";
 type SpriteMode = "walk" | "repair";
 
 const SPRITE_URL = "/sprites/work-sprite-sheet.png";
-const SHEET_WIDTH = 1402;
-const SHEET_HEIGHT = 1122;
+const SHEET_WIDTH = 320;
+const SHEET_HEIGHT = 256;
 const COLUMNS = 5;
 const ROWS = 4;
+const DEFAULT_FRAME_SIZE = 64;
 
 const directions: Direction[] = ["down", "left", "right", "up"];
 const actions: Action[] = ["idle", "walk1", "walk2", "repair1", "repair2"];
@@ -86,12 +87,12 @@ export function SpritePage() {
   const [direction, setDirection] = useState<Direction>("right");
   const [action, setAction] = useState<Action>("idle");
   const [position, setPosition] = useState({ x: 230, y: 150 });
-  const [cellWidth, setCellWidth] = useState(280);
-  const [cellHeight, setCellHeight] = useState(280);
-  const [cropHeight, setCropHeight] = useState(230);
+  const [cellWidth, setCellWidth] = useState(DEFAULT_FRAME_SIZE);
+  const [cellHeight, setCellHeight] = useState(DEFAULT_FRAME_SIZE);
+  const [cropHeight, setCropHeight] = useState(DEFAULT_FRAME_SIZE);
   const [offsetX, setOffsetX] = useState(0);
   const [offsetY, setOffsetY] = useState(0);
-  const [scale, setScale] = useState(0.75);
+  const [scale, setScale] = useState(2.4);
   const [speedMs, setSpeedMs] = useState(160);
   const [isPlaying, setIsPlaying] = useState(true);
   const [spriteMode, setSpriteMode] = useState<SpriteMode>("walk");
@@ -361,8 +362,8 @@ export function SpritePage() {
           Frame width
           <input
             type="range"
-            min="240"
-            max="300"
+            min="48"
+            max="96"
             value={cellWidth}
             onChange={(event) => setCellWidth(Number(event.target.value))}
           />
@@ -373,8 +374,8 @@ export function SpritePage() {
           Cell height
           <input
             type="range"
-            min="240"
-            max="300"
+            min="48"
+            max="96"
             value={cellHeight}
             onChange={(event) => setCellHeight(Number(event.target.value))}
           />
@@ -385,8 +386,8 @@ export function SpritePage() {
           Crop height
           <input
             type="range"
-            min="180"
-            max="280"
+            min="48"
+            max="96"
             value={cropHeight}
             onChange={(event) => setCropHeight(Number(event.target.value))}
           />
@@ -397,8 +398,8 @@ export function SpritePage() {
           X offset
           <input
             type="range"
-            min="-30"
-            max="30"
+            min="-8"
+            max="8"
             value={offsetX}
             onChange={(event) => setOffsetX(Number(event.target.value))}
           />
@@ -409,8 +410,8 @@ export function SpritePage() {
           Y offset
           <input
             type="range"
-            min="-30"
-            max="30"
+            min="-8"
+            max="8"
             value={offsetY}
             onChange={(event) => setOffsetY(Number(event.target.value))}
           />
@@ -421,8 +422,8 @@ export function SpritePage() {
           Scale
           <input
             type="range"
-            min="0.4"
-            max="2.6"
+            min="1"
+            max="5"
             step="0.1"
             value={scale}
             onChange={(event) => setScale(Number(event.target.value))}
