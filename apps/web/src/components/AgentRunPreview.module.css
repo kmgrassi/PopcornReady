@@ -4,6 +4,10 @@
  * in HomePage.module.css and inherit down to this scoped module. */
 
 .run {
+  /* width:100% (capped by max-width) keeps the card a stable size — without it,
+     `margin: 0 auto` defeats the grid stretch and the card shrinks to its content,
+     so it visibly grows as the agent's brief auto-types in. */
+  width: 100%;
   max-width: 760px;
   margin: 0 auto;
   text-align: left;
