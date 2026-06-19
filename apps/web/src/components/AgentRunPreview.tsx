@@ -49,7 +49,9 @@ const COUNT_TICKS = 9; // each of 3 · 2 · 1
 const ACTION_TICKS = 10; // clapperboard snaps shut → "ACTION"
 const CONTINUE_TICKS = CONTINUE_LEAD_TICKS + COUNT_TICKS * 3 + ACTION_TICKS;
 const KEYFRAME_TICKS = 30;
-const WRAP_TICKS = 36; // clapperboard snaps "CUT", holds, then the cycle loops
+// The post-keyframes beat reuses the same clapperboard action as the first one,
+// plus a little hold on "ACTION" before the cycle loops.
+const ADVANCE_TICKS = CONTINUE_TICKS + 8;
 
 // Phase boundaries (cumulative tick offsets within one cycle).
 const T_HANDOFF = TYPE_TICKS;
@@ -57,8 +59,8 @@ const T_PLAN = T_HANDOFF + HANDOFF_TICKS;
 const T_PLAN_DONE = T_PLAN + PLAN_TICKS;
 const T_CONTINUE = T_PLAN_DONE + PLAN_HOLD_TICKS;
 const T_KEYFRAMES = T_CONTINUE + CONTINUE_TICKS;
-const T_WRAP = T_KEYFRAMES + KEYFRAME_TICKS;
-const CYCLE = T_WRAP + WRAP_TICKS;
+const T_ADVANCE = T_KEYFRAMES + KEYFRAME_TICKS;
+const CYCLE = T_ADVANCE + ADVANCE_TICKS;
 
 type Phase =
   | "typing"
@@ -66,11 +68,11 @@ type Phase =
   | "planning"
   | "continue"
   | "keyframes"
-  | "wrap";
+  | "advance";
 type Actor = "you" | "agent" | "done";
 type Act = "plan" | "produce";
 type Stage = "plan" | "keyframes" | null;
-type ClapState = "ask" | "count" | "action" | "cut" | null;
+type ClapState = "ask" | "count" | "action" | null;
 
 const PHASE_STATUS: Record<Phase, string> = {
   typing: "You · writing the brief",
@@ -78,7 +80,7 @@ const PHASE_STATUS: Record<Phase, string> = {
   planning: "Agent · writing the plan",
   continue: "Plan ready · continuing",
   keyframes: "Agent · generating keyframes",
-  wrap: "Cut · take complete",
+  advance: "Keyframes ready · next step",
 };
 
 function prefersReducedMotion() {
@@ -104,19 +106,40 @@ interface Frame {
 }
 
 const FINAL_FRAME: Frame = {
-  phase: "wrap",
-  actor: "done",
+  phase: "advance",
+  actor: "agent",
   act: "produce",
   brief: BRIEF,
   briefTyping: false,
   submitted: true,
   beats: BEATS.map((beat) => ({ ...beat, typing: false })),
   countdown: null,
-  clapState: "cut",
+  clapState: "action",
   clapped: true,
   tiles: TILE_COUNT,
   activeStage: null,
 };
+
+// The clapperboard's CUT → 3 · 2 · 1 → ACTION sequence, shared by both the
+// "continue" beat (after the plan) and the "advance" beat (after the keyframes).
+function computeClap(local: number): {
+  clapState: ClapState;
+  countdown: number | null;
+  clapped: boolean;
+} {
+  if (local < CONTINUE_LEAD_TICKS) {
+    return { clapState: "ask", countdown: null, clapped: false };
+  }
+  const c = local - CONTINUE_LEAD_TICKS;
+  if (c < COUNT_TICKS * 3) {
+    return {
+      clapState: "count",
+      countdown: Math.max(1, 3 - Math.floor(c / COUNT_TICKS)),
+      clapped: false,
+    };
+  }
+  return { clapState: "action", countdown: null, clapped: true };
+}
 
 function computeFrame(tick: number): Frame {
   const t = tick % CYCLE;
@@ -146,12 +169,12 @@ function computeFrame(tick: number): Frame {
   } else if (t < T_KEYFRAMES) {
     phase = "continue";
     actor = "agent";
-  } else if (t < T_WRAP) {
+  } else if (t < T_ADVANCE) {
     phase = "keyframes";
     actor = "agent";
   } else {
-    phase = "wrap";
-    actor = "done";
+    phase = "advance";
+    actor = "agent";
   }
 
   // Act one (plan) runs until the keyframes start; then act two (produce).
@@ -172,23 +195,14 @@ function computeFrame(tick: number): Frame {
   }).filter(Boolean) as Frame["beats"];
 
   // --- The clapperboard: "CUT" → 3 · 2 · 1 → "ACTION" -------------
+  // Same beat after the plan ("continue") and after the keyframes ("advance").
   let countdown: number | null = null;
   let clapState: ClapState = null;
   let clapped = false;
   if (phase === "continue") {
-    const cl = t - T_CONTINUE;
-    if (cl < CONTINUE_LEAD_TICKS) {
-      clapState = "ask"; // slate reads "CUT", arm raised
-    } else if (cl < CONTINUE_LEAD_TICKS + COUNT_TICKS * 3) {
-      clapState = "count";
-      countdown = Math.max(1, 3 - Math.floor((cl - CONTINUE_LEAD_TICKS) / COUNT_TICKS));
-    } else {
-      clapState = "action"; // arm snaps shut, slate reads "ACTION"
-      clapped = true;
-    }
-  } else if (phase === "wrap") {
-    clapState = "cut"; // the take is done — director calls "cut"
-    clapped = true;
+    ({ clapState, countdown, clapped } = computeClap(t - T_CONTINUE));
+  } else if (phase === "advance") {
+    ({ clapState, countdown, clapped } = computeClap(t - T_ADVANCE));
   }
 
   // --- Agent: keyframes pop in one by one -------------------------
@@ -197,7 +211,7 @@ function computeFrame(tick: number): Frame {
     const kf = t - T_KEYFRAMES;
     tiles = Math.min(TILE_COUNT, Math.floor(kf / (KEYFRAME_TICKS / TILE_COUNT)) + 1);
   }
-  if (t >= T_WRAP) {
+  if (t >= T_ADVANCE) {
     tiles = TILE_COUNT;
   }
 
@@ -235,7 +249,6 @@ const DOT_CLASS: Record<Actor, string> = {
 const STATUS_CLASS: Partial<Record<Phase, string>> = {
   typing: styles.statusTyping,
   handoff: styles.statusHandoff,
-  wrap: styles.statusReady,
 };
 
 function StepHead({ label, active }: { label: string; active: boolean }) {
@@ -249,6 +262,58 @@ function StepHead({ label, active }: { label: string; active: boolean }) {
         </span>
       )}
     </span>
+  );
+}
+
+function clapCaption(phase: Phase, clapState: ClapState): string {
+  if (clapState === "action") return "Rolling — action!";
+  if (phase === "advance") {
+    return clapState === "count" ? "Cueing up the timeline…" : "Next step: timeline";
+  }
+  return clapState === "count" ? "Continuing the run…" : "Want to continue on?";
+}
+
+// The clapperboard indicator. A small stop button rides alongside it so it reads
+// as something the user could click to step in.
+function Clapper({
+  clapState,
+  clapped,
+  countdown,
+  caption,
+}: {
+  clapState: ClapState;
+  clapped: boolean;
+  countdown: number | null;
+  caption: string;
+}) {
+  return (
+    <div className={styles.clapRow}>
+      <div
+        className={`${styles.clap}${clapped ? ` ${styles.clapShut}` : ""}`}
+        data-state={clapState ?? undefined}
+      >
+        <span className={styles.clapStick} aria-hidden="true" />
+        <span className={styles.clapBody}>
+          <span className={styles.clapText} key={`${clapState}-${countdown ?? ""}`}>
+            {clapState === "action"
+              ? "ACTION"
+              : clapState === "count"
+                ? countdown
+                : "CUT"}
+          </span>
+        </span>
+      </div>
+      <span className={styles.clapCaption}>{caption}</span>
+      <button
+        type="button"
+        className={styles.clapStop}
+        tabIndex={-1}
+        aria-hidden="true"
+      >
+        <span className={styles.clapStopGlyph} aria-hidden="true" />
+        Stop
+      </button>
+    </div>
   );
 }
 
@@ -276,9 +341,7 @@ export function AgentRunPreview() {
         <span className={styles.file}>dream-montage.run</span>
         <span className={`${styles.status}${STATUS_CLASS[frame.phase] ? ` ${STATUS_CLASS[frame.phase]}` : ""}`}>
           {PHASE_STATUS[frame.phase]}
-          {frame.phase !== "wrap" && (
-            <span className={styles.ellipsis} aria-hidden="true" />
-          )}
+          <span className={styles.ellipsis} aria-hidden="true" />
         </span>
       </div>
 
@@ -305,9 +368,7 @@ export function AgentRunPreview() {
             Agent
           </span>
           <span className={styles.handoffNote}>
-            {frame.phase === "wrap"
-              ? "That's a cut — run complete"
-              : "Running autonomously — step in at any step"}
+            Running autonomously — step in at any step
           </span>
         </div>
       )}
@@ -334,33 +395,12 @@ export function AgentRunPreview() {
           </div>
 
           {frame.phase === "continue" && (
-            <div className={styles.clapRow}>
-              <div
-                className={`${styles.clap}${frame.clapped ? ` ${styles.clapShut}` : ""}`}
-                data-state={frame.clapState ?? undefined}
-              >
-                <span className={styles.clapStick} aria-hidden="true" />
-                <span className={styles.clapBody}>
-                  <span
-                    className={styles.clapText}
-                    key={`${frame.clapState}-${frame.countdown ?? ""}`}
-                  >
-                    {frame.clapState === "action"
-                      ? "ACTION"
-                      : frame.clapState === "count"
-                        ? frame.countdown
-                        : "CUT"}
-                  </span>
-                </span>
-              </div>
-              <span className={styles.clapCaption}>
-                {frame.clapState === "action"
-                  ? "Rolling — action!"
-                  : frame.clapState === "count"
-                    ? "Continuing the run…"
-                    : "Want to continue on?"}
-              </span>
-            </div>
+            <Clapper
+              clapState={frame.clapState}
+              clapped={frame.clapped}
+              countdown={frame.countdown}
+              caption={clapCaption(frame.phase, frame.clapState)}
+            />
           )}
         </section>
       ) : (
@@ -397,16 +437,13 @@ export function AgentRunPreview() {
               </div>
             </div>
 
-            {frame.phase === "wrap" && (
-              <div className={styles.clapRow}>
-                <div className={`${styles.clap} ${styles.clapShut}`} data-state="cut">
-                  <span className={styles.clapStick} aria-hidden="true" />
-                  <span className={styles.clapBody}>
-                    <span className={styles.clapText}>CUT</span>
-                  </span>
-                </div>
-                <span className={styles.clapCaption}>That&apos;s a cut.</span>
-              </div>
+            {frame.phase === "advance" && (
+              <Clapper
+                clapState={frame.clapState}
+                clapped={frame.clapped}
+                countdown={frame.countdown}
+                caption={clapCaption(frame.phase, frame.clapState)}
+              />
             )}
           </div>
         </section>
