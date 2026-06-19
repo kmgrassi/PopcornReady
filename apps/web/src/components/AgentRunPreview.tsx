@@ -37,7 +37,8 @@ const PLAN_TICKS = BEATS.length * TICKS_PER_BEAT; // beats stream in
 const PLAN_HOLD_TICKS = 12; // finished plan breathes before the prompt
 const CONTINUE_LEAD_TICKS = 14; // "Want to continue on?"
 const COUNT_TICKS = 9; // each of 3 · 2 · 1
-const CONTINUE_TICKS = CONTINUE_LEAD_TICKS + COUNT_TICKS * 3;
+const ACTION_TICKS = 10; // clapperboard snaps shut → "ACTION"
+const CONTINUE_TICKS = CONTINUE_LEAD_TICKS + COUNT_TICKS * 3 + ACTION_TICKS;
 const KEYFRAME_TICKS = 30;
 const TIMELINE_TICKS = 26;
 const HOLD_TICKS = 30;
@@ -63,6 +64,7 @@ type Phase =
 type Actor = "you" | "agent" | "done";
 type Act = "plan" | "produce";
 type Stage = "plan" | "keyframes" | "timeline" | null;
+type ClapState = "ask" | "count" | "action" | null;
 
 const PHASE_STATUS: Record<Phase, string> = {
   typing: "You · writing the brief",
@@ -90,6 +92,8 @@ interface Frame {
   submitted: boolean;
   beats: { tag: string; text: string; typing: boolean }[];
   countdown: number | null;
+  clapState: ClapState;
+  clapped: boolean;
   tiles: number;
   timelinePct: number;
   activeStage: Stage;
@@ -104,6 +108,8 @@ const FINAL_FRAME: Frame = {
   submitted: true,
   beats: BEATS.map((beat) => ({ ...beat, typing: false })),
   countdown: null,
+  clapState: null,
+  clapped: false,
   tiles: TILE_COUNT,
   timelinePct: 100,
   activeStage: null,
@@ -165,13 +171,20 @@ function computeFrame(tick: number): Frame {
     };
   }).filter(Boolean) as Frame["beats"];
 
-  // --- The "Want to continue on?" countdown -----------------------
+  // --- The clapperboard: "CUT" → 3 · 2 · 1 → "ACTION" -------------
   let countdown: number | null = null;
+  let clapState: ClapState = null;
+  let clapped = false;
   if (phase === "continue") {
     const cl = t - T_CONTINUE;
-    if (cl >= CONTINUE_LEAD_TICKS) {
-      const step = Math.floor((cl - CONTINUE_LEAD_TICKS) / COUNT_TICKS);
-      countdown = Math.max(1, 3 - step); // 3 · 2 · 1
+    if (cl < CONTINUE_LEAD_TICKS) {
+      clapState = "ask"; // slate reads "CUT", arm raised
+    } else if (cl < CONTINUE_LEAD_TICKS + COUNT_TICKS * 3) {
+      clapState = "count";
+      countdown = Math.max(1, 3 - Math.floor((cl - CONTINUE_LEAD_TICKS) / COUNT_TICKS));
+    } else {
+      clapState = "action"; // arm snaps shut, slate reads "ACTION"
+      clapped = true;
     }
   }
 
@@ -209,6 +222,8 @@ function computeFrame(tick: number): Frame {
     submitted,
     beats,
     countdown,
+    clapState,
+    clapped,
     tiles,
     timelinePct,
     activeStage,
@@ -307,34 +322,50 @@ export function AgentRunPreview() {
         /* ACT ONE — the plan, large and on its own */
         <section className={styles.planStage} aria-hidden="true">
           <StepHead label="Plan" active={frame.activeStage === "plan"} />
-          <ul className={styles.planList}>
-            {frame.beats.map((beat, index) => (
-              <li
-                className={beat.tag === "HOOK" ? styles.planHook : styles.planStep}
-                key={index}
-              >
-                <span className={styles.beatTag}>{beat.tag}</span>
-                <span className={styles.beatText}>
-                  {beat.text}
-                  {beat.typing && <span className={styles.caret} />}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <div className={styles.planCard}>
+            <ul className={styles.planList}>
+              {frame.beats.map((beat, index) => (
+                <li
+                  className={beat.tag === "HOOK" ? styles.planHook : styles.planStep}
+                  key={index}
+                >
+                  <span className={styles.beatTag}>{beat.tag}</span>
+                  <span className={styles.beatText}>
+                    {beat.text}
+                    {beat.typing && <span className={styles.caret} />}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
 
           {frame.phase === "continue" && (
-            <div className={styles.continue}>
-              <span className={styles.continueSpinner} aria-hidden="true" />
-              {frame.countdown == null ? (
-                <span className={styles.continueText}>Want to continue on?</span>
-              ) : (
-                <span className={styles.continueText}>
-                  Continuing in
-                  <strong className={styles.count} key={frame.countdown}>
-                    {frame.countdown}
-                  </strong>
+            <div className={styles.clapRow}>
+              <div
+                className={`${styles.clap}${frame.clapped ? ` ${styles.clapShut}` : ""}`}
+                data-state={frame.clapState ?? undefined}
+              >
+                <span className={styles.clapStick} aria-hidden="true" />
+                <span className={styles.clapBody}>
+                  <span
+                    className={styles.clapText}
+                    key={`${frame.clapState}-${frame.countdown ?? ""}`}
+                  >
+                    {frame.clapState === "action"
+                      ? "ACTION"
+                      : frame.clapState === "count"
+                        ? frame.countdown
+                        : "CUT"}
+                  </span>
                 </span>
-              )}
+              </div>
+              <span className={styles.clapCaption}>
+                {frame.clapState === "action"
+                  ? "Rolling — action!"
+                  : frame.clapState === "count"
+                    ? "Continuing the run…"
+                    : "Want to continue on?"}
+              </span>
             </div>
           )}
         </section>
@@ -351,15 +382,17 @@ export function AgentRunPreview() {
           </div>
 
           <div className={styles.produceMain}>
-            <StepHead label="Keyframes" active={frame.activeStage === "keyframes"} />
-            <div className={styles.tiles}>
-              {Array.from({ length: TILE_COUNT }, (_, index) => (
-                <span
-                  className={`${styles.tile}${index < frame.tiles ? ` ${styles.tileReady}` : ""}`}
-                  data-tile={index}
-                  key={index}
-                />
-              ))}
+            <div className={styles.keyframesCard}>
+              <StepHead label="Keyframes" active={frame.activeStage === "keyframes"} />
+              <div className={styles.tiles}>
+                {Array.from({ length: TILE_COUNT }, (_, index) => (
+                  <span
+                    className={`${styles.tile}${index < frame.tiles ? ` ${styles.tileReady}` : ""}`}
+                    data-tile={index}
+                    key={index}
+                  />
+                ))}
+              </div>
             </div>
 
             <div className={styles.timeline}>

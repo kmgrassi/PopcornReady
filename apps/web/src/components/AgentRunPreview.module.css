@@ -299,13 +299,23 @@
   to { opacity: 1; transform: none; }
 }
 
-/* ACT ONE — the plan, large and on its own. */
+/* ACT ONE — the plan, large and in its own card so it dominates the view. */
+.planCard {
+  margin-top: 8px;
+  padding: 20px 22px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 60%), var(--panel-2);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  animation: beatIn 0.35s ease-out;
+}
+
 .planList {
   list-style: none;
-  margin: 6px 0 0;
+  margin: 0;
   padding: 0;
   display: grid;
-  gap: 10px;
+  gap: 14px;
   align-content: start;
 }
 
@@ -313,26 +323,28 @@
 .planStep {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 10px;
-  align-items: start;
+  gap: 12px;
+  align-items: baseline;
   animation: beatIn 0.3s ease-out;
 }
 
 /* The hook reads as the headline of the plan; steps sit a notch quieter. */
 .planHook {
-  padding-bottom: 10px;
-  margin-bottom: 2px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  padding-bottom: 14px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .planHook .beatText {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.3;
   color: var(--text);
 }
 
 .planStep .beatText {
-  font-size: 14px;
+  font-size: 16.5px;
+  line-height: 1.45;
   color: var(--muted);
 }
 
@@ -347,64 +359,100 @@
   }
 }
 
-/* The "Want to continue on?" indicator + 3 · 2 · 1 countdown. */
-.continue {
-  display: inline-flex;
+/* The continue beat — a clapperboard that reads CUT → 3 · 2 · 1 → ACTION,
+   snapping shut on "action" like a real slate. */
+.clapRow {
+  display: flex;
   align-items: center;
-  gap: 9px;
-  margin-top: 16px;
-  padding: 7px 14px;
-  border-radius: 999px;
-  background: var(--accent-soft);
-  border: 1px solid var(--accent-border);
+  gap: 12px;
+  margin-top: 18px;
   animation: beatIn 0.3s ease-out;
 }
 
-.continueSpinner {
-  width: 12px;
-  height: 12px;
+.clap {
+  position: relative;
   flex: 0 0 auto;
-  border-radius: 999px;
-  border: 2px solid var(--accent-border);
-  border-top-color: var(--accent);
-  animation: continueSpin 0.7s linear infinite;
+  width: 78px;
 }
 
-@keyframes continueSpin {
-  to {
-    transform: rotate(360deg);
-  }
+/* The hinged clap-stick: diagonal black/white stripes, raised while open. */
+.clapStick {
+  position: absolute;
+  top: -11px;
+  left: 0;
+  right: 0;
+  height: 14px;
+  border-radius: 3px;
+  background: repeating-linear-gradient(58deg, #f6f2ff 0 8px, #15121d 8px 16px);
+  transform-origin: 5px 100%;
+  transform: rotate(-24deg);
+  transition: transform 0.16s cubic-bezier(0.2, 0.9, 0.3, 1.4);
 }
 
-.continueText {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--text);
+.clapShut .clapStick {
+  transform: rotate(0deg);
 }
 
-.count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 20px;
-  font-size: 16px;
+.clapBody {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 56px;
+  border-radius: 6px;
+  background: #15121d;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+/* Thin striped strip along the body's top edge (where the stick meets it). */
+.clapBody::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 8px;
+  background: repeating-linear-gradient(58deg, #f6f2ff 0 8px, #15121d 8px 16px);
+}
+
+.clapText {
+  margin-top: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 15px;
   font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--text);
+  animation: countPop 0.25s ease-out;
+}
+
+.clap[data-state="action"] .clapText {
   color: var(--accent);
-  animation: countPop 0.3s ease-out;
+}
+
+.clapShut {
+  animation: clapShake 0.26s ease-out;
+}
+
+@keyframes clapShake {
+  0% { transform: translateX(0) rotate(0); }
+  35% { transform: translateX(-2px) rotate(-1.2deg); }
+  65% { transform: translateX(2px) rotate(0.6deg); }
+  100% { transform: none; }
 }
 
 @keyframes countPop {
-  from {
-    opacity: 0;
-    transform: scale(0.6);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
+  from { opacity: 0; transform: scale(0.6); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.clapCaption {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.clap[data-state="action"] + .clapCaption {
+  color: var(--accent);
 }
 
 /* ACT TWO — the plan recedes to a one-line recap above the production. */
@@ -480,11 +528,22 @@
   50% { opacity: 0; }
 }
 
+/* Act two's feature: the keyframes get their own card and become the big,
+   prominent thing once the plan recedes. */
+.keyframesCard {
+  padding: 18px 20px 20px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 60%), var(--panel-2);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  animation: beatIn 0.35s ease-out;
+}
+
 /* Prominent in act two: a row of widescreen frames, like a shot strip. */
 .tiles {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  gap: 10px;
+  gap: 12px;
 }
 
 .tile {
