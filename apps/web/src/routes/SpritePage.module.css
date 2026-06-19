@@ -15,6 +15,7 @@
 
 .stage,
 .details,
+.playControls,
 .controls,
 .sheetPanel {
   border: 1px solid var(--border);
@@ -24,9 +25,8 @@
 }
 
 .stage {
-  display: grid;
+  position: relative;
   min-height: 520px;
-  place-items: center;
   overflow: hidden;
   background:
     linear-gradient(90deg, var(--surface-2) 1px, transparent 1px),
@@ -35,13 +35,24 @@
   background-size: 32px 32px;
 }
 
+.actor {
+  position: absolute;
+  left: var(--actor-x);
+  top: var(--actor-y);
+  width: 96px;
+  height: 96px;
+  transition:
+    left 140ms linear,
+    top 140ms linear;
+}
+
 .sprite {
   width: var(--frame-width);
   height: var(--frame-height);
   background-repeat: no-repeat;
   image-rendering: pixelated;
   transform: scale(var(--sprite-scale));
-  transform-origin: center;
+  transform-origin: top left;
 }
 
 .details {
@@ -98,6 +109,87 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: var(--text-sm);
   font-weight: 800;
+}
+
+.playControls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-4);
+  align-items: center;
+  padding: var(--space-4);
+}
+
+.modeButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.modeButton,
+.dpad button {
+  min-height: 38px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.modeButton {
+  padding: 0 var(--space-3);
+}
+
+.modeButton:hover,
+.dpad button:hover,
+.activeMode {
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.modeButton:focus-visible,
+.dpad button:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.dpad {
+  display: grid;
+  grid-template-columns: repeat(3, 72px);
+  grid-template-rows: repeat(3, 42px);
+  gap: var(--space-2);
+}
+
+.dpad button {
+  padding: 0 var(--space-2);
+}
+
+.upButton {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.leftButton {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.centerButton {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.rightButton {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.downButton {
+  grid-column: 2;
+  grid-row: 3;
 }
 
 .controls {
@@ -207,6 +299,14 @@
   .controls {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .playControls {
+    grid-template-columns: 1fr;
+  }
+
+  .dpad {
+    justify-self: start;
+  }
 }
 
 @media (max-width: 680px) {
@@ -225,5 +325,10 @@
 
   .details h1 {
     font-size: var(--title-lg);
+  }
+
+  .dpad {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
   }
 }

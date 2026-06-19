@@ -3,6 +3,7 @@ import styles from "./SpritePage.module.css";
 
 type Direction = "down" | "left" | "right" | "up";
 type Action = "idle" | "walk1" | "walk2" | "repair1" | "repair2";
+type SpriteMode = "walk" | "repair";
 
 const SPRITE_URL = "/sprites/work-sprite-sheet.png";
 const SHEET_WIDTH = 1402;
@@ -30,6 +31,9 @@ const colByAction: Record<Action, number> = {
 
 const walkCycle: Action[] = ["walk1", "idle", "walk2", "idle"];
 const repairCycle: Action[] = ["repair1", "repair2"];
+const MOVE_STEP = 28;
+const STAGE_WIDTH = 640;
+const STAGE_HEIGHT = 520;
 
 function labelFor(value: string) {
   return value.replace(/(\d)/, " $1");
@@ -77,17 +81,18 @@ function WorkerSprite({
 export function SpritePage() {
   const [direction, setDirection] = useState<Direction>("right");
   const [action, setAction] = useState<Action>("idle");
+  const [position, setPosition] = useState({ x: 230, y: 150 });
   const [frameWidth, setFrameWidth] = useState(280);
   const [frameHeight, setFrameHeight] = useState(280);
   const [offsetX, setOffsetX] = useState(0);
   const [offsetY, setOffsetY] = useState(0);
-  const [scale, setScale] = useState(1.8);
+  const [scale, setScale] = useState(0.75);
   const [speedMs, setSpeedMs] = useState(160);
   const [isPlaying, setIsPlaying] = useState(true);
-  const [cycleMode, setCycleMode] = useState<"walk" | "repair">("walk");
+  const [spriteMode, setSpriteMode] = useState<SpriteMode>("walk");
   const [frameIndex, setFrameIndex] = useState(0);
 
-  const cycle = cycleMode === "walk" ? walkCycle : repairCycle;
+  const cycle = spriteMode === "walk" ? walkCycle : repairCycle;
   const activeAction = isPlaying ? cycle[frameIndex % cycle.length] : action;
   const row = rowByDirection[direction];
   const col = colByAction[activeAction];
@@ -101,6 +106,75 @@ export function SpritePage() {
     }, speedMs);
     return () => window.clearInterval(id);
   }, [isPlaying, speedMs]);
+
+  function clampPosition(next: { x: number; y: number }) {
+    return {
+      x: Math.min(STAGE_WIDTH - 96, Math.max(0, next.x)),
+      y: Math.min(STAGE_HEIGHT - 96, Math.max(0, next.y)),
+    };
+  }
+
+  function moveWorker(nextDirection: Direction) {
+    setDirection(nextDirection);
+    setSpriteMode("walk");
+    setIsPlaying(true);
+    setPosition((current) => {
+      const delta = {
+        down: { x: 0, y: MOVE_STEP },
+        left: { x: -MOVE_STEP, y: 0 },
+        right: { x: MOVE_STEP, y: 0 },
+        up: { x: 0, y: -MOVE_STEP },
+      }[nextDirection];
+      return clampPosition({
+        x: current.x + delta.x,
+        y: current.y + delta.y,
+      });
+    });
+  }
+
+  function startWalking() {
+    setSpriteMode("walk");
+    setIsPlaying(true);
+  }
+
+  function stopAndRepair() {
+    setSpriteMode("repair");
+    setIsPlaying(true);
+  }
+
+  function resetWorker() {
+    setPosition({ x: 230, y: 150 });
+    setDirection("right");
+    setSpriteMode("walk");
+    setIsPlaying(false);
+    setAction("idle");
+  }
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const keyDirection: Record<string, Direction | undefined> = {
+        ArrowDown: "down",
+        s: "down",
+        S: "down",
+        ArrowLeft: "left",
+        a: "left",
+        A: "left",
+        ArrowRight: "right",
+        d: "right",
+        D: "right",
+        ArrowUp: "up",
+        w: "up",
+        W: "up",
+      };
+      const nextDirection = keyDirection[event.key];
+      if (!nextDirection) return;
+      event.preventDefault();
+      moveWorker(nextDirection);
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const atlasRows = useMemo(
     () =>
@@ -124,15 +198,25 @@ export function SpritePage() {
     <main className={styles.page}>
       <section className={styles.hero}>
         <div className={styles.stage}>
-          <WorkerSprite
-            direction={direction}
-            action={activeAction}
-            frameWidth={frameWidth}
-            frameHeight={frameHeight}
-            offsetX={offsetX}
-            offsetY={offsetY}
-            scale={scale}
-          />
+          <div
+            className={styles.actor}
+            style={
+              {
+                "--actor-x": `${position.x}px`,
+                "--actor-y": `${position.y}px`,
+              } as CSSProperties
+            }
+          >
+            <WorkerSprite
+              direction={direction}
+              action={activeAction}
+              frameWidth={frameWidth}
+              frameHeight={frameHeight}
+              offsetX={offsetX}
+              offsetY={offsetY}
+              scale={scale}
+            />
+          </div>
         </div>
         <div className={styles.details}>
           <p className={styles.eyebrow}>Sprite atlas demo</p>
@@ -151,9 +235,19 @@ export function SpritePage() {
               </dd>
             </div>
             <div>
+              <dt>Mode</dt>
+              <dd>{spriteMode}</dd>
+            </div>
+            <div>
               <dt>Frame</dt>
               <dd>
                 row {row}, col {col}
+              </dd>
+            </div>
+            <div>
+              <dt>Actor</dt>
+              <dd>
+                {position.x}px, {position.y}px
               </dd>
             </div>
             <div>
@@ -163,6 +257,46 @@ export function SpritePage() {
               </dd>
             </div>
           </dl>
+        </div>
+      </section>
+
+      <section className={styles.playControls} aria-label="Worker movement controls">
+        <div className={styles.modeButtons}>
+          <button
+            className={`${styles.modeButton} ${spriteMode === "walk" ? styles.activeMode : ""}`}
+            type="button"
+            onClick={startWalking}
+          >
+            Walk
+          </button>
+          <button
+            className={`${styles.modeButton} ${spriteMode === "repair" ? styles.activeMode : ""}`}
+            type="button"
+            onClick={stopAndRepair}
+          >
+            Stop and repair
+          </button>
+          <button className={styles.modeButton} type="button" onClick={resetWorker}>
+            Reset
+          </button>
+        </div>
+
+        <div className={styles.dpad} aria-label="Move worker">
+          <button type="button" className={styles.upButton} onClick={() => moveWorker("up")}>
+            Up
+          </button>
+          <button type="button" className={styles.leftButton} onClick={() => moveWorker("left")}>
+            Left
+          </button>
+          <button type="button" className={styles.centerButton} onClick={stopAndRepair}>
+            Repair
+          </button>
+          <button type="button" className={styles.rightButton} onClick={() => moveWorker("right")}>
+            Right
+          </button>
+          <button type="button" className={styles.downButton} onClick={() => moveWorker("down")}>
+            Down
+          </button>
         </div>
       </section>
 
@@ -199,8 +333,8 @@ export function SpritePage() {
         <label>
           Cycle
           <select
-            value={cycleMode}
-            onChange={(event) => setCycleMode(event.target.value as "walk" | "repair")}
+            value={spriteMode}
+            onChange={(event) => setSpriteMode(event.target.value as SpriteMode)}
           >
             <option value="walk">walk</option>
             <option value="repair">repair</option>
@@ -268,7 +402,7 @@ export function SpritePage() {
           Scale
           <input
             type="range"
-            min="0.8"
+            min="0.4"
             max="2.6"
             step="0.1"
             value={scale}
