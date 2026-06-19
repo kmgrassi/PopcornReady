@@ -586,10 +586,22 @@
 }
 
 /* Prominent in act two: a row of widescreen frames, like a shot strip. */
+/* Storyboard board: a 2-column grid so the five frames read 2 / 2 / 1, with the
+   last frame centered on its own row. Capped + centered so it stays a tidy board
+   on wide screens and shrinks to fit on narrow ones. */
 .tiles {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 12px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  max-width: 440px;
+  margin: 0 auto;
+}
+
+/* The 5th frame spans the row but keeps a single tile's width, centered. */
+.tile:nth-child(5) {
+  grid-column: 1 / -1;
+  justify-self: center;
+  width: calc((100% - 14px) / 2);
 }
 
 .tile {
