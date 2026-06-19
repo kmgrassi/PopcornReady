@@ -208,6 +208,7 @@ function briefMetaItems(brief: VideoBriefInput): string[] {
 
 function reviewHeading(stageType: GenerationStageType): string {
   if (stageType === "brief_intake") return "Concept ready for review";
+  if (stageType === "storyboard") return "Plan ready for review";
   return `${reviewStageLabel(stageType)} ready for review`;
 }
 
@@ -662,7 +663,9 @@ export function ProgressView({
                 <p className={styles.reviewDescription}>
                   {detail.run.reviewGate.stageType === "brief_intake"
                     ? "Review the concept brief before the run continues to script generation."
-                    : "Review this stage before the run continues to the next generation step. Stop here if you do not want the agent to keep producing from this boundary."}
+                    : detail.run.reviewGate.stageType === "storyboard"
+                      ? "Review the plan before the agent starts storyboard, keyframe, or clip generation. Stop here if you do not want the agent to keep producing from this boundary."
+                      : "Review this stage before the run continues to the next generation step. Stop here if you do not want the agent to keep producing from this boundary."}
                 </p>
               </div>
               {isBriefReviewGate && (project?.brief || projectLoading) ? (

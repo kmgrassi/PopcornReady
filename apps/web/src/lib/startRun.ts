@@ -18,7 +18,7 @@ export interface StartRunResult {
 }
 
 export const LONG_VIDEO_PLANNING_REVIEW_THRESHOLD_SEC = 30;
-const LONG_VIDEO_REQUIRED_REVIEW_GATE: GateableGenerationStageType = "creative_plan";
+const LONG_VIDEO_POST_PLAN_REVIEW_GATE: GateableGenerationStageType = "storyboard";
 
 /** Derive a human project name from the brief goal when none was supplied. */
 export function deriveProjectName(goal: string): string {
@@ -149,7 +149,7 @@ function assertUploadDraftHasVisualFootage(draft: BriefDraft): void {
 export function reviewGatesForDraft(draft: BriefDraft): GateableGenerationStageType[] {
   const reviewGates = new Set<GateableGenerationStageType>(draft.reviewGates);
   if (draft.targetLengthSec > LONG_VIDEO_PLANNING_REVIEW_THRESHOLD_SEC) {
-    reviewGates.add(LONG_VIDEO_REQUIRED_REVIEW_GATE);
+    reviewGates.add(LONG_VIDEO_POST_PLAN_REVIEW_GATE);
   }
   return [...reviewGates];
 }
