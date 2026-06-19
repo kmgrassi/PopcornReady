@@ -78,7 +78,7 @@ function formatDuration(seconds?: number) {
  * the latest v1 project timeline internally, then starts the mounted v1 timeline
  * export route and resolves the resulting artifact for the done state.
  */
-export function ExportStep({ back, projectId, completeDraft }: StepProps) {
+export function ExportStep({ back, draft, projectId, completeDraft }: StepProps) {
   const [quality, setQuality] = useState<ExportQuality>("standard");
   const [showCaptions, setShowCaptions] = useState(true);
   const [durationPolicy, setDurationPolicy] =
@@ -169,11 +169,26 @@ export function ExportStep({ back, projectId, completeDraft }: StepProps) {
 
   return (
     <StepShell
-      heading="Export"
-      description="Render the approved cut as an MP4 and send it to Outputs."
+      heading="Export reviewed cut"
+      description="Render the approved workspace cut as an MP4. Export settings stay unchanged from the current timeline unless you adjust them here."
       onBack={back}
     >
       <div className={styles.form}>
+        <section className={styles.context} aria-label="Export context">
+          <div>
+            <span>Review complete</span>
+            <strong>{draft.projectName || draft.goal || "Untitled video"}</strong>
+          </div>
+          <div>
+            <span>Target</span>
+            <strong>{draft.platform} · {draft.aspectRatio}</strong>
+          </div>
+          <div>
+            <span>Current cut</span>
+            <strong>{duration ?? "No timeline loaded"}</strong>
+          </div>
+        </section>
+
         <fieldset className={styles.group} disabled={exportBusy}>
           <legend>Format</legend>
           <label className={styles.option}>
@@ -244,8 +259,12 @@ export function ExportStep({ back, projectId, completeDraft }: StepProps) {
         </fieldset>
 
         <div className={styles.summary}>
-          <span>Current cut</span>
-          <strong>{duration ?? "No timeline loaded"}</strong>
+          <span>Export source</span>
+          <strong>
+            {timeline?.segments.length
+              ? `${timeline.segments.length} reviewed segments`
+              : "No timeline loaded"}
+          </strong>
         </div>
 
         {timelineLoading ? <p className={styles.status}>Loading the current cut...</p> : null}
@@ -268,7 +287,7 @@ export function ExportStep({ back, projectId, completeDraft }: StepProps) {
             <strong>Export created</strong>
             <span>
               {directUrl
-                ? "Your MP4 is ready to open."
+                ? "Your reviewed MP4 is ready to open."
                 : "The export is recorded in Outputs. Rendering may still be pending."}
             </span>
             <div className={styles.actions}>
