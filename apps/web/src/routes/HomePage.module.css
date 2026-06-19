@@ -164,7 +164,7 @@
 }
 
 :global(.landing .lp-hero) {
-  padding: clamp(88px, 10vw, 132px) 0 clamp(48px, 7vw, 88px);
+  padding: clamp(88px, 10vw, 132px) 0 clamp(88px, 10vw, 132px);
 }
 
 :global(.landing .lp-section) {
@@ -449,7 +449,7 @@
   }
 
   :global(.landing .lp-hero) {
-    padding: 64px 0 28px;
+    padding: 64px 0 64px;
   }
 
   :global(.landing .lp-section)::before {
