@@ -205,7 +205,11 @@ test("eval dashboard loads suites, run grid, and verdict diff", async ({ page })
   await page.goto("/library/evals");
 
   await expect(page.getByRole("heading", { name: "Eval suites" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Story quality regression" })).toBeVisible();
+  await expect(
+    page.getByLabel("Eval suites").getByRole("heading", {
+      name: "Story quality regression",
+    }),
+  ).toBeVisible();
   await expect(page.getByRole("button", { name: /Latest run evalrun_latest/ })).toHaveAttribute(
     "aria-pressed",
     "true",

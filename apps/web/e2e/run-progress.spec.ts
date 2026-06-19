@@ -38,6 +38,7 @@ interface MockRunOptions {
 
 test.beforeEach(async ({ page }) => {
   await mockLocalAuth(page);
+  await mockProject(page);
 });
 
 test("polls an active run, cancels it, and clears the recovery hint", async ({ page }) => {
@@ -89,12 +90,12 @@ test("polls an active run, cancels it, and clears the recovery hint", async ({ p
     .poll(() => overallProgress.getAttribute("aria-valuenow"))
     .toBe("58");
 
-  await expect(page.getByRole("button", { name: "Cancel generation" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Stop here" })).toBeVisible();
   await expect
     .poll(() => page.evaluate((key) => sessionStorage.getItem(key), lastRunHintKey))
     .toContain(`"status":"running"`);
 
-  await page.getByRole("button", { name: "Cancel generation" }).click();
+  await page.getByRole("button", { name: "Stop here" }).click();
 
   await expect(page.getByText("Run canceled")).toBeVisible();
   expect(cancelRequestBody).toEqual({});
@@ -229,7 +230,7 @@ test("shows a stored recovery hint while loading and then renders failure detail
 
   await page.goto(`${runPath}?studioDraft=draft-123`);
 
-  await expect(page.getByRole("heading", { name: "Starting generation" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Opening production workspace" })).toBeVisible();
   await expect(page.getByText(`Last seen run ${runId} was running.`)).toBeVisible();
 
   fulfillRun?.();
@@ -239,7 +240,7 @@ test("shows a stored recovery hint while loading and then renders failure detail
     page.getByRole("alert").getByText("Could not assemble the deterministic timeline."),
   ).toBeVisible();
   await expect(page.getByText("timeline_assembly_failed")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Back to studio" })).toHaveAttribute(
+  await expect(page.getByRole("link", { name: "View draft" })).toHaveAttribute(
     "href",
     "/studio?draft=draft-123&step=review",
   );
@@ -258,6 +259,43 @@ async function mockLocalAuth(page: Page) {
         workspaceName: "Development workspace",
         authMode: "local",
         isLocal: true,
+      },
+    });
+  });
+}
+
+async function mockProject(page: Page) {
+  await page.route(`**/api/v1/projects/${projectId}`, async (route) => {
+    await route.fulfill({
+      json: {
+        project: {
+          id: projectId,
+          schemaVersion: 1,
+          workspaceId: "dev_workspace",
+          name: "Progress E2E project",
+          status: "active",
+          visibility: "private",
+          brief: {
+            goal: "Show the progress flow",
+            targetLengthSec: 30,
+            aspectRatio: "9:16",
+            platform: "tiktok",
+            format: "visual_reveal",
+            audience: "Producers",
+            style: "fast-paced social ad",
+            hookQuestion: "Can the run finish cleanly?",
+            oneBigIdea: "Progress stays tied to Studio.",
+            strongestVisual: "A stage rail advancing through production.",
+            payoff: "The cut is ready for review.",
+            caveat: "",
+          },
+          currentBriefVersionId: null,
+          hasStoryboard: false,
+          posterAssetId: null,
+          posterUrl: null,
+          createdAt: now,
+          updatedAt: now,
+        },
       },
     });
   });

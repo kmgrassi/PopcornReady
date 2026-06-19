@@ -102,6 +102,41 @@ export async function installRunProgressRoutes(
     await route.fulfill({ json: localMeResponse() });
   });
 
+  await page.route(`**/api/v1/projects/${e2eProjectId}`, async (route) => {
+    await route.fulfill({
+      json: {
+        project: {
+          id: e2eProjectId,
+          schemaVersion: 1,
+          workspaceId: "dev_workspace",
+          name: "Run progress E2E project",
+          status: "active",
+          visibility: "private",
+          brief: {
+            goal: "Verify run progress actions",
+            targetLengthSec: 30,
+            aspectRatio: "9:16",
+            platform: "tiktok",
+            format: "visual_reveal",
+            audience: "Producers",
+            style: "fast-paced social ad",
+            hookQuestion: "Can the user direct the run?",
+            oneBigIdea: "Run controls stay in the workspace.",
+            strongestVisual: "A progress rail with review checkpoints.",
+            payoff: "The rough cut reaches review.",
+            caveat: "",
+          },
+          currentBriefVersionId: null,
+          hasStoryboard: false,
+          posterAssetId: null,
+          posterUrl: null,
+          createdAt: now,
+          updatedAt: now,
+        },
+      },
+    });
+  });
+
   await page.route(
     /\/api\/v1\/projects\/[^/]+\/generation-runs\/[^/]+(?:\/(?:approve|reject|cancel))?$/,
     async (route) => {
