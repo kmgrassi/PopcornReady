@@ -1,0 +1,114 @@
+.root {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: 78px;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    border-color var(--transition),
+    box-shadow var(--transition),
+    transform var(--transition);
+}
+
+.root:hover {
+  border-color: var(--accent-border);
+  background: var(--surface-2);
+  transform: translateY(-1px);
+}
+
+.root:has(.input:checked) {
+  border-color: var(--cta);
+  background: var(--surface-2);
+  box-shadow:
+    0 0 0 1px var(--cta),
+    var(--shadow-sm);
+}
+
+.root:has(.input:focus-visible) {
+  box-shadow: var(--ring);
+}
+
+.root:has(.input:checked):has(.input:focus-visible) {
+  box-shadow:
+    0 0 0 1px var(--cta),
+    var(--ring);
+}
+
+.input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.copy {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.label {
+  color: var(--text-strong);
+  font-size: var(--text-md);
+  font-weight: 800;
+  line-height: var(--line-caption);
+}
+
+.description {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--line-body);
+}
+
+.indicator {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--panel);
+  color: var(--cta-contrast);
+  transition:
+    background var(--transition),
+    border-color var(--transition),
+    box-shadow var(--transition);
+}
+
+.indicatorDot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  transform: scale(0.6);
+  transition:
+    background var(--transition),
+    transform var(--transition);
+}
+
+.input:checked ~ .indicator {
+  border-color: var(--cta);
+  background: var(--cta);
+  box-shadow: var(--shadow-sm);
+}
+
+.input:checked ~ .indicator .indicatorDot {
+  background: currentColor;
+  transform: scale(1);
+}
+
+.disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.disabled:hover {
+  transform: none;
+}

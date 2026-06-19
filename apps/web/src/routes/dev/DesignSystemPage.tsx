@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button, ButtonLink } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
+import { ChoiceCard } from "../../components/ui/ChoiceCard";
 import { Inline, Stack } from "../../components/ui/Stack";
 import { Eyebrow, Heading, Text } from "../../components/ui/Typography";
 import { Toggle } from "../../components/ui/Toggle";
@@ -8,6 +9,7 @@ import styles from "./DesignSystemPage.module.css";
 
 export function DesignSystemPage() {
   const [enabled, setEnabled] = useState(true);
+  const [choice, setChoice] = useState<"prompt" | "upload">("prompt");
 
   return (
     <main className={styles.shell}>
@@ -56,6 +58,31 @@ export function DesignSystemPage() {
               label="Auto-publish output"
               description="Disabled controls keep the same layout and state semantics."
             />
+          </Stack>
+        </Card>
+
+        <Card padding="lg">
+          <Stack gap="lg">
+            <Stack gap="sm">
+              <Heading as="h2" size="md">Choice cards</Heading>
+              <Text tone="muted">Use choice cards when a radio or checkbox needs to read as a clear selectable action.</Text>
+            </Stack>
+            <Inline gap="sm">
+              <ChoiceCard
+                name="choice-card-demo"
+                checked={choice === "prompt"}
+                onChange={() => setChoice("prompt")}
+                label="Prompt only"
+                description="Generate the visuals from the brief."
+              />
+              <ChoiceCard
+                name="choice-card-demo"
+                checked={choice === "upload"}
+                onChange={() => setChoice("upload")}
+                label="Upload footage"
+                description="Use videos, images, or audio as source material."
+              />
+            </Inline>
           </Stack>
         </Card>
 
