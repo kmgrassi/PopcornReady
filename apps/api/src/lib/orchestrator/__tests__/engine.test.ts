@@ -473,6 +473,36 @@ test("an async rejected gate parks on the job, then parks for review after job s
   assert.deepEqual(store.actions[0].outputAssetIds, ["keyframe_1"]);
 });
 
+test("a pending stop gate parks for review after an async job succeeds", async () => {
+  const store = new FakeStore(runFixture());
+  const { model } = scriptedModel([
+    { type: "tool_call", toolName: "generate_keyframe" },
+    { type: "tool_call", toolName: "generate_clip" },
+    { type: "done" },
+  ]);
+  const registry = fakeRegistry({
+    generate_keyframe: () => ({ status: "accepted", jobId: "job1", resumesWhen: "job_terminal" }),
+    generate_clip: () => ok(["clip_1"]),
+  });
+
+  const parkedOnJob = await runOrchestratorToCompletion("run1", deps(store, model, registry));
+  assert.equal(parkedOnJob.status, "waiting");
+  store.gates.push(gateFixture("generate_keyframe", "pending"));
+
+  const parkedForReview = await resumeOrchestratorRun(
+    "run1",
+    deps(store, model, registry, {
+      jobs: { getJob: async () => ({ status: "succeeded", result: { assetIds: ["keyframe_1"] } }) },
+    })
+  );
+
+  assert.equal(parkedForReview.status, "waiting");
+  assert.equal(store.gates[0].status, "reached");
+  assert.equal(store.actions.length, 1, "next tool must not run after the pending stop gate");
+  assert.equal(store.actions[0].status, "applied");
+  assert.deepEqual(store.actions[0].outputAssetIds, ["keyframe_1"]);
+});
+
 test("a model turn timeout marks the run failed instead of leaving it running", async () => {
   const store = new FakeStore(runFixture());
   let releaseModel: (() => void) | undefined;

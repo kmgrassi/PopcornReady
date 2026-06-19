@@ -244,7 +244,7 @@ export async function resumeOrchestratorRun(
     });
     const gates = await r.store.listRunGates(runId);
     const gate = gates.find((g) => g.stage === parkingAction.tool);
-    if (gate?.status === "rejected") {
+    if (gate?.status === "pending" || gate?.status === "rejected") {
       await r.store.markGateReached(runId, parkingAction.tool);
       return park(run, r);
     }

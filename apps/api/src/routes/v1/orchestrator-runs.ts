@@ -4,6 +4,8 @@ import { mutation, route } from "@/core/adapter";
 import { ApiError } from "@/core/errors";
 import { runIdempotent } from "@/lib/api/v1/idempotency";
 import {
+  createPendingApprovalGate,
+  createReachedApprovalGate,
   createOrchestratorRun,
   getOrchestratorRun,
   listRunActions,
@@ -592,6 +594,57 @@ async function requireProjectRun(runId: string, projectId: string): Promise<Orch
   return run;
 }
 
+function isTerminalRun(run: OrchestratorRun): boolean {
+  return run.status === "succeeded" || run.status === "failed" || run.status === "canceled";
+}
+
+function latestActionWithStatus(
+  actions: RunActionSummary[],
+  status: "running" | "applied"
+): RunActionSummary | undefined {
+  return generationActions(actions)
+    .slice()
+    .reverse()
+    .find((action) => action.status === status);
+}
+
+async function stopAfterCurrentStep(run: OrchestratorRun): Promise<void> {
+  if (isTerminalRun(run)) return;
+
+  const [gates, actions] = await Promise.all([listRunGates(run.id), listRunActions(run.id)]);
+  const reachedGate = gates.find((gate) => gate.status === "reached");
+  if (reachedGate) {
+    await updateOrchestratorRun(run.id, {
+      status: "canceled",
+      completedAt: new Date().toISOString(),
+    });
+    return;
+  }
+
+  const runningAction = latestActionWithStatus(actions, "running");
+  if (runningAction) {
+    if (runningAction.jobIds.length > 0) {
+      await createPendingApprovalGate({ runId: run.id, stage: runningAction.tool });
+    } else {
+      await createReachedApprovalGate({ runId: run.id, stage: runningAction.tool });
+      await updateOrchestratorRun(run.id, { status: "waiting" });
+    }
+    return;
+  }
+
+  const appliedAction = latestActionWithStatus(actions, "applied");
+  if (appliedAction) {
+    await createReachedApprovalGate({ runId: run.id, stage: appliedAction.tool });
+    await updateOrchestratorRun(run.id, { status: "waiting" });
+    return;
+  }
+
+  await updateOrchestratorRun(run.id, {
+    status: "canceled",
+    completedAt: new Date().toISOString(),
+  });
+}
+
 function startRun(workspaceId: string, runId: string, actorId: string): void {
   void runOrchestratorToCompletion(runId, {
     workspaceId,
@@ -754,11 +807,8 @@ orchestratorRunsRouter.post(
     const projectId = requireParam(params, "projectId");
     const runId = requireParam(params, "runId");
     await requireProjectAccess(auth.workspaceId, projectId);
-    await requireProjectRun(runId, projectId);
-    await updateOrchestratorRun(runId, {
-      status: "canceled",
-      completedAt: new Date().toISOString(),
-    });
+    const run = await requireProjectRun(runId, projectId);
+    await stopAfterCurrentStep(run);
     return { status: 200, body: await assembleRunDetail(runId, projectId) };
   })
 );

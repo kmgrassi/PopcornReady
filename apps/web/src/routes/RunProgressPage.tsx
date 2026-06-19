@@ -121,7 +121,7 @@ function RunProgress({
       if (action === "approve" || action === "reject") {
         setReviewFeedbackNote("");
       }
-      if (action === "cancel") {
+      if (action === "cancel" && data.run.status === "canceled") {
         clearLastRunHint(projectId);
       }
       void runQuery.refetch();
