@@ -3,6 +3,10 @@ import { AgentRunPreview } from "../components/AgentRunPreview";
 import { LogoMark } from "../components/LogoMark";
 import { PromptComposer } from "../components/PromptComposer";
 import { Reveal } from "../components/Reveal";
+import {
+  LandingSection,
+  LandingSectionHeader,
+} from "../components/landing/LandingSection";
 import { WorkflowStages } from "../components/landing/WorkflowStages";
 import styles from "./HomePage.module.css";
 
@@ -219,30 +223,25 @@ export function HomePage() {
         </section>
 
         <Reveal>
-          <section className={`lp-section ${styles.overview}`}>
-            <div className={styles.overviewCopy}>
-              <span className={styles.kicker}>Full run overview</span>
-              <h2 className={styles.title}>One directed run, visible end to end.</h2>
-              <p className={styles.body}>
-                Watch the agent work: it turns the brief into beats, generates a
-                keyframe per beat, and assembles the timeline — every step
-                inspectable in one workspace.
-              </p>
-            </div>
+          <LandingSection
+            spacing="tight"
+            kicker="Full run overview"
+            title="One directed run, visible end to end."
+            subtitle="Watch the agent work: it turns the brief into beats, generates a keyframe per beat, and assembles the timeline — every step inspectable in one workspace."
+          >
             <AgentRunPreview />
-          </section>
+          </LandingSection>
         </Reveal>
 
         <Reveal>
-          <section className={`lp-section ${styles.orchestrator}`}>
+          <LandingSection spacing="normal" contentClassName={styles.orchestrator}>
             <div className={styles.orchestratorCopy}>
-              <span className={styles.kicker}>AI orchestrator</span>
-              <h2 className={styles.title}>The agent coordinates every stage.</h2>
-              <p className={styles.body}>
-                Briefs, planning, asset generation, review, and rendering stay
-                connected as one inspectable system instead of scattered one-off
-                tools.
-              </p>
+              <LandingSectionHeader
+                align="start"
+                kicker="AI orchestrator"
+                title="The agent coordinates every stage."
+                subtitle="Briefs, planning, asset generation, review, and rendering stay connected as one inspectable system instead of scattered one-off tools."
+              />
             </div>
             <figure className={styles.orchestratorFrame}>
               <img
@@ -253,7 +252,7 @@ export function HomePage() {
                 height="1024"
               />
             </figure>
-          </section>
+          </LandingSection>
         </Reveal>
 
         <Reveal>
@@ -261,169 +260,172 @@ export function HomePage() {
         </Reveal>
 
         <Reveal>
-          <section className="lp-section">
-            <h2 className="lp-section-title">What it does</h2>
-            <div className="lp-grid">
-              {FEATURES.map((feature) => (
-                <div className="lp-card" key={feature.title}>
-                  <h3>{feature.title}</h3>
-                  <p>{feature.body}</p>
-                </div>
-              ))}
-            </div>
-          </section>
-        </Reveal>
-
-        <Reveal>
-        <section className="lp-section" aria-label="Competitive feature heatmap">
-          <h2 className="lp-section-title">Where it fits</h2>
-          <p className="lp-section-sub">
-            Other tools bolt AI onto a manual editor. Popcorn Ready is the
-            opposite: an agent that drives the whole pipeline &mdash; brief, plan,
-            assets, audio, timeline, and export &mdash; in one loop.
-          </p>
-          <div className="lp-heatmap-wrap">
-            <div className="lp-heatmap">
-              <div className="lp-heatmap-head">
-                <span>Tool</span>
-                {HEATMAP_COLUMNS.map((column) => (
-                  <span key={column}>{column}</span>
-                ))}
-                <span>Positioning</span>
-              </div>
-              {HEATMAP_ROWS.map((row) => (
-                <div
-                  className={`lp-heatmap-row${row.featured ? " featured" : ""}`}
-                  key={row.app}
-                >
-                  <strong>{row.app}</strong>
-                  {row.scores.map((score, index) => (
-                    <button
-                      type="button"
-                      className={`lp-heat-cell level-${score}`}
-                      key={`${row.app}-${HEATMAP_COLUMNS[index]}`}
-                      aria-label={heatmapTooltip(
-                        row.app,
-                        HEATMAP_COLUMNS[index],
-                        score
-                      )}
-                    >
-                      <em>{HEATMAP_COLUMNS[index]}</em>
-                      <HeatLogoScale score={score} />
-                      <span className="lp-heat-tip">
-                        {heatmapTooltip(row.app, HEATMAP_COLUMNS[index], score)}
-                      </span>
-                    </button>
-                  ))}
-                  <p>{row.note}</p>
-                </div>
-              ))}
-            </div>
-            <div className="lp-heatmap-legend" aria-hidden="true">
-              <span>
-                <span className="lp-heat-scale count-0" /> Minimal
-              </span>
-              <span>
-                <span className="lp-heat-scale count-1">
-                  <LogoMark className="lp-heat-mark" />
-                </span>
-                Light
-              </span>
-              <span>
-                <span className="lp-heat-scale count-2">
-                  <LogoMark className="lp-heat-mark" />
-                  <LogoMark className="lp-heat-mark" />
-                </span>
-                Medium
-              </span>
-              <span>
-                <span className="lp-heat-scale count-3">
-                  <LogoMark className="lp-heat-mark" />
-                  <LogoMark className="lp-heat-mark" />
-                  <LogoMark className="lp-heat-mark" />
-                </span>
-                Strong
-              </span>
-            </div>
-          </div>
-        </section>
-        </Reveal>
-
-        <Reveal>
-        <section id="pricing" className="lp-section">
-          <h2 className="lp-section-title">Hosted pricing</h2>
-          <p className="lp-section-sub">
-            Start free by self-hosting, or let us run the rendering for you.
-          </p>
-          <div className="lp-pricing">
-            {PRICING.map((tier) => (
-              <div
-                className={`lp-price-card${tier.featured ? " featured" : ""}`}
-                key={tier.name}
-              >
-                {tier.featured && <span className="lp-badge">Most popular</span>}
-                <h3>{tier.name}</h3>
-                <div className="lp-price">
-                  <span className="lp-price-amount">{tier.price}</span>
-                  <span className="lp-price-cadence">{tier.cadence}</span>
-                </div>
-                <p className="lp-price-blurb">{tier.blurb}</p>
-                <ul className="lp-price-features">
-                  {tier.features.map((feature) => (
-                    <li key={feature}>{feature}</li>
-                  ))}
-                </ul>
-                {tier.cta.external ? (
-                  <a
-                    className="lp-price-cta"
-                    href={tier.cta.href}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {tier.cta.label}
-                  </a>
-                ) : (
-                  <Link className="lp-price-cta" to={tier.cta.href}>
-                    {tier.cta.label}
-                  </Link>
-                )}
+          <LandingSection title="What it does" contentClassName="lp-grid">
+            {FEATURES.map((feature) => (
+              <div className="lp-card" key={feature.title}>
+                <h3>{feature.title}</h3>
+                <p>{feature.body}</p>
               </div>
             ))}
-          </div>
-          <p className="lp-section-sub lp-pricing-note">
-            Hosted pricing is indicative while we finalize launch tiers. Prefer
-            full control? Self-hosting is always free.
-          </p>
-        </section>
+          </LandingSection>
         </Reveal>
 
         <Reveal>
-        <section className="lp-cta">
-          <h2>Open source. Run it yourself.</h2>
-          <p>
-            Popcorn Ready is open source. Clone it, bring your own model keys,
-            and render unlimited videos on your own machine.
-          </p>
-          <pre className="lp-code">
-            <code>
-              git clone {GITHUB_URL}.git{"\n"}
-              cd popcornready && pnpm install && pnpm dev
-            </code>
-          </pre>
-          <div className="lp-cta-buttons">
-            <a
-              className="lp-price-cta featured"
-              href={GITHUB_URL}
-              target="_blank"
-              rel="noreferrer"
-            >
-              View on GitHub &rarr;
-            </a>
-            <Link className="lp-price-cta" to="/studio">
-              Open the studio
-            </Link>
-          </div>
-        </section>
+          <LandingSection
+            aria-label="Competitive feature heatmap"
+            title="Where it fits"
+            subtitle={
+              <>
+                Other tools bolt AI onto a manual editor. Popcorn Ready is the
+                opposite: an agent that drives the whole pipeline &mdash; brief,
+                plan, assets, audio, timeline, and export &mdash; in one loop.
+              </>
+            }
+          >
+            <div className="lp-heatmap-wrap">
+              <div className="lp-heatmap">
+                <div className="lp-heatmap-head">
+                  <span>Tool</span>
+                  {HEATMAP_COLUMNS.map((column) => (
+                    <span key={column}>{column}</span>
+                  ))}
+                  <span>Positioning</span>
+                </div>
+                {HEATMAP_ROWS.map((row) => (
+                  <div
+                    className={`lp-heatmap-row${row.featured ? " featured" : ""}`}
+                    key={row.app}
+                  >
+                    <strong>{row.app}</strong>
+                    {row.scores.map((score, index) => (
+                      <button
+                        type="button"
+                        className={`lp-heat-cell level-${score}`}
+                        key={`${row.app}-${HEATMAP_COLUMNS[index]}`}
+                        aria-label={heatmapTooltip(
+                          row.app,
+                          HEATMAP_COLUMNS[index],
+                          score
+                        )}
+                      >
+                        <em>{HEATMAP_COLUMNS[index]}</em>
+                        <HeatLogoScale score={score} />
+                        <span className="lp-heat-tip">
+                          {heatmapTooltip(row.app, HEATMAP_COLUMNS[index], score)}
+                        </span>
+                      </button>
+                    ))}
+                    <p>{row.note}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="lp-heatmap-legend" aria-hidden="true">
+                <span>
+                  <span className="lp-heat-scale count-0" /> Minimal
+                </span>
+                <span>
+                  <span className="lp-heat-scale count-1">
+                    <LogoMark className="lp-heat-mark" />
+                  </span>
+                  Light
+                </span>
+                <span>
+                  <span className="lp-heat-scale count-2">
+                    <LogoMark className="lp-heat-mark" />
+                    <LogoMark className="lp-heat-mark" />
+                  </span>
+                  Medium
+                </span>
+                <span>
+                  <span className="lp-heat-scale count-3">
+                    <LogoMark className="lp-heat-mark" />
+                    <LogoMark className="lp-heat-mark" />
+                    <LogoMark className="lp-heat-mark" />
+                  </span>
+                  Strong
+                </span>
+              </div>
+            </div>
+          </LandingSection>
+        </Reveal>
+
+        <Reveal>
+          <LandingSection
+            id="pricing"
+            title="Hosted pricing"
+            subtitle="Start free by self-hosting, or let us run the rendering for you."
+          >
+            <div className="lp-pricing">
+              {PRICING.map((tier) => (
+                <div
+                  className={`lp-price-card${tier.featured ? " featured" : ""}`}
+                  key={tier.name}
+                >
+                  {tier.featured && <span className="lp-badge">Most popular</span>}
+                  <h3>{tier.name}</h3>
+                  <div className="lp-price">
+                    <span className="lp-price-amount">{tier.price}</span>
+                    <span className="lp-price-cadence">{tier.cadence}</span>
+                  </div>
+                  <p className="lp-price-blurb">{tier.blurb}</p>
+                  <ul className="lp-price-features">
+                    {tier.features.map((feature) => (
+                      <li key={feature}>{feature}</li>
+                    ))}
+                  </ul>
+                  {tier.cta.external ? (
+                    <a
+                      className="lp-price-cta"
+                      href={tier.cta.href}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {tier.cta.label}
+                    </a>
+                  ) : (
+                    <Link className="lp-price-cta" to={tier.cta.href}>
+                      {tier.cta.label}
+                    </Link>
+                  )}
+                </div>
+              ))}
+            </div>
+            <p className={styles.pricingNote}>
+              Hosted pricing is indicative while we finalize launch tiers. Prefer
+              full control? Self-hosting is always free.
+            </p>
+          </LandingSection>
+        </Reveal>
+
+        <Reveal>
+          <LandingSection spacing="normal">
+            <div className={styles.ctaCard}>
+              <h2>Open source. Run it yourself.</h2>
+              <p>
+                Popcorn Ready is open source. Clone it, bring your own model keys,
+                and render unlimited videos on your own machine.
+              </p>
+              <pre className="lp-code">
+                <code>
+                  git clone {GITHUB_URL}.git{"\n"}
+                  cd popcornready && pnpm install && pnpm dev
+                </code>
+              </pre>
+              <div className="lp-cta-buttons">
+                <a
+                  className="lp-price-cta featured"
+                  href={GITHUB_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  View on GitHub &rarr;
+                </a>
+                <Link className="lp-price-cta" to="/studio">
+                  Open the studio
+                </Link>
+              </div>
+            </div>
+          </LandingSection>
         </Reveal>
       </main>
     </div>
