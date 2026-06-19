@@ -35,8 +35,7 @@ as separate product functions.
 
 Users should be able to:
 
-- start from a prompt, uploaded footage, uploaded images, or existing generated
-  assets;
+- start from a prompt, uploaded footage, or existing generated assets;
 - enter the flow at the most appropriate stage for those inputs;
 - stop, start, revise, or continue from any stage;
 - see the same core interface whether they are creating a new video or editing an
@@ -45,7 +44,9 @@ Users should be able to:
 The landing-page behavior is the target interaction model: stage boundaries
 should expose a `Stop here` control, but the default path remains autonomous. If
 the user does nothing, the run should automatically continue after a short delay
-around five seconds.
+around five seconds. Nothing should require explicit approval by default, except
+longer videos: for videos over 30 seconds, stop after the plan and require user
+approval before any image or video assets are generated.
 
 ## Source Surfaces
 
@@ -202,6 +203,8 @@ Target:
   `Continue to production`.
 - Show `Stop here` at the stage boundary.
 - If the user does nothing, auto-continue after about five seconds.
+- For videos over 30 seconds, do not auto-continue past planning. Hard stop for
+  approval before generating real image or video assets.
 - On click, show a compact handoff state:
   - `Agent running autonomously`
   - current plan recap
@@ -279,6 +282,35 @@ Implementation seam:
 - Optional shared CSS pattern adapted from `AgentRunPreview.module.css`, using
   scoped modules and existing tokens.
 
+### Storyboard / Keyframe / Shot UI Model
+
+The UI should present visual generation as one board with progressive detail,
+not three unrelated asset lists. The user-facing hierarchy:
+
+1. **Storyboard** - the story structure. A storyboard card represents a scene or
+   beat: what happens, why it exists, rough timing, and status. This is the layer
+   users should scan to understand the video.
+2. **Keyframe** - the representative still for that beat. This is the visual
+   anchor users approve, revise, or regenerate before motion is expensive.
+3. **Shot** - the generated moving clip for that keyframe/beat. This appears
+   after production and can be previewed, swapped, or regenerated.
+
+In the first UI pass, render these as a single `StoryboardBoard`:
+
+- each tile is a beat/scene slot;
+- the tile's main media shows the best available visual: shot thumbnail/video if
+  present, otherwise keyframe, otherwise storyboard placeholder;
+- the tile footer shows the beat label, short intent, status, and active action;
+- tile actions are stage-aware: `Stop here`, `Revise beat`, `Regenerate frame`,
+  `Regenerate shot`, `Use this`, `Compare`;
+- a compact detail drawer opens from a tile for prompt, provenance, alternatives,
+  review notes, and diagnostics.
+
+This lets the UI grow with the data model: initially a tile may be backed only by
+stage context and generated items; later it can bind to relational storyboard
+rows, keyframe assets, shot assets, selections, and actions without changing the
+surface users learned.
+
 ### 6. Make Studio, Progress, And Editing One Interface
 
 The real flow currently transitions:
@@ -306,7 +338,6 @@ Target:
 - Support "enter at stage" behavior from available inputs:
   - prompt-only starts at brief/plan;
   - uploaded footage can start at source selection or plan with footage attached;
-  - uploaded images can start at storyboard/keyframe selection;
   - an existing storyboard can start at shots/timeline;
   - a completed video can start at review/revision/export.
 
@@ -342,6 +373,9 @@ now and relational graph-backed rows when persisted.
 - No fake interactive landing animation inside the dashboard.
 - No manual timeline editor or drag-to-trim surface.
 - No broad dashboard shell rewrite beyond the creation-flow surfaces named here.
+- No uploaded-image intake flow in this pass. Future scope: when users bring
+  images, the AI should ask what the images are and what role each should play
+  before deciding the right entry stage.
 - No additions to `globals.css` or legacy global route styles. New visual work
   uses co-located CSS Modules and existing tokens.
 
@@ -354,7 +388,7 @@ now and relational graph-backed rows when persisted.
 | 3 | **Planning preview beats contract.** Add typed beat outline to the planning preview API/client and render it in the plan card. | Replaces landing hardcoded beats with real planning data. |
 | 4 | **Progress header and plan recap.** Update `ProgressView` to read as `Produce`, show plan/project context, and move debug run details lower. | Keeps continuity after the route transition. |
 | 5 | **Storyboard board.** Add a scoped `StoryboardBoard` for storyboard/keyframe items and fall back to `StageItemCard` for everything else. Use existing stage context first; typed purpose metadata can follow. | Makes generated visuals feel like the movie, not a generic asset list. |
-| 6 | **Stop/continue affordances.** Attach cancel/reject/approve controls to active stages with landing-consistent `Stop here` / `Continue` language and roughly five-second auto-continue where safe. | Makes human intervention a first-class workflow while preserving autonomous default runs. |
+| 6 | **Stop/continue affordances.** Attach cancel/reject/approve controls to active stages with landing-consistent `Stop here` / `Continue` language. Auto-continue after roughly five seconds by default; hard stop after planning only for videos over 30 seconds before image/video assets are generated. | Makes human intervention a first-class workflow while preserving autonomous default runs. |
 | 7 | **Unified workspace continuity.** Make setup, progress, review, and edit states read as one directable agent interface even if routes remain deep-linkable. | Avoids teaching separate workflows for create vs edit vs resume. |
 | 8 | **Artifact purpose metadata.** Add typed purpose/role fields to stage items so the board is data-driven instead of label-driven. | Makes UI grouping robust and asset-graph-ready, but is not a blocker for the first board pass. |
 | 9 | **Review continuity polish.** Carry plan recap and stage history into the review/export handoff; make successful progress-to-review transition feel intentional. | Completes the end-to-end story. |
@@ -364,11 +398,6 @@ files unless the surrounding route registration requires it.
 
 ## Open Decisions
 
-- What is the right stage-entry heuristic for user-provided images: do they land
-  in storyboard selection, keyframe selection, or a more general "visual inputs"
-  stage?
-- Which stage boundaries should auto-continue after five seconds by default, and
-  which should require explicit approval because of cost, quality, or safety?
 - Should storyboard frames, keyframes, and generated shots be distinct labels in
   the UI, or should the first pass collapse them into one `Frames` board until
   users need more specificity?
@@ -386,7 +415,9 @@ files unless the surrounding route registration requires it.
   asset cards.
 - Stop, continue, approve, reject, and cancel affordances use consistent language
   and are visible at the stage where they matter; default autonomous stages
-  continue after a short delay when the user does not stop them.
+  continue after a short delay when the user does not stop them. Videos over 30
+  seconds hard-stop after planning and require approval before image or video
+  asset generation.
 - Creating from scratch, resuming a run, editing an existing video, and entering
   with user-provided assets all use the same underlying directable workspace
   model.
