@@ -32,6 +32,96 @@
   gap: var(--space-2);
 }
 
+.planCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.planHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.planTitle {
+  margin: 0;
+  max-width: 68ch;
+  color: var(--text);
+  font-size: var(--title-md);
+  line-height: 1.2;
+}
+
+.planMeta {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.planMeta span,
+.beatRole {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: var(--space-1) var(--space-2);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.beatList {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.beatRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--panel-2);
+}
+
+.beatNumber {
+  display: inline-grid;
+  place-items: center;
+  width: var(--space-6);
+  height: var(--space-6);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--cta) 18%, var(--panel));
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 800;
+}
+
+.beatLabelRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+}
+
+.beatLabel {
+  color: var(--text);
+  font-weight: 800;
+}
+
+.beatText {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
 .grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -154,6 +244,14 @@
   .header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .planHeader {
+    flex-direction: column;
+  }
+
+  .planMeta {
+    justify-content: flex-start;
   }
 
   .grid,

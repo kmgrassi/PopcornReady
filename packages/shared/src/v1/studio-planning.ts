@@ -28,9 +28,19 @@ export interface StudioPlanningPosterRequest {
   reason?: string;
 }
 
+export type StudioPlanningBeatRole = "hook" | "beat" | "payoff";
+
+export interface StudioPlanningBeatOutlineItem {
+  id: string;
+  label: string;
+  text: string;
+  role?: StudioPlanningBeatRole;
+}
+
 export interface StudioPlanningPreview {
   storyDirection: StudioPlanningStoryDirection;
   openingHook: string;
+  beats: StudioPlanningBeatOutlineItem[];
   poster: StudioPlanningPosterRequest;
   source: {
     mode: "deterministic";
