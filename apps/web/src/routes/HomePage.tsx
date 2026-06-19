@@ -3,32 +3,10 @@ import { AgentRunPreview } from "../components/AgentRunPreview";
 import { LogoMark } from "../components/LogoMark";
 import { PromptComposer } from "../components/PromptComposer";
 import { Reveal } from "../components/Reveal";
+import { WorkflowStages } from "../components/landing/WorkflowStages";
 import styles from "./HomePage.module.css";
 
 const GITHUB_URL = "https://github.com/kmgrassi/popcornready";
-
-const STEPS = [
-  {
-    n: "1",
-    title: "Write a brief",
-    body: "Describe the video you want: your goal, length, style, and audience. One prompt is enough to start.",
-  },
-  {
-    n: "2",
-    title: "AI plans the beats",
-    body: "Claude turns your intent into a structured plan: a hook, the beats that carry it, and the payoff.",
-  },
-  {
-    n: "3",
-    title: "Generate & assemble",
-    body: "Popcorn Ready generates a visual for each beat, assembles an editable timeline, and a critic improves the cut.",
-  },
-  {
-    n: "4",
-    title: "Deterministic render",
-    body: "Export a real MP4 via Remotion. The AI only edits structured data; it never touches raw video.",
-  },
-];
 
 const FEATURES = [
   {
@@ -279,22 +257,7 @@ export function HomePage() {
         </Reveal>
 
         <Reveal>
-          <section id="workflow" className="lp-section">
-            <h2 className="lp-section-title">How it works</h2>
-            <p className="lp-section-sub">
-              You direct; the agent does the work: brief &rarr; plan &rarr;
-              timeline &rarr; render.
-            </p>
-            <div className="lp-steps">
-              {STEPS.map((step) => (
-                <div className="lp-step" key={step.n}>
-                  <span className="lp-step-n">{step.n}</span>
-                  <h3>{step.title}</h3>
-                  <p>{step.body}</p>
-                </div>
-              ))}
-            </div>
-          </section>
+          <WorkflowStages />
         </Reveal>
 
         <Reveal>
