@@ -27,6 +27,8 @@ import {
   type GenerationRunStatus,
   type GenerationStage,
   type GenerationStageItem,
+  type GenerationStageItemKind,
+  type GenerationStageItemPurpose,
   type GenerationStageType,
 } from "@popcorn/shared/v1/types";
 
@@ -40,6 +42,7 @@ interface GenerationRunDetail {
   stageItems: GenerationStageItem[];
   resultArtifacts?: Array<{
     kind: GenerationStageItem["kind"];
+    purpose: GenerationStageItem["purpose"];
     artifactId: string;
     assetId?: string;
     stageId: string;
@@ -250,6 +253,52 @@ function toolStage(tool: string): GenerationStageType {
   }
 }
 
+function toolItemKind(tool: string): GenerationStageItemKind {
+  switch (tool) {
+    case "generate_clip":
+      return "video";
+    case "generate_audio":
+      return "audio";
+    case "assemble_timeline":
+      return "timeline";
+    case "export_video":
+      return "export";
+    default:
+      return "image";
+  }
+}
+
+function toolItemPurpose(tool: string): GenerationStageItemPurpose {
+  switch (tool) {
+    case "create_or_load_brief":
+      return "brief";
+    case "develop_story_blueprint":
+    case "draft_script":
+    case "plan_shots":
+    case "plan_visual_anchors":
+      return "plan";
+    case "generate_storyboard":
+      return "storyboard_frame";
+    case "generate_anchor":
+      return "visual_anchor";
+    case "generate_keyframe":
+      return "keyframe";
+    case "generate_clip":
+      return "shot";
+    case "generate_audio":
+      return "audio";
+    case "assemble_timeline":
+      return "timeline";
+    case "critique_timeline":
+    case "request_approval":
+      return "quality_review";
+    case "export_video":
+      return "export";
+    default:
+      return "unknown";
+  }
+}
+
 function runStatus(status: OrchestratorRun["status"]): GenerationRunStatus {
   if (status === "waiting") return "running";
   return status;
@@ -364,6 +413,7 @@ function projectResultArtifacts(
     .flatMap((action) =>
       action.outputAssetIds.map((assetId) => ({
         kind: "export" as const,
+        purpose: "export" as const,
         artifactId: assetId,
         assetId,
         stageId: stageId(run.id, "export"),
@@ -425,7 +475,8 @@ function projectStageItems(run: OrchestratorRun, actions: RunActionSummary[]): G
     return action.outputAssetIds.map((assetId, index) => ({
       itemId: `${action.id}:${assetId}`,
       stageId: stageId(run.id, type),
-      kind: type === "audio_generation" ? "audio" : type === "export" ? "export" : "image",
+      kind: toolItemKind(action.tool),
+      purpose: toolItemPurpose(action.tool),
       label: `${action.tool} output ${index + 1}`,
       status: actionStatus(action.status),
       assetId,
