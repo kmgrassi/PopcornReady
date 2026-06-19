@@ -63,11 +63,21 @@ function searchParamsFor(req: Parameters<RequestHandler>[0]): URLSearchParams {
 function parseEntryIdsParam(searchParams: URLSearchParams): string[] {
   const rawValues = searchParams.getAll("entryIds");
   const values = rawValues.length ? rawValues : [searchParams.get("entryIds") ?? ""];
-  return values
-    .flatMap((value) => value.split(","))
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .slice(0, 100);
+  const entryIds = Array.from(
+    new Set(
+      values
+        .flatMap((value) => value.split(","))
+        .map((value) => value.trim())
+        .filter(Boolean)
+    )
+  );
+  if (entryIds.length > 100) {
+    throw new ApiError(
+      "validation_failed",
+      "entryIds accepts at most 100 IDs per request."
+    );
+  }
+  return entryIds;
 }
 
 catalogPublicRouter.get(

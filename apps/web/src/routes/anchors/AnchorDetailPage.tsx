@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import type { V1Project } from "@popcorn/shared/v1/types";
+import { useAuth } from "../../components/auth/AuthProvider";
 import { Button } from "../../components/ui/Button";
 import { EmptyState, ErrorState } from "../../components/ui/StateCard";
 import {
@@ -16,6 +17,15 @@ import {
   kindLabel,
 } from "./anchorDisplay";
 import styles from "./AnchorDetailPage.module.css";
+
+const DEV_AUTOPILOT = import.meta.env.DEV;
+
+function catalogLikesAuthScope(auth: ReturnType<typeof useAuth>): string {
+  if (auth.user?.id) return auth.user.id;
+  if (auth.status === "disabled") return "local-disabled-auth";
+  if (DEV_AUTOPILOT && auth.status === "unauthenticated") return "dev-autopilot";
+  return "";
+}
 
 function DetailPreview({ entry }: { entry: CatalogEntry }) {
   if (entry.previewUrl) {
@@ -173,11 +183,13 @@ function UseAnchorPanel({
 }
 
 export function AnchorDetailPage() {
+  const auth = useAuth();
   const { entryId } = useParams();
   const entryQuery = useCatalogEntryQuery(entryId ?? "");
   const projectsQuery = useCatalogProjectPickerQuery();
   const entry = entryQuery.data?.entry ?? null;
-  const likesQuery = useCatalogLikesQuery(entryId ? [entryId] : []);
+  const authScope = catalogLikesAuthScope(auth);
+  const likesQuery = useCatalogLikesQuery(entryId ? [entryId] : [], authScope);
   const likedEntryIds = useMemo(
     () => new Set(likesQuery.data?.likedEntryIds ?? []),
     [likesQuery.data?.likedEntryIds],

@@ -7,6 +7,8 @@ import {
 import type { V1Project } from "@popcorn/shared/v1/types";
 import { apiRequest, v1Api } from "./api-client";
 
+const CATALOG_LIKES_BATCH_SIZE = 100;
+
 export type CatalogEntryKind = "character" | "story" | "image";
 export type CatalogEntryStatus = "draft" | "published" | "archived";
 
@@ -147,8 +149,8 @@ export const catalogQueryKeys = {
       },
     ] as const,
   entry: (entryId: string) => ["catalog", "entry", entryId] as const,
-  likes: (entryIds: string[]) =>
-    ["catalog", "likes", Array.from(new Set(entryIds)).sort()] as const,
+  likes: (authScope: string, entryIds: string[]) =>
+    ["catalog", "likes", authScope, Array.from(new Set(entryIds)).sort()] as const,
   projects: ["catalog", "projects"] as const,
 };
 
@@ -207,11 +209,32 @@ export const catalogApi = {
       searchParams: params,
     }),
 
-  listLikedEntryIds: (entryIds: string[], signal?: AbortSignal) =>
-    apiRequest<CatalogLikesResponse>(catalogPath("/likes"), {
-      signal,
-      searchParams: { entryIds: Array.from(new Set(entryIds)).join(",") },
-    }),
+  listLikedEntryIds: async (
+    entryIds: string[],
+    signal?: AbortSignal
+  ): Promise<CatalogLikesResponse> => {
+    const uniqueEntryIds = Array.from(new Set(entryIds)).filter(Boolean);
+    if (uniqueEntryIds.length === 0) return { likedEntryIds: [] };
+
+    const batches: string[][] = [];
+    for (let index = 0; index < uniqueEntryIds.length; index += CATALOG_LIKES_BATCH_SIZE) {
+      batches.push(uniqueEntryIds.slice(index, index + CATALOG_LIKES_BATCH_SIZE));
+    }
+
+    const responses = await Promise.all(
+      batches.map((batch) =>
+        apiRequest<CatalogLikesResponse>(catalogPath("/likes"), {
+          signal,
+          searchParams: { entryIds: batch.join(",") },
+        })
+      )
+    );
+    return {
+      likedEntryIds: Array.from(
+        new Set(responses.flatMap((response) => response.likedEntryIds))
+      ),
+    };
+  },
 
   likeEntry: (entryId: string) =>
     apiRequest<CatalogEntryResponse>(
@@ -270,12 +293,12 @@ export function useCatalogEntryQuery(entryId: string) {
   });
 }
 
-export function useCatalogLikesQuery(entryIds: string[]) {
+export function useCatalogLikesQuery(entryIds: string[], authScope: string) {
   const normalizedIds = Array.from(new Set(entryIds)).filter(Boolean).sort();
   return useQuery({
-    queryKey: catalogQueryKeys.likes(normalizedIds),
+    queryKey: catalogQueryKeys.likes(authScope, normalizedIds),
     queryFn: ({ signal }) => catalogApi.listLikedEntryIds(normalizedIds, signal),
-    enabled: normalizedIds.length > 0,
+    enabled: normalizedIds.length > 0 && Boolean(authScope),
     staleTime: 30_000,
   });
 }

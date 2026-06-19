@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { useAuth } from "../../components/auth/AuthProvider";
 import { Button } from "../../components/ui/Button";
 import { EmptyState, ErrorState } from "../../components/ui/StateCard";
 import { PageHeader } from "../../components/ui/PageHeader";
@@ -20,6 +21,14 @@ import {
 import styles from "./AnchorsPage.module.css";
 
 const PAGE_SIZE = 24;
+const DEV_AUTOPILOT = import.meta.env.DEV;
+
+function catalogLikesAuthScope(auth: ReturnType<typeof useAuth>): string {
+  if (auth.user?.id) return auth.user.id;
+  if (auth.status === "disabled") return "local-disabled-auth";
+  if (DEV_AUTOPILOT && auth.status === "unauthenticated") return "dev-autopilot";
+  return "";
+}
 
 function SkeletonGrid() {
   return (
@@ -125,6 +134,7 @@ function AnchorCard({
 }
 
 export function AnchorsPage() {
+  const auth = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [draftQuery, setDraftQuery] = useState(searchParams.get("q") ?? "");
   const kind = isAnchorKind(searchParams.get("kind"))
@@ -141,7 +151,8 @@ export function AnchorsPage() {
     [entriesQuery.data?.pages],
   );
   const entryIds = useMemo(() => entries.map((entry) => entry.id), [entries]);
-  const likesQuery = useCatalogLikesQuery(entryIds);
+  const authScope = catalogLikesAuthScope(auth);
+  const likesQuery = useCatalogLikesQuery(entryIds, authScope);
   const likedEntryIds = useMemo(
     () => new Set(likesQuery.data?.likedEntryIds ?? []),
     [likesQuery.data?.likedEntryIds],
