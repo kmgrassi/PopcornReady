@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import styles from "./AgentRunPreview.module.css";
 
 /**
@@ -320,20 +320,46 @@ function Clapper({
 }
 
 export function AgentRunPreview() {
+  const runRef = useRef<HTMLDivElement | null>(null);
   const [tick, setTick] = useState(0);
   const [reduced] = useState(prefersReducedMotion);
+  const [visible, setVisible] = useState(false);
 
   useEffect(() => {
     if (reduced) return;
+    const node = runRef.current;
+    if (!node) return;
+
+    if (typeof IntersectionObserver === "undefined") {
+      setVisible(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        const nextVisible = entry.isIntersecting && entry.intersectionRatio >= 0.35;
+        setVisible(nextVisible);
+        if (!nextVisible) setTick(0);
+      },
+      { threshold: [0, 0.35] },
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [reduced]);
+
+  useEffect(() => {
+    if (reduced || !visible) return;
     const id = window.setInterval(() => setTick((value) => value + 1), TICK_MS);
     return () => window.clearInterval(id);
-  }, [reduced]);
+  }, [reduced, visible]);
 
   const frame = reduced ? FINAL_FRAME : computeFrame(tick);
   const agentRunning = frame.actor === "agent";
 
   return (
     <div
+      ref={runRef}
       className={styles.run}
       role="img"
       aria-label="Preview of a run: you type one short brief, the agent writes the plan, then on your go-ahead it generates the keyframes and assembles the timeline — and you can stop it at any step."
