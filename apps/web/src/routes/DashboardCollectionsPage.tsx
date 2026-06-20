@@ -301,21 +301,34 @@ export function ProjectsPage() {
           <div className={`${styles.grid} ${styles.gridProjects}`}>
             {projectsQuery.items.map((project) => (
               <article className={styles.projectCard} key={project.id}>
-                <Link
-                  className={styles.cardLink}
-                  to={projectDetailPath(project.id)}
-                  aria-label={`Open ${project.name} overview`}
-                >
-                  <ProjectPoster name={project.name} posterUrl={project.posterUrl} />
-                </Link>
+                {/* Public projects belong to other workspaces; their detail and
+                    runs routes are owner-scoped and would 403, so render the
+                    card without owner-only navigation in public scope. */}
+                {isPublic ? (
+                  <div className={styles.cardLink}>
+                    <ProjectPoster name={project.name} posterUrl={project.posterUrl} />
+                  </div>
+                ) : (
+                  <Link
+                    className={styles.cardLink}
+                    to={projectDetailPath(project.id)}
+                    aria-label={`Open ${project.name} overview`}
+                  >
+                    <ProjectPoster name={project.name} posterUrl={project.posterUrl} />
+                  </Link>
+                )}
                 <div className={styles.projectCardBody}>
                   <div>
-                    <Link
-                      className={`${styles.rowTitle} ${styles.titleLink}`}
-                      to={projectDetailPath(project.id)}
-                    >
-                      {project.name}
-                    </Link>
+                    {isPublic ? (
+                      <span className={styles.rowTitle}>{project.name}</span>
+                    ) : (
+                      <Link
+                        className={`${styles.rowTitle} ${styles.titleLink}`}
+                        to={projectDetailPath(project.id)}
+                      >
+                        {project.name}
+                      </Link>
+                    )}
                     <span className={styles.rowSub}>Updated {formatDate(project.updatedAt)}</span>
                   </div>
                   <div className={styles.cardMeta}>
@@ -326,22 +339,24 @@ export function ProjectsPage() {
                     <span>Created {formatDate(project.createdAt)}</span>
                   </div>
                 </div>
-                <div className={styles.cardActions}>
-                  <ButtonLink
-                    variant="secondary"
-                    size="sm"
-                    to={projectDetailPath(project.id)}
-                  >
-                    Overview
-                  </ButtonLink>
-                  <ButtonLink
-                    variant="ghost"
-                    size="sm"
-                    to={`/library/runs?projectId=${encodeURIComponent(project.id)}`}
-                  >
-                    Runs
-                  </ButtonLink>
-                </div>
+                {!isPublic ? (
+                  <div className={styles.cardActions}>
+                    <ButtonLink
+                      variant="secondary"
+                      size="sm"
+                      to={projectDetailPath(project.id)}
+                    >
+                      Overview
+                    </ButtonLink>
+                    <ButtonLink
+                      variant="ghost"
+                      size="sm"
+                      to={`/library/runs?projectId=${encodeURIComponent(project.id)}`}
+                    >
+                      Runs
+                    </ButtonLink>
+                  </div>
+                ) : null}
               </article>
             ))}
           </div>
