@@ -116,7 +116,9 @@ test.describe("local auth and routing smoke", () => {
     });
 
     await expect.poll(() => createRequests).toBe(1);
-    await expect(createButton).toBeDisabled();
+    await expect(page.getByRole("heading", { name: "Creating your new video" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Creating..." })).toBeDisabled();
+    await expect(page.getByRole("heading", { name: "Continue a draft" })).toHaveCount(0);
 
     releaseCreate?.();
     await expect(page).toHaveURL(/\/studio\?draft=draft-created$/);
