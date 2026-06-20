@@ -5,436 +5,49 @@ import { ApiError, notFound } from "./errors";
 import { getProject } from "./store";
 import { getServiceSupabase } from "@/lib/supabase/clients";
 import { runQuery } from "@/lib/supabase/db-errors";
-import type { StoryboardSearchChunkKind } from "./storyboard-search-chunks";
+import {
+  mapBeat,
+  mapPanel,
+  mapScene,
+  mapSearchChunk,
+  mapStoryboard,
+} from "./storyboards-mappers";
+import type {
+  BeatAssetRow,
+  BeatInput,
+  PanelInput,
+  SceneInput,
+  Storyboard,
+  StoryboardBeat,
+  StoryboardBeatRow,
+  StoryboardInput,
+  StoryboardPanel,
+  StoryboardPanelRow,
+  StoryboardRow,
+  StoryboardScene,
+  StoryboardSceneRow,
+  StoryboardSearchChunkRow,
+  StoryboardSearchResult,
+} from "./storyboards-types";
 
-type StoryboardStatus =
-  | "draft"
-  | "generating"
-  | "ready"
-  | "reviewing"
-  | "approved"
-  | "archived";
-type StoryboardItemStatus =
-  | "draft"
-  | "queued"
-  | "generating"
-  | "ready"
-  | "approved"
-  | "rejected"
-  | "failed";
+export {
+  parseBeatInput,
+  parsePanelInput,
+  parseSceneInput,
+  parseStoryboardInput,
+} from "./storyboards-input";
 
-const STORYBOARD_STATUSES: StoryboardStatus[] = [
-  "draft",
-  "generating",
-  "ready",
-  "reviewing",
-  "approved",
-  "archived",
-];
-const ITEM_STATUSES: StoryboardItemStatus[] = [
-  "draft",
-  "queued",
-  "generating",
-  "ready",
-  "approved",
-  "rejected",
-  "failed",
-];
-
-interface StoryboardRow {
-  id: string;
-  project_id: string;
-  plan_asset_id: string | null;
-  status: StoryboardStatus;
-  created_by_action_id: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-interface StoryboardSceneRow {
-  id: string;
-  project_id: string;
-  storyboard_id: string;
-  scene_index: number;
-  title: string | null;
-  summary: string | null;
-  setting: string | null;
-  mood: string | null;
-  duration_sec: number | null;
-  scene_asset_id: string | null;
-  status: StoryboardItemStatus;
-  created_at: string;
-  updated_at: string;
-}
-
-interface StoryboardBeatRow {
-  id: string;
-  project_id: string;
-  scene_id: string;
-  beat_index: number;
-  intent: string;
-  visual_description: string | null;
-  dialogue_summary: string | null;
-  narration: string | null;
-  duration_sec: number | null;
-  status: StoryboardItemStatus;
-  beat_asset_id: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-interface StoryboardPanelRow {
-  id: string;
-  project_id: string;
-  beat_id: string;
-  panel_index: number;
-  image_asset_id: string | null;
-  prompt_asset_id: string | null;
-  status: StoryboardItemStatus;
-  is_selected: boolean;
-  approved_at: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-interface BeatAssetRow {
-  id: string;
-  lineage_id: string;
-  version: number;
-}
-
-interface StoryboardSearchChunkRow {
-  chunk_key: string;
-  chunk_kind: StoryboardSearchChunkKind;
-  source_hash: string;
-  source_text: string;
-  project_id: string;
-  storyboard_id: string;
-  scene_id: string | null;
-  beat_id: string | null;
-  scene_index: number | null;
-  beat_index: number | null;
-  linked_asset_id: string | null;
-  rank: number;
-}
-
-export interface Storyboard {
-  id: string;
-  projectId: string;
-  planAssetId: string | null;
-  status: StoryboardStatus;
-  createdByActionId: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface StoryboardScene {
-  id: string;
-  projectId: string;
-  storyboardId: string;
-  sceneIndex: number;
-  title: string | null;
-  summary: string | null;
-  setting: string | null;
-  mood: string | null;
-  durationSec: number | null;
-  sceneAssetId: string | null;
-  status: StoryboardItemStatus;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface StoryboardBeat {
-  id: string;
-  projectId: string;
-  sceneId: string;
-  beatIndex: number;
-  intent: string;
-  visualDescription: string | null;
-  dialogueSummary: string | null;
-  narration: string | null;
-  durationSec: number | null;
-  status: StoryboardItemStatus;
-  beatAssetId: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface StoryboardPanel {
-  id: string;
-  projectId: string;
-  beatId: string;
-  panelIndex: number;
-  imageAssetId: string | null;
-  promptAssetId: string | null;
-  status: StoryboardItemStatus;
-  isSelected: boolean;
-  approvedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface StoryboardSearchResult {
-  chunkKey: string;
-  chunkKind: StoryboardSearchChunkKind;
-  sourceHash: string;
-  sourceText: string;
-  projectId: string;
-  storyboardId: string;
-  sceneId: string | null;
-  beatId: string | null;
-  sceneIndex: number | null;
-  beatIndex: number | null;
-  linkedAssetId: string | null;
-  rank: number;
-}
-
-interface StoryboardInput {
-  planAssetId?: string | null;
-  status?: StoryboardStatus;
-}
-
-interface SceneInput {
-  sceneIndex?: number;
-  title?: string | null;
-  summary?: string | null;
-  setting?: string | null;
-  mood?: string | null;
-  durationSec?: number | null;
-  sceneAssetId?: string | null;
-  status?: StoryboardItemStatus;
-}
-
-interface BeatInput {
-  beatIndex?: number;
-  intent?: string;
-  visualDescription?: string | null;
-  dialogueSummary?: string | null;
-  narration?: string | null;
-  durationSec?: number | null;
-  status?: StoryboardItemStatus;
-  beatAssetId?: string | null;
-}
-
-interface PanelInput {
-  panelIndex?: number;
-  imageAssetId?: string | null;
-  promptAssetId?: string | null;
-  status?: StoryboardItemStatus;
-  isSelected?: boolean;
-  approvedAt?: string | null;
-}
-
-function iso(value: string | null | undefined): string {
-  if (!value) return new Date(0).toISOString();
-  return new Date(value).toISOString();
-}
-
-function bodyObject(body: unknown): Record<string, unknown> {
-  if (!body || typeof body !== "object" || Array.isArray(body)) {
-    throw new ApiError("validation_failed", "Request body must be an object.");
-  }
-  return body as Record<string, unknown>;
-}
-
-function optionalString(
-  body: Record<string, unknown>,
-  key: string
-): string | null | undefined {
-  if (!(key in body)) return undefined;
-  const value = body[key];
-  if (value === null) return null;
-  if (typeof value !== "string") {
-    throw new ApiError("validation_failed", `${key} must be a string or null.`);
-  }
-  return value;
-}
-
-function optionalNonnegativeNumber(
-  body: Record<string, unknown>,
-  key: string
-): number | null | undefined {
-  if (!(key in body)) return undefined;
-  const value = body[key];
-  if (value === null) return null;
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-    throw new ApiError("validation_failed", `${key} must be a non-negative number or null.`);
-  }
-  return value;
-}
-
-function optionalNonnegativeInteger(
-  body: Record<string, unknown>,
-  key: string
-): number | undefined {
-  if (!(key in body)) return undefined;
-  const value = body[key];
-  if (!Number.isInteger(value) || (value as number) < 0) {
-    throw new ApiError("validation_failed", `${key} must be a non-negative integer.`);
-  }
-  return value as number;
-}
-
-function optionalBoolean(
-  body: Record<string, unknown>,
-  key: string
-): boolean | undefined {
-  if (!(key in body)) return undefined;
-  const value = body[key];
-  if (typeof value !== "boolean") {
-    throw new ApiError("validation_failed", `${key} must be a boolean.`);
-  }
-  return value;
-}
-
-function optionalStatus<T extends string>(
-  body: Record<string, unknown>,
-  key: string,
-  allowed: readonly T[]
-): T | undefined {
-  if (!(key in body)) return undefined;
-  const value = body[key];
-  if (typeof value !== "string" || !allowed.includes(value as T)) {
-    throw new ApiError(
-      "validation_failed",
-      `${key} must be one of: ${allowed.join(", ")}.`
-    );
-  }
-  return value as T;
-}
-
-export function parseStoryboardInput(body: unknown): StoryboardInput {
-  const obj = bodyObject(body);
-  return {
-    planAssetId: optionalString(obj, "planAssetId"),
-    status: optionalStatus(obj, "status", STORYBOARD_STATUSES),
-  };
-}
-
-export function parseSceneInput(body: unknown): SceneInput {
-  const obj = bodyObject(body);
-  return {
-    sceneIndex: optionalNonnegativeInteger(obj, "sceneIndex"),
-    title: optionalString(obj, "title"),
-    summary: optionalString(obj, "summary"),
-    setting: optionalString(obj, "setting"),
-    mood: optionalString(obj, "mood"),
-    durationSec: optionalNonnegativeNumber(obj, "durationSec"),
-    sceneAssetId: optionalString(obj, "sceneAssetId"),
-    status: optionalStatus(obj, "status", ITEM_STATUSES),
-  };
-}
-
-export function parseBeatInput(body: unknown): BeatInput {
-  const obj = bodyObject(body);
-  const intent = optionalString(obj, "intent");
-  if (intent === null) {
-    throw new ApiError("validation_failed", "intent must be a string.");
-  }
-  return {
-    beatIndex: optionalNonnegativeInteger(obj, "beatIndex"),
-    intent,
-    visualDescription: optionalString(obj, "visualDescription"),
-    dialogueSummary: optionalString(obj, "dialogueSummary"),
-    narration: optionalString(obj, "narration"),
-    durationSec: optionalNonnegativeNumber(obj, "durationSec"),
-    status: optionalStatus(obj, "status", ITEM_STATUSES),
-    beatAssetId: optionalString(obj, "beatAssetId"),
-  };
-}
-
-export function parsePanelInput(body: unknown): PanelInput {
-  const obj = bodyObject(body);
-  return {
-    panelIndex: optionalNonnegativeInteger(obj, "panelIndex"),
-    imageAssetId: optionalString(obj, "imageAssetId"),
-    promptAssetId: optionalString(obj, "promptAssetId"),
-    status: optionalStatus(obj, "status", ITEM_STATUSES),
-    isSelected: optionalBoolean(obj, "isSelected"),
-    approvedAt: optionalString(obj, "approvedAt"),
-  };
-}
-
-function mapStoryboard(row: StoryboardRow): Storyboard {
-  return {
-    id: row.id,
-    projectId: row.project_id,
-    planAssetId: row.plan_asset_id,
-    status: row.status,
-    createdByActionId: row.created_by_action_id,
-    createdAt: iso(row.created_at),
-    updatedAt: iso(row.updated_at),
-  };
-}
-
-function mapScene(row: StoryboardSceneRow): StoryboardScene {
-  return {
-    id: row.id,
-    projectId: row.project_id,
-    storyboardId: row.storyboard_id,
-    sceneIndex: row.scene_index,
-    title: row.title,
-    summary: row.summary,
-    setting: row.setting,
-    mood: row.mood,
-    durationSec: row.duration_sec,
-    sceneAssetId: row.scene_asset_id,
-    status: row.status,
-    createdAt: iso(row.created_at),
-    updatedAt: iso(row.updated_at),
-  };
-}
-
-function mapBeat(row: StoryboardBeatRow): StoryboardBeat {
-  return {
-    id: row.id,
-    projectId: row.project_id,
-    sceneId: row.scene_id,
-    beatIndex: row.beat_index,
-    intent: row.intent,
-    visualDescription: row.visual_description,
-    dialogueSummary: row.dialogue_summary,
-    narration: row.narration,
-    durationSec: row.duration_sec,
-    status: row.status,
-    beatAssetId: row.beat_asset_id,
-    createdAt: iso(row.created_at),
-    updatedAt: iso(row.updated_at),
-  };
-}
-
-function mapPanel(row: StoryboardPanelRow): StoryboardPanel {
-  return {
-    id: row.id,
-    projectId: row.project_id,
-    beatId: row.beat_id,
-    panelIndex: row.panel_index,
-    imageAssetId: row.image_asset_id,
-    promptAssetId: row.prompt_asset_id,
-    status: row.status,
-    isSelected: row.is_selected,
-    approvedAt: row.approved_at ? iso(row.approved_at) : null,
-    createdAt: iso(row.created_at),
-    updatedAt: iso(row.updated_at),
-  };
-}
-
-function mapSearchChunk(row: StoryboardSearchChunkRow): StoryboardSearchResult {
-  return {
-    chunkKey: row.chunk_key,
-    chunkKind: row.chunk_kind,
-    sourceHash: row.source_hash,
-    sourceText: row.source_text,
-    projectId: row.project_id,
-    storyboardId: row.storyboard_id,
-    sceneId: row.scene_id,
-    beatId: row.beat_id,
-    sceneIndex: row.scene_index,
-    beatIndex: row.beat_index,
-    linkedAssetId: row.linked_asset_id,
-    rank: row.rank,
-  };
-}
+export type {
+  BeatInput,
+  PanelInput,
+  SceneInput,
+  Storyboard,
+  StoryboardBeat,
+  StoryboardInput,
+  StoryboardPanel,
+  StoryboardScene,
+  StoryboardSearchResult,
+} from "./storyboards-types";
 
 async function assertProject(auth: AuthContext, projectId: string): Promise<void> {
   await getProject(auth.workspaceId, projectId);
