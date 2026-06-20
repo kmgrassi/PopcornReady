@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { FOOTAGE_ACCEPT, readSelectedFootage } from "../../../lib/upload";
+import { ChoiceCard } from "../../ui/ChoiceCard";
 import type { StepProps } from "../useStudioFlow";
 import { StepShell } from "./StepShell";
 import styles from "./SourceFootageStep.module.css";
@@ -68,30 +69,26 @@ export function SourceFootageStep({ draft, update, next, back }: StepProps) {
       nextDisabled={isReading || (isUploadMode && !hasVisualFootage)}
     >
       <div className={styles.choiceGrid}>
-        <label className={styles.choiceCard}>
-          <input
-            type="radio"
-            name="footage-choice"
-            checked={draft.footageChoice === "prompt_only"}
-            onChange={selectPromptOnly}
-          />
-          <span className={styles.choiceTitle}>No</span>
-        </label>
+        <ChoiceCard
+          name="footage-choice"
+          checked={draft.footageChoice === "prompt_only"}
+          onChange={selectPromptOnly}
+          label="No"
+          description="Generate the visuals from the brief."
+        />
 
-        <label className={styles.choiceCard}>
-          <input
-            type="radio"
-            name="footage-choice"
-            checked={draft.footageChoice === "upload"}
-            onChange={() =>
-              update({
-                footageChoice: "upload",
-                footageMode: "hybrid",
-              })
-            }
-          />
-          <span className={styles.choiceTitle}>Yes</span>
-        </label>
+        <ChoiceCard
+          name="footage-choice"
+          checked={draft.footageChoice === "upload"}
+          onChange={() =>
+            update({
+              footageChoice: "upload",
+              footageMode: "hybrid",
+            })
+          }
+          label="Yes"
+          description="Upload videos, images, or audio as source material."
+        />
       </div>
 
       {isUploadMode ? (
