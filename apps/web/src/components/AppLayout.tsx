@@ -35,7 +35,6 @@ const PRIMARY_NAV = [
     to: "/library",
     activePaths: ["/library", "/projects", "/runs", "/assets", "/outputs", "/evals"],
   },
-  { label: "Settings", to: "/settings", activePaths: ["/settings"] },
 ];
 
 function applyStoredTheme() {
@@ -115,7 +114,6 @@ export function AuthenticatedAppLayout() {
     return "Account";
   }, [auth.status, auth.user?.email, me]);
 
-  const workspaceLabel = me?.workspaceName ?? me?.workspaceId ?? "Workspace";
   const showAdmin = canAccessAdminSurface(auth);
   const canSignOut = auth.configured && auth.status === "authenticated";
 
@@ -205,15 +203,16 @@ export function AuthenticatedAppLayout() {
             </nav>
           ) : null}
 
-          {/* Quieter workspace indicator — a single read-only pill, no longer a
-              prominent labelled <select> competing with the nav. */}
-          <div
-            className={styles.workspace}
-            title={`Active workspace: ${workspaceLabel}`}
-          >
-            <span className={styles.workspaceDot} aria-hidden="true" />
-            <span className={styles.workspaceName}>{workspaceLabel}</span>
-          </div>
+          <nav className={styles.footerNav} aria-label="Account">
+            <NavLink
+              to="/settings"
+              className={({ isActive }) =>
+                isActive ? `${styles.navLink} ${styles.active}` : styles.navLink
+              }
+            >
+              Settings
+            </NavLink>
+          </nav>
         </div>
       </aside>
 
