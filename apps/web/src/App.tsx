@@ -20,6 +20,7 @@ import { HomePage } from "./routes/HomePage";
 import { LaunchpadPage } from "./routes/LaunchpadPage";
 import { LibraryPage } from "./routes/LibraryPage";
 import { LoginPage } from "./routes/LoginPage";
+import { ProjectDetailPage } from "./routes/ProjectDetailPage";
 import { ProjectWatchPage } from "./routes/ProjectWatchPage";
 import { SignupPage } from "./routes/SignupPage";
 import { SpritePage } from "./routes/SpritePage";
@@ -59,6 +60,10 @@ export function App() {
           <Route path="/templates" element={<TemplatesPage />} />
           <Route path="/brand" element={<BrandKitPage />} />
           <Route path="/storyboard" element={<Navigate to="/studio" replace />} />
+          <Route
+            path="/projects/:projectId"
+            element={<ProjectDetailPage />}
+          />
           <Route
             path="/projects/:projectId/storyboard"
             element={<StoryboardPage />}

@@ -67,6 +67,10 @@ function projectCollectionPath(projectId: string, extraParams?: Record<string, s
   return `/library/projects?${params.toString()}`;
 }
 
+function projectDetailPath(projectId: string) {
+  return `/projects/${encodeURIComponent(projectId)}`;
+}
+
 function projectWatchPath(projectId: string) {
   return `/projects/${encodeURIComponent(projectId)}/watch`;
 }
@@ -263,8 +267,8 @@ export function ProjectsPage() {
               <article className={styles.projectCard} key={project.id}>
                 <Link
                   className={styles.cardLink}
-                  to={`/library/runs?projectId=${encodeURIComponent(project.id)}`}
-                  aria-label={`Open ${project.name}`}
+                  to={projectDetailPath(project.id)}
+                  aria-label={`Open ${project.name} overview`}
                 >
                   <ProjectPoster name={project.name} posterUrl={project.posterUrl} />
                 </Link>
@@ -285,9 +289,9 @@ export function ProjectsPage() {
                   <ButtonLink
                     variant="secondary"
                     size="sm"
-                    to={`/library/runs?projectId=${encodeURIComponent(project.id)}`}
+                    to={projectDetailPath(project.id)}
                   >
-                    Workspace
+                    Overview
                   </ButtonLink>
                   <ButtonLink
                     variant="ghost"
