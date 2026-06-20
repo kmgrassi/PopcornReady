@@ -47,6 +47,14 @@
   white-space: nowrap;
 }
 
+.titleLink {
+  text-decoration: none;
+}
+
+.titleLink:hover {
+  color: var(--accent);
+}
+
 .rowSub {
   display: block;
   margin-top: var(--space-1);
