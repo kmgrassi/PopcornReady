@@ -12,6 +12,7 @@ import { PageHeader } from "../components/ui/PageHeader";
 import { Toolbar, ToolbarField } from "../components/ui/Toolbar";
 import { Button, ButtonLink } from "../components/ui/Button";
 import { EmptyState, ErrorState } from "../components/ui/StateCard";
+import { VisibilityBadge } from "../components/ui/VisibilityBadge";
 import { MediaViewer, type MediaViewerItem } from "../components/media/MediaViewer";
 import {
   useAssetMediaMutation,
@@ -79,16 +80,6 @@ function statusChipClass(status: string) {
 
 function StatusChip({ status }: { status: GenerationRunStatus | WorkspaceAsset["status"] }) {
   return <span className={`${styles.chip} ${statusChipClass(status)}`}>{titleCase(status)}</span>;
-}
-
-function VisibilityBadge({ visibility }: { visibility?: WorkspaceAsset["visibility"] }) {
-  const isPrivate = visibility === "private";
-  return (
-    <span className={styles.visibilityBadge} data-private={isPrivate}>
-      <span className={styles.visibilityIcon} aria-hidden="true" />
-      <span>{isPrivate ? "Private" : "Public"}</span>
-    </span>
-  );
 }
 
 function assetViewerItem(asset: WorkspaceAsset): MediaViewerItem {
