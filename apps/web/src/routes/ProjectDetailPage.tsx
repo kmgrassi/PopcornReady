@@ -129,7 +129,6 @@ function ProjectHero({
           ) : null}
           <span>Created {formatDate(project.createdAt)}</span>
         </div>
-        <h2>{project.brief?.goal ?? project.name}</h2>
         <dl className={styles.stats}>
           <div>
             <dt>Length</dt>
@@ -184,7 +183,7 @@ function ProjectBrief({ project }: { project: V1Project }) {
       </div>
       {brief ? (
         <dl className={styles.detailList}>
-          <DetailTerm label="Goal" value={brief.goal} />
+          <DetailTerm label="Prompt" value={brief.goal} />
           <DetailTerm label="Audience" value={brief.audience} />
           <DetailTerm label="Style" value={brief.style} />
           <DetailTerm label="Format" value={brief.format} />

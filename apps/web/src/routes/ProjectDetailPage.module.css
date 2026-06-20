@@ -85,14 +85,6 @@
   min-width: 0;
 }
 
-.heroBody h2 {
-  margin: 0;
-  max-width: 760px;
-  color: var(--text-strong);
-  font-size: var(--text-xl);
-  line-height: 1.2;
-}
-
 .metaRow {
   display: flex;
   flex-wrap: wrap;
