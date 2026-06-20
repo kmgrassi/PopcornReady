@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { AssetKind } from "@popcorn/shared/v1/types";
+import { RegenerateAssetDialog } from "./RegenerateAssetDialog";
 import styles from "./MediaViewer.module.css";
 
 export interface MediaViewerItem {
@@ -29,6 +30,14 @@ export interface MediaViewerProps {
   onPrevious?: () => void;
   onNext?: () => void;
   onRefresh?: (item: MediaViewerItem) => Promise<RefreshedMediaUrls>;
+  // Re-run image generation for an asset with no deliverable URL. Resolve with
+  // the now-live media. Reject with an error whose `.code === "prompt_required"`
+  // to make the viewer pop a prompt-entry dialog instead of surfacing an error.
+  onRegenerate?: (item: MediaViewerItem, prompt?: string) => Promise<RefreshedMediaUrls>;
+}
+
+function isPromptRequired(error: unknown): boolean {
+  return Boolean(error) && (error as { code?: string }).code === "prompt_required";
 }
 
 function formatDuration(seconds?: number | null) {
@@ -54,15 +63,22 @@ export function MediaViewer({
   onPrevious,
   onNext,
   onRefresh,
+  onRegenerate,
 }: MediaViewerProps) {
   const [media, setMedia] = useState<MediaViewerItem | null>(item);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenError, setRegenError] = useState<string | null>(null);
+  const [promptOpen, setPromptOpen] = useState(false);
   const lastRefreshIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     setMedia(item);
     setRefreshError(null);
+    setRegenError(null);
+    setRegenerating(false);
+    setPromptOpen(false);
     lastRefreshIdRef.current = null;
   }, [item]);
 
@@ -88,6 +104,40 @@ export function MediaViewer({
       setRefreshing(false);
     }
   }, [media, onRefresh, refreshing]);
+
+  const regenerate = useCallback(
+    async (prompt?: string) => {
+      if (!media || !onRegenerate || regenerating) return;
+      setRegenerating(true);
+      setRegenError(null);
+      try {
+        const next = await onRegenerate(media, prompt);
+        setMedia((current) =>
+          current && current.id === media.id
+            ? {
+                ...current,
+                url: next.url,
+                thumbnailUrl: next.thumbnailUrl ?? next.url ?? current.thumbnailUrl,
+                expiresAt: next.expiresAt ?? current.expiresAt,
+              }
+            : current
+        );
+        setPromptOpen(false);
+      } catch (error) {
+        if (isPromptRequired(error)) {
+          // No saved prompt to reuse — collect one from the user instead.
+          setPromptOpen(true);
+        } else {
+          setRegenError(
+            error instanceof Error ? error.message : "Unable to regenerate this image."
+          );
+        }
+      } finally {
+        setRegenerating(false);
+      }
+    },
+    [media, onRegenerate, regenerating]
+  );
 
   useEffect(() => {
     if (!media || !onRefresh || !isNearExpiry(media.expiresAt)) return;
@@ -160,6 +210,16 @@ export function MediaViewer({
             <div className={styles.emptyState}>
               <strong>No playable URL</strong>
               <span>This asset is not viewable until the API projects a signed media URL.</span>
+              {onRegenerate && media.kind === "image" ? (
+                <button
+                  className={styles.regenerateButton}
+                  type="button"
+                  onClick={() => void regenerate()}
+                  disabled={regenerating}
+                >
+                  {regenerating ? "Regenerating…" : "Regenerate image"}
+                </button>
+              ) : null}
             </div>
           ) : null}
 
@@ -170,13 +230,29 @@ export function MediaViewer({
           ) : null}
         </div>
 
-        {(refreshing || refreshError) ? (
-          <div className={styles.status} role={refreshError ? "alert" : "status"}>
-            {refreshing ? "Refreshing media URL..." : refreshError}
+        {(refreshing || refreshError || (regenerating && !promptOpen) || (regenError && !promptOpen)) ? (
+          <div className={styles.status} role={refreshError || regenError ? "alert" : "status"}>
+            {refreshing
+              ? "Refreshing media URL..."
+              : regenerating
+                ? "Regenerating image..."
+                : refreshError ?? regenError}
           </div>
         ) : null}
         {actions ? <footer className={styles.actions}>{actions}</footer> : null}
       </section>
+
+      <RegenerateAssetDialog
+        open={promptOpen}
+        message="This image doesn't have a saved prompt. Enter one to regenerate it."
+        pending={regenerating}
+        error={regenError}
+        onSubmit={(prompt) => void regenerate(prompt)}
+        onCancel={() => {
+          setPromptOpen(false);
+          setRegenError(null);
+        }}
+      />
     </div>
   );
 }

@@ -21,6 +21,7 @@ import {
   searchProjectAssetsSemantic,
   setAssetVisibility,
 } from "@/lib/api/v1/store";
+import { regenerateImageAsset } from "@/lib/api/v1/regenerate-asset";
 
 export const assetsRouter = Router();
 
@@ -37,6 +38,25 @@ assetsRouter.get(
   route(async ({ auth }, params) => {
     const assetId = requiredParam(params, "assetId");
     const media = await getAssetMediaUrls(auth.workspaceId, assetId);
+    return {
+      status: 200,
+      body: media,
+      headers: { "Cache-Control": "no-store" },
+    };
+  })
+);
+
+assetsRouter.post(
+  "/assets/:assetId/regenerate",
+  mutation(async ({ auth, body }, params) => {
+    const assetId = requiredParam(params, "assetId");
+    const rawPrompt = (body as { prompt?: unknown } | null)?.prompt;
+    const prompt = typeof rawPrompt === "string" ? rawPrompt : undefined;
+    const media = await regenerateImageAsset({
+      workspaceId: auth.workspaceId,
+      assetId,
+      prompt,
+    });
     return {
       status: 200,
       body: media,
