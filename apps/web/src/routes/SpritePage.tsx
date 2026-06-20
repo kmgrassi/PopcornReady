@@ -239,6 +239,21 @@ export function SpritePage() {
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+      // Let focused form controls keep their native key handling (Space opens
+      // a select, toggles the Animate checkbox, etc.). Buttons intentionally
+      // fall through so Space always performs the action.
+      if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") {
+        return;
+      }
+
+      if (event.key === " " || event.code === "Space") {
+        event.preventDefault();
+        performAction();
+        return;
+      }
+
       const keyDirection: Record<string, Direction | undefined> = {
         ArrowDown: "down",
         s: "down",
@@ -392,8 +407,10 @@ export function SpritePage() {
             className={`${styles.modeButton} ${spriteMode === "action" ? styles.activeMode : ""}`}
             type="button"
             onClick={performAction}
+            title={`Perform the ${config.actionName} action (Space)`}
           >
-            Stop and {config.actionName}
+            {actionTitle}
+            <kbd className={styles.key}>Space</kbd>
           </button>
           <button className={styles.modeButton} type="button" onClick={resetActor}>
             Reset
