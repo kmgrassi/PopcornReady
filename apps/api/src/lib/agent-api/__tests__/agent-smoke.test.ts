@@ -56,6 +56,10 @@ test("job lifecycle: queued -> running -> succeeded", async () => {
     projectId: "proj_1",
   });
   assert.equal(created, true);
+  assert.match(
+    job.id,
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+  );
   assert.equal(job.status, "queued");
 
   await store.setStep(job.id, "planning_timeline");
