@@ -58,6 +58,8 @@ export interface RunActionSummary {
   jobIds: string[];
   error?: Record<string, unknown>;
   createdAt: string;
+  /** Set when the action was superseded by a restart-from-stage. */
+  supersededAt?: string | null;
 }
 
 export interface CreateOrchestratorRunInput {
@@ -110,6 +112,7 @@ interface RunActionRow {
   job_ids: string[] | null;
   error: Record<string, unknown> | null;
   created_at: string;
+  superseded_at?: string | null;
 }
 
 function mapRun(row: OrchestratorRunRow): OrchestratorRun {
@@ -156,6 +159,7 @@ function mapRunAction(row: RunActionRow): RunActionSummary {
     outputAssetIds: row.output_asset_ids ?? [],
     jobIds: row.job_ids ?? [],
     createdAt: iso(row.created_at),
+    supersededAt: row.superseded_at ?? null,
   };
   const error = unmarkedJson(row.error);
   if (error) summary.error = error;
@@ -367,13 +371,46 @@ export async function resolveGate(
 // context when a parked run resumes.
 export async function listRunActions(runId: string): Promise<RunActionSummary[]> {
   const db = getServiceSupabase();
+  // select("*") (not an explicit column list) so a not-yet-migrated DB without
+  // the superseded_at column degrades to "nothing superseded" instead of erroring.
   const data = await runQuery(
     "store.listRunActions",
     db
       .from("actions")
-      .select("id, tool, status, params, output_asset_ids, job_ids, error, created_at")
+      .select("*")
       .eq("orchestrator_run_id", runId)
       .order("created_at", { ascending: true })
   );
-  return ((data as RunActionRow[]) ?? []).map(mapRunAction);
+  // Superseded actions (from a restart-from-stage) are hidden from the action
+  // log so the orchestrator re-derives and re-runs those stages.
+  return ((data as RunActionRow[]) ?? [])
+    .map(mapRunAction)
+    .filter((action) => !action.supersededAt);
+}
+
+// Flag a set of actions superseded so they drop out of the run's action log.
+// Append-only: the rows and the assets they produced are preserved.
+export async function supersedeRunActions(actionIds: string[]): Promise<void> {
+  if (actionIds.length === 0) return;
+  const db = getServiceSupabase();
+  await runQuery(
+    "store.supersedeRunActions",
+    db
+      .from("actions")
+      .update({ superseded_at: new Date().toISOString() })
+      .in("id", actionIds)
+  );
+}
+
+// Reset the given gates (by id) back to pending so they pause again on re-run.
+export async function resetGatesToPending(gateIds: string[]): Promise<void> {
+  if (gateIds.length === 0) return;
+  const db = getServiceSupabase();
+  await runQuery(
+    "store.resetGatesToPending",
+    db
+      .from("orchestrator_run_gates")
+      .update({ status: "pending", updated_at: new Date().toISOString() })
+      .in("id", gateIds)
+  );
 }

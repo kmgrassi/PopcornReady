@@ -21,6 +21,10 @@ interface StageRailProps {
     error?: string | null;
     onStop: () => void;
   };
+  restartAction?: {
+    pendingStageType?: GenerationStageType | null;
+    onRestart: (stageType: GenerationStageType) => void;
+  };
 }
 
 const VISIBLE_STAGES: Array<{
@@ -109,6 +113,7 @@ export function StageRail({
   runMessage,
   reviewGate,
   stopAction,
+  restartAction,
 }: StageRailProps) {
   const ordered = [...stages].sort((a, b) => a.order - b.order);
   const stagesByType = new Map<GenerationStageType, GenerationStage[]>();
@@ -236,6 +241,32 @@ export function StageRail({
                       </>
                     ) : (
                       "Stop after current stage"
+                    )}
+                  </button>
+                </div>
+              ) : null}
+              {restartAction &&
+              stage &&
+              (status === "succeeded" ||
+                status === "failed" ||
+                status === "canceled" ||
+                awaitingReview) ? (
+                <div className={styles.stageControlRow}>
+                  <button
+                    type="button"
+                    className={styles.stageRestartButton}
+                    onClick={() => restartAction.onRestart(stage.type)}
+                    disabled={restartAction.pendingStageType != null}
+                    aria-busy={restartAction.pendingStageType === stage.type || undefined}
+                    aria-label={`Restart the run from the ${visibleStage.label} stage`}
+                  >
+                    {restartAction.pendingStageType === stage.type ? (
+                      <>
+                        <LoadingDot />
+                        Restarting...
+                      </>
+                    ) : (
+                      "Restart from here"
                     )}
                   </button>
                 </div>

@@ -1,3 +1,28 @@
+.stageRestartButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 30px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-3);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: 850;
+}
+.stageRestartButton:hover:not(:disabled) {
+  border-color: var(--cta);
+  color: var(--cta);
+}
+.stageRestartButton:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
 .shell {
   max-width: 1260px;
   margin: 0 auto;

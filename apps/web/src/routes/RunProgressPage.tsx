@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
-import type { GenerationRun } from "@popcorn/shared/v1/types";
+import type { GenerationRun, GenerationStageType } from "@popcorn/shared/v1/types";
 import { ProgressView } from "../components/progress/ProgressView";
 import type { GenerationRunDetail } from "../lib/v1/generation-runs/status";
 import {
@@ -10,6 +10,7 @@ import {
 } from "../lib/v1/generation-runs/recovery";
 import {
   useGenerationRunQuery,
+  useRestartGenerationRunFromStageMutation,
   useUpdateGenerationRunMutation,
 } from "../lib/queryClient";
 
@@ -65,6 +66,7 @@ function RunProgress({
   const studioReturnPath = studioDraftId ? studioReviewPath(studioDraftId) : null;
   const runQuery = useGenerationRunQuery(projectId, runId);
   const updateRun = useUpdateGenerationRunMutation(projectId, runId);
+  const restartRun = useRestartGenerationRunFromStageMutation(projectId, runId);
   const payload = runQuery.data ?? null;
   const error =
     runQuery.error instanceof Error
@@ -130,6 +132,23 @@ function RunProgress({
     }
   }
 
+  async function restartFromStage(stageType: GenerationStageType) {
+    if (restartRun.isPending) return;
+    const confirmed = window.confirm(
+      `Restart this run from the ${stageType.replace(/_/g, " ")} stage? ` +
+        "That stage and everything after it will re-run; existing assets are kept as history.",
+    );
+    if (!confirmed) return;
+    setActionError(null);
+    try {
+      const data = await restartRun.mutateAsync(stageType);
+      applyPayload(data);
+      void runQuery.refetch();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   if (!payload) {
     return (
       <main className="progress-shell">
@@ -170,6 +189,10 @@ function RunProgress({
             }
           : undefined
       }
+      restartAction={{
+        pendingStageType: restartRun.isPending ? restartRun.variables ?? null : null,
+        onRestart: (stageType) => void restartFromStage(stageType),
+      }}
       reviewActions={
         payload.run.reviewGate
           ? {
