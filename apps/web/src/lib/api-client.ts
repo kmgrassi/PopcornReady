@@ -440,6 +440,26 @@ export interface ExportJobResponse {
   job: ExportJob;
 }
 
+export interface StoryboardGenerationJobResponse {
+  job: {
+    id: string;
+    type: "asset_generation";
+    status: JobStatus;
+    projectId: string;
+    step?: string;
+    result?: {
+      assetIds?: string[];
+      storyboardId?: string;
+    };
+    error?: {
+      code: string;
+      message: string;
+    };
+    createdAt: string;
+    updatedAt: string;
+  };
+}
+
 export interface ExportArtifactResponse {
   artifact: ExportRenderArtifact;
 }
@@ -508,6 +528,25 @@ export const v1Api = {
   getProjectStoryboard: (projectId: string, signal?: AbortSignal) =>
     apiRequest<ProjectStoryboardResponse>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/storyboard`,
+      { signal }
+    ),
+  generateProjectStoryboard: (projectId: string) =>
+    apiRequest<StoryboardGenerationJobResponse>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/storyboards/generate`,
+      {
+        method: "POST",
+        headers: {
+          "Idempotency-Key": `storyboard-generate:${projectId}:${globalThis.crypto?.randomUUID?.() ?? Date.now()}`,
+        },
+      }
+    ),
+  getProjectStoryboardGenerationJob: (
+    projectId: string,
+    jobId: string,
+    signal?: AbortSignal
+  ) =>
+    apiRequest<StoryboardGenerationJobResponse>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/storyboards/generate/${encodeURIComponent(jobId)}`,
       { signal }
     ),
   getProjectWatch: (projectId: string, signal?: AbortSignal) =>
