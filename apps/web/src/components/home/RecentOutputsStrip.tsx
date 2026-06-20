@@ -11,7 +11,7 @@ export function RecentOutputsStrip({
     <section className={styles.section} aria-labelledby="recent-outputs-title">
       <div className={styles.header}>
         <h2 id="recent-outputs-title">Recent outputs</h2>
-        <Link to="/outputs">View all</Link>
+        <Link to="/library/projects">View projects</Link>
       </div>
 
       {outputs.length === 0 ? (
@@ -24,7 +24,7 @@ export function RecentOutputsStrip({
             <Link
               className={styles.output}
               key={output.artifactId}
-              to={`/outputs?${new URLSearchParams({ projectId: output.projectId }).toString()}`}
+              to={`/projects/${encodeURIComponent(output.projectId)}#outputs`}
             >
               {output.thumbnailUrl ? (
                 <img

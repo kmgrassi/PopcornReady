@@ -48,13 +48,9 @@ test("review feedback, export polling, outputs listing, and watch playback share
     showCaptions: true,
   });
 
-  await page.goto("/library/outputs");
-  await expect(page.getByRole("heading", { name: "Outputs" })).toBeVisible();
-  await expect(page.getByText("Coffee Reveal").first()).toBeVisible();
-  await expect(page.getByRole("link", { name: "Watch" })).toHaveAttribute(
-    "href",
-    `/projects/${api.projectId}/watch`,
-  );
+  await page.goto(`/projects/${api.projectId}#outputs`);
+  await expect(page.getByRole("heading", { name: "Finished exports" })).toBeVisible();
+  await expect(page.getByText("MP4")).toBeVisible();
 
   await page.getByRole("link", { name: "Watch" }).click();
   await expect(page).toHaveURL(`/projects/${api.projectId}/watch`);

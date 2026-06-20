@@ -147,6 +147,9 @@ export function ExportStep({ back, draft, projectId, completeDraft }: StepProps)
   const exportBusy = startExportMutation.isPending || Boolean(job && !isTerminal(job));
   const jobError = job?.status === "failed" ? job.error?.message : null;
   const directUrl = artifact?.url ?? null;
+  const outputsPath = projectId
+    ? `/projects/${encodeURIComponent(projectId)}#outputs`
+    : "/library/projects";
   const timelineLoading = timelineQuery.isLoading;
   const timelineError =
     timelineQuery.error instanceof Error
@@ -300,7 +303,7 @@ export function ExportStep({ back, draft, projectId, completeDraft }: StepProps)
                   Open MP4
                 </a>
               ) : null}
-              <ButtonLink variant="secondary" to="/outputs">
+              <ButtonLink variant="secondary" to={outputsPath}>
                 View Outputs
               </ButtonLink>
             </div>
@@ -315,7 +318,7 @@ export function ExportStep({ back, draft, projectId, completeDraft }: StepProps)
             >
               {exportBusy ? "Exporting..." : "Export"}
             </Button>
-            <ButtonLink variant="secondary" to="/outputs">
+            <ButtonLink variant="secondary" to={outputsPath}>
               Outputs
             </ButtonLink>
           </div>

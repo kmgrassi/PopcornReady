@@ -4,8 +4,8 @@ import styles from "./OverviewStats.module.css";
 
 const TILES: { key: keyof DashboardCounts; label: string; to: string }[] = [
   { key: "projects", label: "Projects", to: "/library/projects" },
-  { key: "activeRuns", label: "Active runs", to: "/library/runs" },
-  { key: "outputs", label: "Outputs", to: "/library/outputs" },
+  { key: "activeRuns", label: "Active runs", to: "/library/projects" },
+  { key: "outputs", label: "Outputs", to: "/library/projects" },
 ];
 
 export function OverviewStats({ counts }: { counts: DashboardCounts }) {
