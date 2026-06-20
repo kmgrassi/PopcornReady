@@ -2,10 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useLocation, useParams } from "react-router-dom";
 import type {
   GenerationRun,
+  GenerationStageType,
   ProjectStoryboard,
   StoryboardPanel,
   V1Project,
   VideoBriefInput,
+} from "@popcorn/shared/v1/types";
+import {
+  GENERATION_STAGE_LABELS,
+  GENERATION_STAGE_ORDER,
 } from "@popcorn/shared/v1/types";
 import type { WorkspaceOutput } from "../lib/api-client";
 import { useAuth } from "../components/auth/AuthProvider";
@@ -133,7 +138,16 @@ export function ProjectDetailPage() {
 
       {!loading && !error && project ? (
         <>
-          <ProjectHero project={project} storyboard={storyboard} />
+          <section className={styles.overviewLayout}>
+            <ProjectHero project={project} storyboard={storyboard} />
+            <ProjectPipelinePanel
+              projectId={projectId}
+              runs={runsQuery.items}
+              loading={runsQuery.loading}
+              error={runsQuery.error}
+              onRetry={runsQuery.refetch}
+            />
+          </section>
           <section className={styles.layout}>
             <ProjectBrief project={project} />
             <StoryboardPreview
@@ -178,6 +192,109 @@ export function ProjectDetailPage() {
         </>
       ) : null}
     </main>
+  );
+}
+
+function ProjectPipelinePanel({
+  projectId,
+  runs,
+  loading,
+  error,
+  onRetry,
+}: {
+  projectId: string;
+  runs: GenerationRun[];
+  loading: boolean;
+  error: Error | null;
+  onRetry: () => void;
+}) {
+  const latestRun = runs[0] ?? null;
+  const currentStage = latestRun
+    ? latestRun.reviewGate?.stageType ?? latestRun.currentStageType ?? null
+    : null;
+  const currentStageLabel = currentStage
+    ? GENERATION_STAGE_LABELS[currentStage]
+    : latestRun?.status === "queued"
+      ? "Queued"
+      : "Not started";
+  const nextStage = latestRun ? nextStageType(latestRun, currentStage) : null;
+  const nextStageLabel = nextStage ? GENERATION_STAGE_LABELS[nextStage] : null;
+  const progressPercent = Math.max(
+    0,
+    Math.min(100, latestRun?.progressPercent ?? 0),
+  );
+
+  return (
+    <aside className={styles.pipelinePanel} aria-label="Project pipeline">
+      <div className={styles.sectionHeader}>
+        <div>
+          <span className={styles.eyebrow}>Pipeline</span>
+          <h2>Stage and next step</h2>
+        </div>
+      </div>
+
+      {loading ? <div className={styles.placeholder}>Loading pipeline...</div> : null}
+
+      {!loading && error ? (
+        <ErrorState
+          title="Unable to load pipeline"
+          body="We couldn't load the latest generation run for this project."
+          error={error}
+          onRetry={onRetry}
+        />
+      ) : null}
+
+      {!loading && !error && !latestRun ? (
+        <EmptyState
+          title="No pipeline activity"
+          body="Start a generation run to see the current stage and next step."
+        />
+      ) : null}
+
+      {!loading && !error && latestRun ? (
+        <>
+          <div className={styles.pipelineSummary}>
+            <div>
+              <span className={styles.statusLabel}>Current stage</span>
+              <strong>
+                {latestRun.reviewGate ? `${currentStageLabel} review` : currentStageLabel}
+              </strong>
+            </div>
+            <div>
+              <span className={styles.statusLabel}>Status</span>
+              <strong>{latestRun.reviewGate ? "Needs review" : titleCase(latestRun.status)}</strong>
+            </div>
+            <div>
+              <span className={styles.statusLabel}>Next step</span>
+              <strong>{nextStageLabel ?? (isTerminalRun(latestRun) ? "Complete" : "Preparing")}</strong>
+            </div>
+          </div>
+
+          <div
+            className={styles.pipelineMeter}
+            role="progressbar"
+            aria-valuenow={progressPercent}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={`${progressPercent}% complete`}
+          >
+            <span style={{ width: `${Math.max(2, progressPercent)}%` }} />
+          </div>
+
+          <p className={styles.pipelineMeta}>
+            Updated {formatDate(latestRun.updatedAt)}
+          </p>
+
+          <ButtonLink
+            variant="secondary"
+            size="sm"
+            to={`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(latestRun.runId)}`}
+          >
+            View run
+          </ButtonLink>
+        </>
+      ) : null}
+    </aside>
   );
 }
 
@@ -605,6 +722,24 @@ function statusClass(status: string) {
     return styles.statusFailed;
   }
   return "";
+}
+
+function isTerminalRun(run: GenerationRun) {
+  return run.status === "succeeded" || run.status === "failed" || run.status === "canceled";
+}
+
+function nextStageType(
+  run: GenerationRun,
+  currentStage: GenerationStageType | null,
+): GenerationStageType | null {
+  if (isTerminalRun(run)) return null;
+  if (!currentStage) return run.status === "queued" ? "brief_intake" : null;
+  const currentOrder = GENERATION_STAGE_ORDER[currentStage];
+  const nextEntry = Object.entries(GENERATION_STAGE_ORDER)
+    .filter((entry): entry is [GenerationStageType, number] => entry[0] !== "ready")
+    .sort((a, b) => a[1] - b[1])
+    .find(([, order]) => order > currentOrder);
+  return nextEntry?.[0] ?? null;
 }
 
 function storyboardStats(storyboard: ProjectStoryboard | null) {
