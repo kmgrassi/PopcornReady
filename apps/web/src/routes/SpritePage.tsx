@@ -4,6 +4,13 @@ import styles from "./SpritePage.module.css";
 type Direction = "down" | "left" | "right" | "up";
 type Action = "idle" | "walk1" | "walk2" | "action1" | "action2";
 type SpriteMode = "walk" | "action";
+type Backdrop = "grid" | "light" | "checker";
+
+const backdrops: { id: Backdrop; label: string }[] = [
+  { id: "grid", label: "grid" },
+  { id: "light", label: "light" },
+  { id: "checker", label: "checker" },
+];
 
 type SpriteConfig = {
   id: string;
@@ -156,6 +163,7 @@ export function SpritePage() {
   const [isPlaying, setIsPlaying] = useState(true);
   const [spriteMode, setSpriteMode] = useState<SpriteMode>("walk");
   const [frameIndex, setFrameIndex] = useState(0);
+  const [backdrop, setBackdrop] = useState<Backdrop>("grid");
 
   const cycle = spriteMode === "walk" ? walkCycle : actionCycle;
   const activeAction = isPlaying ? cycle[frameIndex % cycle.length] : action;
@@ -278,7 +286,15 @@ export function SpritePage() {
   return (
     <main className={styles.page}>
       <section className={styles.hero}>
-        <div className={styles.stage}>
+        <div
+          className={`${styles.stage} ${
+            backdrop === "light"
+              ? styles.stageLight
+              : backdrop === "checker"
+                ? styles.stageChecker
+                : ""
+          }`}
+        >
           <div
             className={styles.actor}
             style={
@@ -391,6 +407,20 @@ export function SpritePage() {
             {SPRITES.map((item) => (
               <option value={item.id} key={item.id}>
                 {item.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          Backdrop
+          <select
+            value={backdrop}
+            onChange={(event) => setBackdrop(event.target.value as Backdrop)}
+          >
+            {backdrops.map((item) => (
+              <option value={item.id} key={item.id}>
+                {item.label}
               </option>
             ))}
           </select>

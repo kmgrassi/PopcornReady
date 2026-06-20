@@ -35,6 +35,16 @@
   background-size: 32px 32px;
 }
 
+.stageLight {
+  background: #f4f4f6;
+}
+
+.stageChecker {
+  background:
+    conic-gradient(from 90deg at 50% 50%, #d7d7de 25%, #f4f4f6 0 50%, #d7d7de 0 75%, #f4f4f6 0)
+      0 0 / 32px 32px;
+}
+
 .actor {
   position: absolute;
   left: var(--actor-x);
