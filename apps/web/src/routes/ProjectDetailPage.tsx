@@ -214,6 +214,7 @@ function ProjectStagePanel({
   onRetry: () => void;
 }) {
   const selectedRun = useMemo(() => selectStageRun(runs), [runs]);
+  const [pendingGateAction, setPendingGateAction] = useState<"approve" | "reject" | null>(null);
   const runDetailQuery = useGenerationRunQuery(
     projectId,
     selectedRun?.runId ?? "",
@@ -232,7 +233,8 @@ function ProjectStagePanel({
 
   function updateGate(action: "approve" | "reject") {
     if (!run?.runId) return;
-    void updateRunMutation.mutateAsync({
+    setPendingGateAction(action);
+    updateRunMutation.mutate({
       action,
       body: action === "reject"
         ? {
@@ -324,7 +326,7 @@ function ProjectStagePanel({
                   variant="primary"
                   onClick={() => updateGate("approve")}
                   disabled={updateRunMutation.isPending}
-                  isLoading={updateRunMutation.isPending}
+                  isLoading={updateRunMutation.isPending && pendingGateAction === "approve"}
                 >
                   Approve and continue
                 </Button>
@@ -332,6 +334,7 @@ function ProjectStagePanel({
                   variant="secondary"
                   onClick={() => updateGate("reject")}
                   disabled={updateRunMutation.isPending}
+                  isLoading={updateRunMutation.isPending && pendingGateAction === "reject"}
                 >
                   Request revision
                 </Button>
@@ -345,6 +348,16 @@ function ProjectStagePanel({
               </ButtonLink>
             )}
           </div>
+          {updateRunMutation.error ? (
+            <ErrorState
+              title="Unable to update stage"
+              body="We couldn't apply that stage action. The run may have changed, or your session may need to be refreshed."
+              error={updateRunMutation.error}
+              onRetry={() => {
+                if (pendingGateAction) updateGate(pendingGateAction);
+              }}
+            />
+          ) : null}
         </div>
       ) : null}
     </section>
