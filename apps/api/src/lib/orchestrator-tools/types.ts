@@ -14,7 +14,8 @@ export type ToolName =
   | "assemble_timeline"
   | "critique_timeline"
   | "request_approval"
-  | "export_video";
+  | "export_video"
+  | "publish_to_catalog";
 
 export type ToolInvocationStatus =
   | "requested"

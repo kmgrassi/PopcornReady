@@ -415,11 +415,19 @@ export async function unlikeCatalogEntry(input: {
 
 export async function publishCatalogEntry(input: {
   authWorkspaceId: string;
+  // Attribute the entry to this workspace's owner instead of authWorkspaceId.
+  // Lets the system publisher own AI-generated entries while the source asset is
+  // still read from the run's (authWorkspaceId) workspace. Defaults to
+  // authWorkspaceId (the normal user-publishes-their-own-asset case).
+  publisherWorkspaceId?: string;
   body: PublishCatalogEntryInput;
 }, deps?: CatalogDeps): Promise<CatalogEntry> {
   const db = dbFrom(deps);
   const id = randomUUID();
-  const publisherUserId = await publisherUserIdForWorkspace(db, input.authWorkspaceId);
+  const publisherUserId = await publisherUserIdForWorkspace(
+    db,
+    input.publisherWorkspaceId ?? input.authWorkspaceId
+  );
   const snapshot =
     input.body.kind === "story"
       ? await storySnapshot(db, input.authWorkspaceId, input.body.sourceStoryBlueprintId!)
