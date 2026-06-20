@@ -15,7 +15,8 @@
     "test:e2e": "turbo run test:e2e",
     "lint": "turbo run lint",
     "dev:api": "turbo run dev --filter=@popcorn/api",
-    "dev:web": "turbo run dev --filter=@popcorn/web"
+    "dev:web": "turbo run dev --filter=@popcorn/web",
+    "prod:storyboard": "node scripts/start-storyboard-from-prompt.mjs"
   },
   "devDependencies": {
     "turbo": "^2.3.3",
