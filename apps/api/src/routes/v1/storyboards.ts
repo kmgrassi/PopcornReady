@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { mutation, route } from "@/core/adapter";
 import { ApiError } from "@/core/errors";
+import { agentApiStore } from "@/lib/agent-api/jobs";
+import { getActiveProjectPlan, getProject } from "@/lib/api/v1/store";
 import {
   createBeat,
   createPanel,
@@ -25,6 +27,7 @@ import {
   updateScene,
   updateStoryboard,
 } from "@/lib/api/v1/storyboards";
+import { runStoryboardJob } from "@/lib/orchestrator-tools/storyboard-job";
 import { parsePagination } from "@/lib/api/v1/schemas";
 
 export const storyboardsRouter = Router();
@@ -60,6 +63,40 @@ storyboardsRouter.post(
       data: parseStoryboardInput(body),
     });
     return { status: 201, body: { storyboard } };
+  })
+);
+
+storyboardsRouter.post(
+  "/projects/:projectId/storyboards/generate",
+  mutation(async ({ auth, req }, params) => {
+    const projectId = requiredParam(params, "projectId");
+    await getProject(auth.workspaceId, projectId);
+    const active = await getActiveProjectPlan(projectId);
+    if (!active) {
+      throw new ApiError(
+        "brief_missing",
+        "A shot plan is required before generating storyboard panels."
+      );
+    }
+
+    const { job, created } = await agentApiStore.createOrGetJob({
+      type: "asset_generation",
+      projectId,
+      idempotencyKey: req.header("Idempotency-Key"),
+    });
+
+    if (created) {
+      void runStoryboardJob({
+        jobId: job.id,
+        workspaceId: auth.workspaceId,
+        projectId,
+        plan: active.plan,
+        planAssetId: active.assetId,
+        planContentHash: active.contentHash,
+      });
+    }
+
+    return { status: 202, body: { job } };
   })
 );
 

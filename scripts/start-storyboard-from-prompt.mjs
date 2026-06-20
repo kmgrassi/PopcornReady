@@ -117,6 +117,7 @@ async function startPromptRun(projectId) {
 async function pollRun({ projectId, runId }) {
   const deadline = Date.now() + timeoutMs;
   let lastSignature = "";
+  let directStoryboardRequested = false;
 
   while (Date.now() < deadline) {
     const detail = await jsonRequest(
@@ -155,10 +156,10 @@ async function pollRun({ projectId, runId }) {
           storyboardFrameAssetIds,
         };
       }
-      throw new Error(
-        "Run reached the asset_generation gate before any storyboard panels were visible. " +
-          "The API stopped before heavy assets, but the orchestrator likely chose an asset-generation tool before generate_storyboard."
-      );
+      if (!directStoryboardRequested) {
+        directStoryboardRequested = true;
+        await generateStoryboardFromActivePlan(projectId, runId);
+      }
     }
 
     if (detail.run?.status === "failed" || detail.run?.status === "canceled") {
@@ -169,6 +170,22 @@ async function pollRun({ projectId, runId }) {
   }
 
   throw new Error(`Timed out after ${timeoutMs}ms waiting for storyboard generation.`);
+}
+
+async function generateStoryboardFromActivePlan(projectId, runId) {
+  const body = await jsonRequest(
+    `/api/v1/projects/${encodeURIComponent(projectId)}/storyboards/generate`,
+    {
+      method: "POST",
+      headers: { "Idempotency-Key": `${idempotencyKey}:storyboard:${runId}` },
+    }
+  );
+  log("direct_storyboard_started", {
+    projectId,
+    runId,
+    jobId: body.job?.id ?? null,
+    jobStatus: body.job?.status ?? null,
+  });
 }
 
 async function storyboardStatus(projectId) {
