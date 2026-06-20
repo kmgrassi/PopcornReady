@@ -3777,6 +3777,36 @@ export async function listPublicProjects(
   return paginate(all, limit, cursor);
 }
 
+// Read-only bundle for a single PUBLIC project (the share / read-only view).
+// Resolves the project by id with a visibility=public guard, then reuses the
+// existing workspace-scoped readers via the project's own workspace id.
+export async function getPublicProjectBundle(projectId: string): Promise<{
+  project: V1Project;
+  storyboard: ProjectStoryboard | null;
+  media: ProjectWatchMedia | null;
+} | null> {
+  const db = getServiceSupabase();
+  const row = await runQuery(
+    "store.getPublicProject",
+    db
+      .from("projects")
+      .select("*, workspaces!inner(purpose)")
+      .eq("id", projectId)
+      .eq("visibility", "public")
+      .eq("workspaces.purpose", "user")
+      .neq("status", "deleted")
+      .maybeSingle()
+  );
+  if (!row) return null;
+  const projectRow = row as ProjectRow;
+  const [project, storyboard, media] = await Promise.all([
+    mapProjectWithProjection(db, projectRow, { publicOnly: true }),
+    getProjectStoryboard(projectRow.workspace_id, projectId),
+    getProjectWatchMedia(projectRow.workspace_id, projectId),
+  ]);
+  return { project, storyboard, media };
+}
+
 export async function setBrief(
   workspaceId: string,
   projectId: string,

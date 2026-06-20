@@ -294,6 +294,13 @@ export interface ProjectWatchMedia {
   updatedAt: string;
 }
 
+// Read-only bundle for the public share / read-only project view.
+export interface PublicProjectResponse {
+  project: V1Project;
+  storyboard: ProjectStoryboard | null;
+  media: ProjectWatchMedia | null;
+}
+
 export interface ProjectWatchResponse {
   media: ProjectWatchMedia | null;
   fallback: {
@@ -558,6 +565,12 @@ export const v1Api = {
     apiRequest<ProjectsResponse>("/api/v1/discover/projects", {
       searchParams: params,
     }),
+  // Public, no-auth read of a single public project + storyboard + watch media.
+  getPublicProject: (projectId: string, signal?: AbortSignal) =>
+    apiRequest<PublicProjectResponse>(
+      `/api/v1/discover/projects/${encodeURIComponent(projectId)}`,
+      { signal }
+    ),
   listPublicAssets: async (
     params?: { kind?: AssetKind | "all"; limit?: number; cursor?: string | null },
     signal?: AbortSignal
