@@ -23,9 +23,13 @@ import { useMeQuery } from "../../queryClient";
 
 type PageCursor = string | null;
 
+// "mine" lists the caller's own workspace; "public" lists everyone's public
+// projects/assets via the discovery endpoints.
+export type LibraryScope = "mine" | "public";
+
 export const dashboardCollectionQueryKeys = {
-  projects: (workspaceId: string, limit: number) =>
-    ["dashboard", "projects", workspaceId, { limit }] as const,
+  projects: (workspaceId: string, limit: number, scope: LibraryScope) =>
+    ["dashboard", "projects", workspaceId, { limit, scope }] as const,
   runs: (
     workspaceId: string,
     filters: {
@@ -50,6 +54,7 @@ export const dashboardCollectionQueryKeys = {
       kind: AssetKind | "all";
       source: WorkspaceAssetSource | "all";
       limit: number;
+      scope: LibraryScope;
     },
   ) =>
     [
@@ -60,6 +65,7 @@ export const dashboardCollectionQueryKeys = {
         kind: filters.kind,
         source: filters.source,
         limit: filters.limit,
+        scope: filters.scope,
       },
     ] as const,
   outputs: (
@@ -162,15 +168,24 @@ export function useDashboardRunsQuery(
   };
 }
 
-export function useDashboardProjectsQuery(authScope: string, limit: number) {
+export function useDashboardProjectsQuery(
+  authScope: string,
+  limit: number,
+  scope: LibraryScope = "mine",
+) {
   const meQuery = useMeQuery(authScope);
-  const workspaceId = meQuery.data?.workspaceId ?? "pending";
+  const isPublic = scope === "public";
+  // Public lists don't depend on the caller's workspace; key them on a stable
+  // "public" bucket so they don't refetch when the workspace resolves.
+  const keyWorkspace = isPublic ? "public" : (meQuery.data?.workspaceId ?? "pending");
   const query = useInfiniteQuery({
-    queryKey: dashboardCollectionQueryKeys.projects(workspaceId, limit),
-    enabled: Boolean(meQuery.data),
+    queryKey: dashboardCollectionQueryKeys.projects(keyWorkspace, limit, scope),
+    enabled: isPublic ? true : Boolean(meQuery.data),
     initialPageParam: null as PageCursor,
     queryFn: ({ pageParam }) =>
-      v1Api.listProjects({ limit, cursor: pageParam }),
+      isPublic
+        ? v1Api.listPublicProjects({ limit, cursor: pageParam })
+        : v1Api.listProjects({ limit, cursor: pageParam }),
     getNextPageParam: (lastPage) => lastPage.pagination.nextCursor,
   });
 
@@ -179,13 +194,13 @@ export function useDashboardProjectsQuery(authScope: string, limit: number) {
       query.data?.pages,
       (page) => page.projects,
     ),
-    error: meQuery.error ?? query.error ?? null,
-    loading: meQuery.isLoading || query.isLoading,
+    error: (isPublic ? null : meQuery.error) ?? query.error ?? null,
+    loading: (isPublic ? false : meQuery.isLoading) || query.isLoading,
     loadingMore: query.isFetchingNextPage,
     hasMore: query.hasNextPage,
     fetchNextPage: query.fetchNextPage,
     refetch: () => {
-      void meQuery.refetch();
+      if (!isPublic) void meQuery.refetch();
       void query.refetch();
     },
   };
@@ -198,38 +213,45 @@ export function useDashboardAssetsQuery(
     source: WorkspaceAssetSource | "all";
     limit: number;
   },
+  scope: LibraryScope = "mine",
 ) {
   const meQuery = useMeQuery(authScope);
-  const workspaceId = meQuery.data?.workspaceId ?? "pending";
-  const queryKey = dashboardCollectionQueryKeys.assets(workspaceId, filters);
+  const isPublic = scope === "public";
+  const keyWorkspace = isPublic ? "public" : (meQuery.data?.workspaceId ?? "pending");
+  const queryKey = dashboardCollectionQueryKeys.assets(keyWorkspace, { ...filters, scope });
   const query = useInfiniteQuery({
     queryKey,
-    enabled: Boolean(meQuery.data),
+    enabled: isPublic ? true : Boolean(meQuery.data),
     initialPageParam: null as PageCursor,
     queryFn: ({ pageParam, signal }) =>
-      v1Api.listWorkspaceAssets(
-        meQuery.data!.workspaceId,
-        {
-          kind: filters.kind,
-          source: filters.source,
-          limit: filters.limit,
-          cursor: pageParam,
-        },
-        signal,
-      ),
+      isPublic
+        ? v1Api.listPublicAssets(
+            { kind: filters.kind, limit: filters.limit, cursor: pageParam },
+            signal,
+          )
+        : v1Api.listWorkspaceAssets(
+            meQuery.data!.workspaceId,
+            {
+              kind: filters.kind,
+              source: filters.source,
+              limit: filters.limit,
+              cursor: pageParam,
+            },
+            signal,
+          ),
     getNextPageParam: (lastPage) => lastPage.pagination.nextCursor,
   });
 
   return {
     items: flattenPages(query.data?.pages, (page) => page.assets),
-    error: meQuery.error ?? query.error ?? null,
-    loading: meQuery.isLoading || query.isLoading,
+    error: (isPublic ? null : meQuery.error) ?? query.error ?? null,
+    loading: (isPublic ? false : meQuery.isLoading) || query.isLoading,
     loadingMore: query.isFetchingNextPage,
     hasMore: query.hasNextPage,
     fetchNextPage: query.fetchNextPage,
     queryKey,
     refetch: () => {
-      void meQuery.refetch();
+      if (!isPublic) void meQuery.refetch();
       void query.refetch();
     },
   };
@@ -356,7 +378,10 @@ export function useAssetMediaMutation(
   const queryClient = useQueryClient();
   const meQuery = useMeQuery(authScope);
   const queryKey = meQuery.data
-    ? dashboardCollectionQueryKeys.assets(meQuery.data.workspaceId, filters)
+    ? dashboardCollectionQueryKeys.assets(meQuery.data.workspaceId, {
+        ...filters,
+        scope: "mine",
+      })
     : null;
 
   return useMutation({

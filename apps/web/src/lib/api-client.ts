@@ -497,12 +497,90 @@ function workspaceAssetToClip(asset: WorkspaceAsset): Project["clips"][number] {
   };
 }
 
+// Shape returned by GET /api/v1/discover/assets. It's the API's richer asset
+// row, not the lean shared V1Asset: the resolved CDN/media URL arrives as
+// `remoteUrl` (the shared V1Asset's `url` is not populated on this path).
+export interface DiscoverAsset {
+  id: string;
+  projectId: string;
+  workspaceId: string;
+  kind: AssetKind;
+  status: AssetStatus;
+  filename: string;
+  url?: string;
+  remoteUrl?: string;
+  durationSec?: number;
+  description?: string;
+  role?: string;
+  source?: { type?: string } | string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+function discoverAssetUrl(asset: DiscoverAsset): string | undefined {
+  return asset.url ?? asset.remoteUrl ?? undefined;
+}
+
+// Public discovery returns bare assets (no workspace-scoped joins like the
+// owning project name). Normalize them into the WorkspaceAsset shape the
+// Library grid renders, marking them public so owner-only actions stay hidden.
+function publicAssetToWorkspaceAsset(asset: DiscoverAsset): WorkspaceAsset {
+  const url = discoverAssetUrl(asset);
+  const sourceType = typeof asset.source === "object" ? asset.source?.type : asset.source;
+  return {
+    id: asset.id,
+    assetId: asset.id,
+    projectId: asset.projectId,
+    projectName: "",
+    kind: asset.kind,
+    status: asset.status,
+    source: sourceType === "generated" ? "generated" : "upload",
+    filename: asset.filename,
+    title: asset.filename,
+    description: asset.description,
+    url,
+    thumbnailUrl: asset.kind === "image" ? url : undefined,
+    durationSec: asset.durationSec,
+    visibility: "public",
+    createdAt: asset.createdAt,
+    updatedAt: asset.updatedAt,
+  };
+}
+
 export const v1Api = {
   me: () => apiRequest<MeResponse>("/api/v1/me"),
   listProjects: (params?: { limit?: number; cursor?: string | null }) =>
     apiRequest<ProjectsResponse>("/api/v1/projects", {
       searchParams: params,
     }),
+  // Public discovery: every user's public projects, not just the caller's.
+  listPublicProjects: (params?: { limit?: number; cursor?: string | null }) =>
+    apiRequest<ProjectsResponse>("/api/v1/discover/projects", {
+      searchParams: params,
+    }),
+  listPublicAssets: async (
+    params?: { kind?: AssetKind | "all"; limit?: number; cursor?: string | null },
+    signal?: AbortSignal
+  ): Promise<WorkspaceAssetsResponse> => {
+    const response = await apiRequest<{
+      assets: DiscoverAsset[];
+      pagination: ListPagination;
+    }>("/api/v1/discover/assets", {
+      signal,
+      searchParams: {
+        ...params,
+        kind: params?.kind === "all" ? undefined : params?.kind,
+      },
+    });
+    return {
+      // Drop assets with no resolvable media (e.g. legacy storyboard sketches
+      // stored without a bucket) so the public gallery isn't full of blanks.
+      assets: response.assets
+        .filter((asset) => discoverAssetUrl(asset))
+        .map(publicAssetToWorkspaceAsset),
+      pagination: response.pagination,
+    };
+  },
   createProject: (input: CreateProjectInput) =>
     apiRequest<CreateProjectResponse>("/api/v1/projects", {
       method: "POST",
