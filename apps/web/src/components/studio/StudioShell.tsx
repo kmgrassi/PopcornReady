@@ -101,6 +101,7 @@ export function StudioShell({
   } | null>(null);
   const [draftActionError, setDraftActionError] = useState<string | null>(null);
   const [flowKey, setFlowKey] = useState(0);
+  const [isStartingFreshDraft, setIsStartingFreshDraft] = useState(false);
   const autoStartRequestedRef = useRef(false);
   const handledNewDraftRequestRef = useRef<string | null>(null);
   const createDraftInFlightRef = useRef(false);
@@ -153,6 +154,7 @@ export function StudioShell({
     if (createDraftInFlightRef.current) return;
 
     createDraftInFlightRef.current = true;
+    setIsStartingFreshDraft(true);
     setDraftActionError(null);
     try {
       const record = await createDraftMutation.mutateAsync({
@@ -174,6 +176,7 @@ export function StudioShell({
       });
     } finally {
       createDraftInFlightRef.current = false;
+      setIsStartingFreshDraft(false);
     }
   }, [createDraftMutation, initialStarted, navigate, openPanel, seededBrief]);
 
@@ -216,6 +219,19 @@ export function StudioShell({
     } catch (error) {
       setDraftActionError(error instanceof Error ? error.message : "Could not delete draft.");
     }
+  }
+
+  if (isStartingFreshDraft) {
+    return (
+      <main className={styles.shell}>
+        <StudioEmptyState
+          drafts={[]}
+          loading={false}
+          error={null}
+          creating
+        />
+      </main>
+    );
   }
 
   if (!activeDraftId) {

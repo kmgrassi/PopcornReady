@@ -396,11 +396,12 @@ export function useRegisterProjectUploadMutation(projectId: string) {
   });
 }
 
-export function useGenerationRunQuery(projectId: string, runId: string) {
+export function useGenerationRunQuery(projectId: string, runId: string, enabled = true) {
   return useQuery({
     queryKey: queryKeys.generationRun(projectId, runId),
     queryFn: ({ signal }: { signal: QuerySignal }) =>
       v1Api.getGenerationRun(projectId, runId, signal),
+    enabled: enabled && Boolean(projectId && runId),
     refetchInterval: (query) => {
       const data = query.state.data as GenerationRunDetail | undefined;
       if (!shouldPollRun(data)) return false;
@@ -437,6 +438,8 @@ export function useUpdateGenerationRunMutation(projectId: string, runId: string)
     }) => v1Api.updateGenerationRun(projectId, runId, action, body),
     onSuccess: (data) => {
       client.setQueryData(queryKeys.generationRun(projectId, runId), data);
+      void client.invalidateQueries({ queryKey: ["dashboard"] });
+      void client.invalidateQueries({ queryKey: ["workspaces"] });
     },
   });
 }

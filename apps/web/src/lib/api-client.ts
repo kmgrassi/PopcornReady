@@ -294,6 +294,13 @@ export interface ProjectWatchMedia {
   updatedAt: string;
 }
 
+// Read-only bundle for the public share / read-only project view.
+export interface PublicProjectResponse {
+  project: V1Project;
+  storyboard: ProjectStoryboard | null;
+  media: ProjectWatchMedia | null;
+}
+
 export interface ProjectWatchResponse {
   media: ProjectWatchMedia | null;
   fallback: {
@@ -558,6 +565,12 @@ export const v1Api = {
     apiRequest<ProjectsResponse>("/api/v1/discover/projects", {
       searchParams: params,
     }),
+  // Public, no-auth read of a single public project + storyboard + watch media.
+  getPublicProject: (projectId: string, signal?: AbortSignal) =>
+    apiRequest<PublicProjectResponse>(
+      `/api/v1/discover/projects/${encodeURIComponent(projectId)}`,
+      { signal }
+    ),
   listPublicAssets: async (
     params?: { kind?: AssetKind | "all"; limit?: number; cursor?: string | null },
     signal?: AbortSignal
@@ -717,6 +730,17 @@ export const v1Api = {
     apiRequest<AssetMediaResponse>(
       `/api/v1/assets/${encodeURIComponent(assetId)}/media`,
       { signal }
+    ),
+  // Re-run image generation for an asset in place. Omit `prompt` to reuse the
+  // asset's saved prompt; the API throws `prompt_required` (ApiClientError.code)
+  // when none is stored, which the UI uses to prompt for one.
+  regenerateAsset: (assetId: string, prompt?: string) =>
+    apiRequest<AssetMediaResponse>(
+      `/api/v1/assets/${encodeURIComponent(assetId)}/regenerate`,
+      {
+        method: "POST",
+        body: prompt != null ? { prompt } : {},
+      }
     ),
   setAssetVisibility: (
     projectId: string,

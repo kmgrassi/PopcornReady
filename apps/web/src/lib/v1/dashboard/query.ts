@@ -400,3 +400,39 @@ export function useAssetMediaMutation(
     },
   });
 }
+
+export function useAssetRegenerateMutation(
+  authScope: string,
+  filters: {
+    kind: AssetKind | "all";
+    source: WorkspaceAssetSource | "all";
+    limit: number;
+  },
+) {
+  const queryClient = useQueryClient();
+  const meQuery = useMeQuery(authScope);
+  const queryKey = meQuery.data
+    ? dashboardCollectionQueryKeys.assets(meQuery.data.workspaceId, {
+        ...filters,
+        scope: "mine",
+      })
+    : null;
+
+  return useMutation({
+    mutationFn: ({ assetId, prompt }: { assetId: string; prompt?: string }) =>
+      v1Api.regenerateAsset(assetId, prompt),
+    onSuccess: (media: AssetMediaResponse, { assetId }) => {
+      if (!queryKey) return;
+      queryClient.setQueryData<
+        InfiniteData<WorkspaceAssetsResponse, PageCursor>
+      >(queryKey, (current) =>
+        updateAssetPages(current, assetId, (asset) => ({
+          ...asset,
+          status: "ready",
+          url: media.url ?? undefined,
+          thumbnailUrl: media.thumbnailUrl ?? undefined,
+        })),
+      );
+    },
+  });
+}

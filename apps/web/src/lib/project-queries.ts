@@ -1,6 +1,10 @@
 import { useQuery, type QueryFunctionContext } from "@tanstack/react-query";
 import type { ProjectStoryboard } from "@popcorn/shared/v1/types";
-import { v1Api, type ProjectWatchResponse } from "./api-client";
+import {
+  v1Api,
+  type ProjectWatchResponse,
+  type PublicProjectResponse,
+} from "./api-client";
 
 type QuerySignal = QueryFunctionContext["signal"];
 
@@ -13,7 +17,23 @@ export const projectQueryKeys = {
   storyboardPage: (projectId: string | null) =>
     ["projects", projectId ?? "studio-project", "storyboard-page"] as const,
   projectWatch: (projectId: string) => ["projects", projectId, "watch"] as const,
+  publicProject: (projectId: string) => ["public-project", projectId] as const,
 };
+
+export function usePublicProjectQuery(projectId: string | null) {
+  return useQuery<PublicProjectResponse, Error>({
+    queryKey: projectId
+      ? projectQueryKeys.publicProject(projectId)
+      : ["public-project", "missing"],
+    queryFn: ({ signal }) => {
+      if (!projectId) {
+        throw new Error("Project id is required.");
+      }
+      return v1Api.getPublicProject(projectId, signal);
+    },
+    enabled: Boolean(projectId),
+  });
+}
 
 async function loadStoryboardPage(
   routeProjectId: string | null,

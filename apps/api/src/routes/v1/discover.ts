@@ -6,6 +6,7 @@ import {
   parsePagination,
 } from "@/lib/api/v1/schemas";
 import {
+  getPublicProjectBundle,
   listPublicAssets,
   listPublicProjects,
 } from "@/lib/api/v1/store";
@@ -46,6 +47,21 @@ discoverRouter.get(
       status: 200,
       body: { projects: items, pagination: { limit, nextCursor } },
     };
+  })
+);
+
+discoverRouter.get(
+  "/discover/projects/:projectId",
+  publicRoute(async (req) => {
+    const projectId = req.params.projectId;
+    if (!projectId) {
+      throw new ApiError("validation_failed", "projectId is required.");
+    }
+    const bundle = await getPublicProjectBundle(projectId);
+    if (!bundle) {
+      throw new ApiError("not_found", "Public project not found.");
+    }
+    return { status: 200, body: bundle };
   })
 );
 
