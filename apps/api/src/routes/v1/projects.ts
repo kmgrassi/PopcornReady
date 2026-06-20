@@ -47,7 +47,9 @@ projectsRouter.post(
       brief: input.brief,
     });
     if (briefVersion) {
-      startPosterGenerationInBackground(auth, project.id);
+      startPosterGenerationInBackground(auth, project.id, {
+        provider: input.posterProvider,
+      });
     }
     return {
       status: 201,

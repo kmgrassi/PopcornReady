@@ -20,16 +20,6 @@ export interface StartRunResult {
 export const LONG_VIDEO_PLANNING_REVIEW_THRESHOLD_SEC = 30;
 const LONG_VIDEO_POST_PLAN_REVIEW_GATE: GateableGenerationStageType = "storyboard";
 
-/** Derive a human project name from the brief goal when none was supplied. */
-export function deriveProjectName(goal: string): string {
-  const trimmed = goal.trim();
-  if (!trimmed) return "Untitled cut";
-  const firstSentence = trimmed.split(/[.!?]/)[0]?.trim() || trimmed;
-  return firstSentence.length > 64
-    ? `${firstSentence.slice(0, 61).trim()}...`
-    : firstSentence;
-}
-
 /** Build the V1 brief payload the create/run endpoints expect from a draft. */
 function briefInputFromDraft(draft: BriefDraft): VideoBriefInput {
   const requiredBeats = [draft.hook, draft.bigIdea]
@@ -166,8 +156,9 @@ export async function createAndStartRun(draft: BriefDraft): Promise<StartRunResu
   const reviewGates = reviewGatesForDraft(draft);
 
   const projectInput = {
-    name: draft.projectName.trim() || deriveProjectName(draft.goal),
-    ...(draft.footageChoice === "upload" ? { brief } : {}),
+    ...(draft.projectName.trim() ? { name: draft.projectName.trim() } : {}),
+    brief,
+    posterProvider: draft.provider,
   };
   const { project, briefVersion } = await v1Api.createProject(projectInput);
 
@@ -197,6 +188,7 @@ export async function createAndStartRun(draft: BriefDraft): Promise<StartRunResu
 
   const { runId } = await v1Api.startPromptGenerationRun(project.id, {
     brief,
+    ...(briefVersion?.id ? { briefVersionId: briefVersion.id } : {}),
     mode: compositionModeFromDraft(draft),
     allowGeneratedGapFill: true,
     provider: draft.provider,
