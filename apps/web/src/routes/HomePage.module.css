@@ -125,7 +125,7 @@
 }
 
 :global(.web-shell:has(.landing)) {
-  --bg: #0a0810;
+  --bg: #08070a;
   --panel: #14111c;
   --panel-2: #1c1827;
   --border: #2a2440;

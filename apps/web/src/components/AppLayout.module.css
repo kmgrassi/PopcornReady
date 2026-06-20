@@ -6,7 +6,6 @@
   color: var(--text);
 }
 
-/* Sidebar — slightly lifted from the app background for separation. */
 .sidebar {
   position: sticky;
   top: 0;
@@ -15,7 +14,7 @@
   height: 100vh;
   padding: var(--space-5) var(--space-4);
   border-right: 1px solid var(--border);
-  background: var(--surface);
+  background: var(--bg);
 }
 
 .brand {
