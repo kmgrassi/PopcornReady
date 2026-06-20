@@ -49,6 +49,10 @@ interface ProgressViewProps {
     error?: string | null;
     onCancel: () => void;
   };
+  restartAction?: {
+    pendingStageType?: GenerationStageType | null;
+    onRestart: (stageType: GenerationStageType) => void;
+  };
   /** Optional list of other demo runs to link to from the header. */
   alternateRuns?: { runId: string; label: string }[];
 }
@@ -394,6 +398,7 @@ export function ProgressView({
   studioReturnPath,
   reviewActions,
   cancelAction,
+  restartAction,
   alternateRuns,
 }: ProgressViewProps) {
   const [detail, setDetail] = useState({ run, stages, stageItems });
@@ -831,6 +836,7 @@ export function ProgressView({
                   }
                 : undefined
             }
+            restartAction={restartAction}
           />
           {showCancelAction && cancelAction?.error ? (
             <p className={styles.error} role="alert">

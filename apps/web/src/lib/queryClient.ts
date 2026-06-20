@@ -7,7 +7,7 @@ import {
   type UseQueryOptions,
 } from "@tanstack/react-query";
 import type { DashboardSummaryResponse } from "@popcorn/shared/v1/dashboard";
-import type { AssetKind, GenerationRun } from "@popcorn/shared/v1/types";
+import type { AssetKind, GenerationRun, GenerationStageType } from "@popcorn/shared/v1/types";
 import {
   ApiClientError,
   v1Api,
@@ -436,6 +436,20 @@ export function useUpdateGenerationRunMutation(projectId: string, runId: string)
       action: "approve" | "reject" | "cancel";
       body?: RejectGenerationRunInput;
     }) => v1Api.updateGenerationRun(projectId, runId, action, body),
+    onSuccess: (data) => {
+      client.setQueryData(queryKeys.generationRun(projectId, runId), data);
+      void client.invalidateQueries({ queryKey: ["dashboard"] });
+      void client.invalidateQueries({ queryKey: ["workspaces"] });
+    },
+  });
+}
+
+export function useRestartGenerationRunFromStageMutation(projectId: string, runId: string) {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: (stageType: GenerationStageType) =>
+      v1Api.restartGenerationRunFromStage(projectId, runId, stageType),
     onSuccess: (data) => {
       client.setQueryData(queryKeys.generationRun(projectId, runId), data);
       void client.invalidateQueries({ queryKey: ["dashboard"] });

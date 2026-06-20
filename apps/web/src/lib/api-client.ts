@@ -10,6 +10,7 @@ import type {
   GenerationJob,
   GenerationRun,
   GenerationRunStatus,
+  GenerationStageType,
   ProjectStoryboard,
   V1Asset,
   V1Project,
@@ -765,6 +766,20 @@ export const v1Api = {
       {
         method: "POST",
         body: body ?? {},
+      }
+    ),
+  // Re-enter a run at an earlier stage: supersede that stage + downstream and
+  // resume so the agent re-runs from there.
+  restartGenerationRunFromStage: (
+    projectId: string,
+    runId: string,
+    stageType: GenerationStageType
+  ) =>
+    apiRequest<GenerationRunDetail>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/generation-runs/${encodeURIComponent(runId)}/restart-from`,
+      {
+        method: "POST",
+        body: { stageType },
       }
     ),
   createTimelineRevision: (
