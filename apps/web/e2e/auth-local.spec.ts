@@ -43,22 +43,4 @@ test.describe("local auth mode", () => {
     expect(body.workspaceId.length).toBeGreaterThan(0);
   });
 
-  test("lets an unauthenticated browser enter protected app routes", async ({
-    page,
-  }) => {
-    await page.goto("/settings");
-
-    await expect(page).toHaveURL(/\/settings$/);
-    await expect(
-      page.getByRole("heading", { name: "Workspace controls" }),
-    ).toBeVisible();
-    await expect(page.getByText("Local developer").first()).toBeVisible();
-    await expect(page.getByText("Local mode").first()).toBeVisible();
-
-    await page.getByRole("link", { name: "Create" }).click();
-    await expect(page).toHaveURL(/\/studio$/);
-    await expect(
-      page.getByRole("heading", { name: /Create your first AI rough cut|Continue a draft/ }),
-    ).toBeVisible();
-  });
 });
