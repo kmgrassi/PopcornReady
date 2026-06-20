@@ -2,44 +2,97 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import styles from "./SpritePage.module.css";
 
 type Direction = "down" | "left" | "right" | "up";
-type Action = "idle" | "walk1" | "walk2" | "repair1" | "repair2";
-type SpriteMode = "walk" | "repair";
+type Action = "idle" | "walk1" | "walk2" | "action1" | "action2";
+type SpriteMode = "walk" | "action";
 
-const SPRITE_URL = "/sprites/work-sprite-sheet.png";
-const SHEET_WIDTH = 1402;
-const SHEET_HEIGHT = 1122;
-const COLUMNS = 5;
-const ROWS = 4;
+type SpriteConfig = {
+  id: string;
+  name: string;
+  eyebrow: string;
+  url: string;
+  sheetWidth: number;
+  sheetHeight: number;
+  columns: number;
+  rows: number;
+  /** Sheet row index for each facing direction. */
+  rowByDirection: Record<Direction, number>;
+  /** Human label for the non-walk action (e.g. "repair", "film"). */
+  actionName: string;
+  /** Default tuning for this sheet. */
+  defaults: {
+    cellWidth: number;
+    cellHeight: number;
+    cropHeight: number;
+    scale: number;
+  };
+};
 
 const directions: Direction[] = ["down", "left", "right", "up"];
-const actions: Action[] = ["idle", "walk1", "walk2", "repair1", "repair2"];
-
-const rowByDirection: Record<Direction, number> = {
-  down: 0,
-  left: 1,
-  right: 2,
-  up: 3,
-};
+const actions: Action[] = ["idle", "walk1", "walk2", "action1", "action2"];
 
 const colByAction: Record<Action, number> = {
   idle: 0,
   walk1: 1,
   walk2: 2,
-  repair1: 3,
-  repair2: 4,
+  action1: 3,
+  action2: 4,
 };
 
 const walkCycle: Action[] = ["walk1", "idle", "walk2", "idle"];
-const repairCycle: Action[] = ["repair1", "repair2"];
+const actionCycle: Action[] = ["action1", "action2"];
+
+const SPRITES: SpriteConfig[] = [
+  {
+    id: "worker",
+    name: "Worker",
+    eyebrow: "Sprite atlas demo",
+    url: "/sprites/work-sprite-sheet.png",
+    sheetWidth: 1402,
+    sheetHeight: 1122,
+    columns: 5,
+    rows: 4,
+    rowByDirection: { down: 0, left: 1, right: 2, up: 3 },
+    actionName: "repair",
+    defaults: { cellWidth: 280, cellHeight: 280, cropHeight: 280, scale: 0.75 },
+  },
+  {
+    id: "cameraman",
+    name: "Cameraman",
+    eyebrow: "Sprite atlas demo",
+    url: "/sprites/camera-man-sprite-sheet.png",
+    sheetWidth: 1254,
+    sheetHeight: 1254,
+    columns: 5,
+    rows: 5,
+    // The cameraman sheet has 5 rows; row 3 is a diagonal we skip for the
+    // four cardinal facings (up uses the full-back row 4).
+    rowByDirection: { down: 0, left: 1, right: 2, up: 4 },
+    actionName: "film",
+    defaults: { cellWidth: 251, cellHeight: 251, cropHeight: 251, scale: 0.8 },
+  },
+];
+
 const MOVE_STEP = 28;
 const STAGE_WIDTH = 640;
 const STAGE_HEIGHT = 520;
 
-function labelFor(value: string) {
-  return value.replace(/(\d)/, " $1");
+function actionLabel(value: Action, actionName: string) {
+  switch (value) {
+    case "idle":
+      return "idle";
+    case "walk1":
+      return "walk 1";
+    case "walk2":
+      return "walk 2";
+    case "action1":
+      return `${actionName} 1`;
+    case "action2":
+      return `${actionName} 2`;
+  }
 }
 
-function WorkerSprite({
+function Sprite({
+  config,
   direction,
   action,
   cellWidth,
@@ -50,6 +103,7 @@ function WorkerSprite({
   offsetY,
   scale,
 }: {
+  config: SpriteConfig;
   direction: Direction;
   action: Action;
   cellWidth: number;
@@ -60,7 +114,7 @@ function WorkerSprite({
   offsetY: number;
   scale: number;
 }) {
-  const row = rowByDirection[direction];
+  const row = config.rowByDirection[direction];
   const col = colByAction[action];
   const x = offsetX + col * cellWidth;
   const y = offsetY + row * cellHeight;
@@ -68,7 +122,7 @@ function WorkerSprite({
     "--frame-width": `${cropWidth}px`,
     "--frame-height": `${cropHeight}px`,
     "--sprite-scale": scale,
-    backgroundImage: `url("${SPRITE_URL}")`,
+    backgroundImage: `url("${config.url}")`,
     backgroundPosition: `${-x}px ${-y}px`,
   } as CSSProperties;
 
@@ -77,29 +131,35 @@ function WorkerSprite({
       className={styles.sprite}
       style={style}
       role="img"
-      aria-label={`${direction} ${action} worker sprite`}
+      aria-label={`${direction} ${actionLabel(action, config.actionName)} ${config.name} sprite`}
     />
   );
 }
 
 export function SpritePage() {
+  const [spriteId, setSpriteId] = useState<string>(SPRITES[0].id);
+  const config = useMemo(
+    () => SPRITES.find((item) => item.id === spriteId) ?? SPRITES[0],
+    [spriteId],
+  );
+
   const [direction, setDirection] = useState<Direction>("right");
   const [action, setAction] = useState<Action>("idle");
   const [position, setPosition] = useState({ x: 230, y: 150 });
-  const [cellWidth, setCellWidth] = useState(280);
-  const [cellHeight, setCellHeight] = useState(280);
-  const [cropHeight, setCropHeight] = useState(280);
+  const [cellWidth, setCellWidth] = useState(config.defaults.cellWidth);
+  const [cellHeight, setCellHeight] = useState(config.defaults.cellHeight);
+  const [cropHeight, setCropHeight] = useState(config.defaults.cropHeight);
   const [offsetX, setOffsetX] = useState(0);
   const [offsetY, setOffsetY] = useState(0);
-  const [scale, setScale] = useState(0.75);
+  const [scale, setScale] = useState(config.defaults.scale);
   const [speedMs, setSpeedMs] = useState(160);
   const [isPlaying, setIsPlaying] = useState(true);
   const [spriteMode, setSpriteMode] = useState<SpriteMode>("walk");
   const [frameIndex, setFrameIndex] = useState(0);
 
-  const cycle = spriteMode === "walk" ? walkCycle : repairCycle;
+  const cycle = spriteMode === "walk" ? walkCycle : actionCycle;
   const activeAction = isPlaying ? cycle[frameIndex % cycle.length] : action;
-  const row = rowByDirection[direction];
+  const row = config.rowByDirection[direction];
   const col = colByAction[activeAction];
   const x = offsetX + col * cellWidth;
   const y = offsetY + row * cellHeight;
@@ -112,6 +172,20 @@ export function SpritePage() {
     return () => window.clearInterval(id);
   }, [isPlaying, speedMs]);
 
+  function selectSprite(nextId: string) {
+    const next = SPRITES.find((item) => item.id === nextId) ?? SPRITES[0];
+    setSpriteId(next.id);
+    setCellWidth(next.defaults.cellWidth);
+    setCellHeight(next.defaults.cellHeight);
+    setCropHeight(next.defaults.cropHeight);
+    setScale(next.defaults.scale);
+    setOffsetX(0);
+    setOffsetY(0);
+    setAction("idle");
+    setSpriteMode("walk");
+    setIsPlaying(true);
+  }
+
   function clampPosition(next: { x: number; y: number }) {
     return {
       x: Math.min(STAGE_WIDTH - 96, Math.max(0, next.x)),
@@ -119,7 +193,7 @@ export function SpritePage() {
     };
   }
 
-  function moveWorker(nextDirection: Direction) {
+  function moveActor(nextDirection: Direction) {
     setDirection(nextDirection);
     setSpriteMode("walk");
     setIsPlaying(true);
@@ -142,12 +216,12 @@ export function SpritePage() {
     setIsPlaying(true);
   }
 
-  function stopAndRepair() {
-    setSpriteMode("repair");
+  function performAction() {
+    setSpriteMode("action");
     setIsPlaying(true);
   }
 
-  function resetWorker() {
+  function resetActor() {
     setPosition({ x: 230, y: 150 });
     setDirection("right");
     setSpriteMode("walk");
@@ -174,7 +248,7 @@ export function SpritePage() {
       const nextDirection = keyDirection[event.key];
       if (!nextDirection) return;
       event.preventDefault();
-      moveWorker(nextDirection);
+      moveActor(nextDirection);
     }
 
     window.addEventListener("keydown", handleKeyDown);
@@ -186,9 +260,9 @@ export function SpritePage() {
       directions.flatMap((rowDirection) =>
         actions.map((rowAction) => {
           const atlasX = offsetX + colByAction[rowAction] * cellWidth;
-          const atlasY = offsetY + rowByDirection[rowDirection] * cellHeight;
+          const atlasY = offsetY + config.rowByDirection[rowDirection] * cellHeight;
           return {
-            name: `${rowDirection}_${rowAction}`,
+            name: `${rowDirection}_${actionLabel(rowAction, config.actionName).replace(" ", "")}`,
             x: atlasX,
             y: atlasY,
             w: cellWidth,
@@ -196,8 +270,10 @@ export function SpritePage() {
           };
         }),
       ),
-    [cellHeight, cellWidth, cropHeight, offsetX, offsetY],
+    [cellHeight, cellWidth, config, cropHeight, offsetX, offsetY],
   );
+
+  const actionTitle = `${config.actionName.charAt(0).toUpperCase()}${config.actionName.slice(1)}`;
 
   return (
     <main className={styles.page}>
@@ -212,7 +288,8 @@ export function SpritePage() {
               } as CSSProperties
             }
           >
-            <WorkerSprite
+            <Sprite
+              config={config}
               direction={direction}
               action={activeAction}
               cellWidth={cellWidth}
@@ -226,24 +303,24 @@ export function SpritePage() {
           </div>
         </div>
         <div className={styles.details}>
-          <p className={styles.eyebrow}>Sprite atlas demo</p>
-          <h1>Worker sprite renderer</h1>
+          <p className={styles.eyebrow}>{config.eyebrow}</p>
+          <h1>{config.name} sprite renderer</h1>
           <dl>
             <div>
               <dt>Sheet</dt>
               <dd>
-                {SHEET_WIDTH} x {SHEET_HEIGHT}
+                {config.sheetWidth} x {config.sheetHeight}
               </dd>
             </div>
             <div>
               <dt>Grid</dt>
               <dd>
-                {COLUMNS} x {ROWS}
+                {config.columns} x {config.rows}
               </dd>
             </div>
             <div>
               <dt>Mode</dt>
-              <dd>{spriteMode}</dd>
+              <dd>{spriteMode === "action" ? config.actionName : "walk"}</dd>
             </div>
             <div>
               <dt>Frame</dt>
@@ -267,7 +344,7 @@ export function SpritePage() {
         </div>
       </section>
 
-      <section className={styles.playControls} aria-label="Worker movement controls">
+      <section className={styles.playControls} aria-label="Actor movement controls">
         <div className={styles.modeButtons}>
           <button
             className={`${styles.modeButton} ${spriteMode === "walk" ? styles.activeMode : ""}`}
@@ -277,37 +354,48 @@ export function SpritePage() {
             Walk
           </button>
           <button
-            className={`${styles.modeButton} ${spriteMode === "repair" ? styles.activeMode : ""}`}
+            className={`${styles.modeButton} ${spriteMode === "action" ? styles.activeMode : ""}`}
             type="button"
-            onClick={stopAndRepair}
+            onClick={performAction}
           >
-            Stop and repair
+            Stop and {config.actionName}
           </button>
-          <button className={styles.modeButton} type="button" onClick={resetWorker}>
+          <button className={styles.modeButton} type="button" onClick={resetActor}>
             Reset
           </button>
         </div>
 
-        <div className={styles.dpad} aria-label="Move worker">
-          <button type="button" className={styles.upButton} onClick={() => moveWorker("up")}>
+        <div className={styles.dpad} aria-label="Move actor">
+          <button type="button" className={styles.upButton} onClick={() => moveActor("up")}>
             Up
           </button>
-          <button type="button" className={styles.leftButton} onClick={() => moveWorker("left")}>
+          <button type="button" className={styles.leftButton} onClick={() => moveActor("left")}>
             Left
           </button>
-          <button type="button" className={styles.centerButton} onClick={stopAndRepair}>
-            Repair
+          <button type="button" className={styles.centerButton} onClick={performAction}>
+            {actionTitle}
           </button>
-          <button type="button" className={styles.rightButton} onClick={() => moveWorker("right")}>
+          <button type="button" className={styles.rightButton} onClick={() => moveActor("right")}>
             Right
           </button>
-          <button type="button" className={styles.downButton} onClick={() => moveWorker("down")}>
+          <button type="button" className={styles.downButton} onClick={() => moveActor("down")}>
             Down
           </button>
         </div>
       </section>
 
       <section className={styles.controls} aria-label="Sprite controls">
+        <label>
+          Sprite
+          <select value={spriteId} onChange={(event) => selectSprite(event.target.value)}>
+            {SPRITES.map((item) => (
+              <option value={item.id} key={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
         <label>
           Direction
           <select
@@ -331,7 +419,7 @@ export function SpritePage() {
           >
             {actions.map((item) => (
               <option value={item} key={item}>
-                {labelFor(item)}
+                {actionLabel(item, config.actionName)}
               </option>
             ))}
           </select>
@@ -344,7 +432,7 @@ export function SpritePage() {
             onChange={(event) => setSpriteMode(event.target.value as SpriteMode)}
           >
             <option value="walk">walk</option>
-            <option value="repair">repair</option>
+            <option value="action">{config.actionName}</option>
           </select>
         </label>
 
@@ -361,7 +449,7 @@ export function SpritePage() {
           Frame width
           <input
             type="range"
-            min="240"
+            min="220"
             max="300"
             value={cellWidth}
             onChange={(event) => setCellWidth(Number(event.target.value))}
@@ -373,7 +461,7 @@ export function SpritePage() {
           Cell height
           <input
             type="range"
-            min="240"
+            min="220"
             max="300"
             value={cellHeight}
             onChange={(event) => setCellHeight(Number(event.target.value))}
@@ -386,7 +474,7 @@ export function SpritePage() {
           <input
             type="range"
             min="180"
-            max="280"
+            max="300"
             value={cropHeight}
             onChange={(event) => setCropHeight(Number(event.target.value))}
           />
@@ -446,7 +534,7 @@ export function SpritePage() {
 
       <section className={styles.sheetPanel} aria-label="Sprite sheet">
         <div className={styles.sheetWrap}>
-          <img src={SPRITE_URL} alt="Worker sprite sheet" />
+          <img src={config.url} alt={`${config.name} sprite sheet`} />
         </div>
         <div className={styles.atlas}>
           {atlasRows.map((frame) => (
