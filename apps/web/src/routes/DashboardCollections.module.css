@@ -111,7 +111,7 @@
 /* Card grids (assets, outputs) */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: var(--space-4);
 }
 
@@ -184,6 +184,13 @@
   gap: var(--space-2);
   padding: var(--space-3);
   border-top: 1px solid var(--border);
+}
+
+.viewerActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
 }
 
 .projectCard {
@@ -276,7 +283,12 @@
 .cardBody {
   display: grid;
   gap: var(--space-3);
-  padding: var(--space-3);
+  min-width: 0;
+  padding: var(--space-4);
+}
+
+.cardBody > div {
+  min-width: 0;
 }
 
 .cardMeta {
@@ -290,6 +302,7 @@
 }
 
 .cardMeta > span:not(.chip) {
+  min-width: 0;
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-pill);
   background: var(--surface-2);
@@ -350,6 +363,10 @@
   .page {
     width: calc(100% - var(--space-5));
     padding: var(--space-5) 0 var(--space-7);
+  }
+
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .runRow {
