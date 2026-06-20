@@ -22,6 +22,8 @@ export interface StepShellProps {
   nextCta?: boolean;
   /** Let complex workflow steps use more horizontal room. */
   wide?: boolean;
+  /** Use the full-stage creation layout with a sticky action bar. */
+  stage?: boolean;
 }
 
 /**
@@ -42,40 +44,51 @@ export function StepShell({
   nextDisabled = false,
   nextCta = false,
   wide = false,
+  stage = false,
 }: StepShellProps) {
-  const cardClassName = [styles.step, wide ? styles.wide : ""].filter(Boolean).join(" ");
+  const cardClassName = [styles.step, wide ? styles.wide : "", stage ? styles.stage : ""]
+    .filter(Boolean)
+    .join(" ");
+  const footer = (
+    <footer className={[styles.footer, stage ? styles.stageFooter : ""].filter(Boolean).join(" ")}>
+      {onBack ? (
+        <Button variant="secondary" onClick={onBack}>
+          Back
+        </Button>
+      ) : (
+        <span />
+      )}
+      {onNext ? (
+        <Button
+          variant={nextCta ? "cta" : "primary"}
+          size={stage ? "lg" : "md"}
+          onClick={onNext}
+          disabled={nextDisabled}
+        >
+          {nextLabel}
+        </Button>
+      ) : null}
+    </footer>
+  );
 
   return (
-    <Card padding="lg" elevated className={cardClassName}>
-      <header className={styles.header}>
-        <h2 className={styles.heading}>{heading}</h2>
-        {description ? <p className={styles.description}>{description}</p> : null}
-      </header>
+    <div className={stage ? styles.stageFrame : undefined}>
+      <Card padding="lg" elevated className={cardClassName}>
+        <header className={styles.header}>
+          <h2 className={styles.heading}>{heading}</h2>
+          {description ? <p className={styles.description}>{description}</p> : null}
+        </header>
 
-      {children ? <div className={styles.body}>{children}</div> : null}
+        {children ? <div className={styles.body}>{children}</div> : null}
 
-      {comingSoonPr ? (
-        <p className={styles.note}>Fuller controls land in wave 3 ({comingSoonPr}).</p>
-      ) : null}
-
-      <footer className={styles.footer}>
-        {onBack ? (
-          <Button variant="secondary" onClick={onBack}>
-            Back
-          </Button>
-        ) : (
-          <span />
-        )}
-        {onNext ? (
-          <Button
-            variant={nextCta ? "cta" : "primary"}
-            onClick={onNext}
-            disabled={nextDisabled}
-          >
-            {nextLabel}
-          </Button>
+        {comingSoonPr ? (
+          <p className={styles.note}>Fuller controls land in wave 3 ({comingSoonPr}).</p>
         ) : null}
-      </footer>
-    </Card>
+
+        {stage ? null : footer}
+      </Card>
+
+      {stage ? footer : null}
+    </div>
   );
 }

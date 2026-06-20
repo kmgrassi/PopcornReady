@@ -1,9 +1,9 @@
 .shell {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5, 24px);
-  padding: var(--space-5, 24px);
-  max-width: 1280px;
+  gap: var(--space-6, 32px);
+  padding: clamp(48px, 7vh, 80px) clamp(24px, 5vw, 64px) var(--space-6, 32px);
+  max-width: 1440px;
   margin: 0 auto;
   width: 100%;
 }
@@ -11,6 +11,8 @@
 .stepBody {
   display: flex;
   flex-direction: column;
+  align-items: center;
+  width: 100%;
 }
 
 .generating {
@@ -218,6 +220,10 @@
 }
 
 @media (max-width: 640px) {
+  .shell {
+    padding: var(--space-5) var(--space-3) var(--space-5);
+  }
+
   .draftRow {
     grid-template-columns: minmax(0, 1fr);
   }
