@@ -5,7 +5,11 @@ import type {
   OrchestratorRunGate,
   RunActionSummary,
 } from "@/lib/api/v1/orchestrator-store";
-import { downstreamActionIds, downstreamGateIds } from "../orchestrator-runs";
+import {
+  downstreamActionIds,
+  downstreamGateIds,
+  restartSelectionScope,
+} from "../orchestrator-runs";
 
 function action(id: string, tool: string): RunActionSummary {
   return { id, tool, status: "applied", params: {}, outputAssetIds: [], jobIds: [], createdAt: "t0" };
@@ -60,4 +64,23 @@ test("downstreamGateIds resets only gates at/after the target stage", () => {
     "g-clip",
     "g-export",
   ]);
+});
+
+test("restartSelectionScope from asset_generation clears beat + downstream selections", () => {
+  const scope = restartSelectionScope(GENERATION_STAGE_ORDER.asset_generation);
+  // beat keyframe/clip selections are the ones that drive the skip bug.
+  assert.ok(scope.rolePrefixes.includes("beat_keyframe:"));
+  assert.ok(scope.rolePrefixes.includes("beat_clip:"));
+  assert.ok(scope.exactRoles.includes("visual_anchors"));
+  // downstream audio + timeline selections too.
+  assert.ok(scope.rolePrefixes.includes("voiceover:"));
+  assert.ok(scope.exactRoles.includes("cut"));
+  // upstream brief/plan selections are left intact.
+  assert.ok(!scope.exactRoles.includes("brief"));
+  assert.ok(!scope.exactRoles.includes("plan"));
+});
+
+test("restartSelectionScope from timeline only clears the cut selection", () => {
+  const scope = restartSelectionScope(GENERATION_STAGE_ORDER.timeline_assembly);
+  assert.deepEqual(scope, { exactRoles: ["cut"], rolePrefixes: [] });
 });

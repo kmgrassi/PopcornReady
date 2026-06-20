@@ -414,3 +414,29 @@ export async function resetGatesToPending(gateIds: string[]): Promise<void> {
       .in("id", gateIds)
   );
 }
+
+// Clear active selections for the given slot roles so the asset tools regenerate
+// instead of reusing the superseded outputs. Beat selections (beat_keyframe:*,
+// beat_clip:*) carry no producing-action link, so they must be cleared by slot
+// role, not by action id. Deletes every row for the slot (current_selections is
+// "latest seq wins", so a leftover prior row would still skip regeneration). The
+// produced assets stay in the pool; only the active pointer is removed.
+export async function clearProjectSelections(
+  projectId: string,
+  exactRoles: string[],
+  rolePrefixes: string[]
+): Promise<void> {
+  const db = getServiceSupabase();
+  if (exactRoles.length > 0) {
+    await runQuery(
+      "store.clearProjectSelections exact",
+      db.from("selections").delete().eq("project_id", projectId).in("slot_role", exactRoles)
+    );
+  }
+  for (const prefix of rolePrefixes) {
+    await runQuery(
+      `store.clearProjectSelections ${prefix}`,
+      db.from("selections").delete().eq("project_id", projectId).like("slot_role", `${prefix}%`)
+    );
+  }
+}

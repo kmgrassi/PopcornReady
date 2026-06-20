@@ -4,6 +4,7 @@ import { mutation, route } from "@/core/adapter";
 import { ApiError } from "@/core/errors";
 import { runIdempotent } from "@/lib/api/v1/idempotency";
 import {
+  clearProjectSelections,
   createPendingApprovalGate,
   createReachedApprovalGate,
   createOrchestratorRun,
@@ -904,6 +905,38 @@ export function downstreamGateIds(gates: OrchestratorRunGate[], fromOrder: numbe
     .map((gate) => gate.id);
 }
 
+// Active-selection slots produced by each stage. Restarting from a stage clears
+// these and downstream so the asset tools regenerate instead of reusing the
+// superseded selection. Beat selections (beat_keyframe:*, beat_clip:*) carry no
+// producing-action link, so they must be cleared by slot role, not action id.
+// (Poster is intentionally excluded — it's the project thumbnail, not a run
+// output the tools skip on.)
+const SELECTION_SLOTS: { order: number; exact: string[]; prefixes: string[] }[] = [
+  { order: GENERATION_STAGE_ORDER.brief_intake, exact: ["brief"], prefixes: [] },
+  { order: GENERATION_STAGE_ORDER.creative_plan, exact: ["plan"], prefixes: [] },
+  {
+    order: GENERATION_STAGE_ORDER.asset_generation,
+    exact: ["visual_anchors"],
+    prefixes: ["anchor:", "beat_keyframe:", "beat_clip:"],
+  },
+  { order: GENERATION_STAGE_ORDER.audio_generation, exact: [], prefixes: ["soundtrack:", "voiceover:"] },
+  { order: GENERATION_STAGE_ORDER.timeline_assembly, exact: ["cut"], prefixes: [] },
+];
+
+export function restartSelectionScope(fromOrder: number): {
+  exactRoles: string[];
+  rolePrefixes: string[];
+} {
+  const exactRoles: string[] = [];
+  const rolePrefixes: string[] = [];
+  for (const slot of SELECTION_SLOTS) {
+    if (slot.order < fromOrder) continue;
+    exactRoles.push(...slot.exact);
+    rolePrefixes.push(...slot.prefixes);
+  }
+  return { exactRoles, rolePrefixes };
+}
+
 function parseRestartStageType(body: unknown): GenerationStageType {
   const value = (body as { stageType?: unknown } | null)?.stageType;
   if (typeof value !== "string" || !(value in GENERATION_STAGE_ORDER) || value === "ready") {
@@ -938,6 +971,10 @@ orchestratorRunsRouter.post(
     const [actions, gates] = await Promise.all([listRunActions(runId), listRunGates(runId)]);
     await supersedeRunActions(downstreamActionIds(actions, fromOrder));
     await resetGatesToPending(downstreamGateIds(gates, fromOrder));
+    // Clear the active selections for this stage + downstream so the asset tools
+    // regenerate instead of skipping beats that still have a live selection.
+    const selectionScope = restartSelectionScope(fromOrder);
+    await clearProjectSelections(projectId, selectionScope.exactRoles, selectionScope.rolePrefixes);
 
     await updateOrchestratorRun(runId, {
       status: "running",
