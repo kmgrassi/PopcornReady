@@ -285,6 +285,25 @@ export function SpritePage() {
 
   return (
     <main className={styles.page}>
+      <section className={styles.switcher} aria-label="Choose sprite">
+        <span className={styles.switcherLabel}>Sprite</span>
+        <div className={styles.switcherButtons}>
+          {SPRITES.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={`${styles.switcherButton} ${
+                item.id === spriteId ? styles.activeMode : ""
+              }`}
+              aria-pressed={item.id === spriteId}
+              onClick={() => selectSprite(item.id)}
+            >
+              {item.name}
+            </button>
+          ))}
+        </div>
+      </section>
+
       <section className={styles.hero}>
         <div
           className={`${styles.stage} ${
@@ -401,17 +420,6 @@ export function SpritePage() {
       </section>
 
       <section className={styles.controls} aria-label="Sprite controls">
-        <label>
-          Sprite
-          <select value={spriteId} onChange={(event) => selectSprite(event.target.value)}>
-            {SPRITES.map((item) => (
-              <option value={item.id} key={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-        </label>
-
         <label>
           Backdrop
           <select
