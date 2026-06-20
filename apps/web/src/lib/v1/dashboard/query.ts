@@ -68,8 +68,22 @@ export const dashboardCollectionQueryKeys = {
         scope: filters.scope,
       },
     ] as const,
-  outputs: (workspaceId: string, limit: number) =>
-    ["dashboard", "outputs", workspaceId, { limit }] as const,
+  outputs: (
+    workspaceId: string,
+    filters: {
+      projectId?: string;
+      limit: number;
+    },
+  ) =>
+    [
+      "dashboard",
+      "outputs",
+      workspaceId,
+      {
+        projectId: filters.projectId ?? null,
+        limit: filters.limit,
+      },
+    ] as const,
 };
 
 function assetKey(asset: WorkspaceAsset): string {
@@ -243,17 +257,29 @@ export function useDashboardAssetsQuery(
   };
 }
 
-export function useDashboardOutputsQuery(authScope: string, limit: number) {
+export function useDashboardOutputsQuery(
+  authScope: string,
+  limitOrFilters:
+    | number
+    | {
+        projectId?: string;
+        limit: number;
+      },
+) {
+  const filters =
+    typeof limitOrFilters === "number"
+      ? { limit: limitOrFilters }
+      : limitOrFilters;
   const meQuery = useMeQuery(authScope);
   const workspaceId = meQuery.data?.workspaceId ?? "pending";
   const query = useInfiniteQuery({
-    queryKey: dashboardCollectionQueryKeys.outputs(workspaceId, limit),
+    queryKey: dashboardCollectionQueryKeys.outputs(workspaceId, filters),
     enabled: Boolean(meQuery.data),
     initialPageParam: null as PageCursor,
     queryFn: ({ pageParam, signal }) =>
       v1Api.listWorkspaceOutputs(
         meQuery.data!.workspaceId,
-        { limit, cursor: pageParam },
+        { projectId: filters.projectId, limit: filters.limit, cursor: pageParam },
         signal,
       ),
     getNextPageParam: (lastPage) => lastPage.pagination.nextCursor,

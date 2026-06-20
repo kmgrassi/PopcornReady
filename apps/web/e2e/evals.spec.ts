@@ -199,30 +199,13 @@ async function mockEvalApi(page: Page) {
   });
 }
 
-test("eval dashboard loads suites, run grid, and verdict diff", async ({ page }) => {
+test("legacy eval library route redirects to the admin workbench", async ({ page }) => {
   await mockEvalApi(page);
 
   await page.goto("/library/evals");
 
-  await expect(page.getByRole("heading", { name: "Eval suites" })).toBeVisible();
-  await expect(
-    page.getByLabel("Eval suites").getByRole("heading", {
-      name: "Story quality regression",
-    }),
-  ).toBeVisible();
-  await expect(page.getByRole("button", { name: /Latest run evalrun_latest/ })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
-  await expect(page.getByRole("table", { name: "Cases by stages" })).toContainText(
-    "Launch announcement",
-  );
-  await expect(page.getByRole("table", { name: "Cases by stages" })).toContainText(
-    "timeline_assembly.v1",
-  );
-  await expect(page.getByRole("rowheader", { name: "Bakery rebuild" })).toBeVisible();
-  await expect(page.getByText("Pass -> Needs review")).toBeVisible();
-  await expect(page.getByText("88%")).toBeVisible();
+  await expect(page).toHaveURL(/\/admin\/evals$/);
+  await expect(page.getByRole("heading", { name: "Manual story judgment" })).toBeVisible();
 });
 
 test("admin eval workbench posts a manual judgment and updates the card", async ({ page }) => {

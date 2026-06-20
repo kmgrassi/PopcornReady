@@ -30,13 +30,11 @@ const VALID_THEMES = new Set(["popcorn", "popcorn-warm", "popcorn-night"]);
 // Primary workspace nav. Library groups the collection routes until PR 5 gives
 // it a dedicated tab shell.
 const PRIMARY_NAV = [
-  { label: "Create", to: "/studio", activePaths: ["/studio"] },
   {
     label: "Library",
     to: "/library",
-    activePaths: ["/library", "/projects", "/runs", "/assets", "/outputs", "/evals"],
+    activePaths: ["/library", "/projects", "/assets"],
   },
-  { label: "Settings", to: "/settings", activePaths: ["/settings"] },
 ];
 
 function applyStoredTheme() {
@@ -107,13 +105,6 @@ export function AuthenticatedAppLayout() {
       (auth.status !== "unauthenticated" || DEV_AUTOPILOT),
   });
   const me = meQuery.data ?? null;
-  const meError =
-    meQuery.error instanceof Error
-      ? meQuery.error.message
-      : meQuery.error
-        ? String(meQuery.error)
-        : null;
-
   const accountLabel = useMemo(() => {
     if (auth.user?.email) return auth.user.email;
     if (me?.actor && typeof me.actor === "object" && me.actor.email) {
@@ -123,13 +114,9 @@ export function AuthenticatedAppLayout() {
     return "Account";
   }, [auth.status, auth.user?.email, me]);
 
-  const workspaceLabel = me?.workspaceName ?? me?.workspaceId ?? "Workspace";
-  const authModeLabel =
-    me?.isLocal || auth.status === "disabled"
-      ? "Local mode"
-      : me?.authMode ?? "Hosted mode";
   const showAdmin = canAccessAdminSurface(auth);
   const canSignOut = auth.configured && auth.status === "authenticated";
+  const isStudioRoute = location.pathname.startsWith("/studio");
 
   async function signOut() {
     if (!canSignOut) return;
@@ -163,7 +150,7 @@ export function AuthenticatedAppLayout() {
   }
 
   return (
-    <div className={styles.shell}>
+    <div className={[styles.shell, isStudioRoute ? styles.studioShell : ""].filter(Boolean).join(" ")}>
       <aside className={styles.sidebar}>
         <Link className={styles.brand} to="/dashboard">
           <LogoMark className={styles.logo} />
@@ -217,15 +204,16 @@ export function AuthenticatedAppLayout() {
             </nav>
           ) : null}
 
-          {/* Quieter workspace indicator — a single read-only pill, no longer a
-              prominent labelled <select> competing with the nav. */}
-          <div
-            className={styles.workspace}
-            title={`Active workspace: ${workspaceLabel}`}
-          >
-            <span className={styles.workspaceDot} aria-hidden="true" />
-            <span className={styles.workspaceName}>{workspaceLabel}</span>
-          </div>
+          <nav className={styles.footerNav} aria-label="Account">
+            <NavLink
+              to="/settings"
+              className={({ isActive }) =>
+                isActive ? `${styles.navLink} ${styles.active}` : styles.navLink
+              }
+            >
+              Settings
+            </NavLink>
+          </nav>
         </div>
       </aside>
 
@@ -233,13 +221,6 @@ export function AuthenticatedAppLayout() {
         <header className={styles.topbar}>
           <CommandPalette showAdminCommands={showAdmin} />
           <div className={styles.account}>
-            {meError && auth.configured ? (
-              <span className={`${styles.authMode} ${styles.authError}`} title={meError}>
-                Account unavailable
-              </span>
-            ) : (
-              <span className={styles.authMode}>{authModeLabel}</span>
-            )}
             <Link className={styles.accountLink} to="/settings">
               {accountLabel}
             </Link>

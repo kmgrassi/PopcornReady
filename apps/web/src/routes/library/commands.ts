@@ -13,31 +13,10 @@ export const libraryCommands: PaletteCommand[] = [
     run: go("/projects"),
   },
   {
-    id: "library.runs",
-    title: "Runs",
-    subtitle: "Track generation runs",
-    keywords: ["library", "status", "progress", "queued", "running"],
-    run: go("/runs"),
-  },
-  {
     id: "library.assets",
     title: "Assets",
     subtitle: "Browse uploaded and generated assets",
     keywords: ["library", "uploads", "images", "video", "audio"],
     run: go("/assets"),
-  },
-  {
-    id: "library.outputs",
-    title: "Outputs",
-    subtitle: "Browse exported videos",
-    keywords: ["library", "exports", "mp4", "renders"],
-    run: go("/outputs"),
-  },
-  {
-    id: "library.evals",
-    title: "Evals",
-    subtitle: "Quality checks and evaluation runs",
-    keywords: ["quality", "admin", "tests"],
-    run: go("/evals"),
   },
 ];

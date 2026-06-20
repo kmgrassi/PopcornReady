@@ -804,7 +804,14 @@ export function ProgressView({
               <h2 className={styles.sidePanelHeading}>Remaining stages</h2>
             </div>
           </div>
-          <StageRail stages={detail.stages} reviewGate={detail.run.reviewGate} />
+          <StageRail
+            stages={detail.stages}
+            runStatus={detail.run.status}
+            currentStageType={detail.run.currentStageType}
+            runProgressPercent={detail.run.progressPercent}
+            runMessage={detail.run.message}
+            reviewGate={detail.run.reviewGate}
+          />
           <p className={styles.sidePanelMeta}>
             Started {formatDateTime(detail.run.startedAt)}. Updated{" "}
             {formatDateTime(detail.run.updatedAt)}.

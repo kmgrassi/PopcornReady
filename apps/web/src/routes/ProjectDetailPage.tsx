@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Link, Navigate, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, Navigate, useLocation, useParams } from "react-router-dom";
 import type {
   GenerationRun,
   ProjectStoryboard,
@@ -7,18 +7,25 @@ import type {
   V1Project,
   VideoBriefInput,
 } from "@popcorn/shared/v1/types";
+import type { WorkspaceOutput } from "../lib/api-client";
 import { useAuth } from "../components/auth/AuthProvider";
-import { ButtonLink } from "../components/ui/Button";
+import { Button, ButtonLink } from "../components/ui/Button";
 import { EmptyState, ErrorState } from "../components/ui/StateCard";
 import {
+  useGenerateProjectStoryboardMutation,
   useProjectQuery,
+  useProjectStoryboardGenerationJobQuery,
   useProjectStoryboardQuery,
 } from "../lib/queryClient";
-import { useDashboardRunsQuery } from "../lib/v1/dashboard/query";
+import {
+  useDashboardOutputsQuery,
+  useDashboardRunsQuery,
+} from "../lib/v1/dashboard/query";
 import styles from "./ProjectDetailPage.module.css";
 
 const DEV_AUTOPILOT = import.meta.env.DEV;
 const RUN_LIMIT = 6;
+const OUTPUT_LIMIT = 6;
 
 function useDashboardAuthScope() {
   const auth = useAuth();
@@ -27,14 +34,48 @@ function useDashboardAuthScope() {
 
 export function ProjectDetailPage() {
   const { projectId } = useParams();
+  const location = useLocation();
   const authScope = useDashboardAuthScope();
   const projectQuery = useProjectQuery(projectId ?? "", Boolean(projectId));
   const storyboardQuery = useProjectStoryboardQuery(projectId ?? "", Boolean(projectId));
+  const generateStoryboardMutation = useGenerateProjectStoryboardMutation(projectId ?? "");
+  const storyboardGenerationJobId = generateStoryboardMutation.data?.job.id ?? "";
+  const storyboardGenerationJobQuery = useProjectStoryboardGenerationJobQuery(
+    projectId ?? "",
+    storyboardGenerationJobId,
+    Boolean(projectId && storyboardGenerationJobId)
+  );
+  const storyboardGenerationJob = storyboardGenerationJobQuery.data?.job;
+  const refetchStoryboard = storyboardQuery.refetch;
+  const storyboardGenerationError = useMemo(() => {
+    if (storyboardGenerationJob?.error) {
+      return new Error(storyboardGenerationJob.error.message);
+    }
+    return storyboardGenerationJobQuery.error;
+  }, [storyboardGenerationJob?.error?.message, storyboardGenerationJobQuery.error]);
   const runsQuery = useDashboardRunsQuery(authScope, {
     status: "all",
     projectId: projectId ?? undefined,
     limit: RUN_LIMIT,
   });
+  const outputsQuery = useDashboardOutputsQuery(authScope, {
+    projectId: projectId ?? undefined,
+    limit: OUTPUT_LIMIT,
+  });
+
+  useEffect(() => {
+    if (storyboardGenerationJob?.status === "succeeded") {
+      void refetchStoryboard();
+    }
+  }, [refetchStoryboard, storyboardGenerationJob?.status]);
+
+  useEffect(() => {
+    if (!location.hash || !projectQuery.data?.project) return;
+    const sectionId = decodeURIComponent(location.hash.slice(1));
+    window.requestAnimationFrame(() => {
+      document.getElementById(sectionId)?.scrollIntoView({ block: "start" });
+    });
+  }, [location.hash, projectQuery.data?.project]);
 
   if (!projectId) return <Navigate to="/library/projects" replace />;
 
@@ -60,9 +101,15 @@ export function ProjectDetailPage() {
         <div className={styles.headerActions}>
           <ButtonLink
             variant="secondary"
-            to={`/library/runs?projectId=${encodeURIComponent(projectId)}`}
+            to="#runs"
           >
             Runs
+          </ButtonLink>
+          <ButtonLink
+            variant="secondary"
+            to="#outputs"
+          >
+            Outputs
           </ButtonLink>
           <ButtonLink
             variant="primary"
@@ -95,14 +142,38 @@ export function ProjectDetailPage() {
               loading={storyboardQuery.isLoading}
               error={storyboardQuery.error}
               onRetry={() => void storyboardQuery.refetch()}
+              generating={generateStoryboardMutation.isPending}
+              generationStarted={Boolean(generateStoryboardMutation.data)}
+              generationError={
+                generateStoryboardMutation.error ?? storyboardGenerationError
+              }
+              onGenerate={() => {
+                void generateStoryboardMutation.mutateAsync().then(() => {
+                  void storyboardQuery.refetch();
+                  window.setTimeout(() => void storyboardQuery.refetch(), 3000);
+                  window.setTimeout(() => void storyboardQuery.refetch(), 8000);
+                });
+              }}
             />
           </section>
           <RunsPreview
             projectId={projectId}
             runs={runsQuery.items}
             loading={runsQuery.loading}
+            loadingMore={runsQuery.loadingMore}
+            hasMore={runsQuery.hasMore}
             error={runsQuery.error}
             onRetry={runsQuery.refetch}
+            onLoadMore={() => void runsQuery.fetchNextPage()}
+          />
+          <OutputsPreview
+            outputs={outputsQuery.items}
+            loading={outputsQuery.loading}
+            loadingMore={outputsQuery.loadingMore}
+            hasMore={outputsQuery.hasMore}
+            error={outputsQuery.error}
+            onRetry={outputsQuery.refetch}
+            onLoadMore={() => void outputsQuery.fetchNextPage()}
           />
         </>
       ) : null}
@@ -129,7 +200,6 @@ function ProjectHero({
           ) : null}
           <span>Created {formatDate(project.createdAt)}</span>
         </div>
-        <h2>{project.brief?.goal ?? project.name}</h2>
         <dl className={styles.stats}>
           <div>
             <dt>Length</dt>
@@ -184,7 +254,7 @@ function ProjectBrief({ project }: { project: V1Project }) {
       </div>
       {brief ? (
         <dl className={styles.detailList}>
-          <DetailTerm label="Goal" value={brief.goal} />
+          <DetailTerm label="Prompt" value={brief.goal} />
           <DetailTerm label="Audience" value={brief.audience} />
           <DetailTerm label="Style" value={brief.style} />
           <DetailTerm label="Format" value={brief.format} />
@@ -216,12 +286,20 @@ function StoryboardPreview({
   loading,
   error,
   onRetry,
+  generating,
+  generationStarted,
+  generationError,
+  onGenerate,
 }: {
   projectId: string;
   storyboard: ProjectStoryboard | null;
   loading: boolean;
   error: Error | null;
   onRetry: () => void;
+  generating: boolean;
+  generationStarted: boolean;
+  generationError: Error | null;
+  onGenerate: () => void;
 }) {
   const stats = storyboardStats(storyboard);
   const panels = firstPanels(storyboard, 4);
@@ -236,7 +314,7 @@ function StoryboardPreview({
         <ButtonLink
           variant="ghost"
           size="sm"
-          to={`/library/runs?projectId=${encodeURIComponent(projectId)}`}
+          to="#runs"
         >
           Runs
         </ButtonLink>
@@ -251,18 +329,34 @@ function StoryboardPreview({
         />
       ) : null}
       {!loading && !error && !storyboard ? (
-        <EmptyState
-          title="No storyboard yet"
-          body="Start a run to create storyboard scenes and beats for this project."
-          action={
-            <ButtonLink
-              variant="secondary"
-              to={`/library/runs?projectId=${encodeURIComponent(projectId)}`}
-            >
-              View runs
-            </ButtonLink>
-          }
-        />
+        <>
+          <EmptyState
+            title={generationStarted ? "Storyboard generation started" : "No storyboard yet"}
+            body={
+              generationStarted
+                ? "Storyboard panels are being created from the current shot plan."
+                : "Create storyboard scenes and beats from this project's current shot plan."
+            }
+            action={
+              <Button
+                variant="secondary"
+                onClick={onGenerate}
+                isLoading={generating}
+                disabled={generating}
+              >
+                {generationStarted ? "Generate again" : "Create storyboard"}
+              </Button>
+            }
+          />
+          {generationError ? (
+            <ErrorState
+              title="Unable to start storyboard"
+              body="We couldn't start storyboard generation for this project."
+              error={generationError}
+              onRetry={onGenerate}
+            />
+          ) : null}
+        </>
       ) : null}
       {!loading && !error && storyboard ? (
         <>
@@ -322,17 +416,23 @@ function RunsPreview({
   projectId,
   runs,
   loading,
+  loadingMore,
+  hasMore,
   error,
   onRetry,
+  onLoadMore,
 }: {
   projectId: string;
   runs: GenerationRun[];
   loading: boolean;
+  loadingMore: boolean;
+  hasMore: boolean;
   error: Error | null;
   onRetry: () => void;
+  onLoadMore: () => void;
 }) {
   return (
-    <section className={styles.panel}>
+    <section className={styles.panel} id="runs">
       <div className={styles.sectionHeader}>
         <div>
           <span className={styles.eyebrow}>Runs</span>
@@ -341,9 +441,9 @@ function RunsPreview({
         <ButtonLink
           variant="ghost"
           size="sm"
-          to={`/library/runs?projectId=${encodeURIComponent(projectId)}`}
+          to={`/projects/${encodeURIComponent(projectId)}`}
         >
-          All runs
+          Project
         </ButtonLink>
       </div>
       {loading ? <div className={styles.placeholder}>Loading runs...</div> : null}
@@ -381,6 +481,97 @@ function RunsPreview({
               <StatusChip status={run.status} />
             </Link>
           ))}
+        </div>
+      ) : null}
+      {hasMore ? (
+        <div className={styles.loadMore}>
+          <Button variant="secondary" size="sm" disabled={loadingMore} onClick={onLoadMore}>
+            {loadingMore ? "Loading..." : "Load more runs"}
+          </Button>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function OutputsPreview({
+  outputs,
+  loading,
+  loadingMore,
+  hasMore,
+  error,
+  onRetry,
+  onLoadMore,
+}: {
+  outputs: WorkspaceOutput[];
+  loading: boolean;
+  loadingMore: boolean;
+  hasMore: boolean;
+  error: Error | null;
+  onRetry: () => void;
+  onLoadMore: () => void;
+}) {
+  return (
+    <section className={styles.panel} id="outputs">
+      <div className={styles.sectionHeader}>
+        <div>
+          <span className={styles.eyebrow}>Outputs</span>
+          <h2>Finished exports</h2>
+        </div>
+      </div>
+      {loading ? <div className={styles.placeholder}>Loading outputs...</div> : null}
+      {!loading && error ? (
+        <ErrorState
+          title="Unable to load outputs"
+          body="We couldn't load exported videos for this project."
+          error={error}
+          onRetry={onRetry}
+        />
+      ) : null}
+      {!loading && !error && outputs.length === 0 ? (
+        <EmptyState
+          title="No outputs yet"
+          body="Finished exports for this project will appear here."
+        />
+      ) : null}
+      {!loading && !error && outputs.length > 0 ? (
+        <div className={styles.outputGrid}>
+          {outputs.map((output) => {
+            const playbackUrl = output.playbackUrl ?? output.url;
+            const meta = [output.format?.toUpperCase(), formatDuration(output.durationSec)]
+              .filter(Boolean)
+              .join(" - ");
+            return (
+              <article className={styles.outputCard} key={output.artifactId}>
+                <div className={styles.outputMedia}>
+                  {playbackUrl ? (
+                    <video
+                      src={playbackUrl}
+                      poster={output.thumbnailUrl}
+                      muted
+                      playsInline
+                      preload="metadata"
+                    />
+                  ) : output.thumbnailUrl ? (
+                    <img src={output.thumbnailUrl} alt="" loading="lazy" />
+                  ) : (
+                    <span>Output</span>
+                  )}
+                </div>
+                <div className={styles.outputBody}>
+                  <span className={styles.runTitle}>Exported {formatDate(output.createdAt)}</span>
+                  <span className={styles.runMeta}>{meta || "Finished export"}</span>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      ) : null}
+      {hasMore ? (
+        <div className={styles.loadMore}>
+          <Button variant="secondary" size="sm" disabled={loadingMore} onClick={onLoadMore}>
+            {loadingMore ? "Loading..." : "Load more outputs"}
+          </Button>
         </div>
       ) : null}
     </section>

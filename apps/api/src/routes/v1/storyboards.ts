@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { mutation, route } from "@/core/adapter";
 import { ApiError } from "@/core/errors";
+import { agentApiStore } from "@/lib/agent-api/jobs";
 import {
   createBeat,
   createPanel,
@@ -26,6 +27,11 @@ import {
   updateStoryboard,
 } from "@/lib/api/v1/storyboards";
 import { parsePagination } from "@/lib/api/v1/schemas";
+import {
+  getActiveProjectPlan,
+  getProject,
+} from "@/lib/api/v1/store";
+import { runStoryboardJob } from "@/lib/orchestrator-tools/storyboard-job";
 
 export const storyboardsRouter = Router();
 
@@ -38,6 +44,14 @@ function requiredParam(
     throw new ApiError("validation_failed", `${name} is required.`);
   }
   return value;
+}
+
+function scopedIdempotencyKey(
+  req: { header(name: string): string | null },
+  projectId: string
+): string | null {
+  const key = req.header("Idempotency-Key");
+  return key ? `${projectId}:${key}` : null;
 }
 
 storyboardsRouter.get(
@@ -60,6 +74,59 @@ storyboardsRouter.post(
       data: parseStoryboardInput(body),
     });
     return { status: 201, body: { storyboard } };
+  })
+);
+
+storyboardsRouter.post(
+  "/projects/:projectId/storyboards/generate",
+  route(async ({ auth, req }, params) => {
+    const projectId = requiredParam(params, "projectId");
+    await getProject(auth.workspaceId, projectId);
+
+    const activePlan = await getActiveProjectPlan(projectId);
+    if (!activePlan) {
+      throw new ApiError(
+        "brief_missing",
+        "A shot plan is required before generating storyboard panels."
+      );
+    }
+
+    const { job, created } = await agentApiStore.createOrGetJob({
+      type: "asset_generation",
+      projectId,
+      idempotencyKey: scopedIdempotencyKey(req, projectId),
+    });
+
+    if (created) {
+      void runStoryboardJob({
+        jobId: job.id,
+        workspaceId: auth.workspaceId,
+        projectId,
+        plan: activePlan.plan,
+        planAssetId: activePlan.assetId,
+        planContentHash: activePlan.contentHash,
+      });
+    }
+
+    return { status: created ? 202 : 200, body: { job } };
+  })
+);
+
+storyboardsRouter.get(
+  "/projects/:projectId/storyboards/generate/:jobId",
+  route(async ({ auth }, params) => {
+    const projectId = requiredParam(params, "projectId");
+    const jobId = requiredParam(params, "jobId");
+    await getProject(auth.workspaceId, projectId);
+
+    const job = await agentApiStore.getJob(jobId);
+    if (!job || job.type !== "asset_generation" || job.projectId !== projectId) {
+      throw new ApiError("not_found", "Storyboard generation job not found.", {
+        jobId,
+      });
+    }
+
+    return { status: 200, body: { job } };
   })
 );
 

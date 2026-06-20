@@ -3,16 +3,26 @@ import { STUDIO_SETUP_STEPS, type StudioStep } from "./studioSteps";
 
 /** Human labels for the wizard steps shown in the rail. */
 const STEP_LABELS: Record<StudioStep, string> = {
-  brief: "Brief",
+  brief: "Idea",
   footage: "Footage",
-  plan: "Plan",
+  plan: "Production Plan",
   story: "Story",
   generate: "Produce",
   review: "Review",
   export: "Export",
 };
 
-const STEPPER_STEPS = STUDIO_SETUP_STEPS.map((id) => ({ id, label: STEP_LABELS[id] }));
+const STEP_SUBTITLES: Partial<Record<StudioStep, string>> = {
+  brief: "Goal + length",
+  footage: "Upload or choose clips",
+  plan: "Review the agent's plan",
+};
+
+const STEPPER_STEPS = STUDIO_SETUP_STEPS.map((id) => ({
+  id,
+  label: STEP_LABELS[id],
+  subtitle: STEP_SUBTITLES[id],
+}));
 
 export interface StudioStepperProps {
   /** The currently active step. */

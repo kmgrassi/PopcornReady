@@ -1,7 +1,7 @@
 .disclosure {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: var(--panel);
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
 }
 
 .trigger {
@@ -10,14 +10,14 @@
   justify-content: space-between;
   gap: var(--space-3);
   width: 100%;
-  padding: var(--section-gap) var(--section-gap-loose);
+  padding: var(--space-3) var(--space-4);
   border: none;
   border-radius: var(--radius-md);
   background: transparent;
   font-family: inherit;
-  font-size: var(--text-lg);
-  font-weight: 700;
-  color: var(--text);
+  font-size: var(--text-md);
+  font-weight: 800;
+  color: var(--text-strong);
   cursor: pointer;
   text-align: left;
   transition: background var(--transition);

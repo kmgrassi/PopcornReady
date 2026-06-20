@@ -128,7 +128,7 @@ test.describe("local auth and routing smoke", () => {
     await expectNoAppCrash(page);
 
     await page.goto("/runs?status=running");
-    await expect(page).toHaveURL(/\/library\/runs\?status=running$/);
+    await expect(page).toHaveURL(/\/library\/projects$/);
     await expectNoAppCrash(page);
 
     await page.goto("/assets");
@@ -136,7 +136,7 @@ test.describe("local auth and routing smoke", () => {
     await expectNoAppCrash(page);
 
     await page.goto("/outputs");
-    await expect(page).toHaveURL(/\/library\/outputs$/);
+    await expect(page).toHaveURL(/\/library\/projects$/);
     await expectNoAppCrash(page);
 
     await page.goto("/library");

@@ -16,7 +16,7 @@ export function ProjectWatchPage() {
 
   if (!projectId) return <Navigate to="/library/projects" replace />;
   if (!watchQuery.isLoading && !error && !media) {
-    return <Navigate to={`/library/runs?projectId=${encodeURIComponent(projectId)}`} replace />;
+    return <Navigate to={`/projects/${encodeURIComponent(projectId)}#runs`} replace />;
   }
 
   return (
@@ -40,7 +40,7 @@ export function ProjectWatchPage() {
         </div>
         <ButtonLink
           variant="secondary"
-          to={`/library/runs?projectId=${encodeURIComponent(projectId)}`}
+          to={`/projects/${encodeURIComponent(projectId)}#runs`}
         >
           Open workspace
         </ButtonLink>
