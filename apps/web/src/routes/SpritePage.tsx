@@ -82,6 +82,21 @@ const SPRITES: SpriteConfig[] = [
     // crouch (film) frames.
     defaults: { cellWidth: 251, cellHeight: 251, cropHeight: 251, offsetY: 10, scale: 0.8 },
   },
+  {
+    id: "writer",
+    name: "Writer",
+    eyebrow: "Sprite atlas demo",
+    url: "/sprites/writer-sprite-sheet.png",
+    sheetWidth: 1254,
+    sheetHeight: 1254,
+    columns: 5,
+    rows: 5,
+    // Same 5x5 layout as the cameraman: row 3 is a diagonal we skip, and the
+    // action frames are the writer raising and writing on a clipboard.
+    rowByDirection: { down: 0, left: 1, right: 2, up: 4 },
+    actionName: "write",
+    defaults: { cellWidth: 251, cellHeight: 251, cropHeight: 251, offsetY: 10, scale: 0.8 },
+  },
 ];
 
 const MOVE_STEP = 28;
