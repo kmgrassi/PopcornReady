@@ -15,6 +15,23 @@
         "quality": "high"
       },
       "prompt": "A rain-slicked downtown street at night, neo-noir style. Wet asphalt reflecting saturated neon signage in magenta, cyan, and amber; steam rising from a manhole; tall glass-and-steel towers fading into blue fog; one flickering streetlight; cinematic anamorphic look, shallow depth of field, high contrast, moody low-key lighting, subtle 35mm grain. No people, no text."
+    },
+    {
+      "file": "images/golden-hour-meadow.png",
+      "kind": "image",
+      "title": "Golden-hour meadow",
+      "summary": "A warm pastoral meadow at golden hour with wild grasses, wildflowers, rolling hills, and a lone oak.",
+      "tags": ["nature", "golden-hour", "warm"],
+      "generation": {
+        "provider": "openai",
+        "model": "gpt-image-2",
+        "size": "1536x1024",
+        "quality": "high"
+      },
+      "postprocess": {
+        "crop": "center crop to 1536x864 for the catalog review frame"
+      },
+      "prompt": "A wide pastoral meadow at golden hour: tall wild grasses and scattered wildflowers swaying, warm low sun flaring through a lone oak on the right, soft volumetric light and long shadows, distant rolling hills, gentle haze, naturalistic color, cinematic wide establishing shot, shallow depth of field. No people, no text."
     }
   ]
 }
