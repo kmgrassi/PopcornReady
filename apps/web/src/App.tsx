@@ -22,6 +22,7 @@ import { LibraryPage } from "./routes/LibraryPage";
 import { LoginPage } from "./routes/LoginPage";
 import { ProjectDetailPage } from "./routes/ProjectDetailPage";
 import { ProjectWatchPage } from "./routes/ProjectWatchPage";
+import { PublicProjectPage } from "./routes/PublicProjectPage";
 import { SignupPage } from "./routes/SignupPage";
 import { SpritePage } from "./routes/SpritePage";
 import { SettingsPage } from "./routes/SettingsPage";
@@ -39,6 +40,8 @@ export function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/sprite" element={<SpritePage />} />
+          {/* Public, no-login read-only share view of a public project. */}
+          <Route path="/p/:projectId" element={<PublicProjectPage />} />
         </Route>
 
         <Route element={<AuthenticatedAppLayout />}>

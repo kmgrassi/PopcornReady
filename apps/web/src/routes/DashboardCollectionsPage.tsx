@@ -76,6 +76,10 @@ function projectDetailPath(projectId: string) {
   return `/projects/${encodeURIComponent(projectId)}`;
 }
 
+function publicProjectPath(projectId: string) {
+  return `/p/${encodeURIComponent(projectId)}`;
+}
+
 function projectWatchPath(projectId: string) {
   return `/projects/${encodeURIComponent(projectId)}/watch`;
 }
@@ -317,34 +321,24 @@ export function ProjectsPage() {
           <div className={`${styles.grid} ${styles.gridProjects}`}>
             {projectsQuery.items.map((project) => (
               <article className={styles.projectCard} key={project.id}>
-                {/* Public projects belong to other workspaces; their detail and
-                    runs routes are owner-scoped and would 403, so render the
-                    card without owner-only navigation in public scope. */}
-                {isPublic ? (
-                  <div className={styles.cardLink}>
-                    <ProjectPoster name={project.name} posterUrl={project.posterUrl} />
-                  </div>
-                ) : (
-                  <Link
-                    className={styles.cardLink}
-                    to={projectDetailPath(project.id)}
-                    aria-label={`Open ${project.name} overview`}
-                  >
-                    <ProjectPoster name={project.name} posterUrl={project.posterUrl} />
-                  </Link>
-                )}
+                {/* Public projects belong to other workspaces; the owner detail
+                    route is workspace-scoped, so public cards open the no-login
+                    read-only share page instead. */}
+                <Link
+                  className={styles.cardLink}
+                  to={isPublic ? publicProjectPath(project.id) : projectDetailPath(project.id)}
+                  aria-label={`Open ${project.name} overview`}
+                >
+                  <ProjectPoster name={project.name} posterUrl={project.posterUrl} />
+                </Link>
                 <div className={styles.projectCardBody}>
                   <div>
-                    {isPublic ? (
-                      <span className={styles.rowTitle}>{project.name}</span>
-                    ) : (
-                      <Link
-                        className={`${styles.rowTitle} ${styles.titleLink}`}
-                        to={projectDetailPath(project.id)}
-                      >
-                        {project.name}
-                      </Link>
-                    )}
+                    <Link
+                      className={`${styles.rowTitle} ${styles.titleLink}`}
+                      to={isPublic ? publicProjectPath(project.id) : projectDetailPath(project.id)}
+                    >
+                      {project.name}
+                    </Link>
                     <span className={styles.rowSub}>Updated {formatDate(project.updatedAt)}</span>
                   </div>
                   <div className={styles.cardMeta}>
@@ -355,7 +349,17 @@ export function ProjectsPage() {
                     <span>Created {formatDate(project.createdAt)}</span>
                   </div>
                 </div>
-                {!isPublic ? (
+                {isPublic ? (
+                  <div className={styles.cardActions}>
+                    <ButtonLink
+                      variant="secondary"
+                      size="sm"
+                      to={publicProjectPath(project.id)}
+                    >
+                      Open
+                    </ButtonLink>
+                  </div>
+                ) : (
                   <div className={styles.cardActions}>
                     <ButtonLink
                       variant="secondary"
@@ -372,7 +376,7 @@ export function ProjectsPage() {
                       Open
                     </ButtonLink>
                   </div>
-                ) : null}
+                )}
               </article>
             ))}
           </div>
