@@ -30,6 +30,8 @@ type SpriteConfig = {
     cellWidth: number;
     cellHeight: number;
     cropHeight: number;
+    /** Vertical sample nudge, in px — used to skip neighbor-cell overflow. */
+    offsetY: number;
     scale: number;
   };
 };
@@ -60,7 +62,7 @@ const SPRITES: SpriteConfig[] = [
     rows: 4,
     rowByDirection: { down: 0, left: 1, right: 2, up: 3 },
     actionName: "repair",
-    defaults: { cellWidth: 280, cellHeight: 280, cropHeight: 280, scale: 0.75 },
+    defaults: { cellWidth: 280, cellHeight: 280, cropHeight: 280, offsetY: 0, scale: 0.75 },
   },
   {
     id: "cameraman",
@@ -75,7 +77,10 @@ const SPRITES: SpriteConfig[] = [
     // four cardinal facings (up uses the full-back row 4).
     rowByDirection: { down: 0, left: 1, right: 2, up: 4 },
     actionName: "film",
-    defaults: { cellWidth: 251, cellHeight: 251, cropHeight: 251, scale: 0.8 },
+    // offsetY 10 samples each cell ~10px lower so the front row's feet, which
+    // overflow into the next row, don't peek into the top of the left/right
+    // crouch (film) frames.
+    defaults: { cellWidth: 251, cellHeight: 251, cropHeight: 251, offsetY: 10, scale: 0.8 },
   },
 ];
 
@@ -157,7 +162,7 @@ export function SpritePage() {
   const [cellHeight, setCellHeight] = useState(config.defaults.cellHeight);
   const [cropHeight, setCropHeight] = useState(config.defaults.cropHeight);
   const [offsetX, setOffsetX] = useState(0);
-  const [offsetY, setOffsetY] = useState(0);
+  const [offsetY, setOffsetY] = useState(config.defaults.offsetY);
   const [scale, setScale] = useState(config.defaults.scale);
   const [speedMs, setSpeedMs] = useState(160);
   const [isPlaying, setIsPlaying] = useState(true);
@@ -188,7 +193,7 @@ export function SpritePage() {
     setCropHeight(next.defaults.cropHeight);
     setScale(next.defaults.scale);
     setOffsetX(0);
-    setOffsetY(0);
+    setOffsetY(next.defaults.offsetY);
     setAction("idle");
     setSpriteMode("walk");
     setIsPlaying(true);
