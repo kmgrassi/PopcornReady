@@ -243,6 +243,21 @@ export function useProjectStoryboardQuery(projectId: string, enabled = true) {
   });
 }
 
+export function useGenerateProjectStoryboardMutation(projectId: string) {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => v1Api.generateProjectStoryboard(projectId),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.projectStoryboard(projectId) });
+      void client.invalidateQueries({ queryKey: queryKeys.project(projectId) });
+      void client.invalidateQueries({ queryKey: ["projects"] });
+      void client.invalidateQueries({ queryKey: ["workspaces"] });
+      void client.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
 export function useSaveProjectStoryboardMutation(projectId: string) {
   const client = useQueryClient();
 

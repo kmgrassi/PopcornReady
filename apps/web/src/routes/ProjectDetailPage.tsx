@@ -8,9 +8,10 @@ import type {
   VideoBriefInput,
 } from "@popcorn/shared/v1/types";
 import { useAuth } from "../components/auth/AuthProvider";
-import { ButtonLink } from "../components/ui/Button";
+import { Button, ButtonLink } from "../components/ui/Button";
 import { EmptyState, ErrorState } from "../components/ui/StateCard";
 import {
+  useGenerateProjectStoryboardMutation,
   useProjectQuery,
   useProjectStoryboardQuery,
 } from "../lib/queryClient";
@@ -30,6 +31,7 @@ export function ProjectDetailPage() {
   const authScope = useDashboardAuthScope();
   const projectQuery = useProjectQuery(projectId ?? "", Boolean(projectId));
   const storyboardQuery = useProjectStoryboardQuery(projectId ?? "", Boolean(projectId));
+  const generateStoryboardMutation = useGenerateProjectStoryboardMutation(projectId ?? "");
   const runsQuery = useDashboardRunsQuery(authScope, {
     status: "all",
     projectId: projectId ?? undefined,
@@ -95,6 +97,16 @@ export function ProjectDetailPage() {
               loading={storyboardQuery.isLoading}
               error={storyboardQuery.error}
               onRetry={() => void storyboardQuery.refetch()}
+              generating={generateStoryboardMutation.isPending}
+              generationStarted={Boolean(generateStoryboardMutation.data)}
+              generationError={generateStoryboardMutation.error}
+              onGenerate={() => {
+                void generateStoryboardMutation.mutateAsync().then(() => {
+                  void storyboardQuery.refetch();
+                  window.setTimeout(() => void storyboardQuery.refetch(), 3000);
+                  window.setTimeout(() => void storyboardQuery.refetch(), 8000);
+                });
+              }}
             />
           </section>
           <RunsPreview
@@ -216,12 +228,20 @@ function StoryboardPreview({
   loading,
   error,
   onRetry,
+  generating,
+  generationStarted,
+  generationError,
+  onGenerate,
 }: {
   projectId: string;
   storyboard: ProjectStoryboard | null;
   loading: boolean;
   error: Error | null;
   onRetry: () => void;
+  generating: boolean;
+  generationStarted: boolean;
+  generationError: Error | null;
+  onGenerate: () => void;
 }) {
   const stats = storyboardStats(storyboard);
   const panels = firstPanels(storyboard, 4);
@@ -251,18 +271,34 @@ function StoryboardPreview({
         />
       ) : null}
       {!loading && !error && !storyboard ? (
-        <EmptyState
-          title="No storyboard yet"
-          body="Start a run to create storyboard scenes and beats for this project."
-          action={
-            <ButtonLink
-              variant="secondary"
-              to={`/library/runs?projectId=${encodeURIComponent(projectId)}`}
-            >
-              View runs
-            </ButtonLink>
-          }
-        />
+        <>
+          <EmptyState
+            title={generationStarted ? "Storyboard generation started" : "No storyboard yet"}
+            body={
+              generationStarted
+                ? "Storyboard panels are being created from the current shot plan."
+                : "Create storyboard scenes and beats from this project's current shot plan."
+            }
+            action={
+              <Button
+                variant="secondary"
+                onClick={onGenerate}
+                isLoading={generating}
+                disabled={generating}
+              >
+                {generationStarted ? "Generate again" : "Create storyboard"}
+              </Button>
+            }
+          />
+          {generationError ? (
+            <ErrorState
+              title="Unable to start storyboard"
+              body="We couldn't start storyboard generation for this project."
+              error={generationError}
+              onRetry={onGenerate}
+            />
+          ) : null}
+        </>
       ) : null}
       {!loading && !error && storyboard ? (
         <>
