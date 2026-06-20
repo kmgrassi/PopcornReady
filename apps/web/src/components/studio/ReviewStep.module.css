@@ -25,6 +25,14 @@
   font-size: var(--title-lg);
 }
 
+.planRecap {
+  max-width: 720px;
+  margin: var(--space-2) 0 0;
+  color: var(--muted);
+  font-size: var(--text-md);
+  line-height: var(--line-body);
+}
+
 .headerCopy {
   max-width: 680px;
   margin: var(--space-2) 0 0;

@@ -215,10 +215,25 @@ function reviewHeading(stageType: GenerationStageType): string {
 function headerStatus(run: GenerationRun): string {
   if (run.reviewGate) return "Ready for your approval";
   if (run.status === "queued") return "Waiting to start";
-  if (run.status === "running") return "Generating";
+  if (run.status === "running") return "Producing";
   if (run.status === "succeeded") return "Complete";
   if (run.status === "failed") return "Failed";
   return "Canceled";
+}
+
+function workspaceReturnLabel({
+  hasStudioDraft,
+  terminal,
+  succeeded,
+}: {
+  hasStudioDraft: boolean;
+  terminal: boolean;
+  succeeded: boolean;
+}): string {
+  if (hasStudioDraft && succeeded) return "Review in Studio";
+  if (hasStudioDraft && terminal) return "View draft";
+  if (hasStudioDraft) return "View draft";
+  return "Open Studio";
 }
 
 const BOARD_STAGE_TYPES = new Set<GenerationStageType>([
@@ -452,6 +467,13 @@ export function ProgressView({
   const currentStageDisplay = detail.run.reviewGate
     ? `${currentStageLabel} review`
     : currentStageLabel;
+  const projectBrief = project?.brief ?? null;
+  const projectTitle = project?.name?.trim() || "your video";
+  const returnLabel = workspaceReturnLabel({
+    hasStudioDraft: Boolean(studioReturnPath),
+    terminal,
+    succeeded: detail.run.status === "succeeded",
+  });
 
   async function approveFallback() {
     const reviewGate = detail.run.reviewGate;
@@ -538,12 +560,11 @@ export function ProgressView({
     <div className={styles.shell}>
       <header className={styles.header}>
         <div className={styles.headerCopy}>
-          <p className={styles.eyebrow}>Act Two / Produce</p>
-          <h1 className={styles.title}>Producing your video</h1>
+          <p className={styles.eyebrow}>Unified workspace</p>
+          <h1 className={styles.title}>Producing {projectTitle}</h1>
           <p className={styles.headerDescription}>
-            {project?.brief?.goal ??
-              project?.name ??
-              "The agent is turning the approved plan into production assets, timeline, review, and export."}
+            The plan, generated assets, review checkpoints, and final export stay
+            attached to this workspace.
           </p>
         </div>
         <div className={styles.headerActions}>
@@ -583,7 +604,7 @@ export function ProgressView({
             </div>
           </div>
           <Link className={styles.secondaryButton} to={studioReturnPath ?? "/studio"}>
-            Back to studio
+            {returnLabel}
           </Link>
           {alternateRuns && alternateRuns.length > 0 ? (
             <nav className={styles.altRuns} aria-label="Other demo states">
@@ -668,8 +689,8 @@ export function ProgressView({
                       : "Review this stage before the run continues to the next generation step. Stop here if you do not want the agent to keep producing from this boundary."}
                 </p>
               </div>
-              {isBriefReviewGate && (project?.brief || projectLoading) ? (
-                <BriefReviewOutput brief={project?.brief ?? null} loading={projectLoading} />
+              {isBriefReviewGate && (projectBrief || projectLoading) ? (
+                <BriefReviewOutput brief={projectBrief} loading={projectLoading} />
               ) : reviewItems.length > 0 ? (
                 <div className={styles.reviewOutputs}>
                   <ReadonlyStoryboardBoard
@@ -788,8 +809,8 @@ export function ProgressView({
             Started {formatDateTime(detail.run.startedAt)}. Updated{" "}
             {formatDateTime(detail.run.updatedAt)}.
           </p>
-          <div className={styles.diagnosticsRow}>
-            <span className={styles.statusLabel}>Run ID</span>
+          <div className={styles.diagnostics}>
+            <span className={styles.runIdLabel}>Run ID</span>
             <code className={styles.runId} title={detail.run.runId}>{shortId(detail.run.runId)}</code>
             <button
               type="button"

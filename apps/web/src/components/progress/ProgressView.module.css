@@ -34,10 +34,10 @@
 }
 
 .headerDescription {
-  max-width: 680px;
-  margin: 0;
-  color: var(--text);
-  font-size: var(--text-lg);
+  max-width: 640px;
+  margin: calc(-1 * var(--space-2)) 0 0;
+  color: var(--muted);
+  font-size: var(--text-md);
   line-height: var(--line-body);
 }
 
@@ -622,13 +622,17 @@
   padding-top: var(--space-4);
 }
 
-.diagnosticsRow {
+.diagnostics {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--space-2);
+  align-items: center;
   border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   padding-top: var(--space-4);
+}
+
+.diagnostics .runIdLabel {
+  grid-column: 1 / -1;
 }
 
 .stageRail {

@@ -123,6 +123,9 @@ export function ReviewStep({
           <h2 id="studio-review-heading" className={styles.heading}>
             Your rough cut is ready
           </h2>
+          {project?.goal ? (
+            <p className={styles.planRecap}>{project.goal}</p>
+          ) : null}
           <p className={styles.headerCopy}>
             Review the cut in the same workspace, then send whole-cut or beat-level
             feedback before export.

@@ -169,8 +169,12 @@ export function ExportStep({ back, draft, projectId, completeDraft }: StepProps)
 
   return (
     <StepShell
-      heading="Export reviewed cut"
-      description="Render the approved workspace cut as an MP4. Export settings stay unchanged from the current timeline unless you adjust them here."
+      heading="Export your video"
+      description={
+        draft.goal
+          ? `Render the reviewed cut for: ${draft.goal}`
+          : "Render the reviewed Studio cut as an MP4 and send it to Outputs."
+      }
       onBack={back}
     >
       <div className={styles.form}>

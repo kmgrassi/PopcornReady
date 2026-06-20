@@ -7,7 +7,6 @@ export function ProjectWatchPage() {
   const { projectId } = useParams();
   const watchQuery = useProjectWatchQuery(projectId ?? null);
   const media = watchQuery.data?.media ?? null;
-  const storyboardUrl = watchQuery.data?.fallback.storyboardUrl ?? null;
   const error =
     watchQuery.error instanceof Error
       ? watchQuery.error
@@ -16,8 +15,8 @@ export function ProjectWatchPage() {
         : null;
 
   if (!projectId) return <Navigate to="/library/projects" replace />;
-  if (!watchQuery.isLoading && !error && !media && storyboardUrl) {
-    return <Navigate to={storyboardUrl} replace />;
+  if (!watchQuery.isLoading && !error && !media) {
+    return <Navigate to={`/library/runs?projectId=${encodeURIComponent(projectId)}`} replace />;
   }
 
   return (
@@ -41,9 +40,9 @@ export function ProjectWatchPage() {
         </div>
         <ButtonLink
           variant="secondary"
-          to={`/projects/${encodeURIComponent(projectId)}/storyboard`}
+          to={`/library/runs?projectId=${encodeURIComponent(projectId)}`}
         >
-          Storyboard
+          Open workspace
         </ButtonLink>
       </header>
 

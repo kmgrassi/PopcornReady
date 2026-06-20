@@ -56,7 +56,7 @@ export function App() {
           <Route path="/uploads" element={<UploadsPage />} />
           <Route path="/templates" element={<TemplatesPage />} />
           <Route path="/brand" element={<BrandKitPage />} />
-          <Route path="/storyboard" element={<Navigate to="/library" replace />} />
+          <Route path="/storyboard" element={<Navigate to="/studio" replace />} />
           <Route
             path="/projects/:projectId/storyboard"
             element={<StoryboardPage />}

@@ -272,7 +272,7 @@ export function ProjectsPage() {
               <article className={styles.projectCard} key={project.id}>
                 <Link
                   className={styles.cardLink}
-                  to={`/projects/${encodeURIComponent(project.id)}/storyboard`}
+                  to={`/library/runs?projectId=${encodeURIComponent(project.id)}`}
                   aria-label={`Open ${project.name}`}
                 >
                   <ProjectPoster name={project.name} posterUrl={project.posterUrl} />
@@ -294,9 +294,9 @@ export function ProjectsPage() {
                   <ButtonLink
                     variant="secondary"
                     size="sm"
-                    to={`/projects/${encodeURIComponent(project.id)}/storyboard`}
+                    to={`/library/runs?projectId=${encodeURIComponent(project.id)}`}
                   >
-                    Storyboard
+                    Workspace
                   </ButtonLink>
                   <ButtonLink
                     variant="ghost"
