@@ -215,8 +215,13 @@ test("covers library pagination, filters, media viewer, visibility, and watch li
   await page.getByLabel("Kind").selectOption("image");
   await page.getByLabel("Source").selectOption("generated");
   await expect(page.locator("span[data-private='true']")).toHaveText("Private");
-  await page.getByRole("button", { name: "Make public" }).click();
+  await page.getByRole("button", { name: "View Keyframe still" }).click();
+  const keyframeDialog = page.getByRole("dialog", { name: "Keyframe still" });
+  await expect(keyframeDialog).toBeVisible();
+  await keyframeDialog.getByRole("button", { name: "Make public" }).click();
   await expect(page.locator("span[data-private='false']")).toHaveText("Public");
+  await page.keyboard.press("Escape");
+  await expect(keyframeDialog).toBeHidden();
 
   await tabs.getByRole("link", { name: "Outputs", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Outputs" })).toBeVisible();
