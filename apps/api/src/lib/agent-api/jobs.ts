@@ -7,8 +7,8 @@
 // async queue.
 
 import { promises as fs } from "fs";
+import { randomUUID } from "crypto";
 import path from "path";
-import { newId } from "./runtime";
 import {
   ApiErrorBody,
   Artifact,
@@ -78,7 +78,10 @@ export class AgentApiStore {
 
     const now = new Date().toISOString();
     const job: Job = {
-      id: newId("job"),
+      // actions.job_ids is a uuid[] in the asset-graph schema. These jobs are
+      // still JSON-backed, but their ids must be DB-compatible when the
+      // orchestrator records async tool invocations.
+      id: randomUUID(),
       type: input.type,
       status: "queued",
       projectId: input.projectId,
