@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { AssetKind } from "@popcorn/shared/v1/types";
 import styles from "./MediaViewer.module.css";
 
@@ -24,6 +24,7 @@ export interface MediaViewerProps {
   item: MediaViewerItem | null;
   hasPrevious?: boolean;
   hasNext?: boolean;
+  actions?: ReactNode;
   onClose: () => void;
   onPrevious?: () => void;
   onNext?: () => void;
@@ -48,6 +49,7 @@ export function MediaViewer({
   item,
   hasPrevious = false,
   hasNext = false,
+  actions,
   onClose,
   onPrevious,
   onNext,
@@ -173,6 +175,7 @@ export function MediaViewer({
             {refreshing ? "Refreshing media URL..." : refreshError}
           </div>
         ) : null}
+        {actions ? <footer className={styles.actions}>{actions}</footer> : null}
       </section>
     </div>
   );

@@ -432,7 +432,6 @@ export function AssetsPage() {
           <div className={styles.grid}>
             {assetsQuery.items.map((asset) => {
               const id = asset.assetId ?? asset.id;
-              const isPrivate = asset.visibility === "private";
               return (
                 <div className={styles.card} key={id}>
                   <button
@@ -447,38 +446,11 @@ export function AssetsPage() {
                       <div><span className={styles.rowTitle}>{asset.title ?? asset.filename ?? asset.id}</span><span className={styles.rowSub}>{asset.projectName}</span></div>
                       <div className={styles.cardMeta}>
                         <span>{titleCase(asset.kind)}</span>
-                        <span>{titleCase(asset.source === "upload" ? "uploaded" : asset.source)}</span>
                         <VisibilityBadge visibility={asset.visibility} />
                         <StatusChip status={asset.status} />
                       </div>
                     </div>
                   </button>
-                  <div className={styles.cardActions}>
-                    <ButtonLink
-                      variant="ghost"
-                      size="sm"
-                      to={projectCollectionPath(asset.projectId)}
-                    >
-                      Project
-                    </ButtonLink>
-                    {asset.kind === "image" ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setPublishingAsset(asset)}
-                      >
-                        Publish as anchor
-                      </Button>
-                    ) : null}
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={pendingIds.has(id)}
-                      onClick={() => void toggleVisibility(asset)}
-                    >
-                      {isPrivate ? "Make public" : "Make private"}
-                    </Button>
-                  </div>
                 </div>
               );
             })}
@@ -504,6 +476,36 @@ export function AssetsPage() {
         onRefresh={async (item) => {
           return mediaMutation.mutateAsync(item.id);
         }}
+        actions={
+          selectedAsset ? (
+            <div className={styles.viewerActions}>
+              <ButtonLink
+                variant="ghost"
+                size="sm"
+                to={projectCollectionPath(selectedAsset.projectId)}
+              >
+                Project
+              </ButtonLink>
+              {selectedAsset.kind === "image" ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setPublishingAsset(selectedAsset)}
+                >
+                  Publish as anchor
+                </Button>
+              ) : null}
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={pendingIds.has(selectedAsset.assetId ?? selectedAsset.id)}
+                onClick={() => void toggleVisibility(selectedAsset)}
+              >
+                {selectedAsset.visibility === "private" ? "Make public" : "Make private"}
+              </Button>
+            </div>
+          ) : null
+        }
       />
       <PublishAnchorDialog
         source={
