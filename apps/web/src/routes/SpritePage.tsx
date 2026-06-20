@@ -88,7 +88,7 @@ export function SpritePage() {
   const [position, setPosition] = useState({ x: 230, y: 150 });
   const [cellWidth, setCellWidth] = useState(280);
   const [cellHeight, setCellHeight] = useState(280);
-  const [cropHeight, setCropHeight] = useState(230);
+  const [cropHeight, setCropHeight] = useState(280);
   const [offsetX, setOffsetX] = useState(0);
   const [offsetY, setOffsetY] = useState(0);
   const [scale, setScale] = useState(0.75);
