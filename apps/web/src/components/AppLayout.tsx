@@ -30,7 +30,6 @@ const VALID_THEMES = new Set(["popcorn", "popcorn-warm", "popcorn-night"]);
 // Primary workspace nav. Library groups the collection routes until PR 5 gives
 // it a dedicated tab shell.
 const PRIMARY_NAV = [
-  { label: "Create", to: "/studio", activePaths: ["/studio"] },
   {
     label: "Library",
     to: "/library",
@@ -107,13 +106,6 @@ export function AuthenticatedAppLayout() {
       (auth.status !== "unauthenticated" || DEV_AUTOPILOT),
   });
   const me = meQuery.data ?? null;
-  const meError =
-    meQuery.error instanceof Error
-      ? meQuery.error.message
-      : meQuery.error
-        ? String(meQuery.error)
-        : null;
-
   const accountLabel = useMemo(() => {
     if (auth.user?.email) return auth.user.email;
     if (me?.actor && typeof me.actor === "object" && me.actor.email) {
@@ -124,10 +116,6 @@ export function AuthenticatedAppLayout() {
   }, [auth.status, auth.user?.email, me]);
 
   const workspaceLabel = me?.workspaceName ?? me?.workspaceId ?? "Workspace";
-  const authModeLabel =
-    me?.isLocal || auth.status === "disabled"
-      ? "Local mode"
-      : me?.authMode ?? "Hosted mode";
   const showAdmin = canAccessAdminSurface(auth);
   const canSignOut = auth.configured && auth.status === "authenticated";
 
@@ -233,13 +221,6 @@ export function AuthenticatedAppLayout() {
         <header className={styles.topbar}>
           <CommandPalette showAdminCommands={showAdmin} />
           <div className={styles.account}>
-            {meError && auth.configured ? (
-              <span className={`${styles.authMode} ${styles.authError}`} title={meError}>
-                Account unavailable
-              </span>
-            ) : (
-              <span className={styles.authMode}>{authModeLabel}</span>
-            )}
             <Link className={styles.accountLink} to="/settings">
               {accountLabel}
             </Link>
