@@ -17,21 +17,25 @@ function confirmLongVideoLength(seconds: number) {
 const promptChips = [
   {
     label: "Product launch video",
+    targetLengthSec: 60,
     prompt:
       "Make a 60-second product launch video for Popcorn Ready that shows the before-and-after of turning raw clips into a polished trailer.",
   },
   {
     label: "Social ad",
+    targetLengthSec: 30,
     prompt:
       "Create a punchy 30-second social ad with a clear hook, fast pacing, and a simple call to action for new creators.",
   },
   {
     label: "Customer story",
+    targetLengthSec: 60,
     prompt:
       "Tell a customer story that starts with a messy editing workflow and ends with a finished, shareable video.",
   },
   {
     label: "Event recap",
+    targetLengthSec: 60,
     prompt:
       "Make an energetic event recap that uses the strongest crowd moments, speaker highlights, and sponsor message.",
   },
@@ -65,7 +69,12 @@ export function BriefStep({ draft, update, next, openPanel }: BriefStepProps) {
               className={styles.promptChip}
               type="button"
               key={chip.label}
-              onClick={() => update({ goal: chip.prompt })}
+              onClick={() =>
+                update({
+                  goal: chip.prompt,
+                  targetLengthSec: chip.targetLengthSec,
+                })
+              }
             >
               {chip.label}
             </button>
