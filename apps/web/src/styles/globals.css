@@ -2,7 +2,7 @@
  * with the landing page: deep near-black violet surfaces, amber/coral accents.
  * Kept in sync with the landing override in HomePage.module.css. */
 :root {
-  --bg: #0a0810;
+  --bg: #08070a;
   --panel: #14111c;
   --panel-2: #1c1827;
   --border: #2a2440;
@@ -22,7 +22,7 @@
 }
 
 :root[data-theme="popcorn"] {
-  --bg: #0a0810;
+  --bg: #08070a;
   --panel: #14111c;
   --panel-2: #1c1827;
   --border: #2a2440;
