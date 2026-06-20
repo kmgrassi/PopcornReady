@@ -62,7 +62,7 @@ export function SourceFootageStep({ draft, update, next, back }: StepProps) {
 
   return (
     <StepShell
-      heading="Do you have any of your own assets/footage to use for this video?"
+      heading="Do you have source material for the video?"
       onNext={next}
       onBack={back}
       nextLabel="Continue →"
