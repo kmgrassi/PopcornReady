@@ -116,6 +116,7 @@ export function AuthenticatedAppLayout() {
 
   const showAdmin = canAccessAdminSurface(auth);
   const canSignOut = auth.configured && auth.status === "authenticated";
+  const isStudioRoute = location.pathname.startsWith("/studio");
 
   async function signOut() {
     if (!canSignOut) return;
@@ -149,7 +150,7 @@ export function AuthenticatedAppLayout() {
   }
 
   return (
-    <div className={styles.shell}>
+    <div className={[styles.shell, isStudioRoute ? styles.studioShell : ""].filter(Boolean).join(" ")}>
       <aside className={styles.sidebar}>
         <Link className={styles.brand} to="/dashboard">
           <LogoMark className={styles.logo} />

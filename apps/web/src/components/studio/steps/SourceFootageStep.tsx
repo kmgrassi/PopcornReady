@@ -65,8 +65,9 @@ export function SourceFootageStep({ draft, update, next, back }: StepProps) {
       heading="Do you have any of your own assets/footage to use for this video?"
       onNext={next}
       onBack={back}
-      nextLabel="Continue"
+      nextLabel="Continue →"
       nextDisabled={isReading || (isUploadMode && !hasVisualFootage)}
+      stage
     >
       <div className={styles.choiceGrid}>
         <ChoiceCard
