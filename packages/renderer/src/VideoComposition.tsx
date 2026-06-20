@@ -2,7 +2,7 @@ import React from "react";
 import { AbsoluteFill, Audio, Img, OffthreadVideo, Sequence } from "remotion";
 import { Clip, RenderPlan, Timeline } from "@popcorn/shared/types";
 
-export interface VideoProps {
+export interface VideoProps extends Record<string, unknown> {
   timeline: Timeline | null;
   renderPlan?: RenderPlan | null;
   clips: Clip[];
