@@ -1,4 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
+import type {
+  ContentBlock,
+  Message,
+  ToolUseBlock,
+} from "@anthropic-ai/sdk/resources/messages/messages";
 
 export const MODEL = "claude-opus-4-7";
 
@@ -48,11 +53,15 @@ function structuredTool(schema: Record<string, unknown>) {
   };
 }
 
-function resultFromToolUse<T>(res: any): T {
-  const content = Array.isArray(res?.content) ? res.content : [];
-  const toolUse = content.find(
-    (block: any) => block?.type === "tool_use" && block?.name === STRUCTURED_RESULT_TOOL
-  );
+function isStructuredResultToolUse(
+  block: ContentBlock
+): block is ToolUseBlock {
+  return block.type === "tool_use" && block.name === STRUCTURED_RESULT_TOOL;
+}
+
+function resultFromToolUse<T>(res: Message): T {
+  const content = res.content;
+  const toolUse = content.find(isStructuredResultToolUse);
   if (!toolUse) {
     throw new Error(`Model did not call required tool: ${STRUCTURED_RESULT_TOOL}`);
   }
@@ -73,7 +82,7 @@ export async function structuredCall<T>({
   maxTokens = 8000,
   model = MODEL,
 }: StructuredCallArgs): Promise<T> {
-  const res: any = await client().messages.create({
+  const res = await client().messages.create({
     model,
     max_tokens: maxTokens,
     system: [
@@ -114,7 +123,7 @@ export async function structuredVisionCall<T>({
     })
   );
 
-  const res: any = await client().messages.create({
+  const res = await client().messages.create({
     model,
     max_tokens: maxTokens,
     system: [
