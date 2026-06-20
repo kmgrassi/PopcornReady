@@ -34,18 +34,24 @@ export function StudioEmptyState({
     <div className={styles.startScreen}>
       {showZeroState ? (
         <EmptyState
-          headline="Create your first AI rough cut"
-          supporting="Start with a brief, add footage, then review an editable timeline."
+          headline={creating ? "Creating your new video" : "Create your first AI rough cut"}
+          supporting={
+            creating
+              ? "Preparing a fresh Studio draft."
+              : "Start with a brief, add footage, then review an editable timeline."
+          }
           action={
-            <Button
-              className={styles.firstVideoButton}
-              variant="cta"
-              size="lg"
-              isLoading={creating}
-              onClick={onCreate}
-            >
-              Create your first video
-            </Button>
+            onCreate || creating ? (
+              <Button
+                className={styles.firstVideoButton}
+                variant="cta"
+                size="lg"
+                isLoading={creating}
+                onClick={onCreate}
+              >
+                {creating ? "Creating..." : "Create your first video"}
+              </Button>
+            ) : null
           }
         />
       ) : null}
