@@ -17,9 +17,11 @@ import type { GenerateAssetRequest, GeneratedAssetResult } from "@popcorn/shared
 import { ApiError } from "@/core/errors";
 import { providerFor } from "@/lib/generative/providers";
 import { writeAssetObject } from "@/lib/storage/asset-write";
+import { sha256Hex } from "./asset-graph";
 import { GeneratedAssetProvenance } from "./provenance";
 import {
   applyRegeneratedAssetMedia,
+  effectiveAssetStorageVisibility,
   getAssetByWorkspace,
   type AssetMediaUrls,
   type RegeneratedAssetMedia,
@@ -46,6 +48,7 @@ export interface RegenerateImageAssetDeps {
     prompt: string;
   }) => Promise<GeneratedAssetResult>;
   writeObject: typeof writeAssetObject;
+  resolveVisibility: typeof effectiveAssetStorageVisibility;
   applyMedia: (
     workspaceId: string,
     assetId: string,
@@ -71,6 +74,7 @@ const defaultDeps: RegenerateImageAssetDeps = {
   getAsset: getAssetByWorkspace,
   generateImage: defaultGenerateImage,
   writeObject: writeAssetObject,
+  resolveVisibility: effectiveAssetStorageVisibility,
   applyMedia: applyRegeneratedAssetMedia,
 };
 
@@ -78,7 +82,7 @@ export async function regenerateImageAsset(
   args: RegenerateImageAssetArgs
 ): Promise<AssetMediaUrls> {
   const { workspaceId, assetId } = args;
-  const { getAsset, generateImage, writeObject, applyMedia } = {
+  const { getAsset, generateImage, writeObject, resolveVisibility, applyMedia } = {
     ...defaultDeps,
     ...args.deps,
   };
@@ -113,7 +117,14 @@ export async function regenerateImageAsset(
   // Fresh filename per regenerate so the managed storage key changes and CDN
   // caches can't serve the old (or missing) object.
   const filename = `${randomUUID()}.${result.extension}`;
-  const visibility = asset.visibility ?? "public";
+  // Respect project visibility: a "public" asset inside a private project must
+  // land in the private bucket, mirroring the generated-assets write path. Never
+  // publish private project media just because the asset row says "public".
+  const visibility = await resolveVisibility({
+    workspaceId,
+    projectId: asset.projectId,
+    assetVisibility: asset.visibility ?? "public",
+  });
   const stored = await writeObject({
     workspaceId,
     projectId: asset.projectId,
@@ -140,6 +151,9 @@ export async function regenerateImageAsset(
     storageKey: stored.storageKey,
     storageBucket: stored.storageBucket,
     filename,
+    // New bytes → new content hash, so stale-candidate detection and downstream
+    // generation inputs see the asset's content as changed (not the old image).
+    contentHash: sha256Hex(result.bytes),
     ...(asset.durationSec != null ? { durationSec: asset.durationSec } : {}),
     provenance,
   });
