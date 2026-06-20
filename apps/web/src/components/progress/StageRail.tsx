@@ -16,6 +16,11 @@ interface StageRailProps {
   runProgressPercent?: number;
   runMessage?: string | null;
   reviewGate?: RunReviewGate | null;
+  stopAction?: {
+    pending?: boolean;
+    error?: string | null;
+    onStop: () => void;
+  };
 }
 
 const VISIBLE_STAGES: Array<{
@@ -92,6 +97,10 @@ function StatusGlyph({ status }: { status: GenerationRunStatus }) {
   );
 }
 
+function LoadingDot() {
+  return <span className={styles.inlineSpinner} aria-hidden="true" />;
+}
+
 export function StageRail({
   stages,
   runStatus,
@@ -99,6 +108,7 @@ export function StageRail({
   runProgressPercent,
   runMessage,
   reviewGate,
+  stopAction,
 }: StageRailProps) {
   const ordered = [...stages].sort((a, b) => a.order - b.order);
   const stagesByType = new Map<GenerationStageType, GenerationStage[]>();
@@ -151,7 +161,8 @@ export function StageRail({
           visibleStage.description;
         const awaitingReview = Boolean(stage && reviewGate?.stageId === stage.stageId);
         const statusKey = awaitingReview ? "review" : status;
-        const isUpcoming = status === "queued" && !nextQueuedShown;
+        const isRealQueuedStage = Boolean(stage && stage.status === "queued");
+        const isUpcoming = isRealQueuedStage && status === "queued" && !nextQueuedShown;
         if (isUpcoming) nextQueuedShown = true;
         const showStatus =
           awaitingReview ||
@@ -202,6 +213,31 @@ export function StageRail({
                     className={styles.stageProgressFill}
                     style={{ width: `${Math.max(2, Math.min(100, progressPercent))}%` }}
                   />
+                </div>
+              ) : null}
+              {isUpcoming && stopAction ? (
+                <div className={styles.stageControlRow}>
+                  <button
+                    type="button"
+                    className={styles.stageStopButton}
+                    onClick={stopAction.onStop}
+                    disabled={stopAction.pending}
+                    aria-busy={stopAction.pending || undefined}
+                    aria-label={
+                      stopAction.pending
+                        ? "Stopping after current stage"
+                        : "Stop after current stage"
+                    }
+                  >
+                    {stopAction.pending ? (
+                      <>
+                        <LoadingDot />
+                        Stopping after current step...
+                      </>
+                    ) : (
+                      "Stop after current stage"
+                    )}
+                  </button>
                 </div>
               ) : null}
             </div>
