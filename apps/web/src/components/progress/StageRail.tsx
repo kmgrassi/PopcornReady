@@ -11,6 +11,10 @@ import styles from "./ProgressView.module.css";
 
 interface StageRailProps {
   stages: GenerationStage[];
+  runStatus: GenerationRunStatus;
+  currentStageType?: GenerationStageType;
+  runProgressPercent?: number;
+  runMessage?: string | null;
   reviewGate?: RunReviewGate | null;
 }
 
@@ -63,7 +67,7 @@ const VISIBLE_STAGES: Array<{
 
 const STATUS_LABEL: Record<GenerationRunStatus | "review", string> = {
   queued: "Upcoming",
-  running: "Generating",
+  running: "In progress",
   succeeded: "Complete",
   failed: "Failed",
   canceled: "Canceled",
@@ -88,7 +92,14 @@ function StatusGlyph({ status }: { status: GenerationRunStatus }) {
   );
 }
 
-export function StageRail({ stages, reviewGate }: StageRailProps) {
+export function StageRail({
+  stages,
+  runStatus,
+  currentStageType,
+  runProgressPercent,
+  runMessage,
+  reviewGate,
+}: StageRailProps) {
   const ordered = [...stages].sort((a, b) => a.order - b.order);
   const stagesByType = new Map<GenerationStageType, GenerationStage[]>();
   ordered.forEach((stage) => {
@@ -99,6 +110,9 @@ export function StageRail({ stages, reviewGate }: StageRailProps) {
 
   const occurrenceCounts = new Map<GenerationStageType, number>();
   let nextQueuedShown = false;
+  const hasExplicitRunningStage = stages.some((stage) => stage.status === "running");
+  const inferCurrentStage =
+    runStatus === "running" && !reviewGate && !hasExplicitRunningStage && currentStageType;
 
   return (
     <ol className={styles.stageRail} aria-label="Generation stages">
@@ -122,8 +136,19 @@ export function StageRail({ stages, reviewGate }: StageRailProps) {
           );
         }
         const isLast = idx === VISIBLE_STAGES.length - 1;
-        const status = stage?.status ?? "queued";
-        const message = stage?.error?.message ?? stage?.message ?? visibleStage.description;
+        const inferredRunning = Boolean(
+          inferCurrentStage &&
+            stage?.type === inferCurrentStage &&
+            stage?.status === "queued",
+        );
+        const status = inferredRunning ? "running" : stage?.status ?? "queued";
+        const progressPercent = inferredRunning
+          ? runProgressPercent
+          : stage?.progressPercent;
+        const message =
+          stage?.error?.message ??
+          (inferredRunning ? runMessage : stage?.message) ??
+          visibleStage.description;
         const awaitingReview = Boolean(stage && reviewGate?.stageId === stage.stageId);
         const statusKey = awaitingReview ? "review" : status;
         const isUpcoming = status === "queued" && !nextQueuedShown;
@@ -165,17 +190,17 @@ export function StageRail({ stages, reviewGate }: StageRailProps) {
               ) : (
                 <p className={styles.stageMessage}>{message}</p>
               )}
-              {status === "running" && stage?.progressPercent != null ? (
+              {status === "running" && progressPercent != null ? (
                 <div
                   className={styles.stageProgress}
                   role="progressbar"
-                  aria-valuenow={stage.progressPercent}
+                  aria-valuenow={progressPercent}
                   aria-valuemin={0}
                   aria-valuemax={100}
                 >
                   <div
                     className={styles.stageProgressFill}
-                    style={{ width: `${Math.max(2, Math.min(100, stage.progressPercent))}%` }}
+                    style={{ width: `${Math.max(2, Math.min(100, progressPercent))}%` }}
                   />
                 </div>
               ) : null}
