@@ -64,7 +64,7 @@ export function AdminRoute({ children }: { children: ReactNode }) {
         <h1>Admin access required</h1>
         <p className="auth-switch">
           This workbench is limited to workspace admins.{" "}
-          <Link to="/evals">Return to eval suites</Link>
+          <Link to="/admin/evals">Return to eval suites</Link>
         </p>
       </section>
     </main>

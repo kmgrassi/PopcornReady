@@ -1,19 +1,13 @@
-import { Navigate, NavLink, useParams } from "react-router-dom";
+import { Navigate, NavLink, useParams, useSearchParams } from "react-router-dom";
 import {
   AssetsPage,
-  OutputsPage,
   ProjectsPage,
-  RunsPage,
 } from "./DashboardCollectionsPage";
-import { EvalsPage } from "./EvalsPage";
 import styles from "./LibraryPage.module.css";
 
 const LIBRARY_TABS = [
   { id: "projects", label: "Projects" },
-  { id: "runs", label: "Runs" },
   { id: "assets", label: "Assets" },
-  { id: "outputs", label: "Outputs" },
-  { id: "evals", label: "Evals" },
 ] as const;
 
 type LibraryTab = (typeof LIBRARY_TABS)[number]["id"];
@@ -24,9 +18,20 @@ function isLibraryTab(value: string | undefined): value is LibraryTab {
 
 export function LibraryPage() {
   const { tab } = useParams();
+  const [searchParams] = useSearchParams();
 
   if (!tab) return <Navigate to="/library/projects" replace />;
-  if (!isLibraryTab(tab)) return <Navigate to="/library/projects" replace />;
+  if (!isLibraryTab(tab)) {
+    const projectId = searchParams.get("projectId");
+    if (tab === "runs" && projectId) {
+      return <Navigate to={`/projects/${encodeURIComponent(projectId)}#runs`} replace />;
+    }
+    if (tab === "outputs" && projectId) {
+      return <Navigate to={`/projects/${encodeURIComponent(projectId)}#outputs`} replace />;
+    }
+    if (tab === "evals") return <Navigate to="/admin/evals" replace />;
+    return <Navigate to="/library/projects" replace />;
+  }
 
   return (
     <div className={styles.shell}>
@@ -44,10 +49,7 @@ export function LibraryPage() {
         ))}
       </nav>
       {tab === "projects" ? <ProjectsPage /> : null}
-      {tab === "runs" ? <RunsPage /> : null}
       {tab === "assets" ? <AssetsPage /> : null}
-      {tab === "outputs" ? <OutputsPage /> : null}
-      {tab === "evals" ? <EvalsPage /> : null}
     </div>
   );
 }

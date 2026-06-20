@@ -23,7 +23,7 @@ function json(route: Route, body: JsonValue) {
 
 function project(index: number) {
   return {
-    id: `proj-${index}`,
+    id: index === 1 ? "proj-alpha" : `proj-${index}`,
     schemaVersion: "project.v1",
     workspaceId,
     name: index === 1 ? "Project Alpha" : `Project ${index}`,
@@ -51,6 +51,14 @@ async function mockLibraryApi(page: Page) {
       pagination: { limit: 24, nextCursor: cursor === "page-2" ? null : "page-2" },
     });
   });
+
+  await page.route("**/api/v1/projects/proj-alpha", (route) =>
+    json(route, { project: project(1) }),
+  );
+
+  await page.route("**/api/v1/projects/proj-alpha/storyboard", (route) =>
+    json(route, { storyboard: null }),
+  );
 
   await page.route("**/api/v1/workspaces/*/generation-runs?**", async (route) => {
     const url = new URL(route.request().url());
@@ -185,14 +193,22 @@ test("covers library pagination, filters, media viewer, visibility, and watch li
   await page.getByRole("button", { name: "Load more" }).click();
   await expect(page.getByText("Project 25")).toBeVisible();
 
-  await tabs.getByRole("link", { name: "Runs", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Runs" })).toBeVisible();
-  await page.getByLabel("Status").selectOption("succeeded");
-  await expect(page.getByText("Launch recap")).toBeVisible();
-  await expect(page.getByRole("link", { name: /Launch recap/i })).toHaveAttribute(
+  await expect(tabs.getByRole("link", { name: "Runs", exact: true })).toHaveCount(0);
+  await expect(tabs.getByRole("link", { name: "Outputs", exact: true })).toHaveCount(0);
+  await expect(tabs.getByRole("link", { name: "Evals", exact: true })).toHaveCount(0);
+
+  await page.getByRole("link", { name: "Overview" }).first().click();
+  await expect(page).toHaveURL(/\/projects\/proj-alpha$/);
+  await expect(page.getByRole("heading", { name: "Recent generation work" })).toBeVisible();
+  await expect(page.getByText("Timeline Assembly")).toBeVisible();
+  await expect(page.getByRole("link", { name: /Timeline Assembly/i })).toHaveAttribute(
     "href",
-    "/projects/proj-alpha/runs/run-success",
+    "/projects/proj-alpha/runs/run-running",
   );
+  await expect(page.getByRole("heading", { name: "Finished exports" })).toBeVisible();
+  await expect(page.getByText("Exported Jun 16")).toBeVisible();
+
+  await page.goto("/library/projects");
 
   await tabs.getByRole("link", { name: "Assets", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Assets" })).toBeVisible();
@@ -223,12 +239,7 @@ test("covers library pagination, filters, media viewer, visibility, and watch li
   await page.keyboard.press("Escape");
   await expect(keyframeDialog).toBeHidden();
 
-  await tabs.getByRole("link", { name: "Outputs", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Outputs" })).toBeVisible();
-  await page.getByRole("button", { name: "View Project Alpha output" }).click();
-  await expect(page.getByRole("dialog", { name: "Project Alpha" })).toBeVisible();
-  await page.keyboard.press("Escape");
-
+  await page.goto("/projects/proj-alpha");
   await page.getByRole("link", { name: "Watch" }).click();
   await expect(page).toHaveURL(/\/projects\/proj-alpha\/watch$/);
   await expect(page.getByRole("heading", { name: "Project Alpha" })).toBeVisible();

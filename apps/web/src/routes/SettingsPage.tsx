@@ -30,7 +30,7 @@ const QUIET_LINKS = [
   },
   {
     label: "Evals",
-    to: "/evals",
+    to: "/admin/evals",
     description: "Review workspace quality checks.",
   },
 ];

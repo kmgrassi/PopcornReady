@@ -301,9 +301,9 @@ export function ProjectsPage() {
                   <ButtonLink
                     variant="ghost"
                     size="sm"
-                    to={`/library/runs?projectId=${encodeURIComponent(project.id)}`}
+                    to={projectDetailPath(project.id)}
                   >
-                    Runs
+                    Open
                   </ButtonLink>
                 </div>
               </article>

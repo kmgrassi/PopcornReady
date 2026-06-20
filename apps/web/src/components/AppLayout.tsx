@@ -34,7 +34,7 @@ const PRIMARY_NAV = [
   {
     label: "Library",
     to: "/library",
-    activePaths: ["/library", "/projects", "/runs", "/assets", "/outputs", "/evals"],
+    activePaths: ["/library", "/projects", "/assets"],
   },
   { label: "Settings", to: "/settings", activePaths: ["/settings"] },
 ];

@@ -82,8 +82,8 @@ export function AdminEvalsPage() {
             runs into regression cases.
           </p>
         </div>
-        <Link className="eval-header-action" to="/evals">
-          Suite dashboard
+        <Link className="eval-header-action" to="/admin">
+          Admin
         </Link>
       </header>
 

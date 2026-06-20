@@ -144,8 +144,7 @@ export function runPath(run: Pick<DashboardActiveRunSummary, "projectId" | "runI
 }
 
 function outputPath(output: DashboardRecentOutput) {
-  const params = new URLSearchParams({ projectId: output.projectId });
-  return `/outputs?${params.toString()}`;
+  return `/projects/${encodeURIComponent(output.projectId)}#outputs`;
 }
 
 export function formatStage(stage: DashboardActiveRunSummary["currentStageType"]) {

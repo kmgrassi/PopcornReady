@@ -7,6 +7,7 @@ import type {
   V1Project,
   VideoBriefInput,
 } from "@popcorn/shared/v1/types";
+import type { WorkspaceOutput } from "../lib/api-client";
 import { useAuth } from "../components/auth/AuthProvider";
 import { ButtonLink } from "../components/ui/Button";
 import { EmptyState, ErrorState } from "../components/ui/StateCard";
@@ -14,11 +15,15 @@ import {
   useProjectQuery,
   useProjectStoryboardQuery,
 } from "../lib/queryClient";
-import { useDashboardRunsQuery } from "../lib/v1/dashboard/query";
+import {
+  useDashboardOutputsQuery,
+  useDashboardRunsQuery,
+} from "../lib/v1/dashboard/query";
 import styles from "./ProjectDetailPage.module.css";
 
 const DEV_AUTOPILOT = import.meta.env.DEV;
 const RUN_LIMIT = 6;
+const OUTPUT_LIMIT = 6;
 
 function useDashboardAuthScope() {
   const auth = useAuth();
@@ -34,6 +39,10 @@ export function ProjectDetailPage() {
     status: "all",
     projectId: projectId ?? undefined,
     limit: RUN_LIMIT,
+  });
+  const outputsQuery = useDashboardOutputsQuery(authScope, {
+    projectId: projectId ?? undefined,
+    limit: OUTPUT_LIMIT,
   });
 
   if (!projectId) return <Navigate to="/library/projects" replace />;
@@ -60,9 +69,15 @@ export function ProjectDetailPage() {
         <div className={styles.headerActions}>
           <ButtonLink
             variant="secondary"
-            to={`/library/runs?projectId=${encodeURIComponent(projectId)}`}
+            to="#runs"
           >
             Runs
+          </ButtonLink>
+          <ButtonLink
+            variant="secondary"
+            to="#outputs"
+          >
+            Outputs
           </ButtonLink>
           <ButtonLink
             variant="primary"
@@ -103,6 +118,12 @@ export function ProjectDetailPage() {
             loading={runsQuery.loading}
             error={runsQuery.error}
             onRetry={runsQuery.refetch}
+          />
+          <OutputsPreview
+            outputs={outputsQuery.items}
+            loading={outputsQuery.loading}
+            error={outputsQuery.error}
+            onRetry={outputsQuery.refetch}
           />
         </>
       ) : null}
@@ -236,7 +257,7 @@ function StoryboardPreview({
         <ButtonLink
           variant="ghost"
           size="sm"
-          to={`/library/runs?projectId=${encodeURIComponent(projectId)}`}
+          to="#runs"
         >
           Runs
         </ButtonLink>
@@ -257,7 +278,7 @@ function StoryboardPreview({
           action={
             <ButtonLink
               variant="secondary"
-              to={`/library/runs?projectId=${encodeURIComponent(projectId)}`}
+              to="#runs"
             >
               View runs
             </ButtonLink>
@@ -332,7 +353,7 @@ function RunsPreview({
   onRetry: () => void;
 }) {
   return (
-    <section className={styles.panel}>
+    <section className={styles.panel} id="runs">
       <div className={styles.sectionHeader}>
         <div>
           <span className={styles.eyebrow}>Runs</span>
@@ -341,9 +362,9 @@ function RunsPreview({
         <ButtonLink
           variant="ghost"
           size="sm"
-          to={`/library/runs?projectId=${encodeURIComponent(projectId)}`}
+          to={`/projects/${encodeURIComponent(projectId)}`}
         >
-          All runs
+          Project
         </ButtonLink>
       </div>
       {loading ? <div className={styles.placeholder}>Loading runs...</div> : null}
@@ -381,6 +402,77 @@ function RunsPreview({
               <StatusChip status={run.status} />
             </Link>
           ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function OutputsPreview({
+  outputs,
+  loading,
+  error,
+  onRetry,
+}: {
+  outputs: WorkspaceOutput[];
+  loading: boolean;
+  error: Error | null;
+  onRetry: () => void;
+}) {
+  return (
+    <section className={styles.panel} id="outputs">
+      <div className={styles.sectionHeader}>
+        <div>
+          <span className={styles.eyebrow}>Outputs</span>
+          <h2>Finished exports</h2>
+        </div>
+      </div>
+      {loading ? <div className={styles.placeholder}>Loading outputs...</div> : null}
+      {!loading && error ? (
+        <ErrorState
+          title="Unable to load outputs"
+          body="We couldn't load exported videos for this project."
+          error={error}
+          onRetry={onRetry}
+        />
+      ) : null}
+      {!loading && !error && outputs.length === 0 ? (
+        <EmptyState
+          title="No outputs yet"
+          body="Finished exports for this project will appear here."
+        />
+      ) : null}
+      {!loading && !error && outputs.length > 0 ? (
+        <div className={styles.outputGrid}>
+          {outputs.map((output) => {
+            const playbackUrl = output.playbackUrl ?? output.url;
+            const meta = [output.format?.toUpperCase(), formatDuration(output.durationSec)]
+              .filter(Boolean)
+              .join(" - ");
+            return (
+              <article className={styles.outputCard} key={output.artifactId}>
+                <div className={styles.outputMedia}>
+                  {playbackUrl ? (
+                    <video
+                      src={playbackUrl}
+                      poster={output.thumbnailUrl}
+                      muted
+                      playsInline
+                      preload="metadata"
+                    />
+                  ) : output.thumbnailUrl ? (
+                    <img src={output.thumbnailUrl} alt="" loading="lazy" />
+                  ) : (
+                    <span>Output</span>
+                  )}
+                </div>
+                <div className={styles.outputBody}>
+                  <span className={styles.runTitle}>Exported {formatDate(output.createdAt)}</span>
+                  <span className={styles.runMeta}>{meta || "Finished export"}</span>
+                </div>
+              </article>
+            );
+          })}
         </div>
       ) : null}
     </section>
