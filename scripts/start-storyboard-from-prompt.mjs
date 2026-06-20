@@ -174,7 +174,14 @@ async function pollRun({ projectId, runId }) {
 async function storyboardStatus(projectId) {
   const body = await jsonRequest(`/api/v1/projects/${encodeURIComponent(projectId)}/storyboards`);
   const storyboards = Array.isArray(body.storyboards) ? body.storyboards : [];
-  const storyboard = storyboards[0] ?? null;
+  const listedStoryboard = storyboards[0] ?? null;
+  const storyboard = listedStoryboard?.id
+    ? (
+        await jsonRequest(
+          `/api/v1/projects/${encodeURIComponent(projectId)}/storyboards/${encodeURIComponent(listedStoryboard.id)}`
+        )
+      ).storyboard
+    : null;
   return {
     storyboardId: storyboard?.id ?? null,
     panelCount: countPanels(storyboard),
