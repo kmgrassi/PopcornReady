@@ -715,6 +715,7 @@ async function dataAssetById(
   db: SupabaseClient,
   assetId: string
 ): Promise<DataAssetRow | null> {
+  if (!isAssetIdShape(assetId)) return null;
   const data = await runQuery(
     "store.dataAssetById",
     db
@@ -816,6 +817,7 @@ async function readyImageAssetById(
   assetId: string,
   opts: PosterVisibilityOpts = {}
 ): Promise<PosterAssetRow | null> {
+  if (!isAssetIdShape(assetId)) return null;
   let query = db
     .from("assets")
     .select(POSTER_ASSET_COLUMNS)
@@ -1669,14 +1671,11 @@ async function getAssetRow(
   assetId: string,
   context: string
 ): Promise<AssetRow> {
-  // `assets.id` is a uuid column. A non-UUID id (e.g. a character slug like
-  // "character_homeowner" handed to the character-anchor endpoint) can never
-  // match a row — Postgres rejects it with `22P02` (invalid input syntax for
-  // type uuid), which `runQuery` surfaces as an opaque `database_error` that
-  // aborts the whole run. Short-circuit to the same typed `not_found` we return
-  // for an absent-but-well-formed id, so callers get the precondition they
-  // self-heal against (anchor autocreate) instead of a hard failure.
-  if (!UUID_RE.test(assetId)) {
+  // A non-UUID id (e.g. a character slug like "character_homeowner" handed to
+  // the character-anchor endpoint) can never match the uuid `assets.id` column;
+  // treat it as the same `not_found` we return for an absent id rather than
+  // letting Postgres' `22P02` surface as a database_error. See isAssetIdShape.
+  if (!isAssetIdShape(assetId)) {
     throw notFound(`Asset not found: ${assetId}`);
   }
   const data = await runQuery(
@@ -3379,6 +3378,19 @@ function assertUuid(value: string | null | undefined, path: string): void {
   }
 }
 
+// `assets.id` is a uuid column, so a caller-supplied id that isn't a UUID can
+// never match a row — Postgres instead raises `22P02` (invalid input syntax for
+// type uuid), which `runQuery` surfaces as an opaque `database_error`. Every
+// asset-by-id read must treat a malformed id the same way it treats an
+// absent-but-well-formed one, so callers get the typed precondition they
+// self-heal against (e.g. character-anchor autocreate) instead of a hard
+// failure. Used by every direct `.eq("id", assetId)` read below — throwing
+// `notFound` where the reader throws on a missing row, returning early where it
+// returns null.
+function isAssetIdShape(assetId: string): boolean {
+  return UUID_RE.test(assetId);
+}
+
 async function assertStoryboardIdAvailable(
   db: SupabaseClient,
   projectId: string,
@@ -4058,6 +4070,7 @@ export async function setAssetVisibility(
   if (!projectData) throw notFound(`Project not found: ${projectId}`);
   const project = projectData as ProjectRow;
 
+  if (!isAssetIdShape(assetId)) throw notFound(`Asset not found: ${assetId}`);
   const currentData = await runQuery(
     "store.setAssetVisibility current",
     db
@@ -4444,6 +4457,7 @@ export async function getAssetMediaUrls(
   workspaceId: string,
   assetId: string
 ): Promise<AssetMediaUrls> {
+  if (!isAssetIdShape(assetId)) throw notFound(`Asset not found: ${assetId}`);
   const db = getServiceSupabase();
   const data = await runQuery(
     "store.getAssetMediaUrls",
