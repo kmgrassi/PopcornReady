@@ -274,7 +274,12 @@ export function ProjectsPage() {
                 </Link>
                 <div className={styles.projectCardBody}>
                   <div>
-                    <span className={styles.rowTitle}>{project.name}</span>
+                    <Link
+                      className={`${styles.rowTitle} ${styles.titleLink}`}
+                      to={projectDetailPath(project.id)}
+                    >
+                      {project.name}
+                    </Link>
                     <span className={styles.rowSub}>Updated {formatDate(project.updatedAt)}</span>
                   </div>
                   <div className={styles.cardMeta}>
