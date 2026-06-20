@@ -104,6 +104,39 @@ test("polls an active run, cancels it, and clears the recovery hint", async ({ p
     .toBeNull();
 });
 
+test("shows in-progress rail state when active stage rows have not caught up", async ({ page }) => {
+  const detail = runDetail({
+    status: "running",
+    stageType: "asset_generation",
+    progressPercent: 46,
+    message: "Generating shot candidates.",
+  });
+  detail.stages = detail.stages.map((stage) =>
+    stage.type === "asset_generation"
+      ? {
+          ...stage,
+          status: "queued",
+          progressPercent: 0,
+          message: undefined,
+          startedAt: undefined,
+        }
+      : stage,
+  );
+
+  await page.route(`**${apiRunPath}`, async (route) => {
+    await route.fulfill({ json: detail });
+  });
+
+  await page.goto(runPath);
+
+  const rail = page.getByRole("complementary", { name: "Stage rail" });
+  await expect(rail.getByText("Pipeline")).toBeVisible();
+  await expect(rail.getByText("In progress")).toBeVisible();
+  await expect(rail.getByText("Generating shot candidates.")).toBeVisible();
+  await expect(rail.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "46");
+  await expect(rail.getByText("Shots")).toBeVisible();
+});
+
 test("submits review-gate approve and reject actions with notes", async ({ page }) => {
   const requests: Array<{ action: string; body: unknown }> = [];
   let detail = runDetail({
