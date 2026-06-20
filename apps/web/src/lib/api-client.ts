@@ -477,10 +477,36 @@ function workspaceAssetToClip(asset: WorkspaceAsset): Project["clips"][number] {
   };
 }
 
-// Public discovery returns bare V1Assets (no workspace-scoped joins like the
+// Shape returned by GET /api/v1/discover/assets. It's the API's richer asset
+// row, not the lean shared V1Asset: the resolved CDN/media URL arrives as
+// `remoteUrl` (the shared V1Asset's `url` is not populated on this path).
+export interface DiscoverAsset {
+  id: string;
+  projectId: string;
+  workspaceId: string;
+  kind: AssetKind;
+  status: AssetStatus;
+  filename: string;
+  url?: string;
+  remoteUrl?: string;
+  durationSec?: number;
+  description?: string;
+  role?: string;
+  source?: { type?: string } | string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+function discoverAssetUrl(asset: DiscoverAsset): string | undefined {
+  return asset.url ?? asset.remoteUrl ?? undefined;
+}
+
+// Public discovery returns bare assets (no workspace-scoped joins like the
 // owning project name). Normalize them into the WorkspaceAsset shape the
 // Library grid renders, marking them public so owner-only actions stay hidden.
-function publicAssetToWorkspaceAsset(asset: V1Asset): WorkspaceAsset {
+function publicAssetToWorkspaceAsset(asset: DiscoverAsset): WorkspaceAsset {
+  const url = discoverAssetUrl(asset);
+  const sourceType = typeof asset.source === "object" ? asset.source?.type : asset.source;
   return {
     id: asset.id,
     assetId: asset.id,
@@ -488,11 +514,12 @@ function publicAssetToWorkspaceAsset(asset: V1Asset): WorkspaceAsset {
     projectName: "",
     kind: asset.kind,
     status: asset.status,
-    source: asset.source === "generated" ? "generated" : "upload",
+    source: sourceType === "generated" ? "generated" : "upload",
     filename: asset.filename,
     title: asset.filename,
     description: asset.description,
-    url: asset.url,
+    url,
+    thumbnailUrl: asset.kind === "image" ? url : undefined,
     durationSec: asset.durationSec,
     visibility: "public",
     createdAt: asset.createdAt,
@@ -516,7 +543,7 @@ export const v1Api = {
     signal?: AbortSignal
   ): Promise<WorkspaceAssetsResponse> => {
     const response = await apiRequest<{
-      assets: V1Asset[];
+      assets: DiscoverAsset[];
       pagination: ListPagination;
     }>("/api/v1/discover/assets", {
       signal,
@@ -526,7 +553,11 @@ export const v1Api = {
       },
     });
     return {
-      assets: response.assets.map(publicAssetToWorkspaceAsset),
+      // Drop assets with no resolvable media (e.g. legacy storyboard sketches
+      // stored without a bucket) so the public gallery isn't full of blanks.
+      assets: response.assets
+        .filter((asset) => discoverAssetUrl(asset))
+        .map(publicAssetToWorkspaceAsset),
       pagination: response.pagination,
     };
   },
