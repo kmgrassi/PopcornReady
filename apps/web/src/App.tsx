@@ -22,6 +22,7 @@ import { LibraryPage } from "./routes/LibraryPage";
 import { LoginPage } from "./routes/LoginPage";
 import { ProjectWatchPage } from "./routes/ProjectWatchPage";
 import { SignupPage } from "./routes/SignupPage";
+import { SpritePage } from "./routes/SpritePage";
 import { SettingsPage } from "./routes/SettingsPage";
 import { TemplatesPage } from "./routes/TemplatesPage";
 import { UploadsPage } from "./routes/UploadsPage";
@@ -36,6 +37,7 @@ export function App() {
           <Route index element={<HomePage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
+          <Route path="/sprite" element={<SpritePage />} />
         </Route>
 
         <Route element={<AuthenticatedAppLayout />}>
