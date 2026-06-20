@@ -540,6 +540,15 @@ export const v1Api = {
         },
       }
     ),
+  getProjectStoryboardGenerationJob: (
+    projectId: string,
+    jobId: string,
+    signal?: AbortSignal
+  ) =>
+    apiRequest<StoryboardGenerationJobResponse>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/storyboards/generate/${encodeURIComponent(jobId)}`,
+      { signal }
+    ),
   getProjectWatch: (projectId: string, signal?: AbortSignal) =>
     apiRequest<ProjectWatchResponse>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/watch`,

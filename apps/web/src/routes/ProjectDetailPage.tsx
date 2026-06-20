@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import type {
   GenerationRun,
@@ -13,6 +13,7 @@ import { EmptyState, ErrorState } from "../components/ui/StateCard";
 import {
   useGenerateProjectStoryboardMutation,
   useProjectQuery,
+  useProjectStoryboardGenerationJobQuery,
   useProjectStoryboardQuery,
 } from "../lib/queryClient";
 import { useDashboardRunsQuery } from "../lib/v1/dashboard/query";
@@ -32,11 +33,31 @@ export function ProjectDetailPage() {
   const projectQuery = useProjectQuery(projectId ?? "", Boolean(projectId));
   const storyboardQuery = useProjectStoryboardQuery(projectId ?? "", Boolean(projectId));
   const generateStoryboardMutation = useGenerateProjectStoryboardMutation(projectId ?? "");
+  const storyboardGenerationJobId = generateStoryboardMutation.data?.job.id ?? "";
+  const storyboardGenerationJobQuery = useProjectStoryboardGenerationJobQuery(
+    projectId ?? "",
+    storyboardGenerationJobId,
+    Boolean(projectId && storyboardGenerationJobId)
+  );
+  const storyboardGenerationJob = storyboardGenerationJobQuery.data?.job;
+  const refetchStoryboard = storyboardQuery.refetch;
+  const storyboardGenerationError = useMemo(() => {
+    if (storyboardGenerationJob?.error) {
+      return new Error(storyboardGenerationJob.error.message);
+    }
+    return storyboardGenerationJobQuery.error;
+  }, [storyboardGenerationJob?.error?.message, storyboardGenerationJobQuery.error]);
   const runsQuery = useDashboardRunsQuery(authScope, {
     status: "all",
     projectId: projectId ?? undefined,
     limit: RUN_LIMIT,
   });
+
+  useEffect(() => {
+    if (storyboardGenerationJob?.status === "succeeded") {
+      void refetchStoryboard();
+    }
+  }, [refetchStoryboard, storyboardGenerationJob?.status]);
 
   if (!projectId) return <Navigate to="/library/projects" replace />;
 
@@ -99,7 +120,9 @@ export function ProjectDetailPage() {
               onRetry={() => void storyboardQuery.refetch()}
               generating={generateStoryboardMutation.isPending}
               generationStarted={Boolean(generateStoryboardMutation.data)}
-              generationError={generateStoryboardMutation.error}
+              generationError={
+                generateStoryboardMutation.error ?? storyboardGenerationError
+              }
               onGenerate={() => {
                 void generateStoryboardMutation.mutateAsync().then(() => {
                   void storyboardQuery.refetch();

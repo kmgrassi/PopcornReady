@@ -79,7 +79,7 @@ storyboardsRouter.post(
 
 storyboardsRouter.post(
   "/projects/:projectId/storyboards/generate",
-  mutation(async ({ auth, req }, params) => {
+  route(async ({ auth, req }, params) => {
     const projectId = requiredParam(params, "projectId");
     await getProject(auth.workspaceId, projectId);
 
@@ -109,6 +109,24 @@ storyboardsRouter.post(
     }
 
     return { status: created ? 202 : 200, body: { job } };
+  })
+);
+
+storyboardsRouter.get(
+  "/projects/:projectId/storyboards/generate/:jobId",
+  route(async ({ auth }, params) => {
+    const projectId = requiredParam(params, "projectId");
+    const jobId = requiredParam(params, "jobId");
+    await getProject(auth.workspaceId, projectId);
+
+    const job = await agentApiStore.getJob(jobId);
+    if (!job || job.type !== "asset_generation" || job.projectId !== projectId) {
+      throw new ApiError("not_found", "Storyboard generation job not found.", {
+        jobId,
+      });
+    }
+
+    return { status: 200, body: { job } };
   })
 );
 
