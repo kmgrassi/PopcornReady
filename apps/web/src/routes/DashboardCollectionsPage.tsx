@@ -21,6 +21,7 @@ import {
   useDashboardOutputsQuery,
   useDashboardProjectsQuery,
   useDashboardRunsQuery,
+  type LibraryScope,
 } from "../lib/v1/dashboard/query";
 import { newStudioDraftPath } from "../lib/studioRoutes";
 import styles from "./DashboardCollections.module.css";
@@ -30,6 +31,10 @@ const DEV_AUTOPILOT = import.meta.env.DEV;
 const RUN_STATUSES = ["all", "queued", "running", "succeeded", "failed", "canceled"] as const;
 const ASSET_KINDS = ["all", "image", "video", "audio"] as const;
 const ASSET_SOURCES = ["all", "uploaded", "generated"] as const;
+const LIBRARY_SCOPES: { id: LibraryScope; label: string }[] = [
+  { id: "mine", label: "My library" },
+  { id: "public", label: "All public" },
+];
 
 type RunStatusFilter = (typeof RUN_STATUSES)[number];
 type AssetKindFilter = (typeof ASSET_KINDS)[number];
@@ -143,6 +148,18 @@ function DashboardSkeleton({ variant = "rows" }: { variant?: "rows" | "grid" }) 
   );
 }
 
+function ScopeField({ scope, onChange }: { scope: LibraryScope; onChange: (scope: LibraryScope) => void }) {
+  return (
+    <ToolbarField label="Show">
+      <select value={scope} onChange={(event) => onChange(event.target.value as LibraryScope)}>
+        {LIBRARY_SCOPES.map((option) => (
+          <option key={option.id} value={option.id}>{option.label}</option>
+        ))}
+      </select>
+    </ToolbarField>
+  );
+}
+
 function LoadMore({ hasMore, loading, onClick }: { hasMore: boolean; loading: boolean; onClick: () => void }) {
   if (!hasMore) return null;
   return (
@@ -240,10 +257,22 @@ function ProjectPoster({ name, posterUrl }: { name: string; posterUrl?: string |
 
 export function ProjectsPage() {
   const authScope = useDashboardAuthScope();
-  const projectsQuery = useDashboardProjectsQuery(authScope, PAGE_SIZE);
+  const [scope, setScope] = useState<LibraryScope>("mine");
+  const projectsQuery = useDashboardProjectsQuery(authScope, PAGE_SIZE, scope);
+  const isPublic = scope === "public";
 
   return (
-    <DashboardFrame title="Projects" description="All active video projects in this workspace.">
+    <DashboardFrame
+      title="Projects"
+      description={
+        isPublic
+          ? "Public video projects shared across Popcorn Ready."
+          : "All active video projects in this workspace."
+      }
+    >
+      <Toolbar>
+        <ScopeField scope={scope} onChange={setScope} />
+      </Toolbar>
       {projectsQuery.loading ? <DashboardSkeleton variant="grid" /> : null}
       {!projectsQuery.loading && projectsQuery.error ? (
         <ErrorState
@@ -254,11 +283,18 @@ export function ProjectsPage() {
         />
       ) : null}
       {!projectsQuery.loading && !projectsQuery.error && projectsQuery.items.length === 0 ? (
-        <EmptyState
-          title="No projects yet"
-          body="Create a video to start building your project library."
-          action={<ButtonLink variant="secondary" to="/studio">Open studio</ButtonLink>}
-        />
+        isPublic ? (
+          <EmptyState
+            title="No public projects yet"
+            body="Projects appear here once they’re shared publicly."
+          />
+        ) : (
+          <EmptyState
+            title="No projects yet"
+            body="Create a video to start building your project library."
+            action={<ButtonLink variant="secondary" to="/studio">Open studio</ButtonLink>}
+          />
+        )
       ) : null}
       {!projectsQuery.loading && !projectsQuery.error && projectsQuery.items.length > 0 ? (
         <>
@@ -319,14 +355,16 @@ export function ProjectsPage() {
 export function AssetsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const authScope = useDashboardAuthScope();
+  const [scope, setScope] = useState<LibraryScope>("mine");
   const [kind, setKind] = useState<AssetKindFilter>("all");
   const [source, setSource] = useState<AssetSourceFilter>("all");
   const [pendingIds, setPendingIds] = useState<Set<string>>(() => new Set());
   const [openingIds, setOpeningIds] = useState<Set<string>>(() => new Set());
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [publishingAsset, setPublishingAsset] = useState<WorkspaceAsset | null>(null);
+  const isPublic = scope === "public";
   const assetFilters = { kind, source, limit: PAGE_SIZE };
-  const assetsQuery = useDashboardAssetsQuery(authScope, assetFilters);
+  const assetsQuery = useDashboardAssetsQuery(authScope, assetFilters, scope);
   const visibilityMutation = useAssetVisibilityMutation(authScope, assetFilters);
   const mediaMutation = useAssetMediaMutation(authScope, assetFilters);
   const setSelectedAsset = useCallback((assetId: string) => {
@@ -398,18 +436,28 @@ export function AssetsPage() {
   }, [searchParams, setSearchParams]);
 
   return (
-    <DashboardFrame title="Assets" description="Generated and uploaded media across all projects in this workspace.">
+    <DashboardFrame
+      title="Assets"
+      description={
+        isPublic
+          ? "Public media shared across Popcorn Ready projects."
+          : "Generated and uploaded media across all projects in this workspace."
+      }
+    >
       <Toolbar>
+        <ScopeField scope={scope} onChange={setScope} />
         <ToolbarField label="Kind">
           <select value={kind} onChange={(event) => setKind(event.target.value as AssetKindFilter)}>
             {ASSET_KINDS.map((option) => <option key={option} value={option}>{titleCase(option)}</option>)}
           </select>
         </ToolbarField>
-        <ToolbarField label="Source">
-          <select value={source} onChange={(event) => setSource(event.target.value as AssetSourceFilter)}>
-            {ASSET_SOURCES.map((option) => <option key={option} value={option}>{titleCase(option)}</option>)}
-          </select>
-        </ToolbarField>
+        {!isPublic ? (
+          <ToolbarField label="Source">
+            <select value={source} onChange={(event) => setSource(event.target.value as AssetSourceFilter)}>
+              {ASSET_SOURCES.map((option) => <option key={option} value={option}>{titleCase(option)}</option>)}
+            </select>
+          </ToolbarField>
+        ) : null}
       </Toolbar>
       {assetsQuery.loading ? <DashboardSkeleton variant="grid" /> : null}
       {!assetsQuery.loading && assetsQuery.error ? (
@@ -421,11 +469,18 @@ export function AssetsPage() {
         />
       ) : null}
       {!assetsQuery.loading && !assetsQuery.error && assetsQuery.items.length === 0 ? (
-        <EmptyState
-          title="No assets match this filter"
-          body="Upload source media or generate assets in the studio to build the workspace library."
-          action={<ButtonLink variant="secondary" to="/studio">Open studio</ButtonLink>}
-        />
+        isPublic ? (
+          <EmptyState
+            title="No public assets match this filter"
+            body="Public media appears here once projects share their assets."
+          />
+        ) : (
+          <EmptyState
+            title="No assets match this filter"
+            body="Upload source media or generate assets in the studio to build the workspace library."
+            action={<ButtonLink variant="secondary" to="/studio">Open studio</ButtonLink>}
+          />
+        )
       ) : null}
       {!assetsQuery.loading && !assetsQuery.error && assetsQuery.items.length > 0 ? (
         <>
@@ -473,20 +528,26 @@ export function AssetsPage() {
             setSelectedAsset(assetsQuery.items[selectedIndex + 1].assetId ?? assetsQuery.items[selectedIndex + 1].id);
           }
         }}
-        onRefresh={async (item) => {
-          return mediaMutation.mutateAsync(item.id);
-        }}
+        onRefresh={
+          isPublic
+            ? undefined
+            : async (item) => {
+                return mediaMutation.mutateAsync(item.id);
+              }
+        }
         actions={
           selectedAsset ? (
             <div className={styles.viewerActions}>
-              <ButtonLink
-                variant="ghost"
-                size="sm"
-                to={projectCollectionPath(selectedAsset.projectId)}
-              >
-                Project
-              </ButtonLink>
-              {selectedAsset.kind === "image" ? (
+              {!isPublic ? (
+                <ButtonLink
+                  variant="ghost"
+                  size="sm"
+                  to={projectCollectionPath(selectedAsset.projectId)}
+                >
+                  Project
+                </ButtonLink>
+              ) : null}
+              {!isPublic && selectedAsset.kind === "image" ? (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -495,14 +556,16 @@ export function AssetsPage() {
                   Publish as anchor
                 </Button>
               ) : null}
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={pendingIds.has(selectedAsset.assetId ?? selectedAsset.id)}
-                onClick={() => void toggleVisibility(selectedAsset)}
-              >
-                {selectedAsset.visibility === "private" ? "Make public" : "Make private"}
-              </Button>
+              {!isPublic ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={pendingIds.has(selectedAsset.assetId ?? selectedAsset.id)}
+                  onClick={() => void toggleVisibility(selectedAsset)}
+                >
+                  {selectedAsset.visibility === "private" ? "Make public" : "Make private"}
+                </Button>
+              ) : null}
             </div>
           ) : null
         }

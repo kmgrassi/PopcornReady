@@ -477,12 +477,59 @@ function workspaceAssetToClip(asset: WorkspaceAsset): Project["clips"][number] {
   };
 }
 
+// Public discovery returns bare V1Assets (no workspace-scoped joins like the
+// owning project name). Normalize them into the WorkspaceAsset shape the
+// Library grid renders, marking them public so owner-only actions stay hidden.
+function publicAssetToWorkspaceAsset(asset: V1Asset): WorkspaceAsset {
+  return {
+    id: asset.id,
+    assetId: asset.id,
+    projectId: asset.projectId,
+    projectName: "",
+    kind: asset.kind,
+    status: asset.status,
+    source: asset.source === "generated" ? "generated" : "upload",
+    filename: asset.filename,
+    title: asset.filename,
+    description: asset.description,
+    url: asset.url,
+    durationSec: asset.durationSec,
+    visibility: "public",
+    createdAt: asset.createdAt,
+    updatedAt: asset.updatedAt,
+  };
+}
+
 export const v1Api = {
   me: () => apiRequest<MeResponse>("/api/v1/me"),
   listProjects: (params?: { limit?: number; cursor?: string | null }) =>
     apiRequest<ProjectsResponse>("/api/v1/projects", {
       searchParams: params,
     }),
+  // Public discovery: every user's public projects, not just the caller's.
+  listPublicProjects: (params?: { limit?: number; cursor?: string | null }) =>
+    apiRequest<ProjectsResponse>("/api/v1/discover/projects", {
+      searchParams: params,
+    }),
+  listPublicAssets: async (
+    params?: { kind?: AssetKind | "all"; limit?: number; cursor?: string | null },
+    signal?: AbortSignal
+  ): Promise<WorkspaceAssetsResponse> => {
+    const response = await apiRequest<{
+      assets: V1Asset[];
+      pagination: ListPagination;
+    }>("/api/v1/discover/assets", {
+      signal,
+      searchParams: {
+        ...params,
+        kind: params?.kind === "all" ? undefined : params?.kind,
+      },
+    });
+    return {
+      assets: response.assets.map(publicAssetToWorkspaceAsset),
+      pagination: response.pagination,
+    };
+  },
   createProject: (input: CreateProjectInput) =>
     apiRequest<CreateProjectResponse>("/api/v1/projects", {
       method: "POST",
