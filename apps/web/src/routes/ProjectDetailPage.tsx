@@ -145,14 +145,16 @@ export function ProjectDetailPage() {
 
       {!loading && !error && project ? (
         <>
-          <ProjectHero project={project} storyboard={storyboard} />
-          <ProjectStagePanel
-            projectId={projectId}
-            runs={runsQuery.items}
-            loading={runsQuery.loading}
-            error={runsQuery.error}
-            onRetry={runsQuery.refetch}
-          />
+          <section className={styles.overviewLayout}>
+            <ProjectHero project={project} storyboard={storyboard} />
+            <ProjectStagePanel
+              projectId={projectId}
+              runs={runsQuery.items}
+              loading={runsQuery.loading}
+              error={runsQuery.error}
+              onRetry={runsQuery.refetch}
+            />
+          </section>
           <section className={styles.layout}>
             <ProjectBrief project={project} />
             <StoryboardPreview

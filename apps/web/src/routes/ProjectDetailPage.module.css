@@ -64,6 +64,13 @@
   background: var(--panel);
 }
 
+.overviewLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  align-items: start;
+  gap: var(--space-5);
+}
+
 .poster {
   width: 100%;
   aspect-ratio: 16 / 10;
@@ -406,6 +413,7 @@
 
 @media (max-width: 900px) {
   .hero,
+  .overviewLayout,
   .layout {
     grid-template-columns: 1fr;
   }
