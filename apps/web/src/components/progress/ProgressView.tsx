@@ -454,6 +454,7 @@ export function ProgressView({
   const pending = reviewActions?.pending ?? (fallbackApproving ? "approve" : undefined);
   const actionError = reviewActions?.error ?? fallbackError;
   const showCancelAction = !terminal && !detail.run.reviewGate && !!cancelAction;
+  const showBackgroundActivity = !terminal && !detail.run.reviewGate;
   const feedbackNote = reviewActions?.feedbackNote ?? fallbackFeedbackNote;
   const setFeedbackNote = reviewActions?.onFeedbackNoteChange ?? setFallbackFeedbackNote;
   const progress = progressSummary(detail.run, detail.stages);
@@ -804,7 +805,34 @@ export function ProgressView({
               <h2 className={styles.sidePanelHeading}>Remaining stages</h2>
             </div>
           </div>
-          <StageRail stages={detail.stages} reviewGate={detail.run.reviewGate} />
+          {showBackgroundActivity ? (
+            <div className={styles.backgroundActivity} role="status">
+              <span className={styles.backgroundSpinner} aria-hidden="true" />
+              <span>
+                {cancelAction?.pending
+                  ? "Stopping after the current step..."
+                  : "Working in the background"}
+              </span>
+            </div>
+          ) : null}
+          <StageRail
+            stages={detail.stages}
+            reviewGate={detail.run.reviewGate}
+            stopAction={
+              showCancelAction && cancelAction
+                ? {
+                    pending: cancelAction.pending,
+                    error: cancelAction.error,
+                    onStop: cancelAction.onCancel,
+                  }
+                : undefined
+            }
+          />
+          {showCancelAction && cancelAction?.error ? (
+            <p className={styles.error} role="alert">
+              {cancelAction.error}
+            </p>
+          ) : null}
           <p className={styles.sidePanelMeta}>
             Started {formatDateTime(detail.run.startedAt)}. Updated{" "}
             {formatDateTime(detail.run.updatedAt)}.

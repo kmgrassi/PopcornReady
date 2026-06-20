@@ -12,6 +12,11 @@ import styles from "./ProgressView.module.css";
 interface StageRailProps {
   stages: GenerationStage[];
   reviewGate?: RunReviewGate | null;
+  stopAction?: {
+    pending?: boolean;
+    error?: string | null;
+    onStop: () => void;
+  };
 }
 
 const VISIBLE_STAGES: Array<{
@@ -88,7 +93,11 @@ function StatusGlyph({ status }: { status: GenerationRunStatus }) {
   );
 }
 
-export function StageRail({ stages, reviewGate }: StageRailProps) {
+function LoadingDot() {
+  return <span className={styles.inlineSpinner} aria-hidden="true" />;
+}
+
+export function StageRail({ stages, reviewGate, stopAction }: StageRailProps) {
   const ordered = [...stages].sort((a, b) => a.order - b.order);
   const stagesByType = new Map<GenerationStageType, GenerationStage[]>();
   ordered.forEach((stage) => {
@@ -177,6 +186,26 @@ export function StageRail({ stages, reviewGate }: StageRailProps) {
                     className={styles.stageProgressFill}
                     style={{ width: `${Math.max(2, Math.min(100, stage.progressPercent))}%` }}
                   />
+                </div>
+              ) : null}
+              {isUpcoming && stopAction ? (
+                <div className={styles.stageControlRow}>
+                  <button
+                    type="button"
+                    className={styles.stageStopButton}
+                    onClick={stopAction.onStop}
+                    disabled={stopAction.pending}
+                    aria-busy={stopAction.pending || undefined}
+                  >
+                    {stopAction.pending ? (
+                      <>
+                        <LoadingDot />
+                        Stopping after current step...
+                      </>
+                    ) : (
+                      "Stop here"
+                    )}
+                  </button>
                 </div>
               ) : null}
             </div>
