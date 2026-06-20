@@ -112,7 +112,17 @@ function outputViewerItem(output: WorkspaceOutput): MediaViewerItem {
   };
 }
 
-function DashboardFrame({ title, description, children }: { title: string; description: string; children: ReactNode }) {
+function DashboardFrame({
+  title,
+  description,
+  children,
+  showNewVideoAction = true,
+}: {
+  title: string;
+  description: string;
+  children: ReactNode;
+  showNewVideoAction?: boolean;
+}) {
   return (
     <div className={styles.page}>
       <PageHeader
@@ -120,9 +130,11 @@ function DashboardFrame({ title, description, children }: { title: string; descr
         title={title}
         description={description}
         action={
-          <ButtonLink variant="primary" to={newStudioDraftPath()}>
-            New video
-          </ButtonLink>
+          showNewVideoAction ? (
+            <ButtonLink variant="primary" to={newStudioDraftPath()}>
+              New video
+            </ButtonLink>
+          ) : null
         }
       />
       {children}
@@ -166,7 +178,11 @@ export function RunsPage() {
   });
 
   return (
-    <DashboardFrame title="Runs" description="Track generation runs in this workspace.">
+    <DashboardFrame
+      title="Runs"
+      description="Track generation runs in this workspace."
+      showNewVideoAction={false}
+    >
       <Toolbar>
         <ToolbarField label="Status">
           <select value={status} onChange={(event) => setStatus(event.target.value as RunStatusFilter)}>
@@ -301,9 +317,9 @@ export function ProjectsPage() {
                   <ButtonLink
                     variant="ghost"
                     size="sm"
-                    to={`/library/runs?projectId=${encodeURIComponent(project.id)}`}
+                    to={projectDetailPath(project.id)}
                   >
-                    Runs
+                    Open
                   </ButtonLink>
                 </div>
               </article>

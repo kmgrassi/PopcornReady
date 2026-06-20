@@ -1,29 +1,48 @@
 .stepper {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--section-gap-tight);
+  justify-content: center;
+  gap: var(--space-3);
   margin: 0;
   padding: 0;
   list-style: none;
+  width: 100%;
 }
 
 .step {
+  position: relative;
   display: flex;
   min-width: 0;
+  flex: 1 1 220px;
+  max-width: 320px;
+}
+
+.step:not(:last-child)::after {
+  content: "→";
+  position: absolute;
+  top: 50%;
+  right: calc(var(--space-3) * -1);
+  transform: translate(50%, -50%);
+  color: var(--muted);
+  font-weight: 800;
+  opacity: 0.55;
 }
 
 .trigger {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid transparent;
-  border-radius: var(--radius-pill);
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 68px;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   background: transparent;
   font-family: inherit;
   font-size: var(--text-md);
   color: var(--muted);
   cursor: default;
+  text-align: left;
   transition:
     background var(--transition),
     color var(--transition),
@@ -38,8 +57,9 @@ button.trigger {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
   border-radius: var(--radius-pill);
   border: 1px solid var(--border);
   font-size: var(--text-sm);
@@ -47,9 +67,25 @@ button.trigger {
   line-height: 1;
 }
 
+.copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .label {
+  color: inherit;
+  font-size: var(--text-md);
   font-weight: 700;
-  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.subtitle {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: 650;
+  line-height: 1.25;
 }
 
 /* Completed steps */
@@ -71,7 +107,8 @@ button.done:hover .trigger,
 /* Active step — clear highlight */
 .active .trigger {
   color: var(--text-strong);
-  border-color: var(--border);
+  border-color: var(--accent-border);
+  box-shadow: var(--shadow-sm);
 }
 
 .active .marker {
@@ -84,4 +121,19 @@ button.done:hover .trigger,
 .upcoming .trigger {
   color: var(--muted);
   opacity: 0.7;
+}
+
+@media (max-width: 760px) {
+  .stepper {
+    justify-content: stretch;
+  }
+
+  .step {
+    flex-basis: 100%;
+    max-width: none;
+  }
+
+  .step:not(:last-child)::after {
+    display: none;
+  }
 }

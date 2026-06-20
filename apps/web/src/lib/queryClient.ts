@@ -20,6 +20,7 @@ import {
   type StartGenerationRunInput,
   type StartTimelineExportInput,
   type StartUploadedFootageRunInput,
+  type StoryboardGenerationJobResponse,
   type WorkspaceAssetSource,
 } from "./api-client";
 import { projectQueryKeys } from "./project-queries";
@@ -59,6 +60,8 @@ export const queryKeys = {
   project: (projectId: string) => ["projects", projectId] as const,
   projectStoryboard: (projectId: string) =>
     ["projects", projectId, "storyboard"] as const,
+  projectStoryboardGenerationJob: (projectId: string, jobId: string) =>
+    ["projects", projectId, "storyboards", "generate", jobId] as const,
   dashboardSummary: (workspaceId: string) =>
     ["dashboard", "summary", workspaceId] as const,
   workspaceGenerationRuns: (
@@ -121,12 +124,18 @@ type StudioProjectTimelineKey = {
   }>;
 };
 
-function isTerminal(status: GenerationRun["status"]): boolean {
+function isTerminal(status: string): boolean {
   return status === "succeeded" || status === "failed" || status === "canceled";
 }
 
 function shouldPollRun(run: GenerationRunDetail | undefined): boolean {
   return Boolean(run && !isTerminal(run.run.status));
+}
+
+function shouldPollStoryboardJob(
+  response: StoryboardGenerationJobResponse | undefined,
+): boolean {
+  return Boolean(response && !isTerminal(response.job.status));
 }
 
 function studioProjectTimelineKey(
@@ -240,6 +249,44 @@ export function useProjectStoryboardQuery(projectId: string, enabled = true) {
     queryFn: ({ signal }: { signal: QuerySignal }) =>
       v1Api.getProjectStoryboard(projectId, signal),
     enabled: enabled && Boolean(projectId),
+  });
+}
+
+export function useGenerateProjectStoryboardMutation(projectId: string) {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => v1Api.generateProjectStoryboard(projectId),
+    onSuccess: ({ job }) => {
+      client.setQueryData(
+        queryKeys.projectStoryboardGenerationJob(projectId, job.id),
+        { job },
+      );
+      void client.invalidateQueries({ queryKey: queryKeys.projectStoryboard(projectId) });
+      void client.invalidateQueries({ queryKey: queryKeys.project(projectId) });
+      void client.invalidateQueries({ queryKey: ["projects"] });
+      void client.invalidateQueries({ queryKey: ["workspaces"] });
+      void client.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
+export function useProjectStoryboardGenerationJobQuery(
+  projectId: string,
+  jobId: string,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: queryKeys.projectStoryboardGenerationJob(projectId, jobId),
+    queryFn: ({ signal }: { signal: QuerySignal }) =>
+      v1Api.getProjectStoryboardGenerationJob(projectId, jobId, signal),
+    enabled: enabled && Boolean(projectId && jobId),
+    refetchInterval: (query) => {
+      const data = query.state.data as StoryboardGenerationJobResponse | undefined;
+      if (!shouldPollStoryboardJob(data)) return false;
+      if (document.visibilityState === "hidden") return false;
+      return POLL_INTERVAL_MS;
+    },
   });
 }
 

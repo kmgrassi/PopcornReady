@@ -6,6 +6,8 @@ export interface Step {
   id: string;
   /** Short human label shown next to the step index. */
   label: string;
+  /** Optional helper text shown under the step label. */
+  subtitle?: string;
 }
 
 export interface StepperProps {
@@ -52,7 +54,10 @@ export function Stepper({
             <span className={styles.marker} aria-hidden="true">
               {status === "done" ? "✓" : index + 1}
             </span>
-            <span className={styles.label}>{step.label}</span>
+            <span className={styles.copy}>
+              <span className={styles.label}>{step.label}</span>
+              {step.subtitle ? <span className={styles.subtitle}>{step.subtitle}</span> : null}
+            </span>
           </>
         );
         return (

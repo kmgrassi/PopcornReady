@@ -2,8 +2,7 @@ import { Navigate, useParams } from "react-router-dom";
 
 function projectWorkspacePath(projectId?: string): string {
   if (!projectId) return "/studio";
-  const params = new URLSearchParams({ projectId });
-  return `/library/runs?${params.toString()}`;
+  return `/projects/${encodeURIComponent(projectId)}#runs`;
 }
 
 export function StoryboardPage() {

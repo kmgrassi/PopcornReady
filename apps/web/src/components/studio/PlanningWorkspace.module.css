@@ -2,7 +2,9 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-  width: 100%;
+  width: min(100%, 1040px);
+  margin: 0 auto;
+  padding-bottom: 96px;
 }
 
 .header {
@@ -22,8 +24,11 @@
 
 .heading {
   margin: 0;
-  color: var(--text);
-  font-size: var(--title-lg);
+  color: var(--text-strong);
+  font-size: clamp(2.25rem, 4vw, 3rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
 }
 
 .headerActions {
@@ -301,10 +306,18 @@
 }
 
 .footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
+  min-height: 76px;
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg) 90%, transparent);
+  backdrop-filter: blur(16px);
 }
 
 .footerSecondary {

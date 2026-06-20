@@ -49,9 +49,9 @@ export function App() {
           {/* The standalone create wizard is retired — Studio owns the full
               flow. Preserve any /projects/new deep links as a redirect. */}
           <Route path="/projects/new" element={<Navigate to="/studio" replace />} />
-          <Route path="/runs" element={<RedirectWithSearch to="/library/runs" />} />
+          <Route path="/runs" element={<CollectionCompatRedirect section="runs" />} />
           <Route path="/assets" element={<RedirectWithSearch to="/library/assets" />} />
-          <Route path="/outputs" element={<RedirectWithSearch to="/library/outputs" />} />
+          <Route path="/outputs" element={<CollectionCompatRedirect section="outputs" />} />
           <Route path="/anchors" element={<AnchorsPage />} />
           <Route path="/anchors/mine" element={<AnchorsMinePage />} />
           <Route path="/anchors/:entryId" element={<AnchorDetailPage />} />
@@ -75,7 +75,7 @@ export function App() {
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/dev/design-system" element={<DesignSystemPage />} />
           <Route path="/dev/generation-cards" element={<GenerationCardsPage />} />
-          <Route path="/evals" element={<RedirectWithSearch to="/library/evals" />} />
+          <Route path="/evals" element={<Navigate to="/admin/evals" replace />} />
           <Route path="/admin" element={<AdminPage />} />
           <Route
             path="/admin/evals"
@@ -102,6 +102,20 @@ export function App() {
 function RedirectWithSearch({ to }: { to: string }) {
   const location = useLocation();
   return <Navigate to={`${to}${location.search}`} replace />;
+}
+
+function CollectionCompatRedirect({ section }: { section: "runs" | "outputs" }) {
+  const location = useLocation();
+  const projectId = new URLSearchParams(location.search).get("projectId");
+  if (projectId) {
+    return (
+      <Navigate
+        to={`/projects/${encodeURIComponent(projectId)}#${section}`}
+        replace
+      />
+    );
+  }
+  return <Navigate to="/library/projects" replace />;
 }
 
 function Placeholder({ name }: { name: string }) {

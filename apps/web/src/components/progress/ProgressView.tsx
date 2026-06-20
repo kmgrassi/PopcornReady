@@ -817,6 +817,10 @@ export function ProgressView({
           ) : null}
           <StageRail
             stages={detail.stages}
+            runStatus={detail.run.status}
+            currentStageType={detail.run.currentStageType}
+            runProgressPercent={detail.run.progressPercent}
+            runMessage={detail.run.message}
             reviewGate={detail.run.reviewGate}
             stopAction={
               showCancelAction && cancelAction

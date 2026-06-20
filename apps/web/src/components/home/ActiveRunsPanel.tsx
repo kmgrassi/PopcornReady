@@ -25,7 +25,7 @@ export function ActiveRunsPanel({
     <section className={styles.section} aria-labelledby="active-runs-title">
       <div className={styles.header}>
         <h2 id="active-runs-title">In progress</h2>
-        <Link to="/library/runs">View all</Link>
+        <Link to="/library/projects">View projects</Link>
       </div>
 
       <ul className={styles.list}>

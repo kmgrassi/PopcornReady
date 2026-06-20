@@ -6,15 +6,15 @@ import type {
 
 export const studioCopy = {
   brief: {
-    heading: "What should this video do?",
+    heading: "What are we making?",
     description:
-      "Give the agent the outcome, audience, and message. Keep it short; the next steps refine footage and story direction.",
-    goalLabel: "What should this video do?",
+      "Describe the outcome, audience, and message. You can keep it rough - the next steps will refine the footage, story, and plan.",
+    goalLabel: "Video idea",
     goalPlaceholder:
-      "e.g. Make a 60s launch video that shows how our app turns raw clips into a polished product teaser.",
+      "Make a 60-second launch video for Popcorn Ready showing how raw clips become a polished movie trailer.",
     lengthLabel: "Length",
     aspectLabel: "Aspect ratio",
-    advancedSummary: "Advanced creative direction",
+    advancedSummary: "Add creative direction",
   },
   advanced: {
     audience: "Audience",
@@ -33,10 +33,10 @@ export const studioCopy = {
 } as const;
 
 export const lengthOptions = [
-  { value: 30, label: "30s" },
-  { value: 60, label: "60s" },
-  { value: 120, label: "2m" },
-  { value: 300, label: "5m" },
+  { value: 30, label: "30s", description: "Ad" },
+  { value: 60, label: "60s", description: "Short" },
+  { value: 120, label: "2 min", description: "Explainer" },
+  { value: 300, label: "5 min", description: "Full story" },
 ] as const;
 
 export const aspectOptions: Array<{ value: AspectRatio; label: string }> = [
