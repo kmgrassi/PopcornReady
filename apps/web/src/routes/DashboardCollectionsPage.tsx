@@ -16,6 +16,7 @@ import { VisibilityBadge } from "../components/ui/VisibilityBadge";
 import { MediaViewer, type MediaViewerItem } from "../components/media/MediaViewer";
 import {
   useAssetMediaMutation,
+  useAssetRegenerateMutation,
   useAssetVisibilityMutation,
   useDashboardAssetsQuery,
   useDashboardOutputsQuery,
@@ -398,6 +399,7 @@ export function AssetsPage() {
   const assetsQuery = useDashboardAssetsQuery(authScope, assetFilters, scope);
   const visibilityMutation = useAssetVisibilityMutation(authScope, assetFilters);
   const mediaMutation = useAssetMediaMutation(authScope, assetFilters);
+  const regenerateMutation = useAssetRegenerateMutation(authScope, assetFilters);
   const setSelectedAsset = useCallback((assetId: string) => {
     setSelectedAssetId(assetId);
     const next = new URLSearchParams(searchParams);
@@ -564,6 +566,13 @@ export function AssetsPage() {
             ? undefined
             : async (item) => {
                 return mediaMutation.mutateAsync(item.id);
+              }
+        }
+        onRegenerate={
+          isPublic
+            ? undefined
+            : async (item, prompt) => {
+                return regenerateMutation.mutateAsync({ assetId: item.id, prompt });
               }
         }
         actions={
