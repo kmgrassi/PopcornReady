@@ -1669,6 +1669,16 @@ async function getAssetRow(
   assetId: string,
   context: string
 ): Promise<AssetRow> {
+  // `assets.id` is a uuid column. A non-UUID id (e.g. a character slug like
+  // "character_homeowner" handed to the character-anchor endpoint) can never
+  // match a row — Postgres rejects it with `22P02` (invalid input syntax for
+  // type uuid), which `runQuery` surfaces as an opaque `database_error` that
+  // aborts the whole run. Short-circuit to the same typed `not_found` we return
+  // for an absent-but-well-formed id, so callers get the precondition they
+  // self-heal against (anchor autocreate) instead of a hard failure.
+  if (!UUID_RE.test(assetId)) {
+    throw notFound(`Asset not found: ${assetId}`);
+  }
   const data = await runQuery(
     `store.${context}`,
     db
