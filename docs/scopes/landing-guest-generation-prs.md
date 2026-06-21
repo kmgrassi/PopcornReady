@@ -158,10 +158,19 @@ Implementation artifact:
 - For an authenticated **anonymous** user, an upgrade entry point (banner on the
   run/dashboard: "Save your video — create an account") calling
   `supabase.auth.updateUser({ email, password })` (or `linkIdentity`). Same auth
-  id → project already theirs; verify nothing else is needed to claim.
+  id → existing projects/runs stay owned by the same `public.users.id`, so no
+  project/run ownership migration is needed.
+- **Domain email sync:** `handle_new_user()` only runs when the original
+  anonymous `auth.users` row is inserted; it does **not** rerun after
+  `updateUser()` adds an email. PR 5 must explicitly sync the verified upgrade
+  email into the existing `public.users.email` row after the auth upgrade
+  succeeds, so downstream flows that compare against domain email (workspace
+  invite acceptance, invite collision checks, account-management copy) do not
+  continue to see the upgraded user as email-less.
 - **Edge case:** upgrading to an email that already has an unlinked
-  `public.users` row (invite collision). For v1, detect and surface a clear
-  error rather than silently merging two identities.
+  `public.users` row (invite collision) or another linked user. For v1, detect
+  and surface a clear error before syncing the email rather than silently merging
+  two identities.
 
 ### PR 6 — Abuse guard: client-side run limit (localStorage) + server quota
 
