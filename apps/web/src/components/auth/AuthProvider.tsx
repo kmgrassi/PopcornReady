@@ -24,6 +24,7 @@ type AuthContextValue = {
   configured: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
+  signInAnonymous: () => Promise<void>;
   signOut: () => Promise<void>;
   clearError: () => void;
 };
@@ -142,6 +143,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const signInAnonymous = useCallback(async () => {
+    setError(null);
+    setStatus("loading");
+    try {
+      clearAllSupabaseAuthStorage();
+      const { data, error: signInError } =
+        await getSupabaseClient().auth.signInAnonymously();
+      if (signInError || !data.session?.user) {
+        throw signInError || new Error("No Supabase anonymous session returned.");
+      }
+      setUser(data.session.user);
+      setStatus("authenticated");
+    } catch (err) {
+      setUser(null);
+      setStatus("unauthenticated");
+      setError(describeAuthError(err));
+      throw err;
+    }
+  }, []);
+
   const signOut = useCallback(async () => {
     setError(null);
     if (configured) {
@@ -164,8 +185,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const clearError = useCallback(() => setError(null), []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ status, user, error, configured, signIn, signUp, signOut, clearError }),
-    [status, user, error, configured, signIn, signUp, signOut, clearError]
+    () => ({
+      status,
+      user,
+      error,
+      configured,
+      signIn,
+      signUp,
+      signInAnonymous,
+      signOut,
+      clearError,
+    }),
+    [
+      status,
+      user,
+      error,
+      configured,
+      signIn,
+      signUp,
+      signInAnonymous,
+      signOut,
+      clearError,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
