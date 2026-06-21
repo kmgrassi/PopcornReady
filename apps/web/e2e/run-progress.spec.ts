@@ -23,6 +23,7 @@ interface MockRunOptions {
   stageType?: StageType;
   progressPercent?: number;
   message?: string;
+  stageItems?: Array<Record<string, unknown>>;
   reviewGate?: null | {
     stageType: StageType;
     stageId: string;
@@ -135,6 +136,95 @@ test("shows in-progress rail state when active stage rows have not caught up", a
   await expect(rail.getByText("Generating shot candidates.")).toBeVisible();
   await expect(rail.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "46");
   await expect(rail.getByText("Shots")).toBeVisible();
+});
+
+test("opens generated asset feedback in a modal and posts the targeted revision", async ({ page }) => {
+  let revisionRequestBody: unknown = null;
+  let getCount = 0;
+  let detail = runDetail({
+    status: "running",
+    stageType: "audio_generation",
+    progressPercent: 85,
+    message: "Audio is ready for feedback.",
+    stageItems: [
+      {
+        itemId: "item-score-1",
+        stageId: "stage-audio_generation",
+        kind: "audio",
+        purpose: "audio",
+        label: "Score bed",
+        status: "succeeded",
+        provider: "fixture",
+        promptPreview: "Warm cinematic score.",
+        assetId: "asset-score-1",
+        createdAt: now,
+        updatedAt: now,
+      },
+    ],
+  });
+  await page.route(`**${apiRunPath}`, async (route) => {
+    getCount += 1;
+    await route.fulfill({ json: detail });
+  });
+  await page.route(`**${apiRunPath}/board-revisions`, async (route) => {
+    revisionRequestBody = await route.request().postDataJSON();
+    detail = runDetail({
+      status: "running",
+      stageType: "audio_generation",
+      progressPercent: 88,
+      message: "Revision is running.",
+      stageItems: detail.stageItems,
+    });
+    await route.fulfill({
+      json: {
+        revision: {
+          id: "revision-1",
+          message: "Make the score less dramatic.",
+          target: {
+            scope: "tile",
+            runId,
+            stageId: "stage-audio_generation",
+            itemId: "item-score-1",
+            assetId: "asset-score-1",
+            label: "Score bed",
+          },
+          createdAt: now,
+        },
+      },
+    });
+  });
+
+  await page.goto(runPath);
+
+  await expect(page.getByRole("heading", { name: "Generated assets" })).toBeVisible();
+  await expect(page.getByPlaceholder("Tell the AI what to change here.")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Edit Score bed with AI" }).click();
+  const dialog = page.getByRole("dialog", { name: "Score bed" });
+  await expect(dialog).toBeVisible();
+
+  const feedback = dialog.getByLabel("Feedback for the AI");
+  await feedback.fill("Make the score less dramatic.");
+  await expect.poll(() => getCount).toBeGreaterThan(1);
+  await expect(dialog).toBeVisible();
+  await expect(feedback).toHaveValue("Make the score less dramatic.");
+
+  await dialog.getByRole("button", { name: "Send to AI" }).click();
+
+  await expect(dialog).toHaveCount(0);
+  await expect.poll(() => getCount).toBeGreaterThan(2);
+  await expect(page.getByText("Revision is running.")).toBeVisible();
+  expect(revisionRequestBody).toEqual({
+    message: "Make the score less dramatic.",
+    target: {
+      scope: "tile",
+      runId,
+      stageId: "stage-audio_generation",
+      itemId: "item-score-1",
+      assetId: "asset-score-1",
+      label: "Score bed",
+    },
+  });
 });
 
 test("submits review-gate approve and reject actions with notes", async ({ page }) => {
@@ -360,22 +450,24 @@ function runDetail(options: MockRunOptions = {}) {
       reviewStageId: options.reviewGate?.stageId,
       error: options.error,
     }),
-    stageItems: options.reviewGate
-      ? [
-          {
-            itemId: "item-storyboard-1",
-            stageId: options.reviewGate.stageId,
-            kind: "image",
-            purpose: "storyboard_frame",
-            label: "Opening storyboard frame",
-            status: "succeeded",
-            provider: "fixture",
-            promptPreview: "Opening frame for review.",
-            createdAt: now,
-            updatedAt: now,
-          },
-        ]
-      : [],
+    stageItems:
+      options.stageItems ??
+      (options.reviewGate
+        ? [
+            {
+              itemId: "item-storyboard-1",
+              stageId: options.reviewGate.stageId,
+              kind: "image",
+              purpose: "storyboard_frame",
+              label: "Opening storyboard frame",
+              status: "succeeded",
+              provider: "fixture",
+              promptPreview: "Opening frame for review.",
+              createdAt: now,
+              updatedAt: now,
+            },
+          ]
+        : []),
   };
 }
 
