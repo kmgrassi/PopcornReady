@@ -326,6 +326,7 @@ function toolStage(tool: string): GenerationStageType {
     case "request_approval":
       return "quality_review";
     case "export_video":
+    case "publish_to_catalog":
       return "export";
     default:
       return "creative_plan";

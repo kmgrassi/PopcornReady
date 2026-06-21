@@ -30,6 +30,10 @@ import {
 } from "./plan-visual-anchors";
 import { createPlanShotsTool, type PlanShotsDeps } from "./plan-shots";
 import {
+  createPublishToCatalogTool,
+  type PublishToCatalogDeps,
+} from "./publish-to-catalog";
+import {
   createRequestApprovalTool,
   type RequestApprovalDeps,
 } from "./request-approval";
@@ -50,6 +54,7 @@ export interface DefaultToolRegistryDeps {
   planVisualAnchors?: Partial<PlanVisualAnchorsDeps>;
   requestApproval?: Partial<RequestApprovalDeps>;
   assembleTimeline?: Partial<AssembleTimelineDeps>;
+  publishToCatalog?: Partial<PublishToCatalogDeps>;
 }
 
 export function createDefaultToolRegistry(
@@ -70,5 +75,6 @@ export function createDefaultToolRegistry(
   registry.register(createExportVideoTool(deps.exportVideo));
   registry.register(createRequestApprovalTool(deps.requestApproval));
   registry.register(createAssembleTimelineTool(deps.assembleTimeline));
+  registry.register(createPublishToCatalogTool(deps.publishToCatalog));
   return registry;
 }

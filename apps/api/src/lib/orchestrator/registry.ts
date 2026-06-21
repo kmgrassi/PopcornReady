@@ -90,6 +90,8 @@ function toolDescription(name: ToolName): string {
       return "Create a user approval gate before an expensive or user-visible stage.";
     case "export_video":
       return "Export the current approved timeline to a video artifact.";
+    case "publish_to_catalog":
+      return "Publish a generated image, character, or story to the shared public catalog under the system publisher.";
   }
 }
 

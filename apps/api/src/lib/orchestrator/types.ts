@@ -13,6 +13,7 @@ export const TOOL_NAMES = [
   "critique_timeline",
   "request_approval",
   "export_video",
+  "publish_to_catalog",
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];
