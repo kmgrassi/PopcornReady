@@ -12,8 +12,6 @@
 // supplies where to write bytes and how to mint a public URL, so the generator
 // is unit-testable offline against the `mock` provider.
 
-import { promises as fs } from "fs";
-import path from "path";
 import type { Beat, Scene } from "@popcorn/shared/types";
 import type { Asset } from "@popcorn/shared/assets/types";
 import type {
@@ -59,13 +57,18 @@ export interface GenerateStoryboardTileInput {
   provider?: StoryboardTileProvider;
 
   // --- persistence seam (kept out of this module so it stays store-agnostic) -
-  // Directory to write the sketch bytes into.
-  outputDir: string;
-  // Map a written filename to the public/served URL recorded on the asset.
-  publicUrlFor: (filename: string) => string;
-  // Mint the asset id (the DB/store assigns this in production; tests pass a
-  // deterministic generator).
+  // Mint the storage filename's id namespace (the store assigns the real asset
+  // id in production; tests pass a deterministic generator).
   newId: () => string;
+}
+
+// The generator stays storage-agnostic: it returns the tile metadata plus the
+// raw image bytes, and the store layer persists them — uploading to the object
+// store and recording storage_key/storage_bucket so the serving layer can
+// deliver them in every environment. See addStoryboardTiles.
+export interface GeneratedStoryboardTile {
+  asset: Asset;
+  bytes: Buffer;
 }
 
 // Resolve which provider actually runs: minors always go to Gemini.
@@ -100,7 +103,7 @@ function imageRequestFor(
 
 export async function generateStoryboardTile(
   input: GenerateStoryboardTileInput
-): Promise<Asset> {
+): Promise<GeneratedStoryboardTile> {
   const beatId = input.beat.id;
   if (!beatId) {
     throw new Error(
@@ -121,12 +124,10 @@ export async function generateStoryboardTile(
     imageRequestFor(provider, prompt, input.referencePaths)
   );
 
-  // Write the bytes under a storage filename (its own namespace, not the asset
-  // id) so they can land before the row exists.
+  // The storage filename uses its own id namespace (not the asset id) so the
+  // bytes can be uploaded before the asset row exists.
   const id = input.newId();
   const filename = `${id}.${result.extension}`;
-  await fs.mkdir(input.outputDir, { recursive: true });
-  await fs.writeFile(path.join(input.outputDir, filename), result.bytes);
 
   // Provenance input edges: the tile depends on the beat intent + scene context,
   // and on any sketch anchors it was conditioned on (NORTH_STAR recompute-
@@ -145,7 +146,9 @@ export async function generateStoryboardTile(
     depicts: { beatId },
     description: `Storyboard sketch — ${input.scene.name}: ${input.beat.name}`,
     media: {
-      url: input.publicUrlFor(filename),
+      // Placeholder locator: the store uploads the bytes and records the real
+      // storage key/bucket, which drive serving (not this field).
+      url: filename,
       filename,
       // Sketches are stills; carry the beat's intended shot duration so a tile
       // reads at the right length in the storyboard timeline.
@@ -170,5 +173,5 @@ export async function generateStoryboardTile(
     },
   };
 
-  return asset;
+  return { asset, bytes: result.bytes };
 }
