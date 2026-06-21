@@ -145,18 +145,20 @@ export function ProjectDetailPage() {
 
       {!loading && !error && project ? (
         <>
-          <section className={styles.overviewLayout}>
+          <section className={styles.projectTopLayout}>
             <ProjectHero project={project} storyboard={storyboard} />
-            <ProjectStagePanel
-              projectId={projectId}
-              runs={runsQuery.items}
-              loading={runsQuery.loading}
-              error={runsQuery.error}
-              onRetry={runsQuery.refetch}
-            />
+            <div className={styles.projectTopRail}>
+              <ProjectBrief project={project} />
+              <ProjectStagePanel
+                projectId={projectId}
+                runs={runsQuery.items}
+                loading={runsQuery.loading}
+                error={runsQuery.error}
+                onRetry={runsQuery.refetch}
+              />
+            </div>
           </section>
-          <section className={styles.layout}>
-            <ProjectBrief project={project} />
+          <section className={styles.storyboardLayout}>
             <StoryboardPreview
               projectId={projectId}
               storyboard={storyboard}
@@ -434,7 +436,7 @@ function ProjectBrief({ project }: { project: V1Project }) {
       <div className={styles.sectionHeader}>
         <div>
           <span className={styles.eyebrow}>Plan</span>
-          <h2>Plan</h2>
+          <h2>Project direction</h2>
         </div>
       </div>
       {brief ? (

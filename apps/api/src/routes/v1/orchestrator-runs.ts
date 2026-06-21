@@ -714,6 +714,7 @@ orchestratorRunsRouter.post(
     if (!replayed) {
       startPosterGenerationInBackground(auth, projectId, {
         provider: requestedProvider(body),
+        runId: run.id,
       });
       startRun(auth.workspaceId, run.id, auth.actor.id);
     }
@@ -759,7 +760,13 @@ orchestratorRunsRouter.post(
       budgetUsd: budget,
       body,
     });
-    if (!replayed) startRun(auth.workspaceId, run.id, auth.actor.id);
+    if (!replayed) {
+      startPosterGenerationInBackground(auth, projectId, {
+        provider: requestedProvider(body),
+        runId: run.id,
+      });
+      startRun(auth.workspaceId, run.id, auth.actor.id);
+    }
     return { status: 202, body: { runId: run.id } };
   })
 );

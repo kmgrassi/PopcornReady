@@ -55,8 +55,7 @@
 
 .hero {
   display: grid;
-  grid-template-columns: minmax(220px, 360px) minmax(0, 1fr);
-  gap: var(--space-5);
+  gap: var(--space-4);
   align-items: stretch;
   padding: var(--space-5);
   border: 1px solid var(--border);
@@ -64,16 +63,22 @@
   background: var(--panel);
 }
 
-.overviewLayout {
+.projectTopLayout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  grid-template-columns: minmax(320px, 0.78fr) minmax(0, 1.22fr);
   align-items: start;
   gap: var(--space-5);
 }
 
+.projectTopRail {
+  display: grid;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
 .poster {
   width: 100%;
-  aspect-ratio: 16 / 10;
+  aspect-ratio: 2 / 3;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -174,6 +179,11 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-5);
+}
+
+.storyboardLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .panel {
@@ -413,7 +423,7 @@
 
 @media (max-width: 900px) {
   .hero,
-  .overviewLayout,
+  .projectTopLayout,
   .layout {
     grid-template-columns: 1fr;
   }
