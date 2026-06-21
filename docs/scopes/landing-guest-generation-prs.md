@@ -49,8 +49,8 @@ revive the multi-step Studio wizard. Reviving the wizard is a separate decision.
 - **[supabase-cutover-prs.md](./supabase-cutover-prs.md)** /
   **[docs/supabase-identity-and-rls.md](../supabase-identity-and-rls.md)** — the
   `public.users.auth_id` ≠ `auth.uid()` identity model and
-  `current_app_user_id()`. PR 1 below modifies the `handle_new_user` trigger;
-  read the identity rules first.
+  `current_app_user_id()`. PR 1 below verifies the anonymous user flows through
+  `handle_new_user` and this mapping correctly; read the identity rules first.
 - **[docs/NORTH_STAR.md](../NORTH_STAR.md)** /
   **[docs/ui-interaction-model.md](../ui-interaction-model.md)** — the landing
   prompt box is **top-of-funnel intake**, not an object-edit surface, so a
@@ -64,12 +64,18 @@ revive the multi-step Studio wizard. Reviving the wizard is a separate decision.
   `apps/web/src/components/AppLayout.tsx`. Once a guest has an anon session,
   **all existing authed routes and API calls work unchanged** — no parallel
   guest code path through the SPA or the API.
-- **The one real backend gap:** `handle_new_user()`
+- **The identity path already covers anonymous users** (verify, don't rebuild).
+  `handle_new_user()`
   (`supabase/migrations/20260603000000_init_schema.sql:111-159`, trigger
-  `on_auth_user_created:157`) only creates a `public.users` row on **email
-  match**. Anonymous users have no email, so they get **no `public.users` row**,
-  and the API middleware (`apps/api/src/middleware/auth.ts:109-117`) then
-  resolves a null domain id and returns **401**. This must be fixed first.
+  `on_auth_user_created:157`) fires `after insert on auth.users`, and anonymous
+  sign-in inserts a real `auth.users` row. The email-match lookup is guarded by
+  `if v_email is not null` (`:124`), so for an anonymous user (`email` null)
+  `v_existing` stays null and the function falls through to its **unconditional
+  `else` insert** (`:140-150`), creating a `public.users` row with
+  `auth_id = new.id` and `email` null (the column is nullable). The API
+  middleware (`apps/api/src/middleware/auth.ts:109-117`) then resolves a valid
+  domain id via `current_app_user_id()`. **No trigger/migration change is
+  required** for an anon user to get an app identity.
 - **Auto-claim is free.** In-place upgrade (`supabase.auth.updateUser` /
   `linkIdentity`) keeps `auth.uid()`, so `current_app_user_id()`
   (`...init_schema.sql:98-106`) resolves the **same** `public.users.id`. The
@@ -82,25 +88,34 @@ revive the multi-step Studio wizard. Reviving the wizard is a separate decision.
 
 ## Work breakdown (parallelizable PRs)
 
-> Dependency note: **PR 1 is the unblock** — everything that starts a guest run
-> needs the `public.users` row to exist. PR 2 (web `signInAnonymous`) and PR 3
-> (landing UI) can be built against a stubbed/dev identity in parallel, but the
-> guest path can't be exercised end-to-end until PR 1 lands. PRs 4–7 are
-> largely independent of each other once 1–3 are in.
+> Dependency note: there is **no backend migration unblock** — the existing
+> `handle_new_user` trigger already creates a `public.users` row for anonymous
+> users (see Current state). The only true prerequisite is enabling anonymous
+> sign-ins in Supabase (PR 2's ops step) plus the one-time identity-path
+> verification in PR 1. PR 2 (web `signInAnonymous`) and PR 3 (landing UI) can
+> be built in parallel; PRs 4–7 are largely independent once 2–3 are in.
 
-### PR 1 — Trigger: every auth user gets a `public.users` row (backend unblock)
+### PR 1 — Verify the anonymous identity path (spike, likely no code)
 
-- Additive migration that **drop+creates** `handle_new_user()` (per the
-  no-history-rewrite rule — never edit an applied migration) so that when no
-  email match is found, it still inserts a `public.users` row with `auth_id`
-  set and `email` null (covers anonymous users).
-- Keep the existing email-match / invite-adoption branch intact — only add the
-  no-email branch.
-- Use a **unique migration timestamp** and verify it applied live (parallel
-  agents colliding on a timestamp silently skip — see migration-collision
-  history). Confirm the migrations CI workflow goes green.
-- **Verify:** an anonymous token now resolves a domain id through the existing
-  middleware with no middleware change.
+The earlier draft of this plan assumed a missing-`public.users`-row gap that
+**does not exist** — `handle_new_user`'s `else` branch already inserts a row for
+email-less (anonymous) users. So PR 1 is a verification spike, not a migration:
+
+- With anonymous sign-ins enabled, create an anon session and confirm a
+  `public.users` row is created with `auth_id` = the anon `auth.users.id` and
+  null `email`.
+- Confirm `current_app_user_id()` / `resolveAppUserId`
+  (`apps/api/src/middleware/auth.ts:109-117`) resolves a domain id for the anon
+  token so a real authed API call (e.g. `createProject`) succeeds — **no
+  middleware or trigger change expected**.
+- Check the edge cases that *could* surface a real failing condition: multiple
+  concurrent anon users with null `email` against any `public.users.email`
+  uniqueness, and whether any RLS policy keyed on the `authenticated` role
+  behaves differently for an `is_anonymous` JWT.
+- **Only if** verification finds a concrete failure does this PR turn into a
+  migration — and then it is an additive **drop+create** of `handle_new_user`
+  with a unique timestamp (never edit an applied migration), documenting the
+  exact failing condition.
 
 ### PR 2 — `signInAnonymous` in the web auth layer
 
