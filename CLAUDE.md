@@ -13,6 +13,15 @@ assets via a dependency/provenance graph. Align new generation work to it; flag
 deviations explicitly. Do **not** entrench the old forward-only "edit the
 timeline with patches" model.
 
+**[docs/ui-interaction-model.md](docs/ui-interaction-model.md)** is the
+authoritative companion for how the **UI behaves**: the dashboard is
+observe-first (read-optimized, minimal direct-edit controls), and the *only* way
+to change content is the object-scoped **"Ask the AI"** modal — every change
+flows through the agent (NORTH_STAR Principle 10), nothing is edited in
+isolation. Read it before building any dashboard/editor surface; default new
+object surfaces to read-only + an "Ask the AI" entry point rather than form
+fields.
+
 ## Direction (target architecture)
 
 The app is **moving off the Next.js monolith** into a monorepo split. Target stack:

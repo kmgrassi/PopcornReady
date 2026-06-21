@@ -58,13 +58,15 @@ async function mockProjectWorkspace(page: Page) {
   });
 }
 
-test("legacy project storyboard route redirects to the project workspace", async ({ page }) => {
+test("project storyboard route renders the dedicated storyboard page", async ({ page }) => {
   await mockLocalAuth(page);
   await mockProjectWorkspace(page);
 
   await page.goto(`/projects/${projectId}/storyboard`);
 
-  await expect(page).toHaveURL(`/projects/${projectId}#runs`);
-  await expect(page.getByRole("heading", { name: "Recent generation work" })).toBeVisible();
-  await expect(page.getByText("No runs yet")).toBeVisible();
+  // It no longer redirects — it renders the storyboard page (empty state here,
+  // since the mocked project has no storyboard).
+  await expect(page).toHaveURL(`/projects/${projectId}/storyboard`);
+  await expect(page.getByRole("heading", { name: "Storyboard" })).toBeVisible();
+  await expect(page.getByText("No storyboard yet")).toBeVisible();
 });

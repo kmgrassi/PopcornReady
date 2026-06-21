@@ -604,6 +604,39 @@
   margin-top: var(--space-2);
 }
 
+.assetEditButton {
+  min-width: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-align: left;
+}
+
+.assetEditButton:hover,
+.assetEditButton:focus-visible {
+  outline: none;
+}
+
+.assetEditButton:hover :global(.stage-item-card),
+.assetEditButton:focus-visible :global(.stage-item-card) {
+  border-color: color-mix(in srgb, var(--cta) 54%, var(--border));
+  box-shadow: var(--ring);
+}
+
+.assetEditButton[aria-busy="true"] {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.assetModalPreview {
+  width: min(100%, 420px);
+  padding: var(--space-3);
+}
+
 .reviewOutputs,
 .generatedOutputs {
   display: grid;

@@ -1,4 +1,3 @@
-import { studioCommands } from "../studio/commands";
 import { homeCommands } from "../../routes/home/commands";
 import { libraryCommands } from "../../routes/library/commands";
 import {
@@ -16,7 +15,6 @@ export function getPaletteCommands({
 }: PaletteRegistryOptions = {}): PaletteCommand[] {
   return [
     ...homeCommands,
-    ...studioCommands,
     ...libraryCommands,
     ...settingsCommands,
     ...(showAdminCommands ? adminSettingsCommands : []),

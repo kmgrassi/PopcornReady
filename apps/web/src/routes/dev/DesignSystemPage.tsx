@@ -36,7 +36,7 @@ export function DesignSystemPage() {
               <Button variant="secondary">Preview</Button>
               <Button variant="ghost">Cancel</Button>
               <Button variant="secondary" isLoading>Rendering</Button>
-              <ButtonLink variant="secondary" to="/studio">Open studio</ButtonLink>
+              <ButtonLink variant="secondary" to="/library/projects">View projects</ButtonLink>
             </Inline>
           </Stack>
         </Card>

@@ -5,7 +5,7 @@
 
 .header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
   gap: var(--space-5);
 }
@@ -26,6 +26,14 @@
   line-height: var(--line-heading);
 }
 
+.headerCopy {
+  max-width: 620px;
+  margin: var(--space-2) 0 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--line-body);
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -39,6 +47,27 @@
   border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--surface-2) 74%, var(--bg));
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-align: left;
+}
+
+.tile:hover,
+.tile:focus-visible {
+  border-color: color-mix(in srgb, var(--cta) 54%, var(--border));
+  box-shadow: var(--shadow-sm);
+}
+
+.tile:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.tile[aria-busy="true"] {
+  cursor: wait;
+  opacity: 0.72;
 }
 
 .media {
@@ -100,60 +129,6 @@
   color: var(--muted);
   font-size: var(--text-sm);
   line-height: var(--line-body);
-}
-
-.feedback {
-  display: grid;
-  gap: var(--space-2);
-}
-
-.feedbackLabel {
-  color: var(--text-strong);
-  font-size: var(--text-sm);
-  font-weight: 800;
-}
-
-.feedback textarea {
-  min-height: 84px;
-  width: 100%;
-  resize: vertical;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--surface) 84%, var(--bg));
-  color: var(--text);
-  font: inherit;
-  line-height: var(--line-body);
-  padding: var(--space-3);
-}
-
-.feedback textarea:focus {
-  border-color: var(--cta);
-  box-shadow: var(--ring);
-  outline: none;
-}
-
-.feedback button {
-  justify-self: start;
-  min-height: 36px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  color: var(--text);
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--text-sm);
-  font-weight: 800;
-  padding: 0 var(--space-3);
-}
-
-.feedback button:hover {
-  border-color: color-mix(in srgb, var(--cta) 45%, var(--border));
-}
-
-.feedback button:disabled,
-.feedback textarea:disabled {
-  cursor: wait;
-  opacity: 0.66;
 }
 
 .error {

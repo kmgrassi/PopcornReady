@@ -8,6 +8,7 @@
     "start": "tsx src/index.ts",
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
+    "cli": "tsx scripts/cli.ts",
     "storage:smoke": "tsx scripts/storage-smoke.ts",
     "smoke:tool-calls": "tsx scripts/orchestrator-tool-call-smoke.ts",
     "test:tools": "tsx scripts/tool-tests.ts",

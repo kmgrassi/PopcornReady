@@ -6,7 +6,6 @@ import {
 } from "./components/AppLayout";
 import { AdminRoute } from "./components/auth/AdminRoute";
 import { RunProgressPage } from "./routes/RunProgressPage";
-import { StudioPage } from "./routes/StudioPage";
 import { StoryboardPage } from "./routes/StoryboardPage";
 import { GenerationCardsPage } from "./routes/dev/GenerationCardsPage";
 import { DesignSystemPage } from "./routes/dev/DesignSystemPage";
@@ -49,20 +48,17 @@ export function App() {
           <Route path="/library" element={<LibraryPage />} />
           <Route path="/library/:tab" element={<LibraryPage />} />
           <Route path="/projects" element={<RedirectWithSearch to="/library/projects" />} />
-          {/* The standalone create wizard is retired — Studio owns the full
-              flow. Preserve any /projects/new deep links as a redirect. */}
-          <Route path="/projects/new" element={<Navigate to="/studio" replace />} />
+          <Route path="/projects/new" element={<Navigate to="/library/projects" replace />} />
           <Route path="/runs" element={<CollectionCompatRedirect section="runs" />} />
           <Route path="/assets" element={<RedirectWithSearch to="/library/assets" />} />
           <Route path="/outputs" element={<CollectionCompatRedirect section="outputs" />} />
           <Route path="/anchors" element={<AnchorsPage />} />
           <Route path="/anchors/mine" element={<AnchorsMinePage />} />
           <Route path="/anchors/:entryId" element={<AnchorDetailPage />} />
-          <Route path="/studio" element={<StudioPage />} />
           <Route path="/uploads" element={<UploadsPage />} />
           <Route path="/templates" element={<TemplatesPage />} />
           <Route path="/brand" element={<BrandKitPage />} />
-          <Route path="/storyboard" element={<Navigate to="/studio" replace />} />
+          <Route path="/storyboard" element={<Navigate to="/library/projects" replace />} />
           <Route
             path="/projects/:projectId"
             element={<ProjectDetailPage />}

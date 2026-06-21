@@ -18,6 +18,7 @@ import { generateKeyframeBattery } from "./specs/generate-keyframe";
 import { generateStoryboardBattery } from "./specs/generate-storyboard";
 import { planShotsBattery } from "./specs/plan-shots";
 import { planVisualAnchorsBattery } from "./specs/plan-visual-anchors";
+import { publishToCatalogBattery } from "./specs/publish-to-catalog";
 import { requestApprovalBattery } from "./specs/request-approval";
 
 const ALL_BATTERIES: ToolBattery[] = [
@@ -35,6 +36,7 @@ const ALL_BATTERIES: ToolBattery[] = [
   critiqueTimelineBattery,
   requestApprovalBattery,
   exportVideoBattery,
+  publishToCatalogBattery,
 ];
 
 export const batteries: Map<ToolName, ToolBattery> = new Map(

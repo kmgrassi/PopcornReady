@@ -114,6 +114,26 @@ that change touches.
    intermediate anchors/keyframes and every composite, is persisted in the pool
    (never a temp file). Beyond reuse, persistence is the **audit trail** for *why
    the agent did what it did*.
+10. **Every change flows through the agent — nothing is edited in isolation.**
+    The user never directly mutates an asset, a beat, the brief, or the story
+    through a one-off form control. Every change — "make this shot brighter,"
+    "give the hero a denim jacket," "tighten the open," "rename the protagonist"
+    — is expressed as **intent to the agent**, which decides the blast radius
+    (Principle 3), proposes the minimal re-run (Principle 5), and recomputes only
+    the affected assets over the provenance graph (Principle 4). This is what
+    makes upstream/downstream consistency a **property of the system rather than
+    the user's burden**: because the agent is the *only writer*, an upstream edit
+    can ripple into every dependent keyframe, clip, caption, and cut without the
+    user hunting them down — and conversely the agent can prune ripples it judges
+    irrelevant. A direct, isolated field edit is exactly the forward-only patch
+    model we reject (§3): it mutates one node and silently desynchronizes its
+    dependents. The single carve-out is **selection, not creation** — pointing a
+    slot at an already-generated pooled asset (§5, "I like image 10 — use it
+    here") re-points an active selection rather than authoring content; even then
+    the agent reconciles any downstream effect. The UI consequence — an
+    observe-first dashboard whose primary edit affordance is **"Ask the AI"** — is
+    the source-of-truth interaction model in
+    [docs/ui-interaction-model.md](ui-interaction-model.md).
 
 ## 3. Where we are today (the model we must NOT entrench)
 
@@ -306,6 +326,9 @@ P1**. Kept here with their resolutions as the design record.
 
 ## 9. Provenance & related reading
 
+- **UI source of truth:** [`docs/ui-interaction-model.md`](ui-interaction-model.md)
+  — the observe-first dashboard + "Ask the AI" editing model that Principle 10
+  implies. Read it before building any dashboard/editor surface.
 - **Agent memory:** `generation-pipeline-architecture` (mirrors this doc).
 - **PRs:** #89 (per-beat keyframes + planner-decided anchors), #90 (pre/post
   generation critique loops).

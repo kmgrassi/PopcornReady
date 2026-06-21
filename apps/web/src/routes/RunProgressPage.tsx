@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import type { GenerationRun, GenerationStageType } from "@popcorn/shared/v1/types";
 import { ProgressView } from "../components/progress/ProgressView";
 import type { GenerationRunDetail } from "../lib/v1/generation-runs/status";
@@ -18,18 +18,12 @@ function isTerminal(status: GenerationRun["status"]): boolean {
   return status === "succeeded" || status === "failed" || status === "canceled";
 }
 
-function studioReviewPath(draftId: string): string {
-  const params = new URLSearchParams({
-    draft: draftId,
-    step: "review",
-  });
-  return `/studio?${params.toString()}`;
+function progressFallbackPath(projectId: string): string {
+  return `/projects/${encodeURIComponent(projectId)}`;
 }
 
 export function RunProgressPage() {
   const { projectId, runId } = useParams();
-  const [params] = useSearchParams();
-  const studioDraftId = params.get("studioDraft");
 
   if (!projectId || !runId) {
     return (
@@ -46,7 +40,6 @@ export function RunProgressPage() {
     <RunProgress
       projectId={projectId}
       runId={runId}
-      studioDraftId={studioDraftId}
     />
   );
 }
@@ -54,16 +47,14 @@ export function RunProgressPage() {
 function RunProgress({
   projectId,
   runId,
-  studioDraftId,
 }: {
   projectId: string;
   runId: string;
-  studioDraftId?: string | null;
 }) {
   const [actionError, setActionError] = useState<string | null>(null);
   const [reviewFeedbackNote, setReviewFeedbackNote] = useState("");
   const hint = readLastRunHint(projectId);
-  const studioReturnPath = studioDraftId ? studioReviewPath(studioDraftId) : null;
+  const studioReturnPath = null;
   const runQuery = useGenerationRunQuery(projectId, runId);
   const updateRun = useUpdateGenerationRunMutation(projectId, runId);
   const restartRun = useRestartGenerationRunFromStageMutation(projectId, runId);
@@ -162,16 +153,12 @@ function RunProgress({
               Last seen run <code>{hint.runId}</code> was {hint.status}.
             </p>
           ) : null}
-          <Link className="secondary compact" to={studioReturnPath ?? "/studio"}>
-            {studioReturnPath ? "View draft" : "Open Studio"}
+          <Link className="secondary compact" to={studioReturnPath ?? progressFallbackPath(projectId)}>
+            {studioReturnPath ? "View draft" : "Open project"}
           </Link>
         </div>
       </main>
     );
-  }
-
-  if (studioReturnPath && payload.run.status === "succeeded") {
-    return <Navigate to={studioReturnPath} replace />;
   }
 
   return (
@@ -180,6 +167,9 @@ function RunProgress({
       stages={payload.stages}
       stageItems={payload.stageItems}
       studioReturnPath={studioReturnPath}
+      onBoardRevisionSuccess={async () => {
+        await runQuery.refetch();
+      }}
       cancelAction={
         !payload.run.reviewGate && !isTerminal(payload.run.status)
           ? {

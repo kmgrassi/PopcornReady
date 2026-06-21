@@ -15,6 +15,7 @@ import {
   type VideoBriefInput,
 } from "@popcorn/shared/v1/types";
 import { StageItemCard } from "../generation-progress/StageItemCard";
+import { AiAssetFeedbackDialog } from "../ai-edit/AiAssetFeedbackDialog";
 import {
   GenerationRunClient,
   GenerationRunRequestError,
@@ -53,6 +54,7 @@ interface ProgressViewProps {
     pendingStageType?: GenerationStageType | null;
     onRestart: (stageType: GenerationStageType) => void;
   };
+  onBoardRevisionSuccess?: () => Promise<void> | void;
   /** Optional list of other demo runs to link to from the header. */
   alternateRuns?: { runId: string; label: string }[];
 }
@@ -237,7 +239,7 @@ function workspaceReturnLabel({
   if (hasStudioDraft && succeeded) return "Review in Studio";
   if (hasStudioDraft && terminal) return "View draft";
   if (hasStudioDraft) return "View draft";
-  return "Open Studio";
+  return "Open project";
 }
 
 const BOARD_STAGE_TYPES = new Set<GenerationStageType>([
@@ -391,6 +393,21 @@ function PlanRecap({
   );
 }
 
+function stageItemRevisionTarget(
+  runId: string,
+  item: GenerationStageItem,
+): BoardRevisionTarget {
+  return {
+    scope: "tile",
+    runId,
+    stageId: item.stageId,
+    itemId: item.itemId,
+    ...(item.assetId ? { assetId: item.assetId } : {}),
+    ...(item.artifactId ? { artifactId: item.artifactId } : {}),
+    label: item.label,
+  };
+}
+
 export function ProgressView({
   run,
   stages,
@@ -399,6 +416,7 @@ export function ProgressView({
   reviewActions,
   cancelAction,
   restartAction,
+  onBoardRevisionSuccess,
   alternateRuns,
 }: ProgressViewProps) {
   const [detail, setDetail] = useState({ run, stages, stageItems });
@@ -408,6 +426,7 @@ export function ProgressView({
   const [fallbackFeedbackNote, setFallbackFeedbackNote] = useState("");
   const [boardFeedbackPendingKey, setBoardFeedbackPendingKey] = useState<string | null>(null);
   const [boardFeedbackError, setBoardFeedbackError] = useState<string | null>(null);
+  const [selectedAssetItemId, setSelectedAssetItemId] = useState<string | null>(null);
   const reviewGateKey = detail.run.reviewGate?.stageId ?? null;
   const isBriefReviewGate = detail.run.reviewGate?.stageType === "brief_intake";
   const projectQuery = useProjectQuery(detail.run.projectId);
@@ -419,6 +438,10 @@ export function ProgressView({
     setFallbackApproving(false);
     setFallbackError(null);
   }, [run, stages, stageItems]);
+
+  useEffect(() => {
+    setSelectedAssetItemId(null);
+  }, [run.runId]);
 
   useEffect(() => {
     setFallbackFeedbackNote("");
@@ -434,6 +457,10 @@ export function ProgressView({
   const stageById = new Map(detail.stages.map((stage) => [stage.stageId, stage]));
   const reviewOutputGroups = splitStoryboardItems(reviewItems, stageById);
   const generatedOutputGroups = splitStoryboardItems(generatedItems, stageById);
+  const selectedAssetItem =
+    selectedAssetItemId
+      ? detail.stageItems.find((item) => item.itemId === selectedAssetItemId) ?? null
+      : null;
 
   useEffect(() => {
     if (generatedOutputGroups.boardItems.length === 0) {
@@ -552,6 +579,7 @@ export function ProgressView({
     setBoardFeedbackError(null);
     try {
       await v1Api.createRunBoardRevision(detail.run.projectId, detail.run.runId, input);
+      await onBoardRevisionSuccess?.();
     } catch (err) {
       setBoardFeedbackError(
         err instanceof Error ? err.message : "Could not send board feedback.",
@@ -561,6 +589,16 @@ export function ProgressView({
       setBoardFeedbackPendingKey(null);
     }
   }
+
+  const selectedAssetTarget = selectedAssetItem
+    ? stageItemRevisionTarget(detail.run.runId, selectedAssetItem)
+    : null;
+  const selectedAssetPendingKey = selectedAssetTarget
+    ? storyboardFeedbackTargetKey(selectedAssetTarget)
+    : null;
+  const selectedAssetPending = Boolean(
+    selectedAssetPendingKey && boardFeedbackPendingKey === selectedAssetPendingKey,
+  );
 
   return (
     <div className={styles.shell}>
@@ -609,7 +647,10 @@ export function ProgressView({
               />
             </div>
           </div>
-          <Link className={styles.secondaryButton} to={studioReturnPath ?? "/studio"}>
+          <Link
+            className={styles.secondaryButton}
+            to={studioReturnPath ?? `/projects/${encodeURIComponent(detail.run.projectId)}`}
+          >
             {returnLabel}
           </Link>
           {alternateRuns && alternateRuns.length > 0 ? (
@@ -794,11 +835,46 @@ export function ProgressView({
                 {generatedOutputGroups.genericItems.length > 0 ? (
                   <div className={`${styles.itemGrid} ${styles.reviewOutputGrid}`}>
                     {generatedOutputGroups.genericItems.map((item) => (
-                      <StageItemCard key={item.itemId} item={item} />
+                      <button
+                        className={styles.assetEditButton}
+                        type="button"
+                        key={item.itemId}
+                        onClick={() => setSelectedAssetItemId(item.itemId)}
+                        aria-label={`Edit ${item.label} with AI`}
+                        aria-busy={
+                          boardFeedbackPendingKey ===
+                            storyboardFeedbackTargetKey(stageItemRevisionTarget(detail.run.runId, item)) ||
+                          undefined
+                        }
+                      >
+                        <StageItemCard item={item} />
+                      </button>
                     ))}
                   </div>
                 ) : null}
               </div>
+              <AiAssetFeedbackDialog
+                open={Boolean(selectedAssetItem)}
+                title={selectedAssetItem?.label ?? "Edit asset"}
+                subtitle={selectedAssetItem?.promptPreview ?? selectedAssetItem?.purpose}
+                pending={selectedAssetPending}
+                error={selectedAssetItem ? boardFeedbackError : null}
+                onClose={() => {
+                  if (!selectedAssetPending) setSelectedAssetItemId(null);
+                }}
+                onSubmit={async (message) => {
+                  if (!selectedAssetTarget) return;
+                  await submitBoardFeedback({ message, target: selectedAssetTarget });
+                  setSelectedAssetItemId(null);
+                }}
+                asset={
+                  selectedAssetItem ? (
+                    <div className={styles.assetModalPreview}>
+                      <StageItemCard item={selectedAssetItem} />
+                    </div>
+                  ) : null
+                }
+              />
             </section>
           ) : null}
         </section>

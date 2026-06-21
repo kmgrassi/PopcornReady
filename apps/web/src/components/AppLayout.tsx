@@ -20,7 +20,6 @@ import { CommandPalette } from "./palette/Palette";
 import ThemeToggle from "./ThemeToggle";
 import { Button } from "./ui/Button";
 import { queryClient, useMeQuery } from "../lib/queryClient";
-import { newStudioDraftPath } from "../lib/studioRoutes";
 import styles from "./AppLayout.module.css";
 
 const STORAGE_KEY = "popcorn-ready-theme";
@@ -116,16 +115,10 @@ export function AuthenticatedAppLayout() {
 
   const showAdmin = canAccessAdminSurface(auth);
   const canSignOut = auth.configured && auth.status === "authenticated";
-  const isStudioRoute = location.pathname.startsWith("/studio");
-
   async function signOut() {
     if (!canSignOut) return;
     await auth.signOut();
     navigate("/login", { replace: true });
-  }
-
-  function startNewVideo() {
-    navigate(newStudioDraftPath());
   }
 
   if (auth.status === "loading") {
@@ -150,15 +143,15 @@ export function AuthenticatedAppLayout() {
   }
 
   return (
-    <div className={[styles.shell, isStudioRoute ? styles.studioShell : ""].filter(Boolean).join(" ")}>
+    <div className={styles.shell}>
       <aside className={styles.sidebar}>
         <Link className={styles.brand} to="/dashboard">
           <LogoMark className={styles.logo} />
           <span>Popcorn Ready</span>
         </Link>
 
-        <Button className={styles.newVideo} variant="primary" onClick={startNewVideo}>
-          New video
+        <Button className={styles.newVideo} variant="primary" onClick={() => navigate("/library/projects")}>
+          Projects
         </Button>
 
         <nav className={styles.nav} aria-label="Dashboard">
