@@ -180,6 +180,9 @@ function RunProgress({
       stages={payload.stages}
       stageItems={payload.stageItems}
       studioReturnPath={studioReturnPath}
+      onBoardRevisionSuccess={async () => {
+        await runQuery.refetch();
+      }}
       cancelAction={
         !payload.run.reviewGate && !isTerminal(payload.run.status)
           ? {

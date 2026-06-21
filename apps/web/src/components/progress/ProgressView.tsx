@@ -54,6 +54,7 @@ interface ProgressViewProps {
     pendingStageType?: GenerationStageType | null;
     onRestart: (stageType: GenerationStageType) => void;
   };
+  onBoardRevisionSuccess?: () => Promise<void> | void;
   /** Optional list of other demo runs to link to from the header. */
   alternateRuns?: { runId: string; label: string }[];
 }
@@ -415,6 +416,7 @@ export function ProgressView({
   reviewActions,
   cancelAction,
   restartAction,
+  onBoardRevisionSuccess,
   alternateRuns,
 }: ProgressViewProps) {
   const [detail, setDetail] = useState({ run, stages, stageItems });
@@ -424,7 +426,7 @@ export function ProgressView({
   const [fallbackFeedbackNote, setFallbackFeedbackNote] = useState("");
   const [boardFeedbackPendingKey, setBoardFeedbackPendingKey] = useState<string | null>(null);
   const [boardFeedbackError, setBoardFeedbackError] = useState<string | null>(null);
-  const [selectedAssetItem, setSelectedAssetItem] = useState<GenerationStageItem | null>(null);
+  const [selectedAssetItemId, setSelectedAssetItemId] = useState<string | null>(null);
   const reviewGateKey = detail.run.reviewGate?.stageId ?? null;
   const isBriefReviewGate = detail.run.reviewGate?.stageType === "brief_intake";
   const projectQuery = useProjectQuery(detail.run.projectId);
@@ -435,8 +437,11 @@ export function ProgressView({
     setDetail({ run, stages, stageItems });
     setFallbackApproving(false);
     setFallbackError(null);
-    setSelectedAssetItem(null);
   }, [run, stages, stageItems]);
+
+  useEffect(() => {
+    setSelectedAssetItemId(null);
+  }, [run.runId]);
 
   useEffect(() => {
     setFallbackFeedbackNote("");
@@ -452,6 +457,10 @@ export function ProgressView({
   const stageById = new Map(detail.stages.map((stage) => [stage.stageId, stage]));
   const reviewOutputGroups = splitStoryboardItems(reviewItems, stageById);
   const generatedOutputGroups = splitStoryboardItems(generatedItems, stageById);
+  const selectedAssetItem =
+    selectedAssetItemId
+      ? detail.stageItems.find((item) => item.itemId === selectedAssetItemId) ?? null
+      : null;
 
   useEffect(() => {
     if (generatedOutputGroups.boardItems.length === 0) {
@@ -570,6 +579,7 @@ export function ProgressView({
     setBoardFeedbackError(null);
     try {
       await v1Api.createRunBoardRevision(detail.run.projectId, detail.run.runId, input);
+      await onBoardRevisionSuccess?.();
     } catch (err) {
       setBoardFeedbackError(
         err instanceof Error ? err.message : "Could not send board feedback.",
@@ -826,7 +836,7 @@ export function ProgressView({
                         className={styles.assetEditButton}
                         type="button"
                         key={item.itemId}
-                        onClick={() => setSelectedAssetItem(item)}
+                        onClick={() => setSelectedAssetItemId(item.itemId)}
                         aria-label={`Edit ${item.label} with AI`}
                         aria-busy={
                           boardFeedbackPendingKey ===
@@ -847,12 +857,12 @@ export function ProgressView({
                 pending={selectedAssetPending}
                 error={selectedAssetItem ? boardFeedbackError : null}
                 onClose={() => {
-                  if (!selectedAssetPending) setSelectedAssetItem(null);
+                  if (!selectedAssetPending) setSelectedAssetItemId(null);
                 }}
                 onSubmit={async (message) => {
                   if (!selectedAssetTarget) return;
                   await submitBoardFeedback({ message, target: selectedAssetTarget });
-                  setSelectedAssetItem(null);
+                  setSelectedAssetItemId(null);
                 }}
                 asset={
                   selectedAssetItem ? (

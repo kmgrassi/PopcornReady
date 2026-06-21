@@ -140,33 +140,41 @@ test("shows in-progress rail state when active stage rows have not caught up", a
 
 test("opens generated asset feedback in a modal and posts the targeted revision", async ({ page }) => {
   let revisionRequestBody: unknown = null;
-  await page.route(`**${apiRunPath}`, async (route) => {
-    await route.fulfill({
-      json: runDetail({
+  let getCount = 0;
+  let detail = runDetail({
+    status: "running",
+    stageType: "audio_generation",
+    progressPercent: 85,
+    message: "Audio is ready for feedback.",
+    stageItems: [
+      {
+        itemId: "item-score-1",
+        stageId: "stage-audio_generation",
+        kind: "audio",
+        purpose: "audio",
+        label: "Score bed",
         status: "succeeded",
-        stageType: "audio_generation",
-        progressPercent: 100,
-        message: "Audio is ready.",
-        stageItems: [
-          {
-            itemId: "item-score-1",
-            stageId: "stage-audio_generation",
-            kind: "audio",
-            purpose: "audio",
-            label: "Score bed",
-            status: "succeeded",
-            provider: "fixture",
-            promptPreview: "Warm cinematic score.",
-            assetId: "asset-score-1",
-            createdAt: now,
-            updatedAt: now,
-          },
-        ],
-      }),
-    });
+        provider: "fixture",
+        promptPreview: "Warm cinematic score.",
+        assetId: "asset-score-1",
+        createdAt: now,
+        updatedAt: now,
+      },
+    ],
+  });
+  await page.route(`**${apiRunPath}`, async (route) => {
+    getCount += 1;
+    await route.fulfill({ json: detail });
   });
   await page.route(`**${apiRunPath}/board-revisions`, async (route) => {
     revisionRequestBody = await route.request().postDataJSON();
+    detail = runDetail({
+      status: "running",
+      stageType: "audio_generation",
+      progressPercent: 88,
+      message: "Revision is running.",
+      stageItems: detail.stageItems,
+    });
     await route.fulfill({
       json: {
         revision: {
@@ -195,10 +203,17 @@ test("opens generated asset feedback in a modal and posts the targeted revision"
   const dialog = page.getByRole("dialog", { name: "Score bed" });
   await expect(dialog).toBeVisible();
 
-  await dialog.getByLabel("Feedback for the AI").fill("Make the score less dramatic.");
+  const feedback = dialog.getByLabel("Feedback for the AI");
+  await feedback.fill("Make the score less dramatic.");
+  await expect.poll(() => getCount).toBeGreaterThan(1);
+  await expect(dialog).toBeVisible();
+  await expect(feedback).toHaveValue("Make the score less dramatic.");
+
   await dialog.getByRole("button", { name: "Send to AI" }).click();
 
   await expect(dialog).toHaveCount(0);
+  await expect.poll(() => getCount).toBeGreaterThan(2);
+  await expect(page.getByText("Revision is running.")).toBeVisible();
   expect(revisionRequestBody).toEqual({
     message: "Make the score less dramatic.",
     target: {
