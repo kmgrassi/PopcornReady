@@ -96,6 +96,9 @@ async function generateClipForBeat(input: {
       ...(input.model ? { model: input.model } : {}),
       beatId: input.beat.beatId,
       assetRole: "beat_clip",
+      // Stable handle derived from the planned beat (namespaced vs. the keyframe).
+      name: `Clip — ${input.beat.beatId}`,
+      slug: `clip-${input.beat.beatId}`,
       referenceAssetIds: [input.beat.keyframeAssetId],
       graphInputs: graphInputsForBeat(input.beat),
       ...(input.orchestratorRunId ? { runId: input.orchestratorRunId } : {}),

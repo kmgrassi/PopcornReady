@@ -29,7 +29,7 @@ import { randomUUID } from "crypto";
 import { AuthContext } from "./auth";
 import { ApiError, ApiErrorCode, FieldError, validationError } from "./errors";
 import { createJob, getJob, updateJob, V1Job } from "./jobs";
-import { generatedAssetDisplayName } from "./naming";
+import { resolveAssetMetadata } from "./naming";
 import {
   GeneratedAssetProvenance,
   GeneratedAssetProviderSettings,
@@ -126,6 +126,8 @@ interface ParsedRequest {
   runId?: string;
   assetRole?: string;
   displayName?: string;
+  // Stable, project-scoped handle the generating agent assigned to this asset.
+  slug?: string;
   graphInputs?: GraphAssetInput[];
 }
 
@@ -383,6 +385,7 @@ function parseGeneratedAssetRequest(body: unknown): ParsedRequest {
           : typeof body.name === "string"
             ? body.name
             : undefined,
+    slug: typeof body.slug === "string" ? body.slug : undefined,
     graphInputs: parseGraphInputs(body.graphInputs),
   };
 }
@@ -637,8 +640,8 @@ async function runGeneration(
   };
 
   const now = new Date().toISOString();
-  const displayName = await generatedAssetDisplayName({
-    explicitName: parsed.displayName,
+  const { name: displayName, slug } = await resolveAssetMetadata({
+    agent: { name: parsed.displayName, slug: parsed.slug },
     kind: parsed.kind,
     provider: parsed.provider,
     prompt: preflight.finalPrompt || parsed.prompt,
@@ -658,6 +661,8 @@ async function runGeneration(
     status: "pending",
     source: { type: "generated", generatedAssetId: "" },
     role: parsed.assetRole,
+    name: displayName,
+    ...(slug ? { slug } : {}),
     durationSec,
     context,
     userContext: {
@@ -872,6 +877,7 @@ export async function runGeneratedAssetJob(args: {
         model: parsed.model,
         prompt: parsed.prompt,
         displayName: parsed.displayName,
+        slug: parsed.slug,
         durationSec: parsed.durationSec,
         referenceAssetIds: parsed.referenceAssetIds,
         beatId: parsed.beatId,

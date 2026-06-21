@@ -4,22 +4,18 @@ import test from "node:test";
 import { getAsset, getAssetMediaUrls } from "../store";
 import { ApiError } from "../errors";
 
-// Regression: a non-UUID asset id must surface as a typed `not_found`
-// precondition, not an opaque Postgres `22P02` (invalid input syntax for type
-// uuid) database_error that aborts the run.
+// A non-UUID asset reference must never hit the uuid `assets.id` column (that
+// produced the opaque Postgres `22P02` error that aborted runs as
+// `provider_failed`). `getAssetRow` now routes a non-UUID reference to the
+// project-scoped `slug` column instead — so a handle like "character_homeowner"
+// RESOLVES to the asset the generating agent named, rather than short-circuiting.
 //
-// Production failure this guards against: the character-anchor stage passed a
-// character slug ("character_homeowner") into `getAsset`, which queries the
-// uuid `assets.id` column. Postgres rejected it, the error escaped the
-// `generateCharacterAnchor` autocreate self-heal (it only catches `not_found`),
-// and the whole generation run failed as `provider_failed`. Every asset-by-id
-// read shares this hazard, so the guard lives in a shared `isAssetIdShape`
-// helper applied at each direct `.eq("id", assetId)` read — including the
-// media-refresh path (`getAssetMediaUrls`) that doesn't route through
-// `getAssetRow`.
-//
-// The guard short-circuits before any query, so no live Supabase is needed —
-// dummy creds only satisfy lazy client construction (no network is performed).
+// Two paths still short-circuit to `not_found` before any query, so no live
+// Supabase is needed here:
+//   * a reference that normalizes to an empty slug (no resolvable handle), and
+//   * `getAssetMediaUrls`, which has no projectId and so can't resolve a
+//     project-scoped slug.
+// Slug resolution for a well-formed handle is exercised by integration tests.
 const WORKSPACE_ID = "11111111-1111-4111-8111-111111111111";
 const PROJECT_ID = "22222222-2222-4222-8222-222222222222";
 
@@ -43,12 +39,11 @@ const isNotFound = (assetId: string) => (err: unknown) =>
   err.code === "not_found" &&
   new RegExp(assetId).test(err.message);
 
-test("getAsset maps a non-UUID id to not_found without a DB round-trip", async () => {
+test("getAsset maps an unresolvable (empty-slug) reference to not_found without a DB round-trip", async () => {
   await withDummySupabaseEnv(async () => {
-    await assert.rejects(
-      getAsset(WORKSPACE_ID, PROJECT_ID, "character_homeowner"),
-      isNotFound("character_homeowner")
-    );
+    // "!!!" normalizes to no slug, so there is nothing to resolve — not_found
+    // before any query, never a 22P02 against the uuid id column.
+    await assert.rejects(getAsset(WORKSPACE_ID, PROJECT_ID, "!!!"), isNotFound("!!!"));
   });
 });
 
