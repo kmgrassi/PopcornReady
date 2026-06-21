@@ -74,6 +74,7 @@ import {
 } from "@popcorn/shared/v1/studio-drafts";
 import type { EditPlan, ScriptDraft, Timeline } from "@popcorn/shared/types";
 import type { Asset } from "@popcorn/shared/assets/types";
+import type { GeneratedStoryboardTile } from "@/lib/generative/storyboard-tile";
 import {
   getOrchestratorRun,
   listOrchestratorRunsForProject,
@@ -2975,18 +2976,27 @@ export interface PersistedStoryboardTile {
 // recording the plan as its input so a plan/brief change marks the tiles stale.
 // The relational storyboard (storyboards/scenes/panels) links to these via
 // panel.image_asset_id — see buildStoryboardForPlan.
+//
+// Tiles go through the same persistence path as every other generated image
+// (createGeneratedAsset): insert pending → upload the bytes to the object store →
+// stamp the resulting storage_key/storage_bucket. Earlier this recorded a local
+// filesystem locator with no bucket, which resolveAssetUrl could not deliver in
+// the hosted S3 environment (the tiles rendered no image in production).
 export async function addStoryboardTiles(input: {
   workspaceId: string;
   projectId: string;
   planAssetId: string;
   planContentHash: string;
-  tiles: Asset[];
+  tiles: GeneratedStoryboardTile[];
   createdByActionId?: string;
 }): Promise<PersistedStoryboardTile[]> {
+  // Dynamic import avoids a static store <-> asset-write cycle (asset-write
+  // imports localDir from this module).
+  const { writeAssetObject } = await import("../../storage/asset-write");
   const now = new Date().toISOString();
   const persisted: PersistedStoryboardTile[] = [];
   for (let i = 0; i < input.tiles.length; i += 1) {
-    const tile = input.tiles[i];
+    const { asset: tile, bytes } = input.tiles[i];
     const beatId = tile.depicts?.beatId ?? "";
     const asset: V1Asset = {
       id: "",
@@ -2996,13 +3006,9 @@ export async function addStoryboardTiles(input: {
       kind: "image",
       role: tile.role,
       filename: tile.media.filename,
-      status: "ready",
+      // Pending until the bytes land in storage; flipped to ready on upload.
+      status: "pending",
       source: { type: "generated", generatedAssetId: "" },
-      // The primitive already wrote the bytes to the local generated dir; persist
-      // its storage-relative locator as storageKey (NOT remoteUrl) so
-      // resolveAssetUrl converts it to the API-served /generated/... URL. (remoteUrl
-      // is returned verbatim and would 404 the panel images in local/dev.)
-      storageKey: tile.media.url,
       durationSec: tile.media.durationSec,
       context: tile.description ? { summary: tile.description } : undefined,
       provenance: {
@@ -3020,7 +3026,7 @@ export async function addStoryboardTiles(input: {
           ...(input.planContentHash ? { contentHash: input.planContentHash } : {}),
         },
       ],
-      contentHash: canonicalContentHash({ url: tile.media.url, beatId }),
+      contentHash: canonicalContentHash({ url: tile.media.filename, beatId }),
       createdAt: now,
       updatedAt: now,
     };
@@ -3028,6 +3034,24 @@ export async function addStoryboardTiles(input: {
       asset,
       input.createdByActionId ? { createdByActionId: input.createdByActionId } : {}
     );
+    const visibility = await effectiveAssetStorageVisibility({
+      workspaceId: input.workspaceId,
+      projectId: input.projectId,
+      assetVisibility: created.visibility ?? "public",
+    });
+    const stored = await writeAssetObject({
+      workspaceId: input.workspaceId,
+      projectId: input.projectId,
+      assetId: created.id,
+      filename: tile.media.filename,
+      bytes,
+      visibility,
+    });
+    await updateAsset(input.workspaceId, input.projectId, created.id, (a) => {
+      a.status = "ready";
+      a.storageKey = stored.storageKey;
+      a.storageBucket = stored.storageBucket;
+    });
     persisted.push({ beatId, assetId: created.id });
   }
   return persisted;
