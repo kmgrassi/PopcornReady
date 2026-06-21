@@ -101,6 +101,9 @@ The earlier draft of this plan assumed a missing-`public.users`-row gap that
 **does not exist** — `handle_new_user`'s `else` branch already inserts a row for
 email-less (anonymous) users. So PR 1 is a verification spike, not a migration:
 
+Implementation artifact:
+[landing-guest-generation-pr1-verification.md](./landing-guest-generation-pr1-verification.md).
+
 - With anonymous sign-ins enabled, create an anon session and confirm a
   `public.users` row is created with `auth_id` = the anon `auth.users.id` and
   null `email`.
