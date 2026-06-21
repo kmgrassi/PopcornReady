@@ -6,7 +6,7 @@ import {
   getActiveProjectBrief,
 } from "@/lib/api/v1/store";
 import { buildStoryboardForPlan } from "@/lib/api/v1/storyboards";
-import type { Asset } from "@popcorn/shared/assets/types";
+import type { GeneratedStoryboardTile } from "@/lib/generative/storyboard-tile";
 import type { ToolBattery } from "../types";
 
 async function seedPlan(sandbox: { workspaceId: string; projectId: string }) {
@@ -55,21 +55,24 @@ async function seedPlan(sandbox: { workspaceId: string; projectId: string }) {
 
 async function seedStoryboard(sandbox: { workspaceId: string; projectId: string }) {
   const { planAssetId, plan } = await seedPlan(sandbox);
-  const tiles: Asset[] = plan.scenes[0].beats.map((beat) => ({
-    id: `${beat.id}_tile`,
-    schemaVersion: "asset.v1",
-    projectId: sandbox.projectId,
-    kind: "image",
-    role: "beat_storyboard",
-    depicts: { beatId: beat.id },
-    description: beat.intent,
-    media: {
-      url: `/generated/${beat.id}_tile.png`,
-      filename: `${beat.id}_tile.png`,
-      durationSec: 4,
+  const tiles: GeneratedStoryboardTile[] = plan.scenes[0].beats.map((beat) => ({
+    asset: {
+      id: `${beat.id}_tile`,
+      schemaVersion: "asset.v1",
+      projectId: sandbox.projectId,
+      kind: "image",
+      role: "beat_storyboard",
+      depicts: { beatId: beat.id },
+      description: beat.intent,
+      media: {
+        url: `${beat.id}_tile.png`,
+        filename: `${beat.id}_tile.png`,
+        durationSec: 4,
+      },
+      provenance: { provider: "mock", prompt: beat.intent },
+      source: "generated",
     },
-    provenance: { provider: "mock", prompt: beat.intent },
-    source: "generated",
+    bytes: Buffer.from(`mock-tile-${beat.id}`),
   }));
   const persisted = await addStoryboardTiles({
     workspaceId: sandbox.workspaceId,
