@@ -27,6 +27,11 @@ export interface StageItemCardProps {
   // text (typically derived from the matching Job's JobProgress.message).
   statusMessage?: string;
   onRetry?: (item: GenerationStageItem) => void;
+  // Render the inline "regenerate" control on a blank image frame. Defaults to
+  // true; set false when the card is embedded inside a clickable parent (e.g. an
+  // "edit with AI" <button>), since a nested <button> is invalid markup — the
+  // parent should render its own sibling regenerate control instead.
+  allowInlineRegenerate?: boolean;
 }
 
 const KIND_LABEL: Record<StageItemKind, string> = {
@@ -93,14 +98,16 @@ function formatDuration(seconds: number): string {
 function MediaFrame({
   item,
   asset,
+  allowInlineRegenerate = true,
 }: {
   item: GenerationStageItem;
   asset?: StageItemAsset;
+  allowInlineRegenerate?: boolean;
 }) {
   if (!asset?.url) {
     return (
       <div className="media-frame placeholder">
-        {item.kind === "image" && item.assetId ? (
+        {allowInlineRegenerate && item.kind === "image" && item.assetId ? (
           <RegenerateImageButton assetId={item.assetId} initialPrompt={item.promptPreview} />
         ) : null}
       </div>
@@ -132,15 +139,19 @@ function MediaFrame({
 function CompletedBody({
   item,
   asset,
+  allowInlineRegenerate,
 }: {
   item: GenerationStageItem;
   asset?: StageItemAsset;
+  allowInlineRegenerate?: boolean;
 }) {
   switch (item.kind) {
     case "image":
     case "video":
     case "export":
-      return <MediaFrame item={item} asset={asset} />;
+      return (
+        <MediaFrame item={item} asset={asset} allowInlineRegenerate={allowInlineRegenerate} />
+      );
     case "audio":
       return (
         <div className="audio-player">
@@ -178,6 +189,7 @@ export function StageItemCard({
   asset,
   statusMessage,
   onRetry,
+  allowInlineRegenerate = true,
 }: StageItemCardProps) {
   const canRetry =
     item.status === "failed" &&
@@ -239,7 +251,11 @@ export function StageItemCard({
 
       {item.status === "succeeded" && (
         <div className="stage-item-card-body succeeded">
-          <CompletedBody item={item} asset={asset} />
+          <CompletedBody
+            item={item}
+            asset={asset}
+            allowInlineRegenerate={allowInlineRegenerate}
+          />
         </div>
       )}
 
