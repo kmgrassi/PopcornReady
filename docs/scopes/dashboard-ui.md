@@ -1,5 +1,10 @@
 # Dashboard UI Scope
 
+> **Behavioral source of truth:** [docs/ui-interaction-model.md](../ui-interaction-model.md).
+> This scope's observe-first stance ("the dashboard reads and navigates") is
+> exactly right and extends to every object detail surface; the *only* edit
+> affordance anywhere is the object-scoped **"Ask the AI"** modal.
+
 ## Objective
 
 Give an authenticated user a home surface they land on after login: a dashboard
