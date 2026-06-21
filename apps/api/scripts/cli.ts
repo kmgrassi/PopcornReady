@@ -186,7 +186,10 @@ async function main() {
           res.projects.forEach((p) => console.log(`${(p as Json).id}\t${(p as Json).name}`))
         );
       }
-      if (sub === "get") return out(cfg, await api(cfg, "GET", `/projects/${required(opts, "id") ?? positionals[2]}`));
+      if (sub === "get") {
+        const projectId = positionals[2] ?? required(opts, "id");
+        return out(cfg, await api(cfg, "GET", `/projects/${projectId}`));
+      }
       if (positionals[1] && !["create", "list", "get"].includes(positionals[1])) {
         return out(cfg, await api(cfg, "GET", `/projects/${positionals[1]}`));
       }
