@@ -29,7 +29,7 @@ import { randomUUID } from "crypto";
 import { AuthContext } from "./auth";
 import { ApiError, ApiErrorCode, FieldError, validationError } from "./errors";
 import { createJob, getJob, updateJob, V1Job } from "./jobs";
-import { generatedAssetDisplayName } from "./naming";
+import { resolveAssetMetadata } from "./naming";
 import {
   GeneratedAssetProvenance,
   GeneratedAssetProviderSettings,
@@ -37,6 +37,7 @@ import {
 import { AssetKind, SCHEMA_VERSIONS } from "./schemas";
 import {
   addAsset,
+  canonicalizeAssetIds,
   assertRunBudgetAllows,
   createAction,
   effectiveAssetStorageVisibility,
@@ -126,6 +127,8 @@ interface ParsedRequest {
   runId?: string;
   assetRole?: string;
   displayName?: string;
+  // Stable, project-scoped handle the generating agent assigned to this asset.
+  slug?: string;
   graphInputs?: GraphAssetInput[];
 }
 
@@ -383,6 +386,7 @@ function parseGeneratedAssetRequest(body: unknown): ParsedRequest {
           : typeof body.name === "string"
             ? body.name
             : undefined,
+    slug: typeof body.slug === "string" ? body.slug : undefined,
     graphInputs: parseGraphInputs(body.graphInputs),
   };
 }
@@ -637,8 +641,8 @@ async function runGeneration(
   };
 
   const now = new Date().toISOString();
-  const displayName = await generatedAssetDisplayName({
-    explicitName: parsed.displayName,
+  const { name: displayName, slug } = await resolveAssetMetadata({
+    agent: { name: parsed.displayName, slug: parsed.slug },
     kind: parsed.kind,
     provider: parsed.provider,
     prompt: preflight.finalPrompt || parsed.prompt,
@@ -658,6 +662,8 @@ async function runGeneration(
     status: "pending",
     source: { type: "generated", generatedAssetId: "" },
     role: parsed.assetRole,
+    name: displayName,
+    ...(slug ? { slug } : {}),
     durationSec,
     context,
     userContext: {
@@ -837,6 +843,27 @@ export async function runGeneratedAssetJob(args: {
   }
 
   const parsed = parseGeneratedAssetRequest(generatedAssetJobInput(job).body);
+  // The agent may reference inputs by slug (e.g. "character_homeowner"). Resolve
+  // every asset reference to its canonical uuid BEFORE these values are written to
+  // uuid columns (createAction.input_asset_ids, asset_edges via graphInputs), or
+  // Postgres rejects the raw slug with 22P02. See store.canonicalizeAssetIds.
+  parsed.referenceAssetIds = await canonicalizeAssetIds(
+    auth.workspaceId,
+    projectId,
+    parsed.referenceAssetIds
+  );
+  parsed.anchorIds = await canonicalizeAssetIds(auth.workspaceId, projectId, parsed.anchorIds);
+  if (parsed.graphInputs?.length) {
+    const canonical = await canonicalizeAssetIds(
+      auth.workspaceId,
+      projectId,
+      parsed.graphInputs.map((input) => input.assetId)
+    );
+    parsed.graphInputs = parsed.graphInputs.map((input, index) => ({
+      ...input,
+      assetId: canonical[index],
+    }));
+  }
   const estimatedCostUsd = estimateCostUsd({
     provider: parsed.provider,
     kind: parsed.kind,
@@ -872,6 +899,7 @@ export async function runGeneratedAssetJob(args: {
         model: parsed.model,
         prompt: parsed.prompt,
         displayName: parsed.displayName,
+        slug: parsed.slug,
         durationSec: parsed.durationSec,
         referenceAssetIds: parsed.referenceAssetIds,
         beatId: parsed.beatId,

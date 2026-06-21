@@ -35,6 +35,8 @@ export interface V1Project {
   schemaVersion: typeof SCHEMA.project;
   workspaceId: string;
   name: string;
+  // Stable, workspace-scoped, lowercase handle written by the generating agent.
+  slug?: string | null;
   status: ProjectStatus;
   visibility?: ProjectVisibility;
   brief?: VideoBriefInput | null;
@@ -376,6 +378,11 @@ export interface V1Asset {
   filename: string;
   url: string; // served/managed path the renderer can read
   durationSec: number;
+  // Human display name written by the generating agent (falls back to a derived name).
+  name?: string;
+  // Stable, project-scoped, lowercase handle written by the generating agent. Agents
+  // may reference this asset by (project, slug); resolved in the store's getAssetRow.
+  slug?: string | null;
   description?: string;
   userContext?: UserAssetContext;
   agentContext?: AgentAssetContext | AgentClipContext;

@@ -1,6 +1,6 @@
 <p align="left">
   <a href="https://popcornready.ai">
-    <img src="./public/brand/popcorn-ready-logo.svg" alt="Popcorn Ready logo" width="140" />
+    <img src="./public/brand/popcorn-ready-logo.png" alt="Popcorn Ready logo" width="140" />
   </a>
 </p>
 

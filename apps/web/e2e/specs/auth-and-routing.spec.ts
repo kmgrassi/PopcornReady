@@ -17,7 +17,7 @@ test.describe("local auth and routing smoke", () => {
 
   test("renders public auth routes", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByRole("link", { name: "Start creating" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "View projects" }).first()).toBeVisible();
 
     await page.goto("/login");
     await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
@@ -31,97 +31,9 @@ test.describe("local auth and routing smoke", () => {
     await expect(page.getByRole("heading", { name: "Workspace controls" })).toBeVisible();
     await expect(page.getByText("Local mode").first()).toBeVisible();
 
-    await page.goto("/studio");
-    await expect(page.getByRole("heading", { name: "Create your first AI rough cut" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Create your first video" })).toBeVisible();
-
+    // The Studio route was retired (#491); the Library is the protected entry.
     await page.goto("/library/projects");
     await expect(page.getByRole("navigation", { name: "Library collections" })).toBeVisible();
-  });
-
-  test("shows saved studio drafts instead of the first-video prompt", async ({ page }) => {
-    await page.route(/\/api\/v1\/workspaces\/[^/]+\/studio-drafts(?:\?.*)?$/, (route) =>
-      route.fulfill({
-        status: 200,
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          drafts: [
-            {
-              id: "draft-existing",
-              schemaVersion: "studioDraft.v1",
-              workspaceId: "e2e_local_workspace",
-              displayExcerpt: "Launch teaser for the summer drop",
-              step: "story",
-              createdAt: "2026-06-16T00:00:00.000Z",
-              updatedAt: "2026-06-16T12:00:00.000Z",
-            },
-          ],
-          pagination: { limit: 20, nextCursor: null },
-        }),
-      }),
-    );
-
-    await page.goto("/studio");
-
-    await expect(page.getByRole("heading", { name: "Continue a draft" })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Launch teaser for the summer drop/ })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Create your first video" })).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "Create your first AI rough cut" })).toHaveCount(0);
-  });
-
-  test("does not create duplicate drafts from rapid first-video clicks", async ({ page }) => {
-    let createRequests = 0;
-    let releaseCreate: (() => void) | null = null;
-
-    await page.route(/\/api\/v1\/workspaces\/[^/]+\/studio-drafts(?:\?.*)?$/, async (route) => {
-      if (route.request().method() === "POST") {
-        createRequests += 1;
-        await new Promise<void>((resolve) => {
-          releaseCreate = resolve;
-        });
-        await route.fulfill({
-          status: 200,
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            draft: {
-              id: "draft-created",
-              schemaVersion: "studioDraft.v1",
-              workspaceId: "e2e_local_workspace",
-              displayExcerpt: "Untitled draft",
-              step: "brief",
-              createdAt: "2026-06-16T00:00:00.000Z",
-              updatedAt: "2026-06-16T12:00:00.000Z",
-              payload: { v: 1, draft: { goal: "" }, step: "brief" },
-            },
-          }),
-        });
-        return;
-      }
-
-      await route.fulfill({
-        status: 200,
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ drafts: [], pagination: { limit: 20, nextCursor: null } }),
-      });
-    });
-
-    await page.goto("/studio");
-
-    const createButton = page.getByRole("button", { name: "Create your first video" });
-    await expect(createButton).toBeVisible();
-
-    await createButton.evaluate((element) => {
-      element.click();
-      element.click();
-    });
-
-    await expect.poll(() => createRequests).toBe(1);
-    await expect(page.getByRole("heading", { name: "Creating your new video" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Creating..." })).toBeDisabled();
-    await expect(page.getByRole("heading", { name: "Continue a draft" })).toHaveCount(0);
-
-    releaseCreate?.();
-    await expect(page).toHaveURL(/\/studio\?draft=draft-created$/);
   });
 
   test("keeps compatibility redirects and not-found route working", async ({ page }) => {

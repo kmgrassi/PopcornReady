@@ -501,9 +501,9 @@ function StoryboardPreview({
         <ButtonLink
           variant="ghost"
           size="sm"
-          to="#runs"
+          to={`/projects/${encodeURIComponent(projectId)}/storyboard`}
         >
-          Runs
+          Open storyboard
         </ButtonLink>
       </div>
       {loading ? <div className={styles.placeholder}>Loading storyboard...</div> : null}
