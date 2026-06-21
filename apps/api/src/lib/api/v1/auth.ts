@@ -38,6 +38,7 @@ export interface Actor {
   id: string;
   type: "local" | "user" | "agent";
   email?: string | null;
+  isAnonymous?: boolean;
 }
 
 export interface AuthContext {
@@ -69,7 +70,8 @@ export function bearerToken(req: ApiRequestView): string | null {
 // app-minted `ws_user_<id>` string. Multi-workspace selection is a follow-up.
 async function supabaseAuthContext(
   publicUserId: string,
-  email: string | null
+  email: string | null,
+  isAnonymous: boolean
 ): Promise<AuthContext> {
   const workspace = await ensureUserWorkspace(
     publicUserId,
@@ -77,7 +79,7 @@ async function supabaseAuthContext(
   );
   return {
     mode: "supabase",
-    actor: { id: publicUserId, type: "user", email: email ?? null },
+    actor: { id: publicUserId, type: "user", email: email ?? null, isAnonymous },
     workspaceId: workspace.id,
     isLocal: false,
   };
@@ -103,7 +105,7 @@ export async function resolveAuth(req?: ApiRequestView): Promise<AuthContext> {
   // domain id into the request context. Trust it — no second Supabase round-trip.
   const ctx = requestContext.getStore();
   if (ctx) {
-    return supabaseAuthContext(ctx.publicUserId, ctx.email);
+    return supabaseAuthContext(ctx.publicUserId, ctx.email, ctx.isAnonymous);
   }
 
   // No verified context. Verify the bearer token and resolve the domain id
@@ -129,7 +131,11 @@ export async function resolveAuth(req?: ApiRequestView): Promise<AuthContext> {
       // Verified auth user with no linked domain row -> treat as unauthenticated.
       throw new ApiError("unauthorized", "Invalid or expired session.");
     }
-    return supabaseAuthContext(publicUserId, data.user.email ?? null);
+    return supabaseAuthContext(
+      publicUserId,
+      data.user.email ?? null,
+      data.user.is_anonymous === true
+    );
   } catch (err) {
     if (err instanceof ApiError) throw err;
     if (err instanceof SupabaseConfigError) {

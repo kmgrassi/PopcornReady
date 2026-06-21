@@ -10,11 +10,16 @@ import type {
 } from "@popcorn/shared/v1/types";
 import type { CompositionMode } from "@popcorn/shared/v1/types";
 import { v1Api } from "./api-client";
+import { assertGuestRunAllowed, recordGuestRunStarted } from "./guestRunLimit";
 import type { BriefDraft } from "../components/studio/useStudioFlow";
 
 export interface StartRunResult {
   projectId: string;
   runId: string;
+}
+
+export interface CreateAndStartRunOptions {
+  enforceGuestRunLimit?: boolean;
 }
 
 export const LONG_VIDEO_PLANNING_REVIEW_THRESHOLD_SEC = 30;
@@ -149,8 +154,14 @@ export function reviewGatesForDraft(draft: BriefDraft): GateableGenerationStageT
  * shell needs to poll. Throws on any API failure or a missing run id so the
  * caller can surface the error.
  */
-export async function createAndStartRun(draft: BriefDraft): Promise<StartRunResult> {
+export async function createAndStartRun(
+  draft: BriefDraft,
+  options: CreateAndStartRunOptions = {}
+): Promise<StartRunResult> {
   assertUploadDraftHasVisualFootage(draft);
+  if (options.enforceGuestRunLimit) {
+    assertGuestRunAllowed();
+  }
 
   const brief = briefInputFromDraft(draft);
   const reviewGates = reviewGatesForDraft(draft);
@@ -180,6 +191,9 @@ export async function createAndStartRun(draft: BriefDraft): Promise<StartRunResu
       throw new Error("Generation started without a run ID.");
     }
 
+    if (options.enforceGuestRunLimit) {
+      recordGuestRunStarted();
+    }
     return { projectId: project.id, runId };
   }
 
@@ -209,5 +223,8 @@ export async function createAndStartRun(draft: BriefDraft): Promise<StartRunResu
     throw new Error("Generation started without a run ID.");
   }
 
+  if (options.enforceGuestRunLimit) {
+    recordGuestRunStarted();
+  }
   return { projectId: project.id, runId };
 }

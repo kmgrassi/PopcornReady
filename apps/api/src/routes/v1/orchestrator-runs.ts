@@ -8,6 +8,7 @@ import {
   createPendingApprovalGate,
   createReachedApprovalGate,
   createOrchestratorRun,
+  createOrchestratorRunWithAnonymousQuota,
   getOrchestratorRun,
   listRunActions,
   listRunGates,
@@ -46,6 +47,8 @@ import {
 
 const NO_STORE_HEADERS = { "Cache-Control": "no-store" };
 const BOARD_FEEDBACK_TOOL = "board_feedback";
+const ANONYMOUS_RUN_QUOTA_LIMIT = 1;
+const ANONYMOUS_RUN_QUOTA_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export const orchestratorRunsRouter = Router();
 
@@ -78,6 +81,17 @@ async function requireProjectAccess(workspaceId: string, projectId: string): Pro
 
 function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
+}
+
+function anonymousRunQuotaForAuth(auth: {
+  actor: { isAnonymous?: boolean };
+  workspaceId: string;
+}): { windowStartIso: string; limit: number } | undefined {
+  if (!auth.actor.isAnonymous) return undefined;
+  return {
+    windowStartIso: new Date(Date.now() - ANONYMOUS_RUN_QUOTA_WINDOW_MS).toISOString(),
+    limit: ANONYMOUS_RUN_QUOTA_LIMIT,
+  };
 }
 
 function optionalStringField(
@@ -256,15 +270,23 @@ async function createEntrypointRun(args: {
   gates: string[];
   budgetUsd?: number;
   body: unknown;
+  anonymousQuota?: { windowStartIso: string; limit: number };
 }): Promise<{ run: OrchestratorRun; replayed: boolean }> {
+  const createRun = () => {
+    const input = {
+      projectId: args.projectId,
+      inputSummary: args.inputSummary,
+      gates: args.gates,
+      budgetUsd: args.budgetUsd,
+    };
+    return args.anonymousQuota
+      ? createOrchestratorRunWithAnonymousQuota(input, args.anonymousQuota)
+      : createOrchestratorRun(input);
+  };
+
   if (!args.idempotencyKey) {
     return {
-      run: await createOrchestratorRun({
-        projectId: args.projectId,
-        inputSummary: args.inputSummary,
-        gates: args.gates,
-        budgetUsd: args.budgetUsd,
-      }),
+      run: await createRun(),
       replayed: false,
     };
   }
@@ -276,12 +298,7 @@ async function createEntrypointRun(args: {
     runBodyHash(args),
     async () => {
       produced = true;
-      const run = await createOrchestratorRun({
-        projectId: args.projectId,
-        inputSummary: args.inputSummary,
-        gates: args.gates,
-        budgetUsd: args.budgetUsd,
-      });
+      const run = await createRun();
       return { status: 202, body: { runId: run.id } };
     }
   );
@@ -710,6 +727,7 @@ orchestratorRunsRouter.post(
       gates,
       budgetUsd: budget,
       body,
+      anonymousQuota: anonymousRunQuotaForAuth(auth),
     });
     if (!replayed) {
       startPosterGenerationInBackground(auth, projectId, {
@@ -759,6 +777,7 @@ orchestratorRunsRouter.post(
       gates,
       budgetUsd: budget,
       body,
+      anonymousQuota: anonymousRunQuotaForAuth(auth),
     });
     if (!replayed) {
       startPosterGenerationInBackground(auth, projectId, {
