@@ -1,48 +1,51 @@
 import { useEffect, useId, useState, type FormEvent } from "react";
+import type { BoardRevisionTarget } from "@popcorn/shared/v1/types";
 import { Button } from "../ui/Button";
 import { v1Api } from "../../lib/api-client";
 import styles from "./AssetEditModal.module.css";
 
 export interface AssetEditModalProps {
   open: boolean;
-  /** The asset to edit (regenerate). When null the modal is closed. */
-  assetId: string | null;
+  projectId: string;
+  /** What is being edited. When null the modal is closed. */
+  target: BoardRevisionTarget | null;
   imageUrl?: string | null;
   title?: string;
   subtitle?: string | null;
   onClose: () => void;
-  /** Called after a successful edit so the caller can refetch. */
-  onEdited?: () => void;
+  /** Called after the edit is sent so the caller can poll/refetch. */
+  onSubmitted?: () => void;
 }
 
-// Universal "click an asset, ask the AI to edit it" modal: shows the image and a
-// prompt box, and regenerates the asset in place. Reusable for any asset id.
+// Universal "click an asset, ask the AI to edit it" modal. The edit is routed
+// through the project's AGENT (not a raw image regen): it submits feedback the
+// orchestrator processes in context, so it can place the change correctly and
+// propagate to downstream assets when they exist.
 export function AssetEditModal({
   open,
-  assetId,
+  projectId,
+  target,
   imageUrl,
   title = "Edit this asset",
   subtitle,
   onClose,
-  onEdited,
+  onSubmitted,
 }: AssetEditModalProps) {
   const titleId = useId();
   const [prompt, setPrompt] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [currentUrl, setCurrentUrl] = useState<string | null | undefined>(imageUrl);
-  const [edited, setEdited] = useState(false);
+  const [sent, setSent] = useState(false);
 
-  // Reset whenever the modal (re)opens for a (possibly different) asset.
+  // Reset whenever the modal (re)opens for a (possibly different) target.
   useEffect(() => {
     if (open) {
       setPrompt("");
       setError(null);
       setPending(false);
-      setEdited(false);
-      setCurrentUrl(imageUrl);
+      setSent(false);
     }
-  }, [open, assetId, imageUrl]);
+  }, [open, target]);
 
   useEffect(() => {
     if (!open) return;
@@ -53,20 +56,19 @@ export function AssetEditModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  if (!open || !assetId) return null;
+  if (!open || !target) return null;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     const trimmed = prompt.trim();
-    if (!trimmed || pending || !assetId) return;
+    if (!trimmed || pending || !target) return;
     setPending(true);
     setError(null);
     try {
-      const media = await v1Api.regenerateAsset(assetId, trimmed);
-      setCurrentUrl(media.url ?? media.thumbnailUrl ?? currentUrl);
-      setEdited(true);
+      await v1Api.createProjectAssetRevision(projectId, { message: trimmed, target });
+      setSent(true);
       setPrompt("");
-      onEdited?.();
+      onSubmitted?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -88,8 +90,8 @@ export function AssetEditModal({
         </button>
 
         <div className={styles.media}>
-          {currentUrl ? (
-            <img src={currentUrl} alt="" />
+          {imageUrl ? (
+            <img src={imageUrl} alt="" />
           ) : (
             <div className={styles.mediaEmpty}>No preview available</div>
           )}
@@ -102,6 +104,13 @@ export function AssetEditModal({
             {subtitle ? <p className={styles.subtitle}>{subtitle}</p> : null}
           </div>
 
+          {sent && !error ? (
+            <p className={styles.success} role="status">
+              Sent to the agent. It’s revising this in context — this panel will update
+              shortly. You can ask for another change or close.
+            </p>
+          ) : null}
+
           <label className={styles.field}>
             <span>What should change?</span>
             <textarea
@@ -113,11 +122,6 @@ export function AssetEditModal({
             />
           </label>
 
-          {edited && !error ? (
-            <p className={styles.success} role="status">
-              Updated. Ask for another change or close.
-            </p>
-          ) : null}
           {error ? (
             <p className={styles.error} role="alert">
               {error}
@@ -129,7 +133,7 @@ export function AssetEditModal({
               Close
             </Button>
             <Button variant="primary" type="submit" disabled={!prompt.trim() || pending} isLoading={pending}>
-              {pending ? "Editing…" : "Apply edit"}
+              {pending ? "Sending…" : "Send to agent"}
             </Button>
           </div>
         </form>

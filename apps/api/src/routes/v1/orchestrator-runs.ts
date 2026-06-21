@@ -891,6 +891,69 @@ orchestratorRunsRouter.post(
   })
 );
 
+// Project-scoped AI edit: route an asset edit through the agent without the
+// caller needing a run. Revives the project's latest usable run (or starts a
+// fresh one), records the board_feedback, and resumes — so the agent revises the
+// target in context and can propagate to downstream assets when they exist.
+orchestratorRunsRouter.post(
+  "/projects/:projectId/asset-revisions",
+  mutation(async ({ auth, body }, params) => {
+    const projectId = requireParam(params, "projectId");
+    await requireProjectAccess(auth.workspaceId, projectId);
+
+    const runs = await listOrchestratorRunsForProject(projectId);
+    let run =
+      runs.find((candidate) => candidate.status !== "failed" && candidate.status !== "canceled") ??
+      null;
+    if (!run) {
+      run = await createOrchestratorRun({
+        projectId,
+        inputSummary: "Revise a generated asset based on user feedback.",
+      });
+    }
+
+    const request = parseBoardRevisionRequest(body, run.id);
+    const action = await createAction({
+      projectId,
+      orchestratorRunId: run.id,
+      tool: BOARD_FEEDBACK_TOOL,
+      status: "applied",
+      params: {
+        schemaVersion: "board_revision_request.v1",
+        message: request.message,
+        target: request.target,
+      },
+      inputAssetIds: [
+        request.target.assetId,
+        request.target.keyframeAssetId,
+        request.target.clipAssetId,
+      ].filter((id): id is string => Boolean(id)),
+      rationale: "User asked the agent to revise an asset from the storyboard view.",
+      proposal: { message: request.message, target: request.target },
+    });
+    if (run.status !== "running" && run.status !== "waiting") {
+      await updateOrchestratorRun(run.id, {
+        status: "running",
+        startedAt: run.startedAt ?? new Date().toISOString(),
+      });
+    }
+    resumeRunInBackground(auth.workspaceId, run.id);
+
+    return {
+      status: 202,
+      body: {
+        runId: run.id,
+        revision: {
+          id: action.id,
+          message: request.message,
+          target: request.target,
+          createdAt: action.createdAt,
+        },
+      },
+    };
+  })
+);
+
 // Actions/gates at or downstream of `fromOrder` (by their tool's stage). These
 // are what a restart-from-stage supersedes/resets so the agent re-runs them.
 export function downstreamActionIds(actions: RunActionSummary[], fromOrder: number): string[] {

@@ -806,6 +806,16 @@ export const v1Api = {
         body: input,
       }
     ),
+  // Project-scoped AI edit: route an asset edit through the agent without a run
+  // (the API revives/starts one). The agent revises the target in context.
+  createProjectAssetRevision: (projectId: string, input: BoardRevisionRequest) =>
+    apiRequest<{ runId: string; revision: BoardRevisionResponse["revision"] }>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/asset-revisions`,
+      {
+        method: "POST",
+        body: input,
+      }
+    ),
   startPromptGenerationRun: (
     projectId: string,
     input: StartGenerationRunInput

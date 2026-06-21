@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import type {
+  BoardRevisionTarget,
   ProjectStoryboard,
   StoryboardBeat,
   StoryboardPanel,
@@ -13,7 +14,7 @@ import { useProjectQuery, useProjectStoryboardQuery } from "../lib/queryClient";
 import styles from "./StoryboardPage.module.css";
 
 interface EditTarget {
-  assetId: string;
+  target: BoardRevisionTarget;
   url?: string | null;
   title: string;
   subtitle?: string | null;
@@ -82,12 +83,18 @@ export function StoryboardPage() {
 
       <AssetEditModal
         open={Boolean(editTarget)}
-        assetId={editTarget?.assetId ?? null}
+        projectId={projectId}
+        target={editTarget?.target ?? null}
         imageUrl={editTarget?.url}
         title={editTarget?.title}
         subtitle={editTarget?.subtitle}
         onClose={() => setEditTarget(null)}
-        onEdited={() => void storyboardQuery.refetch()}
+        onSubmitted={() => {
+          // The agent revises in the background; refetch a few times to pick up
+          // the new panel image.
+          window.setTimeout(() => void storyboardQuery.refetch(), 4000);
+          window.setTimeout(() => void storyboardQuery.refetch(), 12000);
+        }}
       />
     </main>
   );
@@ -107,7 +114,13 @@ function StoryboardBody({
   return (
     <div className={styles.scenes}>
       {scenes.map((scene, index) => (
-        <SceneSection key={scene.id} scene={scene} order={index + 1} onEdit={onEdit} />
+        <SceneSection
+          key={scene.id}
+          scene={scene}
+          storyboardId={storyboard.id}
+          order={index + 1}
+          onEdit={onEdit}
+        />
       ))}
     </div>
   );
@@ -115,10 +128,12 @@ function StoryboardBody({
 
 function SceneSection({
   scene,
+  storyboardId,
   order,
   onEdit,
 }: {
   scene: StoryboardScene;
+  storyboardId: string;
   order: number;
   onEdit: (target: EditTarget) => void;
 }) {
@@ -137,7 +152,15 @@ function SceneSection({
       </div>
       <div className={styles.beats}>
         {beats.map((beat, index) => (
-          <BeatCard key={beat.id} beat={beat} order={index + 1} sceneOrder={order} onEdit={onEdit} />
+          <BeatCard
+            key={beat.id}
+            beat={beat}
+            storyboardId={storyboardId}
+            sceneId={scene.id}
+            order={index + 1}
+            sceneOrder={order}
+            onEdit={onEdit}
+          />
         ))}
       </div>
     </section>
@@ -151,11 +174,15 @@ function selectedPanel(beat: StoryboardBeat): StoryboardPanel | null {
 
 function BeatCard({
   beat,
+  storyboardId,
+  sceneId,
   order,
   sceneOrder,
   onEdit,
 }: {
   beat: StoryboardBeat;
+  storyboardId: string;
+  sceneId: string;
   order: number;
   sceneOrder: number;
   onEdit: (target: EditTarget) => void;
@@ -173,7 +200,15 @@ function BeatCard({
           className={styles.panelButton}
           onClick={() =>
             onEdit({
-              assetId: panel!.imageAssetId!,
+              target: {
+                scope: "tile",
+                storyboardId,
+                sceneId,
+                beatId: beat.id,
+                panelId: panel!.id,
+                assetId: panel!.imageAssetId!,
+                label,
+              },
               url: panel!.url ?? panel!.thumbnailUrl,
               title: label,
               subtitle: `Scene ${sceneOrder} · Beat ${order}`,
