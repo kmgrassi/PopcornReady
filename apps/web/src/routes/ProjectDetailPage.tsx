@@ -145,18 +145,20 @@ export function ProjectDetailPage() {
 
       {!loading && !error && project ? (
         <>
-          <section className={styles.overviewLayout}>
+          <section className={styles.projectTopLayout}>
             <ProjectHero project={project} storyboard={storyboard} />
-            <ProjectStagePanel
-              projectId={projectId}
-              runs={runsQuery.items}
-              loading={runsQuery.loading}
-              error={runsQuery.error}
-              onRetry={runsQuery.refetch}
-            />
+            <div className={styles.projectTopRail}>
+              <ProjectBrief project={project} />
+              <ProjectStagePanel
+                projectId={projectId}
+                runs={runsQuery.items}
+                loading={runsQuery.loading}
+                error={runsQuery.error}
+                onRetry={runsQuery.refetch}
+              />
+            </div>
           </section>
-          <section className={styles.layout}>
-            <ProjectBrief project={project} />
+          <section className={styles.storyboardLayout}>
             <StoryboardPreview
               projectId={projectId}
               storyboard={storyboard}
@@ -433,8 +435,8 @@ function ProjectBrief({ project }: { project: V1Project }) {
     <section className={styles.panel}>
       <div className={styles.sectionHeader}>
         <div>
-          <span className={styles.eyebrow}>Brief</span>
-          <h2>Project details</h2>
+          <span className={styles.eyebrow}>Plan</span>
+          <h2>Project direction</h2>
         </div>
       </div>
       {brief ? (
@@ -499,9 +501,9 @@ function StoryboardPreview({
         <ButtonLink
           variant="ghost"
           size="sm"
-          to="#runs"
+          to={`/projects/${encodeURIComponent(projectId)}/storyboard`}
         >
-          Runs
+          Open storyboard
         </ButtonLink>
       </div>
       {loading ? <div className={styles.placeholder}>Loading storyboard...</div> : null}

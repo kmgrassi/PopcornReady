@@ -2,6 +2,7 @@ import { Router } from "express";
 import { mutation, route } from "@/core/adapter";
 import { ApiError } from "@/core/errors";
 import { parseBrief, parsePagination } from "@/lib/api/v1/schemas";
+import { startPosterGenerationInBackground } from "@/lib/api/v1/poster-background";
 import {
   createBriefVersion,
   getProject,
@@ -39,11 +40,9 @@ briefRouter.put(
   "/projects/:projectId/brief",
   mutation(async ({ auth, body }, params) => {
     const brief = parseBrief(body, "");
-    const project = await setBrief(
-      auth.workspaceId,
-      requireProjectId(params.projectId),
-      brief
-    );
+    const projectId = requireProjectId(params.projectId);
+    const project = await setBrief(auth.workspaceId, projectId, brief);
+    startPosterGenerationInBackground(auth, projectId);
     return { status: 200, body: { project } };
   })
 );
@@ -69,11 +68,13 @@ briefRouter.post(
   "/projects/:projectId/brief-versions",
   mutation(async ({ auth, body }, params) => {
     const brief = parseBrief(body, "");
+    const projectId = requireProjectId(params.projectId);
     const { briefVersion } = await createBriefVersion(
       auth.workspaceId,
-      requireProjectId(params.projectId),
+      projectId,
       brief
     );
+    startPosterGenerationInBackground(auth, projectId);
     return { status: 201, body: { briefVersion } };
   })
 );
