@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { LogoMark } from "../LogoMark";
 import { clearAllSupabaseAuthStorage, getSupabaseClient } from "../../lib/supabase/browser";
+import { usePendingQuickStartRun } from "../../lib/quickStartRun";
 import { useAuth } from "./AuthProvider";
 import styles from "./AuthForm.module.css";
 
@@ -11,7 +12,9 @@ type AuthFormProps = {
 
 export function AuthForm({ mode }: AuthFormProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { status, error, configured, signIn, signUp, clearError } = useAuth();
+  const quickStartResume = usePendingQuickStartRun(status, location.state);
   const [ready, setReady] = useState(false);
   const [showSignupIntro, setShowSignupIntro] = useState(false);
   const [email, setEmail] = useState("");
@@ -59,8 +62,14 @@ export function AuthForm({ mode }: AuthFormProps) {
   }, [configured, status]);
 
   useEffect(() => {
-    if (status === "authenticated") navigate("/dashboard", { replace: true });
-  }, [navigate, status]);
+    if (
+      status === "authenticated" &&
+      !quickStartResume.hasPending &&
+      !quickStartResume.starting
+    ) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [navigate, quickStartResume.hasPending, quickStartResume.starting, status]);
 
   useEffect(() => {
     if (!isSignup) {
@@ -160,16 +169,30 @@ export function AuthForm({ mode }: AuthFormProps) {
         </div>
 
         {error && <p className={styles.error}>{error}</p>}
+        {quickStartResume.error && (
+          <p className={styles.error}>{quickStartResume.error}</p>
+        )}
+
+        {quickStartResume.starting && (
+          <p className={styles.status}>Starting your video...</p>
+        )}
 
         <button
           className={styles.submit}
           type="button"
           onClick={() => void submit()}
-          disabled={!ready || loading || !configured || !email.trim() || !password}
+          disabled={
+            !ready ||
+            loading ||
+            quickStartResume.starting ||
+            !configured ||
+            !email.trim() ||
+            !password
+          }
         >
           {!ready
             ? "Preparing..."
-            : loading
+            : loading || quickStartResume.starting
               ? isSignup
                 ? "Creating..."
                 : "Signing in..."

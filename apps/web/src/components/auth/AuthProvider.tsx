@@ -15,7 +15,7 @@ import {
   resolveBrowserSupabaseConfig,
 } from "../../lib/supabase/browser";
 
-type AuthStatus = "loading" | "disabled" | "unauthenticated" | "authenticated";
+export type AuthStatus = "loading" | "disabled" | "unauthenticated" | "authenticated";
 
 type AuthContextValue = {
   status: AuthStatus;
