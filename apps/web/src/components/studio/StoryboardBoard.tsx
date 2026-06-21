@@ -5,6 +5,7 @@ import type {
 } from "@popcorn/shared/v1/types";
 import { JudgmentBadge } from "../evals/JudgmentBadge";
 import type { StageItemAsset } from "../generation-progress/StageItemCard";
+import { RegenerateImageButton } from "../media/RegenerateImageButton";
 import styles from "./StoryboardBoard.module.css";
 
 type StoryboardItem = GenerationStageItem & {
@@ -68,8 +69,11 @@ function TileMedia({
   }
 
   return (
-    <div className={styles.placeholder} aria-hidden="true">
-      <span>{itemRole(item)}</span>
+    <div className={styles.placeholder}>
+      <span aria-hidden="true">{itemRole(item)}</span>
+      {item.kind === "image" && item.assetId ? (
+        <RegenerateImageButton assetId={item.assetId} initialPrompt={item.promptPreview} />
+      ) : null}
     </div>
   );
 }

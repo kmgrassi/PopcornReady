@@ -11,6 +11,7 @@ import type {
 } from "@popcorn/shared/v1/types";
 import { AiAssetFeedbackDialog } from "../ai-edit/AiAssetFeedbackDialog";
 import dialogStyles from "../ai-edit/AiAssetFeedbackDialog.module.css";
+import { RegenerateImageButton } from "../media/RegenerateImageButton";
 import styles from "./StoryboardBoard.module.css";
 
 interface StoryboardBoardProps {
@@ -174,34 +175,43 @@ export function StoryboardBoard({
       <div className={styles.grid}>
         {tiles.map((tile, index) => {
           const key = targetKey(tile.target);
+          const regenAssetId = tile.target.assetId ?? tile.item?.assetId;
+          const canRegenerate =
+            !tile.mediaUrl && tile.item?.kind === "image" && Boolean(regenAssetId);
           return (
-            <button
-              className={styles.tile}
-              type="button"
-              key={tile.key}
-              onClick={() => setSelectedTile(tile)}
-              aria-label={`Edit ${tile.label} with AI`}
-              aria-busy={pendingTargetKey === key || undefined}
-            >
-              <div className={styles.media}>
-                {tile.mediaUrl ? (
-                  <img
-                    src={tile.mediaUrl}
-                    alt={tile.intent ? `${tile.label}: ${tile.intent}` : tile.label}
-                  />
-                ) : (
-                  <span aria-hidden="true">{index + 1}</span>
-                )}
-              </div>
-              <div className={styles.tileBody}>
-                <div className={styles.tileMeta}>
-                  <span>{tile.sceneLabel ?? "Generated frame"}</span>
-                  <span>{statusLabel(tile.item, tile.beat)}</span>
+            <div className={styles.tileWrap} key={tile.key}>
+              <button
+                className={styles.tile}
+                type="button"
+                onClick={() => setSelectedTile(tile)}
+                aria-label={`Edit ${tile.label} with AI`}
+                aria-busy={pendingTargetKey === key || undefined}
+              >
+                <div className={styles.media}>
+                  {tile.mediaUrl ? (
+                    <img
+                      src={tile.mediaUrl}
+                      alt={tile.intent ? `${tile.label}: ${tile.intent}` : tile.label}
+                    />
+                  ) : (
+                    <span aria-hidden="true">{index + 1}</span>
+                  )}
                 </div>
-                <h3>{tile.label}</h3>
-                {tile.intent ? <p>{tile.intent}</p> : null}
-              </div>
-            </button>
+                <div className={styles.tileBody}>
+                  <div className={styles.tileMeta}>
+                    <span>{tile.sceneLabel ?? "Generated frame"}</span>
+                    <span>{statusLabel(tile.item, tile.beat)}</span>
+                  </div>
+                  <h3>{tile.label}</h3>
+                  {tile.intent ? <p>{tile.intent}</p> : null}
+                </div>
+              </button>
+              {canRegenerate && regenAssetId ? (
+                <div className={styles.tileRegen}>
+                  <RegenerateImageButton assetId={regenAssetId} initialPrompt={tile.intent} />
+                </div>
+              ) : null}
+            </div>
           );
         })}
       </div>

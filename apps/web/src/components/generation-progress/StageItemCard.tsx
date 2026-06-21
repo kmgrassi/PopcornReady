@@ -3,6 +3,7 @@ import type {
   GenerationStageItem,
 } from "@popcorn/shared/v1/types";
 import { JudgmentBadge } from "../evals/JudgmentBadge";
+import { RegenerateImageButton } from "../media/RegenerateImageButton";
 
 type StageItemKind = GenerationStageItem["kind"];
 
@@ -97,7 +98,13 @@ function MediaFrame({
   asset?: StageItemAsset;
 }) {
   if (!asset?.url) {
-    return <div className="media-frame placeholder" aria-hidden="true" />;
+    return (
+      <div className="media-frame placeholder">
+        {item.kind === "image" && item.assetId ? (
+          <RegenerateImageButton assetId={item.assetId} initialPrompt={item.promptPreview} />
+        ) : null}
+      </div>
+    );
   }
 
   if (item.kind === "image") {
