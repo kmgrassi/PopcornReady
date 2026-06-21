@@ -20,9 +20,9 @@ type AuthStatus = "loading" | "disabled" | "unauthenticated" | "authenticated";
 type AuthContextValue = {
   status: AuthStatus;
   user: User | null;
+  isAnonymous: boolean;
   error: string | null;
   configured: boolean;
-  isAnonymous: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
   signInAnonymous: () => Promise<void>;
@@ -49,14 +49,15 @@ function describeAuthError(err: unknown): string {
   return String(err);
 }
 
+function isAnonymousUser(user: User | null): boolean {
+  return Boolean(user?.is_anonymous);
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>("loading");
   const [user, setUser] = useState<User | null>(null);
   const [error, setError] = useState<string | null>(null);
   const configured = Boolean(resolveBrowserSupabaseConfig());
-  const isAnonymous = Boolean(
-    user && (user as User & { is_anonymous?: boolean }).is_anonymous,
-  );
 
   useEffect(() => {
     if (!configured) {
@@ -192,9 +193,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     () => ({
       status,
       user,
+      isAnonymous: isAnonymousUser(user),
       error,
       configured,
-      isAnonymous,
       signIn,
       signUp,
       signInAnonymous,
@@ -206,7 +207,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       error,
       configured,
-      isAnonymous,
       signIn,
       signUp,
       signInAnonymous,

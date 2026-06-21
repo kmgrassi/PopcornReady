@@ -1,8 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { promises as fs } from "fs";
-import os from "os";
-import path from "path";
 import type { Beat, Scene } from "@popcorn/shared/types";
 import {
   generateStoryboardTile,
@@ -21,15 +18,6 @@ const scene: Scene = {
   beats: [{ id: "beat_1_hook", name: "hook", durationSec: 3, intent: "open on the steaming mug" }],
 };
 const beat: Beat = scene.beats[0];
-
-async function withDir(fn: (dir: string) => Promise<void>): Promise<void> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "storyboard-tile-"));
-  try {
-    await fn(dir);
-  } finally {
-    await fs.rm(dir, { recursive: true, force: true });
-  }
-}
 
 // --- sketch style preset ---------------------------------------------------
 
@@ -71,54 +59,45 @@ test("resolveStoryboardTileProvider forces Gemini for any minor likeness", () =>
 
 // --- generateStoryboardTile ------------------------------------------------
 
-test("generateStoryboardTile produces a beat_storyboard asset with depicts + provenance", async () => {
-  await withDir(async (dir) => {
-    let n = 0;
-    const tile = await generateStoryboardTile({
-      projectId: "proj_1",
-      scene,
-      beat,
-      sceneAnchorAssetId: "scene_anchor_1",
-      characterAnchorAssetIds: ["char_anchor_1"],
-      provider: "mock",
-      outputDir: dir,
-      publicUrlFor: (filename) => `/generated/${filename}`,
-      newId: () => `tile_${++n}`,
-    });
-
-    assert.equal(tile.role, "beat_storyboard");
-    assert.equal(tile.kind, "image");
-    assert.equal(tile.projectId, "proj_1");
-    assert.deepEqual(tile.depicts, { beatId: "beat_1_hook" });
-    assert.equal(tile.source, "generated");
-    // Provenance: prompt is the sketch-style prompt; input edges trace the beat
-    // + the conditioning anchors.
-    assert.ok(tile.provenance);
-    assert.ok(tile.provenance!.prompt.startsWith(STORYBOARD_SKETCH_STYLE_PRESET));
-    assert.equal(tile.provenance!.inputs?.beatId, "beat_1_hook");
-    assert.deepEqual(tile.provenance!.inputs?.anchorIds, ["scene_anchor_1", "char_anchor_1"]);
-    assert.equal(tile.media.durationSec, 3);
-
-    // Bytes were written under the storage filename (not the asset id namespace).
-    const written = await fs.readFile(path.join(dir, tile.media.filename));
-    assert.ok(written.length > 0, "sketch bytes were persisted");
-    assert.equal(tile.media.url, `/generated/${tile.media.filename}`);
+test("generateStoryboardTile produces a beat_storyboard asset with depicts + provenance + bytes", async () => {
+  let n = 0;
+  const { asset: tile, bytes } = await generateStoryboardTile({
+    projectId: "proj_1",
+    scene,
+    beat,
+    sceneAnchorAssetId: "scene_anchor_1",
+    characterAnchorAssetIds: ["char_anchor_1"],
+    provider: "mock",
+    newId: () => `tile_${++n}`,
   });
+
+  assert.equal(tile.role, "beat_storyboard");
+  assert.equal(tile.kind, "image");
+  assert.equal(tile.projectId, "proj_1");
+  assert.deepEqual(tile.depicts, { beatId: "beat_1_hook" });
+  assert.equal(tile.source, "generated");
+  // Provenance: prompt is the sketch-style prompt; input edges trace the beat
+  // + the conditioning anchors.
+  assert.ok(tile.provenance);
+  assert.ok(tile.provenance!.prompt.startsWith(STORYBOARD_SKETCH_STYLE_PRESET));
+  assert.equal(tile.provenance!.inputs?.beatId, "beat_1_hook");
+  assert.deepEqual(tile.provenance!.inputs?.anchorIds, ["scene_anchor_1", "char_anchor_1"]);
+  assert.equal(tile.media.durationSec, 3);
+  assert.match(tile.media.filename, /^tile_1\./);
+
+  // Raw bytes are returned for the store layer to upload (no local-disk write).
+  assert.ok(bytes.length > 0, "sketch bytes were produced");
 });
 
 test("generateStoryboardTile rejects a beat without a stable id", async () => {
-  await withDir(async (dir) => {
-    await assert.rejects(
-      generateStoryboardTile({
-        projectId: "proj_1",
-        scene,
-        beat: { name: "hook", durationSec: 3, intent: "x" },
-        provider: "mock",
-        outputDir: dir,
-        publicUrlFor: (f) => f,
-        newId: () => "tile_x",
-      }),
-      /stable id/
-    );
-  });
+  await assert.rejects(
+    generateStoryboardTile({
+      projectId: "proj_1",
+      scene,
+      beat: { name: "hook", durationSec: 3, intent: "x" },
+      provider: "mock",
+      newId: () => "tile_x",
+    }),
+    /stable id/
+  );
 });
