@@ -172,8 +172,8 @@ function UseAnchorPanel({
           title="No projects yet"
           body="Create a project before copying an anchor into your workspace."
           action={
-            <Button variant="secondary" onClick={() => navigate("/studio")}>
-              Open studio
+            <Button variant="secondary" onClick={() => navigate("/library/projects")}>
+              View projects
             </Button>
           }
         />

@@ -113,29 +113,29 @@ export function deriveNextAction(
     return {
       type: "resume_draft",
       draft,
-      title: `Continue your draft - ${draft.goalExcerpt}`,
-      body: `Resume step ${draft.step} of ${draft.totalSteps}.`,
-      ctaLabel: "Continue draft",
-      to: `/studio?draft=${encodeURIComponent(draft.draftId)}`,
+      title: `Draft unavailable - ${draft.goalExcerpt}`,
+      body: "Studio drafts are no longer available. Open the project library to continue from saved projects.",
+      ctaLabel: "View projects",
+      to: "/library/projects",
     };
   }
 
   if (!pulse || pulse.counts.projects === 0) {
     return {
       type: "start",
-      title: "Create your first AI rough cut",
-      body: "Start with a brief. Popcorn Ready will guide the plan, generation, review, and export one step at a time.",
-      ctaLabel: "Start a video",
-      to: "/studio",
+      title: "No projects yet",
+      body: "Project creation is being reworked. Your project library will show saved work as it becomes available.",
+      ctaLabel: "View projects",
+      to: "/library/projects",
     };
   }
 
   return {
     type: "new",
-    title: "Start the next rough cut",
-    body: "No workspace item needs attention right now. Create a new video when you are ready.",
-    ctaLabel: "New video",
-    to: "/studio",
+    title: "Workspace is up to date",
+    body: "No workspace item needs attention right now. Browse saved projects, runs, assets, and outputs.",
+    ctaLabel: "View projects",
+    to: "/library/projects",
   };
 }
 

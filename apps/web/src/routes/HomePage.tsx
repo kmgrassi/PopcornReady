@@ -152,7 +152,7 @@ const PRICING = [
       "1080p watermark-free export",
       "1 workspace",
     ],
-    cta: { label: "Start creating", href: "/studio", external: false },
+    cta: { label: "View projects", href: "/library/projects", external: false },
     featured: true,
   },
   {
@@ -166,7 +166,7 @@ const PRICING = [
       "Priority rendering + 4K export",
       "Agent API preview",
     ],
-    cta: { label: "Go Pro", href: "/studio", external: false },
+    cta: { label: "View projects", href: "/library/projects", external: false },
     featured: false,
   },
   {
@@ -420,8 +420,8 @@ export function HomePage() {
                 >
                   View on GitHub &rarr;
                 </a>
-                <Link className="lp-price-cta" to="/studio">
-                  Open the studio
+                <Link className="lp-price-cta" to="/library/projects">
+                  Open projects
                 </Link>
               </div>
             </div>

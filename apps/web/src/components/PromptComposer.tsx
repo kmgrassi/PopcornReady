@@ -65,8 +65,8 @@ const GENERATION_STAGES = [
     detail: "Turning the prompt into cinematic beats.",
   },
   {
-    label: "Opening studio",
-    detail: "Loading the editable workflow.",
+    label: "Opening library",
+    detail: "Loading the project workspace.",
   },
 ];
 
@@ -112,7 +112,7 @@ export function PromptComposer() {
       if (reviewGates.length > 0) {
         params.set("reviewGates", reviewGates.join(","));
       }
-      navigate(`/studio?${params.toString()}`);
+      navigate(`/library/projects?${params.toString()}`);
     }, 350);
     return () => window.clearTimeout(timer);
   }, [lengthSec, navigate, reviewGates, submitting, value]);

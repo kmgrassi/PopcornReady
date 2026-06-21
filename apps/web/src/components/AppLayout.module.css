@@ -6,19 +6,6 @@
   color: var(--text);
 }
 
-.studioShell {
-  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
-}
-
-.studioShell .sidebar {
-  background: color-mix(in srgb, var(--bg) 92%, transparent);
-}
-
-.studioShell .brand span,
-.studioShell .sidebarFooter {
-  opacity: 0.72;
-}
-
 .sidebar {
   position: sticky;
   top: 0;
@@ -130,7 +117,6 @@
   stroke-width: 8;
 }
 
-/* New video — the one prominent sidebar CTA, sitting just under the brand. */
 .newVideo {
   width: 100%;
   margin-bottom: var(--space-6);
@@ -318,13 +304,4 @@
     grid-auto-columns: max-content;
   }
 
-  .studioShell {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .studioShell .content,
-  .studioShell .routeFrame {
-    width: 100%;
-    min-width: 0;
-  }
 }

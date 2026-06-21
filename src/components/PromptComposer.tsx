@@ -220,9 +220,7 @@ export function PromptComposer() {
         );
       }
       setActiveStage(5);
-      router.push(
-        `/studio?goal=${encodeURIComponent(goal)}&length=${lengthSec}`
-      );
+      router.push("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setSubmitting(false);

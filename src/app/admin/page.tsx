@@ -134,7 +134,7 @@ export default function AdminPage() {
           Popcorn Ready
         </Link>
         <nav>
-          <Link href="/studio">Studio</Link>
+          <Link href="/dashboard">Dashboard</Link>
           <Link href="/">Landing</Link>
         </nav>
       </header>

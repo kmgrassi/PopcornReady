@@ -237,7 +237,7 @@ function workspaceReturnLabel({
   if (hasStudioDraft && succeeded) return "Review in Studio";
   if (hasStudioDraft && terminal) return "View draft";
   if (hasStudioDraft) return "View draft";
-  return "Open Studio";
+  return "Open project";
 }
 
 const BOARD_STAGE_TYPES = new Set<GenerationStageType>([
@@ -609,7 +609,10 @@ export function ProgressView({
               />
             </div>
           </div>
-          <Link className={styles.secondaryButton} to={studioReturnPath ?? "/studio"}>
+          <Link
+            className={styles.secondaryButton}
+            to={studioReturnPath ?? `/projects/${encodeURIComponent(detail.run.projectId)}`}
+          >
             {returnLabel}
           </Link>
           {alternateRuns && alternateRuns.length > 0 ? (

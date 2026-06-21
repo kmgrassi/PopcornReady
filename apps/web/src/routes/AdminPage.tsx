@@ -134,7 +134,7 @@ export function AdminPage() {
           Popcorn Ready
         </Link>
         <nav>
-          <Link to="/studio">Studio</Link>
+          <Link to="/library/projects">Projects</Link>
           <Link to="/">Landing</Link>
         </nav>
       </header>
