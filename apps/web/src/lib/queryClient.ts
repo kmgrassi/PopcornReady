@@ -26,6 +26,8 @@ import {
 import { projectQueryKeys } from "./project-queries";
 import { dashboardApi } from "./v1/dashboard/client";
 import type { GenerationRunDetail } from "./v1/generation-runs/status";
+import { storyboardProgress } from "./v1/storyboard/progress";
+import type { ProjectStoryboardResponse } from "./api-client";
 
 const DEFAULT_STALE_TIME_MS = 15_000;
 const POLL_INTERVAL_MS = 2_000;
@@ -243,12 +245,27 @@ export function useSetProjectPosterMutation(projectId: string) {
   });
 }
 
-export function useProjectStoryboardQuery(projectId: string, enabled = true) {
+export function useProjectStoryboardQuery(
+  projectId: string,
+  enabled = true,
+  // Keep polling even when the storyboard itself does not yet report progress —
+  // e.g. while the generation job is queued/running and the storyboard row has
+  // not been created or flipped to `generating` yet.
+  pollWhileActive = false,
+) {
   return useQuery({
     queryKey: queryKeys.projectStoryboard(projectId),
     queryFn: ({ signal }: { signal: QuerySignal }) =>
       v1Api.getProjectStoryboard(projectId, signal),
     enabled: enabled && Boolean(projectId),
+    refetchInterval: (query) => {
+      const data = query.state.data as ProjectStoryboardResponse | undefined;
+      const active =
+        pollWhileActive || storyboardProgress(data?.storyboard ?? null).isGenerating;
+      if (!active) return false;
+      if (document.visibilityState === "hidden") return false;
+      return POLL_INTERVAL_MS;
+    },
   });
 }
 
