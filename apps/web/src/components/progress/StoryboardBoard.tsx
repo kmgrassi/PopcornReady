@@ -9,6 +9,8 @@ import type {
   StoryboardPanel,
   StoryboardScene,
 } from "@popcorn/shared/v1/types";
+import { AiAssetFeedbackDialog } from "../ai-edit/AiAssetFeedbackDialog";
+import dialogStyles from "../ai-edit/AiAssetFeedbackDialog.module.css";
 import styles from "./StoryboardBoard.module.css";
 
 interface StoryboardBoardProps {
@@ -125,48 +127,6 @@ function statusLabel(item?: GenerationStageItem, beat?: StoryboardBeat): string 
   return "ready";
 }
 
-function FeedbackForm({
-  id,
-  label,
-  target,
-  pending,
-  onSubmit,
-}: {
-  id: string;
-  label: string;
-  target: BoardRevisionTarget;
-  pending: boolean;
-  onSubmit: (input: { message: string; target: BoardRevisionTarget }) => Promise<void>;
-}) {
-  const [message, setMessage] = useState("");
-
-  async function submit() {
-    const trimmed = message.trim();
-    if (!trimmed || pending) return;
-    await onSubmit({ message: trimmed, target });
-    setMessage("");
-  }
-
-  return (
-    <div className={styles.feedback}>
-      <label className={styles.feedbackLabel} htmlFor={id}>
-        {label}
-      </label>
-      <textarea
-        id={id}
-        value={message}
-        onChange={(event) => setMessage(event.target.value)}
-        placeholder="Tell the AI what to change here."
-        rows={3}
-        disabled={pending}
-      />
-      <button type="button" onClick={submit} disabled={!message.trim() || pending}>
-        {pending ? "Sending..." : "Send to AI"}
-      </button>
-    </div>
-  );
-}
-
 export function StoryboardBoard({
   runId,
   items,
@@ -183,16 +143,15 @@ export function StoryboardBoard({
         : itemTiles(runId, visualItems),
     [runId, storyboard, visualItems],
   );
+  const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
 
   if (tiles.length === 0) return null;
 
-  const boardTarget: BoardRevisionTarget = {
-    scope: "board",
-    runId,
-    ...(storyboard ? { storyboardId: storyboard.id } : {}),
-    label: "Storyboard board",
-  };
-  const boardKey = targetKey(boardTarget);
+  const selectedKey = selectedTile ? targetKey(selectedTile.target) : null;
+  const selectedPending = Boolean(selectedKey && pendingTargetKey === selectedKey);
+  const selectedSubtitle = selectedTile
+    ? [selectedTile.sceneLabel, selectedTile.intent].filter(Boolean).join(" - ")
+    : null;
 
   return (
     <section className={styles.board} aria-labelledby="storyboard-board-heading">
@@ -200,14 +159,10 @@ export function StoryboardBoard({
         <div>
           <p className={styles.eyebrow}>Storyboard</p>
           <h2 id="storyboard-board-heading">Direct the board</h2>
+          <p className={styles.headerCopy}>
+            Click any asset to send targeted feedback to the AI.
+          </p>
         </div>
-        <FeedbackForm
-          id="storyboard-board-feedback"
-          label="Board-level feedback"
-          target={boardTarget}
-          pending={pendingTargetKey === boardKey}
-          onSubmit={onFeedback}
-        />
       </header>
 
       {error ? (
@@ -220,7 +175,14 @@ export function StoryboardBoard({
         {tiles.map((tile, index) => {
           const key = targetKey(tile.target);
           return (
-            <article className={styles.tile} key={tile.key}>
+            <button
+              className={styles.tile}
+              type="button"
+              key={tile.key}
+              onClick={() => setSelectedTile(tile)}
+              aria-label={`Edit ${tile.label} with AI`}
+              aria-busy={pendingTargetKey === key || undefined}
+            >
               <div className={styles.media}>
                 {tile.mediaUrl ? (
                   <img
@@ -238,18 +200,46 @@ export function StoryboardBoard({
                 </div>
                 <h3>{tile.label}</h3>
                 {tile.intent ? <p>{tile.intent}</p> : null}
-                <FeedbackForm
-                  id={`storyboard-tile-feedback-${tile.key}`}
-                  label="Tile feedback"
-                  target={tile.target}
-                  pending={pendingTargetKey === key}
-                  onSubmit={onFeedback}
-                />
               </div>
-            </article>
+            </button>
           );
         })}
       </div>
+      <AiAssetFeedbackDialog
+        open={Boolean(selectedTile)}
+        title={selectedTile?.label ?? "Edit asset"}
+        subtitle={selectedSubtitle}
+        pending={selectedPending}
+        error={selectedTile ? error : null}
+        onClose={() => {
+          if (!selectedPending) setSelectedTile(null);
+        }}
+        onSubmit={async (message) => {
+          if (!selectedTile) return;
+          await onFeedback({ message, target: selectedTile.target });
+          setSelectedTile(null);
+        }}
+        asset={
+          selectedTile?.mediaUrl ? (
+            selectedTile.item?.kind === "video" ? (
+              <video
+                src={selectedTile.mediaUrl}
+                controls
+                muted
+                playsInline
+                preload="metadata"
+              />
+            ) : (
+              <img
+                src={selectedTile.mediaUrl}
+                alt={selectedTile.intent ? `${selectedTile.label}: ${selectedTile.intent}` : selectedTile.label}
+              />
+            )
+          ) : (
+            <div className={dialogStyles.assetPlaceholder}>No preview available.</div>
+          )
+        }
+      />
     </section>
   );
 }
