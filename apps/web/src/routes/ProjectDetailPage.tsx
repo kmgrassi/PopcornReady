@@ -433,8 +433,8 @@ function ProjectBrief({ project }: { project: V1Project }) {
     <section className={styles.panel}>
       <div className={styles.sectionHeader}>
         <div>
-          <span className={styles.eyebrow}>Brief</span>
-          <h2>Project details</h2>
+          <span className={styles.eyebrow}>Plan</span>
+          <h2>Plan</h2>
         </div>
       </div>
       {brief ? (
@@ -499,9 +499,9 @@ function StoryboardPreview({
         <ButtonLink
           variant="ghost"
           size="sm"
-          to="#runs"
+          to={`/projects/${encodeURIComponent(projectId)}/storyboard`}
         >
-          Runs
+          Open storyboard
         </ButtonLink>
       </div>
       {loading ? <div className={styles.placeholder}>Loading storyboard...</div> : null}
