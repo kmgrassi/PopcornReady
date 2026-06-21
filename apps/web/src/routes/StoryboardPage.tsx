@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import type {
   BoardRevisionTarget,
@@ -10,8 +10,14 @@ import type {
 import { AssetEditModal } from "../components/media/AssetEditModal";
 import { ButtonLink } from "../components/ui/Button";
 import { EmptyState, ErrorState } from "../components/ui/StateCard";
-import { useProjectQuery, useProjectStoryboardQuery } from "../lib/queryClient";
+import {
+  useGenerationRunQuery,
+  useProjectQuery,
+  useProjectStoryboardQuery,
+} from "../lib/queryClient";
 import styles from "./StoryboardPage.module.css";
+
+const TERMINAL_RUN_STATUSES = new Set(["succeeded", "failed", "canceled"]);
 
 interface EditTarget {
   target: BoardRevisionTarget;
@@ -24,7 +30,30 @@ export function StoryboardPage() {
   const { projectId } = useParams();
   const projectQuery = useProjectQuery(projectId ?? "", Boolean(projectId));
   const storyboardQuery = useProjectStoryboardQuery(projectId ?? "", Boolean(projectId));
+  const refetchStoryboard = storyboardQuery.refetch;
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
+  // Beats whose panel the agent is currently revising (skeleton + live update).
+  const [revisingBeats, setRevisingBeats] = useState<Set<string>>(() => new Set());
+  const [revisionRunId, setRevisionRunId] = useState<string | null>(null);
+
+  // Poll the revision run; useGenerationRunQuery auto-polls while it's active.
+  const revisionRunQuery = useGenerationRunQuery(
+    projectId ?? "",
+    revisionRunId ?? "",
+    Boolean(projectId && revisionRunId),
+  );
+  const revisionStatus = revisionRunQuery.data?.run.status;
+
+  // When the revision run settles, pull the updated panel image and clear the
+  // skeletons.
+  useEffect(() => {
+    if (!revisionRunId || !revisionStatus) return;
+    if (TERMINAL_RUN_STATUSES.has(revisionStatus)) {
+      void refetchStoryboard();
+      setRevisingBeats(new Set());
+      setRevisionRunId(null);
+    }
+  }, [revisionRunId, revisionStatus, refetchStoryboard]);
 
   if (!projectId) return <Navigate to="/library/projects" replace />;
 
@@ -32,6 +61,7 @@ export function StoryboardPage() {
   const storyboard = storyboardQuery.data?.storyboard ?? null;
   const loading = storyboardQuery.isLoading;
   const error = storyboardQuery.error ?? null;
+  const revising = revisingBeats.size > 0;
 
   return (
     <main className={styles.shell}>
@@ -46,12 +76,20 @@ export function StoryboardPage() {
           <h1>Storyboard</h1>
           <p>Click any panel to ask the AI to edit it.</p>
         </div>
-        <ButtonLink
-          variant="secondary"
-          to={`/projects/${encodeURIComponent(projectId)}`}
-        >
-          Back to project
-        </ButtonLink>
+        <div className={styles.headerActions}>
+          {revising ? (
+            <span className={styles.syncPill} role="status">
+              <span className={styles.spinner} aria-hidden />
+              Agent revising…
+            </span>
+          ) : null}
+          <ButtonLink
+            variant="secondary"
+            to={`/projects/${encodeURIComponent(projectId)}`}
+          >
+            Back to project
+          </ButtonLink>
+        </div>
       </header>
 
       {loading ? <div className={styles.placeholder}>Loading storyboard…</div> : null}
@@ -78,7 +116,7 @@ export function StoryboardPage() {
       ) : null}
 
       {!loading && !error && storyboard ? (
-        <StoryboardBody storyboard={storyboard} onEdit={setEditTarget} />
+        <StoryboardBody storyboard={storyboard} revisingBeats={revisingBeats} onEdit={setEditTarget} />
       ) : null}
 
       <AssetEditModal
@@ -89,11 +127,14 @@ export function StoryboardPage() {
         title={editTarget?.title}
         subtitle={editTarget?.subtitle}
         onClose={() => setEditTarget(null)}
-        onSubmitted={() => {
-          // The agent revises in the background; refetch a few times to pick up
-          // the new panel image.
-          window.setTimeout(() => void storyboardQuery.refetch(), 4000);
-          window.setTimeout(() => void storyboardQuery.refetch(), 12000);
+        onSubmitted={(runId) => {
+          // Mark the edited beat's panel as out of sync (skeleton) and poll the
+          // run until it settles, then live-update the image.
+          const beatId = editTarget?.target.beatId;
+          if (beatId) {
+            setRevisingBeats((current) => new Set(current).add(beatId));
+          }
+          setRevisionRunId(runId);
         }}
       />
     </main>
@@ -102,9 +143,11 @@ export function StoryboardPage() {
 
 function StoryboardBody({
   storyboard,
+  revisingBeats,
   onEdit,
 }: {
   storyboard: ProjectStoryboard;
+  revisingBeats: Set<string>;
   onEdit: (target: EditTarget) => void;
 }) {
   const scenes = [...storyboard.scenes].sort((a, b) => a.sceneIndex - b.sceneIndex);
@@ -118,6 +161,7 @@ function StoryboardBody({
           key={scene.id}
           scene={scene}
           storyboardId={storyboard.id}
+          revisingBeats={revisingBeats}
           order={index + 1}
           onEdit={onEdit}
         />
@@ -129,11 +173,13 @@ function StoryboardBody({
 function SceneSection({
   scene,
   storyboardId,
+  revisingBeats,
   order,
   onEdit,
 }: {
   scene: StoryboardScene;
   storyboardId: string;
+  revisingBeats: Set<string>;
   order: number;
   onEdit: (target: EditTarget) => void;
 }) {
@@ -157,6 +203,7 @@ function SceneSection({
             beat={beat}
             storyboardId={storyboardId}
             sceneId={scene.id}
+            revising={revisingBeats.has(beat.id)}
             order={index + 1}
             sceneOrder={order}
             onEdit={onEdit}
@@ -176,6 +223,7 @@ function BeatCard({
   beat,
   storyboardId,
   sceneId,
+  revising,
   order,
   sceneOrder,
   onEdit,
@@ -183,6 +231,7 @@ function BeatCard({
   beat: StoryboardBeat;
   storyboardId: string;
   sceneId: string;
+  revising: boolean;
   order: number;
   sceneOrder: number;
   onEdit: (target: EditTarget) => void;
@@ -194,7 +243,16 @@ function BeatCard({
 
   return (
     <article className={styles.beat}>
-      {canEdit && image ? (
+      {revising ? (
+        <div className={`${styles.panelImage} ${styles.panelRevising}`} aria-busy="true">
+          {image ? <img className={styles.panelGhost} src={image} alt="" /> : null}
+          <div className={styles.shimmer} aria-hidden />
+          <span className={styles.revisingLabel}>
+            <span className={styles.spinner} aria-hidden />
+            Revising…
+          </span>
+        </div>
+      ) : canEdit && image ? (
         <button
           type="button"
           className={styles.panelButton}

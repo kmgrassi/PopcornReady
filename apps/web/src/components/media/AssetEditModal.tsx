@@ -13,8 +13,8 @@ export interface AssetEditModalProps {
   title?: string;
   subtitle?: string | null;
   onClose: () => void;
-  /** Called after the edit is sent so the caller can poll/refetch. */
-  onSubmitted?: () => void;
+  /** Called with the run id after the edit is sent so the caller can poll it. */
+  onSubmitted?: (runId: string) => void;
 }
 
 // Universal "click an asset, ask the AI to edit it" modal. The edit is routed
@@ -65,10 +65,10 @@ export function AssetEditModal({
     setPending(true);
     setError(null);
     try {
-      await v1Api.createProjectAssetRevision(projectId, { message: trimmed, target });
+      const res = await v1Api.createProjectAssetRevision(projectId, { message: trimmed, target });
       setSent(true);
       setPrompt("");
-      onSubmitted?.();
+      onSubmitted?.(res.runId);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
