@@ -24,7 +24,6 @@ import {
   useDashboardRunsQuery,
   type LibraryScope,
 } from "../lib/v1/dashboard/query";
-import { newStudioDraftPath } from "../lib/studioRoutes";
 import styles from "./DashboardCollections.module.css";
 
 const PAGE_SIZE = 24;
@@ -141,8 +140,8 @@ function DashboardFrame({
         description={description}
         action={
           showNewVideoAction ? (
-            <ButtonLink variant="primary" to={newStudioDraftPath()}>
-              New video
+            <ButtonLink variant="primary" to="/library/projects">
+              Projects
             </ButtonLink>
           ) : null
         }
@@ -225,7 +224,7 @@ export function RunsPage() {
         <EmptyState
           title="No runs match this filter"
           body="Start a new video or choose another status to see past generation work."
-          action={<ButtonLink variant="secondary" to="/studio">Open studio</ButtonLink>}
+          action={<ButtonLink variant="secondary" to="/library/projects">View projects</ButtonLink>}
         />
       ) : null}
       {!runsQuery.loading && !runsQuery.error && runsQuery.items.length > 0 ? (
@@ -313,7 +312,7 @@ export function ProjectsPage() {
           <EmptyState
             title="No projects yet"
             body="Create a video to start building your project library."
-            action={<ButtonLink variant="secondary" to="/studio">Open studio</ButtonLink>}
+            action={<ButtonLink variant="secondary" to="/library/projects">View projects</ButtonLink>}
           />
         )
       ) : null}
@@ -514,8 +513,8 @@ export function AssetsPage() {
         ) : (
           <EmptyState
             title="No assets match this filter"
-            body="Upload source media or generate assets in the studio to build the workspace library."
-            action={<ButtonLink variant="secondary" to="/studio">Open studio</ButtonLink>}
+            body="Upload source media or generate assets to build the workspace library."
+            action={<ButtonLink variant="secondary" to="/library/projects">View projects</ButtonLink>}
           />
         )
       ) : null}
@@ -677,7 +676,7 @@ export function OutputsPage() {
         <EmptyState
           title="No finished outputs yet"
           body="Exports appear here after a video finishes rendering successfully."
-          action={<ButtonLink variant="secondary" to="/studio">Create a video</ButtonLink>}
+          action={<ButtonLink variant="secondary" to="/library/projects">View projects</ButtonLink>}
         />
       ) : null}
       {!outputsQuery.loading && !outputsQuery.error && outputsQuery.items.length > 0 ? (

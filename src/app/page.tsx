@@ -188,7 +188,7 @@ const PRICING = [
       "1080p watermark-free export",
       "1 workspace",
     ],
-    cta: { label: "Start creating", href: "/studio", external: false },
+    cta: { label: "View projects", href: "/dashboard", external: false },
     featured: true,
   },
   {
@@ -202,7 +202,7 @@ const PRICING = [
       "Priority rendering + 4K export",
       "Agent API (preview)",
     ],
-    cta: { label: "Go Pro", href: "/studio", external: false },
+    cta: { label: "View projects", href: "/dashboard", external: false },
     featured: false,
   },
   {
@@ -288,8 +288,8 @@ export default async function LandingPage() {
             </a>
             <Link href="/admin">Admin</Link>
             <AuthNavButton />
-            <Link className="lp-nav-cta" href="/studio">
-              Open studio
+            <Link className="lp-nav-cta" href="/dashboard">
+              Open dashboard
             </Link>
           </nav>
         </div>
@@ -464,7 +464,7 @@ export default async function LandingPage() {
               <h2>Example renders</h2>
               <p>Local videos created with this workspace.</p>
             </div>
-            <Link href="/studio">Open studio</Link>
+            <Link href="/dashboard">Open dashboard</Link>
           </div>
           {exampleVideos.length > 0 ? (
             <div className="lp-example-grid">
@@ -516,7 +516,7 @@ export default async function LandingPage() {
             >
               View on GitHub &rarr;
             </a>
-            <Link className="lp-price-cta" href="/studio">
+            <Link className="lp-price-cta" href="/dashboard">
               Open the studio
             </Link>
           </div>

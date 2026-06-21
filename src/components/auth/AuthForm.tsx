@@ -44,7 +44,7 @@ export function AuthForm({ mode }: AuthFormProps) {
   }, [configured]);
 
   useEffect(() => {
-    if (status === "authenticated") router.replace("/studio");
+    if (status === "authenticated") router.replace("/dashboard");
   }, [router, status]);
 
   async function submit() {

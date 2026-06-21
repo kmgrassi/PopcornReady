@@ -1,7 +1,6 @@
 import { Link } from "react-router-dom";
 import { AgentRunPreview } from "../components/AgentRunPreview";
 import { HeatLogoMark } from "../components/HeatLogoMark";
-import { PromptComposer } from "../components/PromptComposer";
 import { Reveal } from "../components/Reveal";
 import {
   LandingSection,
@@ -152,7 +151,7 @@ const PRICING = [
       "1080p watermark-free export",
       "1 workspace",
     ],
-    cta: { label: "Start creating", href: "/studio", external: false },
+    cta: { label: "View projects", href: "/library/projects", external: false },
     featured: true,
   },
   {
@@ -166,7 +165,7 @@ const PRICING = [
       "Priority rendering + 4K export",
       "Agent API preview",
     ],
-    cta: { label: "Go Pro", href: "/studio", external: false },
+    cta: { label: "View projects", href: "/library/projects", external: false },
     featured: false,
   },
   {
@@ -219,7 +218,19 @@ export function HomePage() {
             and refines the final cut — one AI-native production, not a pile of
             clips.
           </p>
-          <PromptComposer />
+          <div className="lp-cta-buttons">
+            <Link className="lp-price-cta featured" to="/library/projects">
+              View projects
+            </Link>
+            <a
+              className="lp-price-cta"
+              href={GITHUB_URL}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Self-host
+            </a>
+          </div>
         </section>
 
         <Reveal>
@@ -420,8 +431,8 @@ export function HomePage() {
                 >
                   View on GitHub &rarr;
                 </a>
-                <Link className="lp-price-cta" to="/studio">
-                  Open the studio
+                <Link className="lp-price-cta" to="/library/projects">
+                  Open projects
                 </Link>
               </div>
             </div>

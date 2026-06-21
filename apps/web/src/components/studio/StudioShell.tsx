@@ -52,7 +52,7 @@ function studioDraftPath({
   if (step !== "brief") params.set("step", step);
   if (openPanel) params.set("panel", openPanel);
   const query = params.toString();
-  return query ? `/studio?${query}` : "/studio";
+  return query ? `/library/projects?${query}` : "/library/projects";
 }
 
 export interface StudioShellProps {
@@ -64,7 +64,7 @@ export interface StudioShellProps {
   initialStarted?: boolean;
   /** Optional panel key the active step should open by default. */
   openPanel?: string;
-  /** Optional saved draft id from `/studio?draft=:id`. */
+  /** Optional saved draft id from the retired Studio route. */
   draftId?: string | null;
   /** Unique route token requesting a fresh Studio draft. */
   newDraftRequest?: string;
@@ -135,7 +135,7 @@ export function StudioShell({
     setInitialPayload(record.payload);
     setFlowKey((current) => current + 1);
     setPendingDraftRequest(null);
-    navigate(`/studio?draft=${encodeURIComponent(record.draftId)}`, { replace: true });
+    navigate(`/library/projects?draft=${encodeURIComponent(record.draftId)}`, { replace: true });
   }, [
     draftQuery.data,
     draftQuery.dataUpdatedAt,
@@ -214,7 +214,7 @@ export function StudioShell({
         setActiveDraftId(null);
         setInitialPayload(null);
         setPendingDraftRequest(null);
-        navigate("/studio", { replace: true });
+        navigate("/library/projects", { replace: true });
       }
     } catch (error) {
       setDraftActionError(error instanceof Error ? error.message : "Could not delete draft.");
