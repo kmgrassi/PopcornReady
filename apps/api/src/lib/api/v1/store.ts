@@ -4123,6 +4123,49 @@ export async function getAsset(
   return mapAsset(await getAssetRow(db, workspaceId, projectId, assetId, "getAsset"));
 }
 
+// Canonicalize a mix of asset uuids and agent-written slugs to uuids. Reads accept
+// a slug (getAssetRow resolves it), but a slug must never reach a uuid write column
+// (input_asset_ids, asset_edges, selections) as a raw string — Postgres rejects it
+// with 22P02. Call this before any write that persists asset references. UUID-shaped
+// values pass through untouched; a non-uuid that resolves to no slug is a typed
+// not_found, mirroring getAssetRow. Input order is preserved; duplicates allowed.
+export async function canonicalizeAssetIds(
+  workspaceId: string,
+  projectId: string,
+  refs: string[]
+): Promise<string[]> {
+  if (refs.length === 0) return [];
+  const slugByRef = new Map<string, string>();
+  for (const ref of refs) {
+    if (isAssetIdShape(ref)) continue;
+    const slug = normalizeSlug(ref);
+    if (!slug) throw notFound(`Asset not found: ${ref}`);
+    slugByRef.set(ref, slug);
+  }
+  const idBySlug = new Map<string, string>();
+  if (slugByRef.size > 0) {
+    const db = getServiceSupabase();
+    const data = await runQuery(
+      "store.canonicalizeAssetIds",
+      db
+        .from("assets")
+        .select("id, slug")
+        .eq("project_id", projectId)
+        .eq("workspace_id", workspaceId)
+        .in("slug", [...new Set(slugByRef.values())])
+    );
+    for (const row of (data ?? []) as Array<{ id: string; slug: string | null }>) {
+      if (row.slug) idBySlug.set(row.slug, row.id);
+    }
+  }
+  return refs.map((ref) => {
+    if (isAssetIdShape(ref)) return ref;
+    const id = idBySlug.get(slugByRef.get(ref)!);
+    if (!id) throw notFound(`Asset not found: ${ref}`);
+    return id;
+  });
+}
+
 export async function updateAsset(
   workspaceId: string,
   projectId: string,

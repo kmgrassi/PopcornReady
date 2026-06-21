@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { getAsset, getAssetMediaUrls } from "../store";
+import { canonicalizeAssetIds, getAsset, getAssetMediaUrls } from "../store";
 import { ApiError } from "../errors";
 
 // A non-UUID asset reference must never hit the uuid `assets.id` column (that
@@ -52,6 +52,34 @@ test("getAssetMediaUrls maps a non-UUID id to not_found without a DB round-trip"
     await assert.rejects(
       getAssetMediaUrls(WORKSPACE_ID, "character_homeowner"),
       isNotFound("character_homeowner")
+    );
+  });
+});
+
+// Slug references must be canonicalized to uuids before they reach a uuid write
+// column (input_asset_ids, asset_edges), or Postgres 22P02s on the write — the
+// hazard a slug-tolerant read path would otherwise reintroduce.
+test("canonicalizeAssetIds passes uuids through untouched (no DB round-trip)", async () => {
+  await withDummySupabaseEnv(async () => {
+    const ids = [
+      "33333333-3333-4333-8333-333333333333",
+      "44444444-4444-4444-8444-444444444444",
+    ];
+    assert.deepEqual(await canonicalizeAssetIds(WORKSPACE_ID, PROJECT_ID, ids), ids);
+  });
+});
+
+test("canonicalizeAssetIds returns [] for an empty list", async () => {
+  await withDummySupabaseEnv(async () => {
+    assert.deepEqual(await canonicalizeAssetIds(WORKSPACE_ID, PROJECT_ID, []), []);
+  });
+});
+
+test("canonicalizeAssetIds rejects an unresolvable (empty-slug) reference", async () => {
+  await withDummySupabaseEnv(async () => {
+    await assert.rejects(
+      canonicalizeAssetIds(WORKSPACE_ID, PROJECT_ID, ["!!!"]),
+      isNotFound("!!!")
     );
   });
 });

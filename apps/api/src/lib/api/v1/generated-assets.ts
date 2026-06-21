@@ -37,6 +37,7 @@ import {
 import { AssetKind, SCHEMA_VERSIONS } from "./schemas";
 import {
   addAsset,
+  canonicalizeAssetIds,
   assertRunBudgetAllows,
   createAction,
   effectiveAssetStorageVisibility,
@@ -842,6 +843,27 @@ export async function runGeneratedAssetJob(args: {
   }
 
   const parsed = parseGeneratedAssetRequest(generatedAssetJobInput(job).body);
+  // The agent may reference inputs by slug (e.g. "character_homeowner"). Resolve
+  // every asset reference to its canonical uuid BEFORE these values are written to
+  // uuid columns (createAction.input_asset_ids, asset_edges via graphInputs), or
+  // Postgres rejects the raw slug with 22P02. See store.canonicalizeAssetIds.
+  parsed.referenceAssetIds = await canonicalizeAssetIds(
+    auth.workspaceId,
+    projectId,
+    parsed.referenceAssetIds
+  );
+  parsed.anchorIds = await canonicalizeAssetIds(auth.workspaceId, projectId, parsed.anchorIds);
+  if (parsed.graphInputs?.length) {
+    const canonical = await canonicalizeAssetIds(
+      auth.workspaceId,
+      projectId,
+      parsed.graphInputs.map((input) => input.assetId)
+    );
+    parsed.graphInputs = parsed.graphInputs.map((input, index) => ({
+      ...input,
+      assetId: canonical[index],
+    }));
+  }
   const estimatedCostUsd = estimateCostUsd({
     provider: parsed.provider,
     kind: parsed.kind,
