@@ -363,9 +363,10 @@ test("shows a stored recovery hint while loading and then renders failure detail
     page.getByRole("alert").getByText("Could not assemble the deterministic timeline."),
   ).toBeVisible();
   await expect(page.getByText("timeline_assembly_failed")).toBeVisible();
-  await expect(page.getByRole("link", { name: "View draft" })).toHaveAttribute(
+  // The Studio route was retired; the recovery link now returns to the project.
+  await expect(page.getByRole("link", { name: "Open project" })).toHaveAttribute(
     "href",
-    "/studio?draft=draft-123&step=review",
+    `/projects/${projectId}`,
   );
 });
 

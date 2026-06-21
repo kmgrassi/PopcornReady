@@ -137,8 +137,12 @@ test.describe("run progress actions", () => {
     });
     await installRunProgressRoutes(page, { detail: succeeded });
 
+    // The retired Studio route is gone, so a studio-linked succeeded run no
+    // longer redirects to /studio — it stays on the run progress page.
     await page.goto(`/projects/${e2eProjectId}/runs/${succeeded.run.runId}?studioDraft=draft-e2e`);
-    await expect(page).toHaveURL(/\/studio\?draft=draft-e2e&step=review$/);
+    await expect(page).toHaveURL(
+      new RegExp(`/projects/${e2eProjectId}/runs/${succeeded.run.runId}`),
+    );
   });
 
   test("loading state shows the last-run recovery hint while polling waits", async ({ page }) => {
