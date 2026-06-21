@@ -101,7 +101,7 @@ import {
   reconcileAssetStorage,
   type VisibilityObjectStore,
 } from "../../storage/visibility-move";
-import { projectDisplayName } from "./naming";
+import { normalizeSlug, projectDisplayName } from "./naming";
 
 export interface V1Workspace {
   id: string;
@@ -116,6 +116,8 @@ export interface V1Project {
   schemaVersion: typeof SCHEMA_VERSIONS.project;
   workspaceId: string;
   name: string;
+  // Stable, workspace-scoped, lowercase handle written by the generating agent.
+  slug?: string | null;
   status: "active" | "deleted";
   visibility?: "public" | "private";
   brief: VideoBrief | null;
@@ -142,6 +144,11 @@ export interface V1Asset {
   projectId: string;
   kind: AssetKind;
   role?: string;
+  // Human display name written by the generating agent (falls back to a derived name).
+  name?: string;
+  // Stable, project-scoped, lowercase handle written by the generating agent. Agents
+  // may reference this asset by (project, slug); resolved in getAssetRow.
+  slug?: string | null;
   filename: string;
   status: "ready" | "pending";
   source: AgentAssetSource;
@@ -506,6 +513,7 @@ interface ProjectRow {
   schema_version: string;
   workspace_id: string;
   name: string;
+  slug?: string | null;
   status: "active" | "deleted";
   visibility?: "public" | "private";
   created_at: string;
@@ -527,6 +535,7 @@ function mapProject(
     schemaVersion: SCHEMA_VERSIONS.project,
     workspaceId: row.workspace_id,
     name: row.name,
+    slug: row.slug ?? null,
     status: row.status,
     visibility: row.visibility,
     brief: projection.brief ?? null,
@@ -1475,6 +1484,8 @@ interface AssetRow {
   media: AssetMedia;
   status: "ready" | "pending";
   role: string | null;
+  name: string | null;
+  slug: string | null;
   filename: string;
   content: unknown | null;
   params: { schema_version?: string; provenance?: GeneratedAssetProvenance } | null;
@@ -1539,6 +1550,8 @@ function assetToRow(asset: V1Asset): AssetRow {
     media: asset.kind,
     status: asset.status,
     role: asset.role ?? null,
+    name: asset.name ?? null,
+    slug: asset.slug ?? null,
     filename: asset.filename,
     content: null,
     params,
@@ -1631,6 +1644,8 @@ function mapAssetRow(row: AssetRow): V1Asset {
   if (row.storage_bucket != null) asset.storageBucket = row.storage_bucket;
   if (row.duration_sec != null) asset.durationSec = row.duration_sec;
   if (row.role != null) asset.role = row.role;
+  if (row.name != null) asset.name = row.name;
+  if (row.slug != null) asset.slug = row.slug;
   if (envelope.context !== undefined) asset.context = envelope.context;
   if (envelope.userContext !== undefined) asset.userContext = envelope.userContext;
   if (envelope.agentContext !== undefined) asset.agentContext = envelope.agentContext;
@@ -1671,19 +1686,23 @@ async function getAssetRow(
   assetId: string,
   context: string
 ): Promise<AssetRow> {
-  // A non-UUID id (e.g. a character slug like "character_homeowner" handed to
-  // the character-anchor endpoint) can never match the uuid `assets.id` column;
-  // treat it as the same `not_found` we return for an absent id rather than
-  // letting Postgres' `22P02` surface as a database_error. See isAssetIdShape.
-  if (!isAssetIdShape(assetId)) {
-    throw notFound(`Asset not found: ${assetId}`);
-  }
+  // A non-UUID reference (e.g. an agent-written handle like "homeowner" or
+  // "character_homeowner") can never match the uuid `assets.id` column. Rather
+  // than let Postgres' `22P02` surface as a database_error, resolve it as the
+  // project-scoped `slug` the generating agent assigned. This makes the slug a
+  // first-class handle the agent can reference assets by; an unknown handle is
+  // the same `not_found` we return for an absent id. See isAssetIdShape.
+  const isUuid = isAssetIdShape(assetId);
+  // Normalize a slug reference through the same normalizer used on write, so a
+  // handle like "character_homeowner" matches the stored "character-homeowner".
+  const lookupValue = isUuid ? assetId : normalizeSlug(assetId);
+  if (!lookupValue) throw notFound(`Asset not found: ${assetId}`);
   const data = await runQuery(
     `store.${context}`,
     db
       .from("assets")
       .select("*")
-      .eq("id", assetId)
+      .eq(isUuid ? "id" : "slug", lookupValue)
       .eq("project_id", projectId)
       .eq("workspace_id", workspaceId)
       .maybeSingle()
@@ -1762,6 +1781,7 @@ export function ensureUserWorkspace(
 export async function createProject(input: {
   workspaceId: string;
   name?: string;
+  slug?: string;
   brief?: VideoBrief;
 }): Promise<{ project: V1Project; briefVersion: V1BriefVersion | null }> {
   const db = getServiceSupabase();
@@ -1771,6 +1791,11 @@ export async function createProject(input: {
     explicitName: input.name,
     brief: input.brief,
   });
+  const slug = await ensureUniqueProjectSlug(
+    db,
+    input.workspaceId,
+    normalizeSlug(input.slug) ?? normalizeSlug(name)
+  );
 
   const insertedProject = await runQuery(
     "store.createProject insert project",
@@ -1780,6 +1805,7 @@ export async function createProject(input: {
         schema_version: SCHEMA_VERSIONS.project,
         workspace_id: input.workspaceId,
         name,
+        slug,
         status: "active",
         visibility,
         created_at: now,
@@ -4006,6 +4032,66 @@ export async function deleteStudioDraft(
 // ---------------------------------------------------------------------------
 // Assets
 // ---------------------------------------------------------------------------
+// Resolve a project-unique slug from the agent-written base. The (project_id, slug)
+// index is unique, so on collision we suffix -2, -3, ... The base is already
+// normalized by normalizeSlug at the tool boundary; this only de-duplicates.
+async function ensureUniqueAssetSlug(
+  db: SupabaseClient,
+  projectId: string,
+  base: string | null | undefined
+): Promise<string | null> {
+  const normalized = normalizeSlug(base);
+  if (!normalized) return null;
+  const data = await runQuery(
+    "store.ensureUniqueAssetSlug",
+    db
+      .from("assets")
+      .select("slug")
+      .eq("project_id", projectId)
+      .like("slug", `${normalized}%`)
+  );
+  const taken = new Set(
+    ((data ?? []) as Array<{ slug: string | null }>)
+      .map((r) => r.slug)
+      .filter((s): s is string => Boolean(s))
+  );
+  if (!taken.has(normalized)) return normalized;
+  for (let n = 2; n < 1000; n += 1) {
+    const candidate = `${normalized}-${n}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  return null;
+}
+
+// Workspace-scoped twin of ensureUniqueAssetSlug for project slugs.
+async function ensureUniqueProjectSlug(
+  db: SupabaseClient,
+  workspaceId: string,
+  base: string | null | undefined
+): Promise<string | null> {
+  const normalized = normalizeSlug(base);
+  if (!normalized) return null;
+  const data = await runQuery(
+    "store.ensureUniqueProjectSlug",
+    db
+      .from("projects")
+      .select("slug")
+      .eq("workspace_id", workspaceId)
+      .like("slug", `${normalized}%`)
+  );
+  const taken = new Set(
+    ((data ?? []) as Array<{ slug: string | null }>)
+      .map((r) => r.slug)
+      .filter((s): s is string => Boolean(s))
+  );
+  if (!taken.has(normalized)) return normalized;
+  for (let n = 2; n < 1000; n += 1) {
+    const candidate = `${normalized}-${n}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  return null;
+}
+
 export async function addAsset(
   asset: V1Asset,
   options: { createdByActionId?: string } = {}
@@ -4016,6 +4102,7 @@ export async function addAsset(
   // object is a placeholder and is read back from the inserted row.
   const { id: _omit, ...row } = assetToRow(assetWithGraph);
   void _omit;
+  row.slug = await ensureUniqueAssetSlug(db, assetWithGraph.projectId, row.slug);
   row.visibility = await defaultVisibilityForWorkspace(db, assetWithGraph.workspaceId);
   if (options.createdByActionId) {
     row.created_by_action_id = options.createdByActionId;
@@ -4034,6 +4121,49 @@ export async function getAsset(
 ): Promise<V1Asset> {
   const db = getServiceSupabase();
   return mapAsset(await getAssetRow(db, workspaceId, projectId, assetId, "getAsset"));
+}
+
+// Canonicalize a mix of asset uuids and agent-written slugs to uuids. Reads accept
+// a slug (getAssetRow resolves it), but a slug must never reach a uuid write column
+// (input_asset_ids, asset_edges, selections) as a raw string — Postgres rejects it
+// with 22P02. Call this before any write that persists asset references. UUID-shaped
+// values pass through untouched; a non-uuid that resolves to no slug is a typed
+// not_found, mirroring getAssetRow. Input order is preserved; duplicates allowed.
+export async function canonicalizeAssetIds(
+  workspaceId: string,
+  projectId: string,
+  refs: string[]
+): Promise<string[]> {
+  if (refs.length === 0) return [];
+  const slugByRef = new Map<string, string>();
+  for (const ref of refs) {
+    if (isAssetIdShape(ref)) continue;
+    const slug = normalizeSlug(ref);
+    if (!slug) throw notFound(`Asset not found: ${ref}`);
+    slugByRef.set(ref, slug);
+  }
+  const idBySlug = new Map<string, string>();
+  if (slugByRef.size > 0) {
+    const db = getServiceSupabase();
+    const data = await runQuery(
+      "store.canonicalizeAssetIds",
+      db
+        .from("assets")
+        .select("id, slug")
+        .eq("project_id", projectId)
+        .eq("workspace_id", workspaceId)
+        .in("slug", [...new Set(slugByRef.values())])
+    );
+    for (const row of (data ?? []) as Array<{ id: string; slug: string | null }>) {
+      if (row.slug) idBySlug.set(row.slug, row.id);
+    }
+  }
+  return refs.map((ref) => {
+    if (isAssetIdShape(ref)) return ref;
+    const id = idBySlug.get(slugByRef.get(ref)!);
+    if (!id) throw notFound(`Asset not found: ${ref}`);
+    return id;
+  });
 }
 
 export async function updateAsset(

@@ -237,6 +237,10 @@ export async function runGenerateKeyframeJob(
           prompt,
           provider,
           assetRole: "beat_keyframe",
+          // Display name + a stable, agent-referenceable handle derived from the
+          // planned beat (namespaced so a beat's keyframe and clip don't collide).
+          name: `Keyframe — ${beat.name}`,
+          slug: `keyframe-${beatId}`,
           anchorIds: anchorAssetIds,
           structuralReferenceAssetIds,
           graphInputs,

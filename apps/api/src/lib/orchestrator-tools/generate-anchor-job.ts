@@ -116,6 +116,9 @@ async function generateAnchorAsset(input: {
       body: {
         autocreate: true,
         name: input.anchor.label,
+        // The plan item's id (e.g. "character_homeowner") becomes the asset's
+        // stable, agent-referenceable slug.
+        slug: input.anchor.id,
         description: input.anchor.description,
         prompt,
         provider: input.provider,
@@ -133,6 +136,9 @@ async function generateAnchorAsset(input: {
     body: {
       kind: "image",
       prompt,
+      name: input.anchor.label,
+      // The plan item's id (e.g. "location_driveway") becomes the asset slug.
+      slug: input.anchor.id,
       description: input.anchor.description,
       provider: input.provider,
       assetRole: input.role,
