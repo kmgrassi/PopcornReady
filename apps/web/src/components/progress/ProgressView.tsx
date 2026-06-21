@@ -1,7 +1,7 @@
 "use client";
 
 import { Link } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   GENERATION_STAGE_LABELS,
   GENERATION_STAGE_ORDER,
@@ -55,6 +55,7 @@ interface ProgressViewProps {
     onRestart: (stageType: GenerationStageType) => void;
   };
   onBoardRevisionSuccess?: () => Promise<void> | void;
+  headerSlot?: ReactNode;
   /** Optional list of other demo runs to link to from the header. */
   alternateRuns?: { runId: string; label: string }[];
 }
@@ -417,6 +418,7 @@ export function ProgressView({
   cancelAction,
   restartAction,
   onBoardRevisionSuccess,
+  headerSlot,
   alternateRuns,
 }: ProgressViewProps) {
   const [detail, setDetail] = useState({ run, stages, stageItems });
@@ -610,6 +612,7 @@ export function ProgressView({
             The plan, generated assets, review checkpoints, and final export stay
             attached to this workspace.
           </p>
+          {headerSlot ? <div className={styles.headerSlot}>{headerSlot}</div> : null}
         </div>
         <div className={styles.headerActions}>
           <div className={styles.headerStatusPanel} aria-label="Current run status">

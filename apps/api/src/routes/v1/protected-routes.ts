@@ -1,4 +1,5 @@
 import type { Router } from "express";
+import { accountRouter } from "./account.js";
 import { assetGraphRouter } from "./asset-graph.js";
 import { assetsRouter } from "./assets.js";
 import { beatsRouter } from "./beats.js";
@@ -17,6 +18,7 @@ import { timelinesRouter } from "./timelines.js";
 import { workspacesRouter } from "./workspaces.js";
 
 export function mountProtectedV1Routes(v1: Router) {
+  v1.use(accountRouter);
   v1.use(meRouter);
   v1.use(projectsRouter);
   v1.use(workspacesRouter);

@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import type { User } from "@supabase/supabase-js";
+import { v1Api } from "../../lib/api-client";
 import {
   clearAllSupabaseAuthStorage,
   clearBrowserSessionState,
@@ -24,8 +25,10 @@ type AuthContextValue = {
   configured: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
+  upgradeAnonymousAccount: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   clearError: () => void;
+  isAnonymous: boolean;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -43,8 +46,18 @@ function describeAuthError(err: unknown): string {
   if (code === "invalid_credentials") {
     return "Incorrect email or password.";
   }
+  if (code === "account_collision") {
+    return "That email is already reserved for an invited account. Sign in with that account or use a different email.";
+  }
+  if (code === "user_already_exists" || code === "email_exists") {
+    return "An account already exists for that email. Sign in instead, or use a different email.";
+  }
   if (err instanceof Error) return err.message;
   return String(err);
+}
+
+function userIsAnonymous(user: User | null): boolean {
+  return Boolean((user as { is_anonymous?: boolean } | null)?.is_anonymous);
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -142,6 +155,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const upgradeAnonymousAccount = useCallback(async (email: string, password: string) => {
+    const normalizedEmail = email.trim().toLowerCase();
+    setError(null);
+    try {
+      await v1Api.preflightAnonymousAccountUpgrade(normalizedEmail);
+      const { data, error: updateError } = await getSupabaseClient().auth.updateUser({
+        email: normalizedEmail,
+        password,
+      });
+      if (updateError || !data.user) {
+        throw updateError || new Error("No Supabase user returned.");
+      }
+      await getSupabaseClient().auth.refreshSession();
+      await v1Api.completeAnonymousAccountUpgrade(normalizedEmail);
+      setUser(data.user);
+      setStatus("authenticated");
+    } catch (err) {
+      setStatus(user ? "authenticated" : "unauthenticated");
+      const message = describeAuthError(err);
+      setError(message);
+      throw new Error(message);
+    }
+  }, [user]);
+
   const signOut = useCallback(async () => {
     setError(null);
     if (configured) {
@@ -164,8 +201,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const clearError = useCallback(() => setError(null), []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ status, user, error, configured, signIn, signUp, signOut, clearError }),
-    [status, user, error, configured, signIn, signUp, signOut, clearError]
+    () => ({
+      status,
+      user,
+      error,
+      configured,
+      signIn,
+      signUp,
+      upgradeAnonymousAccount,
+      signOut,
+      clearError,
+      isAnonymous: userIsAnonymous(user),
+    }),
+    [
+      status,
+      user,
+      error,
+      configured,
+      signIn,
+      signUp,
+      upgradeAnonymousAccount,
+      signOut,
+      clearError,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

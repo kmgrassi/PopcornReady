@@ -9,6 +9,7 @@ export type ApiErrorCode =
   | "idempotency_conflict"
   | "asset_not_ready"
   | "asset_invalid"
+  | "account_collision"
   | "prompt_required"
   | "brief_missing"
   | "timeline_invalid"
@@ -30,6 +31,7 @@ const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
   idempotency_conflict: 409,
   asset_not_ready: 409,
   asset_invalid: 400,
+  account_collision: 409,
   // The caller must supply a prompt because the asset has none stored to reuse.
   prompt_required: 422,
   brief_missing: 400,

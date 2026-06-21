@@ -66,6 +66,11 @@
   line-height: var(--line-body);
 }
 
+.headerSlot {
+  max-width: 700px;
+  margin-top: var(--space-5);
+}
+
 .runIdRow {
   display: flex;
   align-items: center;

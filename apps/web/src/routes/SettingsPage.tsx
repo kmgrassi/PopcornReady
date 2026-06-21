@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../components/auth/AuthProvider";
+import { AnonymousUpgradeBanner } from "../components/auth/AnonymousUpgradeBanner";
 import { AccessTokenPanel } from "../components/settings/AccessTokenPanel";
 import ThemeToggle from "../components/ThemeToggle";
 import { Button } from "../components/ui/Button";
@@ -53,13 +54,14 @@ export function SettingsPage() {
         : null;
 
   const accountLabel = useMemo(() => {
+    if (auth.isAnonymous) return "Guest account";
     if (auth.user?.email) return auth.user.email;
     if (me?.actor && typeof me.actor === "object" && me.actor.email) {
       return me.actor.email;
     }
     if (me?.isLocal || auth.status === "disabled") return "Local developer";
     return "Account";
-  }, [auth.status, auth.user?.email, me]);
+  }, [auth.isAnonymous, auth.status, auth.user?.email, me]);
 
   const workspaceLabel = me?.workspaceName ?? me?.workspaceId ?? "Workspace";
   const authModeLabel =
@@ -114,6 +116,8 @@ export function SettingsPage() {
           ) : null}
         </article>
       </section>
+
+      <AnonymousUpgradeBanner />
 
       <AccessTokenPanel />
 

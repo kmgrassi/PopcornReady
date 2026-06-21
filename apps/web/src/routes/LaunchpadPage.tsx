@@ -6,6 +6,7 @@ import { RecentOutputsStrip } from "../components/home/RecentOutputsStrip";
 import { Button } from "../components/ui/Button";
 import { ErrorState } from "../components/ui/StateCard";
 import { useAuth } from "../components/auth/AuthProvider";
+import { AnonymousUpgradeBanner } from "../components/auth/AnonymousUpgradeBanner";
 import { deriveNextAction } from "../lib/nextAction";
 import { useDashboardSummaryQuery } from "../lib/queryClient";
 import styles from "./LaunchpadPage.module.css";
@@ -24,6 +25,8 @@ export function LaunchpadPage() {
 
   return (
     <div className={styles.page}>
+      <AnonymousUpgradeBanner />
+
       {loading ? <LaunchpadSkeleton /> : null}
 
       {!loading && error ? (
