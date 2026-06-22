@@ -57,6 +57,7 @@ function TileMedia({
       assetId={item.assetId ?? null}
       prompt={item.promptPreview ?? null}
       alt={item.label}
+      frameClassName={styles.assetFrame}
       mediaClassName={styles.media}
       placeholderClassName={styles.placeholder}
       placeholder={<span aria-hidden="true">{itemRole(item)}</span>}

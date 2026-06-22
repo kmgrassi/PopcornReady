@@ -90,6 +90,14 @@
   background: color-mix(in srgb, var(--surface) 78%, var(--bg));
 }
 
+/* Make the AssetImage wrapper fill the aspect-ratio tile so its placeholder and
+   centered recovery overlay span the whole frame (otherwise the wrapper hugs the
+   role-label text and the regenerate button is jammed against the top badges). */
+.assetFrame {
+  width: 100%;
+  height: 100%;
+}
+
 .media {
   display: block;
   width: 100%;
