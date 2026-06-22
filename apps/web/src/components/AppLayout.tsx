@@ -30,6 +30,11 @@ const VALID_THEMES = new Set(["popcorn", "popcorn-warm", "popcorn-night"]);
 // it a dedicated tab shell.
 const PRIMARY_NAV = [
   {
+    label: "Inspiration",
+    to: "/inspiration",
+    activePaths: ["/inspiration"],
+  },
+  {
     label: "Library",
     to: "/library",
     activePaths: ["/library", "/projects", "/assets"],
