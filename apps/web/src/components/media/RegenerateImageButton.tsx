@@ -8,9 +8,9 @@ export interface RegenerateImageButtonProps {
   // The image asset to re-run. The endpoint rejects non-image assets, so only
   // render this for image-kind assets.
   assetId: string;
-  // The asset's saved prompt, used to prefill the dialog if the API reports no
-  // stored prompt to reuse.
-  initialPrompt?: string | null;
+  // The asset's saved generation prompt. The button opens a dialog with this
+  // value so the user can review or edit it before regenerating.
+  prompt?: string | null;
   label?: string;
   // Extra class for placement (e.g. an absolutely-positioned overlay slot).
   className?: string;
@@ -21,26 +21,24 @@ function isPromptRequired(error: unknown): boolean {
 }
 
 // A self-contained "regenerate this image" control for blank/failed image tiles.
-// One click re-runs generation reusing the asset's saved prompt; if none is
-// stored the API reports `prompt_required` and we collect one via the dialog.
+// Click opens the saved prompt in a dialog so regeneration is explicit and the
+// prompt can be edited before the request is sent.
 export function RegenerateImageButton({
   assetId,
-  initialPrompt,
+  prompt,
   label = "Regenerate",
   className,
 }: RegenerateImageButtonProps) {
   const [promptOpen, setPromptOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mutation = useRegenerateImageMutation();
-  const promptPreview = initialPrompt?.trim();
-  const tooltip = promptPreview
-    ? `Prompt: ${promptPreview}`
-    : "Regenerate this image from its prompt";
+  const savedPrompt = prompt?.trim();
+  const tooltip = savedPrompt || "Review the prompt before regenerating this image";
 
-  const run = async (prompt?: string) => {
+  const run = async (nextPrompt: string) => {
     setError(null);
     try {
-      await mutation.mutateAsync({ assetId, ...(prompt ? { prompt } : {}) });
+      await mutation.mutateAsync({ assetId, prompt: nextPrompt });
       setPromptOpen(false);
     } catch (err) {
       if (isPromptRequired(err)) {
@@ -60,7 +58,7 @@ export function RegenerateImageButton({
         // tile's click handler (open viewer / select / send feedback).
         onClick={(event) => {
           event.stopPropagation();
-          void run();
+          setPromptOpen(true);
         }}
         disabled={mutation.isPending}
         aria-label="Regenerate this image from its prompt"
@@ -91,8 +89,12 @@ export function RegenerateImageButton({
       ) : null}
       <RegenerateAssetDialog
         open={promptOpen}
-        initialPrompt={initialPrompt ?? ""}
-        message="This image doesn't have a saved prompt. Enter one to regenerate it."
+        initialPrompt={prompt ?? ""}
+        message={
+          savedPrompt
+            ? "Review or edit the prompt before regenerating this image."
+            : "This image doesn't have a saved prompt. Enter one to regenerate it."
+        }
         pending={mutation.isPending}
         error={error}
         onSubmit={(prompt) => void run(prompt)}

@@ -3216,6 +3216,11 @@ function mapStoryboardPanel(row: StoryboardPanelRow): StoryboardPanel {
   };
 }
 
+function assetGenerationPrompt(row: Pick<AssetRow, "params">): string | undefined {
+  const prompt = row.params?.provenance?.prompt?.trim();
+  return prompt || undefined;
+}
+
 function mapStoryboardBeat(
   row: StoryboardBeatRow,
   panels: StoryboardPanel[]
@@ -3321,8 +3326,11 @@ async function resolvePanelMediaByAssetId(
   workspaceId: string,
   projectId: string,
   assetIds: string[]
-): Promise<Map<string, { url: string | null; thumbnailUrl: string | null }>> {
-  const result = new Map<string, { url: string | null; thumbnailUrl: string | null }>();
+): Promise<Map<string, { url: string | null; thumbnailUrl: string | null; prompt?: string }>> {
+  const result = new Map<
+    string,
+    { url: string | null; thumbnailUrl: string | null; prompt?: string }
+  >();
   const ids = [...new Set(assetIds.filter(Boolean))];
   if (ids.length === 0) return result;
 
@@ -3362,13 +3370,17 @@ async function resolvePanelMediaByAssetId(
     if (!headByLineage.has(row.lineage_id)) headByLineage.set(row.lineage_id, row);
   }
 
-  const mediaByLineage = new Map<string, { url: string | null; thumbnailUrl: string | null }>();
+  const mediaByLineage = new Map<
+    string,
+    { url: string | null; thumbnailUrl: string | null; prompt?: string }
+  >();
   await Promise.all(
     [...headByLineage.entries()].map(async ([lineageId, row]) => {
       const media = await assetMediaUrlsForRow(row);
       mediaByLineage.set(lineageId, {
         url: media.url,
         thumbnailUrl: media.thumbnailUrl ?? null,
+        prompt: assetGenerationPrompt(row),
       });
     })
   );
@@ -3450,6 +3462,7 @@ export async function getProjectStoryboard(
       panel.url = media.url;
       if (media.thumbnailUrl) panel.thumbnailUrl = media.thumbnailUrl;
     }
+    if (media?.prompt) panel.prompt = media.prompt;
     panelsByBeat.set(panel.beatId, [...(panelsByBeat.get(panel.beatId) ?? []), panel]);
   }
 
@@ -4678,6 +4691,7 @@ export interface WorkspaceAssetSummary {
   source: string;
   filename?: string;
   description?: string;
+  prompt?: string;
   promptPreview?: string;
   url?: string;
   thumbnailUrl?: string;
@@ -4878,6 +4892,7 @@ export async function listWorkspaceAssets(
   });
   const all: WorkspaceAssetSummary[] = filtered.map((row) => {
     const source = row.source as { type?: string } | null;
+    const prompt = assetGenerationPrompt(row);
     return {
       id: row.id,
       assetId: row.id,
@@ -4888,10 +4903,8 @@ export async function listWorkspaceAssets(
       source: typeof source?.type === "string" ? source.type : "imported",
       filename: row.filename,
       description: row.description ?? undefined,
-      promptPreview:
-        typeof row.params?.provenance?.prompt === "string"
-          ? row.params.provenance.prompt
-          : undefined,
+      prompt,
+      promptPreview: prompt,
       durationSec: row.duration_sec ?? undefined,
       visibility: row.visibility ?? "public",
       createdAt: iso(row.created_at),

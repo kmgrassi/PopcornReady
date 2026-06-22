@@ -615,7 +615,7 @@ export function AssetsPage() {
                     <div className={styles.cardRegen}>
                       <RegenerateImageButton
                         assetId={id}
-                        initialPrompt={asset.promptPreview ?? asset.description ?? null}
+                        prompt={asset.prompt ?? asset.promptPreview ?? asset.description ?? null}
                       />
                     </div>
                   ) : null}
