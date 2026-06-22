@@ -258,6 +258,7 @@ function BeatCard({
           kind="image"
           url={image}
           assetId={panel?.imageAssetId ?? null}
+          prompt={panel?.prompt ?? null}
           alt={label}
           mediaClassName={styles.panelImage}
           placeholderClassName={`${styles.panelImage} ${styles.panelEmpty}`}

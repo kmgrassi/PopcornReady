@@ -215,7 +215,7 @@ export function StoryboardBoard({
                 <div className={styles.tileRegen}>
                   <RegenerateImageButton
                     assetId={regenAssetId}
-                    prompt={tile.prompt ?? tile.intent}
+                    prompt={tile.prompt}
                   />
                 </div>
               ) : null}
