@@ -74,6 +74,25 @@ R=$(pnpm --filter @popcorn/api exec tsx scripts/cli.ts run start --project $P \
 pnpm --filter @popcorn/api exec tsx scripts/cli.ts run watch --project $P --run $R
 ```
 
+## regenerate-smoke — image regeneration against a real DB
+
+Regenerating an image mints a **new immutable asset version** (same lineage,
+`version + 1`) and repoints the storyboard panels / selection slots that pointed
+at the old asset — the old in-place UPDATE violated `assets_guard_immutable`.
+`regenerate-smoke` drives the real `regenerateImageAsset` executor with the image
+provider + storage writer stubbed, so only the DB insert + repoint (the
+`regenerate_asset_version` RPC) is live. Point it at the local Supabase stack:
+
+```bash
+node scripts/with-local-supabase-env.mjs \
+  pnpm --filter @popcorn/api exec tsx scripts/regenerate-smoke.ts demo
+# or: seed [--project <id>] | inspect <assetId> | run <assetId> [--prompt <text>]
+```
+
+`demo` seeds an image asset wired into a panel and a selection slot, regenerates
+it, and prints the lineage before/after so you can see v2 minted and both
+surfaces repointed while v1 stays intact.
+
 ## Known limits (CLI-drivability)
 
 - The only browser/OAuth-shaped step is getting a Supabase token in

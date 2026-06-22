@@ -1,12 +1,13 @@
-// Regenerate an image asset's media IN PLACE.
+// Regenerate an image asset by minting a NEW IMMUTABLE VERSION.
 //
 // Why this exists: generated image bytes can become undeliverable — e.g. a
 // storyboard keyframe written only to ephemeral local disk and never uploaded to
 // managed storage, so its row is `ready` but `resolveAssetUrl` yields nothing.
 // This re-runs image generation from the asset's saved prompt (or a
-// caller-supplied one), uploads the result to managed storage, and swaps the
-// asset's media in place (same id, bumped version), so a dead URL becomes live
-// again without repointing any references.
+// caller-supplied one), uploads the result to managed storage, and persists it as
+// a new asset version in the same lineage. Assets are immutable, so the store
+// inserts the new version and repoints the surfaces (storyboard panels, selection
+// slots) that referenced the old asset — a dead URL becomes live again.
 //
 // If the asset has no saved prompt and the caller didn't provide one, this
 // raises `prompt_required` — the typed signal the client uses to pop the

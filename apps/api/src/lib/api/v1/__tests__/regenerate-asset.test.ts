@@ -81,7 +81,7 @@ function makeDeps(asset: V1Asset, effectiveVisibility: "public" | "private" = "p
   };
 }
 
-test("regenerates from the saved prompt and swaps media in place", async () => {
+test("regenerates from the saved prompt and persists a new version", async () => {
   const asset = imageAsset();
   const { calls, deps } = makeDeps(asset);
 
@@ -94,7 +94,8 @@ test("regenerates from the saved prompt and swaps media in place", async () => {
   assert.equal(calls.generateImage?.prompt, "a saved prompt");
   assert.equal(calls.generateImage?.provider, "openai");
   assert.equal(calls.generateImage?.model, "gpt-image-1.5");
-  // In-place: applyMedia targets the same asset id, with the live bucket set.
+  // The executor hands the store the SOURCE asset id; the store mints the new
+  // immutable version off it and repoints references.
   assert.equal(calls.applyMedia?.assetId, asset.id);
   assert.equal(calls.applyMedia?.update.storageBucket, "popcornready-assets-public");
   assert.equal((calls.applyMedia?.update.provenance as { prompt: string }).prompt, "a saved prompt");
