@@ -67,6 +67,7 @@
   /* Layout */
   --content-max: 1120px;
   --sidebar-w: 248px;
+  --z-modal: 50;
 
   /* Motion */
   --transition: 160ms ease;

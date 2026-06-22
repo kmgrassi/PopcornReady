@@ -1,15 +1,29 @@
-import { Link } from "react-router-dom";
+import { useState, type FormEvent } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { AgentRunPreview } from "../components/AgentRunPreview";
+import { useAuth } from "../components/auth/AuthProvider";
 import { HeatLogoMark } from "../components/HeatLogoMark";
 import { Reveal } from "../components/Reveal";
+import {
+  EMPTY_BRIEF_DRAFT,
+  type BriefDraft,
+} from "../components/studio/useStudioFlow";
 import {
   LandingSection,
   LandingSectionHeader,
 } from "../components/landing/LandingSection";
 import { WorkflowStages } from "../components/landing/WorkflowStages";
+import { createAndStartRun } from "../lib/startRun";
 import styles from "./HomePage.module.css";
 
 const GITHUB_URL = "https://github.com/kmgrassi/popcornready";
+const PENDING_LANDING_PROMPT_STORAGE_KEY = "pr.pendingLandingPrompt";
+const VIDEO_LENGTH_OPTIONS = [15, 30, 45, 60] as const;
+
+type LandingPromptDraft = {
+  goal: string;
+  lengthSec: number;
+};
 
 const FEATURES = [
   {
@@ -202,7 +216,167 @@ function HeatLogoScale({ score }: { score: number }) {
   );
 }
 
+function savePendingLandingPrompt(draft: LandingPromptDraft) {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(
+    PENDING_LANDING_PROMPT_STORAGE_KEY,
+    JSON.stringify(draft),
+  );
+}
+
+function clearPendingLandingPrompt() {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.removeItem(PENDING_LANDING_PROMPT_STORAGE_KEY);
+}
+
+function draftFromLandingPrompt(draft: LandingPromptDraft): BriefDraft {
+  return {
+    ...EMPTY_BRIEF_DRAFT,
+    goal: draft.goal,
+    targetLengthSec: draft.lengthSec,
+    projectName: draft.goal.slice(0, 80),
+  };
+}
+
+function AccountChoiceModal({
+  draft,
+  error,
+  isSubmitting,
+  onClose,
+  onCreateAccount,
+  onSkip,
+}: {
+  draft: LandingPromptDraft;
+  error: string | null;
+  isSubmitting: boolean;
+  onClose: () => void;
+  onCreateAccount: () => void;
+  onSkip: () => void;
+}) {
+  return (
+    <div className={styles.modalBackdrop} role="presentation" onMouseDown={onClose}>
+      <section
+        aria-labelledby="account-choice-title"
+        aria-modal="true"
+        className={styles.accountModal}
+        role="dialog"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className={styles.modalHeading}>
+          <p className={styles.modalKicker}>Ready to generate</p>
+          <h2 id="account-choice-title">Do you want to create an account?</h2>
+          <p>
+            Save this prompt now, or skip the signup step and start as a guest.
+          </p>
+        </div>
+
+        <div className={styles.promptSummary}>
+          <span>{draft.lengthSec}s video</span>
+          <p>{draft.goal}</p>
+        </div>
+
+        {error && <p className={styles.modalError}>{error}</p>}
+
+        <div className={styles.modalActions}>
+          <button
+            className={styles.primaryAction}
+            type="button"
+            onClick={onCreateAccount}
+            disabled={isSubmitting}
+          >
+            Create account
+          </button>
+          <button
+            className={styles.secondaryAction}
+            type="button"
+            onClick={onSkip}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? "Starting video..." : "Skip this step"}
+          </button>
+        </div>
+
+        <button
+          aria-label="Close account choice"
+          className={styles.closeButton}
+          type="button"
+          onClick={onClose}
+          disabled={isSubmitting}
+        >
+          &times;
+        </button>
+      </section>
+    </div>
+  );
+}
+
 export function HomePage() {
+  const navigate = useNavigate();
+  const { configured, signInAnonymous, status } = useAuth();
+  const [goal, setGoal] = useState("");
+  const [lengthSec, setLengthSec] = useState<number>(30);
+  const [pendingDraft, setPendingDraft] = useState<LandingPromptDraft | null>(
+    null,
+  );
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [isStartingRun, setIsStartingRun] = useState(false);
+
+  const trimmedGoal = goal.trim();
+  const canSubmitPrompt = trimmedGoal.length > 0;
+
+  function openAccountChoice(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canSubmitPrompt) return;
+    const draft = { goal: trimmedGoal, lengthSec };
+    savePendingLandingPrompt(draft);
+    setPendingDraft(draft);
+    setModalError(null);
+  }
+
+  function chooseAccountSignup() {
+    if (!pendingDraft) return;
+    savePendingLandingPrompt(pendingDraft);
+    navigate("/signup", {
+      state: { pendingLandingPrompt: pendingDraft },
+    });
+  }
+
+  async function chooseGuestSession() {
+    if (!pendingDraft || isStartingRun) return;
+    if (status === "loading") {
+      setModalError("Your session is still loading. Try again in a moment.");
+      return;
+    }
+    if (status !== "authenticated" && status !== "disabled" && !configured) {
+      setModalError(
+        "Guest generation needs Supabase auth configured before it can start.",
+      );
+      return;
+    }
+
+    setIsStartingRun(true);
+    setModalError(null);
+    try {
+      savePendingLandingPrompt(pendingDraft);
+      if (status !== "authenticated" && configured) {
+        await signInAnonymous();
+      }
+      const result = await createAndStartRun(draftFromLandingPrompt(pendingDraft));
+      clearPendingLandingPrompt();
+      navigate(
+        `/projects/${encodeURIComponent(result.projectId)}/runs/${encodeURIComponent(
+          result.runId,
+        )}`,
+      );
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Could not start your video.";
+      setModalError(message);
+    } finally {
+      setIsStartingRun(false);
+    }
+  }
+
   return (
     <div className="landing">
       <main>
@@ -218,6 +392,42 @@ export function HomePage() {
             and refines the final cut — one AI-native production, not a pile of
             clips.
           </p>
+          <form className={styles.promptComposer} onSubmit={openAccountChoice}>
+            <label className={styles.promptLabel} htmlFor="landing-prompt">
+              What should Popcorn Ready make?
+            </label>
+            <textarea
+              id="landing-prompt"
+              value={goal}
+              onChange={(event) => setGoal(event.target.value)}
+              placeholder="A tense 30-second trailer for a sci-fi short about a chef negotiating with a sentient oven."
+              rows={4}
+              maxLength={600}
+            />
+            <div className={styles.promptControls}>
+              <label className={styles.lengthControl} htmlFor="landing-length">
+                Length
+                <select
+                  id="landing-length"
+                  value={lengthSec}
+                  onChange={(event) => setLengthSec(Number(event.target.value))}
+                >
+                  {VIDEO_LENGTH_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option} seconds
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                className={styles.promptSubmit}
+                type="submit"
+                disabled={!canSubmitPrompt}
+              >
+                Create my {lengthSec}-second video
+              </button>
+            </div>
+          </form>
           <div className="lp-cta-buttons">
             <Link className="lp-price-cta featured" to="/library/projects">
               View projects
@@ -439,6 +649,20 @@ export function HomePage() {
           </LandingSection>
         </Reveal>
       </main>
+      {pendingDraft && (
+        <AccountChoiceModal
+          draft={pendingDraft}
+          error={modalError}
+          isSubmitting={isStartingRun}
+          onClose={() => {
+            if (isStartingRun) return;
+            setPendingDraft(null);
+            setModalError(null);
+          }}
+          onCreateAccount={chooseAccountSignup}
+          onSkip={() => void chooseGuestSession()}
+        />
+      )}
     </div>
   );
 }
