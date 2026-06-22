@@ -19,6 +19,8 @@ export interface RequestContext {
   publicUserId: string;
   /** Caller's email, if present on the verified session. */
   email: string | null;
+  /** True when the verified Supabase session is an anonymous guest session. */
+  isAnonymous: boolean;
 }
 
 export const requestContext = new AsyncLocalStorage<RequestContext>();

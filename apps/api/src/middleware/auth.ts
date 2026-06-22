@@ -60,6 +60,10 @@ function sendError(
   });
 }
 
+function isAnonymousUser(user: { is_anonymous?: boolean }): boolean {
+  return user.is_anonymous === true;
+}
+
 export async function authMiddleware(
   req: Request,
   res: Response,
@@ -120,7 +124,12 @@ export async function authMiddleware(
     req.publicUserId = publicUserId;
 
     requestContext.run(
-      { supabase, publicUserId, email: data.user.email ?? null },
+      {
+        supabase,
+        publicUserId,
+        email: data.user.email ?? null,
+        isAnonymous: isAnonymousUser(data.user),
+      },
       () => next()
     );
   } catch (err) {

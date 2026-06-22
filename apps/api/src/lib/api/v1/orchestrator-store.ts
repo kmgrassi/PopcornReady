@@ -71,6 +71,11 @@ export interface CreateOrchestratorRunInput {
   status?: OrchestratorRunStatus;
 }
 
+export interface AnonymousQuotaInput {
+  windowStartIso: string;
+  limit: number;
+}
+
 export type UpdateOrchestratorRunPatch = Partial<
   Pick<OrchestratorRun, "status" | "spentUsd" | "error" | "startedAt" | "completedAt">
 >;
@@ -166,6 +171,29 @@ function mapRunAction(row: RunActionRow): RunActionSummary {
   return summary;
 }
 
+async function createOrchestratorRunGates(
+  runId: string,
+  gates: string[] | undefined,
+  now = new Date().toISOString()
+): Promise<void> {
+  const stages = [...new Set((gates ?? []).filter((stage) => stage.trim().length > 0))];
+  if (stages.length === 0) return;
+
+  const db = getServiceSupabase();
+  await runQuery(
+    "store.createOrchestratorRun gates",
+    db.from("orchestrator_run_gates").insert(
+      stages.map((stage) => ({
+        orchestrator_run_id: runId,
+        stage,
+        status: "pending",
+        created_at: now,
+        updated_at: now,
+      }))
+    )
+  );
+}
+
 export async function createOrchestratorRun(
   input: CreateOrchestratorRunInput
 ): Promise<OrchestratorRun> {
@@ -191,22 +219,48 @@ export async function createOrchestratorRun(
   );
   const run = mapRun(inserted as OrchestratorRunRow);
 
-  const stages = [...new Set((input.gates ?? []).filter((stage) => stage.trim().length > 0))];
-  if (stages.length > 0) {
-    await runQuery(
-      "store.createOrchestratorRun gates",
-      db.from("orchestrator_run_gates").insert(
-        stages.map((stage) => ({
-          orchestrator_run_id: run.id,
-          stage,
-          status: "pending",
-          created_at: now,
-          updated_at: now,
-        }))
-      )
+  await createOrchestratorRunGates(run.id, input.gates, now);
+  return run;
+}
+
+export async function createOrchestratorRunWithAnonymousQuota(
+  input: CreateOrchestratorRunInput,
+  quota: AnonymousQuotaInput
+): Promise<OrchestratorRun> {
+  const db = getServiceSupabase();
+  const metadata = deploymentMetadata();
+  const rows = await runQuery(
+    "store.createOrchestratorRunWithAnonymousQuota",
+    db.rpc("create_orchestrator_run_with_anonymous_quota", {
+      p_project_id: input.projectId,
+      p_input_summary: input.inputSummary,
+      p_budget_usd: input.budgetUsd ?? null,
+      p_window_start: quota.windowStartIso,
+      p_limit: quota.limit,
+      p_deploy_id: metadata.deploy_id,
+      p_git_sha: metadata.git_sha,
+    })
+  );
+  const row = (rows as Array<{ run_id: string | null; quota_exceeded: boolean }>)[0];
+  if (!row) {
+    throw new ApiError("internal_error", "Anonymous quota run creation returned no result.");
+  }
+  if (row.quota_exceeded) {
+    throw new ApiError(
+      "rate_limited",
+      "Create an account to make more videos.",
+      {
+        limit: quota.limit,
+        reason: "anonymous_generation_quota",
+      }
     );
   }
-  return run;
+  if (!row.run_id) {
+    throw new ApiError("internal_error", "Anonymous quota run creation returned no run ID.");
+  }
+
+  await createOrchestratorRunGates(row.run_id, input.gates);
+  return getOrchestratorRun(row.run_id);
 }
 
 export async function getOrchestratorRun(runId: string): Promise<OrchestratorRun> {
