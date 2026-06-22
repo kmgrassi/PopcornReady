@@ -32,6 +32,10 @@ export function RegenerateImageButton({
   const [promptOpen, setPromptOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mutation = useRegenerateImageMutation();
+  const promptPreview = initialPrompt?.trim();
+  const tooltip = promptPreview
+    ? `Prompt: ${promptPreview}`
+    : "Regenerate this image from its prompt";
 
   const run = async (prompt?: string) => {
     setError(null);
@@ -60,7 +64,8 @@ export function RegenerateImageButton({
         }}
         disabled={mutation.isPending}
         aria-label="Regenerate this image from its prompt"
-        title="Regenerate this image from its prompt"
+        title={tooltip}
+        data-tooltip={tooltip}
       >
         <svg
           className={mutation.isPending ? styles.spin : undefined}
