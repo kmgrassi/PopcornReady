@@ -3,7 +3,7 @@ import type {
   GenerationStageItem,
 } from "@popcorn/shared/v1/types";
 import { JudgmentBadge } from "../evals/JudgmentBadge";
-import { RegenerateImageButton } from "../media/RegenerateImageButton";
+import { AssetImage } from "../media/AssetImage";
 
 type StageItemKind = GenerationStageItem["kind"];
 
@@ -104,35 +104,19 @@ function MediaFrame({
   asset?: StageItemAsset;
   allowInlineRegenerate?: boolean;
 }) {
-  if (!asset?.url) {
-    return (
-      <div className="media-frame placeholder">
-        {allowInlineRegenerate && item.kind === "image" && item.assetId ? (
-          <RegenerateImageButton assetId={item.assetId} initialPrompt={item.promptPreview} />
-        ) : null}
-      </div>
-    );
-  }
-
-  if (item.kind === "image") {
-    return (
-      <div className="media-frame">
-        <img src={asset.url} alt={item.label} />
-      </div>
-    );
-  }
-
   return (
-    <div className="media-frame">
-      <video
-        src={asset.url}
-        poster={asset.thumbnailUrl}
-        controls
-        muted
-        playsInline
-        preload="metadata"
-      />
-    </div>
+    <AssetImage
+      kind={item.kind === "image" ? "image" : "video"}
+      url={asset?.url ?? null}
+      thumbnailUrl={asset?.thumbnailUrl ?? null}
+      status={item.status}
+      assetId={item.assetId ?? null}
+      prompt={item.promptPreview ?? null}
+      alt={item.label}
+      allowRegenerate={allowInlineRegenerate}
+      frameClassName="media-frame"
+      placeholderClassName="media-frame-placeholder"
+    />
   );
 }
 

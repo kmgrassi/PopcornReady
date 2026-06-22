@@ -8,6 +8,7 @@ import type {
   StoryboardScene,
 } from "@popcorn/shared/v1/types";
 import { AssetEditModal } from "../components/media/AssetEditModal";
+import { AssetImage } from "../components/media/AssetImage";
 import { ButtonLink } from "../components/ui/Button";
 import { EmptyState, ErrorState } from "../components/ui/StateCard";
 import {
@@ -252,35 +253,37 @@ function BeatCard({
             Revising…
           </span>
         </div>
-      ) : canEdit && image ? (
-        <button
-          type="button"
-          className={styles.panelButton}
-          onClick={() =>
-            onEdit({
-              target: {
-                scope: "tile",
-                storyboardId,
-                sceneId,
-                beatId: beat.id,
-                panelId: panel!.id,
-                assetId: panel!.imageAssetId!,
-                label,
-              },
-              url: panel!.url ?? panel!.thumbnailUrl,
-              title: label,
-              subtitle: `Scene ${sceneOrder} · Beat ${order}`,
-            })
-          }
-          aria-label={`Edit panel for ${label}`}
-        >
-          <img className={styles.panelImage} src={image} alt="" loading="lazy" />
-          <span className={styles.editHint}>Click to edit</span>
-        </button>
       ) : (
-        <div className={`${styles.panelImage} ${styles.panelEmpty}`}>
-          <span>{image ? "Generated" : "No panel image yet"}</span>
-        </div>
+        <AssetImage
+          kind="image"
+          url={image}
+          assetId={panel?.imageAssetId ?? null}
+          alt={label}
+          mediaClassName={styles.panelImage}
+          placeholderClassName={`${styles.panelImage} ${styles.panelEmpty}`}
+          placeholder={<span>No panel image yet</span>}
+          activateClassName={styles.panelButton}
+          {...(canEdit && image
+            ? {
+                onActivate: () =>
+                  onEdit({
+                    target: {
+                      scope: "tile",
+                      storyboardId,
+                      sceneId,
+                      beatId: beat.id,
+                      panelId: panel!.id,
+                      assetId: panel!.imageAssetId!,
+                      label,
+                    },
+                    url: panel!.url ?? panel!.thumbnailUrl,
+                    title: label,
+                    subtitle: `Scene ${sceneOrder} · Beat ${order}`,
+                  }),
+                mediaOverlay: <span className={styles.editHint}>Click to edit</span>,
+              }
+            : {})}
+        />
       )}
       <div className={styles.beatBody}>
         <span className={styles.beatTag}>Beat {order}</span>

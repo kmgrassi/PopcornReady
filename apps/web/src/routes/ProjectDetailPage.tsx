@@ -12,7 +12,7 @@ import { useAuth } from "../components/auth/AuthProvider";
 import { Button, ButtonLink } from "../components/ui/Button";
 import { EmptyState, ErrorState } from "../components/ui/StateCard";
 import { StageRail } from "../components/progress/StageRail";
-import { RegenerateImageButton } from "../components/media/RegenerateImageButton";
+import { AssetImage } from "../components/media/AssetImage";
 import {
   useGenerateProjectStoryboardMutation,
   useGenerationRunQuery,
@@ -582,24 +582,16 @@ function StoryboardPreview({
 }
 
 function StoryboardPanelThumb({ panel }: { panel: StoryboardPanel }) {
-  const image = panel.thumbnailUrl ?? panel.url;
-  if (image) {
-    return (
-      <img
-        className={styles.storyImage}
-        src={image}
-        alt=""
-        loading="lazy"
-      />
-    );
-  }
   return (
-    <div className={`${styles.storyImage} ${styles.storyImageEmpty}`}>
-      <span>{titleCase(panel.status)}</span>
-      {panel.imageAssetId ? (
-        <RegenerateImageButton assetId={panel.imageAssetId} />
-      ) : null}
-    </div>
+    <AssetImage
+      kind="image"
+      url={panel.thumbnailUrl ?? panel.url}
+      assetId={panel.imageAssetId ?? null}
+      status={panel.status}
+      mediaClassName={styles.storyImage}
+      placeholderClassName={`${styles.storyImage} ${styles.storyImageEmpty}`}
+      placeholder={<span>{titleCase(panel.status)}</span>}
+    />
   );
 }
 

@@ -5,7 +5,7 @@ import type {
 } from "@popcorn/shared/v1/types";
 import { JudgmentBadge } from "../evals/JudgmentBadge";
 import type { StageItemAsset } from "../generation-progress/StageItemCard";
-import { RegenerateImageButton } from "../media/RegenerateImageButton";
+import { AssetImage } from "../media/AssetImage";
 import styles from "./StoryboardBoard.module.css";
 
 type StoryboardItem = GenerationStageItem & {
@@ -48,33 +48,19 @@ function TileMedia({
   item: GenerationStageItem;
   asset?: StageItemAsset;
 }) {
-  const url = asset?.url;
-
-  if (url && item.kind === "video") {
-    return (
-      <video
-        className={styles.media}
-        src={url}
-        poster={asset?.thumbnailUrl}
-        controls
-        muted
-        playsInline
-        preload="metadata"
-      />
-    );
-  }
-
-  if (url) {
-    return <img className={styles.media} src={url} alt={item.label} />;
-  }
-
   return (
-    <div className={styles.placeholder}>
-      <span aria-hidden="true">{itemRole(item)}</span>
-      {item.kind === "image" && item.assetId ? (
-        <RegenerateImageButton assetId={item.assetId} initialPrompt={item.promptPreview} />
-      ) : null}
-    </div>
+    <AssetImage
+      kind={item.kind === "video" ? "video" : "image"}
+      url={asset?.url ?? null}
+      thumbnailUrl={asset?.thumbnailUrl ?? null}
+      status={item.status}
+      assetId={item.assetId ?? null}
+      prompt={item.promptPreview ?? null}
+      alt={item.label}
+      mediaClassName={styles.media}
+      placeholderClassName={styles.placeholder}
+      placeholder={<span aria-hidden="true">{itemRole(item)}</span>}
+    />
   );
 }
 
