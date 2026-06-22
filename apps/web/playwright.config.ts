@@ -5,7 +5,9 @@ import { defineConfig, devices } from "@playwright/test";
 
 const webRoot = fileURLToPath(new URL(".", import.meta.url));
 const repoRoot = path.resolve(webRoot, "../..");
-const envFile = path.join(webRoot, "e2e", "e2e.env");
+const envFile = process.env.POPCORN_E2E_ENV_FILE
+  ? path.resolve(repoRoot, process.env.POPCORN_E2E_ENV_FILE)
+  : path.join(webRoot, "e2e", "e2e.env");
 
 function readEnvFile(file: string): Record<string, string> {
   if (!existsSync(file)) return {};
@@ -39,6 +41,8 @@ const apiPort = Number(
 );
 const baseURL = e2eEnv.PLAYWRIGHT_BASE_URL || `http://127.0.0.1:${webPort}`;
 const apiURL = e2eEnv.VITE_API_URL || `http://127.0.0.1:${apiPort}`;
+const reuseExistingServer =
+  e2eEnv.POPCORN_E2E_REUSE_EXISTING_SERVER === "false" ? false : !process.env.CI;
 const { VITE_API_URL: _clientApiURL, ...webE2EEnv } = e2eEnv;
 const browserAuthDisabledEnv = {
   VITE_SUPABASE_ENV: "",
@@ -98,7 +102,7 @@ export default defineConfig({
       cwd: repoRoot,
       env: apiServerEnv,
       url: `${apiURL}/api/v1/health`,
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer,
       timeout: 120_000,
     },
     {

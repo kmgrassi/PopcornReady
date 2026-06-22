@@ -136,6 +136,25 @@ use** (`pnpm dev`, `pnpm dev:api`, or `pnpm --filter @popcorn/api start`).
 Production injects env vars directly (Railway service variables), so no `.env`
 files are needed there.
 
+### Local Supabase/Postgres for tests
+
+The default `DB_BACKEND=local` in `.env.local.example` is the file-backed JSON
+store under `.local/`. To test against a true local database, use the Supabase
+CLI stack:
+
+```bash
+pnpm db:local:start
+pnpm db:local:reset
+pnpm test:e2e:local-db
+```
+
+The test command reads the local Supabase URL and keys from `supabase status`,
+sets `DB_BACKEND=supabase`, points both API and Vite auth env at the local
+Supabase API URL from `supabase status`, and runs the Playwright suite against
+local Postgres.
+See [`supabase/README.md`](supabase/README.md) for the hosted-vs-local migration
+commands.
+
 The home page (`/`) is the marketing landing page: it explains the product, lets
 you create a 30-second video from a single prompt (with template chips to start
 from), lists hosted pricing, and links to GitHub for self-hosting. Submitting the

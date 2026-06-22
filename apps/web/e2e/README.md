@@ -18,6 +18,19 @@ repo's normal local Supabase service-role env must be available for assertions
 that resolve `/api/v1/me`. Route and health checks still run without those
 secrets.
 
+For a true local-first database run, start and reset the Supabase CLI stack,
+then use the local DB E2E command:
+
+```sh
+pnpm db:local:start
+pnpm db:local:reset
+pnpm test:e2e:local-db
+```
+
+That command wraps Playwright with `scripts/with-local-supabase-env.mjs`, reads
+the local URL and keys from `supabase status -o json`, sets
+`DB_BACKEND=supabase`, and loads `apps/web/e2e/e2e.local-db.env`.
+
 Hosted Supabase auth is opt-in and skipped unless all required secrets are
 present:
 
