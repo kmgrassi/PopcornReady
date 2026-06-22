@@ -613,7 +613,10 @@ export function AssetsPage() {
                   </button>
                   {canRegenerate ? (
                     <div className={styles.cardRegen}>
-                      <RegenerateImageButton assetId={id} />
+                      <RegenerateImageButton
+                        assetId={id}
+                        initialPrompt={asset.promptPreview ?? asset.description ?? null}
+                      />
                     </div>
                   ) : null}
                 </div>

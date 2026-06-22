@@ -4678,6 +4678,7 @@ export interface WorkspaceAssetSummary {
   source: string;
   filename?: string;
   description?: string;
+  promptPreview?: string;
   url?: string;
   thumbnailUrl?: string;
   durationSec?: number;
@@ -4869,6 +4870,10 @@ export async function listWorkspaceAssets(
       source: typeof source?.type === "string" ? source.type : "imported",
       filename: row.filename,
       description: row.description ?? undefined,
+      promptPreview:
+        typeof row.params?.provenance?.prompt === "string"
+          ? row.params.provenance.prompt
+          : undefined,
       durationSec: row.duration_sec ?? undefined,
       visibility: row.visibility ?? "public",
       createdAt: iso(row.created_at),
