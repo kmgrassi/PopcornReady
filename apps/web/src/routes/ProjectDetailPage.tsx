@@ -179,30 +179,30 @@ export function ProjectDetailPage() {
         <div className={styles.projectPageLayout}>
           <div className={styles.projectContent} id="overview">
             <section className={styles.projectTopLayout}>
-              <ProjectConcept project={project} storyboard={storyboard} />
+              <div className={styles.projectPrimaryColumn}>
+                <ProjectConcept project={project} storyboard={storyboard} />
+                <StoryboardPreview
+                  projectId={projectId}
+                  storyboard={storyboard}
+                  loading={storyboardQuery.isLoading}
+                  error={storyboardQuery.error}
+                  onRetry={() => void storyboardQuery.refetch()}
+                  generating={storyboardGenerating}
+                  progress={storyboardProgressState}
+                  generationError={
+                    generateStoryboardMutation.error ?? storyboardGenerationError
+                  }
+                  onGenerate={() => {
+                    void generateStoryboardMutation.mutateAsync().then(() => {
+                      void storyboardQuery.refetch();
+                    });
+                  }}
+                />
+              </div>
               <div className={styles.projectTopRail}>
                 <ProjectBrief project={project} />
                 <ProjectScript project={project} storyboard={storyboard} />
               </div>
-            </section>
-            <section className={styles.storyboardLayout}>
-              <StoryboardPreview
-                projectId={projectId}
-                storyboard={storyboard}
-                loading={storyboardQuery.isLoading}
-                error={storyboardQuery.error}
-                onRetry={() => void storyboardQuery.refetch()}
-                generating={storyboardGenerating}
-                progress={storyboardProgressState}
-                generationError={
-                  generateStoryboardMutation.error ?? storyboardGenerationError
-                }
-                onGenerate={() => {
-                  void generateStoryboardMutation.mutateAsync().then(() => {
-                    void storyboardQuery.refetch();
-                  });
-                }}
-              />
             </section>
             <RunsPreview
               projectId={projectId}
