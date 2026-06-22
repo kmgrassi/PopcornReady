@@ -1,8 +1,14 @@
 import { Router } from "express";
-import { route } from "@/core/adapter";
+import { createHash } from "crypto";
+import { mutation, route } from "@/core/adapter";
 import { ApiError } from "@/core/errors";
+import { createGeneratedAsset } from "@/lib/api/v1/generated-assets";
+import type { AuthContext } from "@/lib/api/v1/auth";
+import type { V1Job } from "@/lib/api/v1/jobs";
+import { setAssetVisibility } from "@/lib/api/v1/store";
 import { getServiceSupabase } from "@/lib/supabase/clients";
 import { runQuery } from "@/lib/supabase/db-errors";
+import { remoteAssetUrlForDelivery, resolveAssetUrl } from "@/lib/storage/asset-urls";
 
 type StoryElementCategory =
   | "plot_type"
@@ -53,6 +59,14 @@ interface RandomStoryInspiration {
     stakes: InspirationElement[];
     structure: InspirationElement[];
   };
+  poster?: StoryConceptPoster;
+}
+
+interface StoryConceptPoster {
+  status: "queued" | "generating" | "ready" | "failed";
+  url: string | null;
+  assetId: string | null;
+  prompt: string;
 }
 
 const CATEGORIES: StoryElementCategory[] = [
@@ -122,6 +136,9 @@ const ENDING_TYPES = [
   "a new beginning on their own terms",
 ] as const;
 
+const SYSTEM_WORKSPACE_ID = "00000000-0000-4000-a000-000000000002";
+const INSPIRATION_POSTER_CACHE_PROJECT_ID = "00000000-0000-4000-a000-000000000003";
+
 export const inspirationRouter = Router();
 
 inspirationRouter.get(
@@ -131,6 +148,19 @@ inspirationRouter.get(
     return {
       status: 200,
       body: { inspiration: buildRandomStory(rows) },
+      headers: { "Cache-Control": "no-store" },
+    };
+  })
+);
+
+inspirationRouter.post(
+  "/inspiration/poster",
+  mutation(async ({ body }) => {
+    const inspiration = parsePosterInspiration(body);
+    const poster = await ensureStoryConceptPoster(inspiration);
+    return {
+      status: poster.status === "ready" ? 200 : 202,
+      body: { poster },
       headers: { "Cache-Control": "no-store" },
     };
   })
@@ -236,6 +266,279 @@ function buildRandomStory(rows: StoryElementRow[]): RandomStoryInspiration {
       structure: [structure].map(toElement),
     },
   };
+}
+
+function parsePosterInspiration(body: unknown): RandomStoryInspiration {
+  const record = body && typeof body === "object" && !Array.isArray(body)
+    ? (body as Record<string, unknown>)
+    : {};
+  const inspiration = record.inspiration;
+  if (!inspiration || typeof inspiration !== "object" || Array.isArray(inspiration)) {
+    throw new ApiError("validation_failed", "inspiration is required.");
+  }
+  const value = inspiration as RandomStoryInspiration;
+  if (typeof value.logline !== "string" || !value.logline.trim()) {
+    throw new ApiError("validation_failed", "inspiration.logline is required.");
+  }
+  if (!value.elements || typeof value.elements !== "object") {
+    throw new ApiError("validation_failed", "inspiration.elements is required.");
+  }
+  return value;
+}
+
+function conceptElementEntries(inspiration: RandomStoryInspiration) {
+  return Object.entries(inspiration.elements)
+    .flatMap(([group, elements]) =>
+      elements.map((element, index) => ({
+        element,
+        role: roleForElement(group, element),
+        position: index,
+      }))
+    )
+    .filter((entry) => entry.element.id);
+}
+
+function roleForElement(group: string, element: InspirationElement): string {
+  if (element.category === "belief_shift") return "belief_shift";
+  if (element.category === "character_arc") return "arc";
+  if (element.category === "antagonist_type") return "antagonist_type";
+  if (group === "plot") return "plot";
+  if (group === "setting") return "setting";
+  if (group === "structure") return "structure";
+  if (group === "theme") return "theme";
+  if (group === "stakes") return "stakes";
+  return group;
+}
+
+function conceptKeyFor(inspiration: RandomStoryInspiration): string {
+  return conceptElementEntries(inspiration)
+    .map(({ element, role, position }) => `${role}:${position}:${element.slug || element.id}`)
+    .sort()
+    .join("|");
+}
+
+function sha256(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function posterPromptFor(inspiration: RandomStoryInspiration): string {
+  return [
+    "Create cinematic movie poster key art for this story concept.",
+    `Logline: ${inspiration.logline}`,
+    `Hero: ${inspiration.typeOfPerson}.`,
+    `Setting: ${inspiration.setting}.`,
+    `Antagonistic force: ${inspiration.antagonisticForce}.`,
+    `Theme and stakes: ${inspiration.newTruth}; ${inspiration.endingType}.`,
+    "Vertical theatrical one-sheet, bold composition, no readable typography, no logos.",
+  ].join(" ");
+}
+
+async function ensureStoryConceptPoster(
+  inspiration: RandomStoryInspiration
+): Promise<StoryConceptPoster> {
+  const db = getServiceSupabase();
+  const conceptKey = conceptKeyFor(inspiration);
+  const conceptHash = sha256(conceptKey);
+  const prompt = posterPromptFor(inspiration);
+  const promptHash = sha256(prompt);
+
+  const concept = await runQuery(
+    "inspiration.upsertStoryConcept",
+    db
+      .from("story_concepts")
+      .upsert(
+        {
+          concept_key: conceptKey,
+          concept_hash: conceptHash,
+          formula: inspiration.formula ?? null,
+          logline: inspiration.logline,
+          status: "ready",
+        },
+        { onConflict: "concept_key" }
+      )
+      .select("id")
+      .single()
+  ) as { id: string };
+
+  const entries = conceptElementEntries(inspiration);
+  if (entries.length) {
+    await runQuery(
+      "inspiration.upsertStoryConceptElements",
+      db
+        .from("story_concept_elements")
+        .upsert(
+          entries.map(({ element, role, position }) => ({
+            story_concept_id: concept.id,
+            story_element_id: element.id,
+            role,
+            position,
+          })),
+          { onConflict: "story_concept_id,role,position" }
+        )
+    );
+  }
+
+  const existing = await runQuery(
+    "inspiration.findStoryConceptPoster",
+    db
+      .from("story_concept_posters")
+      .select("id,status,poster_asset_id,prompt")
+      .eq("story_concept_id", concept.id)
+      .eq("is_primary", true)
+      .maybeSingle()
+  ) as { id: string; status: StoryConceptPoster["status"]; poster_asset_id: string | null; prompt: string } | null;
+
+  if (existing?.status === "ready" && existing.poster_asset_id) {
+    return {
+      status: "ready",
+      assetId: existing.poster_asset_id,
+      url: await posterUrlForAsset(existing.poster_asset_id),
+      prompt: existing.prompt,
+    };
+  }
+  if (existing?.status === "queued" || existing?.status === "generating") {
+    return {
+      status: existing.status,
+      assetId: existing.poster_asset_id,
+      url: existing.poster_asset_id ? await posterUrlForAsset(existing.poster_asset_id) : null,
+      prompt: existing.prompt,
+    };
+  }
+
+  const posterRow = existing
+    ? await runQuery(
+        "inspiration.markStoryConceptPosterGenerating",
+        db
+          .from("story_concept_posters")
+          .update({
+            prompt,
+            prompt_hash: promptHash,
+            poster_asset_id: null,
+            status: "generating",
+            error: null,
+          })
+          .eq("id", existing.id)
+          .select("id")
+          .single()
+      ) as { id: string }
+    : await runQuery(
+        "inspiration.insertStoryConceptPoster",
+        db
+          .from("story_concept_posters")
+          .insert({
+            story_concept_id: concept.id,
+            prompt,
+            prompt_hash: promptHash,
+            status: "generating",
+            is_primary: true,
+          })
+          .select("id")
+          .single()
+      ) as { id: string };
+
+  try {
+    const result = await createGeneratedAsset({
+      auth: systemAuth(),
+      projectId: INSPIRATION_POSTER_CACHE_PROJECT_ID,
+      body: {
+        kind: "image",
+        prompt,
+        description: "Generated inspiration movie poster.",
+        size: "1024x1536",
+        assetRole: "poster",
+        displayName: "Inspiration poster",
+        slug: `inspiration-poster-${conceptHash.slice(0, 12)}`,
+      },
+    });
+    const assetId = jobAssetId(result.body.job as V1Job);
+    await setAssetVisibility(
+      SYSTEM_WORKSPACE_ID,
+      INSPIRATION_POSTER_CACHE_PROJECT_ID,
+      assetId,
+      "public",
+      { actorId: "system_inspiration_poster" }
+    );
+    await runQuery(
+      "inspiration.markStoryConceptPosterReady",
+      db
+        .from("story_concept_posters")
+        .update({
+          poster_asset_id: assetId,
+          status: "ready",
+          error: null,
+        })
+        .eq("id", posterRow.id)
+    );
+    return {
+      status: "ready",
+      assetId,
+      url: await posterUrlForAsset(assetId),
+      prompt,
+    };
+  } catch (error) {
+    await runQuery(
+      "inspiration.markStoryConceptPosterFailed",
+      db
+        .from("story_concept_posters")
+        .update({
+          status: "failed",
+          error: {
+            message: error instanceof Error ? error.message : "Poster generation failed.",
+          },
+        })
+        .eq("id", posterRow.id)
+    );
+    return {
+      status: "failed",
+      assetId: null,
+      url: null,
+      prompt,
+    };
+  }
+}
+
+function systemAuth(): AuthContext {
+  return {
+    mode: "local",
+    actor: { id: "system_inspiration_poster", type: "agent" },
+    workspaceId: SYSTEM_WORKSPACE_ID,
+    isLocal: false,
+  };
+}
+
+function jobAssetId(job: V1Job): string {
+  const result = job.result as { assetIds?: unknown } | null;
+  const assetId = Array.isArray(result?.assetIds) ? result.assetIds[0] : null;
+  if (typeof assetId !== "string" || assetId.length === 0) {
+    throw new ApiError("job_failed", "Poster generation job did not return an asset id.");
+  }
+  return assetId;
+}
+
+async function posterUrlForAsset(assetId: string): Promise<string | null> {
+  const db = getServiceSupabase();
+  const row = await runQuery(
+    "inspiration.posterAssetUrl",
+    db
+      .from("assets")
+      .select("remote_url,storage_key,storage_bucket,visibility")
+      .eq("id", assetId)
+      .maybeSingle()
+  ) as {
+    remote_url: string | null;
+    storage_key: string | null;
+    storage_bucket: string | null;
+    visibility: "public" | "private" | null;
+  } | null;
+  if (!row) return null;
+  if (row.storage_key) {
+    try {
+      return (await resolveAssetUrl(row, { privateTtlSec: 3600 })) ?? null;
+    } catch {
+      return remoteAssetUrlForDelivery(row.remote_url) ?? null;
+    }
+  }
+  return remoteAssetUrlForDelivery(row.remote_url) ?? null;
 }
 
 function groupByCategory(rows: StoryElementRow[]): Record<StoryElementCategory, StoryElementRow[]> {
