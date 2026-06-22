@@ -26,9 +26,16 @@ colliding with other Supabase projects that use the CLI defaults:
 - Postgres: `127.0.0.1:55522`
 - Studio: `http://127.0.0.1:55523`
 
-If `supabase status` mentions a stale hosted project ref or missing container,
-clear the ignored CLI cache with `rm -rf supabase/.temp`, then run
-`pnpm db:local:start` again.
+If `supabase status` (or `start`) reports a container named after the **hosted**
+project ref — e.g. `No such container: supabase_db_<hosted-ref>` instead of
+`supabase_db_popcornready` — the cause is almost always a `SUPABASE_PROJECT_ID`
+entry in your `.env`/`.env.local`. The Supabase CLI auto-loads those files and
+binds `SUPABASE_PROJECT_ID` to `config.toml`'s `project_id`, so it points the
+*local* stack at the hosted ref. Nothing in the app reads `SUPABASE_PROJECT_ID`,
+so **remove or comment it out** (the server uses `SUPABASE_URL`; hosted migration
+pushes use `SUPABASE_PROJECT_REF` in CI, a different variable). After fixing the
+env, `pnpm db:local:status` should resolve `popcornready` again. A stale CLI cache
+(`rm -rf supabase/.temp`) is a secondary, rarer cause.
 
 ## Hosted database migrations
 
