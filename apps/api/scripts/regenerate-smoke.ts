@@ -59,8 +59,26 @@ async function pickProject(projectId?: string): Promise<{ id: string; workspace_
     ? await query.eq("id", projectId).maybeSingle()
     : await query.limit(1).maybeSingle();
   if (error) fail(`project lookup failed: ${error.message}`);
-  if (!data) fail(projectId ? `no project ${projectId}` : "no projects exist; create one first");
-  return data as { id: string; workspace_id: string };
+  if (data) return data as { id: string; workspace_id: string };
+  if (projectId) fail(`no project ${projectId}`);
+
+  // Freshly-seeded local DB has workspaces but no project — create a throwaway one
+  // so the harness is self-contained.
+  const { data: ws, error: wsErr } = await db
+    .from("workspaces")
+    .select("id")
+    .limit(1)
+    .maybeSingle();
+  if (wsErr) fail(`workspace lookup failed: ${wsErr.message}`);
+  if (!ws) fail("no workspaces exist; run `pnpm db:local:reset` to seed the DB");
+  const { data: created, error: projErr } = await db
+    .from("projects")
+    .insert({ workspace_id: (ws as { id: string }).id, name: "regenerate-smoke" })
+    .select("id, workspace_id")
+    .single();
+  if (projErr) fail(`project create failed: ${projErr.message}`);
+  console.log(`created smoke project ${(created as { id: string }).id}`);
+  return created as { id: string; workspace_id: string };
 }
 
 // Seed an image asset wired into a storyboard panel AND a selection slot, so a
