@@ -202,11 +202,14 @@ function ScopeIcon({ scope }: { scope: LibraryScope }) {
     );
   }
 
+  // "My library" is the whole workspace (public + private projects), not a
+  // private-only view — so use a neutral collection glyph, never a lock.
   return (
     <svg className={styles.scopeIcon} viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-      <rect x="3.25" y="7" width="9.5" height="6.25" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
-      <path d="M5.25 7V5.6a2.75 2.75 0 0 1 5.5 0V7" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
-      <path d="M8 9.5v1.25" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
+      <rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <rect x="9" y="2.5" width="4.5" height="4.5" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <rect x="2.5" y="9" width="4.5" height="4.5" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <rect x="9" y="9" width="4.5" height="4.5" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5" />
     </svg>
   );
 }
@@ -216,7 +219,7 @@ function ScopeToggle({ scope, onChange }: { scope: LibraryScope; onChange: (scop
     <div className={styles.scopeToggle} role="radiogroup" aria-label="Show projects">
       {LIBRARY_SCOPES.map((option) => {
         const isSelected = option.id === scope;
-        const label = option.id === "public" ? "Public" : "Private";
+        const label = option.label;
         return (
           <button
             key={option.id}
