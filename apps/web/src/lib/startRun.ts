@@ -20,6 +20,7 @@ export interface StartRunResult {
 
 export interface CreateAndStartRunOptions {
   enforceGuestRunLimit?: boolean;
+  stopAfter?: GateableGenerationStageType;
 }
 
 export const LONG_VIDEO_PLANNING_REVIEW_THRESHOLD_SEC = 30;
@@ -207,6 +208,7 @@ export async function createAndStartRun(
     allowGeneratedGapFill: true,
     provider: draft.provider,
     reviewGates,
+    ...(options.stopAfter ? { stopAfter: options.stopAfter } : {}),
     showCaptions: draft.showCaptions,
     seedAsset: {
       kind: effectiveSeedKind,

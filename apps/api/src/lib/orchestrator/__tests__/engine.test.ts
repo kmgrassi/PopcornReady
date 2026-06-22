@@ -325,6 +325,57 @@ test("parks on an accepted async job, then resumes to completion when the job su
   assert.deepEqual(store.actions[0].outputAssetIds, ["tile_1", "tile_2"]);
 });
 
+test("finishes after an after-gate async job succeeds", async () => {
+  const store = new FakeStore(runFixture(), [gateFixture("after:generate_keyframe")]);
+  const { model } = scriptedModel([
+    { type: "tool_call", toolName: "generate_keyframe" },
+    { type: "tool_call", toolName: "generate_clip" },
+    { type: "done" },
+  ]);
+  const registry = fakeRegistry({
+    generate_keyframe: () => ({ status: "accepted", jobId: "job1", resumesWhen: "job_terminal" }),
+    generate_clip: () => ok(["clip_1"]),
+  });
+
+  const parked = await runOrchestratorToCompletion("run1", deps(store, model, registry));
+  assert.equal(parked.status, "waiting");
+  assert.equal(store.gates[0].status, "pending");
+
+  const stopped = await resumeOrchestratorRun(
+    "run1",
+    deps(store, model, registry, {
+      jobs: { getJob: async () => ({ status: "succeeded", result: { assetIds: ["keyframe_1"] } }) },
+    })
+  );
+
+  assert.equal(stopped.status, "succeeded");
+  assert.equal(store.gates[0].status, "reached");
+  assert.equal(store.actions.length, 1, "next tool must not run after the stop-after tool");
+  assert.equal(store.actions[0].status, "applied");
+  assert.deepEqual(store.actions[0].outputAssetIds, ["keyframe_1"]);
+});
+
+test("after-gates do not pause before the requested tool executes", async () => {
+  const store = new FakeStore(runFixture(), [gateFixture("after:create_or_load_brief")]);
+  const { model } = scriptedModel([
+    { type: "tool_call", toolName: "create_or_load_brief" },
+    { type: "tool_call", toolName: "plan_shots" },
+  ]);
+  const registry = fakeRegistry({
+    create_or_load_brief: () => ok(["asset_brief"]),
+    plan_shots: () => ok(["asset_plan"]),
+  });
+
+  const stopped = await runOrchestratorToCompletion("run1", deps(store, model, registry));
+
+  assert.equal(stopped.status, "succeeded");
+  assert.equal(store.gates[0].status, "reached");
+  assert.deepEqual(
+    store.actions.map((action) => action.tool),
+    ["create_or_load_brief"]
+  );
+});
+
 test("stays parked when the resume job is not yet terminal", async () => {
   const store = new FakeStore(runFixture());
   const { model } = scriptedModel([{ type: "tool_call", toolName: "generate_keyframe" }]);

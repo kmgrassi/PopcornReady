@@ -3,6 +3,7 @@ import test from "node:test";
 
 import type {
   OrchestratorRun,
+  OrchestratorRunGate,
   RunActionSummary,
 } from "@/lib/api/v1/orchestrator-store";
 import type { resumeOrchestratorRun } from "@/lib/orchestrator/engine";
@@ -41,6 +42,21 @@ function actionFixture(
   };
 }
 
+function gateFixture(
+  stage: string,
+  overrides: Partial<OrchestratorRunGate> = {}
+): OrchestratorRunGate {
+  return {
+    id: `gate_${stage}`,
+    orchestratorRunId: "run_1",
+    stage,
+    status: "reached",
+    createdAt: "2026-06-15T00:00:00.000Z",
+    updatedAt: "2026-06-15T00:00:03.000Z",
+    ...overrides,
+  };
+}
+
 test("does not surface a storyboard-only orchestrator success as a ready video", () => {
   const payload = projectRunDetailFromParts(
     runFixture(),
@@ -69,6 +85,7 @@ test("surfaces orchestrator success as ready once export_video produced output",
   );
 
   assert.equal(payload.run.status, "succeeded");
+  assert.equal(payload.run.completionKind, "video");
   assert.equal(payload.run.currentStageType, "ready");
   assert.deepEqual(payload.resultArtifacts, [
     {
@@ -79,6 +96,25 @@ test("surfaces orchestrator success as ready once export_video produced output",
       stageId: "run_1:export",
     },
   ]);
+});
+
+test("surfaces stop-after orchestrator success as complete without a final export", () => {
+  const payload = projectRunDetailFromParts(
+    runFixture(),
+    [gateFixture("after:generate_keyframe")],
+    [
+      actionFixture("create_or_load_brief", { outputAssetIds: ["brief_asset"] }),
+      actionFixture("draft_script", { outputAssetIds: ["script_asset"] }),
+      actionFixture("generate_keyframe", { outputAssetIds: ["keyframe_asset"] }),
+    ]
+  );
+
+  assert.equal(payload.run.status, "succeeded");
+  assert.equal(payload.run.completionKind, "storyboard_assets");
+  assert.equal(payload.run.reviewGate, null);
+  assert.deepEqual(payload.run.reviewGates, []);
+  assert.equal(payload.run.currentStageType, "ready");
+  assert.match(payload.run.message ?? "", /storyboard assets are ready/i);
 });
 
 test("keeps board feedback actions out of generation progress projections", () => {

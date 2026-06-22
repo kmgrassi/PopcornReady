@@ -17,6 +17,7 @@ import {
 } from "@/lib/api/v1/orchestrator-store";
 
 const BOARD_FEEDBACK_TOOL = "board_feedback";
+const AFTER_GATE_PREFIX = "after:";
 
 export interface GenerationRunDetail {
   run: GenerationRun;
@@ -36,7 +37,10 @@ function generationActions(actions: RunActionSummary[]): RunActionSummary[] {
 }
 
 export function toolStage(tool: string): GenerationStageType {
-  switch (tool) {
+  const normalizedTool = tool.startsWith(AFTER_GATE_PREFIX)
+    ? tool.slice(AFTER_GATE_PREFIX.length)
+    : tool;
+  switch (normalizedTool) {
     case "create_or_load_brief":
       return "brief_intake";
     case "generate_storyboard":
@@ -120,11 +124,30 @@ function hasFinishedVideo(actions: RunActionSummary[]): boolean {
   );
 }
 
+function hasReachedAfterGate(gates: OrchestratorRunGate[]): boolean {
+  return gates.some(
+    (gate) => gate.stage.startsWith(AFTER_GATE_PREFIX) && gate.status === "reached"
+  );
+}
+
+function completionKind(
+  run: OrchestratorRun,
+  gates: OrchestratorRunGate[],
+  actions: RunActionSummary[]
+): GenerationRun["completionKind"] {
+  if (run.status !== "succeeded") return undefined;
+  if (hasReachedAfterGate(gates)) return "storyboard_assets";
+  if (hasFinishedVideo(actions)) return "video";
+  return undefined;
+}
+
 function projectedRunStatus(
   run: OrchestratorRun,
-  actions: RunActionSummary[]
+  actions: RunActionSummary[],
+  gates: OrchestratorRunGate[]
 ): GenerationRunStatus {
   if (run.status !== "succeeded") return runStatus(run.status);
+  if (hasReachedAfterGate(gates)) return "succeeded";
   return hasFinishedVideo(actions) ? "succeeded" : "running";
 }
 
@@ -135,7 +158,11 @@ function actionStatus(status: string): GenerationRunStatus {
   return "queued";
 }
 
-function runMessage(run: OrchestratorRun, actions: RunActionSummary[]): string {
+function runMessage(
+  run: OrchestratorRun,
+  actions: RunActionSummary[],
+  gates: OrchestratorRunGate[]
+): string {
   switch (run.status) {
     case "queued":
       return "Generation is queued.";
@@ -144,6 +171,9 @@ function runMessage(run: OrchestratorRun, actions: RunActionSummary[]): string {
     case "waiting":
       return "Generation is waiting for a job or approval gate.";
     case "succeeded":
+      if (hasReachedAfterGate(gates)) {
+        return "Storyboard assets are ready.";
+      }
       return hasFinishedVideo(actions)
         ? "Generation completed."
         : "The orchestrator completed the currently available tools, but no video export is ready yet.";
@@ -172,8 +202,9 @@ export function projectRun(
   gates: OrchestratorRunGate[],
   actions: RunActionSummary[] = []
 ): GenerationRun {
-  const status = projectedRunStatus(run, actions);
-  const reachedGate = gates.find((gate) => gate.status === "reached");
+  const reviewGates = gates.filter((gate) => !gate.stage.startsWith(AFTER_GATE_PREFIX));
+  const status = projectedRunStatus(run, actions, gates);
+  const reachedGate = reviewGates.find((gate) => gate.status === "reached");
   const reviewGate = reachedGate
     ? {
         stageType: toolStage(reachedGate.stage) as GateableGenerationStageType,
@@ -201,11 +232,12 @@ export function projectRun(
     runId: run.id,
     projectId: run.projectId,
     status,
-    reviewGates: gates.map((gate) => toolStage(gate.stage) as GateableGenerationStageType),
+    completionKind: completionKind(run, gates, actions),
+    reviewGates: reviewGates.map((gate) => toolStage(gate.stage) as GateableGenerationStageType),
     reviewGate,
     currentStageType,
     progressPercent: status === "succeeded" ? 100 : run.status === "queued" ? 0 : 50,
-    message: runMessage(run, actions),
+    message: runMessage(run, actions, gates),
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
     startedAt: run.startedAt,

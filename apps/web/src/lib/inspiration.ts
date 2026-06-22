@@ -1,5 +1,10 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "./api-client";
+import {
+  EMPTY_BRIEF_DRAFT,
+  type BriefDraft,
+} from "../components/studio/useStudioFlow";
+import { createAndStartRun, type StartRunResult } from "./startRun";
 
 export type StoryElementCategory =
   | "plot_type"
@@ -77,5 +82,44 @@ export function useStoryConceptPosterMutation() {
         method: "POST",
         body: { inspiration },
       }),
+  });
+}
+
+export function inspirationPrompt(inspiration: RandomStoryInspiration): string {
+  return [
+    inspiration.logline,
+    "",
+    `Hero: ${inspiration.typeOfPerson}`,
+    `Setting: ${inspiration.setting}`,
+    `External goal: ${inspiration.externalGoal}`,
+    `Antagonistic force: ${inspiration.antagonisticForce}`,
+    `Inner flaw or lie: ${inspiration.innerFlawOrLie}`,
+    `Old self: ${inspiration.oldSelf}`,
+    `New truth: ${inspiration.newTruth}`,
+    `Ending: ${inspiration.endingType}`,
+  ].join("\n");
+}
+
+function buildInspirationDraft(inspiration: RandomStoryInspiration): BriefDraft {
+  return {
+    ...EMPTY_BRIEF_DRAFT,
+    goal: inspirationPrompt(inspiration),
+    projectName: inspiration.logline.slice(0, 96),
+    targetLengthSec: 30,
+    footageChoice: "prompt_only",
+  };
+}
+
+export function startInspirationStoryboardRun(
+  inspiration: RandomStoryInspiration,
+): Promise<StartRunResult> {
+  return createAndStartRun(buildInspirationDraft(inspiration), {
+    stopAfter: "asset_generation",
+  });
+}
+
+export function useStartInspirationStoryboardRunMutation() {
+  return useMutation({
+    mutationFn: startInspirationStoryboardRun,
   });
 }

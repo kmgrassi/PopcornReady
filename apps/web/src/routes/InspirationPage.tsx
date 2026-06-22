@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import { apiRequest } from "../lib/api-client";
 import { Button } from "../components/ui/Button";
 import { ErrorState } from "../components/ui/StateCard";
@@ -7,8 +8,10 @@ import {
   type RandomStoryInspiration,
   type StoryConceptPoster,
   useRandomStoryInspiration,
+  useStartInspirationStoryboardRunMutation,
   useStoryConceptPosterMutation,
 } from "../lib/inspiration";
+import { runProgressPath } from "../lib/quickStartRun";
 import styles from "./InspirationPage.module.css";
 
 type IngredientKey = keyof RandomStoryInspiration["elements"];
@@ -40,11 +43,13 @@ const ELEMENT_FIELD_PATCHES: Record<IngredientKey, (keyof RandomStoryInspiration
 };
 
 export function InspirationPage() {
+  const navigate = useNavigate();
   const [nonce, setNonce] = useState(0);
   const [story, setStory] = useState<RandomStoryInspiration | null>(null);
   const [regeneratingKey, setRegeneratingKey] = useState<IngredientKey | null>(null);
   const query = useRandomStoryInspiration(nonce);
   const posterMutation = useStoryConceptPosterMutation();
+  const startRunMutation = useStartInspirationStoryboardRunMutation();
   const storySignature = story ? conceptSignature(story) : null;
 
   useEffect(() => {
@@ -77,6 +82,16 @@ export function InspirationPage() {
       );
     } finally {
       setRegeneratingKey(null);
+    }
+  }
+
+  async function startFromPrompt(inspiration: RandomStoryInspiration) {
+    if (startRunMutation.isPending) return;
+    try {
+      const result = await startRunMutation.mutateAsync(inspiration);
+      navigate(runProgressPath(result));
+    } catch {
+      // The mutation error is rendered below.
     }
   }
 
@@ -116,6 +131,15 @@ export function InspirationPage() {
           posterGenerating={posterMutation.isPending}
           regeneratingKey={regeneratingKey}
           onRegenerateIngredient={(key) => void regenerateIngredient(key)}
+          startingRun={startRunMutation.isPending}
+          startRunError={
+            startRunMutation.error instanceof Error
+              ? startRunMutation.error.message
+              : startRunMutation.error
+                ? String(startRunMutation.error)
+                : null
+          }
+          onStartFromPrompt={(inspiration) => void startFromPrompt(inspiration)}
         />
       ) : null}
     </div>
@@ -129,6 +153,9 @@ function InspirationResult({
   posterGenerating,
   regeneratingKey,
   onRegenerateIngredient,
+  startingRun,
+  startRunError,
+  onStartFromPrompt,
 }: {
   inspiration: RandomStoryInspiration;
   poster: StoryConceptPoster | null;
@@ -136,6 +163,9 @@ function InspirationResult({
   posterGenerating: boolean;
   regeneratingKey: IngredientKey | null;
   onRegenerateIngredient: (key: IngredientKey) => void;
+  startingRun: boolean;
+  startRunError: string | null;
+  onStartFromPrompt: (inspiration: RandomStoryInspiration) => void;
 }) {
   return (
     <>
@@ -146,6 +176,18 @@ function InspirationResult({
           <p className={styles.logline}>
             <HighlightedLogline inspiration={inspiration} />
           </p>
+          <div className={styles.promptActions}>
+            <Button
+              variant="cta"
+              onClick={() => onStartFromPrompt(inspiration)}
+              isLoading={startingRun}
+            >
+              Start from this prompt
+            </Button>
+            {startRunError ? (
+              <p className={styles.promptError}>{startRunError}</p>
+            ) : null}
+          </div>
         </div>
       </section>
 

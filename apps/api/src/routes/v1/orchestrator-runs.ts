@@ -48,6 +48,7 @@ const NO_STORE_HEADERS = { "Cache-Control": "no-store" };
 const BOARD_FEEDBACK_TOOL = "board_feedback";
 const ANONYMOUS_RUN_QUOTA_LIMIT = 1;
 const ANONYMOUS_RUN_QUOTA_WINDOW_MS = 24 * 60 * 60 * 1000;
+const AFTER_GATE_PREFIX = "after:";
 
 export const orchestratorRunsRouter = Router();
 
@@ -195,6 +196,36 @@ function requestedGateTools(body: unknown): string[] {
     }
   });
   return [...new Set(tools)];
+}
+
+function stopAfterTools(body: unknown): string[] {
+  if (!isRecord(body) || typeof body.stopAfter !== "string") return [];
+  switch (body.stopAfter) {
+    case "brief_intake":
+      return ["create_or_load_brief"];
+    case "creative_plan":
+      return ["plan_visual_anchors"];
+    case "storyboard":
+      return ["generate_storyboard"];
+    case "asset_generation":
+      return ["generate_keyframe"];
+    case "audio_generation":
+      return ["generate_audio"];
+    case "timeline_assembly":
+      return ["assemble_timeline"];
+    case "quality_review":
+      return ["critique_timeline"];
+    case "export":
+      return ["export_video"];
+    default:
+      throw new ApiError("validation_failed", "stopAfter must be a gateable generation stage.", {
+        fields: [{ path: "stopAfter", message: "Expected a gateable generation stage." }],
+      });
+  }
+}
+
+function afterGateTools(tools: string[]): string[] {
+  return tools.map((tool) => `${AFTER_GATE_PREFIX}${tool}`);
 }
 
 function canonicalize(value: unknown): unknown {
@@ -426,7 +457,7 @@ orchestratorRunsRouter.post(
       brief = promptBriefFromBody(body);
       await createBriefVersion(auth.workspaceId, projectId, brief);
     }
-    const gates = requestedGateTools(body);
+    const gates = [...requestedGateTools(body), ...afterGateTools(stopAfterTools(body))];
     const budget = budgetUsd(body);
     const { run, replayed } = await createEntrypointRun({
       workspaceId: auth.workspaceId,
@@ -476,7 +507,7 @@ orchestratorRunsRouter.post(
       `briefVersionId=${briefVersionId}`,
       `selectedAssetIds=${assetIds.join(",")}`,
     ];
-    const gates = requestedGateTools(body);
+    const gates = [...requestedGateTools(body), ...afterGateTools(stopAfterTools(body))];
     const budget = budgetUsd(body);
     const { run, replayed } = await createEntrypointRun({
       workspaceId: auth.workspaceId,

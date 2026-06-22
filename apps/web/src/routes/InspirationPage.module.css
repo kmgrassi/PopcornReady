@@ -85,6 +85,20 @@
   line-height: 1.42;
 }
 
+.promptActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.promptError {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--text-sm);
+  font-weight: 750;
+}
+
 .highlight {
   padding: 0.02em 0.18em;
   border-radius: var(--radius-sm);
