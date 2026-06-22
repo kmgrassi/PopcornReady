@@ -751,7 +751,11 @@ export function ProgressView({
                   {reviewOutputGroups.genericItems.length > 0 ? (
                     <div className={`${styles.itemGrid} ${styles.reviewOutputGrid}`}>
                       {reviewOutputGroups.genericItems.map((item) => (
-                        <StageItemCard key={item.itemId} item={item} />
+                        <StageItemCard
+                          key={item.itemId}
+                          item={item}
+                          allowInlineRegenerate={false}
+                        />
                       ))}
                     </div>
                   ) : null}
@@ -850,7 +854,9 @@ export function ProgressView({
                           undefined
                         }
                       >
-                        <StageItemCard item={item} />
+                        {/* Embedded in the edit <button>; a nested regenerate
+                            <button> would be invalid markup, so suppress it. */}
+                        <StageItemCard item={item} allowInlineRegenerate={false} />
                       </button>
                     ))}
                   </div>
@@ -873,7 +879,7 @@ export function ProgressView({
                 asset={
                   selectedAssetItem ? (
                     <div className={styles.assetModalPreview}>
-                      <StageItemCard item={selectedAssetItem} />
+                      <StageItemCard item={selectedAssetItem} allowInlineRegenerate={false} />
                     </div>
                   ) : null
                 }

@@ -40,6 +40,21 @@
   gap: var(--space-3);
 }
 
+.tileWrap {
+  position: relative;
+  display: grid;
+  min-width: 0;
+}
+
+/* Regenerate overlay sits over the tile as a sibling of the tile button
+   (a button cannot nest inside the clickable tile button). */
+.tileRegen {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+}
+
 .tile {
   display: grid;
   min-width: 0;

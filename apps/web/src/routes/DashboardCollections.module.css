@@ -132,6 +132,7 @@
 }
 
 .card {
+  position: relative;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -142,6 +143,15 @@
     border-color var(--transition),
     transform var(--transition),
     box-shadow var(--transition);
+}
+
+/* Regenerate overlay for owned blank/failed image cards. Sits over the preview
+   as a sibling of the card button (a button can't nest inside a button). */
+.cardRegen {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
 }
 
 .card:hover {

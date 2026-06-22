@@ -12,6 +12,7 @@ import { useAuth } from "../components/auth/AuthProvider";
 import { Button, ButtonLink } from "../components/ui/Button";
 import { EmptyState, ErrorState } from "../components/ui/StateCard";
 import { StageRail } from "../components/progress/StageRail";
+import { RegenerateImageButton } from "../components/media/RegenerateImageButton";
 import {
   useGenerateProjectStoryboardMutation,
   useGenerationRunQuery,
@@ -595,6 +596,9 @@ function StoryboardPanelThumb({ panel }: { panel: StoryboardPanel }) {
   return (
     <div className={`${styles.storyImage} ${styles.storyImageEmpty}`}>
       <span>{titleCase(panel.status)}</span>
+      {panel.imageAssetId ? (
+        <RegenerateImageButton assetId={panel.imageAssetId} />
+      ) : null}
     </div>
   );
 }

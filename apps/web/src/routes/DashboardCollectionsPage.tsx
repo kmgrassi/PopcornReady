@@ -14,6 +14,7 @@ import { Button, ButtonLink } from "../components/ui/Button";
 import { EmptyState, ErrorState } from "../components/ui/StateCard";
 import { VisibilityBadge } from "../components/ui/VisibilityBadge";
 import { MediaViewer, type MediaViewerItem } from "../components/media/MediaViewer";
+import { RegenerateImageButton } from "../components/media/RegenerateImageButton";
 import {
   useAssetMediaMutation,
   useAssetRegenerateMutation,
@@ -523,6 +524,13 @@ export function AssetsPage() {
           <div className={styles.grid}>
             {assetsQuery.items.map((asset) => {
               const id = asset.assetId ?? asset.id;
+              // Owned image with no deliverable bytes (or an outright failure) is
+              // regenerable in place — offer it as an overlay (sibling to the
+              // card button, not nested inside it).
+              const canRegenerate =
+                !isPublic &&
+                asset.kind === "image" &&
+                (asset.status === "failed" || !(asset.thumbnailUrl ?? asset.url));
               return (
                 <div className={styles.card} key={id}>
                   <button
@@ -542,6 +550,11 @@ export function AssetsPage() {
                       </div>
                     </div>
                   </button>
+                  {canRegenerate ? (
+                    <div className={styles.cardRegen}>
+                      <RegenerateImageButton assetId={id} />
+                    </div>
+                  ) : null}
                 </div>
               );
             })}

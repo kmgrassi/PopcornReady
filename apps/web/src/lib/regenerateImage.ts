@@ -1,0 +1,26 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { v1Api, type AssetMediaResponse } from "./api-client";
+
+// Query namespaces that render asset images. A regenerate updates the asset in
+// place (same id, fresh bytes), so we invalidate these roots to refetch whatever
+// surface the user triggered it from — storyboards/project detail ("projects"),
+// dashboard collections + run progress ("workspaces"/"dashboard"), and the studio
+// flow ("studio"). Regeneration is a deliberate, infrequent action, so a scoped
+// refetch is cheaper than threading exact keys through every call site.
+const IMAGE_QUERY_NAMESPACES = ["projects", "workspaces", "dashboard", "studio"] as const;
+
+export function useRegenerateImageMutation(options?: {
+  onRegenerated?: (assetId: string, media: AssetMediaResponse) => void;
+}) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ assetId, prompt }: { assetId: string; prompt?: string }) =>
+      v1Api.regenerateAsset(assetId, prompt),
+    onSuccess: (media, { assetId }) => {
+      options?.onRegenerated?.(assetId, media);
+      for (const namespace of IMAGE_QUERY_NAMESPACES) {
+        void queryClient.invalidateQueries({ queryKey: [namespace] });
+      }
+    },
+  });
+}
