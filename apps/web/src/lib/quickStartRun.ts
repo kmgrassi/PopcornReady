@@ -10,6 +10,7 @@ import { createAndStartRun, type StartRunResult } from "./startRun";
 const PENDING_QUICK_START_STORAGE_KEY = "pr.pendingQuickStart";
 const PENDING_QUICK_START_VERSION = 1;
 const PENDING_QUICK_START_TTL_MS = 1000 * 60 * 60;
+const PENDING_QUICK_START_CLAIM_TIMEOUT_MS = 1000 * 30;
 
 export interface QuickStartInput {
   goal: string;
@@ -69,6 +70,13 @@ function isPendingQuickStartPrompt(value: unknown): value is PendingQuickStartPr
 
 function isExpired(prompt: PendingQuickStartPrompt, now = Date.now()): boolean {
   return now - prompt.createdAt > PENDING_QUICK_START_TTL_MS;
+}
+
+function isClaimFresh(prompt: PendingQuickStartPrompt, now = Date.now()): boolean {
+  return (
+    typeof prompt.claimedAt === "number" &&
+    now - prompt.claimedAt < PENDING_QUICK_START_CLAIM_TIMEOUT_MS
+  );
 }
 
 function writePendingQuickStartPrompt(prompt: PendingQuickStartPrompt): void {
@@ -167,7 +175,7 @@ export function clearPendingQuickStartPrompt(): void {
 
 export function claimPendingQuickStartPrompt(): PendingQuickStartPrompt | null {
   const prompt = readPendingQuickStartPrompt();
-  if (!prompt || prompt.claimedAt) return null;
+  if (!prompt || isClaimFresh(prompt)) return null;
   const claimedPrompt = { ...prompt, claimedAt: Date.now() };
   writePendingQuickStartPrompt(claimedPrompt);
   return claimedPrompt;
