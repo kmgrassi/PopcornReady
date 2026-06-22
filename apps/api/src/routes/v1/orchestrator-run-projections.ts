@@ -279,9 +279,23 @@ function projectStages(run: OrchestratorRun, actions: RunActionSummary[]): Gener
     .sort((a, b) => a.order - b.order);
 }
 
+const PROMPT_PREVIEW_MAX = 240;
+
+function promptPreview(value: string): string {
+  const trimmed = value.replace(/\s+/g, " ").trim();
+  if (trimmed.length <= PROMPT_PREVIEW_MAX) return trimmed;
+  return `${trimmed.slice(0, PROMPT_PREVIEW_MAX - 1)}…`;
+}
+
+function actionPrompt(action: RunActionSummary): string | undefined {
+  const prompt = action.params.prompt;
+  return typeof prompt === "string" && prompt.trim() ? prompt : undefined;
+}
+
 function projectStageItems(run: OrchestratorRun, actions: RunActionSummary[]): GenerationStageItem[] {
   return generationActions(actions).flatMap((action) => {
     const type = toolStage(action.tool);
+    const prompt = actionPrompt(action);
     return action.outputAssetIds.map((assetId, index) => ({
       itemId: `${action.id}:${assetId}`,
       stageId: stageId(run.id, type),
@@ -289,6 +303,7 @@ function projectStageItems(run: OrchestratorRun, actions: RunActionSummary[]): G
       purpose: toolItemPurpose(action.tool),
       label: `${action.tool} output ${index + 1}`,
       status: actionStatus(action.status),
+      ...(prompt ? { prompt, promptPreview: promptPreview(prompt) } : {}),
       assetId,
       artifactId: assetId,
       createdAt: action.createdAt,

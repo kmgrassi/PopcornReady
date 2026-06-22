@@ -722,6 +722,7 @@ export interface GenerationStageItem {
   status: GenerationRunStatus;
   progressPercent?: number;
   provider?: string;
+  prompt?: string;
   promptPreview?: string;
   assetId?: string;
   artifactId?: string;

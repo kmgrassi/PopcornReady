@@ -82,7 +82,7 @@ function storyboardTiles(
         key,
         label: `Beat ${beat.beatIndex + 1}`,
         intent: beat.intent || beat.visualDescription,
-        prompt: panel?.prompt ?? item?.promptPreview,
+        prompt: panel?.prompt ?? item?.prompt ?? item?.promptPreview,
         sceneLabel: scene.title || `Scene ${scene.sceneIndex + 1}`,
         item,
         scene,
@@ -112,7 +112,7 @@ function itemTiles(runId: string, items: GenerationStageItem[]): Tile[] {
     key: item.itemId,
     label: item.label || `Frame ${index + 1}`,
     intent: item.promptPreview,
-    prompt: item.promptPreview,
+    prompt: item.prompt ?? item.promptPreview,
     item,
     target: {
       scope: "tile",
