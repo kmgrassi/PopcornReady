@@ -98,7 +98,7 @@ function TileDetails({ item }: { item: GenerationStageItem }) {
     <details className={styles.details}>
       <summary>Inspect tile</summary>
       {item.promptPreview ? (
-        <p className={styles.prompt} title={item.promptPreview}>
+        <p className={styles.prompt}>
           &ldquo;{item.promptPreview}&rdquo;
         </p>
       ) : null}

@@ -228,7 +228,7 @@ export function StageItemCard({
             </p>
           )}
           {item.promptPreview && (
-            <p className="prompt-preview" title={item.promptPreview}>
+            <p className="prompt-preview">
               &ldquo;{item.promptPreview}&rdquo;
             </p>
           )}
