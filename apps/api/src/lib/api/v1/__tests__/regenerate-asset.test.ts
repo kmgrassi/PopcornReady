@@ -5,6 +5,16 @@ import { regenerateImageAsset } from "../regenerate-asset";
 import { ApiError } from "../errors";
 import type { RegeneratedAssetMedia, V1Asset } from "../store";
 
+const silentLogger = {
+  debug() {},
+  info() {},
+  warn() {},
+  error() {},
+  child() {
+    return silentLogger;
+  },
+};
+
 function imageAsset(overrides: Partial<V1Asset> = {}): V1Asset {
   return {
     id: "11111111-1111-4111-8111-111111111111",
@@ -77,6 +87,7 @@ function makeDeps(asset: V1Asset, effectiveVisibility: "public" | "private" = "p
           expiresAt: "2026-06-20T01:00:00.000Z",
         };
       },
+      logger: silentLogger,
     },
   };
 }
