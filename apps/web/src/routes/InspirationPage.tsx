@@ -1,27 +1,84 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { apiRequest } from "../lib/api-client";
 import { Button } from "../components/ui/Button";
 import { ErrorState } from "../components/ui/StateCard";
 import {
   type InspirationElement,
   type RandomStoryInspiration,
+  type StoryConceptPoster,
   useRandomStoryInspiration,
+  useStoryConceptPosterMutation,
 } from "../lib/inspiration";
 import styles from "./InspirationPage.module.css";
 
-const CATEGORY_LABELS: Record<keyof RandomStoryInspiration["elements"], string> = {
-  plot: "Plot",
-  setting: "Setting",
-  arc: "Arc",
-  antagonist: "Antagonist",
-  theme: "Theme",
-  stakes: "Stakes",
-  structure: "Structure",
+type IngredientKey = keyof RandomStoryInspiration["elements"];
+
+interface IngredientConfig {
+  key: IngredientKey;
+  label: string;
+  summary: (inspiration: RandomStoryInspiration) => string;
+}
+
+const INGREDIENTS: IngredientConfig[] = [
+  { key: "setting", label: "Setting", summary: (story) => story.setting },
+  { key: "antagonist", label: "Antagonist", summary: (story) => story.antagonisticForce },
+  { key: "stakes", label: "Stakes", summary: (story) => story.endingType },
+  { key: "plot", label: "Plot", summary: (story) => story.externalGoal },
+  { key: "arc", label: "Inner Change", summary: (story) => story.innerFlawOrLie },
+  { key: "theme", label: "Theme", summary: (story) => story.newTruth },
+  { key: "structure", label: "Structure", summary: (story) => story.oldSelf },
+];
+
+const ELEMENT_FIELD_PATCHES: Record<IngredientKey, (keyof RandomStoryInspiration)[]> = {
+  plot: ["externalGoal"],
+  setting: ["setting"],
+  arc: ["innerFlawOrLie", "oldSelf", "newTruth"],
+  antagonist: ["antagonisticForce"],
+  theme: ["newTruth"],
+  stakes: ["endingType"],
+  structure: ["oldSelf"],
 };
 
 export function InspirationPage() {
   const [nonce, setNonce] = useState(0);
+  const [story, setStory] = useState<RandomStoryInspiration | null>(null);
+  const [regeneratingKey, setRegeneratingKey] = useState<IngredientKey | null>(null);
   const query = useRandomStoryInspiration(nonce);
-  const inspiration = query.data?.inspiration ?? null;
+  const posterMutation = useStoryConceptPosterMutation();
+  const storySignature = story ? conceptSignature(story) : null;
+
+  useEffect(() => {
+    if (query.data?.inspiration) {
+      setStory(stripPoster(query.data.inspiration));
+    }
+  }, [query.data?.inspiration]);
+
+  useEffect(() => {
+    if (!story) return;
+    posterMutation.reset();
+    posterMutation.mutate(story, {
+      onSuccess: ({ poster }) => {
+        setStory((current) => (current ? { ...current, poster } : current));
+      },
+    });
+  }, [storySignature]);
+
+  const poster = story?.poster ?? posterMutation.data?.poster ?? null;
+
+  async function regenerateIngredient(key: IngredientKey) {
+    setRegeneratingKey(key);
+    try {
+      const response = await apiRequest<{ inspiration: RandomStoryInspiration }>(
+        "/api/v1/inspiration/random",
+        { headers: { "Cache-Control": "no-store" } }
+      );
+      setStory((current) =>
+        current ? mergeIngredient(current, stripPoster(response.inspiration), key) : response.inspiration
+      );
+    } finally {
+      setRegeneratingKey(null);
+    }
+  }
 
   return (
     <div className={styles.page}>
@@ -29,6 +86,7 @@ export function InspirationPage() {
         <div>
           <p className={styles.eyebrow}>Inspiration</p>
           <h1>Story generator</h1>
+          <p className={styles.helper}>These are randomly generated story plots that you can use.</p>
         </div>
         <Button
           variant="primary"
@@ -50,53 +108,173 @@ export function InspirationPage() {
         />
       ) : null}
 
-      {inspiration ? <InspirationResult inspiration={inspiration} /> : null}
+      {story ? (
+        <InspirationResult
+          inspiration={story}
+          poster={poster}
+          posterError={posterMutation.error}
+          posterGenerating={posterMutation.isPending}
+          regeneratingKey={regeneratingKey}
+          onRegenerateIngredient={(key) => void regenerateIngredient(key)}
+        />
+      ) : null}
     </div>
   );
 }
 
-function InspirationResult({ inspiration }: { inspiration: RandomStoryInspiration }) {
+function InspirationResult({
+  inspiration,
+  poster,
+  posterError,
+  posterGenerating,
+  regeneratingKey,
+  onRegenerateIngredient,
+}: {
+  inspiration: RandomStoryInspiration;
+  poster: StoryConceptPoster | null;
+  posterError: Error | null;
+  posterGenerating: boolean;
+  regeneratingKey: IngredientKey | null;
+  onRegenerateIngredient: (key: IngredientKey) => void;
+}) {
   return (
     <>
-      <section className={styles.loglinePanel} aria-label="Generated story">
-        <p className={styles.formula}>{inspiration.formula}</p>
-        <p className={styles.logline}>{inspiration.logline}</p>
+      <section className={styles.hero} aria-label="Generated story">
+        <PosterPanel poster={poster} error={posterError} generating={posterGenerating} />
+        <div className={styles.promptPanel}>
+          <p className={styles.promptLabel}>Generated plot</p>
+          <p className={styles.logline}>
+            <HighlightedLogline inspiration={inspiration} />
+          </p>
+        </div>
       </section>
 
-      <section className={styles.breakdown} aria-label="Story ingredients">
-        {Object.entries(inspiration.elements).map(([key, elements]) => (
-          <IngredientGroup
-            key={key}
-            label={CATEGORY_LABELS[key as keyof RandomStoryInspiration["elements"]]}
-            elements={elements}
-          />
-        ))}
-      </section>
-
-      <dl className={styles.fields} aria-label="Formula fields">
-        <Field label="Type of person" value={inspiration.typeOfPerson} />
-        <Field label="Setting" value={inspiration.setting} />
-        <Field label="External goal" value={inspiration.externalGoal} />
-        <Field label="Antagonistic force" value={inspiration.antagonisticForce} />
-        <Field label="Inner flaw or lie" value={inspiration.innerFlawOrLie} />
-        <Field label="Old self" value={inspiration.oldSelf} />
-        <Field label="New truth" value={inspiration.newTruth} />
-        <Field label="Ending type" value={inspiration.endingType} />
-      </dl>
+      <details className={styles.drawer}>
+        <summary>
+          <span>Story ingredients</span>
+          <span>{INGREDIENTS.length} sections</span>
+        </summary>
+        <div className={styles.breakdown}>
+          {INGREDIENTS.map((ingredient) => (
+            <IngredientGroup
+              key={ingredient.key}
+              label={ingredient.label}
+              summary={ingredient.summary(inspiration)}
+              elements={inspiration.elements[ingredient.key]}
+              regenerating={regeneratingKey === ingredient.key}
+              onRegenerate={() => onRegenerateIngredient(ingredient.key)}
+            />
+          ))}
+        </div>
+      </details>
     </>
   );
 }
 
+function PosterPanel({
+  poster,
+  error,
+  generating,
+}: {
+  poster: StoryConceptPoster | null;
+  error: Error | null;
+  generating: boolean;
+}) {
+  if (poster?.url) {
+    return <img className={styles.poster} src={poster.url} alt="Generated movie poster concept" />;
+  }
+
+  const status = error
+    ? "Poster generation failed"
+    : generating || poster?.status === "generating" || poster?.status === "queued"
+      ? "Generating poster"
+      : "Poster pending";
+
+  return (
+    <div className={`${styles.poster} ${styles.posterEmpty}`} aria-live="polite">
+      <span>{status}</span>
+    </div>
+  );
+}
+
+function HighlightedLogline({ inspiration }: { inspiration: RandomStoryInspiration }) {
+  const parts = useMemo(
+    () => [
+      { value: inspiration.typeOfPerson, className: styles.person },
+      { value: inspiration.setting, className: styles.setting },
+      { value: inspiration.externalGoal, className: styles.goal },
+      { value: inspiration.antagonisticForce, className: styles.antagonist },
+      { value: inspiration.innerFlawOrLie, className: styles.flaw },
+      { value: inspiration.oldSelf, className: styles.oldSelf },
+      { value: inspiration.newTruth, className: styles.truth },
+      { value: inspiration.endingType, className: styles.ending },
+    ],
+    [inspiration]
+  );
+
+  return <>{highlightText(inspiration.logline, parts)}</>;
+}
+
+function highlightText(
+  text: string,
+  highlights: { value: string; className: string }[]
+): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  let remaining = text;
+  let key = 0;
+
+  while (remaining.length) {
+    const match = highlights
+      .map((highlight) => ({
+        ...highlight,
+        index: remaining.toLowerCase().indexOf(highlight.value.toLowerCase()),
+      }))
+      .filter((highlight) => highlight.value && highlight.index >= 0)
+      .sort((a, b) => a.index - b.index || b.value.length - a.value.length)[0];
+
+    if (!match) {
+      nodes.push(remaining);
+      break;
+    }
+
+    if (match.index > 0) nodes.push(remaining.slice(0, match.index));
+    const value = remaining.slice(match.index, match.index + match.value.length);
+    nodes.push(
+      <mark key={`${match.value}-${key}`} className={`${styles.highlight} ${match.className}`}>
+        {value}
+      </mark>
+    );
+    key += 1;
+    remaining = remaining.slice(match.index + match.value.length);
+  }
+
+  return nodes;
+}
+
 function IngredientGroup({
   label,
+  summary,
   elements,
+  regenerating,
+  onRegenerate,
 }: {
   label: string;
+  summary: string;
   elements: InspirationElement[];
+  regenerating: boolean;
+  onRegenerate: () => void;
 }) {
   return (
     <article className={styles.ingredient}>
-      <h2>{label}</h2>
+      <div className={styles.ingredientHeader}>
+        <div>
+          <h2>{label}</h2>
+          <p>{summary}</p>
+        </div>
+        <Button variant="secondary" onClick={onRegenerate} disabled={regenerating}>
+          {regenerating ? "Regenerating" : "Regenerate"}
+        </Button>
+      </div>
       <div className={styles.chips}>
         {elements.map((element) => (
           <span key={element.id} className={styles.chip}>
@@ -104,18 +282,60 @@ function IngredientGroup({
           </span>
         ))}
       </div>
-      <p>{elements.map((element) => element.coreIdea).filter(Boolean).join(" ")}</p>
+      <p className={styles.coreIdea}>
+        {elements.map((element) => element.coreIdea).filter(Boolean).join(" ")}
+      </p>
     </article>
   );
 }
 
-function Field({ label, value }: { label: string; value: string }) {
+function mergeIngredient(
+  current: RandomStoryInspiration,
+  next: RandomStoryInspiration,
+  key: IngredientKey
+): RandomStoryInspiration {
+  const merged = {
+    ...current,
+    poster: undefined,
+    elements: {
+      ...current.elements,
+      [key]: next.elements[key],
+    },
+  };
+
+  for (const field of ELEMENT_FIELD_PATCHES[key]) {
+    const value = next[field];
+    if (typeof value === "string") {
+      (merged as Record<string, unknown>)[field] = value;
+    }
+  }
+
+  return {
+    ...merged,
+    logline: buildLogline(merged),
+  };
+}
+
+function buildLogline(story: RandomStoryInspiration): string {
   return (
-    <div className={styles.field}>
-      <dt>{label}</dt>
-      <dd>{value}</dd>
-    </div>
+    `A ${story.typeOfPerson} in ${story.setting} wants to ${story.externalGoal}, ` +
+    `but ${story.antagonisticForce} blocks them. To succeed, they must overcome ` +
+    `${story.innerFlawOrLie} and choose between ${story.oldSelf} and "${story.newTruth}", ` +
+    `leading to ${story.endingType}.`
   );
+}
+
+function stripPoster(inspiration: RandomStoryInspiration): RandomStoryInspiration {
+  return { ...inspiration, poster: undefined };
+}
+
+function conceptSignature(inspiration: RandomStoryInspiration): string {
+  return Object.entries(inspiration.elements)
+    .flatMap(([key, elements]) =>
+      elements.map((element, index) => `${key}:${index}:${element.id}`)
+    )
+    .sort()
+    .join("|");
 }
 
 function InspirationSkeleton() {
