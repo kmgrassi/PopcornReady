@@ -46,6 +46,9 @@ declare
   v_old public.assets;
   v_new public.assets;
   v_sel record;
+  v_effective_params jsonb;
+  v_inputs_fingerprint text;
+  v_next_version integer;
 begin
   -- Lock the source row so a concurrent regenerate of the same asset serializes
   -- behind us rather than racing to mint two version+1 rows.
@@ -65,6 +68,52 @@ begin
       p_old_asset_id, v_old.media
       using errcode = 'invalid_parameter_value';
   end if;
+
+  -- Serialize all regenerations for this immutable lineage. Locking only the
+  -- source row is not enough: a retry that starts from v1 after v2 exists must
+  -- mint v3, not collide with v2's unique (lineage_id, version) entry.
+  perform pg_advisory_xact_lock(hashtext(v_old.lineage_id::text));
+
+  perform 1
+  from public.assets
+  where lineage_id = v_old.lineage_id
+    and workspace_id = p_workspace_id
+  order by version
+  for update;
+
+  select coalesce(max(version), 0) + 1 into v_next_version
+  from public.assets
+  where lineage_id = v_old.lineage_id
+    and workspace_id = p_workspace_id;
+
+  v_effective_params := coalesce(p_params, v_old.params);
+
+  -- Mirror the app-side inputsFingerprint shape: hash params, pair each input
+  -- with the content hash it carried, sort by asset id, then hash the bundle.
+  select encode(
+    extensions.digest(
+      jsonb_build_object(
+        'inputHashes',
+        coalesce(
+          (
+            select jsonb_agg(
+              jsonb_build_object(
+                'assetId', input_item.value->>'assetId',
+                'contentHash', coalesce(input_item.value->>'contentHash', '')
+              )
+              order by input_item.value->>'assetId'
+            )
+            from jsonb_array_elements(coalesce(v_old.inputs, '[]'::jsonb)) as input_item(value)
+          ),
+          '[]'::jsonb
+        ),
+        'paramsHash',
+        encode(extensions.digest(coalesce(v_effective_params, 'null'::jsonb)::text, 'sha256'), 'hex')
+      )::text,
+      'sha256'
+    ),
+    'hex'
+  ) into v_inputs_fingerprint;
 
   -- Mint the new immutable version. `id` and `ref` are assigned by their
   -- defaults/triggers; the edge-sync trigger fires off the copied `inputs`.
@@ -101,7 +150,7 @@ begin
     v_old.workspace_id,
     v_old.project_id,
     v_old.lineage_id,
-    v_old.version + 1,
+    v_next_version,
     v_old.kind,
     v_old.media,
     'ready',
@@ -110,10 +159,10 @@ begin
     null,                                  -- slug: project-unique, see header note
     p_filename,
     v_old.content,
-    coalesce(p_params, v_old.params),
+    v_effective_params,
     v_old.inputs,
     coalesce(p_content_hash, v_old.content_hash),
-    v_old.inputs_fingerprint,
+    v_inputs_fingerprint,
     coalesce(p_action_id, v_old.created_by_action_id),
     null,                                  -- fresh managed-storage object; no stale remote_url
     p_storage_key,
@@ -131,7 +180,12 @@ begin
   update public.storyboard_panels
   set image_asset_id = v_new.id
   where project_id = v_old.project_id
-    and image_asset_id = v_old.id;
+    and image_asset_id in (
+      select id
+      from public.assets
+      where project_id = v_old.project_id
+        and lineage_id = v_old.lineage_id
+    );
 
   -- Repoint any selection slot whose current head is the old asset by appending
   -- a fresh selection row (append-only table; `selections_set_seq` assigns seq).
@@ -139,7 +193,12 @@ begin
     select slot_owner_lineage_id, slot_role
     from public.current_selections
     where project_id = v_old.project_id
-      and active_asset_id = v_old.id
+      and active_asset_id in (
+        select id
+        from public.assets
+        where project_id = v_old.project_id
+          and lineage_id = v_old.lineage_id
+      )
   loop
     insert into public.selections (
       project_id,
