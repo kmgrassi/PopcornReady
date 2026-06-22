@@ -33,6 +33,9 @@ import styles from "./ProjectDetailPage.module.css";
 const DEV_AUTOPILOT = import.meta.env.DEV;
 const RUN_LIMIT = 6;
 const OUTPUT_LIMIT = 6;
+const PROJECT_SECTIONS = ["concept", "brief", "script"] as const;
+
+type ProjectSectionId = (typeof PROJECT_SECTIONS)[number];
 
 function useDashboardAuthScope() {
   const auth = useAuth();
@@ -40,8 +43,10 @@ function useDashboardAuthScope() {
 }
 
 export function ProjectDetailPage() {
-  const { projectId } = useParams();
+  const { projectId, section } = useParams();
   const location = useLocation();
+  const [pipelineOpen, setPipelineOpen] = useState(false);
+  const activeSection = isProjectSectionId(section) ? section : null;
   const authScope = useDashboardAuthScope();
   const projectQuery = useProjectQuery(projectId ?? "", Boolean(projectId));
   const generateStoryboardMutation = useGenerateProjectStoryboardMutation(projectId ?? "");
@@ -91,14 +96,22 @@ export function ProjectDetailPage() {
   }, [refetchStoryboard, storyboardGenerationJob?.status]);
 
   useEffect(() => {
-    if (!location.hash || !projectQuery.data?.project) return;
-    const sectionId = decodeURIComponent(location.hash.slice(1));
+    if (!projectQuery.data?.project) return;
+    const sectionId = location.hash ? decodeURIComponent(location.hash.slice(1)) : activeSection ?? "";
+    if (!sectionId) return;
     window.requestAnimationFrame(() => {
       document.getElementById(sectionId)?.scrollIntoView({ block: "start" });
     });
-  }, [location.hash, projectQuery.data?.project]);
+  }, [activeSection, location.hash, projectQuery.data?.project]);
+
+  useEffect(() => {
+    setPipelineOpen(false);
+  }, [activeSection, location.hash]);
 
   if (!projectId) return <Navigate to="/library/projects" replace />;
+  if (section && !activeSection) {
+    return <Navigate to={`/projects/${encodeURIComponent(projectId)}`} replace />;
+  }
 
   const project = projectQuery.data?.project ?? null;
   const storyboard = storyboardQuery.data?.storyboard ?? null;
@@ -168,62 +181,147 @@ export function ProjectDetailPage() {
       ) : null}
 
       {!loading && !error && project ? (
-        <>
-          <section className={styles.projectTopLayout}>
-            <ProjectHero project={project} storyboard={storyboard} />
-            <div className={styles.projectTopRail}>
-              <ProjectBrief project={project} />
-              <ProjectStagePanel
+        <div className={styles.projectPageLayout}>
+          <div className={styles.projectContent} id="overview">
+            <section className={styles.projectTopLayout}>
+              <ProjectConcept project={project} storyboard={storyboard} />
+              <div className={styles.projectTopRail}>
+                <ProjectBrief project={project} />
+                <ProjectScript project={project} storyboard={storyboard} />
+                <ProjectStagePanel
+                  projectId={projectId}
+                  runs={runsQuery.items}
+                  loading={runsQuery.loading}
+                  error={runsQuery.error}
+                  onRetry={runsQuery.refetch}
+                />
+              </div>
+            </section>
+            <section className={styles.storyboardLayout}>
+              <StoryboardPreview
                 projectId={projectId}
-                runs={runsQuery.items}
-                loading={runsQuery.loading}
-                error={runsQuery.error}
-                onRetry={runsQuery.refetch}
+                storyboard={storyboard}
+                loading={storyboardQuery.isLoading}
+                error={storyboardQuery.error}
+                onRetry={() => void storyboardQuery.refetch()}
+                generating={storyboardGenerating}
+                progress={storyboardProgressState}
+                generationError={
+                  generateStoryboardMutation.error ?? storyboardGenerationError
+                }
+                onGenerate={() => {
+                  void generateStoryboardMutation.mutateAsync().then(() => {
+                    void storyboardQuery.refetch();
+                  });
+                }}
               />
-            </div>
-          </section>
-          <section className={styles.storyboardLayout}>
-            <StoryboardPreview
+            </section>
+            <RunsPreview
               projectId={projectId}
-              storyboard={storyboard}
-              loading={storyboardQuery.isLoading}
-              error={storyboardQuery.error}
-              onRetry={() => void storyboardQuery.refetch()}
-              generating={storyboardGenerating}
-              progress={storyboardProgressState}
-              generationError={
-                generateStoryboardMutation.error ?? storyboardGenerationError
-              }
-              onGenerate={() => {
-                void generateStoryboardMutation.mutateAsync().then(() => {
-                  void storyboardQuery.refetch();
-                });
-              }}
+              runs={runsQuery.items}
+              loading={runsQuery.loading}
+              loadingMore={runsQuery.loadingMore}
+              hasMore={runsQuery.hasMore}
+              error={runsQuery.error}
+              onRetry={runsQuery.refetch}
+              onLoadMore={() => void runsQuery.fetchNextPage()}
             />
-          </section>
-          <RunsPreview
+            <OutputsPreview
+              outputs={outputsQuery.items}
+              loading={outputsQuery.loading}
+              loadingMore={outputsQuery.loadingMore}
+              hasMore={outputsQuery.hasMore}
+              error={outputsQuery.error}
+              onRetry={outputsQuery.refetch}
+              onLoadMore={() => void outputsQuery.fetchNextPage()}
+            />
+          </div>
+          <ProjectPipelineNav
             projectId={projectId}
-            runs={runsQuery.items}
-            loading={runsQuery.loading}
-            loadingMore={runsQuery.loadingMore}
-            hasMore={runsQuery.hasMore}
-            error={runsQuery.error}
-            onRetry={runsQuery.refetch}
-            onLoadMore={() => void runsQuery.fetchNextPage()}
+            activeItem={activeHashItem(location.hash) ?? activeSection ?? "overview"}
+            isOpen={pipelineOpen}
+            onToggle={() => setPipelineOpen((open) => !open)}
+            onNavigate={() => setPipelineOpen(false)}
           />
-          <OutputsPreview
-            outputs={outputsQuery.items}
-            loading={outputsQuery.loading}
-            loadingMore={outputsQuery.loadingMore}
-            hasMore={outputsQuery.hasMore}
-            error={outputsQuery.error}
-            onRetry={outputsQuery.refetch}
-            onLoadMore={() => void outputsQuery.fetchNextPage()}
-          />
-        </>
+        </div>
       ) : null}
     </main>
   );
+}
+
+function ProjectPipelineNav({
+  projectId,
+  activeItem,
+  isOpen,
+  onToggle,
+  onNavigate,
+}: {
+  projectId: string;
+  activeItem: string;
+  isOpen: boolean;
+  onToggle: () => void;
+  onNavigate: () => void;
+}) {
+  const projectPath = `/projects/${encodeURIComponent(projectId)}`;
+  const items = [
+    { id: "overview", label: "Overview", to: projectPath },
+    { id: "concept", label: "Concept", to: `${projectPath}/concept` },
+    { id: "brief", label: "Brief", to: `${projectPath}/brief` },
+    { id: "script", label: "Script", to: `${projectPath}/script` },
+    { id: "storyboard", label: "Storyboard", to: `${projectPath}#storyboard` },
+    { id: "runs", label: "Runs", to: `${projectPath}#runs` },
+    { id: "outputs", label: "Outputs", to: `${projectPath}#outputs` },
+  ];
+
+  return (
+    <aside className={styles.pipelineAside} aria-label="Project pipeline">
+      <button
+        className={styles.pipelineToggle}
+        type="button"
+        aria-expanded={isOpen}
+        onClick={onToggle}
+      >
+        Pipeline
+      </button>
+      <nav
+        className={`${styles.pipelineNav} ${isOpen ? styles.pipelineNavOpen : ""}`}
+        aria-label="Project pipeline"
+      >
+        <div className={styles.pipelineHeader}>
+          <span className={styles.eyebrow}>Pipeline</span>
+          <h2>Project sections</h2>
+        </div>
+        <ol className={styles.pipelineList}>
+          {items.map((item, index) => (
+            <li key={item.id}>
+              <Link
+                className={`${styles.pipelineLink} ${
+                  activeItem === item.id ? styles.pipelineLinkActive : ""
+                }`}
+                to={item.to}
+                onClick={onNavigate}
+                aria-current={activeItem === item.id ? "page" : undefined}
+              >
+                <span className={styles.pipelineIndex}>{index + 1}</span>
+                <span>{item.label}</span>
+              </Link>
+            </li>
+          ))}
+        </ol>
+      </nav>
+    </aside>
+  );
+}
+
+function activeHashItem(hash: string) {
+  if (!hash) return null;
+  const id = decodeURIComponent(hash.slice(1));
+  if (id === "storyboard" || id === "runs" || id === "outputs") return id;
+  return null;
+}
+
+function isProjectSectionId(value: string | undefined): value is ProjectSectionId {
+  return PROJECT_SECTIONS.includes(value as ProjectSectionId);
 }
 
 function ProjectStagePanel({
@@ -275,7 +373,7 @@ function ProjectStagePanel({
     <section className={styles.panel} aria-labelledby="project-stage-heading">
       <div className={styles.sectionHeader}>
         <div>
-          <span className={styles.eyebrow}>Pipeline</span>
+          <span className={styles.eyebrow}>Run pipeline</span>
           <h2 id="project-stage-heading">Stage and next step</h2>
         </div>
         {run ? (
@@ -390,7 +488,7 @@ function ProjectStagePanel({
   );
 }
 
-function ProjectHero({
+function ProjectConcept({
   project,
   storyboard,
 }: {
@@ -398,8 +496,9 @@ function ProjectHero({
   storyboard: ProjectStoryboard | null;
 }) {
   const stats = useMemo(() => storyboardStats(storyboard), [storyboard]);
+  const brief = project.brief;
   return (
-    <section className={styles.hero}>
+    <section className={styles.hero} id="concept">
       <ProjectPoster name={project.name} posterUrl={project.posterUrl} />
       <div className={styles.heroBody}>
         <div className={styles.metaRow}>
@@ -409,14 +508,23 @@ function ProjectHero({
           ) : null}
           <span>Created {formatDate(project.createdAt)}</span>
         </div>
+        <div>
+          <span className={styles.eyebrow}>Concept</span>
+          <h2 className={styles.conceptTitle}>
+            {brief?.oneBigIdea ?? brief?.goal ?? project.name}
+          </h2>
+          {brief?.strongestVisual ? (
+            <p className={styles.conceptSummary}>{brief.strongestVisual}</p>
+          ) : null}
+        </div>
         <dl className={styles.stats}>
           <div>
             <dt>Length</dt>
-            <dd>{formatDuration(project.brief?.targetLengthSec) ?? "Unset"}</dd>
+            <dd>{formatDuration(brief?.targetLengthSec) ?? "Unset"}</dd>
           </div>
           <div>
             <dt>Aspect</dt>
-            <dd>{project.brief?.aspectRatio ?? "Unset"}</dd>
+            <dd>{brief?.aspectRatio ?? "Unset"}</dd>
           </div>
           <div>
             <dt>Scenes</dt>
@@ -428,6 +536,70 @@ function ProjectHero({
           </div>
         </dl>
       </div>
+    </section>
+  );
+}
+
+function ProjectBrief({ project }: { project: V1Project }) {
+  const brief = project.brief;
+  return (
+    <section className={styles.panel} id="brief">
+      <div className={styles.sectionHeader}>
+        <div>
+          <span className={styles.eyebrow}>Brief</span>
+          <h2>Project direction</h2>
+        </div>
+      </div>
+      {brief ? (
+        <dl className={styles.detailList}>
+          <DetailTerm label="Prompt" value={brief.goal} />
+          <DetailTerm label="Audience" value={brief.audience} />
+          <DetailTerm label="Style" value={brief.style} />
+          <DetailTerm label="Format" value={brief.format} />
+          <DetailTerm label="Platform" value={brief.platform} />
+          <DetailTerm label="Hook" value={brief.hookQuestion} />
+          <DetailTerm label="Payoff" value={brief.payoff} />
+          <DetailTerm label="Call to action" value={brief.constraints?.callToAction} />
+        </dl>
+      ) : (
+        <p className={styles.muted}>No brief has been saved for this project yet.</p>
+      )}
+    </section>
+  );
+}
+
+function ProjectScript({
+  project,
+  storyboard,
+}: {
+  project: V1Project;
+  storyboard: ProjectStoryboard | null;
+}) {
+  const scriptLines = storyboardScriptLines(storyboard);
+  const narrationScript = project.brief?.narration?.script?.trim();
+
+  return (
+    <section className={styles.panel} id="script">
+      <div className={styles.sectionHeader}>
+        <div>
+          <span className={styles.eyebrow}>Script</span>
+          <h2>Narration and dialogue</h2>
+        </div>
+      </div>
+      {narrationScript ? (
+        <p className={styles.scriptBlock}>{narrationScript}</p>
+      ) : scriptLines.length > 0 ? (
+        <ol className={styles.scriptList}>
+          {scriptLines.map((line) => (
+            <li key={line.id}>
+              <span>{line.label}</span>
+              <p>{line.text}</p>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className={styles.muted}>No script or narrated storyboard beats are ready yet.</p>
+      )}
     </section>
   );
 }
@@ -448,34 +620,6 @@ function ProjectPoster({ name, posterUrl }: { name: string; posterUrl?: string |
     <div className={`${styles.poster} ${styles.posterEmpty}`} aria-hidden="true">
       <span>{name.trim().charAt(0).toUpperCase() || "?"}</span>
     </div>
-  );
-}
-
-function ProjectBrief({ project }: { project: V1Project }) {
-  const brief = project.brief;
-  return (
-    <section className={styles.panel}>
-      <div className={styles.sectionHeader}>
-        <div>
-          <span className={styles.eyebrow}>Plan</span>
-          <h2>Project direction</h2>
-        </div>
-      </div>
-      {brief ? (
-        <dl className={styles.detailList}>
-          <DetailTerm label="Prompt" value={brief.goal} />
-          <DetailTerm label="Audience" value={brief.audience} />
-          <DetailTerm label="Style" value={brief.style} />
-          <DetailTerm label="Format" value={brief.format} />
-          <DetailTerm label="Platform" value={brief.platform} />
-          <DetailTerm label="Hook" value={brief.hookQuestion} />
-          <DetailTerm label="Payoff" value={brief.payoff} />
-          <DetailTerm label="Call to action" value={brief.constraints?.callToAction} />
-        </dl>
-      ) : (
-        <p className={styles.muted}>No brief has been saved for this project yet.</p>
-      )}
-    </section>
   );
 }
 
@@ -881,6 +1025,23 @@ function firstPanels(storyboard: ProjectStoryboard | null, limit: number) {
       return selected ? [selected] : beat.panels.slice(0, 1);
     })
     .slice(0, limit);
+}
+
+function storyboardScriptLines(storyboard: ProjectStoryboard | null) {
+  if (!storyboard) return [];
+  return storyboard.scenes.flatMap((scene) =>
+    scene.beats.flatMap((beat) => {
+      const text = beat.narration?.trim() || beat.dialogueSummary?.trim();
+      if (!text) return [];
+      return [
+        {
+          id: beat.id,
+          label: `Scene ${scene.sceneIndex + 1}, beat ${beat.beatIndex + 1}`,
+          text,
+        },
+      ];
+    }),
+  );
 }
 
 function formatDate(value?: string) {

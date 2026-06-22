@@ -74,6 +74,10 @@ export function App() {
             path="/projects/:projectId/watch"
             element={<ProjectWatchPage />}
           />
+          <Route
+            path="/projects/:projectId/:section"
+            element={<ProjectDetailPage />}
+          />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/dev/design-system" element={<DesignSystemPage />} />
           <Route path="/dev/generation-cards" element={<GenerationCardsPage />} />
