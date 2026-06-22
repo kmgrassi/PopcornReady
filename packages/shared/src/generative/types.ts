@@ -6,6 +6,7 @@ import type {
 
 export type GenerativeProviderName =
   | "openai"
+  | "ideogram"
   | "gemini"
   | "runway"
   | "ltx"
@@ -143,6 +144,30 @@ export interface OpenAIVideoRequest extends BaseGenerateAssetRequest {
   seconds?: number;
 }
 
+export type IdeogramImageModel = "ideogram-v4" | "ideogram-v3";
+
+export type IdeogramRenderingSpeed = "FLASH" | "TURBO" | "DEFAULT" | "QUALITY";
+export type IdeogramMagicPrompt = "AUTO" | "ON" | "OFF";
+export type IdeogramStyleType = "AUTO" | "GENERAL" | "REALISTIC" | "DESIGN" | "FICTION";
+
+export interface IdeogramImageRequest extends BaseGenerateAssetRequest {
+  provider: "ideogram";
+  kind: "image";
+  model?: IdeogramImageModel | string;
+  size?: string;
+  resolution?: string;
+  aspectRatio?: string;
+  renderingSpeed?: IdeogramRenderingSpeed;
+  magicPrompt?: IdeogramMagicPrompt;
+  negativePrompt?: string;
+  numImages?: number;
+  seed?: number;
+  styleType?: IdeogramStyleType;
+  stylePreset?: string;
+  customModelUri?: string;
+  enableCopyrightDetection?: boolean;
+}
+
 export interface GeminiVideoRequest extends BaseGenerateAssetRequest {
   provider: "gemini";
   kind: "video";
@@ -237,6 +262,7 @@ export interface ElevenLabsAudioRequest extends BaseGenerateAssetRequest {
 export type GenerateAssetRequest =
   | OpenAIImageRequest
   | OpenAIVideoRequest
+  | IdeogramImageRequest
   | GeminiVideoRequest
   | GeminiImageRequest
   | RunwayVideoRequest

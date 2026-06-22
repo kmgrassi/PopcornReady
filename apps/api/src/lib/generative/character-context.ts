@@ -31,7 +31,11 @@ const SUPPORTED_MODES: Record<
     image: ["prompt_only", "reference_pack", "hero_frame"],
     video: ["prompt_only", "hero_frame", "first_frame_video"],
   },
+  ideogram: {
+    image: ["prompt_only", "reference_pack", "hero_frame"],
+  },
   gemini: {
+    image: ["prompt_only", "reference_pack", "hero_frame"],
     video: ["prompt_only", "hero_frame", "first_frame_video"],
   },
   runway: {
