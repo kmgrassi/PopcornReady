@@ -1,0 +1,66 @@
+/* The frame hugs the media (no imposed size) so each surface's media class keeps
+   driving dimensions; it only establishes the positioning context for the
+   recovery overlay. */
+.frame {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
+/* Neutral defaults; surfaces override via mediaClassName. */
+.media {
+  display: block;
+  max-width: 100%;
+}
+
+.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Wrapper used when the healthy media is itself activatable (opens the surface's
+   viewer / Ask-the-AI modal). Strips native button chrome. */
+.activate {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: inherit;
+}
+
+.activate:focus-visible {
+  outline: 2px solid var(--accent, #7c8cff);
+  outline-offset: 2px;
+}
+
+/* Surface chrome layered over healthy media (badges, hints). Non-interactive
+   shell; interactive children opt back in. */
+.overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.overlay > * {
+  pointer-events: auto;
+}
+
+/* Recovery re-run overlay, centered over a blank/failed image placeholder. */
+.recovery {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+/* Only the button itself is interactive, so it never blocks the placeholder. */
+.recovery > * {
+  pointer-events: auto;
+}

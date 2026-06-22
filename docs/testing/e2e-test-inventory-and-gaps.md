@@ -1,466 +1,294 @@
-# End-to-End Test Inventory and Gaps
+# End-to-End Test Inventory And Gaps
 
-Date: 2026-06-16
+Date: 2026-06-22
 
 This inventory covers the active split app described in `CLAUDE.md`: the Vite
-React SPA in `apps/web` and the Express API in `apps/api`. The legacy Next
-surface under `src/` still has tests, but new end-to-end coverage should target
-the split app unless a legacy regression directly blocks migration.
+React SPA in `apps/web` and the Express API in `apps/api`. New end-to-end work
+should target the split app. Legacy Next surfaces under `src/` should only be
+tested when a legacy regression blocks migration.
 
 ## Current Coverage Snapshot
 
-- A first `apps/web` Playwright harness now exists with
-  `e2e/storyboard-editor.spec.ts`, covering the storyboard editor's
-  write-then-reload path.
-- Existing automated coverage is mostly backend and package-level Node tests:
-  80 `*.test.ts(x)` / `*.spec.ts(x)` files total, including 65 under `apps/api`.
-- `apps/api` tests cover many API/service units, route handlers, storage,
-  orchestrator tools, eval services, and generation helpers, but they do not
-  prove that the web UI, auth/session wiring, API base URL, TanStack Query cache
-  behavior, polling, media playback, and user workflows work together in a
-  browser.
-- Manual smoke docs exist under `docs/manual-tests/` for selected orchestration
-  and asset-sharing flows, but they are not executable e2e coverage.
+The `apps/web` Playwright harness now covers the first useful browser layer:
 
-## Recommended E2E Harness
+- `api-routing.spec.ts` verifies health and JSON error-envelope behavior through
+  the web `/api` proxy.
+- `auth-local.spec.ts` verifies local auth mode and `/api/v1/me`.
+- `auth-hosted.spec.ts` verifies hosted Supabase login/sign-out when explicit
+  credentials and Supabase env are provided.
+- `specs/auth-and-routing.spec.ts` covers public auth routes, protected local
+  routes, compatibility redirects, and not-found behavior.
+- `run-progress.spec.ts` and `run-progress-actions.spec.ts` cover run progress,
+  approval/rejection/cancel actions, failed/succeeded states, and recovery hints
+  with mocked browser API fixtures.
+- `specs/library-collections.spec.ts` covers Library pagination, filters, media
+  viewer, visibility mutation behavior, and watch links with mocked fixtures.
+- `storyboard-editor.spec.ts` verifies the dedicated storyboard route renders
+  the empty state for a project whose storyboard endpoint returns `null`.
+- `evals.spec.ts` covers the eval dashboard and admin workbench judgment action.
 
-Use Playwright for the first e2e layer.
+The required local-first database smoke is:
 
-- Target package: add an `apps/web`-owned e2e suite, because the browser is the
-  user boundary and the SPA owns the cross-route workflows.
-- Default mode: run against `AUTH_MODE=local` and local/mock providers so tests
-  can seed deterministic projects, assets, runs, timelines, and eval data
-  without depending on paid model providers.
-- Test data: build on the existing test-sandbox primitives instead of inventing
-  another fixture layer. Supabase-backed e2e should create `internal_test`
-  workspaces/projects through `test_sandboxes` and clean them up with
-  `delete_test_sandbox()`. Local-backend e2e can continue to use `.local/dev-db`
-  and `.local/media` when `DB_BACKEND=local`.
-- CI split: keep smoke e2e small and required; run long provider/storage
-  integration tests separately behind explicit secrets.
+```sh
+pnpm db:local:start
+pnpm db:local:reset
+pnpm test:e2e:local-db
+```
+
+That command runs Playwright against local Supabase/Postgres with
+`DB_BACKEND=supabase`.
 
 ## Development Data Modes
 
-- `AUTH_MODE=local` resolves to the deterministic `dev_workspace`.
-- Older/local code paths still use `.local/dev-db/` and `.local/media` when
-  `DB_BACKEND=local`.
-- Supabase-backed API tests can point at local or dev Supabase with
-  `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`.
-- `supabase/migrations/20260615130000_production_test_sandboxes.sql` adds
-  `workspaces.purpose` values such as `user`, `internal_test`, and `fixture`,
-  plus `test_sandboxes` for isolated production/dev smoke roots.
-- The orchestrator tool-test harness already creates throwaway
-  `internal_test` workspaces/projects, writes real rows, and safely deletes
-  them through `delete_test_sandbox()`. Browser e2e setup should reuse this
-  lifecycle pattern and only add web-specific seed helpers where needed.
-- The manual harness is documented in `apps/api/src/lib/tool-tests/README.md`
-  and runs with:
+- `AUTH_MODE=local` resolves every request to the deterministic local developer
+  workspace. This is the default fast test mode.
+- `AUTH_MODE=hybrid` verifies a Supabase bearer token when present and falls
+  back to the local developer identity when absent. This is the best manual mode
+  for local onboarding tests because a real local Supabase signup resolves as a
+  real user.
+- `AUTH_MODE=supabase` requires a valid Supabase bearer token and should be used
+  for hosted/auth-strict checks.
+- `DB_BACKEND=local` uses file-backed `.local` state. `DB_BACKEND=supabase`
+  routes the foundation store through Postgres.
+- Supabase-backed fixture helpers should prefer `test_sandboxes` /
+  `internal_test` workspaces and clean up with `delete_test_sandbox()` where
+  practical.
 
-```sh
-NODE_ENV=development AUTH_MODE=local ENABLE_TOOL_TEST_HARNESS=1 pnpm dev:api
-```
+## Current Route Inventory
+
+Public routes:
+
+- `/`
+- `/login`
+- `/signup`
+- `/sprite`
+- `/p/:projectId`
+
+Authenticated routes:
+
+- `/dashboard`
+- `/library`, `/library/:tab`
+- `/projects`, `/projects/new`, `/projects/:projectId`,
+  `/projects/:projectId/storyboard`, `/projects/:projectId/watch`,
+  `/projects/:projectId/runs/:runId`
+- `/runs`, `/assets`, `/outputs`
+- `/anchors`, `/anchors/mine`, `/anchors/:entryId`
+- `/uploads`, `/templates`, `/brand`, `/settings`
+- `/evals`, `/admin`, `/admin/evals`
+- `/dev/design-system`, `/dev/generation-cards`
+
+Retired route note: `/studio` is not mounted in the current Vite route table.
+Creation currently enters through the landing prompt and quick-start generation
+path. Any future Studio restoration should add new E2E coverage when the route
+returns.
+
+## Recommended Harness Shape
+
+- Keep `apps/web` as the owner of browser E2E.
+- Keep the default suite fast: local auth, mocked/seeded browser API fixtures,
+  and local Supabase only where persistence/auth behavior matters.
+- Use the local-first DB command for integration smoke that should exercise real
+  Supabase/Postgres setup.
+- Keep provider-backed generation/export tests separate from required CI,
+  behind explicit provider keys.
+- Seed complex UI states through fixtures or test sandboxes; do not require live
+  paid model calls just to test routing, controls, polling, or error states.
 
 ## E2E Inventory
 
-### 1. App Shell, Routing, and Auth
+### 1. App Shell, Routing, And Auth
+
+Covered:
+
+- Public auth routes render.
+- Local protected routes are reachable.
+- Health JSON works through `/api`.
+- Compatibility redirects and not-found route work.
+- Local `/me` resolves the deterministic workspace.
+- Hosted Supabase login/sign-out is covered when secrets are supplied.
+
+Remaining gaps:
+
+- No required CI-hosted strict-auth run yet.
+- No automated local Supabase signup/onboarding test. Manual testing has proven
+  it works, but the suite does not yet create a new local Supabase user and
+  assert `/api/v1/me` resolves `authMode: "supabase"`.
+- Admin/non-admin hosted authorization should be covered with explicit fixtures
+  or credentials.
+
+### 2. Landing Quick-Start Generation
 
 Critical flows:
 
-- Public home renders and can navigate to login, signup, and authenticated app
-  entry points.
-- Unauthenticated hosted-mode user is redirected or blocked from protected
-  routes: `/dashboard`, `/library/*`, `/studio`, `/settings`,
-  `/projects/:projectId/storyboard`, `/projects/:projectId/watch`, and
+- Landing prompt validates minimum content.
+- Account-choice modal opens on submit.
+- Create-account path should preserve and resume the pending prompt through
+  `/signup`. Current implementation stores `pendingLandingPrompt`, while the
+  auth form resumes `pendingQuickStart`, so the automatic post-signup run start
+  remains a product/test gap.
+- Guest path calls anonymous sign-in and respects guest run limits.
+- Successful quick-start creates a project/run and navigates to
   `/projects/:projectId/runs/:runId`.
-- Local dev/auth-disabled mode can access protected app surfaces and resolves
-  `/api/v1/me` to a deterministic workspace.
-- Supabase-hosted login succeeds, persists browser session, exposes the account
-  in settings, and sign-out clears the session and returns to public state.
-- Invalid login and unconfirmed email errors surface readable messages.
-- Redirect compatibility works: `/projects`, `/runs`, `/assets`, `/outputs`,
-  `/evals`, `/projects/new`, and bare `/library` land on the intended SPA route.
-- Unknown routes render the not-found placeholder.
-
-Primary API contracts involved:
-
-- `GET /api/v1/health`
-- `GET /api/v1/me`
-- Supabase browser auth calls
-
-Current gap:
-
-- No executable browser auth/routing coverage exists.
-
-### 2. Studio Draft and Prompt-Only Generation Happy Path
-
-Critical flows:
-
-- Opening `/studio` shows the empty state and can create a persisted draft.
-- A user can fill the brief step, move through source footage, story direction,
-  generation setup, and review setup without losing state.
-- Draft state persists through reload and can be resumed from `/studio?draft=...`.
-- Starting generation creates or reuses a project, starts a prompt-only or fully
-  mocked generation run, and navigates to
-  `/projects/:projectId/runs/:runId?studioDraft=...`.
-- The progress view polls the run, updates stage/status UI, and redirects back
-  to `/studio?draft=...&step=review` when a studio-linked run succeeds.
-- The review view loads the generated project, latest timeline artifact, clips,
-  and segment notes.
-
-Primary API contracts involved:
-
-- `GET/POST /api/v1/workspaces/:workspaceId/studio-drafts`
-- `GET/PUT/DELETE /api/v1/workspaces/:workspaceId/studio-drafts/:draftId`
-- `GET/POST /api/v1/projects`
-- `POST /api/v1/projects/:projectId/generation-entrypoints/prompt`
-- `GET /api/v1/projects/:projectId/generation-runs/:runId`
-- `GET /api/v1/projects/:projectId/artifacts/:artifactId`
-- `GET /api/v1/projects/:projectId/timelines/latest`
-- `GET /api/v1/workspaces/:workspaceId/assets`
-
-Current gap:
-
-- Backend tests cover pieces of run creation and orchestration, but no browser
-  test proves the wizard, draft persistence, run creation, polling, and review
-  handoff work as one flow.
-
-### 3. Uploaded-Footage Generation Path
-
-Critical flows:
-
-- In Studio, choose uploaded footage mode, attach one or more test media files,
-  and submit the flow.
-- Upload registration creates asset rows, stores media through the configured
-  local/object store adapter, and returns a job.
-- Starting the uploaded-footage generation run includes the selected asset IDs
-  and lands on the progress page.
-- The Library assets tab shows uploaded assets and the generated run references
-  them.
-
-Primary API contracts involved:
-
-- `POST /api/v1/projects/:projectId/uploads`
-- `POST /api/v1/projects/:projectId/generation-entrypoints/uploaded-footage`
-- `GET /api/v1/workspaces/:workspaceId/assets`
-- `GET /api/v1/workspaces/:workspaceId/generation-runs`
-
-Current gap:
-
-- `/uploads` is currently browser-local staging only. Persisted upload behavior
-  is reachable through the Studio/API path, but there is no e2e fixture proving
-  file selection, upload registration, storage URL generation, and generation
-  start together.
-
-### 4. Run Progress, Review Gates, and Recovery
-
-Critical flows:
-
-- A queued/running run displays stage rail/checklist progress and continues
-  polling while non-terminal.
-- Canceling an ungated run posts the cancel action, updates terminal UI, and
-  clears the last-run hint.
-- A review-gated run exposes approve/reject controls, posts the selected action
-  with optional note, clears the note on success, and resumes polling.
-- Failed run displays terminal failure details and keeps navigation back to
-  Studio available.
-- A progress page opened before data is loaded displays the last-run recovery
-  hint from browser storage.
-
-Primary API contracts involved:
-
-- `GET /api/v1/projects/:projectId/generation-runs/:runId`
-- `POST /api/v1/projects/:projectId/generation-runs/:runId/approve`
-- `POST /api/v1/projects/:projectId/generation-runs/:runId/reject`
-- `POST /api/v1/projects/:projectId/generation-runs/:runId/cancel`
-
-Current gap:
-
-- API tests cover orchestrator-run actions, but the UI polling/action/recovery
-  behavior has no end-to-end coverage.
-
-### 5. Review, Timeline Revision, and Export
-
-Critical flows:
-
-- Review loads the latest generated timeline and clips.
-- Inline segment edits update the preview/export state in the browser.
-- Submitting review feedback posts a timeline revision request and surfaces
-  pending/error/success states.
-- Export step starts an MP4 export with quality, duration policy, and captions
-  settings.
-- Export polling detects completion and loads the resulting artifact.
-- Completed export appears in Library outputs and the project watch page plays
-  the output.
-
-Primary API contracts involved:
-
-- `POST /api/v1/projects/:projectId/timelines/:timelineId/revisions`
-- `POST /api/v1/projects/:projectId/timelines/:timelineId/exports`
-- `GET /api/v1/projects/:projectId/exports/:jobId`
-- `GET /api/v1/projects/:projectId/artifacts/:artifactId`
-- `GET /api/v1/workspaces/:workspaceId/outputs`
-- `GET /api/v1/projects/:projectId/watch`
-
-Current gap:
-
-- Timeline/export backend coverage exists in service-level tests, but no e2e
-  test verifies the UI can revise, export, poll, list the output, and play it.
-
-### 6. Library Collections
-
-Critical flows:
-
-- `/library` redirects to `/library/projects`.
-- Projects tab loads project cards, paginates with "Load more", opens
-  storyboard links, and filters runs by project through query string links.
-- Runs tab filters by status, paginates, and opens a run progress page.
-- Assets tab filters by kind/source, opens the media viewer, refreshes missing
-  media URLs, toggles public/private visibility with optimistic update and
-  rollback on failure, and navigates to project-scoped views.
-- Outputs tab opens the media viewer, paginates, and navigates to Watch and
-  project links.
-- Empty, loading, and API error states render with retry controls.
-
-Primary API contracts involved:
-
-- `GET /api/v1/projects`
-- `GET /api/v1/workspaces/:workspaceId/generation-runs`
-- `GET /api/v1/workspaces/:workspaceId/assets`
-- `GET /api/v1/workspaces/:workspaceId/outputs`
-- `GET /api/v1/assets/:assetId/media`
-- `PATCH /api/v1/projects/:projectId/assets/:assetId/visibility`
-
-Current gap:
-
-- Dashboard collection query hooks have no browser tests for pagination,
-  filters, cache invalidation, optimistic mutation, or media viewer behavior.
-
-### 7. Storyboard Editor
-
-Critical flows:
-
-- Project storyboard page loads an existing storyboard or creates an editable
-  default when no storyboard exists.
-- User can edit scene fields, add/remove/reorder scenes, edit beats,
-  add/remove/reorder beats, move beats across scenes, and save.
-- Save writes the storyboard, updates status to saved, invalidates library
-  project state, and reloads persisted data correctly on page refresh.
-- Missing project/storyboard errors link back to Studio.
-
-Primary API contracts involved:
-
-- `GET /api/v1/projects/:projectId/storyboard`
-- `PUT /api/v1/projects/:projectId/storyboard`
-- Storyboard route-group endpoints for scenes, beats, and panels where richer
-  editor flows start using them.
+- Missing provider keys surface a readable configuration error.
 
 Current coverage:
 
-- `apps/web/e2e/storyboard-editor.spec.ts` loads a seeded storyboard, edits
-  scene and beat fields, adds a scene, adds/removes beats, moves a beat across
-  scenes, saves through the real `PUT /api/v1/projects/:projectId/storyboard`
-  client path, and reloads to verify persisted data renders.
+- Not covered end to end. Some auth and run-progress pieces are covered
+  separately.
 
-Remaining gap:
+Recommended next test:
 
-- API storyboards have tests, and the editor has initial browser coverage, but
-  richer reorder permutations and Supabase-backed sandbox seeding are still not
-  covered.
+- Add a mock-backed quick-start test after the pending-prompt state keys are
+  unified: submit the landing prompt, sign up, assert pending prompt resume, stub
+  the run-start API, and land on progress.
 
-### 8. Project Watch
+### 3. Run Progress, Review Gates, And Recovery
 
-Critical flows:
+Covered:
 
-- Project with render media loads `/projects/:projectId/watch`, shows metadata,
-  and renders a playable `<video>` with poster when available.
-- Project without render media redirects to the storyboard fallback URL.
-- API errors render an actionable error panel.
-- Storyboard and Library links preserve useful navigation.
+- Active, gated, failed, and succeeded progress states.
+- Approve, reject, and cancel actions.
+- Review notes clear on success.
+- Loading state shows stored recovery hint.
+- Targeted generated-asset feedback modal opens and posts the revision action.
 
-Primary API contracts involved:
+Remaining gaps:
 
-- `GET /api/v1/projects/:projectId/watch`
+- Supabase-backed seeded run fixtures are not used yet.
+- Live orchestrator/provider progress is intentionally not part of the required
+  browser suite.
 
-Current gap:
+### 4. Library Collections
 
-- No browser coverage proves video element rendering, fallback redirects, or
-  watch-page error handling.
+Covered:
 
-### 9. Evals Dashboard and Admin Workbench
+- Projects/runs/assets/outputs route viability with seeded fixtures.
+- Pagination and filters.
+- Media viewer behavior.
+- Visibility mutation flow.
+- Watch/project links.
 
-Critical flows:
+Remaining gaps:
 
-- `/library/evals` and `/evals` redirect/load the eval suite dashboard.
-- Suite cards load, selecting latest run populates the cases-by-stages grid,
-  verdict flips, and calibration panels.
-- API failure states for suites, run detail, and diffs show retry/error UI.
-- Admin access control blocks `/admin/evals` for non-admin hosted users and
-  allows local/admin users.
-- Workbench "Run judge" posts a judgment, updates the card badge/rationale, and
-  surfaces failures.
+- Real Supabase fixture seeding and teardown.
+- More asset media edge cases: expired signed URLs, missing private objects,
+  public/private discovery leakage.
 
-Primary API contracts involved:
+### 5. Storyboard Editor And Project Pages
 
-- `GET /api/v1/eval/suites`
-- `GET /api/v1/eval/runs/:runId`
-- `GET /api/v1/eval/runs/:runId/diff?against=...`
-- `POST /api/v1/eval/judgments`
+Covered:
 
-Current gap:
+- Storyboard route renders the dedicated storyboard page and empty state for a
+  project without a storyboard.
 
-- The dashboard has a real client but no e2e coverage. The admin workbench still
-  seeds artifacts from fixtures because bounded generation workbench execution
-  is not fully wired; e2e should cover the current judgment action now and add
-  live workbench-run coverage once `prompts_only` + `stopAfter` is implemented.
+Remaining gaps:
 
-### 10. Secondary UI Surfaces
+- Project detail route coverage is thin.
+- Seeded storyboard loading, scene/beat edits, save, and reload persistence are
+  not covered by the current browser spec.
+- Adding/removing/moving beats, reorder permutations, and relational storyboard
+  API surfaces are not fully exercised.
+- Watch page video playback/fallback behavior has limited coverage.
 
-Critical flows:
+### 6. Evals And Admin
 
-- Settings loads workspace/account state, toggles theme, links to secondary
-  surfaces, and signs out when hosted auth is active.
-- Uploads page stages local image/video/audio files, updates counts/size, opens
-  media viewer, navigates previous/next, and removes staged files.
-- Templates page renders all template groups/cards and template links redirect
-  through the retired `/projects/new` compatibility path to Studio.
-- Brand kit page updates name/color/font/tone preview and generated prompt
-  summary.
-- Admin landing page renders the operator/style guide surface.
-- Dev routes render in development mode if they remain intentionally reachable.
+Covered:
 
-Primary API contracts involved:
+- Eval dashboard route and admin workbench judgment action.
+- Manual judgment updates visible card state.
 
-- `GET /api/v1/me`
-- Supabase sign-out for hosted auth
+Remaining gaps:
 
-Current gap:
+- Hosted admin/non-admin permission checks.
+- Live bounded-generation eval runs once backing functionality is complete.
 
-- These pages have no automated smoke coverage. Several are local-only or
-  placeholder surfaces, so smoke tests should focus on route viability and basic
-  interactions until persistence/API contracts are added.
-
-### 11. Public API and Developer Harness
+### 7. Secondary Surfaces
 
 Critical flows:
 
-- Public health returns JSON and never requires auth.
-- Discover endpoints return provider/capability metadata needed by clients.
-- Dev tool-test harness is mounted only when explicitly enabled and never in
-  production mode.
-- Protected API endpoints reject unauthenticated hosted-mode requests with the
-  standard error envelope.
-- API client detects accidental HTML responses from bad `VITE_API_URL` or
-  production redirect misconfiguration.
+- Settings theme/account/sign-out.
+- Uploads local staging and media viewer.
+- Templates route and template action redirects.
+- Brand Kit local preview state.
+- Anchors catalog, owned anchors, and anchor detail.
+- Dev design-system/generation-card routes when intentionally reachable.
 
-Primary API contracts involved:
+Current coverage:
 
-- `GET /api/v1/health`
-- `GET /api/v1/discover/*`
-- `GET/POST /api/v1/dev/tool-tests` when enabled
-- Error-envelope behavior across protected route groups
+- Some protected route viability is covered.
+- Detailed interactions are mostly manual-only.
 
-Current gap:
+Recommended next test:
 
-- API route tests exist, but no e2e smoke asserts deployed-style public versus
-  protected routing, auth middleware boundaries, or HTML-response guardrails.
+- Add `secondary-surfaces.spec.ts` for Settings theme persistence, Uploads file
+  staging, Templates route actions, Brand Kit local state, and Anchors empty/data
+  states.
 
-## Prioritized E2E Gaps
+### 8. Storage And Asset Sharing
 
-P0 gaps:
+Current coverage:
 
-- The first `apps/web` Playwright harness exists, but CI coverage is still
-  missing. Add API startup orchestration, deterministic env files, broader
-  fixtures, and a required smoke command.
-- Browser e2e does not yet consume the new Supabase test-sandbox lifecycle.
-  Extend the existing tool-test sandbox approach for web fixtures: create a
-  sandbox row, seed real rows under its `internal_test` workspace/project, and
-  call `delete_test_sandbox()` during teardown.
-- No split-app auth e2e exists. Cover local mode immediately and hosted Supabase
-  mode behind test credentials/secrets.
-- No generation happy path exists from Studio through progress and review.
-  Implement a mock/prompt-only generation fixture before attempting provider
-  backed tests.
-- No deploy-style `/api` routing smoke exists. This is high risk because the
-  API client explicitly guards against receiving SPA HTML instead of JSON.
+- API/storage unit tests and `apps/api/scripts/storage-smoke.ts` cover pieces.
+- Manual flow is documented in `docs/manual-tests/asset-sharing.md`.
 
-P1 gaps:
+Remaining gaps:
 
-- Run progress actions are uncovered: approve, reject, cancel, failed state,
-  terminal success, and recovery hint.
-- Library collections are uncovered: pagination, filters, media viewer,
-  visibility mutation, media URL refresh, and output watch links.
-- Storyboard editing has initial Playwright coverage for load, edit,
-  add/remove, cross-scene beat movement, save, and reload; remaining work is
-  broader reorder permutations and Supabase-backed sandbox fixtures.
-- Review revision/export/watch is uncovered end to end.
-- Eval dashboard and judgment action are uncovered.
+- Browser-level public/private asset URL lifecycle is not required in E2E.
+- MinIO-backed smoke is not part of default CI.
 
-P2 gaps:
+### 9. Export And Watch
 
-- Secondary pages have no route/interactivity smoke tests.
-- Accessibility and keyboard checks are not embedded in e2e flows.
-- Responsive desktop/mobile browser checks do not exist for the dense library,
-  studio, storyboard, progress, and media viewer surfaces.
-- Error-path tests are inconsistent: many backend units assert errors, but UI
-  retry/error states are not exercised in a browser.
+Critical flows:
 
-## Suggested Initial Test Set
+- Timeline export request starts.
+- Export polling reaches terminal success/failure.
+- Output appears in Library outputs.
+- Watch page plays the exported video or falls back to storyboard/error state.
 
-Start with a small required suite that runs quickly in CI:
+Current coverage:
 
-1. `auth-and-routing.spec.ts`
-   - health JSON, local auth access, protected route availability, redirects,
-     not found.
-2. `studio-generation-smoke.spec.ts`
-   - create draft, complete prompt-only setup, start mocked run, observe progress,
-     finish to review.
-3. `run-progress-actions.spec.ts`
-   - seeded running/gated/failed runs, approve/reject/cancel and recovery hint.
-4. `library-collections.spec.ts`
-   - seeded projects/runs/assets/outputs, filters, pagination, media viewer,
-     visibility toggle, watch link.
-5. `storyboard-editor.spec.ts`
-   - load, edit scenes/beats, save, reload persisted storyboard.
-6. `export-watch.spec.ts`
-   - seeded review timeline, request revision, start mocked export, poll
-     completion, verify output appears and watch page renders video.
-7. `evals.spec.ts`
-   - suite dashboard, run grid, diff panel, admin workbench judgment.
-8. `secondary-surfaces.spec.ts`
-   - settings theme/sign-out availability, uploads local staging, templates,
-     brand kit, admin landing.
+- Watch links are covered at Library level.
+- End-to-end export is not covered.
 
-## Fixture Requirements
+Remaining gaps:
 
-- Stable local user/workspace identity for `AUTH_MODE=local`.
-- Supabase-backed fixture helpers should use service-role access only for setup
-  and teardown, create `test_sandboxes` rows, label workspaces as
-  `internal_test`, and delete via `delete_test_sandbox()` so fixture data cannot
-  leak into user/public queries.
-- API helpers to seed within the current local DB or sandbox:
-  - project with and without storyboard
-  - storyboard with multiple scenes/beats
-  - queued/running/gated/succeeded/failed/canceled generation runs
-  - assets with image/video/audio kinds, generated/uploaded sources, public and
-    private visibility, missing media URL, and valid media URL
-  - timeline with clips and an exportable artifact
-  - output artifact with playable tiny MP4 fixture or stable test media URL
-  - eval suite, run, judgments, and verdict flips
-- Mock provider mode that can complete generation/export without external model,
-  storage, or render-provider dependencies.
-- Optional hosted-auth credentials for a non-admin user and an admin user, kept
-  outside the default required smoke suite.
+- Need a mock export fixture and tiny playable video fixture.
+- Provider/render-backed export should remain optional.
 
-## Acceptance Criteria for Closing the Gaps
+## Prioritized Gaps
 
-- `pnpm --filter @popcorn/web test:e2e` or equivalent starts the web/API stack,
-  seeds deterministic data, runs Playwright, and exits cleanly.
-- CI runs the P0 smoke suite on every PR.
-- Every active SPA route has at least one route-level smoke assertion.
-- Every user-owned persistence surface has at least one write-then-reload e2e:
-  studio draft, project/storyboard, asset visibility, generation action,
-  timeline revision/export, and eval judgment.
-- At least one test proves the API returns JSON through the same base URL shape
-  the browser uses.
-- Provider-backed long-running e2e remains optional and separate from required
-  CI, but the mock path exercises the same UI and API contracts.
+P0:
+
+- Add a local Supabase signup/onboarding E2E that creates a fresh user and
+  verifies `/api/v1/me` returns `authMode: "supabase"` and `isLocal: false`.
+- Add landing quick-start create-account flow with mocked run creation.
+- Keep `pnpm test:e2e:local-db` healthy and run it before changes touching auth,
+  Supabase env, route protection, or store setup.
+
+P1:
+
+- Add secondary-surfaces smoke coverage.
+- Add project detail/watch page coverage.
+- Move more mocked Library/Run fixtures toward Supabase test-sandbox fixtures.
+- Add hosted admin/non-admin permission coverage behind secrets.
+
+P2:
+
+- Add responsive desktop/mobile variants for dense Library, Storyboard, Run
+  Progress, and media viewer surfaces.
+- Add accessibility checks for focus order, keyboard controls, and reduced
+  motion where relevant.
+- Add optional provider-backed generation/export smoke jobs.
+
+## Acceptance Criteria For Closing This Inventory
+
+- Every active SPA route has at least one route-level browser assertion.
+- Local-first DB smoke proves migrations, seed data, API env, Vite env, and
+  browser auth can work together.
+- At least one browser test creates a real Supabase user locally and verifies
+  the API resolves the domain user identity.
+- Landing quick-start has one mocked run-creation E2E path.
+- Every persisted user-owned surface has a write-then-reload browser test:
+  account/session, project/storyboard, asset visibility, run action, eval
+  judgment, and eventually export.
+- Provider-backed tests are optional and separate from the required smoke suite.

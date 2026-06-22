@@ -15,6 +15,7 @@ import { EmptyState, ErrorState } from "../components/ui/StateCard";
 import { ImageWithSkeleton } from "../components/ui/ImageWithSkeleton";
 import { VisibilityBadge } from "../components/ui/VisibilityBadge";
 import { MediaViewer, type MediaViewerItem } from "../components/media/MediaViewer";
+import { AssetImage } from "../components/media/AssetImage";
 import { RegenerateImageButton } from "../components/media/RegenerateImageButton";
 import {
   useAssetMediaMutation,
@@ -647,22 +648,21 @@ export function AssetsPage() {
 
 function AssetPreview({ asset }: { asset: WorkspaceAsset }) {
   // Rows can reference media whose bytes are gone (pre-storage-cutover dev
-  // assets); degrade to the kind placeholder instead of a broken-image glyph.
-  // Failures are keyed to the URL that failed (not a sticky flag) so a
-  // refreshed signed URL on the same mounted card retries automatically, and
-  // a failed video src still falls through to its thumbnail.
-  const [failedSrc, setFailedSrc] = useState<string | null>(null);
-  const imageSrc = asset.thumbnailUrl ?? asset.url;
-  if (asset.kind === "image" && imageSrc && imageSrc !== failedSrc) {
-    return <ImageWithSkeleton className={styles.media} src={imageSrc} alt="" loading="lazy" onError={() => setFailedSrc(imageSrc)} />;
-  }
-  if (asset.kind === "video" && asset.url && asset.url !== failedSrc) {
-    return <video className={styles.media} src={asset.url} poster={asset.thumbnailUrl} muted playsInline preload="metadata" onError={() => setFailedSrc(asset.url ?? null)} />;
-  }
-  if (asset.kind === "video" && asset.thumbnailUrl && asset.thumbnailUrl !== failedSrc) {
-    return <ImageWithSkeleton className={styles.media} src={asset.thumbnailUrl} alt="" loading="lazy" onError={() => setFailedSrc(asset.thumbnailUrl ?? null)} />;
-  }
-  return <div className={`${styles.media} ${styles.mediaEmpty}`}><span>{titleCase(asset.kind)}</span></div>;
+  // assets); AssetImage degrades to the kind placeholder on error instead of a
+  // broken-image glyph. Recovery is disabled here because the surrounding card
+  // is a <button>; the grid renders a sibling regenerate overlay (cardRegen).
+  return (
+    <AssetImage
+      kind={asset.kind === "video" ? "video" : asset.kind === "audio" ? "audio" : "image"}
+      url={asset.url}
+      thumbnailUrl={asset.thumbnailUrl}
+      status={asset.status}
+      mediaClassName={styles.media}
+      placeholderClassName={`${styles.media} ${styles.mediaEmpty}`}
+      placeholder={<span>{titleCase(asset.kind)}</span>}
+      allowRegenerate={false}
+    />
+  );
 }
 
 export function OutputsPage() {

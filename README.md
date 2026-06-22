@@ -155,50 +155,41 @@ local Postgres.
 See [`supabase/README.md`](supabase/README.md) for the hosted-vs-local migration
 commands.
 
-The home page (`/`) is the marketing landing page: it explains the product, lets
-you create a 30-second video from a single prompt (with template chips to start
-from), lists hosted pricing, and links to GitHub for self-hosting. Submitting the
-prompt opens the studio (`/studio`) and **one-shots** the video: it plans beats,
-generates a visual for each beat, and cuts a timeline — no uploads required.
+The home page (`/`) is the public landing page and current creation entry point.
+It lets a visitor describe a video, choose a target length, and either create an
+account or continue as a guest. The quick-start flow creates a project/run and
+lands on `/projects/:projectId/runs/:runId`.
 
-The one-shot generates a real **video clip per beat** (Gemini Veo when
-`GEMINI_API_KEY` is set, OpenAI Sora when `OPENAI_API_KEY` is set), so you get an
-actual moving 30-second video. With no video-capable provider key, the request
-returns a clear configuration error instead of falling back to still images. If
-`ELEVENLABS_API_KEY` is set, one-shot also generates an AI-selected instrumental
-music bed for the cut. You can also go straight to `/studio` to bring your own
-clips with the full editor below.
+Generation uses the configured provider stack. Gemini Veo, OpenAI Sora, NVIDIA
+Cosmos, ElevenLabs, and image providers are enabled only when their keys are set;
+otherwise generation should fail with a clear configuration error. Existing work
+is reviewed from the dashboard, Library collections, project detail,
+storyboard, watch, and run-progress routes. The older `/studio` wizard route is
+not currently mounted in the Vite app.
 
-1. Upload a handful of video or image assets. Add a short description for each —
-   in this MVP the AI reasons over the **filename + your description + duration**
-   (real transcription/vision analysis is the documented next step, not in this
-   slice).
-2. If the library is missing a visual, use **Generate missing asset** to create
-   an image or short video asset. OpenAI is live when `OPENAI_API_KEY` is set;
-   Gemini video generation is live when `GEMINI_API_KEY` is set; NVIDIA API
-   Catalog Cosmos3 Nano video generation is live when `NVIDIA_API_KEY` is set.
-   ElevenLabs audio generation is live when `ELEVENLABS_API_KEY` is set.
-3. Write a creative goal, set length/aspect/style, and **Generate rough cut**.
-4. Inspect the plan, timeline, and critic scores; preview plays in the browser.
-5. **Revise (chat)**: "make it punchier", "shorten to 15s", "add captions",
-   "use less talking head". Each message is turned into timeline patches.
-6. **Export MP4**: renders the real cut of your clips via Remotion. The first
-   export downloads a headless browser, so it takes a bit longer.
+Typical current flow:
 
-## Scope / limitations (deliberate, for the MVP)
+1. Start from `/` with a prompt and length.
+2. Create an account or continue as a guest.
+3. Watch the run progress page for stage/status updates and review gates.
+4. Review generated work from `/dashboard`, `/library/*`, project detail, or
+   storyboard/watch routes.
+5. Use asset/project visibility, storyboard editing, and run review actions from
+   their current surfaces.
+
+## Scope / limitations
 
 - Clip understanding is description-based — no FFmpeg proxies, Whisper
   transcription, vision tagging, or embeddings yet. Those are the "real
   analysis" extension from the architecture doc.
-- Single project, file-based store (no Postgres/pgvector, no auth, no queue).
-- Critic runs one pass on generate; the full critique→re-render loop and
-  multiple rough-cut variants are future work.
-- Gemini image generation and NanoBanano provider adapters are placeholders in
-  this pass.
+- Local development can use either the JSON file store (`DB_BACKEND=local`) or a
+  true local Supabase/Postgres database (`DB_BACKEND=supabase` with
+  `pnpm db:local:start`).
+- Some rich creation/editor surfaces are still being migrated from the retired
+  Studio wizard into the split app.
 - Generated audio is saved as an asset but is not yet mixed into exported
   timelines. Audio clips are excluded from visual clip selection prompts.
-- MP4 export requires the dev server running (Remotion fetches the uploaded
-  clips over `http://localhost:3000`).
+- Provider-backed generation/export requires the relevant provider keys.
 
 ## Productionization docs
 
@@ -251,19 +242,6 @@ and output path with `VIDEO_GENERATION_SMOKE_PROMPT`,
 
 ## Project layout
 
-```
-src/
-  app/                Next.js App Router (landing + studio + API routes)
-    page.tsx          marketing landing page (/)
-    studio/page.tsx   the editor (/studio); ?goal=&length=&autostart=1 one-shots
-    api/{project,upload,generate,oneshot,generate-assets,revise,export}/route.ts
-  components/         Editor (UI) + Preview (Remotion Player)
-  lib/
-    agent/            planEdit / selectClips / critique / revise + JSON schemas
-    anthropic.ts      Claude client + structured JSON call helper
-    timeline.ts       patch engine + prompt formatting
-    types.ts          Timeline / Plan / Patch / Clip types
-    store.ts          JSON-file project store
-    generative/       provider abstraction + OpenAI and Gemini adapters
-  remotion/           VideoComposition + registered root for render/preview
-```
+See [`docs/repository-structure.md`](docs/repository-structure.md) for the
+current monorepo map. Active app code lives in `apps/web`, `apps/api`, and
+`packages/*`; the legacy `src/` tree is being retired.
