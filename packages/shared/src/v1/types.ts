@@ -74,6 +74,7 @@ export interface StoryboardPanel {
   panelIndex: number;
   imageAssetId: string | null;
   promptAssetId: string | null;
+  prompt?: string;
   url?: string;
   thumbnailUrl?: string;
   status: StoryboardItemStatus;

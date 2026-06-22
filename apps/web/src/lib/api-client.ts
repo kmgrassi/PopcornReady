@@ -290,6 +290,7 @@ export interface WorkspaceAsset {
   filename?: string;
   title?: string;
   description?: string;
+  prompt?: string;
   promptPreview?: string;
   url?: string;
   thumbnailUrl?: string;

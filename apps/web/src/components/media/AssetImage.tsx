@@ -173,7 +173,7 @@ export function AssetImage({
       )}
       {recoverable ? (
         <div className={styles.recovery}>
-          <RegenerateImageButton assetId={assetId as string} initialPrompt={prompt} />
+          <RegenerateImageButton assetId={assetId as string} prompt={prompt} />
         </div>
       ) : null}
     </div>

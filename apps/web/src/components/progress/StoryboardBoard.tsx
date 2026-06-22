@@ -28,6 +28,7 @@ interface Tile {
   key: string;
   label: string;
   intent?: string | null;
+  prompt?: string | null;
   sceneLabel?: string | null;
   item?: GenerationStageItem;
   scene?: StoryboardScene;
@@ -81,6 +82,7 @@ function storyboardTiles(
         key,
         label: `Beat ${beat.beatIndex + 1}`,
         intent: beat.intent || beat.visualDescription,
+        prompt: panel?.prompt ?? item?.promptPreview,
         sceneLabel: scene.title || `Scene ${scene.sceneIndex + 1}`,
         item,
         scene,
@@ -110,6 +112,7 @@ function itemTiles(runId: string, items: GenerationStageItem[]): Tile[] {
     key: item.itemId,
     label: item.label || `Frame ${index + 1}`,
     intent: item.promptPreview,
+    prompt: item.promptPreview,
     item,
     target: {
       scope: "tile",
@@ -210,7 +213,10 @@ export function StoryboardBoard({
               </button>
               {canRegenerate && regenAssetId ? (
                 <div className={styles.tileRegen}>
-                  <RegenerateImageButton assetId={regenAssetId} initialPrompt={tile.intent} />
+                  <RegenerateImageButton
+                    assetId={regenAssetId}
+                    prompt={tile.prompt ?? tile.intent}
+                  />
                 </div>
               ) : null}
             </div>
