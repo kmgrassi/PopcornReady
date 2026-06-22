@@ -452,24 +452,31 @@ export interface ExportJobResponse {
   job: ExportJob;
 }
 
-export interface StoryboardGenerationJobResponse {
-  job: {
-    id: string;
-    type: "asset_generation";
-    status: JobStatus;
-    projectId: string;
-    step?: string;
-    result?: {
-      assetIds?: string[];
-      storyboardId?: string;
-    };
-    error?: {
-      code: string;
-      message: string;
-    };
-    createdAt: string;
-    updatedAt: string;
+export interface StoryboardGenerationJob {
+  id: string;
+  type: "asset_generation";
+  status: JobStatus;
+  projectId: string;
+  step?: string;
+  result?: {
+    assetIds?: string[];
+    storyboardId?: string;
   };
+  error?: {
+    code: string;
+    message: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StoryboardGenerationJobResponse {
+  job: StoryboardGenerationJob;
+}
+
+// The latest job may be absent (generation never started for this project).
+export interface ProjectStoryboardJobResponse {
+  job: StoryboardGenerationJob | null;
 }
 
 export interface ExportArtifactResponse {
@@ -646,13 +653,11 @@ export const v1Api = {
         },
       }
     ),
-  getProjectStoryboardGenerationJob: (
-    projectId: string,
-    jobId: string,
-    signal?: AbortSignal
-  ) =>
-    apiRequest<StoryboardGenerationJobResponse>(
-      `/api/v1/projects/${encodeURIComponent(projectId)}/storyboards/generate/${encodeURIComponent(jobId)}`,
+  // Latest storyboard generation job for the project (or null). Reload-safe —
+  // does not depend on a client-held job id.
+  getProjectStoryboardJob: (projectId: string, signal?: AbortSignal) =>
+    apiRequest<ProjectStoryboardJobResponse>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/storyboards/generate`,
       { signal }
     ),
   getProjectWatch: (projectId: string, signal?: AbortSignal) =>
