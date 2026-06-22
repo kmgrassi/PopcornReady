@@ -58,13 +58,23 @@ Two columns are missing for this scope:
 Image storage is **S3-backed** via the `ObjectStore` interface in
 [apps/api/src/lib/storage/object-store.ts](../../apps/api/src/lib/storage/object-store.ts):
 `createObjectStore().putObject({ key, body, visibility, contentType })` writes to
-the public or private bucket; `resolveAssetUrl(...)`
-([asset-urls.ts](../../apps/api/src/lib/storage/asset-urls.ts)) returns a stable
-public URL (or CloudFront/S3-presigned for private). Config + `local` dev backend
-live in [config.ts](../../apps/api/src/lib/storage/config.ts). Avatars are
-**public**: upload to the public bucket under a stable key
-(`avatars/{userId}/{contentHash}.{ext}`), persist the key, deliver the stable
-public URL. No new storage infra.
+the public or private bucket, and `objectUrl(key, "public")` returns the stable
+public URL (`publicUrlBase/key`). Config + `local` dev backend live in
+[config.ts](../../apps/api/src/lib/storage/config.ts). Avatars are **public**:
+upload to the public bucket under a stable key
+(`avatars/{userId}/{contentHash}.{ext}`), persist the key, and deliver via
+`objectUrl(key, "public")`. No new storage infra.
+
+**Do not route avatars through `resolveAssetUrl`.** That helper
+([asset-urls.ts](../../apps/api/src/lib/storage/asset-urls.ts) L78–87) is shaped
+for `assets`-table rows: it only emits a public URL when the record carries
+**both** `storage_bucket` **and** `visibility: "public"`, otherwise it falls
+through to private S3 presigning. An avatar persists only `avatar_storage_key` on
+`public.users` (no bucket/visibility columns), so passing it to `resolveAssetUrl`
+would resolve to a private presigned URL (or fail) instead of the stable public
+one. Avatars are public-bucket objects on a non-asset table — build their URL
+directly with the public `ObjectStore.objectUrl(key, "public")` path. (Flagged by
+Codex review; see the Avatar delivery section below.)
 
 ### API + auth
 
@@ -101,15 +111,18 @@ public URL. No new storage infra.
 ### PR 2 — API: read + update profile
 
 - `GET /api/v1/me/profile` → `{ id, email, fullName, bio, avatarUrl, tier }`
-  where `avatarUrl` is resolved via display precedence (uploaded key → provider
-  `avatar_url` → null; initials computed client-side). Reads through
+  where `avatarUrl` follows the display precedence below: if
+  `avatar_storage_key` is set, resolve it with `objectUrl(key, "public")` (the
+  stable public-bucket URL — **not** `resolveAssetUrl`); else the provider
+  `avatar_url`; else `null` (initials computed client-side). Reads through
   `getRequestSupabase()` (own row only).
 - `PATCH /api/v1/me/profile` → updates `full_name`, `bio`. Validates lengths
   (e.g. name ≤ 120, bio ≤ 280). Returns the updated projection.
 - `POST /api/v1/me/avatar` (multipart) → validate image type/size (e.g. ≤ 5 MB,
-  png/jpeg/webp), `putObject` to the public bucket at
-  `avatars/{userId}/{hash}.{ext}`, persist `avatar_storage_key`, return resolved
-  URL. (Optional `DELETE /api/v1/me/avatar` to clear back to provider/initials.)
+  png/jpeg/webp), `putObject({ visibility: "public" })` to the public bucket at
+  `avatars/{userId}/{hash}.{ext}`, persist `avatar_storage_key`, return the
+  `objectUrl(key, "public")` URL. (Optional `DELETE /api/v1/me/avatar` to clear
+  back to provider/initials.)
 - Register all three in `protected-routes.ts`. Unit tests for validation +
   RLS-own-row behavior.
 
@@ -133,11 +146,15 @@ public URL. No new storage infra.
 
 ## Avatar display precedence (single source of truth)
 
-1. `avatar_storage_key` present → resolved public S3 URL.
+1. `avatar_storage_key` present → public-bucket URL via
+   `ObjectStore.objectUrl(key, "public")` (or the `local`-backend equivalent).
+   **Not** `resolveAssetUrl` — see the Storage section for why.
 2. else `avatar_url` (provider value from signup) if present.
 3. else initials derived from `full_name`/`email` (client-side).
 
-Both the Settings Profile section and the topbar chip use this same rule.
+The API computes 1–2 server-side and returns a single `avatarUrl`; the client
+applies 3. Both the Settings Profile section and the topbar chip consume that
+same `avatarUrl`.
 
 ## Open questions
 
