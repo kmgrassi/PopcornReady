@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 import { providerFor } from "../providers";
 
@@ -133,7 +136,7 @@ test("Ideogram provider maps v3 image options", async () => {
     assert.equal(formValue(requests[0].body, "rendering_speed"), "TURBO");
     assert.equal(formValue(requests[0].body, "magic_prompt"), "OFF");
     assert.equal(formValue(requests[0].body, "negative_prompt"), "blur, watermark");
-    assert.equal(formValue(requests[0].body, "num_images"), "2");
+    assert.equal(formValue(requests[0].body, "num_images"), "1");
     assert.equal(formValue(requests[0].body, "seed"), "123");
     assert.equal(formValue(requests[0].body, "style_type"), "DESIGN");
     assert.equal(formValue(requests[0].body, "style_preset"), "C4D_CARTOON");
@@ -141,5 +144,66 @@ test("Ideogram provider maps v3 image options", async () => {
     if (previousKey === undefined) delete process.env.IDEOGRAM_API_KEY;
     else process.env.IDEOGRAM_API_KEY = previousKey;
     globalThis.fetch = previousFetch;
+  }
+});
+
+test("Ideogram provider forces v3 when references are present", async () => {
+  const previousKey = process.env.IDEOGRAM_API_KEY;
+  const previousFetch = globalThis.fetch;
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "popcornready-ideogram-test-"));
+  const referencePath = path.join(tmpDir, "reference.png");
+  const requests: Array<{ url: string; body?: unknown; headers: Headers }> = [];
+
+  await fs.writeFile(referencePath, Buffer.from("reference-bytes"));
+  process.env.IDEOGRAM_API_KEY = "ideogram-test-key";
+  globalThis.fetch = async (input, init) => {
+    requests.push({
+      url: String(input),
+      body: init?.body,
+      headers: new Headers(init?.headers),
+    });
+
+    if (String(input).includes("/v1/ideogram-v3/generate")) {
+      return new Response(
+        JSON.stringify({
+          data: [
+            {
+              prompt: "Reference-conditioned image.",
+              url: "https://ideogram.ai/api/images/ephemeral/reference.png",
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    return new Response(Buffer.from("png-bytes"), {
+      status: 200,
+      headers: { "Content-Type": "image/png" },
+    });
+  };
+
+  try {
+    const result = await providerFor("ideogram").generateAsset({
+      provider: "ideogram",
+      kind: "image",
+      model: "ideogram-v4",
+      prompt: "Use the reference character.",
+      referencePaths: [referencePath],
+    });
+
+    assert.equal(result.model, "ideogram-v3");
+    assert.equal(requests[0].url, "https://api.ideogram.ai/v1/ideogram-v3/generate");
+    assert.equal(formValue(requests[0].body, "prompt"), "Use the reference character.");
+    assert.ok(
+      formValue(requests[0].body, "character_reference_images") instanceof Blob,
+      "reference image should be passed through to v3"
+    );
+    assert.equal(formValue(requests[0].body, "text_prompt"), null);
+  } finally {
+    if (previousKey === undefined) delete process.env.IDEOGRAM_API_KEY;
+    else process.env.IDEOGRAM_API_KEY = previousKey;
+    globalThis.fetch = previousFetch;
+    await fs.rm(tmpDir, { recursive: true, force: true });
   }
 });

@@ -99,7 +99,7 @@ function imageRequestFor(
     return { provider: "mock", kind: "image", ...base };
   }
   if (provider === "ideogram") {
-    return { provider: "ideogram", kind: "image", ...base };
+    return { provider: "ideogram", kind: "image", model: "ideogram-v3", ...base };
   }
   return { provider: "openai", kind: "image", ...base };
 }

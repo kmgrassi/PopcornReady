@@ -33,7 +33,7 @@ interface IdeogramGenerateResponse {
 }
 
 interface IdeogramImageOptions {
-  model: string;
+  model: IdeogramImageModel;
   prompt: string;
   resolution?: string;
   aspectRatio?: string;
@@ -97,18 +97,29 @@ function positiveInteger(value?: number): number | undefined {
   return Number.isFinite(rounded) && rounded > 0 ? rounded : undefined;
 }
 
+function oneImage(value?: number): number | undefined {
+  return positiveInteger(value) ? 1 : undefined;
+}
+
+function resolveIdeogramModel(
+  input: Extract<GenerateAssetRequest, { provider: "ideogram"; kind: "image" }>
+): IdeogramImageModel {
+  if ((input.referencePaths || []).length > 0) return "ideogram-v3";
+  return normalizeIdeogramModel(input.model);
+}
+
 export function buildIdeogramImageOptions(
   input: Extract<GenerateAssetRequest, { provider: "ideogram"; kind: "image" }>
 ): IdeogramImageOptions {
   return {
-    model: normalizeIdeogramModel(input.model),
+    model: resolveIdeogramModel(input),
     prompt: requirePrompt(input.prompt),
     resolution: input.resolution || input.size,
     aspectRatio: input.aspectRatio,
     renderingSpeed: normalizeSpeed(input.renderingSpeed),
     magicPrompt: normalizeMagicPrompt(input.magicPrompt),
     negativePrompt: input.negativePrompt,
-    numImages: positiveInteger(input.numImages),
+    numImages: oneImage(input.numImages),
     seed: positiveInteger(input.seed),
     styleType: normalizeStyleType(input.styleType),
     stylePreset: input.stylePreset,
@@ -197,7 +208,7 @@ async function generateIdeogramImage(
   input: Extract<GenerateAssetRequest, { provider: "ideogram"; kind: "image" }>
 ): Promise<GeneratedAssetResult> {
   const options = buildIdeogramImageOptions(input);
-  const model = normalizeIdeogramModel(options.model);
+  const model = options.model;
   const form = await buildIdeogramForm(input, options);
   const response = await ideogramFetch(endpointForModel(model), {
     method: "POST",
