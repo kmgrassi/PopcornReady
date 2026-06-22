@@ -111,11 +111,12 @@ function toWorkspaceModelSetting(row: WorkspaceModelSettingRow): WorkspaceModelS
 }
 
 export async function listWorkspaceModelSettings(
-  workspaceId: string
+  workspaceId: string,
+  options: { localDevWorkspace?: boolean } = {}
 ): Promise<WorkspaceModelSetting[]> {
   const rows = await runQuery(
     "workspaceModelSettings.list",
-    getRequestSupabase()
+    (options.localDevWorkspace ? getServiceSupabaseForStore() : getRequestSupabase())
       .from("workspace_model_settings")
       .select("purpose,provider,model,updated_at")
       .eq("workspace_id", workspaceId)
@@ -129,10 +130,11 @@ export async function upsertWorkspaceModelSetting(input: {
   purpose: ModelSettingPurpose;
   provider: string;
   model: string;
+  localDevWorkspace?: boolean;
 }): Promise<WorkspaceModelSetting> {
   const row = await runQuery(
     "workspaceModelSettings.upsert",
-    getRequestSupabase()
+    (input.localDevWorkspace ? getServiceSupabaseForStore() : getRequestSupabase())
       .from("workspace_model_settings")
       .upsert(
         {

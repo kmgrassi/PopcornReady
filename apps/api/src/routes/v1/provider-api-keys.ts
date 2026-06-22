@@ -102,7 +102,14 @@ function toProviderApiKey(row: ProviderApiKeyRow) {
 
 providerApiKeysRouter.get(
   "/provider-api-keys",
-  route(async () => {
+  route(async ({ auth }) => {
+    if (auth.isLocal) {
+      return {
+        status: 200,
+        body: { keys: [] },
+      };
+    }
+
     const rows = await runQuery(
       "providerApiKeys.list",
       getRequestSupabase()
@@ -122,7 +129,11 @@ providerApiKeysRouter.get(
 
 providerApiKeysRouter.put(
   "/provider-api-keys/:provider",
-  mutation(async ({ body }, params) => {
+  mutation(async ({ auth, body }, params) => {
+    if (auth.isLocal) {
+      throw new ApiError("unauthorized", "Sign in to manage provider API keys.");
+    }
+
     const provider = readProvider(params.provider);
     const apiKey = readKey(readBodyObject(body));
     const userId = await getCurrentAppUserId();
@@ -153,7 +164,11 @@ providerApiKeysRouter.put(
 
 providerApiKeysRouter.delete(
   "/provider-api-keys/:provider",
-  mutation(async (_ctx, params) => {
+  mutation(async ({ auth }, params) => {
+    if (auth.isLocal) {
+      throw new ApiError("unauthorized", "Sign in to manage provider API keys.");
+    }
+
     const provider = readProvider(params.provider);
     await runQuery(
       "providerApiKeys.delete",

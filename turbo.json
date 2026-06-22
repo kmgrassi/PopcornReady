@@ -3,6 +3,19 @@
   "ui": "stream",
   "globalDependencies": [".env", ".env.*"],
   "globalEnv": ["NODE_ENV"],
+  "globalPassThroughEnv": [
+    "AUTH_MODE",
+    "DB_BACKEND",
+    "PORT",
+    "STORAGE_BACKEND",
+    "SUPABASE_URL",
+    "SUPABASE_ANON_KEY",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "VITE_API_URL",
+    "VITE_SUPABASE_ENV",
+    "VITE_SUPABASE_URL",
+    "VITE_SUPABASE_ANON_KEY"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

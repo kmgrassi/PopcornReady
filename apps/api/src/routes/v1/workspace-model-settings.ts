@@ -28,7 +28,9 @@ workspaceModelSettingsRouter.get(
   "/workspaces/:workspaceId/model-settings",
   route(async ({ auth }, params) => {
     const workspaceId = requireOwnWorkspace(params.workspaceId, auth.workspaceId);
-    const settings = await listWorkspaceModelSettings(workspaceId);
+    const settings = await listWorkspaceModelSettings(workspaceId, {
+      localDevWorkspace: auth.isLocal,
+    });
     return {
       status: 200,
       body: {
@@ -50,6 +52,7 @@ workspaceModelSettingsRouter.put(
       workspaceId,
       purpose,
       ...input,
+      localDevWorkspace: auth.isLocal,
     });
     return {
       status: 200,
