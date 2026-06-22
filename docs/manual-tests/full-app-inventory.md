@@ -193,16 +193,22 @@ Creation entry:
 Brief step:
 
 - Enter a complete brief with goal, audience, desired format, and length.
-- Submit the brief with no later stop points selected.
-- Expected stop-at-brief behavior when selected: the app persists the brief,
-  shows a clear saved/review state, and does not start later generation stages.
+- For the stop-at-brief pass, select the `Stop at brief` or equivalent manual
+  pause control before submitting the brief.
+- If no explicit stop-at-brief control is present, record that as a product gap
+  and verify the interim behavior instead: leave the draft on the brief step,
+  refresh, and confirm no planning or production work starts until the tester
+  clicks Continue.
+- Expected stop-at-brief behavior: the app persists the brief, shows a clear
+  saved/review state, and does not start later generation stages.
 - Leave the flow and return from `/dashboard`; the saved brief should be
   resumable rather than lost.
 - Edit the brief, save again, refresh, and verify the latest content is shown.
 
 Planning step:
 
-- Continue from the brief into planning.
+- For the continue-to-planning pass, leave stop-at-brief unselected and continue
+  from the brief into planning.
 - Verify the plan/story outline is generated or loaded, and that errors are
   readable if provider keys are not configured.
 - Select a manual stop after planning, then continue.
