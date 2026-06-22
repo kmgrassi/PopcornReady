@@ -1,479 +1,331 @@
-# Full App Manual Testing Inventory
+# Full App Manual Testing Guide
 
-This is the starting inventory for a full manual QA pass of Popcorn Ready. It
-lists the user-visible flows a tester should cover, plus API-backed checks that
-prove those flows are connected to the active Vite SPA, Express API, Supabase,
-storage, and generation stack.
+This guide is the current manual QA pass for the active split app: Vite SPA in
+`apps/web`, Express API in `apps/api`, and Supabase-backed data/auth. It is
+meant to be runnable by a person in a browser, with focused API checks where a
+browser cannot prove the behavior alone.
 
-Use the more focused smoke docs when a flow needs deeper operational coverage:
+Use the focused smoke docs when a flow needs deeper operational coverage:
 
 - [Asset sharing](asset-sharing.md)
 - [Orchestrator tool-call smoke tests](orchestrator-tool-calls.md)
 
-## Test Matrix
+## Recommended Local Setup
 
-Run the core pass in at least these modes:
+For most manual browser testing, use a local-first Supabase database:
 
-- Local dev autopilot: `pnpm dev` or split `pnpm dev:web` and `pnpm dev:api`.
-- Authenticated hosted mode: Supabase URL/anon key configured, real login
-  required, API pointed at the intended environment.
-- Desktop viewport: 1440px wide.
-- Mobile viewport: 390px wide.
-- Theme variants: default, warm, and night from Settings or the footer toggle.
+```sh
+pnpm db:local:start
+pnpm db:local:reset
+```
 
-For every route, also verify loading states, empty states, retry/error states
-where practical, keyboard focus, page refresh persistence, and direct URL entry.
+Then run the app in hybrid auth mode so signed-out routes still work, but a real
+Supabase signup resolves as a real user:
 
-## Access And Navigation
+```sh
+eval "$(supabase status -o env)"
 
-### Public Landing
+AUTH_MODE=hybrid \
+DB_BACKEND=supabase \
+STORAGE_BACKEND=local \
+SUPABASE_URL="$API_URL" \
+SUPABASE_ANON_KEY="$ANON_KEY" \
+SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" \
+VITE_SUPABASE_URL="$API_URL" \
+VITE_SUPABASE_ANON_KEY="$ANON_KEY" \
+VITE_SUPABASE_ENV=default \
+PORT=4320 \
+WEB_ORIGIN=http://127.0.0.1:3320 \
+pnpm --filter @popcorn/api start
+```
+
+In another terminal:
+
+```sh
+eval "$(supabase status -o env)"
+
+AUTH_MODE=hybrid \
+DB_BACKEND=supabase \
+STORAGE_BACKEND=local \
+SUPABASE_URL="$API_URL" \
+SUPABASE_ANON_KEY="$ANON_KEY" \
+SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" \
+VITE_SUPABASE_URL="$API_URL" \
+VITE_SUPABASE_ANON_KEY="$ANON_KEY" \
+VITE_SUPABASE_ENV=default \
+VITE_API_URL=http://127.0.0.1:4320 \
+pnpm --filter @popcorn/web exec vite --host 127.0.0.1 --port 3320 --strictPort
+```
+
+Open `http://127.0.0.1:3320`.
+
+Quick automated smoke for the same local DB stack:
+
+```sh
+pnpm test:e2e:local-db
+```
+
+## Route Map
+
+Public routes:
+
+- `/` landing page with prompt-to-video intake.
+- `/login`, `/signup`.
+- `/sprite`.
+- `/p/:projectId` public read-only project share view.
+
+Authenticated routes:
+
+- `/dashboard`.
+- `/library`, `/library/projects`, `/library/runs`, `/library/assets`,
+  `/library/outputs`, `/library/evals`.
+- Compatibility redirects: `/projects`, `/runs`, `/assets`, `/outputs`.
+- `/projects/:projectId`, `/projects/:projectId/storyboard`,
+  `/projects/:projectId/watch`, `/projects/:projectId/runs/:runId`.
+- `/anchors`, `/anchors/mine`, `/anchors/:entryId`.
+- `/uploads`, `/templates`, `/brand`, `/settings`.
+- `/admin`, `/admin/evals` for admin-capable sessions.
+- Dev-only visual routes: `/dev/design-system`, `/dev/generation-cards`.
+
+Retired route note: `/studio` is not currently mounted in the Vite route table.
+Older manual-test instructions that start with `/studio` should be treated as
+historical unless a future PR restores that route.
+
+## Core Browser Pass
+
+Run this pass in desktop width around `1440px` and again in a narrow mobile
+viewport around `390px` when layout is part of the change. For every route,
+watch for console errors, broken media, unreachable controls, and page refresh
+recovery.
+
+### 1. Landing And Public Navigation
 
 - Open `/`.
-- Verify the brand, primary navigation, pricing/how anchors, footer, and auth
-  call to action render without console errors.
-- Use landing-page CTAs to reach `/signup`, `/login`, and `/studio`.
-- Toggle themes from the public footer and refresh; the selected theme should
-  persist.
-- Visit an unknown path and verify the not-found placeholder appears.
+- Verify brand, landing prompt, duration selector, pricing/how sections, footer,
+  and auth CTAs render without console errors.
+- Submit an empty or too-short prompt; the start action should stay disabled or
+  show the intended validation state.
+- Enter a valid prompt and submit.
+- In the account-choice modal, verify both actions are present:
+  - Create account routes to `/signup` and preserves the pending prompt.
+  - Skip this step signs in anonymously and starts the guest path when anonymous
+    sign-ins are enabled.
+- If provider keys are not configured, the run-start path should fail with a
+  readable configuration error rather than a blank page.
+- Open `/login` and `/signup` from public navigation.
+- Visit an unknown route and verify the not-found placeholder appears.
 
-### Authentication
+### 2. Signup, Login, And Session State
 
-- Open `/signup` with Supabase configured.
-- Submit with empty fields; the submit button should stay disabled.
-- Submit with an invalid email or weak/invalid credentials; a useful error
-  should appear without navigating.
-- Create or sign into a valid test account; the app should redirect to
-  `/dashboard`.
-- Switch between `/login` and `/signup`; stale errors from the previous form
-  should clear.
-- Sign out from the topbar or Settings; hosted mode should return to a public
-  route or login route.
-- In production-like hosted mode, direct entry to authenticated routes such as
-  `/dashboard`, `/studio`, and `/library/projects` while signed out should
-  redirect to `/login`.
-- In local dev autopilot, verify authenticated routes load as the local
-  developer without requiring Supabase login.
-- Disable/misconfigure Supabase public config locally and verify the auth forms
-  show the configuration error and keep inputs/actions disabled.
+- Open `/signup`.
+- Confirm the submit button is disabled until email and password are present.
+- Try invalid credentials and confirm a readable error appears without
+  navigation.
+- Create a unique local test account, for example
+  `manual-<timestamp>@example.test`.
+- Verify the app redirects to `/dashboard`.
+- Verify the dashboard or settings surface shows the signed-in email.
+- Call `GET /api/v1/me` with the browser's Supabase access token, or use the
+  network panel, and confirm:
+  - `authMode` is `supabase`.
+  - `isLocal` is `false`.
+  - actor type is `user`.
+  - actor email matches the new account.
+- Sign out from Settings or the top navigation.
+- Confirm direct entry to `/dashboard` while signed out redirects to `/login`
+  in production-like hosted mode. In local hybrid mode without a token, the API
+  may still resolve the local dev fallback; note the mode used in the test
+  report.
+- Sign back in with the same account and verify `/dashboard` loads.
 
-### Shell Navigation
+### 3. Authenticated Shell And Settings
 
-- In the authenticated shell, verify sidebar links for Create, Library, and
-  Settings navigate correctly and set the active state.
-- Use the "New video" sidebar button; it should open `/studio?start=1`.
-- Open the command palette with the trigger and with Cmd/Ctrl+K.
-- Search and run commands for Studio, Library, Settings, Uploads, Templates,
-  Brand Kit, and admin commands when available.
-- Verify Escape closes the palette, arrow keys change the active command, and
-  Enter runs the highlighted command.
-- Refresh every top-level authenticated route and confirm the shell, account
-  label, workspace label, and content recover.
+- In the authenticated shell, verify sidebar/header navigation to Dashboard,
+  Library, Settings, Uploads, Templates, Brand Kit, Anchors, and Evals where
+  links are present.
+- Open the command palette with the visible trigger and Cmd/Ctrl+K.
+- Search for common destinations such as Dashboard, Library, Settings, Uploads,
+  Templates, Brand Kit, and Evals.
+- Verify Escape closes the palette, arrow keys move selection, and Enter
+  activates the selected command.
+- Open `/settings`.
+- Verify account label, workspace id/name, auth mode, and any load errors.
+- Toggle each available theme and refresh after each; the selected theme should
+  persist and keep focus rings/status chips legible.
+- Use secondary Settings links and confirm they land on the intended route.
 
-## Dashboard And Library
+### 4. Dashboard
 
-### Home Dashboard
+- Open `/dashboard` in a fresh workspace.
+- Verify the empty or low-data state has clear next actions.
+- If the workspace has active runs or outputs, verify counts and cards match
+  the corresponding Library tabs.
+- Click active run rows and recent output links when present; they should open
+  the correct run or collection route.
+- Refresh `/dashboard`; shell, account label, and content should recover.
+- Simulate or force an API failure if practical and verify retry/error state.
 
-- Open `/dashboard` in an empty workspace.
-- Verify the empty dashboard action leads to Studio and can seed a goal when
-  quick-start actions are shown.
-- In a workspace with data, verify summary counts, active runs, and recent
-  outputs match the Library collections.
-- Click active run rows; they should open the correct progress page.
-- Click recent outputs; they should open the outputs collection filtered to the
-  related project.
-- Force or simulate a dashboard API error and verify the retry state can reload.
-
-### Library Routing
+### 5. Library Collections
 
 - Open `/library`; it should redirect to `/library/projects`.
-- Open legacy collection aliases `/projects`, `/runs`, `/assets`, `/outputs`,
-  and `/evals`; each should preserve query params and redirect to the matching
-  Library tab.
-- Open an invalid library tab such as `/library/unknown`; it should redirect to
-  projects.
-- Verify tab switching updates the URL and does not lose unrelated shell state.
+- Open compatibility routes `/projects`, `/runs`, `/assets`, `/outputs`, and
+  `/evals`; query params should be preserved where the redirect supports them.
+- Open `/library/unknown`; it should redirect to projects.
+- Switch between Projects, Runs, Assets, Outputs, and Evals tabs and verify the
+  URL updates without losing shell state.
 
-### Projects Collection
+Projects:
 
-- Open `/library/projects` in empty and populated workspaces.
-- Verify project cards show poster fallback or poster media, name, status,
-  storyboard readiness, created/updated times, and actions.
-- Click a project card or Storyboard action; it should open
-  `/projects/:projectId/storyboard`.
-- Click Runs; it should open `/library/runs?projectId=:projectId`.
-- Load more when more than 24 projects exist; ordering should remain stable.
-- Refresh on a project-filtered URL and verify the filter survives.
+- In empty and populated workspaces, verify project cards show name, poster or
+  fallback, status, storyboard readiness, timestamps, and actions.
+- Open a project detail route from a card.
+- Open Storyboard from a card when available.
+- Use Runs to open `/library/runs?projectId=:projectId`.
+- Load more when more than one page exists.
 
-### Runs Collection
+Runs:
 
-- Open `/library/runs`.
 - Filter by all, queued, running, succeeded, failed, and canceled.
-- Open a project-filtered runs URL and verify only that project's runs appear.
-- Click a run row; it should open `/projects/:projectId/runs/:runId`.
-- Verify progress bars clamp between 0 and 100 and status chips match the run
-  state.
-- Load more when more than 24 runs exist.
-- Confirm empty, loading, and API error states.
+- Open a run row and verify `/projects/:projectId/runs/:runId` loads.
+- Verify progress bars clamp to 0-100 and status chips match state.
+- Confirm empty, loading, pagination, and API error states.
 
-### Assets Collection
+Assets:
 
-- Open `/library/assets`.
-- Filter by kind: all, image, video, audio.
-- Filter by source: all, uploaded, generated.
-- Open asset cards for images, videos, and audio; the media viewer should render
-  the correct player, metadata, previous/next controls, Escape close, backdrop
-  close, and arrow-key navigation.
-- Open assets without a projected URL; the viewer should request/refresh media
-  and then show either playable media or the no-playable-URL state.
-- Toggle visibility from public to private and back; labels and action text
-  should update and the asset should remain visible in the grid.
-- Verify broken thumbnails degrade to placeholders instead of broken media
-  icons.
-- Use the Project action; it should open `/library/projects?projectId=...`.
-- Load more when more than 24 assets exist.
-- Run the dedicated [Asset sharing](asset-sharing.md) test for public/private
-  URL behavior and storage movement.
+- Filter by kind and source.
+- Open image, video, and audio assets in the media viewer when data exists.
+- Verify previous/next, Escape close, backdrop close, metadata, and fallback
+  states.
+- Toggle public/private visibility and verify optimistic UI either succeeds or
+  rolls back cleanly.
+- Run [Asset sharing](asset-sharing.md) for the storage-backed public/private
+  URL lifecycle.
 
-### Outputs Collection
+Outputs:
 
-- Open `/library/outputs`.
-- Verify exported videos show project name, export date, format, duration, and
-  timeline/project source metadata.
-- Open an output; the media viewer should play the video and support
-  previous/next, Escape, and backdrop close.
-- Use Project and Watch actions; Project should open the related collection
-  view and Watch should open `/projects/:projectId/watch`.
-- Verify missing playback URLs use thumbnails or an output placeholder.
-- Load more when more than 24 outputs exist.
+- Verify output cards show project name, export date, format, duration, and
+  source metadata when available.
+- Open an output in the media viewer.
+- Use Project and Watch actions.
+- Verify missing playback URLs fall back to thumbnails or placeholders.
 
-## Studio Creation Flow
+### 6. Landing Quick-Start Generation
 
-### Studio Start And Drafts
+This is the current creation entry point while `/studio` is retired.
 
-- Open `/studio`; verify the empty Studio start screen appears.
-- Start a new draft from `/studio?start=1`; it should create or fall back to a
-  local draft and land on the brief step.
-- Create a server-backed draft, refresh, return to `/studio`, and resume it.
-- Delete a non-active draft and verify it disappears without changing the
-  current draft.
-- Delete the active draft and verify Studio returns to the empty state.
-- Open `/studio?draft=:draftId` directly; it should load the saved payload and
-  URL-stabilize to the draft route.
-- Simulate draft API failure; Studio should allow a local in-memory draft and
-  show actionable errors for failed resume/delete operations.
+- Configure provider keys if you expect generation to run end to end. Without
+  provider keys, verify the app surfaces a readable configuration error.
+- From `/`, enter a valid prompt and choose each supported length.
+- Choose Create account:
+  - Pending prompt should survive the `/signup` redirect.
+  - After signup, the quick-start run should auto-start once auth resolves.
+- Choose Skip this step:
+  - Anonymous sign-in should create a Supabase anonymous session.
+  - The app should start the run as a guest if the guest-run limit allows it.
+- Try exceeding the guest run limit; the UI should route the user toward account
+  creation instead of silently starting another run.
+- Confirm successful run start navigates to
+  `/projects/:projectId/runs/:runId`.
 
-### Brief Step
+### 7. Run Progress And Review Actions
 
-- Verify "Continue" is disabled until the goal has non-whitespace text.
-- Enter a goal, choose each supported length, and choose each aspect ratio.
-- Open advanced direction from the UI and by `/studio?start=1&panel=advanced`.
-- Fill audience, platform, format, hook, best visual, big idea, payoff,
-  accuracy note, style, and call to action.
-- Navigate forward and back; all brief fields should persist.
-- Refresh a server-backed draft; saved values should restore.
+- Open a valid run progress route.
+- Verify queued, running, succeeded, failed, canceled, and unknown states render
+  correctly. Seed data or use Playwright fixtures when live generation is not
+  practical.
+- Refresh during a non-terminal state; polling should resume.
+- Cancel a non-gated in-flight run and verify terminal canceled UI.
+- For review-gated runs, approve and reject with notes; notes should clear on
+  success and polling should resume.
+- Open malformed, missing, or unauthorized run URLs and verify useful error
+  states plus navigation back to a stable surface.
 
-### Source Footage Step
+### 8. Storyboard And Project Pages
 
-- Choose prompt-only and continue without file selection.
-- Choose "Use my footage" and "Edit uploaded footage"; continuing should stay
-  disabled until at least one image or video is selected.
-- Select one image, one video, and one audio file. Metadata should show names,
-  sizes, and durations where available; audio-only selection should not satisfy
-  the visual-footage requirement.
-- Select invalid or unreadable files and verify an error appears without
-  corrupting prior valid selections.
-- Switch back to prompt-only; selected footage should clear.
-- Toggle captions on and off and verify the setting persists through later
-  steps.
-
-### Progressive Planning Flow
-
-- Start from a new draft at `/studio?start=1`; fill the brief, choose either
-  prompt-only or a valid uploaded-footage option, and continue into the generated
-  planning workspace.
-- Verify the setup stepper shows only Brief and Footage. It should not show the
-  retired top-level Story, Checkpoints/Generate, Review, or Export steps during
-  setup.
-- Verify generated story direction and opening hook appear quickly, are
-  editable, and preserve edits when moving around the Studio workspace.
-- Verify poster/visual direction renders an explicit pending/loading state while
-  background planning is still running, then a ready state when available.
-- Verify full orchestrator/media generation is not started implicitly after
-  Footage: no project run should be created, no navigation to
-  `/projects/:projectId/runs/:runId` should occur, and network traffic should
-  not call the run-start endpoint until the user chooses the explicit full
-  generation action.
-- Refresh the draft and reopen `/studio?draft=:draftId`; story direction,
-  opening hook, poster/visual pending-or-ready state, and any edits should be
-  restored.
-- Open older draft URLs or records whose saved step is `story`, `generate`,
-  `review`, or `export`. They should route to a valid progressive Studio state
-  instead of blanking, looping, or failing draft validation.
-- Re-test the existing correlation/causation explainer draft/fixture. It should
-  resume with its original brief values, preserve existing planning decisions,
-  and still allow explicit full generation from the new planning workspace.
-
-### Story Direction Step
-
-- Select every story format option.
-- Enter and clear an opening hook.
-- Navigate back to footage and forward again; selected format and hook should
-  persist.
-
-### Generate Step
-
-- Verify the summary reflects goal, aspect ratio, duration, and source choice.
-- Expand/collapse the goal summary.
-- Use Edit to return to the brief step, change the goal, and return to Generate.
-- Toggle each review checkpoint independently; descriptions should change from
-  automatic continuation to pause behavior.
-- Start generation with no checkpoints, with one checkpoint, and with multiple
-  checkpoints.
-- On start, verify the app creates a project/run and navigates to
-  `/projects/:projectId/runs/:runId`, preserving `studioDraft` when applicable.
-- Simulate start failure; the button should recover and the error should be
-  visible without losing the draft.
-
-## Generation Progress
-
-### Progress Page
-
-- Open a valid `/projects/:projectId/runs/:runId`.
-- Verify queued, running, stage-item, succeeded, failed, canceled, and unknown
-  states render correctly.
-- Refresh during a run; polling should resume and the last run hint should
-  appear only when useful.
-- Cancel a non-gated in-flight run; it should become canceled and clear the
-  recovery hint.
-- Open a malformed progress URL; the missing-id state should appear.
-- Open a missing or unauthorized run; the error state should show a useful
-  message and a path back to Studio.
-
-### Review Gates
-
-- Start a run with a brief-intake checkpoint.
-- Verify the progress page loads the project brief review card.
-- Add approval feedback and approve; the run should resume and clear the note.
-- Add rejection feedback and reject; the gated stage should regenerate or move
-  back to a running state.
-- Cancel from a gated state.
-- Repeat for other gateable stages and verify the gate label maps to the
-  correct stage.
-- Open a gated run from Studio's in-place generating view and verify the same
-  approve/reject actions work there.
-
-### Review Handoff
-
-- For a Studio-started run with `studioDraft`, wait for success; the progress
-  page should redirect to `/studio?draft=:draftId&step=review`.
-- For a run opened without a Studio draft, terminal success should remain on the
-  progress terminal state and expose relevant navigation.
-- Verify failed and canceled runs do not redirect to Studio review.
-
-## Review, Storyboard, And Export
-
-### Studio Review
-
-- Enter the Studio review step after a successful run.
-- Verify loading state until project, timeline, clips, and timeline id are
-  available.
-- Confirm the preview player renders the current timeline and clips.
-- Edit timeline segment fields in the timeline panel; the preview/export state
-  should reflect current edits.
-- Add per-segment review notes.
-- Submit global feedback with an empty note; the action should stay disabled.
-- Submit feedback with a note and timeline id; success should show "Feedback
-  sent." and errors should be visible.
-- Verify "Continue to export" is disabled until a timeline exists.
-
-### Storyboard Editor
-
-- Open `/projects/:projectId/storyboard` for a project with and without an
-  existing storyboard.
-- Verify loading, missing-project, and error states.
-- Create, edit, move, delete, and save storyboard scenes and beats.
+- Open `/projects/:projectId` for a valid project.
+- Open `/projects/:projectId/storyboard`.
+- Verify loading, missing-project, no-storyboard, and API error states.
+- For a project with a storyboard, edit scene and beat fields, add/remove
+  scenes and beats, move beats where supported, save, and refresh.
 - Verify dirty, saving, saved, and save-error states.
-- Refresh after edits; saved storyboard data should reload.
-- Use the Back to Studio or library navigation paths and verify they land on the
-  intended route.
+- Open `/storyboard`; it should redirect to `/library/projects`.
+- Open `/projects/:projectId/watch`:
+  - Project with playable output should show video controls and metadata.
+  - Project without playable output but with storyboard fallback should route or
+    message according to the current implementation.
 
-### Project Watch
+### 9. Uploads, Templates, Brand Kit, Anchors
 
-- Open `/projects/:projectId/watch` for a project with an export.
-- Verify the video loads with controls, poster, filename, duration, and project
-  name.
-- Use the Storyboard action to open the project storyboard.
-- Open a project with no playable export but a storyboard fallback; it should
-  redirect to the storyboard.
-- Verify loading and error states.
-
-### Export
-
-- Open the Export step from Studio review and from a direct Studio route when a
-  project id is available.
-- Verify MP4 is selected and read-only.
-- Select draft, standard, and high quality.
-- Toggle burned-in captions.
-- Select each duration policy.
-- Verify export is disabled when there is no project, no timeline, no timeline
-  id, or an empty timeline.
-- Start an export and verify polling shows an exporting state until terminal.
-- On success, verify the draft completes, the output appears in `/outputs`, and
-  the Open MP4 link works when a direct URL is projected.
-- Force an export failure and verify the failure message is shown and retry is
-  possible.
-
-## Secondary Workspace Surfaces
-
-### Uploads
-
-This surface stages files locally today; it is not expected to persist through
-refresh until the upload library is API-backed.
+Uploads:
 
 - Open `/uploads`.
 - Choose multiple image, video, and audio files.
-- Verify staged count, total size, file kind, name, type, and size.
+- Verify staged count, total size, kind, name, type, and size.
 - Open staged files in the media viewer.
-- Navigate previous/next and close the viewer.
-- Remove one file and then all files; object URLs should be revoked and the
-  empty state should return.
-- Refresh; staged files should be gone.
-- Use New project; it should redirect through `/projects/new` to `/studio`.
+- Remove one file and then all files.
+- Refresh and verify browser-local staged files are gone.
 
-### Templates
+Templates:
 
 - Open `/templates`.
-- Verify category pills and all template cards render.
-- Use Blank project and Use template links; they should redirect through
-  `/projects/new` to `/studio`. Note whether template query params are consumed
-  or dropped by the current redirect.
-- Confirm templates are currently static UI and do not persist changes.
+- Verify category pills and template cards render.
+- Use Blank project and Use template actions; current behavior should route to
+  `/library/projects` through the `/projects/new` compatibility redirect unless
+  a newer creation flow consumes template params.
 
-### Brand Kit
-
-This surface is currently local UI state.
+Brand Kit:
 
 - Open `/brand`.
 - Change brand name, color, font, tone, and end-frame guidance.
-- Verify the preview and prompt summary update immediately.
-- Refresh; current values should reset to defaults unless persistence has been
-  added.
-- Use Create with kit; it should redirect through `/projects/new` to `/studio`.
+- Verify preview and prompt summary update immediately.
+- Refresh and confirm values reset unless persistence has been added.
 
-### Settings
+Anchors:
 
-- Open `/settings`.
-- Toggle all themes and refresh after each.
-- Verify workspace name/id, account label, auth mode, and any account-load error
-  render correctly.
-- Use secondary surface links for Uploads, Templates, Brand kit, and Evals.
-- Sign out when available and verify the destination route is correct.
+- Open `/anchors`, `/anchors/mine`, and an anchor detail route when seeded data
+  exists.
+- Verify likes, filters, detail navigation, and empty states.
 
-## Admin And Evals
+### 10. Admin And Evals
 
-### Admin Access
+- Open `/library/evals` or `/evals` and verify redirect behavior.
+- As a non-admin user, open `/admin/evals`; access should be denied or routed
+  according to the admin guard.
+- As an admin-capable user, verify `/admin` and `/admin/evals` are reachable.
+- In `/admin/evals`, run manual judgment actions where enabled and verify
+  pending, success, verdict, rationale, and error states.
 
-- As a non-admin hosted user, open `/admin/evals`; it should deny access or
-  redirect according to the current admin guard.
-- As an admin-capable user, verify `/admin` and `/admin/evals` appear in the
-  sidebar footer.
-- Verify `/admin` renders the operator console style guide, generation-stage
-  examples, loading-state examples, and navigation links.
+## API And Operational Checks
 
-### Evals Dashboard
-
-- Open `/library/evals` or `/evals`; it should redirect to the Library evals
-  route and render the eval suites page.
-- Verify suites load from the API when available and fall back only when the
-  current environment is expected to use fixtures.
-- Select latest runs; the detail grid should update.
-- Verify verdict badges, stage labels, pass rates, trend bars, and case cells.
-- Verify verdict flips, calibration panels, empty states, loading states, and
-  retry/error states.
-- Use Open workbench as an admin; it should open `/admin/evals`.
-
-### Admin Eval Workbench
-
-- Open `/admin/evals` as an admin-capable user.
-- Verify disabled bounded-execution controls are visibly disabled.
-- Run judge on each artifact card; pending, success, verdict, rationale, and
-  error states should be visible.
-- Verify Promote to regression case and Re-run artifact remain disabled until
-  their backing functionality is implemented.
-- Use Suite dashboard to return to eval suites.
-
-## API And Operational Manual Checks
-
-### Health And Public Discovery
-
-- `GET /api/v1/health` should return healthy metadata.
-- Public discovery endpoints for projects, assets, and outputs should return
-  only public data and should work without credentials.
-- Private assets and projects should not appear in public discovery.
-
-### Workspace APIs
-
-- `GET /api/v1/me` should return the active actor/workspace and correct local
-  or hosted auth mode.
-- Workspace summary, projects, runs, assets, and outputs endpoints should honor
+- `GET /api/v1/health` returns healthy JSON through both API origin and web
+  `/api` proxy.
+- `GET /api/v1/me` returns the expected local fallback or Supabase user based
+  on `AUTH_MODE` and whether a bearer token is present.
+- Public discovery endpoints expose only public projects/assets/outputs.
+- Private projects and media do not appear in public discovery.
+- Project, run, asset, output, storyboard, and eval list endpoints honor
   pagination, filters, workspace scoping, and auth.
-- Hosted mode should reject unauthorized or cross-workspace access.
-
-### Project And Asset Lifecycle
-
-- Create a project through the API and verify it appears in Library projects.
-- Patch project metadata/visibility and verify UI and public discovery update.
-- Upload/register image, video, and audio assets through the API.
-- Fetch individual asset media URLs and verify signed URLs expire and refresh.
-- Toggle asset visibility from the UI and API and verify both stay consistent.
-
-### Generation APIs
-
-- Start generation through Studio and through direct API calls.
-- Verify stages, stage items, result artifacts, and progress percentages update
-  coherently.
-- Approve, reject, and cancel runs through both UI and API.
-- Verify runs cannot be mutated after terminal states except where explicitly
-  allowed.
-- Run the [Orchestrator tool-call smoke tests](orchestrator-tool-calls.md)
-  before releases that touch orchestrator tools or LLM adapters.
-
-### Timeline And Export APIs
-
-- Assemble or fetch latest project timelines.
-- Fetch timeline detail and export records.
-- Start an export with every supported quality and duration policy.
-- Verify failed export jobs retain structured errors and successful jobs create
-  output artifacts visible in Library outputs.
-
-### Storyboard APIs
-
-- List, create, update, and delete storyboards.
-- List, create, update, and delete storyboard scenes.
-- List, create, update, and delete beats.
-- List, create, update, and delete panels.
-- List and update approvals.
-- Verify deleted nested records disappear from both API responses and the
-  storyboard editor after refresh.
+- Hosted or strict Supabase mode rejects unauthorized and cross-workspace
+  access.
+- Run [Orchestrator tool-call smoke tests](orchestrator-tool-calls.md) before
+  releases that touch orchestrator tools or LLM adapters.
 
 ## Cross-Cutting Checks
 
-- Browser refresh at every wizard step, progress state, collection filter, and
-  media viewer route.
-- Back/forward browser navigation through Studio, Library filters, and progress
-  pages.
-- No unhandled console errors during normal flows.
-- No duplicate network requests that create duplicate projects, runs, exports,
-  or draft records.
-- Form submissions should be idempotent under double-click or Enter key repeat.
-- Loading skeletons should not shift layout excessively.
+- Refresh every top-level route, filtered collection URL, progress page, and
+  media viewer.
+- Use browser back/forward through landing, auth, Library filters, project
+  detail, storyboard, and progress pages.
+- Avoid unhandled console errors during normal flows.
+- Prevent double-click or Enter-repeat submissions from creating duplicate
+  projects, runs, exports, or account actions.
+- Loading skeletons should not cause excessive layout shift.
 - Empty and error states should include a useful next action.
-- Mobile layout should keep controls reachable without horizontal scrolling.
+- Mobile layout should avoid horizontal scrolling and keep primary controls
+  reachable.
 - Media players should not autoplay with sound.
-- Private media URLs should not leak into public discovery or unauthenticated
-  pages.
-- Theme changes should not obscure focus rings, status chips, media controls, or
+- Private media URLs should not leak into public routes or unauthenticated API
+  responses.
+- Theme changes should not obscure focus rings, status chips, controls, or
   disabled states.
-- Long project names, asset filenames, emails, and error messages should wrap
-  cleanly.
-- API request failures should not leave stale optimistic UI states.
+- Long project names, filenames, emails, and error messages should wrap cleanly.
