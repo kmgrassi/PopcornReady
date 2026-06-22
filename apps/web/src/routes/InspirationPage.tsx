@@ -186,9 +186,11 @@ function PosterPanel({
 
   const status = error
     ? "Poster generation failed"
-    : generating || poster?.status === "generating" || poster?.status === "queued"
-      ? "Generating poster"
-      : "Poster pending";
+    : poster?.status === "failed"
+      ? "Poster generation failed"
+      : generating || poster?.status === "generating" || poster?.status === "queued"
+        ? "Generating poster"
+        : "Poster pending";
 
   return (
     <div className={`${styles.poster} ${styles.posterEmpty}`} aria-live="polite">
@@ -330,12 +332,23 @@ function stripPoster(inspiration: RandomStoryInspiration): RandomStoryInspiratio
 }
 
 function conceptSignature(inspiration: RandomStoryInspiration): string {
-  return Object.entries(inspiration.elements)
+  const elementSignature = Object.entries(inspiration.elements)
     .flatMap(([key, elements]) =>
       elements.map((element, index) => `${key}:${index}:${element.id}`)
     )
     .sort()
     .join("|");
+  return [
+    elementSignature,
+    inspiration.typeOfPerson,
+    inspiration.setting,
+    inspiration.externalGoal,
+    inspiration.antagonisticForce,
+    inspiration.innerFlawOrLie,
+    inspiration.oldSelf,
+    inspiration.newTruth,
+    inspiration.endingType,
+  ].join("|");
 }
 
 function InspirationSkeleton() {
