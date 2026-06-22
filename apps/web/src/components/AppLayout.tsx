@@ -105,13 +105,14 @@ export function AuthenticatedAppLayout() {
   });
   const me = meQuery.data ?? null;
   const accountLabel = useMemo(() => {
+    if (auth.isAnonymous) return "Guest account";
     if (auth.user?.email) return auth.user.email;
     if (me?.actor && typeof me.actor === "object" && me.actor.email) {
       return me.actor.email;
     }
     if (me?.isLocal || auth.status === "disabled") return "Local developer";
     return "Account";
-  }, [auth.status, auth.user?.email, me]);
+  }, [auth.isAnonymous, auth.status, auth.user?.email, me]);
 
   const showAdmin = canAccessAdminSurface(auth);
   const canSignOut = auth.configured && auth.status === "authenticated";

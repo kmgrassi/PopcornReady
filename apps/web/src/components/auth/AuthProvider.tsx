@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import type { User } from "@supabase/supabase-js";
+import { v1Api } from "../../lib/api-client";
 import {
   clearAllSupabaseAuthStorage,
   clearBrowserSessionState,
@@ -26,6 +27,12 @@ type AuthContextValue = {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
   signInAnonymous: () => Promise<void>;
+  beginAnonymousAccountUpgrade: (email: string) => Promise<void>;
+  completeAnonymousAccountUpgrade: (
+    email: string,
+    token: string,
+    password: string
+  ) => Promise<void>;
   signOut: () => Promise<void>;
   clearError: () => void;
 };
@@ -44,6 +51,12 @@ function describeAuthError(err: unknown): string {
   }
   if (code === "invalid_credentials") {
     return "Incorrect email or password.";
+  }
+  if (code === "account_collision") {
+    return "That email is already reserved for an invited account. Sign in with that account or use a different email.";
+  }
+  if (code === "user_already_exists" || code === "email_exists") {
+    return "An account already exists for that email. Sign in instead, or use a different email.";
   }
   if (err instanceof Error) return err.message;
   return String(err);
@@ -168,6 +181,65 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const beginAnonymousAccountUpgrade = useCallback(async (email: string) => {
+    const normalizedEmail = email.trim().toLowerCase();
+    setError(null);
+    try {
+      await v1Api.preflightAnonymousAccountUpgrade(normalizedEmail);
+      const { data, error: updateError } = await getSupabaseClient().auth.updateUser({
+        email: normalizedEmail,
+      });
+      if (updateError || !data.user) {
+        throw updateError || new Error("No Supabase user returned.");
+      }
+      setUser(data.user);
+      setStatus("authenticated");
+    } catch (err) {
+      setStatus(user ? "authenticated" : "unauthenticated");
+      const message = describeAuthError(err);
+      setError(message);
+      throw new Error(message);
+    }
+  }, [user]);
+
+  const completeAnonymousAccountUpgrade = useCallback(async (
+    email: string,
+    token: string,
+    password: string
+  ) => {
+    const normalizedEmail = email.trim().toLowerCase();
+    const trimmedToken = token.trim();
+    setError(null);
+    try {
+      await v1Api.preflightAnonymousAccountUpgrade(normalizedEmail);
+      const supabase = getSupabaseClient();
+      const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
+        email: normalizedEmail,
+        token: trimmedToken,
+        type: "email_change",
+      });
+      if (verifyError || !verifyData.user) {
+        throw verifyError || new Error("No Supabase user returned.");
+      }
+
+      const { data: passwordData, error: passwordError } =
+        await supabase.auth.updateUser({ password });
+      if (passwordError || !passwordData.user) {
+        throw passwordError || new Error("No Supabase user returned.");
+      }
+
+      await supabase.auth.refreshSession();
+      await v1Api.completeAnonymousAccountUpgrade(normalizedEmail);
+      setUser(passwordData.user);
+      setStatus("authenticated");
+    } catch (err) {
+      setStatus(user ? "authenticated" : "unauthenticated");
+      const message = describeAuthError(err);
+      setError(message);
+      throw new Error(message);
+    }
+  }, [user]);
+
   const signOut = useCallback(async () => {
     setError(null);
     if (configured) {
@@ -199,6 +271,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signIn,
       signUp,
       signInAnonymous,
+      beginAnonymousAccountUpgrade,
+      completeAnonymousAccountUpgrade,
       signOut,
       clearError,
     }),
@@ -210,6 +284,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signIn,
       signUp,
       signInAnonymous,
+      beginAnonymousAccountUpgrade,
+      completeAnonymousAccountUpgrade,
       signOut,
       clearError,
     ]

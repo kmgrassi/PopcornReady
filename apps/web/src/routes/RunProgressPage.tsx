@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { GenerationRun, GenerationStageType } from "@popcorn/shared/v1/types";
+import { AnonymousUpgradeBanner } from "../components/auth/AnonymousUpgradeBanner";
 import { ProgressView } from "../components/progress/ProgressView";
 import type { GenerationRunDetail } from "../lib/v1/generation-runs/status";
 import {
@@ -167,6 +168,7 @@ function RunProgress({
       stages={payload.stages}
       stageItems={payload.stageItems}
       studioReturnPath={studioReturnPath}
+      headerSlot={<AnonymousUpgradeBanner />}
       onBoardRevisionSuccess={async () => {
         await runQuery.refetch();
       }}

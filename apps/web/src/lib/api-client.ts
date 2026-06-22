@@ -174,6 +174,10 @@ export interface MeResponse {
   isLocal: boolean;
 }
 
+export interface AccountMutationResponse {
+  ok: true;
+}
+
 export interface ProjectsResponse {
   projects: V1Project[];
   pagination: {
@@ -557,6 +561,16 @@ function publicAssetToWorkspaceAsset(asset: DiscoverAsset): WorkspaceAsset {
 
 export const v1Api = {
   me: () => apiRequest<MeResponse>("/api/v1/me"),
+  preflightAnonymousAccountUpgrade: (email: string) =>
+    apiRequest<AccountMutationResponse>("/api/v1/account/anonymous-upgrade-preflight", {
+      method: "POST",
+      body: { email },
+    }),
+  completeAnonymousAccountUpgrade: (email: string) =>
+    apiRequest<AccountMutationResponse>("/api/v1/account/anonymous-upgrade-complete", {
+      method: "POST",
+      body: { email },
+    }),
   listProjects: (params?: { limit?: number; cursor?: string | null }) =>
     apiRequest<ProjectsResponse>("/api/v1/projects", {
       searchParams: params,
