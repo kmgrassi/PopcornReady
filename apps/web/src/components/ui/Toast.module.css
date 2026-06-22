@@ -1,0 +1,115 @@
+.region {
+  position: fixed;
+  right: var(--space-4);
+  z-index: 80;
+  display: grid;
+  width: min(360px, calc(100vw - (var(--space-4) * 2)));
+  gap: var(--space-2);
+  pointer-events: none;
+}
+
+.top {
+  top: var(--space-4);
+}
+
+.bottom {
+  bottom: var(--space-4);
+}
+
+.toast {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 54px;
+  padding: var(--space-3);
+  color: var(--text-strong);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  pointer-events: auto;
+  animation: enter var(--transition);
+}
+
+.indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-pill);
+}
+
+.success .indicator {
+  background: var(--good);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--good) 18%, transparent);
+}
+
+.error {
+  border-color: var(--danger-border);
+  background: color-mix(in srgb, var(--surface) 88%, var(--danger) 12%);
+}
+
+.error .indicator {
+  background: var(--danger);
+  box-shadow: 0 0 0 4px var(--danger-soft);
+}
+
+.copy {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  font-size: var(--text-sm);
+  line-height: var(--line-caption);
+}
+
+.copy strong,
+.copy span {
+  overflow-wrap: anywhere;
+}
+
+.copy span {
+  color: var(--muted);
+}
+
+.dismiss {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dismiss:hover {
+  color: var(--text-strong);
+  background: var(--surface-2);
+}
+
+.dismiss:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateY(var(--space-2));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 640px) {
+  .region {
+    right: var(--space-3);
+    left: var(--space-3);
+    width: auto;
+  }
+}
