@@ -2,6 +2,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../components/auth/AuthProvider";
 import { Button } from "../../components/ui/Button";
+import { ImageWithSkeleton } from "../../components/ui/ImageWithSkeleton";
 import { EmptyState, ErrorState } from "../../components/ui/StateCard";
 import { PageHeader } from "../../components/ui/PageHeader";
 import {
@@ -47,7 +48,7 @@ function SkeletonGrid() {
 function AnchorPreview({ entry }: { entry: CatalogEntry }) {
   if (entry.previewUrl) {
     return (
-      <img
+      <ImageWithSkeleton
         className={styles.previewImage}
         src={entry.previewUrl}
         alt=""

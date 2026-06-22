@@ -12,6 +12,7 @@ import type {
 import { AiAssetFeedbackDialog } from "../ai-edit/AiAssetFeedbackDialog";
 import dialogStyles from "../ai-edit/AiAssetFeedbackDialog.module.css";
 import { RegenerateImageButton } from "../media/RegenerateImageButton";
+import { ImageWithSkeleton } from "../ui/ImageWithSkeleton";
 import styles from "./StoryboardBoard.module.css";
 
 interface StoryboardBoardProps {
@@ -189,9 +190,10 @@ export function StoryboardBoard({
               >
                 <div className={styles.media}>
                   {tile.mediaUrl ? (
-                    <img
+                    <ImageWithSkeleton
                       src={tile.mediaUrl}
                       alt={tile.intent ? `${tile.label}: ${tile.intent}` : tile.label}
+                      fill
                     />
                   ) : (
                     <span aria-hidden="true">{index + 1}</span>
@@ -240,9 +242,11 @@ export function StoryboardBoard({
                 preload="metadata"
               />
             ) : (
-              <img
+              <ImageWithSkeleton
                 src={selectedTile.mediaUrl}
                 alt={selectedTile.intent ? `${selectedTile.label}: ${selectedTile.intent}` : selectedTile.label}
+                fit="contain"
+                fill
               />
             )
           ) : (

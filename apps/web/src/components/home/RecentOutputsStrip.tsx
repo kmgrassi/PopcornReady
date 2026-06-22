@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import type { DashboardRecentOutput } from "@popcorn/shared/v1/dashboard";
+import { ImageWithSkeleton } from "../ui/ImageWithSkeleton";
 import styles from "./RecentOutputsStrip.module.css";
 
 export function RecentOutputsStrip({
@@ -27,7 +28,7 @@ export function RecentOutputsStrip({
               to={`/projects/${encodeURIComponent(output.projectId)}#outputs`}
             >
               {output.thumbnailUrl ? (
-                <img
+                <ImageWithSkeleton
                   className={styles.thumb}
                   src={output.thumbnailUrl}
                   alt=""

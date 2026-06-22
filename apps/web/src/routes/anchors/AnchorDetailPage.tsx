@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import type { V1Project } from "@popcorn/shared/v1/types";
 import { useAuth } from "../../components/auth/AuthProvider";
 import { Button } from "../../components/ui/Button";
+import { ImageWithSkeleton } from "../../components/ui/ImageWithSkeleton";
 import { EmptyState, ErrorState } from "../../components/ui/StateCard";
 import {
   useCatalogEntryQuery,
@@ -29,7 +30,7 @@ function catalogLikesAuthScope(auth: ReturnType<typeof useAuth>): string {
 
 function DetailPreview({ entry }: { entry: CatalogEntry }) {
   if (entry.previewUrl) {
-    return <img className={styles.previewImage} src={entry.previewUrl} alt="" />;
+    return <ImageWithSkeleton className={styles.previewImage} src={entry.previewUrl} alt="" />;
   }
 
   return (

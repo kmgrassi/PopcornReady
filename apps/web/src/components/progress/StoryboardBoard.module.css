@@ -101,7 +101,7 @@
   object-fit: cover;
 }
 
-.media span {
+.media > span[aria-hidden="true"] {
   display: grid;
   place-items: center;
   width: 42px;

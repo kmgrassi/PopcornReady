@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { AssetKind } from "@popcorn/shared/v1/types";
+import { ImageWithSkeleton } from "../ui/ImageWithSkeleton";
 import { RegenerateAssetDialog } from "./RegenerateAssetDialog";
 import styles from "./MediaViewer.module.css";
 
@@ -195,7 +196,7 @@ export function MediaViewer({
           ) : null}
 
           {canRender && media.kind === "image" ? (
-            <img className={styles.visualMedia} src={media.url ?? media.thumbnailUrl ?? undefined} alt={title} onError={handleMediaError} />
+            <ImageWithSkeleton className={styles.visualMedia} src={media.url ?? media.thumbnailUrl ?? ""} alt={title} fit="contain" onError={handleMediaError} />
           ) : null}
           {canRender && media.kind === "video" ? (
             <video className={styles.visualMedia} src={media.url ?? undefined} poster={media.thumbnailUrl ?? undefined} controls preload="metadata" onError={handleMediaError} />

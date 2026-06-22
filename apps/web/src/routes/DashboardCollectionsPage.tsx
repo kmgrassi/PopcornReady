@@ -12,6 +12,7 @@ import { PageHeader } from "../components/ui/PageHeader";
 import { Toolbar, ToolbarField } from "../components/ui/Toolbar";
 import { Button, ButtonLink } from "../components/ui/Button";
 import { EmptyState, ErrorState } from "../components/ui/StateCard";
+import { ImageWithSkeleton } from "../components/ui/ImageWithSkeleton";
 import { VisibilityBadge } from "../components/ui/VisibilityBadge";
 import { MediaViewer, type MediaViewerItem } from "../components/media/MediaViewer";
 import { AssetImage } from "../components/media/AssetImage";
@@ -261,7 +262,7 @@ function ProjectPoster({ name, posterUrl }: { name: string; posterUrl?: string |
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   if (posterUrl && posterUrl !== failedUrl) {
     return (
-      <img
+      <ImageWithSkeleton
         className={styles.poster}
         src={posterUrl}
         alt=""
@@ -706,7 +707,7 @@ export function OutputsPage() {
                     aria-label={`View ${output.projectName} output`}
                   >
                   <div className={styles.outputMedia}>
-                    {playbackUrl ? <video className={styles.media} src={playbackUrl} poster={output.thumbnailUrl} muted playsInline preload="metadata" /> : output.thumbnailUrl ? <img className={styles.media} src={output.thumbnailUrl} alt="" loading="lazy" /> : <div className={`${styles.media} ${styles.mediaEmpty}`}><span>Output</span></div>}
+                    {playbackUrl ? <video className={styles.media} src={playbackUrl} poster={output.thumbnailUrl} muted playsInline preload="metadata" /> : output.thumbnailUrl ? <ImageWithSkeleton className={styles.media} src={output.thumbnailUrl} alt="" loading="lazy" /> : <div className={`${styles.media} ${styles.mediaEmpty}`}><span>Output</span></div>}
                   </div>
                   <div className={styles.cardBody}>
                     <div><span className={styles.rowTitle}>{output.projectName}</span><span className={styles.rowSub}>Exported {formatDate(output.createdAt)}</span></div>

@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { ImageWithSkeleton } from "../ui/ImageWithSkeleton";
 import { RegenerateImageButton } from "./RegenerateImageButton";
 import styles from "./AssetImage.module.css";
 
@@ -130,11 +131,12 @@ export function AssetImage({
     );
   } else if (stillSrc) {
     body = (
-      <img
+      <ImageWithSkeleton
         className={media}
         src={stillSrc}
         alt={alt}
         loading="lazy"
+        fill
         onError={() => markFailed(stillSrc)}
       />
     );

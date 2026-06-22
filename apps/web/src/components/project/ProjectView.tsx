@@ -6,6 +6,7 @@ import type {
   VideoBriefInput,
 } from "@popcorn/shared/v1/types";
 import type { ProjectWatchMedia } from "../../lib/api-client";
+import { ImageWithSkeleton } from "../ui/ImageWithSkeleton";
 // Reuse the project page's styles so the owner view and the public/read-only
 // view are visually identical.
 import styles from "../../routes/ProjectDetailPage.module.css";
@@ -77,7 +78,7 @@ export function ProjectPoster({ name, posterUrl }: { name: string; posterUrl?: s
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   if (posterUrl && posterUrl !== failedUrl) {
     return (
-      <img
+      <ImageWithSkeleton
         className={styles.poster}
         src={posterUrl}
         alt=""
@@ -175,7 +176,7 @@ export function ProjectBrief({ project }: { project: V1Project }) {
 function StoryboardPanelThumb({ panel }: { panel: StoryboardPanel }) {
   const image = panel.thumbnailUrl ?? panel.url;
   if (image) {
-    return <img className={styles.storyImage} src={image} alt="" loading="lazy" />;
+    return <ImageWithSkeleton className={styles.storyImage} src={image} alt="" loading="lazy" />;
   }
   return (
     <div className={`${styles.storyImage} ${styles.storyImageEmpty}`}>
