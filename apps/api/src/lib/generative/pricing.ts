@@ -26,6 +26,7 @@ export interface CostEstimateInput {
 
 const VIDEO_USD_PER_SEC: Record<GenerativeProviderName, number> = {
   openai: 0.5,
+  ideogram: 0,
   gemini: 0.5,
   runway: 0.12,
   ltx: 0.06,
@@ -37,6 +38,7 @@ const VIDEO_USD_PER_SEC: Record<GenerativeProviderName, number> = {
 
 const AUDIO_USD_PER_SEC: Record<GenerativeProviderName, number> = {
   openai: 0.01,
+  ideogram: 0,
   gemini: 0.01,
   runway: 0,
   ltx: 0,
@@ -48,6 +50,7 @@ const AUDIO_USD_PER_SEC: Record<GenerativeProviderName, number> = {
 
 const IMAGE_USD_PER_GENERATION: Record<GenerativeProviderName, number> = {
   openai: 0.05,
+  ideogram: 0.08,
   gemini: 0.05,
   runway: 0,
   ltx: 0,

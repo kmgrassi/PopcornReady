@@ -32,7 +32,7 @@ import {
 // photoreal, but we still route any minor through Gemini to stay safe.
 export type StoryboardTileProvider = Extract<
   GenerativeProviderName,
-  "openai" | "gemini" | "mock"
+  "openai" | "ideogram" | "gemini" | "mock"
 >;
 
 export const DEFAULT_STORYBOARD_TILE_PROVIDER: StoryboardTileProvider = "openai";
@@ -97,6 +97,9 @@ function imageRequestFor(
   }
   if (provider === "mock") {
     return { provider: "mock", kind: "image", ...base };
+  }
+  if (provider === "ideogram") {
+    return { provider: "ideogram", kind: "image", model: "ideogram-v3", ...base };
   }
   return { provider: "openai", kind: "image", ...base };
 }

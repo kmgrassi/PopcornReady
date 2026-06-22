@@ -161,7 +161,7 @@ account or continue as a guest. The quick-start flow creates a project/run and
 lands on `/projects/:projectId/runs/:runId`.
 
 Generation uses the configured provider stack. Gemini Veo, OpenAI Sora, NVIDIA
-Cosmos, ElevenLabs, and image providers are enabled only when their keys are set;
+Cosmos, Ideogram, ElevenLabs, and image providers are enabled only when their keys are set;
 otherwise generation should fail with a clear configuration error. Existing work
 is reviewed from the dashboard, Library collections, project detail,
 storyboard, watch, and run-progress routes. The older `/studio` wizard route is
