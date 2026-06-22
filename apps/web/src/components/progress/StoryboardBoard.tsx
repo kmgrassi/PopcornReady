@@ -193,6 +193,7 @@ export function StoryboardBoard({
                     <ImageWithSkeleton
                       src={tile.mediaUrl}
                       alt={tile.intent ? `${tile.label}: ${tile.intent}` : tile.label}
+                      fill
                     />
                   ) : (
                     <span aria-hidden="true">{index + 1}</span>
