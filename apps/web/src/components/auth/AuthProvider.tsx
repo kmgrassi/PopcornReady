@@ -21,14 +21,20 @@ type AuthStatus = "loading" | "disabled" | "unauthenticated" | "authenticated";
 type AuthContextValue = {
   status: AuthStatus;
   user: User | null;
+  isAnonymous: boolean;
   error: string | null;
   configured: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
-  upgradeAnonymousAccount: (email: string, password: string) => Promise<void>;
+  signInAnonymous: () => Promise<void>;
+  beginAnonymousAccountUpgrade: (email: string) => Promise<void>;
+  completeAnonymousAccountUpgrade: (
+    email: string,
+    token: string,
+    password: string
+  ) => Promise<void>;
   signOut: () => Promise<void>;
   clearError: () => void;
-  isAnonymous: boolean;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -56,8 +62,8 @@ function describeAuthError(err: unknown): string {
   return String(err);
 }
 
-function userIsAnonymous(user: User | null): boolean {
-  return Boolean((user as { is_anonymous?: boolean } | null)?.is_anonymous);
+function isAnonymousUser(user: User | null): boolean {
+  return Boolean(user?.is_anonymous);
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -155,21 +161,76 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const upgradeAnonymousAccount = useCallback(async (email: string, password: string) => {
+  const signInAnonymous = useCallback(async () => {
+    setError(null);
+    setStatus("loading");
+    try {
+      clearAllSupabaseAuthStorage();
+      const { data, error: signInError } =
+        await getSupabaseClient().auth.signInAnonymously();
+      if (signInError || !data.session?.user) {
+        throw signInError || new Error("No Supabase anonymous session returned.");
+      }
+      setUser(data.session.user);
+      setStatus("authenticated");
+    } catch (err) {
+      setUser(null);
+      setStatus("unauthenticated");
+      setError(describeAuthError(err));
+      throw err;
+    }
+  }, []);
+
+  const beginAnonymousAccountUpgrade = useCallback(async (email: string) => {
     const normalizedEmail = email.trim().toLowerCase();
     setError(null);
     try {
       await v1Api.preflightAnonymousAccountUpgrade(normalizedEmail);
       const { data, error: updateError } = await getSupabaseClient().auth.updateUser({
         email: normalizedEmail,
-        password,
       });
       if (updateError || !data.user) {
         throw updateError || new Error("No Supabase user returned.");
       }
-      await getSupabaseClient().auth.refreshSession();
-      await v1Api.completeAnonymousAccountUpgrade(normalizedEmail);
       setUser(data.user);
+      setStatus("authenticated");
+    } catch (err) {
+      setStatus(user ? "authenticated" : "unauthenticated");
+      const message = describeAuthError(err);
+      setError(message);
+      throw new Error(message);
+    }
+  }, [user]);
+
+  const completeAnonymousAccountUpgrade = useCallback(async (
+    email: string,
+    token: string,
+    password: string
+  ) => {
+    const normalizedEmail = email.trim().toLowerCase();
+    const trimmedToken = token.trim();
+    setError(null);
+    try {
+      await v1Api.preflightAnonymousAccountUpgrade(normalizedEmail);
+      const supabase = getSupabaseClient();
+      const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
+        email: normalizedEmail,
+        token: trimmedToken,
+        type: "email_change",
+      });
+      if (verifyError || !verifyData.user) {
+        throw verifyError || new Error("No Supabase user returned.");
+      }
+
+      const { data: passwordData, error: passwordError } =
+        await supabase.auth.updateUser({ password });
+      if (passwordError || !passwordData.user) {
+        throw passwordError || new Error("No Supabase user returned.");
+      }
+
+      await supabase.auth.refreshSession();
+      await v1Api.completeAnonymousAccountUpgrade(normalizedEmail);
+      setUser(passwordData.user);
       setStatus("authenticated");
     } catch (err) {
       setStatus(user ? "authenticated" : "unauthenticated");
@@ -204,14 +265,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     () => ({
       status,
       user,
+      isAnonymous: isAnonymousUser(user),
       error,
       configured,
       signIn,
       signUp,
-      upgradeAnonymousAccount,
+      signInAnonymous,
+      beginAnonymousAccountUpgrade,
+      completeAnonymousAccountUpgrade,
       signOut,
       clearError,
-      isAnonymous: userIsAnonymous(user),
     }),
     [
       status,
@@ -220,7 +283,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       configured,
       signIn,
       signUp,
-      upgradeAnonymousAccount,
+      signInAnonymous,
+      beginAnonymousAccountUpgrade,
+      completeAnonymousAccountUpgrade,
       signOut,
       clearError,
     ]

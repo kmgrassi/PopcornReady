@@ -1,15 +1,27 @@
-import { Link } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { AgentRunPreview } from "../components/AgentRunPreview";
 import { HeatLogoMark } from "../components/HeatLogoMark";
 import { Reveal } from "../components/Reveal";
+import { useAuth } from "../components/auth/AuthProvider";
 import {
   LandingSection,
   LandingSectionHeader,
 } from "../components/landing/LandingSection";
 import { WorkflowStages } from "../components/landing/WorkflowStages";
+import {
+  buildPendingLandingPrompt,
+  canStartGuestRun,
+  continuePendingLandingPrompt,
+  guestRunGuardRemaining,
+  persistPendingLandingPrompt,
+  type PendingLandingPrompt,
+} from "../lib/guestGeneration";
 import styles from "./HomePage.module.css";
 
 const GITHUB_URL = "https://github.com/kmgrassi/popcornready";
+const PROMPT_MIN_LENGTH = 12;
+const LENGTH_OPTIONS = [15, 30, 45, 60];
 
 const FEATURES = [
   {
@@ -203,6 +215,72 @@ function HeatLogoScale({ score }: { score: number }) {
 }
 
 export function HomePage() {
+  const navigate = useNavigate();
+  const {
+    status,
+    error: authError,
+    configured,
+    signInAnonymous,
+  } = useAuth();
+  const [prompt, setPrompt] = useState("");
+  const [targetLengthSec, setTargetLengthSec] = useState(30);
+  const [pendingPrompt, setPendingPrompt] = useState<PendingLandingPrompt | null>(
+    null,
+  );
+  const [modalMode, setModalMode] = useState<"choice" | "limit">("choice");
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [isSkippingAccount, setIsSkippingAccount] = useState(false);
+  const normalizedPrompt = prompt.trim();
+  const promptTooShort =
+    normalizedPrompt.length > 0 && normalizedPrompt.length < PROMPT_MIN_LENGTH;
+  const canSubmit =
+    normalizedPrompt.length >= PROMPT_MIN_LENGTH && status !== "loading";
+  const remainingGuestRuns = useMemo(() => guestRunGuardRemaining(), []);
+  const guestRunLabel =
+    remainingGuestRuns === 1 ? "1 video" : `${remainingGuestRuns} videos`;
+
+  function openAccountChoice() {
+    if (!canSubmit) return;
+
+    const nextPendingPrompt = buildPendingLandingPrompt(
+      normalizedPrompt,
+      targetLengthSec,
+    );
+    setPendingPrompt(nextPendingPrompt);
+    setModalError(null);
+
+    if (status === "authenticated") {
+      continuePendingLandingPrompt(navigate, nextPendingPrompt);
+      return;
+    }
+
+    setModalMode(canStartGuestRun() ? "choice" : "limit");
+  }
+
+  function createAccount() {
+    if (!pendingPrompt) return;
+    persistPendingLandingPrompt(pendingPrompt);
+    navigate("/signup", {
+      state: { pendingLandingPrompt: pendingPrompt },
+    });
+  }
+
+  async function skipAccount() {
+    if (!pendingPrompt || isSkippingAccount || modalMode === "limit") return;
+    setModalError(null);
+    setIsSkippingAccount(true);
+    try {
+      await signInAnonymous();
+      continuePendingLandingPrompt(navigate, pendingPrompt);
+    } catch (err) {
+      setModalError(
+        err instanceof Error ? err.message : "Anonymous sign-in failed.",
+      );
+    } finally {
+      setIsSkippingAccount(false);
+    }
+  }
+
   return (
     <div className="landing">
       <main>
@@ -218,8 +296,56 @@ export function HomePage() {
             and refines the final cut — one AI-native production, not a pile of
             clips.
           </p>
+          <form
+            className={styles.promptComposer}
+            onSubmit={(event) => {
+              event.preventDefault();
+              openAccountChoice();
+            }}
+          >
+            <label className={styles.promptLabel} htmlFor="landing-video-prompt">
+              What should the video be about?
+            </label>
+            <textarea
+              id="landing-video-prompt"
+              value={prompt}
+              onChange={(event) => setPrompt(event.target.value)}
+              placeholder="A 30-second launch video for a neighborhood bakery's new midnight cookie menu..."
+              rows={4}
+            />
+            <div className={styles.promptControls}>
+              <label className={styles.lengthControl} htmlFor="landing-video-length">
+                <span>Length</span>
+                <select
+                  id="landing-video-length"
+                  value={targetLengthSec}
+                  onChange={(event) =>
+                    setTargetLengthSec(Number(event.target.value))
+                  }
+                >
+                  {LENGTH_OPTIONS.map((seconds) => (
+                    <option key={seconds} value={seconds}>
+                      {seconds} sec
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                className={styles.promptSubmit}
+                type="submit"
+                disabled={!canSubmit}
+              >
+                Create my {targetLengthSec}-second video
+              </button>
+            </div>
+            <p className={styles.promptHint}>
+              {promptTooShort
+                ? `Add a little more detail before starting.`
+                : `Guests can start ${guestRunLabel} before creating an account.`}
+            </p>
+          </form>
           <div className="lp-cta-buttons">
-            <Link className="lp-price-cta featured" to="/library/projects">
+            <Link className="lp-price-cta" to="/library/projects">
               View projects
             </Link>
             <a
@@ -439,6 +565,100 @@ export function HomePage() {
           </LandingSection>
         </Reveal>
       </main>
+      {pendingPrompt && (
+        <AccountChoiceModal
+          authConfigured={configured}
+          error={modalError ?? authError}
+          mode={modalMode}
+          onClose={() => {
+            if (!isSkippingAccount) setPendingPrompt(null);
+          }}
+          onCreateAccount={createAccount}
+          onSkipAccount={() => void skipAccount()}
+          skippingAccount={isSkippingAccount}
+          targetLengthSec={pendingPrompt.targetLengthSec}
+        />
+      )}
+    </div>
+  );
+}
+
+interface AccountChoiceModalProps {
+  authConfigured: boolean;
+  error: string | null;
+  mode: "choice" | "limit";
+  onClose: () => void;
+  onCreateAccount: () => void;
+  onSkipAccount: () => void;
+  skippingAccount: boolean;
+  targetLengthSec: number;
+}
+
+function AccountChoiceModal({
+  authConfigured,
+  error,
+  mode,
+  onClose,
+  onCreateAccount,
+  onSkipAccount,
+  skippingAccount,
+  targetLengthSec,
+}: AccountChoiceModalProps) {
+  const guestLimitReached = mode === "limit";
+
+  return (
+    <div
+      className={styles.modalBackdrop}
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        aria-labelledby="account-choice-title"
+        aria-modal="true"
+        className={styles.accountModal}
+        role="dialog"
+      >
+        <button
+          aria-label="Close"
+          className={styles.modalClose}
+          type="button"
+          onClick={onClose}
+        >
+          X
+        </button>
+        <p className={styles.modalKicker}>Ready to generate</p>
+        <h2 id="account-choice-title">Do you want to create an account?</h2>
+        <p>
+          {guestLimitReached
+            ? "Create an account to make more videos and keep every project tied to your workspace."
+            : `Create an account before starting, or skip this step and generate one ${targetLengthSec}-second video as a guest.`}
+        </p>
+        {!authConfigured && (
+          <p className={styles.modalError}>
+            Supabase auth is not configured in this environment.
+          </p>
+        )}
+        {error && <p className={styles.modalError}>{error}</p>}
+        <div className={styles.modalActions}>
+          <button
+            className={styles.modalPrimary}
+            type="button"
+            onClick={onCreateAccount}
+          >
+            Create account
+          </button>
+          <button
+            className={styles.modalSecondary}
+            type="button"
+            onClick={onSkipAccount}
+            disabled={!authConfigured || guestLimitReached || skippingAccount}
+          >
+            {skippingAccount ? "Starting guest session..." : "Skip this step"}
+          </button>
+        </div>
+      </section>
     </div>
   );
 }
