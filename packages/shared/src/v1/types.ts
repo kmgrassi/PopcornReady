@@ -655,6 +655,7 @@ export interface GenerationRun {
   projectId: string;
   briefVersionId?: string;
   status: GenerationRunStatus;
+  completionKind?: "video" | "storyboard_assets";
   reviewGates?: GateableGenerationStageType[];
   reviewGate?: RunReviewGate | null;
   reviewFeedback?: string | null;

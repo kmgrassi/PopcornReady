@@ -130,6 +130,17 @@ function hasReachedAfterGate(gates: OrchestratorRunGate[]): boolean {
   );
 }
 
+function completionKind(
+  run: OrchestratorRun,
+  gates: OrchestratorRunGate[],
+  actions: RunActionSummary[]
+): GenerationRun["completionKind"] {
+  if (run.status !== "succeeded") return undefined;
+  if (hasReachedAfterGate(gates)) return "storyboard_assets";
+  if (hasFinishedVideo(actions)) return "video";
+  return undefined;
+}
+
 function projectedRunStatus(
   run: OrchestratorRun,
   actions: RunActionSummary[],
@@ -221,6 +232,7 @@ export function projectRun(
     runId: run.id,
     projectId: run.projectId,
     status,
+    completionKind: completionKind(run, gates, actions),
     reviewGates: reviewGates.map((gate) => toolStage(gate.stage) as GateableGenerationStageType),
     reviewGate,
     currentStageType,

@@ -11,15 +11,21 @@ export function TerminalState({ run }: TerminalStateProps) {
   const elapsed = useElapsedTime(run.startedAt, run.completedAt);
 
   if (run.status === "succeeded") {
+    const storyboardAssetsReady = run.completionKind === "storyboard_assets";
+
     return (
       <div className="terminal-state terminal-succeeded" role="status">
         <div className="terminal-state-head">
           <span className="terminal-state-glyph" aria-hidden>✓</span>
-          <span className="terminal-state-heading">Your video is ready</span>
+          <span className="terminal-state-heading">
+            {storyboardAssetsReady ? "Storyboard assets are ready" : "Your video is ready"}
+          </span>
         </div>
         <p className="terminal-state-message">
           {run.message ??
-            "Generation finished. The final preview is available below."}
+            (storyboardAssetsReady
+              ? "Generation stopped after creating the storyboard and keyframe images."
+              : "Generation finished. The final preview is available below.")}
         </p>
         {elapsed !== null ? (
           <p className="terminal-state-meta">

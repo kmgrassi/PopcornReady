@@ -85,6 +85,7 @@ test("surfaces orchestrator success as ready once export_video produced output",
   );
 
   assert.equal(payload.run.status, "succeeded");
+  assert.equal(payload.run.completionKind, "video");
   assert.equal(payload.run.currentStageType, "ready");
   assert.deepEqual(payload.resultArtifacts, [
     {
@@ -109,6 +110,7 @@ test("surfaces stop-after orchestrator success as complete without a final expor
   );
 
   assert.equal(payload.run.status, "succeeded");
+  assert.equal(payload.run.completionKind, "storyboard_assets");
   assert.equal(payload.run.reviewGate, null);
   assert.deepEqual(payload.run.reviewGates, []);
   assert.equal(payload.run.currentStageType, "ready");
