@@ -85,10 +85,11 @@ if (missing.length > 0) {
 
 const env = {
   ...process.env,
-  AUTH_MODE: process.env.AUTH_MODE ?? "local",
+  AUTH_MODE: "local",
   DB_BACKEND: "supabase",
   POPCORN_E2E_ENV_FILE:
     process.env.POPCORN_E2E_ENV_FILE ?? "apps/web/e2e/e2e.local-db.env",
+  POPCORN_E2E_AUTH_MODE: "local",
   STORAGE_BACKEND: process.env.STORAGE_BACKEND ?? "local",
   SUPABASE_URL: supabaseUrl,
   SUPABASE_ANON_KEY: anonKey,
