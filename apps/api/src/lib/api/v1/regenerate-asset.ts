@@ -1,12 +1,13 @@
-// Regenerate an image asset's media IN PLACE.
+// Regenerate an image asset's media as a NEW VERSION in its lineage.
 //
 // Why this exists: generated image bytes can become undeliverable — e.g. a
 // storyboard keyframe written only to ephemeral local disk and never uploaded to
 // managed storage, so its row is `ready` but `resolveAssetUrl` yields nothing.
 // This re-runs image generation from the asset's saved prompt (or a
-// caller-supplied one), uploads the result to managed storage, and swaps the
-// asset's media in place (same id, bumped version), so a dead URL becomes live
-// again without repointing any references.
+// caller-supplied one), uploads the result to managed storage, and inserts a new
+// asset version sharing the lineage (the asset graph is immutable — bytes cannot
+// be swapped in place). Read paths resolve a lineage to its head version, so the
+// dead URL becomes live again for every reference without rewriting any row.
 //
 // If the asset has no saved prompt and the caller didn't provide one, this
 // raises `prompt_required` — the typed signal the client uses to pop the
@@ -20,7 +21,7 @@ import { writeAssetObject } from "@/lib/storage/asset-write";
 import { sha256Hex } from "./asset-graph";
 import { GeneratedAssetProvenance } from "./provenance";
 import {
-  applyRegeneratedAssetMedia,
+  insertRegeneratedAssetVersion,
   effectiveAssetStorageVisibility,
   getAssetByWorkspace,
   type AssetMediaUrls,
@@ -75,7 +76,7 @@ const defaultDeps: RegenerateImageAssetDeps = {
   generateImage: defaultGenerateImage,
   writeObject: writeAssetObject,
   resolveVisibility: effectiveAssetStorageVisibility,
-  applyMedia: applyRegeneratedAssetMedia,
+  applyMedia: insertRegeneratedAssetVersion,
 };
 
 export async function regenerateImageAsset(
