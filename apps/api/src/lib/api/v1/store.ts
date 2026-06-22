@@ -3311,6 +3311,75 @@ async function requireProjectRow(
   return data as ProjectRow;
 }
 
+// Resolve a set of panel image asset ids to their deliverable media urls,
+// following each asset's lineage HEAD (newest ready media version). A regenerate
+// inserts a new version sharing lineage_id, so resolving the head means a panel
+// keeps showing live bytes without its image_asset_id being repointed. Ids whose
+// lineage has no ready media are absent from the result (the panel stays blank).
+async function resolvePanelMediaByAssetId(
+  db: SupabaseClient,
+  workspaceId: string,
+  projectId: string,
+  assetIds: string[]
+): Promise<Map<string, { url: string | null; thumbnailUrl: string | null }>> {
+  const result = new Map<string, { url: string | null; thumbnailUrl: string | null }>();
+  const ids = [...new Set(assetIds.filter(Boolean))];
+  if (ids.length === 0) return result;
+
+  // Map each referenced asset id to its lineage.
+  const refRows = await runQuery(
+    "store.resolvePanelMediaByAssetId refs",
+    db
+      .from("assets")
+      .select("id, lineage_id")
+      .eq("workspace_id", workspaceId)
+      .eq("project_id", projectId)
+      .in("id", ids)
+  );
+  const lineageByAssetId = new Map<string, string>();
+  for (const row of (refRows ?? []) as Array<{ id: string; lineage_id: string }>) {
+    lineageByAssetId.set(row.id, row.lineage_id);
+  }
+  const lineageIds = [...new Set(lineageByAssetId.values())];
+  if (lineageIds.length === 0) return result;
+
+  // Pull every ready media version in those lineages; the first per lineage in
+  // version-desc order is the head.
+  const headRows = await runQuery(
+    "store.resolvePanelMediaByAssetId heads",
+    db
+      .from("assets")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .eq("project_id", projectId)
+      .in("lineage_id", lineageIds)
+      .neq("media", "data")
+      .eq("status", "ready")
+      .order("version", { ascending: false })
+  );
+  const headByLineage = new Map<string, AssetRow>();
+  for (const row of (headRows ?? []) as Array<AssetRow & { lineage_id: string }>) {
+    if (!headByLineage.has(row.lineage_id)) headByLineage.set(row.lineage_id, row);
+  }
+
+  const mediaByLineage = new Map<string, { url: string | null; thumbnailUrl: string | null }>();
+  await Promise.all(
+    [...headByLineage.entries()].map(async ([lineageId, row]) => {
+      const media = await assetMediaUrlsForRow(row);
+      mediaByLineage.set(lineageId, {
+        url: media.url,
+        thumbnailUrl: media.thumbnailUrl ?? null,
+      });
+    })
+  );
+
+  for (const [assetId, lineageId] of lineageByAssetId.entries()) {
+    const media = mediaByLineage.get(lineageId);
+    if (media) result.set(assetId, media);
+  }
+  return result;
+}
+
 export async function getProjectStoryboard(
   workspaceId: string,
   projectId: string
@@ -3359,8 +3428,28 @@ export async function getProjectStoryboard(
     : [];
   const panelRows = (panelsData ?? []) as StoryboardPanelRow[];
 
+  // Resolve each panel's image to a deliverable url. Panels reference an asset by
+  // id; mapStoryboardPanel alone carries no url, so without this every storyboard
+  // surface (StoryboardPage, ProjectDetailPage, the feedback board) rendered a
+  // blank panel. Resolution follows the lineage HEAD so a regenerated keyframe's
+  // fresh bytes appear without repointing image_asset_id.
+  const panelMedia = await resolvePanelMediaByAssetId(
+    db,
+    workspaceId,
+    projectId,
+    panelRows
+      .map((row) => row.image_asset_id)
+      .filter((id): id is string => Boolean(id))
+  );
+
   const panelsByBeat = new Map<string, StoryboardPanel[]>();
-  for (const panel of panelRows.map(mapStoryboardPanel)) {
+  for (const row of panelRows) {
+    const panel = mapStoryboardPanel(row);
+    const media = panel.imageAssetId ? panelMedia.get(panel.imageAssetId) : undefined;
+    if (media?.url) {
+      panel.url = media.url;
+      if (media.thumbnailUrl) panel.thumbnailUrl = media.thumbnailUrl;
+    }
     panelsByBeat.set(panel.beatId, [...(panelsByBeat.get(panel.beatId) ?? []), panel]);
   }
 
