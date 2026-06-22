@@ -32,6 +32,7 @@ import type { ToolCallResult, ToolName } from "./types";
 
 const DEFAULT_MAX_TURNS = 50;
 const DEFAULT_MODEL_TURN_TIMEOUT_MS = 60_000;
+const AFTER_GATE_PREFIX = "after:";
 
 export interface InvocationRecord {
   projectId: string;
@@ -141,11 +142,29 @@ function registryForRejectedGate(
   registry: ToolRegistry,
   gates: OrchestratorRunGate[]
 ): ToolRegistry {
-  const rejectedGate = gates.find((gate) => gate.status === "rejected");
+  const rejectedGate = gates.find(
+    (gate) => gate.status === "rejected" && !gate.stage.startsWith(AFTER_GATE_PREFIX)
+  );
   if (!rejectedGate) return registry;
   const tool = registry.get(rejectedGate.stage as ToolName);
   if (!tool) return registry;
   return new Map([[tool.name, tool]]);
+}
+
+function afterGateStage(toolName: string): string {
+  return `${AFTER_GATE_PREFIX}${toolName}`;
+}
+
+async function finishIfAfterGateReached(
+  run: OrchestratorRun,
+  toolName: string,
+  r: Resolved
+): Promise<OrchestratorRun | null> {
+  const gates = await r.store.listRunGates(run.id);
+  const gate = gates.find((g) => g.stage === afterGateStage(toolName));
+  if (!gate || (gate.status !== "pending" && gate.status !== "rejected")) return null;
+  await r.store.markGateReached(run.id, gate.stage);
+  return finish(run, "succeeded", r);
 }
 
 function resolved(deps: EngineDeps) {
@@ -248,6 +267,8 @@ export async function resumeOrchestratorRun(
       await r.store.markGateReached(runId, parkingAction.tool);
       return park(run, r);
     }
+    const stopped = await finishIfAfterGateReached(run, parkingAction.tool, r);
+    if (stopped) return stopped;
   }
   // Job done (or gate the caller resolved) → continue the loop.
   run = await r.store.updateOrchestratorRun(runId, { status: "running" });
@@ -377,7 +398,9 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
     // fall through. Rejected gates also fall through once: that is the
     // "regenerate this stage" path, and after the tool succeeds the gate is
     // marked reached again for another review stop.
-    const gate = gates.find((g) => g.stage === decision.toolName);
+    const gate = gates.find(
+      (g) => g.stage === decision.toolName && !g.stage.startsWith(AFTER_GATE_PREFIX)
+    );
     const regeneratingRejectedGate = gate?.status === "rejected";
     if (gate && gate.status !== "approved") {
       if (gate.status === "pending") {
@@ -451,6 +474,11 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
     if (regeneratingRejectedGate && result.status === "succeeded") {
       await r.store.markGateReached(run.id, decision.toolName);
       return park(run, r);
+    }
+
+    if (result.status === "succeeded") {
+      const stopped = await finishIfAfterGateReached(run, decision.toolName, r);
+      if (stopped) return stopped;
     }
 
     if (result.status === "accepted" || result.status === "waiting_for_approval") {

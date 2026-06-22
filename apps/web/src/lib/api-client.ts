@@ -427,6 +427,7 @@ export interface StartGenerationRunInput {
   allowGeneratedGapFill?: boolean;
   assetIds?: string[];
   reviewGates?: GateableGenerationStageType[];
+  stopAfter?: GateableGenerationStageType;
   provider?: string;
   seedAsset?: {
     kind?: "image" | "video";
