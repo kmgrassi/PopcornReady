@@ -814,6 +814,22 @@
   font-weight: 800;
 }
 
+.stageTitleLink {
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+}
+
+.stageTitleLink:hover {
+  color: var(--cta);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.stageTitleLink:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
 .stageStatusPill {
   display: inline-flex;
   align-items: center;

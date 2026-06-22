@@ -45,7 +45,6 @@ function useDashboardAuthScope() {
 export function ProjectDetailPage() {
   const { projectId, section } = useParams();
   const location = useLocation();
-  const [pipelineOpen, setPipelineOpen] = useState(false);
   const activeSection = isProjectSectionId(section) ? section : null;
   const authScope = useDashboardAuthScope();
   const projectQuery = useProjectQuery(projectId ?? "", Boolean(projectId));
@@ -103,10 +102,6 @@ export function ProjectDetailPage() {
       document.getElementById(sectionId)?.scrollIntoView({ block: "start" });
     });
   }, [activeSection, location.hash, projectQuery.data?.project]);
-
-  useEffect(() => {
-    setPipelineOpen(false);
-  }, [activeSection, location.hash]);
 
   if (!projectId) return <Navigate to="/library/projects" replace />;
   if (section && !activeSection) {
@@ -188,13 +183,6 @@ export function ProjectDetailPage() {
               <div className={styles.projectTopRail}>
                 <ProjectBrief project={project} />
                 <ProjectScript project={project} storyboard={storyboard} />
-                <ProjectStagePanel
-                  projectId={projectId}
-                  runs={runsQuery.items}
-                  loading={runsQuery.loading}
-                  error={runsQuery.error}
-                  onRetry={runsQuery.refetch}
-                />
               </div>
             </section>
             <section className={styles.storyboardLayout}>
@@ -236,88 +224,19 @@ export function ProjectDetailPage() {
               onLoadMore={() => void outputsQuery.fetchNextPage()}
             />
           </div>
-          <ProjectPipelineNav
-            projectId={projectId}
-            activeItem={activeHashItem(location.hash) ?? activeSection ?? "overview"}
-            isOpen={pipelineOpen}
-            onToggle={() => setPipelineOpen((open) => !open)}
-            onNavigate={() => setPipelineOpen(false)}
-          />
+          <aside className={styles.stageAside} aria-label="Run pipeline">
+            <ProjectStagePanel
+              projectId={projectId}
+              runs={runsQuery.items}
+              loading={runsQuery.loading}
+              error={runsQuery.error}
+              onRetry={runsQuery.refetch}
+            />
+          </aside>
         </div>
       ) : null}
     </main>
   );
-}
-
-function ProjectPipelineNav({
-  projectId,
-  activeItem,
-  isOpen,
-  onToggle,
-  onNavigate,
-}: {
-  projectId: string;
-  activeItem: string;
-  isOpen: boolean;
-  onToggle: () => void;
-  onNavigate: () => void;
-}) {
-  const projectPath = `/projects/${encodeURIComponent(projectId)}`;
-  const items = [
-    { id: "overview", label: "Overview", to: projectPath },
-    { id: "concept", label: "Concept", to: `${projectPath}/concept` },
-    { id: "brief", label: "Brief", to: `${projectPath}/brief` },
-    { id: "script", label: "Script", to: `${projectPath}/script` },
-    { id: "storyboard", label: "Storyboard", to: `${projectPath}#storyboard` },
-    { id: "runs", label: "Runs", to: `${projectPath}#runs` },
-    { id: "outputs", label: "Outputs", to: `${projectPath}#outputs` },
-  ];
-
-  return (
-    <aside className={styles.pipelineAside} aria-label="Project pipeline">
-      <button
-        className={styles.pipelineToggle}
-        type="button"
-        aria-expanded={isOpen}
-        onClick={onToggle}
-      >
-        Pipeline
-      </button>
-      <nav
-        className={`${styles.pipelineNav} ${isOpen ? styles.pipelineNavOpen : ""}`}
-        aria-label="Project pipeline"
-      >
-        <div className={styles.pipelineHeader}>
-          <span className={styles.eyebrow}>Pipeline</span>
-          <h2>Project sections</h2>
-        </div>
-        <ol className={styles.pipelineList}>
-          {items.map((item, index) => (
-            <li key={item.id}>
-              <Link
-                className={`${styles.pipelineLink} ${
-                  activeItem === item.id ? styles.pipelineLinkActive : ""
-                }`}
-                to={item.to}
-                onClick={onNavigate}
-                aria-current={activeItem === item.id ? "page" : undefined}
-              >
-                <span className={styles.pipelineIndex}>{index + 1}</span>
-                <span>{item.label}</span>
-              </Link>
-            </li>
-          ))}
-        </ol>
-      </nav>
-    </aside>
-  );
-}
-
-function activeHashItem(hash: string) {
-  if (!hash) return null;
-  const id = decodeURIComponent(hash.slice(1));
-  if (id === "storyboard" || id === "runs" || id === "outputs") return id;
-  return null;
 }
 
 function isProjectSectionId(value: string | undefined): value is ProjectSectionId {
@@ -354,6 +273,17 @@ function ProjectStagePanel({
     .sort((a, b) => a.order - b.order)
     .find((stage) => stage.status === "queued");
   const hasReviewGate = Boolean(run?.reviewGate);
+  const projectPath = `/projects/${encodeURIComponent(projectId)}`;
+  const stageLinks = {
+    Concept: `${projectPath}/concept`,
+    Brief: `${projectPath}/brief`,
+    Script: `${projectPath}/script`,
+    Storyboard: `${projectPath}#storyboard`,
+    Shots: `${projectPath}#runs`,
+    Assets: `${projectPath}#runs`,
+    Timeline: `${projectPath}#runs`,
+    "Final Render": `${projectPath}#outputs`,
+  };
 
   function updateGate(action: "approve" | "reject") {
     if (!run?.runId) return;
@@ -436,6 +366,7 @@ function ProjectStagePanel({
               runProgressPercent={run.progressPercent}
               runMessage={run.message}
               reviewGate={run.reviewGate}
+              stageLinks={stageLinks}
             />
           ) : (
             <p className={styles.muted}>
