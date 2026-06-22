@@ -6,6 +6,7 @@ import { beatsRouter } from "./beats.js";
 import { briefRouter } from "./brief.js";
 import { catalogProtectedRouter } from "./catalog.js";
 import { evalRouter } from "./eval.js";
+import { inspirationRouter } from "./inspiration.js";
 import { meRouter } from "./me.js";
 import { miscCapabilitiesRouter } from "./misc-capabilities.js";
 import { orchestratorRunsRouter } from "./orchestrator-runs.js";
@@ -27,6 +28,7 @@ export function mountProtectedV1Routes(v1: Router) {
   v1.use(beatsRouter);
   v1.use(briefRouter);
   v1.use(catalogProtectedRouter);
+  v1.use(inspirationRouter);
   v1.use(miscCapabilitiesRouter);
   v1.use(planRouter);
   v1.use(storyboardsRouter);

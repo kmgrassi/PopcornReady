@@ -16,6 +16,7 @@ import { AnchorsPage } from "./routes/anchors/AnchorsPage";
 import { AnchorsMinePage } from "./routes/AnchorsMinePage";
 import { BrandKitPage } from "./routes/BrandKitPage";
 import { HomePage } from "./routes/HomePage";
+import { InspirationPage } from "./routes/InspirationPage";
 import { LaunchpadPage } from "./routes/LaunchpadPage";
 import { LibraryPage } from "./routes/LibraryPage";
 import { LoginPage } from "./routes/LoginPage";
@@ -46,6 +47,7 @@ export function App() {
 
         <Route element={<AuthenticatedAppLayout />}>
           <Route path="/dashboard" element={<LaunchpadPage />} />
+          <Route path="/inspiration" element={<InspirationPage />} />
           <Route path="/library" element={<LibraryPage />} />
           <Route path="/library/:tab" element={<LibraryPage />} />
           <Route path="/projects" element={<RedirectWithSearch to="/library/projects" />} />
