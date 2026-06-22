@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { runtimeProviderApiKey } from "../provider-api-keys";
 
 import {
   ChooseToolArgs,
@@ -198,10 +199,14 @@ export function createOpenAiLlmClient(deps: OpenAiDeps): LlmClient {
   let create = deps.create;
   const ensureCreate = (): ChatCreate => {
     if (create) return create;
-    const client = new OpenAI();
-    create = client.chat.completions.create.bind(
-      client.chat.completions
-    ) as unknown as ChatCreate;
+    create = (async (params: Record<string, unknown>) => {
+      const apiKey = await runtimeProviderApiKey("openai");
+      if (!apiKey) {
+        throw new Error("OPENAI_API_KEY is not set for the OpenAI LLM provider.");
+      }
+      const client = new OpenAI({ apiKey });
+      return client.chat.completions.create(params as never) as Promise<OpenAiCompletionLike>;
+    }) as ChatCreate;
     return create;
   };
   const model = deps.model;
@@ -250,6 +255,7 @@ export function createOpenAiLlmClient(deps: OpenAiDeps): LlmClient {
   return {
     provider: "openai",
     model,
+    modelFor: pickModel,
     structured<T>(args: StructuredArgs) {
       return structuredImpl<T>(args, args.user);
     },

@@ -8,6 +8,7 @@ import type {
   GenerativeProvider,
 } from "@popcorn/shared/generative/types";
 import { estimateCostUsd } from "../pricing";
+import { runtimeProviderApiKey } from "../../provider-api-keys";
 import {
   aspectRatioFromSize,
   characterProviderSettings,
@@ -32,7 +33,7 @@ async function readAsGeminiImage(filePath: string): Promise<Image> {
 async function generateGeminiImage(
   input: Extract<GenerateAssetRequest, { provider: "gemini"; kind: "image" }>
 ): Promise<GeneratedAssetResult> {
-  const key = process.env.GEMINI_API_KEY;
+  const key = await runtimeProviderApiKey("gemini");
   if (!key) {
     throw new Error("GEMINI_API_KEY is not set for the Gemini provider.");
   }
@@ -108,7 +109,7 @@ async function downloadGeminiVideo(ai: GoogleGenAI, video: Video): Promise<Buffe
 async function generateGeminiVideo(
   input: Extract<GenerateAssetRequest, { provider: "gemini"; kind: "video" }>
 ): Promise<GeneratedAssetResult> {
-  const key = process.env.GEMINI_API_KEY;
+  const key = await runtimeProviderApiKey("gemini");
   if (!key) {
     throw new Error("GEMINI_API_KEY is not set for the Gemini provider.");
   }

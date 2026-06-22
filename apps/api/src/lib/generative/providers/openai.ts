@@ -14,6 +14,7 @@ import {
   normalizeOpenAIVideoSize,
 } from "@popcorn/shared/generative/types";
 import { estimateCostUsd } from "../pricing";
+import { runtimeProviderApiKey } from "../../provider-api-keys";
 import {
   authedFetch,
   characterProviderSettings,
@@ -79,12 +80,12 @@ function buildOpenAIVideoPayload(
   };
 }
 
-function openaiFetch(pathName: string, init: RequestInit): Promise<Response> {
+async function openaiFetch(pathName: string, init: RequestInit): Promise<Response> {
   return authedFetch({
     baseUrl: OPENAI_BASE_URL,
     pathName,
     init,
-    apiKey: process.env.OPENAI_API_KEY,
+    apiKey: (await runtimeProviderApiKey("openai")) ?? undefined,
     missingKeyMessage: "OPENAI_API_KEY is not set for the OpenAI provider.",
     errorPrefix: "OpenAI",
   });

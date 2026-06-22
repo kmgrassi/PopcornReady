@@ -1,4 +1,4 @@
-import { client as anthropicClient, MODEL } from "../anthropic";
+import { createMessage as createAnthropicMessage, MODEL } from "../anthropic";
 import {
   ChooseToolArgs,
   LlmClient,
@@ -141,7 +141,7 @@ export function createAnthropicLlmClient(deps: AnthropicDeps = {}): LlmClient {
   const ensureCreate = (): MessageCreate => {
     if (createMessage) return createMessage;
     createMessage = ((params: Record<string, unknown>) =>
-      anthropicClient().messages.create(params as never)) as MessageCreate;
+      createAnthropicMessage(params)) as MessageCreate;
     return createMessage;
   };
 
@@ -186,6 +186,7 @@ export function createAnthropicLlmClient(deps: AnthropicDeps = {}): LlmClient {
   return {
     provider: "anthropic",
     model,
+    modelFor: pickModel,
     structured<T>(args: StructuredArgs) {
       return structuredImpl<T>(args, args.user);
     },

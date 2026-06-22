@@ -1,4 +1,5 @@
 import { ApiError } from "./errors";
+import { hasRuntimeProviderApiKey } from "@/lib/provider-api-keys";
 import { assetEmbeddingConfig } from "./asset-embeddings/config";
 import { defaultAssetEmbeddingProvider } from "./asset-embeddings/provider";
 import type {
@@ -94,7 +95,7 @@ async function buildSemanticSearchInput(
   },
   options: { requireProvider?: boolean } = {}
 ): Promise<AssetSemanticSearchInput | null> {
-  if (!process.env.OPENAI_API_KEY?.trim()) {
+  if (!(await hasRuntimeProviderApiKey("openai"))) {
     if (options.requireProvider) {
       throw new ApiError(
         "validation_failed",

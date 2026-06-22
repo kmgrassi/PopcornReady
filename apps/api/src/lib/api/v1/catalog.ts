@@ -1,6 +1,7 @@
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { hasRuntimeProviderApiKey } from "@/lib/provider-api-keys";
 import { getServiceSupabase } from "@/lib/supabase/clients";
 import { runQuery } from "@/lib/supabase/db-errors";
 import { assetStorageKey, contentTypeForFilename } from "@/lib/storage/asset-write";
@@ -187,7 +188,7 @@ async function embedCatalogSearchText(
 ): Promise<CatalogSearchEmbedding | null> {
   const trimmed = text.trim();
   if (!trimmed) return null;
-  if (!process.env.OPENAI_API_KEY?.trim()) return null;
+  if (!(await hasRuntimeProviderApiKey("openai"))) return null;
   try {
     const config = assetEmbeddingConfig();
     const provider = deps?.embeddingProvider ?? defaultAssetEmbeddingProvider;
