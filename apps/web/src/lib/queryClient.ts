@@ -1,4 +1,6 @@
 import {
+  MutationCache,
+  QueryCache,
   QueryClient,
   useMutation,
   useQuery,
@@ -27,16 +29,30 @@ import {
   type WorkspaceAssetSource,
 } from "./api-client";
 import { projectQueryKeys } from "./project-queries";
+import { showErrorToast, showSuccessToast } from "./toast";
 import { dashboardApi } from "./v1/dashboard/client";
 import type { GenerationRunDetail } from "./v1/generation-runs/status";
 import { storyboardProgress } from "./v1/storyboard/progress";
 import type { ProjectStoryboardResponse } from "./api-client";
+
+declare module "@tanstack/react-query" {
+  interface Register {
+    queryMeta: QueryToastMeta;
+    mutationMeta: QueryToastMeta;
+  }
+}
 
 const DEFAULT_STALE_TIME_MS = 15_000;
 const POLL_INTERVAL_MS = 2_000;
 const REVIEW_POLL_INTERVAL_MS = 15_000;
 const DASHBOARD_POLL_INTERVAL_MS = 5_000;
 const DASHBOARD_HIDDEN_POLL_INTERVAL_MS = 30_000;
+
+interface QueryToastMeta extends Record<string, unknown> {
+  errorMessage?: string;
+  successMessage?: string;
+  suppressErrorToast?: boolean;
+}
 
 function retryApiFailure(failureCount: number, error: Error): boolean {
   if (error instanceof ApiClientError && error.status >= 400 && error.status < 500) {
@@ -45,7 +61,55 @@ function retryApiFailure(failureCount: number, error: Error): boolean {
   return failureCount < 2;
 }
 
+function errorToastMessage(error: unknown): string {
+  if (error instanceof ApiClientError) return error.message;
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  return "Something went wrong. Try again.";
+}
+
+const recentToastKeys = new Map<string, number>();
+
+function showDedupedErrorToast(title: string, message: string) {
+  const key = `${title}:${message}`;
+  const now = Date.now();
+  const lastShownAt = recentToastKeys.get(key) ?? 0;
+  if (now - lastShownAt < 8_000) return;
+
+  recentToastKeys.set(key, now);
+  showErrorToast(title, message);
+}
+
 export const queryClient = new QueryClient({
+  queryCache: new QueryCache({
+    onError: (error, query) => {
+      const meta = query.meta;
+      if (meta?.suppressErrorToast) return;
+      if (query.state.data !== undefined) return;
+
+      showDedupedErrorToast(
+        meta?.errorMessage ?? "Could not load data",
+        errorToastMessage(error),
+      );
+    },
+  }),
+  mutationCache: new MutationCache({
+    onError: (error, _variables, _context, mutation) => {
+      const meta = mutation.meta;
+      if (meta?.suppressErrorToast) return;
+
+      showDedupedErrorToast(
+        meta?.errorMessage ?? "Action failed",
+        errorToastMessage(error),
+      );
+    },
+    onSuccess: (_data, _variables, _context, mutation) => {
+      const message = mutation.meta?.successMessage;
+      if (message) {
+        showSuccessToast(message);
+      }
+    },
+  }),
   defaultOptions: {
     queries: {
       staleTime: DEFAULT_STALE_TIME_MS,
@@ -204,6 +268,10 @@ export function useSaveProviderApiKeyMutation(authScope: string) {
   return useMutation({
     mutationFn: (input: { provider: ModelProvider; apiKey: string }) =>
       v1Api.saveProviderApiKey(input.provider, input.apiKey),
+    meta: {
+      successMessage: "Provider key saved",
+      errorMessage: "Could not save provider key",
+    },
     onSuccess: () => {
       void client.invalidateQueries({
         queryKey: queryKeys.providerApiKeys(authScope),
@@ -217,6 +285,10 @@ export function useDeleteProviderApiKeyMutation(authScope: string) {
 
   return useMutation({
     mutationFn: (provider: ModelProvider) => v1Api.deleteProviderApiKey(provider),
+    meta: {
+      successMessage: "Provider key removed",
+      errorMessage: "Could not remove provider key",
+    },
     onSuccess: () => {
       void client.invalidateQueries({
         queryKey: queryKeys.providerApiKeys(authScope),
@@ -259,6 +331,10 @@ export function useSaveWorkspaceModelSettingMutation(workspaceId: string | null 
         provider: input.provider,
         model: input.model,
       });
+    },
+    meta: {
+      successMessage: "Model setting saved",
+      errorMessage: "Could not save model setting",
     },
     onSuccess: () => {
       if (workspaceId) {
@@ -322,6 +398,10 @@ export function useCreateProjectMutation() {
 
   return useMutation({
     mutationFn: (input: CreateProjectInput) => v1Api.createProject(input),
+    meta: {
+      successMessage: "Project created",
+      errorMessage: "Could not create project",
+    },
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ["projects"] });
       void client.invalidateQueries({ queryKey: ["dashboard"] });
@@ -335,6 +415,10 @@ export function useSetProjectPosterMutation(projectId: string) {
 
   return useMutation({
     mutationFn: (assetId: string) => v1Api.setProjectPoster(projectId, assetId),
+    meta: {
+      successMessage: "Project poster updated",
+      errorMessage: "Could not update project poster",
+    },
     onSuccess: (data) => {
       client.setQueryData(queryKeys.project(projectId), data);
       void client.invalidateQueries({ queryKey: ["projects"] });
@@ -408,6 +492,10 @@ export function useSaveProjectStoryboardMutation(projectId: string) {
   return useMutation({
     mutationFn: (storyboard: SaveProjectStoryboardInput) =>
       v1Api.saveProjectStoryboard(projectId, storyboard),
+    meta: {
+      successMessage: "Storyboard saved",
+      errorMessage: "Could not save storyboard",
+    },
     onSuccess: (data) => {
       client.setQueryData(queryKeys.projectStoryboard(projectId), {
         storyboard: data.storyboard,
@@ -469,6 +557,10 @@ export function useRefreshAssetMediaMutation() {
 
   return useMutation({
     mutationFn: (assetId: string) => v1Api.refreshAssetMedia(assetId),
+    meta: {
+      successMessage: "Media refreshed",
+      errorMessage: "Could not refresh media",
+    },
     onSuccess: (data, assetId) => {
       client.setQueryData(queryKeys.assetMedia(assetId), data);
       void client.invalidateQueries({ queryKey: ["workspaces"] });
@@ -489,6 +581,10 @@ export function useSetAssetVisibilityMutation() {
       assetId: string;
       visibility: "public" | "private";
     }) => v1Api.setAssetVisibility(projectId, assetId, visibility),
+    meta: {
+      successMessage: "Visibility updated",
+      errorMessage: "Could not update visibility",
+    },
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ["workspaces"] });
     },

@@ -19,6 +19,7 @@ import { LogoMark } from "./LogoMark";
 import { CommandPalette } from "./palette/Palette";
 import ThemeToggle from "./ThemeToggle";
 import { Button } from "./ui/Button";
+import { ToastProvider } from "./ui/Toast";
 import { queryClient, useMeQuery } from "../lib/queryClient";
 import styles from "./AppLayout.module.css";
 
@@ -249,7 +250,9 @@ export function RootProviders({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>{children}</AuthProvider>
+      <ToastProvider>
+        <AuthProvider>{children}</AuthProvider>
+      </ToastProvider>
     </QueryClientProvider>
   );
 }
