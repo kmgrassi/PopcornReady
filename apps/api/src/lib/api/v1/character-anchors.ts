@@ -140,12 +140,13 @@ export async function generateCharacterAnchor(
     ...body,
     kind: "image",
     prompt,
-    provider: optionalString(body.provider) ?? "openai",
     description:
       optionalString(body.description) ??
       `Character anchor likeness for ${name}.`,
     characterProfileIds: [character.id],
   };
+  const provider = optionalString(body.provider);
+  if (provider) generatedAssetBody.provider = provider;
   delete generatedAssetBody.autocreate;
 
   return createGeneratedAsset({

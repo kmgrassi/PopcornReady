@@ -12,6 +12,7 @@ import { parseConsistencyMode } from "@/lib/generative/character-context";
 import { measureAudioDurationSec } from "@/lib/generative/audio-duration";
 import { withDerivedAssetKnowledge } from "./assets";
 import { enqueueAssetEmbeddingRefresh } from "./asset-embeddings/jobs";
+import { resolveWorkspaceGenerationModel } from "./model-settings";
 import { preflightGenerationContent } from "@/lib/generative/preflight";
 import { providerFor } from "@/lib/generative/providers";
 import { estimateCostUsd } from "@/lib/generative/pricing";
@@ -99,6 +100,7 @@ async function localPathForAssetBytes(asset: V1Asset): Promise<string> {
 interface ParsedRequest {
   kind: GenerativeAssetKind;
   provider: GenerativeProviderName;
+  providerWasExplicit: boolean;
   prompt: string;
   description: string;
   durationSec: number;
@@ -301,6 +303,8 @@ function parseGeneratedAssetRequest(body: unknown): ParsedRequest {
     ]);
   }
 
+  const providerWasExplicit =
+    typeof body.provider === "string" && body.provider.trim().length > 0;
   const provider = normalizeProvider(body.provider, kind);
   if (!provider) {
     throw validationError("The request body is invalid.", [
@@ -379,6 +383,7 @@ function parseGeneratedAssetRequest(body: unknown): ParsedRequest {
   return {
     kind,
     provider,
+    providerWasExplicit,
     prompt,
     description,
     durationSec,
@@ -929,6 +934,24 @@ export async function runGeneratedAssetJob(args: {
   }
 
   const parsed = parseGeneratedAssetRequest(generatedAssetJobInput(job).body);
+  if (!parsed.providerWasExplicit) {
+    const resolved = await resolveWorkspaceGenerationModel({
+      workspaceId: auth.workspaceId,
+      kind: parsed.kind,
+      explicitModel: parsed.model,
+    });
+    parsed.provider = resolved.provider;
+    parsed.model = resolved.model;
+    const supportedKinds = PROVIDER_KIND_SUPPORT[parsed.provider];
+    if (!supportedKinds?.includes(parsed.kind)) {
+      throw validationError("The request body is invalid.", [
+        {
+          path: "provider",
+          message: `Provider "${parsed.provider}" supports ${supportedKinds?.join(", ") || "no"} generation, not ${parsed.kind}.`,
+        },
+      ]);
+    }
+  }
   // The agent may reference inputs by slug (e.g. "character_homeowner"). Resolve
   // every asset reference to its canonical uuid BEFORE these values are written to
   // uuid columns (createAction.input_asset_ids, asset_edges via graphInputs), or

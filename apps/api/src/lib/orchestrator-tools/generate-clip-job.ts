@@ -92,7 +92,7 @@ async function generateClipForBeat(input: {
       description: input.beat.prompt,
       durationSec: input.beat.durationSec,
       seconds: input.beat.durationSec,
-      provider: input.provider ?? "gemini",
+      ...(input.provider ? { provider: input.provider } : {}),
       ...(input.model ? { model: input.model } : {}),
       beatId: input.beat.beatId,
       assetRole: "beat_clip",

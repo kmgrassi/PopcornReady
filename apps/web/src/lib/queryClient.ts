@@ -14,6 +14,7 @@ import {
   type CreateTimelineRevisionInput,
   type CreateProjectInput,
   type MeResponse,
+  type ModelSettingPurpose,
   type ModelProvider,
   type ProviderApiKey,
   type RejectGenerationRunInput,
@@ -60,6 +61,8 @@ export const queryClient = new QueryClient({
 export const queryKeys = {
   me: (authScope: string) => ["me", authScope] as const,
   providerApiKeys: (authScope: string) => ["provider-api-keys", authScope] as const,
+  workspaceModelSettings: (workspaceId: string) =>
+    ["workspaces", workspaceId, "model-settings"] as const,
   projects: (params: { limit?: number; cursor?: string | null } = {}) =>
     ["projects", params] as const,
   project: (projectId: string) => ["projects", projectId] as const,
@@ -112,6 +115,7 @@ export const queryKeys = {
 
 type MeQueryKey = ReturnType<typeof queryKeys.me>;
 type ProviderApiKeysQueryKey = ReturnType<typeof queryKeys.providerApiKeys>;
+type WorkspaceModelSettingsQueryKey = ReturnType<typeof queryKeys.workspaceModelSettings>;
 type QuerySignal = QueryFunctionContext["signal"];
 type StudioProjectTimeline = NonNullable<
   Parameters<typeof v1Api.getStudioProjectById>[1]
@@ -217,6 +221,51 @@ export function useDeleteProviderApiKeyMutation(authScope: string) {
       void client.invalidateQueries({
         queryKey: queryKeys.providerApiKeys(authScope),
       });
+    },
+  });
+}
+
+export function useWorkspaceModelSettingsQuery(
+  workspaceId: string | null | undefined,
+  options: Omit<
+    UseQueryOptions<
+      Awaited<ReturnType<typeof v1Api.listWorkspaceModelSettings>>,
+      Error,
+      Awaited<ReturnType<typeof v1Api.listWorkspaceModelSettings>>,
+      WorkspaceModelSettingsQueryKey
+    >,
+    "queryKey" | "queryFn"
+  > = {},
+) {
+  return useQuery({
+    queryKey: queryKeys.workspaceModelSettings(workspaceId ?? "pending"),
+    queryFn: () => v1Api.listWorkspaceModelSettings(workspaceId!),
+    enabled: Boolean(workspaceId) && (options.enabled ?? true),
+    ...options,
+  });
+}
+
+export function useSaveWorkspaceModelSettingMutation(workspaceId: string | null | undefined) {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: {
+      purpose: ModelSettingPurpose;
+      provider: string;
+      model: string;
+    }) => {
+      if (!workspaceId) throw new Error("workspaceId is required.");
+      return v1Api.saveWorkspaceModelSetting(workspaceId, input.purpose, {
+        provider: input.provider,
+        model: input.model,
+      });
+    },
+    onSuccess: () => {
+      if (workspaceId) {
+        void client.invalidateQueries({
+          queryKey: queryKeys.workspaceModelSettings(workspaceId),
+        });
+      }
     },
   });
 }

@@ -14,6 +14,7 @@ const PROVIDERS = [
   "openai",
   "anthropic",
   "gemini",
+  "ideogram",
   "elevenlabs",
   "runway",
   "ltx",

@@ -182,6 +182,7 @@ export type ModelProvider =
   | "openai"
   | "anthropic"
   | "gemini"
+  | "ideogram"
   | "elevenlabs"
   | "runway"
   | "ltx"
@@ -200,6 +201,28 @@ export interface ProviderApiKeysResponse {
 
 export interface ProviderApiKeyResponse {
   key: ProviderApiKey;
+}
+
+export type ModelSettingPurpose =
+  | "image_generation"
+  | "video_generation"
+  | "audio_generation"
+  | "text_generation";
+
+export interface WorkspaceModelSetting {
+  purpose: ModelSettingPurpose;
+  provider: string;
+  model: string;
+  updatedAt: string;
+}
+
+export interface WorkspaceModelSettingsResponse {
+  defaults: WorkspaceModelSetting[];
+  settings: WorkspaceModelSetting[];
+}
+
+export interface WorkspaceModelSettingResponse {
+  setting: WorkspaceModelSetting;
 }
 
 export interface ProjectsResponse {
@@ -618,6 +641,22 @@ export const v1Api = {
       `/api/v1/provider-api-keys/${encodeURIComponent(provider)}`,
       {
         method: "DELETE",
+      }
+    ),
+  listWorkspaceModelSettings: (workspaceId: string) =>
+    apiRequest<WorkspaceModelSettingsResponse>(
+      `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/model-settings`
+    ),
+  saveWorkspaceModelSetting: (
+    workspaceId: string,
+    purpose: ModelSettingPurpose,
+    input: { provider: string; model: string }
+  ) =>
+    apiRequest<WorkspaceModelSettingResponse>(
+      `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/model-settings/${encodeURIComponent(purpose)}`,
+      {
+        method: "PUT",
+        body: input,
       }
     ),
   listProjects: (params?: { limit?: number; cursor?: string | null }) =>

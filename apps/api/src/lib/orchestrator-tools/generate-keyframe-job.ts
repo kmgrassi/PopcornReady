@@ -99,9 +99,9 @@ function providerForBeat(
   beat: Beat,
   anchors: VisualAnchorPlanItem[],
   requestedProvider?: KeyframeImageProvider
-): KeyframeImageProvider {
+): KeyframeImageProvider | undefined {
   if (mentionsMinor(beat, anchors)) return "gemini";
-  return requestedProvider ?? "openai";
+  return requestedProvider;
 }
 
 function graphInputForAsset(
@@ -235,7 +235,7 @@ export async function runGenerateKeyframeJob(
         beatId,
         body: {
           prompt,
-          provider,
+          ...(provider ? { provider } : {}),
           assetRole: "beat_keyframe",
           // Display name + a stable, agent-referenceable handle derived from the
           // planned beat (namespaced so a beat's keyframe and clip don't collide).

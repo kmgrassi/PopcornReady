@@ -58,9 +58,9 @@ function mentionsMinor(anchor: VisualAnchorPlanItem): boolean {
 function providerForAnchor(
   anchor: VisualAnchorPlanItem,
   requestedProvider?: AnchorImageProvider
-): AnchorImageProvider {
+): AnchorImageProvider | undefined {
   if (mentionsMinor(anchor)) return "gemini";
-  return requestedProvider ?? "openai";
+  return requestedProvider;
 }
 
 function promptForAnchor(anchor: VisualAnchorPlanItem): string {
@@ -103,7 +103,7 @@ async function generateAnchorAsset(input: {
   projectId: string;
   anchor: VisualAnchorPlanItem;
   role: "character_anchor" | "scene_anchor";
-  provider: AnchorImageProvider;
+  provider?: AnchorImageProvider;
   graphInputs: GraphAssetInput[];
   orchestratorRunId?: string;
 }): Promise<string[]> {
@@ -121,7 +121,7 @@ async function generateAnchorAsset(input: {
         slug: input.anchor.id,
         description: input.anchor.description,
         prompt,
-        provider: input.provider,
+        ...(input.provider ? { provider: input.provider } : {}),
         assetRole: input.role,
         graphInputs: input.graphInputs,
         ...(input.orchestratorRunId ? { runId: input.orchestratorRunId } : {}),
@@ -140,7 +140,7 @@ async function generateAnchorAsset(input: {
       // The plan item's id (e.g. "location_driveway") becomes the asset slug.
       slug: input.anchor.id,
       description: input.anchor.description,
-      provider: input.provider,
+      ...(input.provider ? { provider: input.provider } : {}),
       assetRole: input.role,
       graphInputs: input.graphInputs,
       ...(input.orchestratorRunId ? { runId: input.orchestratorRunId } : {}),
