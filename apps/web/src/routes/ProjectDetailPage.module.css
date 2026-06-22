@@ -306,13 +306,15 @@
 
 .outputGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 380px));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
   gap: var(--space-3);
   justify-content: start;
 }
 
 .outputCard {
   display: grid;
+  width: 100%;
+  max-width: 380px;
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--border);

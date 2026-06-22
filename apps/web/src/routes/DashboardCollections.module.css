@@ -175,17 +175,32 @@
 /* Card grids (assets, outputs) */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 360px));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
   gap: var(--space-4);
   justify-content: start;
 }
 
 .gridOutputs {
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 380px));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
 }
 
 .gridProjects {
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 390px));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+}
+
+.grid > .card,
+.grid > .skeleton {
+  width: 100%;
+  max-width: 360px;
+}
+
+.gridOutputs > .card {
+  max-width: 380px;
+}
+
+.gridProjects > .projectCard {
+  width: 100%;
+  max-width: 390px;
 }
 
 .card {
