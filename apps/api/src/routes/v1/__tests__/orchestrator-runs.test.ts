@@ -6,7 +6,8 @@ import type {
   RunActionSummary,
 } from "@/lib/api/v1/orchestrator-store";
 import type { resumeOrchestratorRun } from "@/lib/orchestrator/engine";
-import { projectRunDetailFromParts, resumeRunInBackground } from "../orchestrator-runs";
+import { projectRunDetailFromParts } from "../orchestrator-run-projections.js";
+import { resumeRunInBackground } from "../orchestrator-runs";
 
 type Resume = typeof resumeOrchestratorRun;
 
