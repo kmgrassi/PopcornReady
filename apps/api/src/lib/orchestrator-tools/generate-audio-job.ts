@@ -172,7 +172,6 @@ export async function runGenerateAudioJob(
   try {
     await d.jobs.setStep(input.jobId, "generating_assets");
     const auth = localAuth(input.workspaceId);
-    const provider = input.provider ?? "elevenlabs";
     const assetIds: string[] = [];
     const graphInputs = graphInputsForPlan(input);
 
@@ -195,7 +194,7 @@ export async function runGenerateAudioJob(
         projectId: input.projectId,
         body: {
           kind: "audio",
-          provider,
+          ...(input.provider ? { provider: input.provider } : {}),
           prompt,
           description: `Voiceover for ${beat.name ?? beat.id}`,
           name: `Voiceover — ${beat.name ?? beat.id}`,
@@ -238,7 +237,7 @@ export async function runGenerateAudioJob(
         projectId: input.projectId,
         body: {
           kind: "audio",
-          provider,
+          ...(input.provider ? { provider: input.provider } : {}),
           prompt: soundtrackPrompt(input),
           description: "Generated soundtrack",
           name: "Soundtrack",

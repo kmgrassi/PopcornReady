@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../components/auth/AuthProvider";
 import { AnonymousUpgradeBanner } from "../components/auth/AnonymousUpgradeBanner";
 import { AccessTokenPanel } from "../components/settings/AccessTokenPanel";
+import { ModelSettingsPanel } from "../components/settings/ModelSettingsPanel";
 import { ProviderApiKeysPanel } from "../components/settings/ProviderApiKeysPanel";
 import ThemeToggle from "../components/ThemeToggle";
 import { Button } from "../components/ui/Button";
@@ -119,6 +120,11 @@ export function SettingsPage() {
       </section>
 
       <AnonymousUpgradeBanner />
+
+      <ModelSettingsPanel
+        workspaceId={me?.workspaceId}
+        enabled={auth.status !== "loading" && Boolean(me?.workspaceId)}
+      />
 
       <ProviderApiKeysPanel authScope={authScope} enabled={auth.status !== "loading"} />
 

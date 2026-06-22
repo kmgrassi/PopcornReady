@@ -4,6 +4,7 @@ import type { GraphAssetInput } from "./asset-graph";
 import { ApiError } from "./errors";
 import { createGeneratedAsset } from "./generated-assets";
 import type { V1Job } from "./jobs";
+import { resolveWorkspaceGenerationModel } from "./model-settings";
 import {
   findReusableGeneratedPoster,
   getAsset,
@@ -136,9 +137,9 @@ function providerName(input: {
   brief: VideoBrief;
   planAsset: PosterGenerationAssetRef | null;
   heroAnchorAsset: PosterGenerationAssetRef | null;
-}): string {
+}): string | undefined {
   if (mentionsMinor(input)) return "gemini";
-  return input.requestedProvider?.trim() || "openai";
+  return input.requestedProvider?.trim() || undefined;
 }
 
 export async function generatePoster(
@@ -162,12 +163,18 @@ export async function generatePoster(
     planSummary: summarizePlan(context.planAsset?.content),
     heroAnchorDescription: context.heroAnchorAsset?.description,
   });
-  const provider = providerName({
+  const requestedOrSafetyProvider = providerName({
     requestedProvider: input.provider,
     brief,
     planAsset: context.planAsset,
     heroAnchorAsset: context.heroAnchorAsset,
   });
+  const resolved = await resolveWorkspaceGenerationModel({
+    workspaceId: auth.workspaceId,
+    kind: "image",
+    ...(requestedOrSafetyProvider ? { explicitProvider: requestedOrSafetyProvider } : {}),
+  });
+  const provider = resolved.provider;
   const graphInputs = graphInputsForPoster({
     briefAsset: context.briefAsset,
     planAsset: context.planAsset,
@@ -209,6 +216,7 @@ export async function generatePoster(
     body: {
       kind: "image",
       provider,
+      ...(resolved.model ? { model: resolved.model } : {}),
       prompt,
       description: "Generated project poster key art.",
       size: "1024x1536",

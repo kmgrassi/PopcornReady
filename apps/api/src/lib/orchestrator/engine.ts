@@ -349,6 +349,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
     try {
       decision = await withTimeout(
         r.model({
+          workspaceId: r.workspaceId,
           projectId: run.projectId,
           inputSummary: run.inputSummary,
           priorResults,

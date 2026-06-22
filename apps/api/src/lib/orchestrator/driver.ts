@@ -120,6 +120,7 @@ export async function runToolLoopTurn({
   }
 
   const decision = await model({
+    workspaceId,
     projectId: run.projectId,
     inputSummary,
     priorResults,

@@ -33,6 +33,12 @@ const PROVIDERS: Array<{
     use: "Image and video generation, including minor-safe image edits.",
   },
   {
+    id: "ideogram",
+    label: "Ideogram",
+    env: "IDEOGRAM_API_KEY",
+    use: "Image generation and storyboard/keyframe visual exploration.",
+  },
+  {
     id: "elevenlabs",
     label: "ElevenLabs",
     env: "ELEVENLABS_API_KEY",

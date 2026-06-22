@@ -18,6 +18,7 @@ import { storyboardsRouter } from "./storyboards.js";
 import { studioDraftsRouter } from "./studio-drafts.js";
 import { studioPlanningRouter } from "./studio-planning.js";
 import { timelinesRouter } from "./timelines.js";
+import { workspaceModelSettingsRouter } from "./workspace-model-settings.js";
 import { workspacesRouter } from "./workspaces.js";
 
 export function mountProtectedV1Routes(v1: Router) {
@@ -40,5 +41,6 @@ export function mountProtectedV1Routes(v1: Router) {
   v1.use(studioDraftsRouter);
   v1.use(studioPlanningRouter);
   v1.use(timelinesRouter);
+  v1.use(workspaceModelSettingsRouter);
   v1.use(evalRouter);
 }

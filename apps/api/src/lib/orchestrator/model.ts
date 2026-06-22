@@ -1,4 +1,5 @@
 import { getLlmClient } from "../llm";
+import { getWorkspaceModelSetting } from "../api/v1/model-settings";
 import { ToolRegistry } from "./registry";
 import {
   OrchestratorModelDecision,
@@ -10,6 +11,7 @@ import {
 const TOOL_NAME_SET = new Set<string>(TOOL_NAMES);
 
 export interface ModelTurnInput {
+  workspaceId?: string;
   projectId: string;
   inputSummary: string;
   priorResults?: unknown[];
@@ -26,6 +28,25 @@ const SYSTEM_PROMPT =
   "Each prior result reports its tool and status; a failed result also carries an `error` describing why it failed. When the most recent action failed, do not repeat the same tool with the same inputs — instead follow `error.suggestedNextTools` and satisfy every `error.unmetRequirements[].satisfyWith.tool` before retrying the failed step. " +
   "Run autonomously by default: advance the pipeline toward a finished video without pausing for confirmation. The server enforces any required stops through its own configured approval gates, so do not insert approval steps on your own — only call `request_approval` when the input explicitly asks for human approval of a stage. Never choose `request_approval` merely because a step is expensive or user-visible.";
 
+async function llmClientForWorkspace(workspaceId: string | undefined) {
+  if (!workspaceId) return getLlmClient();
+  try {
+    const setting = await getWorkspaceModelSetting(workspaceId, "text_generation");
+    if (!setting) return getLlmClient();
+    const env: NodeJS.ProcessEnv = { ...process.env, LLM_PROVIDER: setting.provider };
+    if (setting.provider === "anthropic") {
+      env.ANTHROPIC_MODEL = setting.model;
+      env.ANTHROPIC_FAST_MODEL ||= setting.model;
+    } else {
+      env.OPENAI_MODEL = setting.model;
+      env.OPENAI_FAST_MODEL ||= setting.model;
+    }
+    return getLlmClient(env);
+  } catch {
+    return getLlmClient();
+  }
+}
+
 function requireToolName(value: unknown): ToolName {
   if (typeof value === "string" && TOOL_NAME_SET.has(value)) {
     return value as ToolName;
@@ -39,6 +60,7 @@ function requireToolName(value: unknown): ToolName {
 // to that provider's function-/tool-calling shape.
 export const orchestratorModel: OrchestratorModel = async ({
   projectId,
+  workspaceId,
   inputSummary,
   priorResults = [],
   registry,
@@ -52,7 +74,8 @@ export const orchestratorModel: OrchestratorModel = async ({
     parameters: tool.inputSchema,
   }));
 
-  const decision = await getLlmClient().chooseTool({
+  const client = await llmClientForWorkspace(workspaceId);
+  const decision = await client.chooseTool({
     system: SYSTEM_PROMPT,
     userPayload: {
       projectId,
