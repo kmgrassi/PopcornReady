@@ -9,6 +9,7 @@ import type {
 } from "@popcorn/shared/v1/types";
 import { AssetEditModal } from "../components/media/AssetEditModal";
 import { ButtonLink } from "../components/ui/Button";
+import { ImageWithSkeleton } from "../components/ui/ImageWithSkeleton";
 import { EmptyState, ErrorState } from "../components/ui/StateCard";
 import {
   useGenerationRunQuery,
@@ -274,7 +275,7 @@ function BeatCard({
           }
           aria-label={`Edit panel for ${label}`}
         >
-          <img className={styles.panelImage} src={image} alt="" loading="lazy" />
+          <ImageWithSkeleton className={styles.panelImage} src={image} alt="" loading="lazy" />
           <span className={styles.editHint}>Click to edit</span>
         </button>
       ) : (

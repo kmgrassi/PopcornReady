@@ -108,6 +108,7 @@
 .visualMedia {
   display: block;
   width: 100%;
+  height: min(640px, calc(100vh - 210px));
   max-height: calc(100vh - 210px);
   object-fit: contain;
 }

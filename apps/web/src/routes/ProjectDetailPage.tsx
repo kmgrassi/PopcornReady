@@ -10,6 +10,7 @@ import type {
 import type { WorkspaceOutput } from "../lib/api-client";
 import { useAuth } from "../components/auth/AuthProvider";
 import { Button, ButtonLink } from "../components/ui/Button";
+import { ImageWithSkeleton } from "../components/ui/ImageWithSkeleton";
 import { Spinner } from "../components/ui/Spinner";
 import { EmptyState, ErrorState } from "../components/ui/StateCard";
 import { StageRail } from "../components/progress/StageRail";
@@ -435,7 +436,7 @@ function ProjectPoster({ name, posterUrl }: { name: string; posterUrl?: string |
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   if (posterUrl && posterUrl !== failedUrl) {
     return (
-      <img
+      <ImageWithSkeleton
         className={styles.poster}
         src={posterUrl}
         alt=""
@@ -640,7 +641,7 @@ function StoryboardPanelThumb({ panel }: { panel: StoryboardPanel }) {
   const image = panel.thumbnailUrl ?? panel.url;
   if (image) {
     return (
-      <img
+      <ImageWithSkeleton
         className={styles.storyImage}
         src={image}
         alt=""
@@ -799,7 +800,7 @@ function OutputsPreview({
                       preload="metadata"
                     />
                   ) : output.thumbnailUrl ? (
-                    <img src={output.thumbnailUrl} alt="" loading="lazy" />
+                    <ImageWithSkeleton className={styles.outputImage} src={output.thumbnailUrl} alt="" loading="lazy" />
                   ) : (
                     <span>Output</span>
                   )}

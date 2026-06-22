@@ -6,6 +6,7 @@ import type {
 import { JudgmentBadge } from "../evals/JudgmentBadge";
 import type { StageItemAsset } from "../generation-progress/StageItemCard";
 import { RegenerateImageButton } from "../media/RegenerateImageButton";
+import { ImageWithSkeleton } from "../ui/ImageWithSkeleton";
 import styles from "./StoryboardBoard.module.css";
 
 type StoryboardItem = GenerationStageItem & {
@@ -65,7 +66,7 @@ function TileMedia({
   }
 
   if (url) {
-    return <img className={styles.media} src={url} alt={item.label} />;
+    return <ImageWithSkeleton className={styles.media} src={url} alt={item.label} />;
   }
 
   return (

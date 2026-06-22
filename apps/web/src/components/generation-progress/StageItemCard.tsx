@@ -4,6 +4,7 @@ import type {
 } from "@popcorn/shared/v1/types";
 import { JudgmentBadge } from "../evals/JudgmentBadge";
 import { RegenerateImageButton } from "../media/RegenerateImageButton";
+import { ImageWithSkeleton } from "../ui/ImageWithSkeleton";
 
 type StageItemKind = GenerationStageItem["kind"];
 
@@ -117,7 +118,7 @@ function MediaFrame({
   if (item.kind === "image") {
     return (
       <div className="media-frame">
-        <img src={asset.url} alt={item.label} />
+        <ImageWithSkeleton src={asset.url} alt={item.label} fill />
       </div>
     );
   }
