@@ -14,6 +14,8 @@ import {
   type CreateTimelineRevisionInput,
   type CreateProjectInput,
   type MeResponse,
+  type ModelProvider,
+  type ProviderApiKey,
   type RejectGenerationRunInput,
   type RegisterProjectUploadInput,
   type SaveProjectStoryboardInput,
@@ -57,6 +59,7 @@ export const queryClient = new QueryClient({
 
 export const queryKeys = {
   me: (authScope: string) => ["me", authScope] as const,
+  providerApiKeys: (authScope: string) => ["provider-api-keys", authScope] as const,
   projects: (params: { limit?: number; cursor?: string | null } = {}) =>
     ["projects", params] as const,
   project: (projectId: string) => ["projects", projectId] as const,
@@ -108,6 +111,7 @@ export const queryKeys = {
 };
 
 type MeQueryKey = ReturnType<typeof queryKeys.me>;
+type ProviderApiKeysQueryKey = ReturnType<typeof queryKeys.providerApiKeys>;
 type QuerySignal = QueryFunctionContext["signal"];
 type StudioProjectTimeline = NonNullable<
   Parameters<typeof v1Api.getStudioProjectById>[1]
@@ -170,6 +174,50 @@ export function useMeQuery(
     queryKey: queryKeys.me(authScope),
     queryFn: () => v1Api.me(),
     ...options,
+  });
+}
+
+export function useProviderApiKeysQuery(
+  authScope: string,
+  options: Omit<
+    UseQueryOptions<ProviderApiKey[], Error, ProviderApiKey[], ProviderApiKeysQueryKey>,
+    "queryKey" | "queryFn"
+  > = {},
+) {
+  return useQuery({
+    queryKey: queryKeys.providerApiKeys(authScope),
+    queryFn: async () => {
+      const response = await v1Api.listProviderApiKeys();
+      return response.keys;
+    },
+    ...options,
+  });
+}
+
+export function useSaveProviderApiKeyMutation(authScope: string) {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { provider: ModelProvider; apiKey: string }) =>
+      v1Api.saveProviderApiKey(input.provider, input.apiKey),
+    onSuccess: () => {
+      void client.invalidateQueries({
+        queryKey: queryKeys.providerApiKeys(authScope),
+      });
+    },
+  });
+}
+
+export function useDeleteProviderApiKeyMutation(authScope: string) {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: (provider: ModelProvider) => v1Api.deleteProviderApiKey(provider),
+    onSuccess: () => {
+      void client.invalidateQueries({
+        queryKey: queryKeys.providerApiKeys(authScope),
+      });
+    },
   });
 }
 

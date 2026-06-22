@@ -178,6 +178,30 @@ export interface AccountMutationResponse {
   ok: true;
 }
 
+export type ModelProvider =
+  | "openai"
+  | "anthropic"
+  | "gemini"
+  | "elevenlabs"
+  | "runway"
+  | "ltx"
+  | "nvidia";
+
+export interface ProviderApiKey {
+  provider: ModelProvider;
+  hasKey: true;
+  keyHint: string;
+  updatedAt: string;
+}
+
+export interface ProviderApiKeysResponse {
+  keys: ProviderApiKey[];
+}
+
+export interface ProviderApiKeyResponse {
+  key: ProviderApiKey;
+}
+
 export interface ProjectsResponse {
   projects: V1Project[];
   pagination: {
@@ -578,6 +602,23 @@ export const v1Api = {
       method: "POST",
       body: { email },
     }),
+  listProviderApiKeys: () =>
+    apiRequest<ProviderApiKeysResponse>("/api/v1/provider-api-keys"),
+  saveProviderApiKey: (provider: ModelProvider, apiKey: string) =>
+    apiRequest<ProviderApiKeyResponse>(
+      `/api/v1/provider-api-keys/${encodeURIComponent(provider)}`,
+      {
+        method: "PUT",
+        body: { apiKey },
+      }
+    ),
+  deleteProviderApiKey: (provider: ModelProvider) =>
+    apiRequest<AccountMutationResponse>(
+      `/api/v1/provider-api-keys/${encodeURIComponent(provider)}`,
+      {
+        method: "DELETE",
+      }
+    ),
   listProjects: (params?: { limit?: number; cursor?: string | null }) =>
     apiRequest<ProjectsResponse>("/api/v1/projects", {
       searchParams: params,
