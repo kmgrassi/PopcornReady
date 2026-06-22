@@ -9,12 +9,31 @@
 
 set check_function_bodies = off;
 
--- Stable system project that owns globally reusable Inspiration posters. The
--- system publisher user/workspace are seeded in 20260620180000_system_publisher.
+-- Stable fixture workspace/project that owns globally reusable Inspiration
+-- posters. Keeping the cache workspace non-user prevents this backing project
+-- from appearing in public discovery feeds and project search.
+insert into public.users (id, auth_id, email, full_name)
+values (
+  '00000000-0000-4000-a000-000000000005',
+  null,
+  'inspiration-cache@popcornready.system',
+  'Popcorn Ready Inspiration Cache'
+)
+on conflict (id) do nothing;
+
+insert into public.workspaces (id, owner_id, name, purpose)
+values (
+  '00000000-0000-4000-a000-000000000004',
+  '00000000-0000-4000-a000-000000000005',
+  'Inspiration Poster Cache',
+  'fixture'
+)
+on conflict (id) do nothing;
+
 insert into public.projects (id, workspace_id, name, status, visibility, slug)
 values (
   '00000000-0000-4000-a000-000000000003',
-  '00000000-0000-4000-a000-000000000002',
+  '00000000-0000-4000-a000-000000000004',
   'Inspiration Poster Cache',
   'active',
   'public',
@@ -194,7 +213,7 @@ begin
       using errcode = 'foreign_key_violation';
   end if;
 
-  if v_asset_workspace_id <> '00000000-0000-4000-a000-000000000002'::uuid
+  if v_asset_workspace_id <> '00000000-0000-4000-a000-000000000004'::uuid
      or v_asset_project_id <> '00000000-0000-4000-a000-000000000003'::uuid then
     raise exception 'story concept poster asset must belong to the system Inspiration Poster Cache project'
       using errcode = 'check_violation';
