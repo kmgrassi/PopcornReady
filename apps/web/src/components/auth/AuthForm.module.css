@@ -77,6 +77,13 @@
   line-height: 1.45;
 }
 
+.status {
+  margin: 14px 0;
+  color: var(--muted);
+  font-size: var(--text-md);
+  line-height: 1.45;
+}
+
 .submit {
   width: 100%;
   margin-top: 18px;
