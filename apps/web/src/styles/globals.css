@@ -4479,14 +4479,6 @@ button.eval-card-link[aria-pressed="true"] {
   background: linear-gradient(135deg, #1a1f26, #232a33);
 }
 
-/* AssetImage renders the empty state as a child of .media-frame (not the frame
-   itself), so re-home the placeholder gradient + fill here. */
-.media-frame-placeholder {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, #1a1f26, #232a33);
-}
-
 .audio-player {
   display: flex;
   align-items: center;

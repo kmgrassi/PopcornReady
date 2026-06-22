@@ -4,6 +4,7 @@ import type {
 } from "@popcorn/shared/v1/types";
 import { JudgmentBadge } from "../evals/JudgmentBadge";
 import { AssetImage } from "../media/AssetImage";
+import styles from "./StageItemCard.module.css";
 
 type StageItemKind = GenerationStageItem["kind"];
 
@@ -114,8 +115,9 @@ function MediaFrame({
       prompt={item.promptPreview ?? null}
       alt={item.label}
       allowRegenerate={allowInlineRegenerate}
+      videoControls
       frameClassName="media-frame"
-      placeholderClassName="media-frame-placeholder"
+      placeholderClassName={styles.placeholder}
     />
   );
 }

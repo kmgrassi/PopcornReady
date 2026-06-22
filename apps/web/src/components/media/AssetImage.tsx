@@ -5,8 +5,16 @@ import styles from "./AssetImage.module.css";
 export type AssetMediaKind = "image" | "video" | "audio";
 
 // Still-working states: a blank frame here means "not done yet", not "broken",
-// so we don't offer a recovery re-run.
-const IN_PROGRESS = new Set(["queued", "running", "processing", "pending"]);
+// so we don't offer a recovery re-run. `generating` is the storyboard item
+// contract's in-flight status — without it a panel that has an assetId but no
+// URL yet would render the regenerate button mid-job (a duplicate rerun).
+const IN_PROGRESS = new Set([
+  "queued",
+  "running",
+  "processing",
+  "pending",
+  "generating",
+]);
 
 export interface AssetImageProps {
   // Identity + state. `assetId` enables the blank/failed recovery re-run.
@@ -37,6 +45,12 @@ export interface AssetImageProps {
   // sibling overlay, since a nested <button> is invalid markup.
   allowRegenerate?: boolean;
 
+  // Show native <video> controls. Off by default — dashboard/storyboard previews
+  // are non-interactive posters, and a control tree nested in a clickable card
+  // (<button>) is invalid markup that competes with the card's open handler.
+  // Run-progress opts in. Ignored for non-video media.
+  videoControls?: boolean;
+
   // Activate the healthy media (open the surface's viewer / Ask-the-AI modal).
   // Content edits on a healthy image route through the surface's modal, not here.
   onActivate?: () => void;
@@ -63,12 +77,32 @@ export function AssetImage({
   placeholder,
   mediaOverlay,
   allowRegenerate = true,
+  videoControls = false,
   onActivate,
   activateClassName,
 }: AssetImageProps) {
-  const [failedSrc, setFailedSrc] = useState<string | null>(null);
-  const src = url ?? thumbnailUrl ?? null;
-  const hasMedia = Boolean(src) && src !== failedSrc;
+  // Track every src that has 404'd/errored, so a video can fall through to its
+  // thumbnail poster and an image can fall through to the placeholder.
+  const [failedSrcs, setFailedSrcs] = useState<ReadonlySet<string>>(() => new Set());
+  const markFailed = (s: string | null | undefined) => {
+    if (!s) return;
+    setFailedSrcs((prev) => (prev.has(s) ? prev : new Set(prev).add(s)));
+  };
+  const usable = (s: string | null | undefined): s is string =>
+    Boolean(s) && !failedSrcs.has(s as string);
+
+  // A video plays from `url`; never feed a thumbnail to <video src>. When a
+  // video's bytes are gone, fall back to its thumbnail as a still poster image.
+  const videoUrl = kind === "video" && usable(url) ? url : null;
+  const thumb = usable(thumbnailUrl) ? thumbnailUrl : null;
+  // The still image to render: the image asset's url (then its thumbnail), or a
+  // dead video's thumbnail poster. Audio renders no still — it falls to the
+  // placeholder.
+  const stillSrc =
+    kind === "video" ? thumb : kind === "image" ? (usable(url) ? url : thumb) : null;
+
+  const renderedSrc = videoUrl ?? stillSrc;
+  const hasMedia = renderedSrc != null;
   const inProgress = status != null && IN_PROGRESS.has(status);
   const recoverable =
     allowRegenerate &&
@@ -81,27 +115,27 @@ export function AssetImage({
   const media = [styles.media, mediaClassName].filter(Boolean).join(" ");
 
   let body: ReactNode;
-  if (hasMedia && kind === "video") {
+  if (videoUrl) {
     body = (
       <video
         className={media}
-        src={src ?? undefined}
+        src={videoUrl}
         poster={thumbnailUrl ?? undefined}
         muted
         playsInline
         preload="metadata"
-        controls
-        onError={() => setFailedSrc(src)}
+        controls={videoControls}
+        onError={() => markFailed(videoUrl)}
       />
     );
-  } else if (hasMedia && kind === "image") {
+  } else if (stillSrc) {
     body = (
       <img
         className={media}
-        src={src ?? undefined}
+        src={stillSrc}
         alt={alt}
         loading="lazy"
-        onError={() => setFailedSrc(src)}
+        onError={() => markFailed(stillSrc)}
       />
     );
   } else {
@@ -112,7 +146,7 @@ export function AssetImage({
     );
   }
 
-  const showsMedia = hasMedia && (kind === "image" || kind === "video");
+  const showsMedia = hasMedia;
   const overlay = showsMedia ? mediaOverlay : null;
 
   return (
