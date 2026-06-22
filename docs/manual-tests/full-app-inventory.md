@@ -158,6 +158,11 @@ recovery.
 
 - Open `/dashboard` in a fresh workspace.
 - Verify the empty or low-data state has clear next actions.
+- Verify whether the authenticated shell exposes the intended creation CTA:
+  - Target behavior: a primary `Create New Video` action should start the
+    stepwise project-creation flow.
+  - Current behavior to record as a product gap: the sidebar primary action is
+    `Projects`, and the dashboard empty state routes to `/library/projects`.
 - If the workspace has active runs or outputs, verify counts and cards match
   the corresponding Library tabs.
 - Click active run rows and recent output links when present; they should open
@@ -165,7 +170,69 @@ recovery.
 - Refresh `/dashboard`; shell, account label, and content should recover.
 - Simulate or force an API failure if practical and verify retry/error state.
 
-### 5. Library Collections
+### 5. Project Creation And Manual Stop Points
+
+Use this pass for the intended dashboard-driven creation flow. It is also the
+checklist to run after the `Create New Video` route is wired into the
+authenticated app.
+
+Local user setup:
+
+- Start from a reset local Supabase database using the commands in
+  [Recommended Local Setup](#recommended-local-setup).
+- Either create a fresh local account through `/signup`, or sign in as a known
+  local test user that was created during setup.
+- Confirm `/dashboard` shows the signed-in email or the expected local account
+  label before starting the creation flow.
+
+Creation entry:
+
+- From `/dashboard`, click `Create New Video`.
+- Verify the user lands on the project-creation flow without leaving the
+  authenticated shell.
+- Refresh the first creation screen; the shell and any draft state should
+  recover without creating a duplicate project.
+
+Brief step:
+
+- Enter a complete brief with goal, audience, desired format, and length.
+- Submit the brief with no later stop points selected.
+- Expected stop-at-brief behavior when selected: the app persists the brief,
+  shows a clear saved/review state, and does not start later generation stages.
+- Leave the flow and return from `/dashboard`; the saved brief should be
+  resumable rather than lost.
+- Edit the brief, save again, refresh, and verify the latest content is shown.
+
+Planning step:
+
+- Continue from the brief into planning.
+- Verify the plan/story outline is generated or loaded, and that errors are
+  readable if provider keys are not configured.
+- Select a manual stop after planning, then continue.
+- Expected behavior: the run waits at the planning review gate before image,
+  video, or timeline generation begins.
+- Approve the gate and verify the run resumes. Reject or request changes and
+  verify notes are captured and the run does not continue silently.
+
+Production step:
+
+- Continue with no stop points selected and verify the run advances through the
+  remaining stages autonomously.
+- While the run is active, verify `/projects/:projectId/runs/:runId` shows the
+  same stage/progress state from the dashboard and Library links.
+- Use the visible stop/cancel affordance where available and confirm the run
+  reaches the expected paused or terminal state.
+
+Current implementation gaps to record:
+
+- `/studio` is retired and not mounted.
+- `/projects/new` redirects to `/library/projects`.
+- The dashboard and authenticated sidebar do not currently expose a real
+  `Create New Video` action.
+- The live creation entry point is still the landing quick-start path described
+  below, and that path starts from `/` rather than from the dashboard.
+
+### 6. Library Collections
 
 - Open `/library`; it should redirect to `/library/projects`.
 - Open compatibility routes `/projects`, `/runs`, `/assets`, `/outputs`, and
@@ -209,7 +276,7 @@ Outputs:
 - Use Project and Watch actions.
 - Verify missing playback URLs fall back to thumbnails or placeholders.
 
-### 6. Landing Quick-Start Generation
+### 7. Landing Quick-Start Generation
 
 This is the current creation entry point while `/studio` is retired.
 
@@ -231,7 +298,7 @@ This is the current creation entry point while `/studio` is retired.
 - Confirm successful run start navigates to
   `/projects/:projectId/runs/:runId`.
 
-### 7. Run Progress And Review Actions
+### 8. Run Progress And Review Actions
 
 - Open a valid run progress route.
 - Verify queued, running, succeeded, failed, canceled, and unknown states render
@@ -244,7 +311,7 @@ This is the current creation entry point while `/studio` is retired.
 - Open malformed, missing, or unauthorized run URLs and verify useful error
   states plus navigation back to a stable surface.
 
-### 8. Storyboard And Project Pages
+### 9. Storyboard And Project Pages
 
 - Open `/projects/:projectId` for a valid project.
 - Open `/projects/:projectId/storyboard`.
@@ -258,7 +325,7 @@ This is the current creation entry point while `/studio` is retired.
   - Project without playable output but with storyboard fallback should route or
     message according to the current implementation.
 
-### 9. Uploads, Templates, Brand Kit, Anchors
+### 10. Uploads, Templates, Brand Kit, Anchors
 
 Uploads:
 
@@ -290,7 +357,7 @@ Anchors:
   exists.
 - Verify likes, filters, detail navigation, and empty states.
 
-### 10. Admin And Evals
+### 11. Admin And Evals
 
 - Open `/library/evals` or `/evals` and verify redirect behavior.
 - As a non-admin user, open `/admin/evals`; access should be denied or routed
