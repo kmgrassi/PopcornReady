@@ -2,7 +2,10 @@ name: Apply Supabase migrations
 
 # Applies pending supabase/migrations/** to the linked Supabase project.
 # Runs on merge to main (when migrations change) and can be triggered manually
-# from the main branch.
+# from the main branch (workflow_dispatch) — e.g. to drain a backlog after a fix.
+#
+# Uses `db push --include-all` so out-of-order merges (an earlier timestamp
+# landing after a later one) don't jam the queue and freeze the remote schema.
 #
 # Required GitHub repo config (Settings -> Secrets and variables -> Actions):
 #   Secrets:
@@ -42,4 +45,11 @@ jobs:
         run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
 
       - name: Push pending migrations
-        run: supabase db push
+        # --include-all applies every pending migration even when an earlier
+        # timestamp lands after a later one on remote (inevitable with parallel
+        # branches merging out of order). Without it, one out-of-order file makes
+        # `db push` exit 1 and JAMS THE WHOLE QUEUE — prod schema silently freezes
+        # while the API keeps deploying (PGRST202 / missing-column 500s). Safe here
+        # because migrations are additive by rule (no edits to applied files), so
+        # apply order is independent; a genuinely broken migration still fails loudly.
+        run: supabase db push --include-all
