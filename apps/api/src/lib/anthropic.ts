@@ -4,18 +4,24 @@ import type {
   Message,
   ToolUseBlock,
 } from "@anthropic-ai/sdk/resources/messages/messages";
+import { runtimeProviderApiKey } from "./provider-api-keys";
 
 export const MODEL = "claude-opus-4-7";
 
-let _client: Anthropic | null = null;
-export function client(): Anthropic {
-  if (!process.env.ANTHROPIC_API_KEY) {
+async function runtimeClient(): Promise<Anthropic> {
+  const apiKey = await runtimeProviderApiKey("anthropic");
+  if (!apiKey) {
     throw new Error(
       "ANTHROPIC_API_KEY is not set. Copy .env.local.example to .env.local and add your key."
     );
   }
-  if (!_client) _client = new Anthropic();
-  return _client;
+  return new Anthropic({ apiKey });
+}
+
+export async function createMessage(
+  params: Record<string, unknown>
+): Promise<Message> {
+  return (await runtimeClient()).messages.create(params as never);
 }
 
 export interface StructuredCallArgs {
@@ -82,7 +88,7 @@ export async function structuredCall<T>({
   maxTokens = 8000,
   model = MODEL,
 }: StructuredCallArgs): Promise<T> {
-  const res = await client().messages.create({
+  const res = await createMessage({
     model,
     max_tokens: maxTokens,
     system: [
@@ -95,7 +101,7 @@ export async function structuredCall<T>({
     tools: [structuredTool(schema)],
     tool_choice: { type: "tool", name: STRUCTURED_RESULT_TOOL },
     messages: [{ role: "user", content: user }],
-  } as any);
+  });
 
   return resultFromToolUse<T>(res);
 }
@@ -123,7 +129,7 @@ export async function structuredVisionCall<T>({
     })
   );
 
-  const res = await client().messages.create({
+  const res = await createMessage({
     model,
     max_tokens: maxTokens,
     system: [
@@ -141,7 +147,7 @@ export async function structuredVisionCall<T>({
         content: [{ type: "text", text: user }, ...imageBlocks],
       },
     ],
-  } as any);
+  });
 
   return resultFromToolUse<T>(res);
 }

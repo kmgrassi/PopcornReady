@@ -64,6 +64,9 @@ export interface ChooseToolArgs {
 export interface LlmClient {
   readonly provider: LlmProvider;
   readonly model: string;
+  // The concrete model a call with this effort routes to (fast model for
+  // minimal/low). Callers use it to record reviewer/judge provenance.
+  modelFor(effort?: LlmEffort): string;
   // Structured result via a required tool call (planEdit/critique/revise/...).
   structured<T>(args: StructuredArgs): Promise<T>;
   structuredVision<T>(args: StructuredVisionArgs): Promise<T>;

@@ -21,6 +21,8 @@ export interface RequestContext {
   email: string | null;
   /** True when the verified Supabase session is an anonymous guest session. */
   isAnonymous: boolean;
+  /** Per-request cache for decrypted model-provider keys. Values stay server-side. */
+  providerApiKeys?: Map<string, string | null>;
 }
 
 export const requestContext = new AsyncLocalStorage<RequestContext>();

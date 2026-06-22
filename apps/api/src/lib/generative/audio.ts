@@ -5,6 +5,7 @@ import {
 } from "@popcorn/shared/generative/types";
 import { measureAudioDurationSec } from "./audio-duration";
 import { estimateCostUsd } from "./pricing";
+import { runtimeProviderApiKey } from "../provider-api-keys";
 
 const ELEVENLABS_BASE_URL = "https://api.elevenlabs.io/v1";
 const DEFAULT_VOICE_ID = "JBFqnCBsd6RMkjVDRZzb";
@@ -26,8 +27,8 @@ interface ElevenLabsAudioResultInput {
   requestedSeconds?: number;
 }
 
-function requireElevenLabsKey(): string {
-  const key = process.env.ELEVENLABS_API_KEY;
+async function requireElevenLabsKey(): Promise<string> {
+  const key = await runtimeProviderApiKey("elevenlabs");
   if (!key) {
     throw new Error("ELEVENLABS_API_KEY is not set for the ElevenLabs provider.");
   }
@@ -167,7 +168,7 @@ async function elevenLabsAudioFetch({
   body,
   outputFormat,
 }: ElevenLabsAudioRequest): Promise<Buffer> {
-  const key = requireElevenLabsKey();
+  const key = await requireElevenLabsKey();
   const res = await fetch(
     `${ELEVENLABS_BASE_URL}${withOutputFormat(pathName, outputFormat)}`,
     {

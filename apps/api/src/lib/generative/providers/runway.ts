@@ -4,6 +4,7 @@ import type {
   GenerativeProvider,
 } from "@popcorn/shared/generative/types";
 import { estimateCostUsd } from "../pricing";
+import { runtimeProviderApiKey } from "../../provider-api-keys";
 import {
   aspectRatioFromSize,
   authedFetch,
@@ -38,12 +39,12 @@ function normalizeRunwayVideoSeconds(value?: number): number {
   return 10;
 }
 
-function runwayFetch(pathName: string, init: RequestInit): Promise<Response> {
+async function runwayFetch(pathName: string, init: RequestInit): Promise<Response> {
   return authedFetch({
     baseUrl: RUNWAY_BASE_URL,
     pathName,
     init,
-    apiKey: process.env.RUNWAYML_API_SECRET || process.env.RUNWAY_API_KEY,
+    apiKey: (await runtimeProviderApiKey("runway")) ?? undefined,
     missingKeyMessage: "RUNWAYML_API_SECRET is not set for the Runway provider.",
     errorPrefix: "Runway",
     headers: { "X-Runway-Version": RUNWAY_API_VERSION },

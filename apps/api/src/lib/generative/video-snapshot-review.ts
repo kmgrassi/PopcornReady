@@ -2,7 +2,8 @@ import { execFile } from "child_process";
 import { promises as fs } from "fs";
 import path from "path";
 import { promisify } from "util";
-import { getLlmClient } from "@popcorn/llm";
+import { getLlmClient } from "../llm";
+import { hasRuntimeProviderApiKey } from "../provider-api-keys";
 import {
   type Beat,
   type CharacterProfile,
@@ -127,8 +128,8 @@ export async function reviewGeneratedVideoSnapshots(input: {
 }): Promise<VideoSnapshotReview | null> {
   const preferredProvider =
     process.env.VIDEO_SNAPSHOT_REVIEW_PROVIDER?.toLowerCase().trim() || "openai";
-  const hasOpenAI = Boolean(process.env.OPENAI_API_KEY?.trim());
-  const hasAnthropic = Boolean(process.env.ANTHROPIC_API_KEY?.trim());
+  const hasOpenAI = await hasRuntimeProviderApiKey("openai");
+  const hasAnthropic = await hasRuntimeProviderApiKey("anthropic");
   if (!hasOpenAI && !hasAnthropic) return null;
 
   const outputDir = path.join(process.cwd(), "public", "generated", "snapshots");

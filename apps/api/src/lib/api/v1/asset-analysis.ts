@@ -3,6 +3,7 @@ import path from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { buildSemanticAnalysis } from "@/lib/edit-graph/semantic-analysis";
+import { runtimeProviderApiKey } from "@/lib/provider-api-keys";
 import { AuthContext } from "./auth";
 import { ApiError, validationError } from "./errors";
 import { createJob, getJob, updateJob, V1Job } from "./jobs";
@@ -215,7 +216,7 @@ async function summarizeWithOpenAI(
   frames: FrameSample[],
   userContext: Record<string, unknown> | undefined
 ): Promise<V1AssetAnalysis["observations"]> {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  const apiKey = await runtimeProviderApiKey("openai");
   const model = process.env.OPENAI_ASSET_ANALYSIS_MODEL || DEFAULT_OPENAI_VISION_MODEL;
   if (!apiKey) {
     return {

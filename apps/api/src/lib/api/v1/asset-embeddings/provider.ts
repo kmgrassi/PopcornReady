@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { runtimeProviderApiKey } from "@/lib/provider-api-keys";
 import type { AssetEmbeddingConfig } from "./config";
 
 export interface AssetEmbeddingProvider {
@@ -6,11 +7,12 @@ export interface AssetEmbeddingProvider {
 }
 
 export class OpenAIAssetEmbeddingProvider implements AssetEmbeddingProvider {
-  private client: OpenAI | null = null;
-
   async embed(input: { text: string; config: AssetEmbeddingConfig }): Promise<number[]> {
-    const client = this.client ?? new OpenAI();
-    this.client = client;
+    const apiKey = await runtimeProviderApiKey("openai");
+    if (!apiKey) {
+      throw new Error("OPENAI_API_KEY is not set for the OpenAI embedding provider.");
+    }
+    const client = new OpenAI({ apiKey });
     const response = await client.embeddings.create({
       model: input.config.model,
       input: input.text,

@@ -4,6 +4,7 @@ import type {
   GenerativeProvider,
 } from "@popcorn/shared/generative/types";
 import { estimateCostUsd } from "../pricing";
+import { runtimeProviderApiKey } from "../../provider-api-keys";
 import {
   aspectRatioFromSize,
   authedFetch,
@@ -30,12 +31,12 @@ function normalizeLtxVideoSeconds(value?: number, model = LTX_DEFAULT_VIDEO_MODE
   );
 }
 
-function ltxFetch(pathName: string, init: RequestInit): Promise<Response> {
+async function ltxFetch(pathName: string, init: RequestInit): Promise<Response> {
   return authedFetch({
     baseUrl: LTX_BASE_URL,
     pathName,
     init,
-    apiKey: process.env.LTX_API_KEY,
+    apiKey: (await runtimeProviderApiKey("ltx")) ?? undefined,
     missingKeyMessage: "LTX_API_KEY is not set for the LTX provider.",
     errorPrefix: "LTX",
   });

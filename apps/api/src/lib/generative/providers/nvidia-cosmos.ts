@@ -4,6 +4,7 @@ import type {
   GenerativeProvider,
 } from "@popcorn/shared/generative/types";
 import { estimateCostUsd } from "../pricing";
+import { runtimeProviderApiKey } from "../../provider-api-keys";
 import {
   aspectRatioFromSize,
   characterProviderSettings,
@@ -132,7 +133,7 @@ async function generateNvidiaCosmosVideo(
     { provider: "nvidia_api_catalog"; kind: "video" }
   >
 ): Promise<GeneratedAssetResult> {
-  const apiKey = process.env.NVIDIA_API_KEY;
+  const apiKey = await runtimeProviderApiKey("nvidia");
   if (!apiKey) {
     throw new Error(
       "NVIDIA_API_KEY is not set for the NVIDIA API Catalog provider."
