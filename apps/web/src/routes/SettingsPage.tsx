@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../components/auth/AuthProvider";
 import { AnonymousUpgradeBanner } from "../components/auth/AnonymousUpgradeBanner";
 import { AccessTokenPanel } from "../components/settings/AccessTokenPanel";
+import { ProviderApiKeysPanel } from "../components/settings/ProviderApiKeysPanel";
 import ThemeToggle from "../components/ThemeToggle";
 import { Button } from "../components/ui/Button";
 import { useMeQuery } from "../lib/queryClient";
@@ -118,6 +119,8 @@ export function SettingsPage() {
       </section>
 
       <AnonymousUpgradeBanner />
+
+      <ProviderApiKeysPanel authScope={authScope} enabled={auth.status !== "loading"} />
 
       <AccessTokenPanel />
 

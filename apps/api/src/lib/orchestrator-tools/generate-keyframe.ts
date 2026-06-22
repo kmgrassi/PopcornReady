@@ -7,7 +7,7 @@ import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 import { runGenerateKeyframeJob as realRunGenerateKeyframeJob } from "./generate-keyframe-job";
 
-type KeyframeImageProvider = "openai" | "gemini" | "mock";
+type KeyframeImageProvider = "openai" | "ideogram" | "gemini" | "mock";
 
 export interface GenerateKeyframeInput {
   provider?: KeyframeImageProvider;
@@ -38,7 +38,7 @@ export const generateKeyframeInputSchema = {
   properties: {
     provider: {
       type: "string",
-      enum: ["openai", "gemini", "mock"],
+      enum: ["openai", "ideogram", "gemini", "mock"],
       description:
         "Optional image provider override. Omit to use OpenAI, or Gemini when a beat/anchor appears to depict a minor.",
     },
@@ -62,7 +62,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isProvider(value: unknown): value is KeyframeImageProvider {
-  return value === "openai" || value === "gemini" || value === "mock";
+  return value === "openai" || value === "ideogram" || value === "gemini" || value === "mock";
 }
 
 export function parseGenerateKeyframeInput(input: unknown): GenerateKeyframeInput {
@@ -81,7 +81,7 @@ export function parseGenerateKeyframeInput(input: unknown): GenerateKeyframeInpu
   }
   if (input.provider !== undefined && !isProvider(input.provider)) {
     throw new ToolInputError(
-      "generate_keyframe provider must be openai, gemini, or mock.",
+      "generate_keyframe provider must be openai, ideogram, gemini, or mock.",
       {}
     );
   }

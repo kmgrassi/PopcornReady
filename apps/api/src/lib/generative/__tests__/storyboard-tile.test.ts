@@ -89,6 +89,55 @@ test("generateStoryboardTile produces a beat_storyboard asset with depicts + pro
   assert.ok(bytes.length > 0, "sketch bytes were produced");
 });
 
+test("generateStoryboardTile uses Ideogram v3 for 1024px sketch tiles", async () => {
+  const previousKey = process.env.IDEOGRAM_API_KEY;
+  const previousFetch = globalThis.fetch;
+  const requests: Array<{ url: string; body?: unknown }> = [];
+
+  process.env.IDEOGRAM_API_KEY = "ideogram-test-key";
+  globalThis.fetch = async (input, init) => {
+    requests.push({ url: String(input), body: init?.body });
+    if (String(input).includes("/v1/ideogram-v3/generate")) {
+      return new Response(
+        JSON.stringify({
+          data: [
+            {
+              prompt: "Storyboard sketch.",
+              url: "https://ideogram.ai/api/images/ephemeral/storyboard.png",
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    return new Response(Buffer.from("png-bytes"), {
+      status: 200,
+      headers: { "Content-Type": "image/png" },
+    });
+  };
+
+  try {
+    const { asset } = await generateStoryboardTile({
+      projectId: "proj_1",
+      scene,
+      beat,
+      provider: "ideogram",
+      newId: () => "tile_ideogram",
+    });
+
+    assert.equal(asset.provenance?.provider, "ideogram");
+    assert.equal(asset.provenance?.model, "ideogram-v3");
+    assert.equal(requests[0].url, "https://api.ideogram.ai/v1/ideogram-v3/generate");
+    assert.ok(requests[0].body instanceof FormData);
+    assert.equal(requests[0].body.get("resolution"), "1024x1024");
+    assert.equal(requests[0].body.get("prompt"), asset.provenance?.prompt);
+  } finally {
+    if (previousKey === undefined) delete process.env.IDEOGRAM_API_KEY;
+    else process.env.IDEOGRAM_API_KEY = previousKey;
+    globalThis.fetch = previousFetch;
+  }
+});
+
 test("generateStoryboardTile rejects a beat without a stable id", async () => {
   await assert.rejects(
     generateStoryboardTile({

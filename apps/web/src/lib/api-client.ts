@@ -178,6 +178,30 @@ export interface AccountMutationResponse {
   ok: true;
 }
 
+export type ModelProvider =
+  | "openai"
+  | "anthropic"
+  | "gemini"
+  | "elevenlabs"
+  | "runway"
+  | "ltx"
+  | "nvidia";
+
+export interface ProviderApiKey {
+  provider: ModelProvider;
+  hasKey: true;
+  keyHint: string;
+  updatedAt: string;
+}
+
+export interface ProviderApiKeysResponse {
+  keys: ProviderApiKey[];
+}
+
+export interface ProviderApiKeyResponse {
+  key: ProviderApiKey;
+}
+
 export interface ProjectsResponse {
   projects: V1Project[];
   pagination: {
@@ -243,6 +267,7 @@ export interface WorkspaceAsset {
   filename?: string;
   title?: string;
   description?: string;
+  promptPreview?: string;
   url?: string;
   thumbnailUrl?: string;
   durationSec?: number;
@@ -578,12 +603,35 @@ export const v1Api = {
       method: "POST",
       body: { email },
     }),
+  listProviderApiKeys: () =>
+    apiRequest<ProviderApiKeysResponse>("/api/v1/provider-api-keys"),
+  saveProviderApiKey: (provider: ModelProvider, apiKey: string) =>
+    apiRequest<ProviderApiKeyResponse>(
+      `/api/v1/provider-api-keys/${encodeURIComponent(provider)}`,
+      {
+        method: "PUT",
+        body: { apiKey },
+      }
+    ),
+  deleteProviderApiKey: (provider: ModelProvider) =>
+    apiRequest<AccountMutationResponse>(
+      `/api/v1/provider-api-keys/${encodeURIComponent(provider)}`,
+      {
+        method: "DELETE",
+      }
+    ),
   listProjects: (params?: { limit?: number; cursor?: string | null }) =>
     apiRequest<ProjectsResponse>("/api/v1/projects", {
       searchParams: params,
     }),
-  // Public discovery: every user's public projects, not just the caller's.
-  listPublicProjects: (params?: { limit?: number; cursor?: string | null }) =>
+  // Public discovery feed. Pass `excludeWorkspaceId` (the signed-in viewer's own
+  // workspace) to omit the caller's own public projects — those open read-only
+  // here and are edited from "My library" instead.
+  listPublicProjects: (params?: {
+    limit?: number;
+    cursor?: string | null;
+    excludeWorkspaceId?: string;
+  }) =>
     apiRequest<ProjectsResponse>("/api/v1/discover/projects", {
       searchParams: params,
     }),

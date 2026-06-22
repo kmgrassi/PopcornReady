@@ -175,16 +175,26 @@ export function useDashboardProjectsQuery(
 ) {
   const meQuery = useMeQuery(authScope);
   const isPublic = scope === "public";
-  // Public lists don't depend on the caller's workspace; key them on a stable
-  // "public" bucket so they don't refetch when the workspace resolves.
-  const keyWorkspace = isPublic ? "public" : (meQuery.data?.workspaceId ?? "pending");
+  // Exclude the caller's OWN public projects from the public feed — they open
+  // read-only there and are edited from "My library" instead. Undefined until
+  // the workspace resolves (then the key changes and the feed refetches).
+  const excludeWorkspaceId = isPublic ? meQuery.data?.workspaceId : undefined;
+  // Public lists don't depend on a workspace for tenancy, but they key on the
+  // excluded workspace so the self-exclusion applies once it's known.
+  const keyWorkspace = isPublic
+    ? `public:${excludeWorkspaceId ?? "all"}`
+    : (meQuery.data?.workspaceId ?? "pending");
   const query = useInfiniteQuery({
     queryKey: dashboardCollectionQueryKeys.projects(keyWorkspace, limit, scope),
     enabled: isPublic ? true : Boolean(meQuery.data),
     initialPageParam: null as PageCursor,
     queryFn: ({ pageParam }) =>
       isPublic
-        ? v1Api.listPublicProjects({ limit, cursor: pageParam })
+        ? v1Api.listPublicProjects({
+            limit,
+            cursor: pageParam,
+            ...(excludeWorkspaceId ? { excludeWorkspaceId } : {}),
+          })
         : v1Api.listProjects({ limit, cursor: pageParam }),
     getNextPageParam: (lastPage) => lastPage.pagination.nextCursor,
   });

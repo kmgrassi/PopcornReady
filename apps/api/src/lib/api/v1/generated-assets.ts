@@ -20,6 +20,9 @@ import {
   DialogueInput,
   GenerativeAssetKind,
   GenerativeProviderName,
+  IdeogramMagicPrompt,
+  IdeogramRenderingSpeed,
+  IdeogramStyleType,
 } from "@popcorn/shared/generative/types";
 import type { GeneratedAssetCharacterBinding } from "@popcorn/shared/types";
 import { buildSemanticAnalysis } from "@/lib/edit-graph/semantic-analysis";
@@ -69,6 +72,7 @@ const PROVIDER_KIND_SUPPORT: Record<
   GenerativeAssetKind[]
 > = {
   openai: ["image", "video"],
+  ideogram: ["image"],
   gemini: ["image", "video"],
   runway: ["video"],
   ltx: ["video"],
@@ -111,6 +115,14 @@ interface ParsedRequest {
   model?: string;
   size?: string;
   quality?: "low" | "medium" | "high" | "auto";
+  aspectRatio?: string;
+  renderingSpeed?: IdeogramRenderingSpeed;
+  magicPrompt?: IdeogramMagicPrompt;
+  numImages?: number;
+  styleType?: IdeogramStyleType;
+  stylePreset?: string;
+  customModelUri?: string;
+  enableCopyrightDetection?: boolean;
   voiceId?: string;
   outputFormat?: string;
   languageCode?: string;
@@ -206,6 +218,7 @@ function normalizeProvider(
     kind === "audio" ? "elevenlabs" : kind === "video" ? "gemini" : "openai";
   const name = String(value || fallback).toLowerCase();
   if (name === "openai") return "openai";
+  if (name === "ideogram") return "ideogram";
   if (name === "gemini") return "gemini";
   if (name === "runway" || name === "runwayml") return "runway";
   if (name === "ltx" || name === "ltxvideo" || name === "ltx-video") return "ltx";
@@ -236,6 +249,34 @@ function parseQuality(value: unknown): ParsedRequest["quality"] {
   const q = String(value || "");
   return q === "low" || q === "medium" || q === "high" || q === "auto"
     ? q
+    : undefined;
+}
+
+function parseIdeogramRenderingSpeed(value: unknown): IdeogramRenderingSpeed | undefined {
+  const speed = String(value || "").toUpperCase();
+  return speed === "FLASH" ||
+    speed === "TURBO" ||
+    speed === "DEFAULT" ||
+    speed === "QUALITY"
+    ? speed
+    : undefined;
+}
+
+function parseIdeogramMagicPrompt(value: unknown): IdeogramMagicPrompt | undefined {
+  const magicPrompt = String(value || "").toUpperCase();
+  return magicPrompt === "AUTO" || magicPrompt === "ON" || magicPrompt === "OFF"
+    ? magicPrompt
+    : undefined;
+}
+
+function parseIdeogramStyleType(value: unknown): IdeogramStyleType | undefined {
+  const styleType = String(value || "").toUpperCase();
+  return styleType === "AUTO" ||
+    styleType === "GENERAL" ||
+    styleType === "REALISTIC" ||
+    styleType === "DESIGN" ||
+    styleType === "FICTION"
+    ? styleType
     : undefined;
 }
 
@@ -357,6 +398,29 @@ function parseGeneratedAssetRequest(body: unknown): ParsedRequest {
     model: body.model ? String(body.model) : undefined,
     size: body.size ? String(body.size) : undefined,
     quality: parseQuality(body.quality),
+    aspectRatio: body.aspectRatio ? String(body.aspectRatio) : undefined,
+    renderingSpeed: parseIdeogramRenderingSpeed(
+      body.renderingSpeed ?? body.rendering_speed
+    ),
+    magicPrompt: parseIdeogramMagicPrompt(body.magicPrompt ?? body.magic_prompt),
+    numImages: parseNumber(body.numImages ?? body.num_images),
+    styleType: parseIdeogramStyleType(body.styleType ?? body.style_type),
+    stylePreset: body.stylePreset
+      ? String(body.stylePreset)
+      : body.style_preset
+        ? String(body.style_preset)
+        : undefined,
+    customModelUri: body.customModelUri
+      ? String(body.customModelUri)
+      : body.custom_model_uri
+        ? String(body.custom_model_uri)
+        : undefined,
+    enableCopyrightDetection:
+      typeof body.enableCopyrightDetection === "boolean"
+        ? body.enableCopyrightDetection
+        : typeof body.enable_copyright_detection === "boolean"
+          ? body.enable_copyright_detection
+          : undefined,
     voiceId: body.voiceId ? String(body.voiceId) : undefined,
     outputFormat: body.outputFormat ? String(body.outputFormat) : undefined,
     languageCode: body.languageCode ? String(body.languageCode) : undefined,
@@ -480,6 +544,14 @@ async function runGeneration(
     model: parsed.model,
     size: parsed.size,
     quality: parsed.quality,
+    aspectRatio: parsed.aspectRatio,
+    renderingSpeed: parsed.renderingSpeed,
+    magicPrompt: parsed.magicPrompt,
+    numImages: parsed.numImages,
+    styleType: parsed.styleType,
+    stylePreset: parsed.stylePreset,
+    customModelUri: parsed.customModelUri,
+    enableCopyrightDetection: parsed.enableCopyrightDetection,
     seconds: parsed.providerSeconds,
     audioMode: parsed.audioMode,
     voiceId: parsed.voiceId,
@@ -502,6 +574,12 @@ async function runGeneration(
   if (parsed.provider === "openai" && parsed.kind === "image") {
     result = await provider.generateAsset({
       provider: "openai",
+      kind: "image",
+      ...baseRequest,
+    });
+  } else if (parsed.provider === "ideogram" && parsed.kind === "image") {
+    result = await provider.generateAsset({
+      provider: "ideogram",
       kind: "image",
       ...baseRequest,
     });
@@ -605,6 +683,14 @@ async function runGeneration(
     model: result.model,
     size: parsed.size,
     quality: parsed.quality,
+    aspectRatio: parsed.aspectRatio,
+    renderingSpeed: parsed.renderingSpeed,
+    magicPrompt: parsed.magicPrompt,
+    numImages: parsed.numImages,
+    styleType: parsed.styleType,
+    stylePreset: parsed.stylePreset,
+    customModelUri: parsed.customModelUri,
+    enableCopyrightDetection: parsed.enableCopyrightDetection,
     seconds: parsed.providerSeconds,
     audioMode: parsed.audioMode,
     voiceId: parsed.voiceId,

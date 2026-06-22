@@ -10,6 +10,14 @@ export interface GeneratedAssetProviderSettings {
   model?: string;
   size?: string;
   quality?: string;
+  aspectRatio?: string;
+  renderingSpeed?: string;
+  magicPrompt?: string;
+  numImages?: number;
+  styleType?: string;
+  stylePreset?: string;
+  customModelUri?: string;
+  enableCopyrightDetection?: boolean;
   seconds?: number;
   audioMode?: string;
   voiceId?: string;

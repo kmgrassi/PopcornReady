@@ -1,9 +1,16 @@
 .page {
   display: grid;
-  width: min(var(--content-max), calc(100% - var(--space-8)));
-  margin: 0 auto;
-  padding: var(--space-7) 0 var(--space-8);
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: var(--space-7) var(--space-6) var(--space-8);
   gap: var(--space-6);
+}
+
+@media (max-width: 760px) {
+  .page {
+    padding: var(--space-5) var(--space-3) var(--space-7);
+  }
 }
 
 .skeleton {

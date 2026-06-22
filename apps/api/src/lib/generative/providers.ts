@@ -1,6 +1,7 @@
 import type { GenerativeProvider } from "@popcorn/shared/generative/types";
 import { elevenLabsProvider } from "./providers/elevenlabs";
 import { geminiProvider } from "./providers/gemini";
+import { ideogramProvider } from "./providers/ideogram";
 import { ltxProvider } from "./providers/ltx";
 import { mockProvider, unsupportedProvider } from "./providers/mock";
 import { nvidiaCosmosProvider } from "./providers/nvidia-cosmos";
@@ -13,6 +14,8 @@ export function providerFor(name: string): GenerativeProvider {
   switch (name.toLowerCase()) {
     case "openai":
       return openAIProvider;
+    case "ideogram":
+      return ideogramProvider;
     case "gemini":
       return geminiProvider;
     case "runway":

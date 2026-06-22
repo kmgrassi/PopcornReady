@@ -3896,18 +3896,24 @@ export async function listProjects(
 
 export async function listPublicProjects(
   limit: number,
-  cursor: string | null
+  cursor: string | null,
+  opts: { excludeWorkspaceId?: string } = {}
 ): Promise<PageResult<V1Project>> {
   const db = getServiceSupabase();
-  const data = await runQuery(
-    "store.listPublicProjects",
-    db
-      .from("projects")
-      .select("*, workspaces!inner(purpose)")
-      .eq("visibility", "public")
-      .eq("workspaces.purpose", "user")
-      .neq("status", "deleted")
-  );
+  let query = db
+    .from("projects")
+    .select("*, workspaces!inner(purpose)")
+    .eq("visibility", "public")
+    .eq("workspaces.purpose", "user")
+    .neq("status", "deleted");
+  // Hide the caller's OWN public projects from the cross-workspace feed: opening
+  // one here lands on the read-only public view (no editing), which is confusing
+  // for work you own — your "My library" tab is where you edit it. Filtered
+  // before pagination so page sizes/cursors stay correct.
+  if (opts.excludeWorkspaceId) {
+    query = query.neq("workspace_id", opts.excludeWorkspaceId);
+  }
+  const data = await runQuery("store.listPublicProjects", query);
   const all = await Promise.all(
     (data as ProjectRow[]).map((row) =>
       mapProjectWithProjection(db, row, { publicOnly: true })
@@ -4672,6 +4678,7 @@ export interface WorkspaceAssetSummary {
   source: string;
   filename?: string;
   description?: string;
+  promptPreview?: string;
   url?: string;
   thumbnailUrl?: string;
   durationSec?: number;
@@ -4863,6 +4870,10 @@ export async function listWorkspaceAssets(
       source: typeof source?.type === "string" ? source.type : "imported",
       filename: row.filename,
       description: row.description ?? undefined,
+      promptPreview:
+        typeof row.params?.provenance?.prompt === "string"
+          ? row.params.provenance.prompt
+          : undefined,
       durationSec: row.duration_sec ?? undefined,
       visibility: row.visibility ?? "public",
       createdAt: iso(row.created_at),
