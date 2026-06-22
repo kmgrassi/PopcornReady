@@ -787,6 +787,7 @@ function StoryboardPanelThumb({ panel }: { panel: StoryboardPanel }) {
       kind="image"
       url={panel.thumbnailUrl ?? panel.url}
       assetId={panel.imageAssetId ?? null}
+      prompt={panel.prompt ?? null}
       status={panel.status}
       mediaClassName={styles.storyImage}
       placeholderClassName={`${styles.storyImage} ${styles.storyImageEmpty}`}
