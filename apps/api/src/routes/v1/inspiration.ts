@@ -62,6 +62,8 @@ interface RandomStoryInspiration {
   poster?: StoryConceptPoster;
 }
 
+type InspirationElementGroup = keyof RandomStoryInspiration["elements"];
+
 interface StoryConceptPoster {
   status: "queued" | "generating" | "ready" | "failed";
   url: string | null;
@@ -78,6 +80,16 @@ const CATEGORIES: StoryElementCategory[] = [
   "antagonist_type",
   "stakes",
   "theme",
+];
+
+const ELEMENT_GROUPS: InspirationElementGroup[] = [
+  "plot",
+  "setting",
+  "arc",
+  "antagonist",
+  "theme",
+  "stakes",
+  "structure",
 ];
 
 const PERSON_TYPES = [
@@ -156,7 +168,7 @@ inspirationRouter.get(
 inspirationRouter.post(
   "/inspiration/poster",
   mutation(async ({ body }) => {
-    const inspiration = parsePosterInspiration(body);
+    const inspiration = await parsePosterInspiration(body);
     const poster = await ensureStoryConceptPoster(inspiration);
     return {
       status: poster.status === "ready" ? 200 : 202,
@@ -229,20 +241,20 @@ function buildRandomStory(rows: StoryElementRow[]): RandomStoryInspiration {
   const settingText = formatSetting(timeSetting, placeSetting);
   const externalGoal = randomItem(EXTERNAL_GOALS);
   const antagonistText = describeAntagonist(antagonist, theme);
-  const innerFlawOrLie = beliefShift
-    ? `the belief that ${quote(stripSentenceEnd(beliefShift.name))}`
-    : lowerFirst(arc.name);
-  const newTruth = beliefShift?.core_idea
-    ? stripSentenceEnd(beliefShift.core_idea)
-    : lowerFirst(stripSentenceEnd(arc.core_idea ?? "they can choose a better self"));
+  const innerFlawOrLie = innerFlawFor(arc, beliefShift);
+  const newTruth = newTruthFor(arc, beliefShift);
   const oldSelf = randomItem(OLD_SELF_CHOICES);
   const endingType = randomItem(ENDING_TYPES);
-
-  const logline =
-    `A ${typeOfPerson} in ${settingText} wants to ${externalGoal}, ` +
-    `but ${antagonistText} blocks them. To succeed, they must overcome ` +
-    `${innerFlawOrLie} and choose between ${oldSelf} and ${quote(newTruth)}, ` +
-    `leading to ${endingType}.`;
+  const logline = buildLogline({
+    typeOfPerson,
+    setting: settingText,
+    externalGoal,
+    antagonisticForce: antagonistText,
+    innerFlawOrLie,
+    oldSelf,
+    newTruth,
+    endingType,
+  });
 
   return {
     formula:
@@ -268,22 +280,141 @@ function buildRandomStory(rows: StoryElementRow[]): RandomStoryInspiration {
   };
 }
 
-function parsePosterInspiration(body: unknown): RandomStoryInspiration {
+async function parsePosterInspiration(body: unknown): Promise<RandomStoryInspiration> {
   const record = body && typeof body === "object" && !Array.isArray(body)
     ? (body as Record<string, unknown>)
     : {};
-  const inspiration = record.inspiration;
-  if (!inspiration || typeof inspiration !== "object" || Array.isArray(inspiration)) {
+  const rawInspiration = record.inspiration;
+  if (!rawInspiration || typeof rawInspiration !== "object" || Array.isArray(rawInspiration)) {
     throw new ApiError("validation_failed", "inspiration is required.");
   }
-  const value = inspiration as RandomStoryInspiration;
-  if (typeof value.logline !== "string" || !value.logline.trim()) {
-    throw new ApiError("validation_failed", "inspiration.logline is required.");
+
+  const input = rawInspiration as Record<string, unknown>;
+  const rows = await listStoryElements();
+  const rowsById = new Map(rows.map((row) => [row.id, row]));
+  const selectedRows = parseSelectedElementRows(input.elements, rowsById);
+
+  const timeSetting = selectedRows.setting[0];
+  const placeSetting = selectedRows.setting[1];
+  const arc = selectedRows.arc.find((row) => row.category_slug === "character_arc");
+  const beliefShift = selectedRows.arc.find((row) => row.category_slug === "belief_shift");
+  const structure = selectedRows.structure[0];
+  if (!timeSetting || !placeSetting || !arc || !beliefShift || !structure) {
+    throw new ApiError("validation_failed", "inspiration.elements is incomplete.");
   }
-  if (!value.elements || typeof value.elements !== "object") {
+
+  const typeOfPerson = enumField(input, "typeOfPerson", PERSON_TYPES);
+  const externalGoal = enumField(input, "externalGoal", EXTERNAL_GOALS);
+  const oldSelf = enumField(input, "oldSelf", OLD_SELF_CHOICES);
+  const endingType = enumField(input, "endingType", ENDING_TYPES);
+  const setting = formatSetting(timeSetting, placeSetting);
+  const antagonisticForce = describeAntagonist(selectedRows.antagonist, selectedRows.theme);
+  const innerFlawOrLie = innerFlawFor(arc, beliefShift);
+  const newTruth = newTruthFor(arc, beliefShift);
+  const logline = buildLogline({
+    typeOfPerson,
+    setting,
+    externalGoal,
+    antagonisticForce,
+    innerFlawOrLie,
+    oldSelf,
+    newTruth,
+    endingType,
+  });
+
+  assertFieldMatches(input, "setting", setting);
+  assertFieldMatches(input, "antagonisticForce", antagonisticForce);
+  assertFieldMatches(input, "innerFlawOrLie", innerFlawOrLie);
+  assertFieldMatches(input, "newTruth", newTruth);
+  assertFieldMatches(input, "logline", logline);
+
+  return {
+    formula: typeof input.formula === "string" ? input.formula : "",
+    logline,
+    typeOfPerson,
+    setting,
+    externalGoal,
+    antagonisticForce,
+    innerFlawOrLie,
+    oldSelf,
+    newTruth,
+    endingType,
+    elements: {
+      plot: selectedRows.plot.map(toElement),
+      setting: selectedRows.setting.map(toElement),
+      arc: selectedRows.arc.map(toElement),
+      antagonist: selectedRows.antagonist.map(toElement),
+      theme: selectedRows.theme.map(toElement),
+      stakes: selectedRows.stakes.map(toElement),
+      structure: selectedRows.structure.map(toElement),
+    },
+  };
+}
+
+function parseSelectedElementRows(
+  rawElements: unknown,
+  rowsById: Map<string, StoryElementRow>
+): Record<InspirationElementGroup, StoryElementRow[]> {
+  if (!rawElements || typeof rawElements !== "object" || Array.isArray(rawElements)) {
     throw new ApiError("validation_failed", "inspiration.elements is required.");
   }
+  const rawByGroup = rawElements as Record<string, unknown>;
+  const selected = {} as Record<InspirationElementGroup, StoryElementRow[]>;
+
+  for (const group of ELEMENT_GROUPS) {
+    const rawGroup = rawByGroup[group];
+    if (!Array.isArray(rawGroup) || rawGroup.length === 0) {
+      throw new ApiError("validation_failed", `inspiration.elements.${group} is required.`);
+    }
+    selected[group] = rawGroup.map((item) => {
+      const id = item && typeof item === "object" && !Array.isArray(item)
+        ? (item as Record<string, unknown>).id
+        : null;
+      if (typeof id !== "string") {
+        throw new ApiError("validation_failed", `inspiration.elements.${group} contains an invalid element.`);
+      }
+      const row = rowsById.get(id);
+      if (!row || !elementGroupAllowsCategory(group, row.category_slug)) {
+        throw new ApiError("validation_failed", `inspiration.elements.${group} contains an unknown element.`);
+      }
+      return row;
+    });
+  }
+
+  return selected;
+}
+
+function elementGroupAllowsCategory(
+  group: InspirationElementGroup,
+  category: StoryElementCategory
+): boolean {
+  if (group === "plot") return category === "plot_type";
+  if (group === "setting") return category === "setting";
+  if (group === "arc") return category === "character_arc" || category === "belief_shift";
+  if (group === "antagonist") return category === "antagonist_type";
+  return group === category;
+}
+
+function enumField<T extends readonly string[]>(
+  input: Record<string, unknown>,
+  field: string,
+  allowed: T
+): T[number] {
+  const value = input[field];
+  if (typeof value !== "string" || !allowed.includes(value)) {
+    throw new ApiError("validation_failed", `inspiration.${field} is invalid.`);
+  }
   return value;
+}
+
+function assertFieldMatches(
+  input: Record<string, unknown>,
+  field: string,
+  expected: string
+): void {
+  if (input[field] !== expected) {
+    throw new ApiError("validation_failed", `inspiration.${field} does not match the selected elements.`);
+  }
 }
 
 function conceptElementEntries(inspiration: RandomStoryInspiration) {
@@ -310,11 +441,29 @@ function roleForElement(group: string, element: InspirationElement): string {
   return group;
 }
 
-function conceptKeyFor(inspiration: RandomStoryInspiration): string {
-  return conceptElementEntries(inspiration)
+function conceptKeyFor(inspiration: RandomStoryInspiration, promptHash: string): string {
+  const elementKey = conceptElementEntries(inspiration)
     .map(({ element, role, position }) => `${role}:${position}:${element.slug || element.id}`)
     .sort()
     .join("|");
+  const promptParts = [
+    inspiration.typeOfPerson,
+    inspiration.setting,
+    inspiration.externalGoal,
+    inspiration.antagonisticForce,
+    inspiration.innerFlawOrLie,
+    inspiration.oldSelf,
+    inspiration.newTruth,
+    inspiration.endingType,
+    promptHash,
+  ]
+    .map(normalizeKeyPart)
+    .join("|");
+  return `${elementKey}|prompt:${promptParts}`;
+}
+
+function normalizeKeyPart(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
 function sha256(value: string): string {
@@ -337,10 +486,10 @@ async function ensureStoryConceptPoster(
   inspiration: RandomStoryInspiration
 ): Promise<StoryConceptPoster> {
   const db = getServiceSupabase();
-  const conceptKey = conceptKeyFor(inspiration);
-  const conceptHash = sha256(conceptKey);
   const prompt = posterPromptFor(inspiration);
   const promptHash = sha256(prompt);
+  const conceptKey = conceptKeyFor(inspiration, promptHash);
+  const conceptHash = sha256(conceptKey);
 
   const concept = await runQuery(
     "inspiration.upsertStoryConcept",
@@ -384,6 +533,7 @@ async function ensureStoryConceptPoster(
       .from("story_concept_posters")
       .select("id,status,poster_asset_id,prompt")
       .eq("story_concept_id", concept.id)
+      .eq("prompt_hash", promptHash)
       .eq("is_primary", true)
       .maybeSingle()
   ) as { id: string; status: StoryConceptPoster["status"]; poster_asset_id: string | null; prompt: string } | null;
@@ -612,6 +762,36 @@ function formatSetting(timeSetting: StoryElementRow, placeSetting: StoryElementR
 
 function settingLabel(name: string): string {
   return name.toLowerCase().replace(/\s*\/\s*/g, " or ");
+}
+
+function innerFlawFor(arc: StoryElementRow, beliefShift: StoryElementRow | undefined): string {
+  return beliefShift
+    ? `the belief that ${quote(stripSentenceEnd(beliefShift.name))}`
+    : lowerFirst(arc.name);
+}
+
+function newTruthFor(arc: StoryElementRow, beliefShift: StoryElementRow | undefined): string {
+  return beliefShift?.core_idea
+    ? stripSentenceEnd(beliefShift.core_idea)
+    : lowerFirst(stripSentenceEnd(arc.core_idea ?? "they can choose a better self"));
+}
+
+function buildLogline(input: {
+  typeOfPerson: string;
+  setting: string;
+  externalGoal: string;
+  antagonisticForce: string;
+  innerFlawOrLie: string;
+  oldSelf: string;
+  newTruth: string;
+  endingType: string;
+}): string {
+  return (
+    `A ${input.typeOfPerson} in ${input.setting} wants to ${input.externalGoal}, ` +
+    `but ${input.antagonisticForce} blocks them. To succeed, they must overcome ` +
+    `${input.innerFlawOrLie} and choose between ${input.oldSelf} and ${quote(input.newTruth)}, ` +
+    `leading to ${input.endingType}.`
+  );
 }
 
 function lowerFirst(value: string): string {
