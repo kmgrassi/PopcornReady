@@ -23,7 +23,8 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   with mocked browser API fixtures.
 - `specs/library-collections.spec.ts` covers Library pagination, filters, media
   viewer, visibility mutation behavior, and watch links with mocked fixtures.
-- `storyboard-editor.spec.ts` covers storyboard load, edit, save, and reload.
+- `storyboard-editor.spec.ts` verifies the dedicated storyboard route renders
+  the empty state for a project whose storyboard endpoint returns `null`.
 - `evals.spec.ts` covers the eval dashboard and admin workbench judgment action.
 
 The required local-first database smoke is:
@@ -121,7 +122,10 @@ Critical flows:
 
 - Landing prompt validates minimum content.
 - Account-choice modal opens on submit.
-- Create-account path preserves pending prompt through `/signup`.
+- Create-account path should preserve and resume the pending prompt through
+  `/signup`. Current implementation stores `pendingLandingPrompt`, while the
+  auth form resumes `pendingQuickStart`, so the automatic post-signup run start
+  remains a product/test gap.
 - Guest path calls anonymous sign-in and respects guest run limits.
 - Successful quick-start creates a project/run and navigates to
   `/projects/:projectId/runs/:runId`.
@@ -134,8 +138,9 @@ Current coverage:
 
 Recommended next test:
 
-- Add a mock-backed quick-start test that submits the landing prompt, signs up,
-  asserts pending prompt resume, stubs the run-start API, and lands on progress.
+- Add a mock-backed quick-start test after the pending-prompt state keys are
+  unified: submit the landing prompt, sign up, assert pending prompt resume, stub
+  the run-start API, and land on progress.
 
 ### 3. Run Progress, Review Gates, And Recovery
 
@@ -173,15 +178,16 @@ Remaining gaps:
 
 Covered:
 
-- Storyboard editor loads a seeded storyboard.
-- Scene/beat edits persist through save and reload.
-- Adding/removing/moving beats is covered at a basic level.
+- Storyboard route renders the dedicated storyboard page and empty state for a
+  project without a storyboard.
 
 Remaining gaps:
 
 - Project detail route coverage is thin.
-- Reorder permutations and relational storyboard API surfaces are not fully
-  exercised.
+- Seeded storyboard loading, scene/beat edits, save, and reload persistence are
+  not covered by the current browser spec.
+- Adding/removing/moving beats, reorder permutations, and relational storyboard
+  API surfaces are not fully exercised.
 - Watch page video playback/fallback behavior has limited coverage.
 
 ### 6. Evals And Admin

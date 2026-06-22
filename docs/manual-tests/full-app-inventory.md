@@ -217,8 +217,12 @@ This is the current creation entry point while `/studio` is retired.
   provider keys, verify the app surfaces a readable configuration error.
 - From `/`, enter a valid prompt and choose each supported length.
 - Choose Create account:
-  - Pending prompt should survive the `/signup` redirect.
-  - After signup, the quick-start run should auto-start once auth resolves.
+  - Pending prompt should survive the `/signup` redirect in router state/session
+    storage.
+  - Current gap to record: the landing page stores `pendingLandingPrompt` /
+    `pr.pendingLandingPrompt`, while the auth form only resumes
+    `pendingQuickStart` / `pr.pendingQuickStart`. After signup, expect the user
+    to land on `/dashboard` without an automatic run until that wiring is fixed.
 - Choose Skip this step:
   - Anonymous sign-in should create a Supabase anonymous session.
   - The app should start the run as a guest if the guest-run limit allows it.
