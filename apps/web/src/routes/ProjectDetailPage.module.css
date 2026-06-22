@@ -73,7 +73,7 @@
 
 .projectPageLayout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 260px);
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
   align-items: start;
   gap: var(--space-5);
 }
@@ -221,93 +221,28 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
-.pipelineAside {
+.stageAside {
   position: sticky;
   top: var(--space-5);
   z-index: 4;
   min-width: 0;
 }
 
-.pipelineToggle {
-  display: none;
-  width: 100%;
-  min-height: 42px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 0 var(--space-4);
-  background: var(--panel);
-  color: var(--text-strong);
-  font: inherit;
-  font-size: var(--text-sm);
-  font-weight: 900;
-  text-align: left;
-}
-
-.pipelineNav {
-  display: grid;
-  gap: var(--space-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+.stageAside .panel {
   padding: var(--space-4);
-  background: var(--panel);
-  box-shadow: var(--shadow-sm);
 }
 
-.pipelineHeader h2 {
-  margin: var(--space-1) 0 0;
-  color: var(--text-strong);
-  font-size: var(--text-md);
-  line-height: 1.2;
+.stageAside .sectionHeader {
+  align-items: stretch;
+  flex-direction: column;
 }
 
-.pipelineList {
-  display: grid;
-  gap: var(--space-2);
-  margin: 0;
-  padding: 0;
-  list-style: none;
+.stageAside .sectionHeaderActions {
+  justify-content: stretch;
 }
 
-.pipelineLink {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
-  align-items: center;
-  gap: var(--space-2);
-  min-height: 40px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  padding: var(--space-1) var(--space-2);
-  color: var(--muted);
-  font-size: var(--text-sm);
-  font-weight: 900;
-  text-decoration: none;
-}
-
-.pipelineLink:hover {
-  border-color: var(--border);
-  color: var(--text);
-}
-
-.pipelineLinkActive {
-  border-color: var(--accent);
-  background: var(--panel-2);
-  color: var(--text-strong);
-}
-
-.pipelineIndex {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-pill);
-  background: var(--panel-2);
-  color: var(--muted);
-  font-size: var(--text-xs);
-}
-
-.pipelineLinkActive .pipelineIndex {
-  background: var(--accent);
-  color: var(--bg);
+.stageAside .stageSummary {
+  grid-template-columns: 1fr;
 }
 
 .panel {
@@ -647,22 +582,9 @@
     grid-template-columns: 1fr;
   }
 
-  .pipelineAside {
-    top: var(--space-3);
+  .stageAside {
+    position: static;
     order: -1;
-  }
-
-  .pipelineToggle {
-    display: block;
-  }
-
-  .pipelineNav {
-    display: none;
-    margin-top: var(--space-2);
-  }
-
-  .pipelineNavOpen {
-    display: grid;
   }
 }
 

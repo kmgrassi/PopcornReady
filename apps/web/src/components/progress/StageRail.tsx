@@ -1,5 +1,6 @@
 "use client";
 
+import { Link } from "react-router-dom";
 import {
   type GenerationRunStatus,
   type GenerationStage,
@@ -25,6 +26,7 @@ interface StageRailProps {
     pendingStageType?: GenerationStageType | null;
     onRestart: (stageType: GenerationStageType) => void;
   };
+  stageLinks?: Partial<Record<string, string>>;
 }
 
 const VISIBLE_STAGES: Array<{
@@ -114,6 +116,7 @@ export function StageRail({
   reviewGate,
   stopAction,
   restartAction,
+  stageLinks,
 }: StageRailProps) {
   const ordered = [...stages].sort((a, b) => a.order - b.order);
   const stagesByType = new Map<GenerationStageType, GenerationStage[]>();
@@ -176,6 +179,7 @@ export function StageRail({
           status === "failed" ||
           status === "canceled" ||
           isUpcoming;
+        const stageLink = stageLinks?.[visibleStage.label];
 
         return (
           <li
@@ -193,7 +197,13 @@ export function StageRail({
             </div>
             <div className={styles.stageBody}>
               <div className={styles.stageTitleRow}>
-                <span className={styles.stageTitle}>{visibleStage.label}</span>
+                {stageLink ? (
+                  <Link className={`${styles.stageTitle} ${styles.stageTitleLink}`} to={stageLink}>
+                    {visibleStage.label}
+                  </Link>
+                ) : (
+                  <span className={styles.stageTitle}>{visibleStage.label}</span>
+                )}
                 {showStatus ? (
                   <span className={`${styles.stageStatusPill} ${styles[`stageStatus_${statusKey}`]}`}>
                     {isUpcoming ? "Up next" : stage?.reviewedAt ? "Complete" : STATUS_LABEL[statusKey]}
