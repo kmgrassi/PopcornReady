@@ -159,6 +159,7 @@ interface RunStageHandle {
     kind: ProgressItemKind;
     label: string;
     provider?: string;
+    prompt?: string;
     promptPreview?: string;
   }): Promise<RunStageItemHandle>;
   attachJob(jobId: string): Promise<void>;
@@ -1037,6 +1038,7 @@ export async function runGeneratedAssetJob(args: {
             clipPromptPreview(parsed.prompt) ||
             `Generated ${parsed.kind}`,
           provider: parsed.provider,
+          prompt: parsed.prompt,
           promptPreview: clipPromptPreview(parsed.prompt),
         })
       : null;

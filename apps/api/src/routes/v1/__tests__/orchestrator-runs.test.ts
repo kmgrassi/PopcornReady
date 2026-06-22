@@ -243,6 +243,25 @@ test("projects stage item purpose metadata from orchestrator tools", () => {
   );
 });
 
+test("projects full action prompts into stage items", () => {
+  const longPrompt = `${"cinematic ".repeat(40)}final frame`;
+  const payload = projectRunDetailFromParts(
+    runFixture({ status: "running" }),
+    [],
+    [
+      actionFixture("generate_keyframe", {
+        params: { prompt: longPrompt },
+        outputAssetIds: ["keyframe_asset_1"],
+      }),
+    ]
+  );
+
+  assert.equal(payload.stageItems[0]?.prompt, longPrompt);
+  assert.ok(payload.stageItems[0]?.promptPreview);
+  assert.notEqual(payload.stageItems[0]?.promptPreview, longPrompt);
+  assert.match(payload.stageItems[0]?.promptPreview ?? "", /…$/);
+});
+
 test("resumeRunInBackground starts resume and returns before it settles", async () => {
   let resolveResume: (() => void) | undefined;
   let resumeStarted = false;

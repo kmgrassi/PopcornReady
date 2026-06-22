@@ -112,7 +112,7 @@ function MediaFrame({
       thumbnailUrl={asset?.thumbnailUrl ?? null}
       status={item.status}
       assetId={item.assetId ?? null}
-      prompt={item.promptPreview ?? null}
+      prompt={item.prompt ?? item.promptPreview ?? null}
       alt={item.label}
       allowRegenerate={allowInlineRegenerate}
       videoControls
