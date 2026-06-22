@@ -1,0 +1,8 @@
+/* AssetImage renders the empty state as a child of the `.media-frame` legacy
+   frame (not the frame element itself), so the placeholder fill + gradient live
+   here, co-located, instead of growing globals.css. */
+.placeholder {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, #1a1f26, #232a33);
+}
