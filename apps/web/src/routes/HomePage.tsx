@@ -5,10 +5,15 @@ import { useAuth } from "../components/auth/AuthProvider";
 import { HeatLogoMark } from "../components/HeatLogoMark";
 import { Reveal } from "../components/Reveal";
 import {
+  EMPTY_BRIEF_DRAFT,
+  type BriefDraft,
+} from "../components/studio/useStudioFlow";
+import {
   LandingSection,
   LandingSectionHeader,
 } from "../components/landing/LandingSection";
 import { WorkflowStages } from "../components/landing/WorkflowStages";
+import { createAndStartRun } from "../lib/startRun";
 import styles from "./HomePage.module.css";
 
 const GITHUB_URL = "https://github.com/kmgrassi/popcornready";
@@ -219,6 +224,20 @@ function savePendingLandingPrompt(draft: LandingPromptDraft) {
   );
 }
 
+function clearPendingLandingPrompt() {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.removeItem(PENDING_LANDING_PROMPT_STORAGE_KEY);
+}
+
+function draftFromLandingPrompt(draft: LandingPromptDraft): BriefDraft {
+  return {
+    ...EMPTY_BRIEF_DRAFT,
+    goal: draft.goal,
+    targetLengthSec: draft.lengthSec,
+    projectName: draft.goal.slice(0, 80),
+  };
+}
+
 function AccountChoiceModal({
   draft,
   error,
@@ -273,7 +292,7 @@ function AccountChoiceModal({
             onClick={onSkip}
             disabled={isSubmitting}
           >
-            {isSubmitting ? "Starting guest session..." : "Skip this step"}
+            {isSubmitting ? "Starting video..." : "Skip this step"}
           </button>
         </div>
 
@@ -293,14 +312,14 @@ function AccountChoiceModal({
 
 export function HomePage() {
   const navigate = useNavigate();
-  const { configured, signInAnonymous } = useAuth();
+  const { configured, signInAnonymous, status } = useAuth();
   const [goal, setGoal] = useState("");
   const [lengthSec, setLengthSec] = useState<number>(30);
   const [pendingDraft, setPendingDraft] = useState<LandingPromptDraft | null>(
     null,
   );
   const [modalError, setModalError] = useState<string | null>(null);
-  const [isStartingGuestSession, setIsStartingGuestSession] = useState(false);
+  const [isStartingRun, setIsStartingRun] = useState(false);
 
   const trimmedGoal = goal.trim();
   const canSubmitPrompt = trimmedGoal.length > 0;
@@ -323,28 +342,38 @@ export function HomePage() {
   }
 
   async function chooseGuestSession() {
-    if (!pendingDraft || isStartingGuestSession) return;
-    if (!configured) {
+    if (!pendingDraft || isStartingRun) return;
+    if (status === "loading") {
+      setModalError("Your session is still loading. Try again in a moment.");
+      return;
+    }
+    if (status !== "authenticated" && status !== "disabled" && !configured) {
       setModalError(
         "Guest generation needs Supabase auth configured before it can start.",
       );
       return;
     }
 
-    setIsStartingGuestSession(true);
+    setIsStartingRun(true);
     setModalError(null);
     try {
       savePendingLandingPrompt(pendingDraft);
-      await signInAnonymous();
-      navigate("/library/projects", {
-        state: { pendingLandingPrompt: pendingDraft, startAsGuest: true },
-      });
+      if (status !== "authenticated" && configured) {
+        await signInAnonymous();
+      }
+      const result = await createAndStartRun(draftFromLandingPrompt(pendingDraft));
+      clearPendingLandingPrompt();
+      navigate(
+        `/projects/${encodeURIComponent(result.projectId)}/runs/${encodeURIComponent(
+          result.runId,
+        )}`,
+      );
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : "Could not start a guest session.";
+        err instanceof Error ? err.message : "Could not start your video.";
       setModalError(message);
     } finally {
-      setIsStartingGuestSession(false);
+      setIsStartingRun(false);
     }
   }
 
@@ -624,9 +653,9 @@ export function HomePage() {
         <AccountChoiceModal
           draft={pendingDraft}
           error={modalError}
-          isSubmitting={isStartingGuestSession}
+          isSubmitting={isStartingRun}
           onClose={() => {
-            if (isStartingGuestSession) return;
+            if (isStartingRun) return;
             setPendingDraft(null);
             setModalError(null);
           }}
