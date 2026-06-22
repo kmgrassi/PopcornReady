@@ -176,6 +176,39 @@ test("generate_clip queues only beats without an active clip", async () => {
   assert.equal(kicked?.provider, "mock");
 });
 
+test("generate_clip omits provider so workspace settings can resolve it", async () => {
+  let kicked: { provider?: string; model?: string } | undefined;
+  const tool = createGenerateClipTool({
+    getActiveProjectPlan: async () => activePlan,
+    getActiveProjectScopedAsset: async (input) => {
+      if (input.expectedRole === "beat_keyframe") {
+        const beatId = input.slotRole.replace("beat_keyframe:", "");
+        return asset({
+          id: `kf_${beatId}`,
+          kind: "image",
+          role: "beat_keyframe",
+          contentHash: `hash_${beatId}`,
+        });
+      }
+      return null;
+    },
+    createJob: async () => queuedJob(),
+    runGenerateClipJob: async (input) => {
+      kicked = input;
+    },
+  });
+
+  const result = (await tool.execute(
+    { beatId: "beat_1" },
+    { auth, projectId: "proj_1", orchestratorRunId: "run_1" }
+  )) as ToolCallResult;
+
+  assert.equal(result.status, "accepted");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(kicked?.provider, undefined);
+  assert.equal(kicked?.model, undefined);
+});
+
 test("generate_clip succeeds inline when every requested clip already exists", async () => {
   const tool = createGenerateClipTool({
     getActiveProjectPlan: async () => activePlan,

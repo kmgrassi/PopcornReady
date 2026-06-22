@@ -40,7 +40,7 @@ export const generateKeyframeInputSchema = {
       type: "string",
       enum: ["openai", "ideogram", "gemini", "mock"],
       description:
-        "Optional image provider override. Omit to use OpenAI, or Gemini when a beat/anchor appears to depict a minor.",
+        "Optional image provider override. Omit to use the workspace image-generation setting; minor likenesses still route to Gemini.",
     },
     feedback: {
       type: "string",
@@ -142,7 +142,7 @@ export function createGenerateKeyframeTool(
   return {
     name: "generate_keyframe",
     description:
-      "Generate photoreal beat_keyframe images for planned beats. Requires plan_shots and generate_storyboard first. Runs asynchronously and skips beats with active keyframes.",
+      "Generate photoreal beat_keyframe images for planned beats. Requires plan_shots and generate_storyboard first. Runs asynchronously and skips beats with active keyframes. Do not include provider unless the user explicitly asks to override workspace settings.",
     usage: {
       preconditions: [
         "An active shot plan exists (call plan_shots first).",

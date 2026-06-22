@@ -297,6 +297,27 @@ test("generate_keyframe accepts and kicks off the worker with plan and storyboar
   assert.equal(kicked?.provider, "mock");
 });
 
+test("generate_keyframe omits provider so workspace settings can resolve it", async () => {
+  let kicked: { provider?: string } | undefined;
+  const tool = createGenerateKeyframeTool({
+    getActiveProjectPlan: async () => activePlan,
+    getProjectStoryboard: async () => storyboard,
+    createJob: async () => queuedJob(),
+    runGenerateKeyframeJob: async (input) => {
+      kicked = input;
+    },
+  });
+
+  const result = (await tool.execute(
+    {},
+    { auth, projectId: "proj_1", orchestratorRunId: "run_1" }
+  )) as ToolCallResult;
+
+  assert.equal(result.status, "accepted");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(kicked?.provider, undefined);
+});
+
 test("generate_keyframe validates input before reading graph state", async () => {
   let planReads = 0;
   const tool = createGenerateKeyframeTool({

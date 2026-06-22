@@ -41,7 +41,7 @@ export const generateAudioInputSchema = {
     provider: {
       type: "string",
       enum: ["elevenlabs", "mock"],
-      description: "Optional audio provider override. Omit to use ElevenLabs.",
+      description: "Optional audio provider override. Omit to use the workspace audio-generation setting.",
     },
     voiceId: {
       type: "string",
@@ -138,7 +138,7 @@ export function createGenerateAudioTool(
   return {
     name: "generate_audio",
     description:
-      "Generate beat voiceover and a soundtrack from the active shot plan and optional brief narration. Requires a plan first, honors already-selected audio slots, and runs asynchronously.",
+      "Generate beat voiceover and a soundtrack from the active shot plan and optional brief narration. Requires a plan first, honors already-selected audio slots, and runs asynchronously. Do not include provider unless the user explicitly asks to override workspace settings.",
     usage: {
       preconditions: ["An active shot plan exists (call plan_shots first)."],
       produces: [

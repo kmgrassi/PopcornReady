@@ -66,9 +66,14 @@ export const generateClipInputSchema = {
     provider: {
       type: "string",
       enum: ["openai", "gemini", "runway", "ltx", "nvidia_api_catalog", "mock"],
-      description: "Optional video provider override.",
+      description:
+        "Optional video provider override. Omit to use the workspace video-generation setting.",
     },
-    model: { type: "string", description: "Optional provider model override." },
+    model: {
+      type: "string",
+      description:
+        "Optional provider model override. Omit to use the workspace video-generation model.",
+    },
     durationSec: { type: "number", minimum: 1 },
     seconds: { type: "number", minimum: 1 },
     prompt: { type: "string", description: "Optional prompt override for all requested beats." },
@@ -274,7 +279,7 @@ export function createGenerateClipTool(
   return {
     name: "generate_clip",
     description:
-      "Generate motion video clips for planned beats from their active beat_keyframe first frames. Skips beats that already have active beat_clip selections. Runs asynchronously.",
+      "Generate motion video clips for planned beats from their active beat_keyframe first frames. Skips beats that already have active beat_clip selections. Runs asynchronously. Do not include provider or model unless the user explicitly asks to override workspace settings.",
     usage: {
       preconditions: [
         "An active shot plan exists (call plan_shots first).",

@@ -37,7 +37,7 @@ export const generateAnchorInputSchema = {
       type: "string",
       enum: ["openai", "gemini", "mock"],
       description:
-        "Optional image provider override. Omit to use OpenAI, or Gemini when the anchor appears to depict a minor.",
+        "Optional image provider override. Omit to use the workspace image-generation setting; minor likenesses still route to Gemini.",
     },
     feedback: {
       type: "string",
@@ -117,7 +117,7 @@ export function createGenerateAnchorTool(
   return {
     name: "generate_anchor",
     description:
-      "Generate reusable character and scene anchor images from the active visual-anchor plan. Requires plan_visual_anchors first. Runs asynchronously.",
+      "Generate reusable character and scene anchor images from the active visual-anchor plan. Requires plan_visual_anchors first. Runs asynchronously. Do not include provider unless the user explicitly asks to override workspace settings.",
     usage: {
       preconditions: [
         "An active visual-anchor plan exists (call plan_visual_anchors first).",
