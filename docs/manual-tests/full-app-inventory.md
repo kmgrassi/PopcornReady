@@ -159,10 +159,9 @@ recovery.
 - Open `/dashboard` in a fresh workspace.
 - Verify the empty or low-data state has clear next actions.
 - Verify whether the authenticated shell exposes the intended creation CTA:
-  - Target behavior: a primary `Create New Video` action should start the
+  - Target behavior: a primary `Create new video` action should start the
     stepwise project-creation flow.
-  - Current behavior to record as a product gap: the sidebar primary action is
-    `Projects`, and the dashboard empty state routes to `/library/projects`.
+  - Library remains available as a separate sidebar menu item.
 - If the workspace has active runs or outputs, verify counts and cards match
   the corresponding Library tabs.
 - Click active run rows and recent output links when present; they should open
@@ -172,9 +171,7 @@ recovery.
 
 ### 5. Project Creation And Manual Stop Points
 
-Use this pass for the intended dashboard-driven creation flow. It is also the
-checklist to run after the `Create New Video` route is wired into the
-authenticated app.
+Use this pass for the dashboard-driven creation flow.
 
 Local user setup:
 
@@ -187,7 +184,7 @@ Local user setup:
 
 Creation entry:
 
-- From `/dashboard`, click `Create New Video`.
+- From `/dashboard`, click `Create new video`.
 - Verify the user lands on the project-creation flow without leaving the
   authenticated shell.
 - Refresh the first creation screen; the shell and any draft state should
@@ -223,14 +220,12 @@ Production step:
 - Use the visible stop/cancel affordance where available and confirm the run
   reaches the expected paused or terminal state.
 
-Current implementation gaps to record:
+Route notes:
 
 - `/studio` is retired and not mounted.
-- `/projects/new` redirects to `/library/projects`.
-- The dashboard and authenticated sidebar do not currently expose a real
-  `Create New Video` action.
-- The live creation entry point is still the landing quick-start path described
-  below, and that path starts from `/` rather than from the dashboard.
+- `/projects/new` owns the authenticated stepwise creation surface.
+- The landing quick-start path described below remains a separate public entry
+  point from `/`.
 
 ### 6. Library Collections
 

@@ -123,19 +123,19 @@ export function deriveNextAction(
   if (!pulse || pulse.counts.projects === 0) {
     return {
       type: "start",
-      title: "No projects yet",
-      body: "Project creation is being reworked. Your project library will show saved work as it becomes available.",
-      ctaLabel: "View projects",
-      to: "/library/projects",
+      title: "Create your first AI rough cut",
+      body: "Start with a brief, add footage, then choose where the run should stop for review.",
+      ctaLabel: "Create new video",
+      to: "/projects/new?start=1",
     };
   }
 
   return {
     type: "new",
-    title: "Workspace is up to date",
-    body: "No workspace item needs attention right now. Browse saved projects, runs, assets, and outputs.",
-    ctaLabel: "View projects",
-    to: "/library/projects",
+    title: "Start the next rough cut",
+    body: "No workspace item needs attention right now. Create a new video when you are ready.",
+    ctaLabel: "Create new video",
+    to: "/projects/new?start=1",
   };
 }
 

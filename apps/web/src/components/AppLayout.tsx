@@ -151,8 +151,12 @@ export function AuthenticatedAppLayout() {
           <span>Popcorn Ready</span>
         </Link>
 
-        <Button className={styles.newVideo} variant="primary" onClick={() => navigate("/library/projects")}>
-          Projects
+        <Button
+          className={styles.newVideo}
+          variant="primary"
+          onClick={() => navigate(`/projects/new?new=${Date.now()}`)}
+        >
+          Create new video
         </Button>
 
         <nav className={styles.nav} aria-label="Dashboard">
