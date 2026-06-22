@@ -97,6 +97,25 @@ export class AgentApiStore {
     return { job, created: true };
   }
 
+  // Most recently created job of a given type for a project, or null. Lets a
+  // client rediscover an in-flight job (e.g. storyboard generation) after a
+  // reload, when the job id only ever lived in transient client state. Jobs are
+  // appended in creation order, so the last match is the newest — robust even
+  // when two jobs share a millisecond-resolution createdAt.
+  async findLatestJobForProject(input: {
+    type: JobType;
+    projectId: string;
+  }): Promise<Job | null> {
+    const state = await this.read();
+    for (let i = state.jobs.length - 1; i >= 0; i -= 1) {
+      const job = state.jobs[i];
+      if (job.type === input.type && job.projectId === input.projectId) {
+        return job;
+      }
+    }
+    return null;
+  }
+
   private async patchJob(id: string, patch: Partial<Job>): Promise<Job> {
     const state = await this.read();
     const job = state.jobs.find((j) => j.id === id);

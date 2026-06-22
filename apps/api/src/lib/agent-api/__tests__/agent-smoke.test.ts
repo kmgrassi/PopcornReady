@@ -88,6 +88,45 @@ test("idempotency: same key + type returns the same job", async () => {
   assert.equal(first.job.id, second.job.id);
 });
 
+test("findLatestJobForProject recovers the newest in-flight job (reload case)", async () => {
+  const store = await tempStore();
+
+  // No jobs yet -> null.
+  assert.equal(
+    await store.findLatestJobForProject({ type: "asset_generation", projectId: "proj_1" }),
+    null
+  );
+
+  const first = await store.createOrGetJob({
+    type: "asset_generation",
+    projectId: "proj_1",
+    idempotencyKey: "gen-001",
+  });
+  const second = await store.createOrGetJob({
+    type: "asset_generation",
+    projectId: "proj_1",
+    idempotencyKey: "gen-002",
+  });
+
+  // Returns the most recently created job for the project+type.
+  const latest = await store.findLatestJobForProject({
+    type: "asset_generation",
+    projectId: "proj_1",
+  });
+  assert.equal(latest?.id, second.job.id);
+  assert.notEqual(latest?.id, first.job.id);
+
+  // Scoped by project and by type.
+  assert.equal(
+    await store.findLatestJobForProject({ type: "asset_generation", projectId: "proj_2" }),
+    null
+  );
+  assert.equal(
+    await store.findLatestJobForProject({ type: "export", projectId: "proj_1" }),
+    null
+  );
+});
+
 test("revision worker produces a sibling timeline without mutating the base", async () => {
   const project = projectFixture();
   const patches: Patch[] = [

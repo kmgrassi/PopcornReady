@@ -19,7 +19,7 @@ import {
   useGenerateProjectStoryboardMutation,
   useGenerationRunQuery,
   useProjectQuery,
-  useProjectStoryboardGenerationJobQuery,
+  useProjectStoryboardJobQuery,
   useProjectStoryboardQuery,
   useUpdateGenerationRunMutation,
 } from "../lib/queryClient";
@@ -44,21 +44,19 @@ export function ProjectDetailPage() {
   const authScope = useDashboardAuthScope();
   const projectQuery = useProjectQuery(projectId ?? "", Boolean(projectId));
   const generateStoryboardMutation = useGenerateProjectStoryboardMutation(projectId ?? "");
-  const storyboardGenerationJobId = generateStoryboardMutation.data?.job.id ?? "";
-  const storyboardGenerationJobQuery = useProjectStoryboardGenerationJobQuery(
-    projectId ?? "",
-    storyboardGenerationJobId,
-    Boolean(projectId && storyboardGenerationJobId)
-  );
-  const storyboardGenerationJob = storyboardGenerationJobQuery.data?.job;
-  // The generation job runs in the background; keep the storyboard query polling
-  // while it is queued/running so the row appears and panel progress streams in
-  // without depending on the ephemeral job id (which is lost on reload).
+  // Latest job for the project, fetched from the server, so an in-flight
+  // generation is rediscovered after a reload (the storyboard row isn't created
+  // until every tile is generated, so before then this is the only signal).
+  const storyboardJobQuery = useProjectStoryboardJobQuery(projectId ?? "", Boolean(projectId));
+  const storyboardGenerationJob = storyboardJobQuery.data?.job ?? null;
   const jobActive = Boolean(
-    storyboardGenerationJob && storyboardGenerationJob.status !== "succeeded" &&
+    storyboardGenerationJob &&
+      storyboardGenerationJob.status !== "succeeded" &&
       storyboardGenerationJob.status !== "failed" &&
       storyboardGenerationJob.status !== "canceled"
   );
+  // Keep the storyboard query polling while the job runs so the row appears and
+  // panel progress streams in.
   const storyboardQuery = useProjectStoryboardQuery(
     projectId ?? "",
     Boolean(projectId),
@@ -66,11 +64,15 @@ export function ProjectDetailPage() {
   );
   const refetchStoryboard = storyboardQuery.refetch;
   const storyboardGenerationError = useMemo(() => {
-    if (storyboardGenerationJob?.error) {
+    if (storyboardGenerationJob?.status === "failed" && storyboardGenerationJob.error) {
       return new Error(storyboardGenerationJob.error.message);
     }
-    return storyboardGenerationJobQuery.error;
-  }, [storyboardGenerationJob?.error?.message, storyboardGenerationJobQuery.error]);
+    return storyboardJobQuery.error;
+  }, [
+    storyboardGenerationJob?.status,
+    storyboardGenerationJob?.error?.message,
+    storyboardJobQuery.error,
+  ]);
   const runsQuery = useDashboardRunsQuery(authScope, {
     status: "all",
     projectId: projectId ?? undefined,
@@ -181,6 +183,7 @@ export function ProjectDetailPage() {
           </section>
           <section className={styles.storyboardLayout}>
             <StoryboardPreview
+              projectId={projectId}
               storyboard={storyboard}
               loading={storyboardQuery.isLoading}
               error={storyboardQuery.error}
@@ -486,6 +489,7 @@ function DetailTerm({ label, value }: { label: string; value?: string | null }) 
 }
 
 function StoryboardPreview({
+  projectId,
   storyboard,
   loading,
   error,
@@ -495,6 +499,7 @@ function StoryboardPreview({
   generationError,
   onGenerate,
 }: {
+  projectId: string;
   storyboard: ProjectStoryboard | null;
   loading: boolean;
   error: Error | null;
@@ -514,13 +519,24 @@ function StoryboardPreview({
           <span className={styles.eyebrow}>Storyboard</span>
           <h2>Scenes and beats</h2>
         </div>
-        {/* The generate control only appears once nothing is in flight, so the
-            page never offers "Generate again" mid-run. */}
-        {!loading && !error && !generating ? (
-          <Button variant="secondary" size="sm" onClick={onGenerate}>
-            {storyboard ? "Generate again" : "Create storyboard"}
-          </Button>
-        ) : null}
+        <div className={styles.sectionHeaderActions}>
+          {storyboard ? (
+            <ButtonLink
+              variant="ghost"
+              size="sm"
+              to={`/projects/${encodeURIComponent(projectId)}/storyboard`}
+            >
+              Open storyboard
+            </ButtonLink>
+          ) : null}
+          {/* The generate control only appears once nothing is in flight, so
+              the page never offers "Generate again" mid-run. */}
+          {!loading && !error && !generating ? (
+            <Button variant="secondary" size="sm" onClick={onGenerate}>
+              {storyboard ? "Generate again" : "Create storyboard"}
+            </Button>
+          ) : null}
+        </div>
       </div>
       {loading ? <div className={styles.placeholder}>Loading storyboard...</div> : null}
       {!loading && !error && generating ? (
