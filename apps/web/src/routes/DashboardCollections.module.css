@@ -116,6 +116,61 @@
   color: var(--danger-text);
 }
 
+/* Library scope toggle */
+.scopeToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 38px;
+  padding: var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+}
+
+.scopeButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  min-height: 30px;
+  padding: 0 var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    border-color var(--transition),
+    color var(--transition),
+    box-shadow var(--transition);
+}
+
+.scopeButton:hover {
+  color: var(--text-strong);
+}
+
+.scopeButton[data-active="true"] {
+  border-color: var(--accent-border);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+}
+
+.scopeButton:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.scopeIcon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
 /* Card grids (assets, outputs) */
 .grid {
   display: grid;
@@ -393,5 +448,13 @@
 
   .projectCard .cardLink {
     height: clamp(220px, 52vh, 360px);
+  }
+
+  .scopeToggle {
+    width: 100%;
+  }
+
+  .scopeButton {
+    flex: 1 1 0;
   }
 }
