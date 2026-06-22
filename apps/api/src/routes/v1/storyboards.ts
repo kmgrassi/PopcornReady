@@ -112,6 +112,24 @@ storyboardsRouter.post(
   })
 );
 
+// Latest storyboard generation job for the project (or null). The job id only
+// lives in transient client state, so this lets the dashboard resume polling
+// and keep its loading indicator after a page reload mid-generation.
+storyboardsRouter.get(
+  "/projects/:projectId/storyboards/generate",
+  route(async ({ auth }, params) => {
+    const projectId = requiredParam(params, "projectId");
+    await getProject(auth.workspaceId, projectId);
+
+    const job = await agentApiStore.findLatestJobForProject({
+      type: "asset_generation",
+      projectId,
+    });
+
+    return { status: 200, body: { job: job ?? null } };
+  })
+);
+
 storyboardsRouter.get(
   "/projects/:projectId/storyboards/generate/:jobId",
   route(async ({ auth }, params) => {
