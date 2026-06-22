@@ -19,6 +19,7 @@ import { HomePage } from "./routes/HomePage";
 import { LaunchpadPage } from "./routes/LaunchpadPage";
 import { LibraryPage } from "./routes/LibraryPage";
 import { LoginPage } from "./routes/LoginPage";
+import { ProjectCreationPage } from "./routes/ProjectCreationPage";
 import { ProjectDetailPage } from "./routes/ProjectDetailPage";
 import { ProjectWatchPage } from "./routes/ProjectWatchPage";
 import { PublicProjectPage } from "./routes/PublicProjectPage";
@@ -48,7 +49,7 @@ export function App() {
           <Route path="/library" element={<LibraryPage />} />
           <Route path="/library/:tab" element={<LibraryPage />} />
           <Route path="/projects" element={<RedirectWithSearch to="/library/projects" />} />
-          <Route path="/projects/new" element={<Navigate to="/library/projects" replace />} />
+          <Route path="/projects/new" element={<ProjectCreationPage />} />
           <Route path="/runs" element={<CollectionCompatRedirect section="runs" />} />
           <Route path="/assets" element={<RedirectWithSearch to="/library/assets" />} />
           <Route path="/outputs" element={<CollectionCompatRedirect section="outputs" />} />

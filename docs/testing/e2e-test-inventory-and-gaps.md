@@ -82,6 +82,11 @@ Creation currently enters through the landing prompt and quick-start generation
 path. Any future Studio restoration should add new E2E coverage when the route
 returns.
 
+Dashboard creation note: the intended authenticated flow is for a signed-in
+local user to open `/dashboard`, click `Create new video`, complete a brief,
+and choose whether to stop at the brief/planning gates or continue
+autonomously. The route is `/projects/new`; `/studio` remains retired.
+
 ## Recommended Harness Shape
 
 - Keep `apps/web` as the owner of browser E2E.
@@ -141,6 +146,31 @@ Recommended next test:
 - Add a mock-backed quick-start test after the pending-prompt state keys are
   unified: submit the landing prompt, sign up, assert pending prompt resume, stub
   the run-start API, and land on progress.
+
+### 2a. Dashboard Project Creation
+
+Critical flows:
+
+- A known local Supabase user can log in and reach `/dashboard`.
+- `Create new video` opens the authenticated project-creation flow.
+- Brief entry persists before generation starts.
+- Stop-at-brief leaves the user on a saved brief/review state and does not
+  advance planning or production.
+- Stop-after-planning creates a review-gated run and waits for approval before
+  expensive provider-backed media generation.
+- Continuing with no stop points runs autonomously and lands on
+  `/projects/:projectId/runs/:runId`.
+
+Current coverage:
+
+- Not covered by automated E2E yet.
+
+Recommended next test:
+
+- Add a local-db-backed Playwright spec once the dashboard creation route is
+  stable: sign in with a seeded local user, click `Create new video`, submit a
+  brief, assert the stop-at-brief state, continue to a mocked planning gate, and
+  verify approval resumes the run.
 
 ### 3. Run Progress, Review Gates, And Recovery
 
@@ -261,6 +291,8 @@ P0:
 
 - Add a local Supabase signup/onboarding E2E that creates a fresh user and
   verifies `/api/v1/me` returns `authMode: "supabase"` and `isLocal: false`.
+- Add automated coverage for the dashboard `Create new video` flow with
+  explicit manual stop points for brief and planning.
 - Add landing quick-start create-account flow with mocked run creation.
 - Keep `pnpm test:e2e:local-db` healthy and run it before changes touching auth,
   Supabase env, route protection, or store setup.
