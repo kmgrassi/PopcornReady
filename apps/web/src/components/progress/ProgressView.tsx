@@ -14,13 +14,13 @@ import {
   type V1Project,
   type VideoBriefInput,
 } from "@popcorn/shared/v1/types";
-import { StageItemCard } from "../generation-progress/StageItemCard";
+import { StageItemCard, type StageItemAsset } from "../generation-progress/StageItemCard";
 import { AiAssetFeedbackDialog } from "../ai-edit/AiAssetFeedbackDialog";
 import {
   GenerationRunClient,
   GenerationRunRequestError,
 } from "../../lib/v1/generation-runs/client";
-import { useProjectQuery } from "../../lib/queryClient";
+import { useAssetMediaByIdQueries, useProjectQuery } from "../../lib/queryClient";
 import { v1Api } from "../../lib/api-client";
 import { StageRail } from "./StageRail";
 import {
@@ -459,6 +459,19 @@ export function ProgressView({
   const stageById = new Map(detail.stages.map((stage) => [stage.stageId, stage]));
   const reviewOutputGroups = splitStoryboardItems(reviewItems, stageById);
   const generatedOutputGroups = splitStoryboardItems(generatedItems, stageById);
+  // The review board references assets by id only, so resolve each tile's media
+  // (lineage-head, so a regenerated asset's fresh bytes appear). A tile with no
+  // resolvable bytes stays blank and keeps its recovery re-run affordance.
+  const reviewMediaById = useAssetMediaByIdQueries(
+    [...reviewOutputGroups.boardItems, ...reviewOutputGroups.genericItems]
+      .map((item) => item.assetId)
+      .filter((id): id is string => Boolean(id)),
+  );
+  const reviewAssetsByItemId: Record<string, StageItemAsset | undefined> = {};
+  for (const item of [...reviewOutputGroups.boardItems, ...reviewOutputGroups.genericItems]) {
+    const media = item.assetId ? reviewMediaById.get(item.assetId) : undefined;
+    if (media) reviewAssetsByItemId[item.itemId] = media;
+  }
   const selectedAssetItem =
     selectedAssetItemId
       ? detail.stageItems.find((item) => item.itemId === selectedAssetItemId) ?? null
@@ -745,6 +758,7 @@ export function ProgressView({
                 <div className={styles.reviewOutputs}>
                   <ReadonlyStoryboardBoard
                     items={reviewOutputGroups.boardItems}
+                    assetsByItemId={reviewAssetsByItemId}
                     title="Review the storyboard"
                     description="Visual outputs from this checkpoint are grouped as beat tiles before the run continues."
                   />
@@ -754,6 +768,7 @@ export function ProgressView({
                         <StageItemCard
                           key={item.itemId}
                           item={item}
+                          asset={reviewAssetsByItemId[item.itemId]}
                           allowInlineRegenerate={false}
                         />
                       ))}

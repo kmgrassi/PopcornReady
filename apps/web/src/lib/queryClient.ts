@@ -1,6 +1,7 @@
 import {
   QueryClient,
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient,
   type QueryFunctionContext,
@@ -267,6 +268,38 @@ export function useProjectStoryboardQuery(
       return POLL_INTERVAL_MS;
     },
   });
+}
+
+// Hydrate stage-item / board-tile media: the run-progress boards reference assets
+// by id only (the projection carries no urls), so resolve each id to its media
+// via GET /assets/:id/media (which serves the lineage HEAD, so a regenerated
+// asset's fresh bytes appear without repointing). Returns a map keyed by asset id;
+// ids that resolve to no bytes are absent, so the tile keeps its blank/recovery
+// state. Keyed on queryKeys.assetMedia so a regenerate's "assets" invalidation
+// refetches it.
+export function useAssetMediaByIdQueries(
+  assetIds: string[],
+): Map<string, { url?: string; thumbnailUrl?: string }> {
+  const uniqueIds = [...new Set(assetIds.filter(Boolean))];
+  const results = useQueries({
+    queries: uniqueIds.map((assetId) => ({
+      queryKey: queryKeys.assetMedia(assetId),
+      queryFn: ({ signal }: { signal: QuerySignal }) =>
+        v1Api.refreshAssetMedia(assetId, signal),
+      staleTime: 30_000,
+    })),
+  });
+  const byId = new Map<string, { url?: string; thumbnailUrl?: string }>();
+  uniqueIds.forEach((assetId, index) => {
+    const media = results[index]?.data;
+    if (media?.url) {
+      byId.set(assetId, {
+        url: media.url,
+        thumbnailUrl: media.thumbnailUrl ?? undefined,
+      });
+    }
+  });
+  return byId;
 }
 
 export function useGenerateProjectStoryboardMutation(projectId: string) {
