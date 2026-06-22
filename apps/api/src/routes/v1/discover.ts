@@ -38,11 +38,24 @@ function searchParamsFor(req: Parameters<RequestHandler>[0]): URLSearchParams {
   return new URL(req.originalUrl, "http://localhost").searchParams;
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Optional, caller-supplied workspace id to exclude from the public feed (the
+// signed-in viewer's own workspace). Ignore anything not uuid-shaped so a bad
+// value can't reach Postgres as a malformed filter.
+function optionalWorkspaceId(value: string | null): string | undefined {
+  return value && UUID_RE.test(value) ? value : undefined;
+}
+
 discoverRouter.get(
   "/discover/projects",
   publicRoute(async (req) => {
-    const { limit, cursor } = parsePagination(searchParamsFor(req));
-    const { items, nextCursor } = await listPublicProjects(limit, cursor);
+    const params = searchParamsFor(req);
+    const { limit, cursor } = parsePagination(params);
+    const excludeWorkspaceId = optionalWorkspaceId(params.get("excludeWorkspaceId"));
+    const { items, nextCursor } = await listPublicProjects(limit, cursor, {
+      ...(excludeWorkspaceId ? { excludeWorkspaceId } : {}),
+    });
     return {
       status: 200,
       body: { projects: items, pagination: { limit, nextCursor } },

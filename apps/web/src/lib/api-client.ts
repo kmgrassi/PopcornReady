@@ -582,8 +582,14 @@ export const v1Api = {
     apiRequest<ProjectsResponse>("/api/v1/projects", {
       searchParams: params,
     }),
-  // Public discovery: every user's public projects, not just the caller's.
-  listPublicProjects: (params?: { limit?: number; cursor?: string | null }) =>
+  // Public discovery feed. Pass `excludeWorkspaceId` (the signed-in viewer's own
+  // workspace) to omit the caller's own public projects — those open read-only
+  // here and are edited from "My library" instead.
+  listPublicProjects: (params?: {
+    limit?: number;
+    cursor?: string | null;
+    excludeWorkspaceId?: string;
+  }) =>
     apiRequest<ProjectsResponse>("/api/v1/discover/projects", {
       searchParams: params,
     }),
