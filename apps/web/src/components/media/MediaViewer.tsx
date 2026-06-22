@@ -231,13 +231,11 @@ export function MediaViewer({
           ) : null}
         </div>
 
-        {(refreshing || refreshError || (regenerating && !promptOpen) || (regenError && !promptOpen)) ? (
+        {(refreshing || refreshError || (regenError && !promptOpen)) ? (
           <div className={styles.status} role={refreshError || regenError ? "alert" : "status"}>
             {refreshing
               ? "Refreshing media URL..."
-              : regenerating
-                ? "Regenerating image..."
-                : refreshError ?? regenError}
+              : refreshError ?? regenError}
           </div>
         ) : null}
         {actions ? <footer className={styles.actions}>{actions}</footer> : null}
