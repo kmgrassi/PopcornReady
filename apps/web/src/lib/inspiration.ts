@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "./api-client";
 
 export type StoryElementCategory =
@@ -40,6 +40,14 @@ export interface RandomStoryInspiration {
     stakes: InspirationElement[];
     structure: InspirationElement[];
   };
+  poster?: StoryConceptPoster;
+}
+
+export interface StoryConceptPoster {
+  status: "queued" | "generating" | "ready" | "failed";
+  url: string | null;
+  assetId: string | null;
+  prompt: string;
 }
 
 interface RandomStoryInspirationResponse {
@@ -59,5 +67,15 @@ export function useRandomStoryInspiration(nonce: number) {
       }),
     staleTime: 0,
     gcTime: 5 * 60 * 1000,
+  });
+}
+
+export function useStoryConceptPosterMutation() {
+  return useMutation({
+    mutationFn: (inspiration: RandomStoryInspiration) =>
+      apiRequest<{ poster: StoryConceptPoster }>("/api/v1/inspiration/poster", {
+        method: "POST",
+        body: { inspiration },
+      }),
   });
 }

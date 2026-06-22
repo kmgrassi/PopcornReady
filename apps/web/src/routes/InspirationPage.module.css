@@ -20,30 +20,60 @@
   line-height: 1.1;
 }
 
-.eyebrow {
+.helper,
+.coreIdea {
+  margin: var(--space-2) 0 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.eyebrow,
+.promptLabel {
   margin: 0;
   color: var(--muted);
   font-size: var(--text-sm);
-  font-weight: 700;
+  font-weight: 800;
   text-transform: uppercase;
 }
 
-.loglinePanel {
+.hero {
   display: grid;
+  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
   gap: var(--space-5);
+  align-items: stretch;
+}
+
+.poster {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  box-shadow: var(--shadow-sm);
+  object-fit: cover;
+}
+
+.posterEmpty {
+  display: grid;
+  place-items: center;
+  padding: var(--space-5);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: 800;
+  text-align: center;
+}
+
+.promptPanel {
+  display: grid;
+  align-content: center;
+  gap: var(--space-4);
+  min-height: 360px;
   padding: var(--space-7);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface);
   box-shadow: var(--shadow-sm);
-}
-
-.formula {
-  max-width: 920px;
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--text-sm);
-  line-height: 1.6;
 }
 
 .logline {
@@ -52,13 +82,65 @@
   color: var(--text);
   font-size: var(--title-sm);
   font-weight: 750;
-  line-height: 1.35;
+  line-height: 1.42;
+}
+
+.highlight {
+  padding: 0.02em 0.18em;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--text-strong);
+  font-weight: 850;
+}
+
+.person,
+.goal,
+.truth {
+  background: var(--accent-soft);
+}
+
+.setting,
+.ending {
+  background: color-mix(in srgb, var(--good) 16%, transparent);
+}
+
+.antagonist,
+.flaw,
+.oldSelf {
+  background: color-mix(in srgb, var(--accent-2) 16%, transparent);
+}
+
+.drawer {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.drawer summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-height: 64px;
+  padding: 0 var(--space-5);
+  color: var(--text);
+  cursor: pointer;
+  font-size: var(--text-lg);
+  font-weight: 850;
+}
+
+.drawer summary span:last-child {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: 750;
 }
 
 .breakdown {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-4);
+  padding: 0 var(--space-5) var(--space-5);
 }
 
 .ingredient {
@@ -68,8 +150,15 @@
   min-height: 178px;
   padding: var(--space-5);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--panel);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.ingredientHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
 }
 
 .ingredient h2 {
@@ -78,11 +167,12 @@
   font-size: var(--text-md);
 }
 
-.ingredient p {
-  margin: 0;
-  color: var(--muted);
+.ingredientHeader p {
+  margin: var(--space-1) 0 0;
+  color: var(--text-strong);
   font-size: var(--text-sm);
-  line-height: 1.5;
+  font-weight: 750;
+  line-height: 1.45;
 }
 
 .chips {
@@ -98,42 +188,10 @@
   padding: 0 var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
-  background: var(--surface);
+  background: var(--panel);
   color: var(--text);
   font-size: var(--text-sm);
   font-weight: 650;
-}
-
-.fields {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-3);
-  margin: 0;
-}
-
-.field {
-  display: grid;
-  gap: var(--space-2);
-  min-height: 104px;
-  padding: var(--space-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-}
-
-.field dt {
-  color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: 750;
-  text-transform: uppercase;
-}
-
-.field dd {
-  margin: 0;
-  color: var(--text);
-  font-size: var(--text-sm);
-  font-weight: 650;
-  line-height: 1.45;
 }
 
 .skeleton {
@@ -187,8 +245,12 @@
     flex-direction: column;
   }
 
-  .breakdown,
-  .fields {
+  .hero,
+  .breakdown {
     grid-template-columns: 1fr;
+  }
+
+  .promptPanel {
+    min-height: auto;
   }
 }
