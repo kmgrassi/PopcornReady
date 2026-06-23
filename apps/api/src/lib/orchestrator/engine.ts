@@ -96,6 +96,12 @@ export interface EngineDeps {
   modelTurnTimeoutMs?: number;
   /** Bounded retry for idempotent store ops, so a transient infra blip costs a retry, not the run. */
   retry?: RetryOptions;
+  /**
+   * Resolve the run's owning user (for bring-your-own provider keys). Injectable
+   * so fake-store / no-DB runners can opt out; defaults to the workspace-owner
+   * Supabase lookup.
+   */
+  resolveOwnerUserId?: (workspaceId: string) => Promise<string | null>;
 }
 
 export function defaultEngineStore(): OrchestratorEngineStore {
@@ -182,6 +188,7 @@ function resolved(deps: EngineDeps) {
     jobs: deps.jobs ?? { getJob: (id: string) => agentApiStore.getJob(id) },
     maxTurns: deps.maxTurns ?? DEFAULT_MAX_TURNS,
     modelTurnTimeoutMs: deps.modelTurnTimeoutMs ?? DEFAULT_MODEL_TURN_TIMEOUT_MS,
+    resolveOwnerUserId: deps.resolveOwnerUserId ?? getWorkspaceOwnerUserId,
     workspaceId: deps.workspaceId,
     actorId: deps.actorId,
     agentId: deps.agentId,
@@ -336,7 +343,9 @@ type Resolved = ReturnType<typeof resolved>;
 async function driveGuarded(run: OrchestratorRun, r: Resolved): Promise<OrchestratorRun> {
   // Bind the run to its workspace owner so generation tools resolve that user's
   // bring-your-own provider keys (the run executes detached from any request).
-  const ownerUserId = await getWorkspaceOwnerUserId(r.workspaceId);
+  // The lookup is injectable (resolved() defaults it) so fake-store runners stay
+  // DB-free.
+  const ownerUserId = await r.resolveOwnerUserId(r.workspaceId);
   return withProviderKeyUser(ownerUserId, () => driveGuardedInner(run, r));
 }
 

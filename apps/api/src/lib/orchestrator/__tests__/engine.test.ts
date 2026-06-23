@@ -141,7 +141,15 @@ function scriptedModel(
 }
 
 function deps(store: FakeStore, model: OrchestratorModel, registry: ToolRegistry, extra: Partial<EngineDeps> = {}): EngineDeps {
-  return { workspaceId: "ws1", store, model, registry, ...extra };
+  // No-op owner lookup keeps the fake-store loop DB-free (no Supabase env needed).
+  return {
+    workspaceId: "ws1",
+    store,
+    model,
+    registry,
+    resolveOwnerUserId: async () => null,
+    ...extra,
+  };
 }
 
 const ok = (resourceIds: string[] = [], costUsd?: number): ToolCallResult => ({
