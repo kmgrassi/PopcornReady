@@ -110,13 +110,14 @@ async function generateSeedanceVideo(
   const duration = normalizeSeedanceVideoSeconds(input.seconds);
   const firstReference = input.referencePaths?.[0];
   const model = seedanceModelPath(input.model, Boolean(firstReference));
+  const imageUrl = firstReference ? await readAsDataUri(firstReference) : undefined;
   const body = {
     prompt,
     duration,
     aspect_ratio: aspectRatioFromSize(input.size, "16:9", "9:16"),
     resolution: input.resolution || "720p",
     ...(typeof input.seed === "number" ? { seed: input.seed } : {}),
-    ...(firstReference ? { image_url: await readAsDataUri(firstReference) } : {}),
+    ...(imageUrl ? { image_url: imageUrl } : {}),
   };
 
   const submitUrl = `${process.env.FAL_QUEUE_BASE_URL || FAL_QUEUE_BASE_URL}/${model}`;
