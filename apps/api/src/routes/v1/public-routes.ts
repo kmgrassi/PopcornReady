@@ -1,5 +1,6 @@
 import type { Router } from "express";
 import { catalogPublicRouter } from "./catalog.js";
+import { creditsWebhookRouter } from "./credits-webhook.js";
 import {
   devCharacterReferenceRouter,
   isCharacterReferenceHarnessEnabled,
@@ -13,6 +14,7 @@ export function mountPublicV1Routes(v1: Router) {
   v1.use(healthRouter);
   v1.use(discoverRouter);
   v1.use(catalogPublicRouter);
+  v1.use(creditsWebhookRouter);
 
   // Dev-only, flag-gated tool-call test harness. Never mounted in production.
   if (isToolTestHarnessEnabled()) {
