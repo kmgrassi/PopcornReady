@@ -27,6 +27,10 @@ import { agentApiStore } from "@/lib/agent-api/jobs";
 import { orchestratorModel, type OrchestratorModel } from "./model";
 import { executeRegisteredTool, type ToolRegistry } from "./registry";
 import { withStoreRetry, type RetryOptions } from "./retry";
+import {
+  getWorkspaceOwnerUserId,
+  withProviderKeyUser,
+} from "@/lib/provider-keys/resolve";
 import { createToolExecutionContext } from "./tool-context";
 import type { ToolCallResult, ToolName } from "./types";
 
@@ -330,6 +334,16 @@ type Resolved = ReturnType<typeof resolved>;
 // failure that driveLoop doesn't already convert into a failed result) marks the
 // run 'failed' with the error before rethrowing, so it is never left 'running'.
 async function driveGuarded(run: OrchestratorRun, r: Resolved): Promise<OrchestratorRun> {
+  // Bind the run to its workspace owner so generation tools resolve that user's
+  // bring-your-own provider keys (the run executes detached from any request).
+  const ownerUserId = await getWorkspaceOwnerUserId(r.workspaceId);
+  return withProviderKeyUser(ownerUserId, () => driveGuardedInner(run, r));
+}
+
+async function driveGuardedInner(
+  run: OrchestratorRun,
+  r: Resolved
+): Promise<OrchestratorRun> {
   try {
     return await driveLoop(run, r);
   } catch (err) {

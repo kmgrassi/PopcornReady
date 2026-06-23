@@ -11,6 +11,7 @@ import {
   readAsDataUri,
   requirePrompt,
 } from "./shared";
+import { resolveProviderApiKey } from "@/lib/provider-keys/resolve";
 
 const LTX_BASE_URL = "https://api.ltx.video/v1";
 const LTX_DEFAULT_VIDEO_MODEL = "ltx-2-3-fast";
@@ -30,12 +31,12 @@ function normalizeLtxVideoSeconds(value?: number, model = LTX_DEFAULT_VIDEO_MODE
   );
 }
 
-function ltxFetch(pathName: string, init: RequestInit): Promise<Response> {
+async function ltxFetch(pathName: string, init: RequestInit): Promise<Response> {
   return authedFetch({
     baseUrl: LTX_BASE_URL,
     pathName,
     init,
-    apiKey: process.env.LTX_API_KEY,
+    apiKey: await resolveProviderApiKey("ltx"),
     missingKeyMessage: "LTX_API_KEY is not set for the LTX provider.",
     errorPrefix: "LTX",
   });

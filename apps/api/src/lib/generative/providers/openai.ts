@@ -20,6 +20,7 @@ import {
   readAsBlob,
   requirePrompt,
 } from "./shared";
+import { resolveProviderApiKey } from "@/lib/provider-keys/resolve";
 
 const OPENAI_BASE_URL = "https://api.openai.com/v1";
 const OPENAI_DEFAULT_IMAGE_MODEL: OpenAIImageModel = "gpt-image-1.5";
@@ -79,12 +80,12 @@ function buildOpenAIVideoPayload(
   };
 }
 
-function openaiFetch(pathName: string, init: RequestInit): Promise<Response> {
+async function openaiFetch(pathName: string, init: RequestInit): Promise<Response> {
   return authedFetch({
     baseUrl: OPENAI_BASE_URL,
     pathName,
     init,
-    apiKey: process.env.OPENAI_API_KEY,
+    apiKey: await resolveProviderApiKey("openai"),
     missingKeyMessage: "OPENAI_API_KEY is not set for the OpenAI provider.",
     errorPrefix: "OpenAI",
   });

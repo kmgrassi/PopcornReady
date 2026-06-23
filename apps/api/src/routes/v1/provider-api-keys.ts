@@ -1,4 +1,3 @@
-import { createCipheriv, createHash, randomBytes } from "node:crypto";
 import { Router } from "express";
 import { mutation, route } from "@/core/adapter";
 import { ApiError } from "@/core/errors";
@@ -7,6 +6,7 @@ import {
   getRequestSupabase,
 } from "@/lib/supabase/clients";
 import { runQuery } from "@/lib/supabase/db-errors";
+import { encryptApiKey, keyHint } from "@/lib/provider-keys/crypto";
 
 export const providerApiKeysRouter = Router();
 
@@ -57,38 +57,6 @@ function readKey(body: Record<string, unknown>): string {
     throw new ApiError("validation_failed", "API keys must be 4096 characters or fewer.");
   }
   return key;
-}
-
-function encryptionSecret(): string {
-  const secret =
-    process.env.PROVIDER_API_KEYS_ENCRYPTION_SECRET?.trim() ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  if (!secret) {
-    throw new ApiError(
-      "not_implemented",
-      "Provider key storage needs PROVIDER_API_KEYS_ENCRYPTION_SECRET or SUPABASE_SERVICE_ROLE_KEY."
-    );
-  }
-  return secret;
-}
-
-function encryptApiKey(apiKey: string): string {
-  const key = createHash("sha256").update(encryptionSecret()).digest();
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
-  const ciphertext = Buffer.concat([
-    cipher.update(apiKey, "utf8"),
-    cipher.final(),
-  ]);
-  const tag = cipher.getAuthTag();
-  return `v1.${iv.toString("base64url")}.${tag.toString("base64url")}.${ciphertext.toString(
-    "base64url"
-  )}`;
-}
-
-function keyHint(apiKey: string): string {
-  if (apiKey.length <= 8) return "••••";
-  return `${apiKey.slice(0, 4)}••••${apiKey.slice(-4)}`;
 }
 
 function toProviderApiKey(row: ProviderApiKeyRow) {

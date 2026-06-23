@@ -14,6 +14,7 @@ import {
   mimeForPath,
   requirePrompt,
 } from "./shared";
+import { resolveProviderApiKey } from "@/lib/provider-keys/resolve";
 
 const GEMINI_DEFAULT_VIDEO_MODEL = "veo-3.1-generate-preview";
 // "Nano banana" — the only image model that will edit a photorealistic image of
@@ -32,7 +33,7 @@ async function readAsGeminiImage(filePath: string): Promise<Image> {
 async function generateGeminiImage(
   input: Extract<GenerateAssetRequest, { provider: "gemini"; kind: "image" }>
 ): Promise<GeneratedAssetResult> {
-  const key = process.env.GEMINI_API_KEY;
+  const key = await resolveProviderApiKey("gemini");
   if (!key) {
     throw new Error("GEMINI_API_KEY is not set for the Gemini provider.");
   }
@@ -108,7 +109,7 @@ async function downloadGeminiVideo(ai: GoogleGenAI, video: Video): Promise<Buffe
 async function generateGeminiVideo(
   input: Extract<GenerateAssetRequest, { provider: "gemini"; kind: "video" }>
 ): Promise<GeneratedAssetResult> {
-  const key = process.env.GEMINI_API_KEY;
+  const key = await resolveProviderApiKey("gemini");
   if (!key) {
     throw new Error("GEMINI_API_KEY is not set for the Gemini provider.");
   }
