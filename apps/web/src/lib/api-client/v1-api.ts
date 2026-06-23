@@ -29,8 +29,10 @@ import type {
   ProjectStoryboardResponse,
   ProjectTimelineResponse,
   ProjectWatchResponse,
+  CreateProviderSmokeAssetInput,
   ProviderApiKeyResponse,
   ProviderApiKeysResponse,
+  ProviderSmokeAssetResponse,
   PublicProjectResponse,
   RegisterProjectUploadInput,
   RegisterProjectUploadResponse,
@@ -217,6 +219,11 @@ export const v1Api = {
         body: input,
       }
     ),
+  createProviderSmokeAsset: (input: CreateProviderSmokeAssetInput) =>
+    apiRequest<ProviderSmokeAssetResponse>("/api/v1/manual-tests/provider-asset", {
+      method: "POST",
+      body: input,
+    }),
   listProjects: (params?: { limit?: number; cursor?: string | null }) =>
     apiRequest<ProjectsResponse>("/api/v1/projects", {
       searchParams: params,

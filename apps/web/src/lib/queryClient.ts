@@ -13,6 +13,7 @@ import type { AssetKind, GenerationRun, GenerationStageType } from "@popcorn/sha
 import {
   ApiClientError,
   v1Api,
+  type CreateProviderSmokeAssetInput,
   type CreateTimelineRevisionInput,
   type CreateProjectInput,
   type MeResponse,
@@ -405,6 +406,25 @@ export function useSaveWorkspaceModelSettingMutation(workspaceId: string | null 
           queryKey: queryKeys.workspaceModelSettings(workspaceId),
         });
       }
+    },
+  });
+}
+
+export function useCreateProviderSmokeAssetMutation() {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: CreateProviderSmokeAssetInput) =>
+      v1Api.createProviderSmokeAsset(input),
+    meta: {
+      successMessage: "Provider test asset created",
+      errorMessage: "Could not create provider test asset",
+    },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ["projects"] });
+      void client.invalidateQueries({ queryKey: ["dashboard"] });
+      void client.invalidateQueries({ queryKey: ["workspaces"] });
+      void client.invalidateQueries({ queryKey: ["studio", "project"] });
     },
   });
 }

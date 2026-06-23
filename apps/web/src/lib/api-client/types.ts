@@ -108,6 +108,35 @@ export interface WorkspaceModelSettingResponse {
   setting: WorkspaceModelSetting;
 }
 
+export type ProviderSmokeAssetKind = "image" | "video";
+
+export type ProviderSmokeAssetProvider =
+  | "openai"
+  | "gemini"
+  | "ideogram"
+  | "runway"
+  | "ltx"
+  | "kling"
+  | "seedance"
+  | "xai"
+  | "nvidia_api_catalog";
+
+export interface CreateProviderSmokeAssetInput {
+  kind: ProviderSmokeAssetKind;
+  provider: ProviderSmokeAssetProvider;
+  prompt: string;
+  model?: string;
+  size?: string;
+  aspectRatio?: string;
+  durationSec?: number;
+}
+
+export interface ProviderSmokeAssetResponse {
+  project: V1Project;
+  job: GenerationJob;
+  assetIds: string[];
+}
+
 export interface ProjectsResponse {
   projects: V1Project[];
   pagination: {
