@@ -144,18 +144,21 @@ export function createGenerateKeyframeTool(
   return {
     name: "generate_keyframe",
     description:
-      "Generate photoreal beat_keyframe images for planned beats. Requires plan_shots and generate_storyboard first. Runs asynchronously and skips beats with active keyframes. Do not include provider unless the user explicitly asks to override workspace settings.",
+      "Generate photoreal beat_keyframe first-frame images for planned beats. Requires plan_shots and generate_storyboard first. Runs asynchronously and skips beats with active keyframes. This is the recovery tool when generate_clip says beat_keyframe assets are missing. Do not include provider unless the user explicitly asks to override workspace settings.",
     usage: {
       preconditions: [
         "An active shot plan exists (call plan_shots first).",
         "A storyboard with selected beat_storyboard tiles exists (call generate_storyboard first).",
       ],
       produces: [
-        "Generated beat_keyframe image assets selected per beat, with graph inputs back to the plan, storyboard tile, and any active anchors.",
+        "Generated photoreal beat_keyframe image assets selected per beat, with graph inputs back to the plan, storyboard tile, and any active anchors.",
+        "Active beat_keyframe:<beat id> selections that generate_clip requires before it can create beat_clip videos.",
       ],
       useWhen: [
         "After storyboard and anchors are ready and the project needs photoreal first frames for clips.",
         "Before generate_clip, because clips require beat_keyframe first frames.",
+        "After generate_clip failed with requirement beat_keyframe or suggested generate_keyframe.",
+        "Do not confuse this with generate_storyboard: storyboard creates sketch beat_storyboard references, keyframe creates photoreal beat_keyframe first frames.",
       ],
     },
     inputSchema: generateKeyframeInputSchema,
