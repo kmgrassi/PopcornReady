@@ -62,8 +62,8 @@ export function InspirationPage() {
     if (!story) return;
     posterMutation.reset();
     posterMutation.mutate(story, {
-      onSuccess: ({ poster }) => {
-        setStory((current) => (current ? { ...current, poster } : current));
+      onSuccess: ({ movieTitle, poster }) => {
+        setStory((current) => (current ? { ...current, movieTitle, poster } : current));
       },
     });
   }, [storySignature]);
@@ -173,6 +173,9 @@ function InspirationResult({
         <PosterPanel poster={poster} error={posterError} generating={posterGenerating} />
         <div className={styles.promptPanel}>
           <p className={styles.promptLabel}>Generated plot</p>
+          {inspiration.movieTitle ? (
+            <h2 className={styles.movieTitle}>{inspiration.movieTitle}</h2>
+          ) : null}
           <p className={styles.logline}>
             <HighlightedLogline inspiration={inspiration} />
           </p>
@@ -340,6 +343,7 @@ function mergeIngredient(
 ): RandomStoryInspiration {
   const merged = {
     ...current,
+    movieTitle: undefined,
     poster: undefined,
     elements: {
       ...current.elements,
