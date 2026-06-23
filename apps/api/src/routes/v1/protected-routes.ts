@@ -5,6 +5,7 @@ import { assetsRouter } from "./assets.js";
 import { beatsRouter } from "./beats.js";
 import { briefRouter } from "./brief.js";
 import { catalogProtectedRouter } from "./catalog.js";
+import { creditsRouter } from "./credits.js";
 import { evalRouter } from "./eval.js";
 import { inspirationRouter } from "./inspiration.js";
 import { manualTestsRouter } from "./manual-tests.js";
@@ -31,6 +32,7 @@ export function mountProtectedV1Routes(v1: Router) {
   v1.use(beatsRouter);
   v1.use(briefRouter);
   v1.use(catalogProtectedRouter);
+  v1.use(creditsRouter);
   v1.use(inspirationRouter);
   v1.use(manualTestsRouter);
   v1.use(miscCapabilitiesRouter);
