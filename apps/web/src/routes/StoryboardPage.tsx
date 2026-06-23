@@ -274,6 +274,15 @@ function BeatCard({
   const label = beat.intent || `Beat ${order}`;
   const canEdit = Boolean(panel?.imageAssetId);
   const prompt = panel?.prompt?.trim() || beat.visualDescription?.trim() || null;
+  const mediaOverlay =
+    canEdit && image ? (
+      <>
+        <span className={styles.beatNumber}>Beat {order}</span>
+        <span className={styles.editHint}>Ask AI</span>
+      </>
+    ) : (
+      <span className={styles.beatNumber}>Beat {order}</span>
+    );
 
   return (
     <article className={styles.beat}>
@@ -281,6 +290,7 @@ function BeatCard({
         <div className={`${styles.panelImage} ${styles.panelRevising}`} aria-busy="true">
           {image ? <img className={styles.panelGhost} src={image} alt="" /> : null}
           <div className={styles.shimmer} aria-hidden />
+          <span className={styles.beatNumber}>Beat {order}</span>
           <span className={styles.revisingLabel}>
             <span className={styles.spinner} aria-hidden />
             Revising…
@@ -296,10 +306,16 @@ function BeatCard({
           recoveryClassName={styles.panelRecovery}
           mediaClassName={styles.panelImage}
           placeholderClassName={`${styles.panelImage} ${styles.panelEmpty}`}
-          placeholder={<span>No panel image yet</span>}
+          placeholder={
+            <>
+              <span className={styles.beatNumber}>Beat {order}</span>
+              <span>No panel image yet</span>
+            </>
+          }
           activateClassName={styles.panelButton}
           onRegenerateStart={() => onRegenerateStart(beat.id)}
           onRegenerateSettled={() => onRegenerateSettled(beat.id)}
+          mediaOverlay={mediaOverlay}
           {...(canEdit && image
             ? {
                 onActivate: () =>
@@ -317,17 +333,15 @@ function BeatCard({
                     title: label,
                     subtitle: `Scene ${sceneOrder} · Beat ${order}`,
                   }),
-                mediaOverlay: <span className={styles.editHint}>Click to edit</span>,
               }
             : {})}
         />
       )}
       <div className={styles.beatBody}>
-        <span className={styles.beatTag}>Beat {order}</span>
         <p className={styles.beatIntent}>{label}</p>
         {prompt ? (
           <details className={styles.promptDrawer}>
-            <summary>Show image prompt</summary>
+            <summary>Image prompt</summary>
             <p>{prompt}</p>
           </details>
         ) : null}

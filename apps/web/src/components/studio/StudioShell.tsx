@@ -19,7 +19,6 @@ import {
 } from "./useStudioFlow";
 import { BriefStep } from "./steps/BriefStep";
 import { SourceFootageStep } from "./steps/SourceFootageStep";
-import { PlanningWorkspace } from "./PlanningWorkspace";
 import { ReviewStep } from "./ReviewStep";
 import { ExportStep } from "./steps/ExportStep";
 import {
@@ -41,15 +40,18 @@ function studioDraftPath({
   step,
   openPanel,
   started,
+  autoStart,
 }: {
   draftId?: string;
   step: StudioStep;
   openPanel?: string;
   started?: boolean;
+  autoStart?: boolean;
 }) {
   const params = new URLSearchParams();
   if (draftId) params.set("draft", draftId);
   if (started) params.set("start", "1");
+  if (autoStart) params.set("autoStart", "1");
   if (step !== "brief") params.set("step", step);
   if (openPanel) params.set("panel", openPanel);
   const query = params.toString();
@@ -69,6 +71,8 @@ export interface StudioShellProps {
   draftId?: string | null;
   /** Unique route token requesting a fresh Studio draft. */
   newDraftRequest?: string;
+  /** Start generation immediately after creating/restoring the prompt draft. */
+  autoStartGeneration?: boolean;
 }
 
 /**
@@ -86,6 +90,7 @@ export function StudioShell({
   openPanel,
   draftId,
   newDraftRequest,
+  autoStartGeneration = false,
 }: StudioShellProps) {
   const navigate = useNavigate();
   const seededBrief = useMemo(
@@ -106,6 +111,8 @@ export function StudioShell({
   const autoStartRequestedRef = useRef(false);
   const handledNewDraftRequestRef = useRef<string | null>(null);
   const createDraftInFlightRef = useRef(false);
+  const [pendingAutoStartGeneration, setPendingAutoStartGeneration] =
+    useState(autoStartGeneration);
   const draftsQuery = useStudioDraftsQuery();
   const draftQuery = useStudioDraftQuery(pendingDraftRequest?.draftId ?? null);
   const createDraftMutation = useCreateStudioDraftMutation();
@@ -176,9 +183,15 @@ export function StudioShell({
       setActiveDraftId(record.draftId);
       setInitialPayload(record.payload);
       setFlowKey((current) => current + 1);
-      navigate(studioDraftPath({ draftId: record.draftId, step, openPanel }), {
-        replace: true,
-      });
+      navigate(
+        studioDraftPath({
+          draftId: record.draftId,
+          step,
+          openPanel,
+          autoStart: pendingAutoStartGeneration,
+        }),
+        { replace: true },
+      );
     } catch {
       setActiveDraftId(LOCAL_DRAFT_ID);
       setInitialPayload(null);
@@ -190,7 +203,14 @@ export function StudioShell({
       createDraftInFlightRef.current = false;
       setIsStartingFreshDraft(false);
     }
-  }, [createDraftMutation, initialStarted, navigate, openPanel, seededBrief]);
+  }, [
+    createDraftMutation,
+    initialStarted,
+    navigate,
+    openPanel,
+    pendingAutoStartGeneration,
+    seededBrief,
+  ]);
 
   const persistLocalDraft = useCallback(
     async (draft: BriefDraft, step: StudioStep) => {
@@ -204,9 +224,15 @@ export function StudioShell({
         setActiveDraftId(record.draftId);
         setInitialPayload(record.payload);
         setFlowKey((current) => current + 1);
-        navigate(studioDraftPath({ draftId: record.draftId, step, openPanel }), {
-          replace: true,
-        });
+        navigate(
+          studioDraftPath({
+            draftId: record.draftId,
+            step,
+            openPanel,
+            autoStart: pendingAutoStartGeneration,
+          }),
+          { replace: true },
+        );
         return record.draftId;
       } catch (error) {
         const message = error instanceof Error ? error.message : "Could not create draft.";
@@ -216,8 +242,12 @@ export function StudioShell({
         createDraftInFlightRef.current = false;
       }
     },
-    [activeDraftId, createDraftMutation, navigate, openPanel],
+    [activeDraftId, createDraftMutation, navigate, openPanel, pendingAutoStartGeneration],
   );
+
+  useEffect(() => {
+    if (autoStartGeneration) setPendingAutoStartGeneration(true);
+  }, [autoStartGeneration]);
 
   useEffect(() => {
     if (!initialStarted || draftId) {
@@ -305,6 +335,8 @@ export function StudioShell({
       openPanel={openPanel}
       draftActionError={draftActionError}
       onPersistLocalDraft={persistLocalDraft}
+      autoStartGeneration={pendingAutoStartGeneration}
+      onAutoStartGenerationSettled={() => setPendingAutoStartGeneration(false)}
     />
   );
 }
@@ -317,6 +349,8 @@ function StudioFlowView({
   openPanel,
   draftActionError,
   onPersistLocalDraft,
+  autoStartGeneration,
+  onAutoStartGenerationSettled,
 }: {
   draftId: string;
   initialBrief?: Partial<BriefDraft>;
@@ -325,9 +359,12 @@ function StudioFlowView({
   openPanel?: string;
   draftActionError?: string | null;
   onPersistLocalDraft: (draft: BriefDraft, step: StudioStep) => Promise<string | null>;
+  autoStartGeneration?: boolean;
+  onAutoStartGenerationSettled?: () => void;
 }) {
   const navigate = useNavigate();
-  const [isRedirectingToRun, setIsRedirectingToRun] = useState(false);
+  const [isRedirectingToRun, setIsRedirectingToRun] = useState(autoStartGeneration);
+  const autoStartRequestedRef = useRef(false);
   const flow = useStudioFlow({
     initialBrief,
     draftId: draftId === LOCAL_DRAFT_ID ? undefined : draftId,
@@ -359,7 +396,53 @@ function StudioFlowView({
     if (initialStep) guardedGoToStep(initialStep);
   }, [guardedGoToStep, initialStep]);
 
-  if (isRedirectingToRun) {
+  const navigateToRun = useCallback(
+    (projectId: string, runId: string) => {
+      const params = new URLSearchParams();
+      if (draftId !== LOCAL_DRAFT_ID) params.set("studioDraft", draftId);
+      const query = params.toString();
+      navigate(
+        `/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}${
+          query ? `?${query}` : ""
+        }`,
+        { replace: true },
+      );
+    },
+    [draftId, navigate],
+  );
+
+  useEffect(() => {
+    if (flow.state !== "initial" || flow.step !== "plan" || flow.brief.goal.trim()) return;
+    flow.goTo("brief");
+  }, [flow]);
+
+  useEffect(() => {
+    const shouldStartGeneration =
+      autoStartGeneration || (flow.state === "initial" && flow.step === "plan");
+    if (!shouldStartGeneration || autoStartRequestedRef.current) return;
+    if (flow.state !== "initial" || !flow.brief.goal.trim()) return;
+
+    autoStartRequestedRef.current = true;
+    setIsRedirectingToRun(true);
+    void flow.startGeneration()
+      .then((result) => {
+        onAutoStartGenerationSettled?.();
+        navigateToRun(result.projectId, result.runId);
+      })
+      .catch(() => {
+        autoStartRequestedRef.current = false;
+        setIsRedirectingToRun(false);
+      });
+  }, [autoStartGeneration, flow, navigateToRun, onAutoStartGenerationSettled]);
+
+  const isStartingGeneration =
+    isRedirectingToRun ||
+    (flow.state === "initial" &&
+      flow.step === "plan" &&
+      Boolean(flow.brief.goal.trim()) &&
+      !flow.error);
+
+  if (isStartingGeneration) {
     return (
       <main className={styles.shell}>
         <StudioStepper step="plan" />
@@ -370,6 +453,41 @@ function StudioFlowView({
             Production is starting in the background. The run progress page will
             take over when the project is ready.
           </p>
+        </section>
+      </main>
+    );
+  }
+
+  if (flow.state === "initial" && flow.step === "plan" && flow.error) {
+    return (
+      <main className={styles.shell}>
+        <StudioStepper step="plan" />
+        <section className={styles.redirecting}>
+          <p className={styles.workspaceEyebrow}>Starting run</p>
+          <h2 className={styles.generatingHeading}>Could not start production</h2>
+          <p className="new-project-error">{flow.error}</p>
+          <div className={styles.recoveryActions}>
+            <Button
+              variant="cta"
+              onClick={() => {
+                autoStartRequestedRef.current = false;
+                setIsRedirectingToRun(true);
+                void flow.startGeneration()
+                  .then((result) => {
+                    navigateToRun(result.projectId, result.runId);
+                  })
+                  .catch(() => setIsRedirectingToRun(false));
+              }}
+            >
+              Retry
+            </Button>
+            <Button variant="secondary" onClick={() => flow.goTo("brief")}>
+              Edit idea
+            </Button>
+            <Button variant="secondary" onClick={() => flow.goTo("footage")}>
+              Edit assets
+            </Button>
+          </div>
         </section>
       </main>
     );
@@ -472,17 +590,6 @@ function StudioFlowView({
           openPanel={openPanel}
           draftActionError={draftActionError}
           onGoToStep={guardedGoToStep}
-          onGenerationStarted={(projectId, runId) => {
-            const params = new URLSearchParams();
-            if (draftId !== LOCAL_DRAFT_ID) params.set("studioDraft", draftId);
-            const query = params.toString();
-            navigate(
-              `/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}${
-                query ? `?${query}` : ""
-              }`,
-            );
-          }}
-          onGenerationRedirectingChange={setIsRedirectingToRun}
         />
       </section>
     </main>
@@ -495,16 +602,12 @@ function ActiveStep({
   openPanel,
   draftActionError,
   onGoToStep,
-  onGenerationStarted,
-  onGenerationRedirectingChange,
 }: {
   step: StudioStep;
   flow: ReturnType<typeof useStudioFlow>;
   openPanel?: string;
   draftActionError?: string | null;
   onGoToStep: (step: StudioStep) => void;
-  onGenerationStarted?: (projectId: string, runId: string) => void;
-  onGenerationRedirectingChange?: (isRedirecting: boolean) => void;
 }) {
   const guardedNext = useCallback(() => {
     const currentIndex = STUDIO_STEPS.indexOf(flow.step);
@@ -538,24 +641,7 @@ function ActiveStep({
     case "generate":
     case "review":
     case "export":
-      return (
-        <PlanningWorkspace
-          {...stepProps}
-          error={flow.error}
-          onGenerate={async () => {
-            onGenerationRedirectingChange?.(true);
-            try {
-              const result = await flow.startGeneration();
-              onGenerationStarted?.(result.projectId, result.runId);
-            } catch (error) {
-              onGenerationRedirectingChange?.(false);
-              throw error;
-            }
-          }}
-          onEditBrief={() => flow.goTo("brief")}
-          onEditFootage={() => onGoToStep("footage")}
-        />
-      );
+      return null;
     default:
       return null;
   }

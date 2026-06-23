@@ -1,9 +1,4 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type {
-  ContentBlock,
-  Message,
-  ToolUseBlock,
-} from "@anthropic-ai/sdk/resources/messages/messages";
 
 export const MODEL = "claude-opus-4-7";
 
@@ -45,6 +40,30 @@ export interface StructuredVisionCallArgs extends StructuredCallArgs {
 
 const STRUCTURED_RESULT_TOOL = "return_result";
 
+type AnthropicTextBlock = {
+  type?: "text";
+  text?: string | null;
+};
+
+type AnthropicToolUseBlock = {
+  type?: "tool_use";
+  name?: string | null;
+  input?: unknown;
+};
+
+type AnthropicContentBlock =
+  | AnthropicTextBlock
+  | AnthropicToolUseBlock
+  | { type?: string; [key: string]: unknown };
+
+type AnthropicMessageResponse = {
+  content?: AnthropicContentBlock[] | null;
+};
+
+type MessageCreate = (
+  params: Record<string, unknown>
+) => Promise<AnthropicMessageResponse>;
+
 function structuredTool(schema: Record<string, unknown>) {
   return {
     name: STRUCTURED_RESULT_TOOL,
@@ -54,13 +73,13 @@ function structuredTool(schema: Record<string, unknown>) {
 }
 
 function isStructuredResultToolUse(
-  block: ContentBlock
-): block is ToolUseBlock {
+  block: AnthropicContentBlock
+): block is AnthropicToolUseBlock {
   return block.type === "tool_use" && block.name === STRUCTURED_RESULT_TOOL;
 }
 
-function resultFromToolUse<T>(res: Message): T {
-  const content = res.content;
+function resultFromToolUse<T>(res: AnthropicMessageResponse): T {
+  const content = Array.isArray(res.content) ? res.content : [];
   const toolUse = content.find(isStructuredResultToolUse);
   if (!toolUse) {
     throw new Error(`Model did not call required tool: ${STRUCTURED_RESULT_TOOL}`);
@@ -72,9 +91,13 @@ function resultFromToolUse<T>(res: Message): T {
   return input as T;
 }
 
+function createMessage(): MessageCreate {
+  return ((params: Record<string, unknown>) =>
+    client().messages.create(params as never)) as MessageCreate;
+}
+
 // One structured call. The model must call `return_result`; its input is the
-// typed output object. Cast to any keeps this resilient to SDK type-version
-// drift.
+// typed output object.
 export async function structuredCall<T>({
   cachedSystem,
   user,
@@ -82,7 +105,7 @@ export async function structuredCall<T>({
   maxTokens = 8000,
   model = MODEL,
 }: StructuredCallArgs): Promise<T> {
-  const res = await client().messages.create({
+  const res = await createMessage()({
     model,
     max_tokens: maxTokens,
     system: [
@@ -95,7 +118,7 @@ export async function structuredCall<T>({
     tools: [structuredTool(schema)],
     tool_choice: { type: "tool", name: STRUCTURED_RESULT_TOOL },
     messages: [{ role: "user", content: user }],
-  } as any);
+  });
 
   return resultFromToolUse<T>(res);
 }
@@ -123,7 +146,7 @@ export async function structuredVisionCall<T>({
     })
   );
 
-  const res = await client().messages.create({
+  const res = await createMessage()({
     model,
     max_tokens: maxTokens,
     system: [
@@ -141,7 +164,7 @@ export async function structuredVisionCall<T>({
         content: [{ type: "text", text: user }, ...imageBlocks],
       },
     ],
-  } as any);
+  });
 
   return resultFromToolUse<T>(res);
 }

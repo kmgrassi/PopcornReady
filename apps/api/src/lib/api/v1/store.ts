@@ -24,6 +24,7 @@
 import { randomUUID } from "crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { databaseError, runQuery } from "../../supabase/db-errors";
+import { sumRunCostUsd } from "./model-call-costs";
 import { deploymentMetadata, iso, markedJson, unmarkedJson } from "./store-internal";
 import {
   localDir,
@@ -276,8 +277,6 @@ export interface V1Action {
   inputAssetIds: string[];
   rationale?: string;
   proposal?: Record<string, unknown>;
-  estimatedCostUsd?: number;
-  actualCostUsd?: number;
   jobIds: string[];
   outputAssetIds: string[];
   error?: Record<string, unknown>;
@@ -294,8 +293,6 @@ export interface CreateActionInput {
   inputAssetIds?: string[];
   rationale?: string;
   proposal?: Record<string, unknown>;
-  estimatedCostUsd?: number;
-  actualCostUsd?: number;
   jobIds?: string[];
   outputAssetIds?: string[];
   error?: Record<string, unknown>;
@@ -368,10 +365,7 @@ export interface StoryBlueprintRecord {
 }
 
 export type UpdateActionPatch = Partial<
-  Pick<
-    V1Action,
-    "status" | "estimatedCostUsd" | "actualCostUsd" | "jobIds" | "outputAssetIds" | "error"
-  >
+  Pick<V1Action, "status" | "jobIds" | "outputAssetIds" | "error">
 >;
 
 export {
@@ -682,8 +676,6 @@ interface ActionRow {
   input_asset_ids: string[];
   rationale: string | null;
   proposal: Record<string, unknown> | null;
-  estimated_cost_usd: number | null;
-  actual_cost_usd: number | null;
   job_ids: string[];
   output_asset_ids: string[];
   error: Record<string, unknown> | null;
@@ -715,8 +707,6 @@ function mapAction(row: ActionRow): V1Action {
   if (row.rationale != null) action.rationale = row.rationale;
   const proposal = unmarkedJson(row.proposal);
   if (proposal) action.proposal = proposal;
-  if (row.estimated_cost_usd != null) action.estimatedCostUsd = row.estimated_cost_usd;
-  if (row.actual_cost_usd != null) action.actualCostUsd = row.actual_cost_usd;
   const error = unmarkedJson(row.error);
   if (error) action.error = error;
   return action;
@@ -1222,8 +1212,6 @@ export async function createAction(input: CreateActionInput): Promise<V1Action> 
         input_asset_ids: input.inputAssetIds ?? [],
         rationale: input.rationale ?? null,
         proposal: markedJson("action_proposal.v1", input.proposal) ?? null,
-        estimated_cost_usd: input.estimatedCostUsd ?? null,
-        actual_cost_usd: input.actualCostUsd ?? null,
         job_ids: input.jobIds ?? [],
         output_asset_ids: input.outputAssetIds ?? [],
         error: markedJson("action_error.v1", input.error) ?? null,
@@ -1240,10 +1228,6 @@ export async function updateAction(
 ): Promise<V1Action> {
   const row: Record<string, unknown> = {};
   if (patch.status !== undefined) row.status = patch.status;
-  if (patch.estimatedCostUsd !== undefined) {
-    row.estimated_cost_usd = patch.estimatedCostUsd;
-  }
-  if (patch.actualCostUsd !== undefined) row.actual_cost_usd = patch.actualCostUsd;
   if (patch.jobIds !== undefined) row.job_ids = patch.jobIds;
   if (patch.outputAssetIds !== undefined) row.output_asset_ids = patch.outputAssetIds;
   if (patch.error !== undefined) row.error = markedJson("action_error.v1", patch.error) ?? null;
@@ -1269,22 +1253,10 @@ export async function assertRunBudgetAllows(input: {
   const budgetUsd = run.budgetUsd;
   if (budgetUsd == null || budgetUsd <= 0) return;
 
-  const db = getServiceSupabase();
-  const actions = await runQuery(
-    "store.assertRunBudgetAllows actions",
-    db
-      .from("actions")
-      .select("estimated_cost_usd,actual_cost_usd,status")
-      .eq("orchestrator_run_id", input.runId)
-      .in("status", ["proposed", "approved", "running", "applied"])
-  );
-
-  const committedUsd = ((actions as Pick<
-    ActionRow,
-    "estimated_cost_usd" | "actual_cost_usd" | "status"
-  >[]) ?? []).reduce((sum, action) => {
-    return sum + (action.actual_cost_usd ?? action.estimated_cost_usd ?? 0);
-  }, 0);
+  // Cost lives in the model_call_costs sidecar now. Each generation reserves its
+  // cost row at start, so concurrent in-flight calls are already counted here;
+  // add the about-to-spend estimate for the call being checked.
+  const committedUsd = await sumRunCostUsd(input.runId);
   if (committedUsd + input.additionalCostUsd > budgetUsd) {
     throw new Error(
       `Run budget exceeded: ${committedUsd + input.additionalCostUsd} exceeds ${budgetUsd}.`

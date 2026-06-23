@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ApiError } from "@/core/errors";
 import {
+  buildManualProviderAssetBody,
   parseManualIdeogramImageTestRequest,
   parseManualProviderAssetTestRequest,
 } from "../manual-tests";
@@ -60,6 +61,84 @@ test("manual provider asset parser accepts a video smoke test", () => {
       model: "kling-v3",
       aspectRatio: "16:9",
       durationSec: 5,
+    }
+  );
+});
+
+test("manual provider asset body maps aspect ratio to provider-read size", () => {
+  const input = parseManualProviderAssetTestRequest({
+    kind: "video",
+    provider: "kling",
+    prompt: "A launch clip.",
+    model: "kling-v3",
+    aspectRatio: "9:16",
+    durationSec: 5,
+  });
+
+  assert.deepEqual(buildManualProviderAssetBody(input), {
+    kind: "video",
+    provider: "kling",
+    prompt: "A launch clip.",
+    assetRole: "provider_smoke_test",
+    displayName: "Provider smoke test video",
+    slug: "provider-smoke-video",
+    model: "kling-v3",
+    size: "720x1280",
+    durationSec: 5,
+  });
+});
+
+test("manual provider asset body maps NVIDIA aspect ratio to resolution", () => {
+  const input = parseManualProviderAssetTestRequest({
+    kind: "video",
+    provider: "nvidia_api_catalog",
+    prompt: "A launch clip.",
+    aspectRatio: "16:9",
+  });
+
+  assert.deepEqual(buildManualProviderAssetBody(input), {
+    kind: "video",
+    provider: "nvidia_api_catalog",
+    prompt: "A launch clip.",
+    assetRole: "provider_smoke_test",
+    displayName: "Provider smoke test video",
+    slug: "provider-smoke-video",
+    resolution: "480_16_9",
+  });
+});
+
+test("manual provider asset parser rejects square aspect ratios when wrappers cannot express them", () => {
+  assert.throws(
+    () =>
+      parseManualProviderAssetTestRequest({
+        kind: "video",
+        provider: "runway",
+        prompt: "clip",
+        aspectRatio: "1:1",
+      }),
+    (err: unknown) => {
+      assert.ok(err instanceof ApiError);
+      assert.equal(err.code, "validation_failed");
+      assert.match(err.message, /1:1 is not supported/);
+      return true;
+    }
+  );
+});
+
+test("manual provider asset parser rejects Gemini image aspect ratios", () => {
+  assert.throws(
+    () =>
+      parseManualProviderAssetTestRequest({
+        kind: "image",
+        provider: "gemini",
+        prompt: "poster",
+        aspectRatio: "16:9",
+      }),
+    (err: unknown) => {
+      assert.ok(err instanceof ApiError);
+      assert.equal(err.code, "validation_failed");
+      assert.match(err.message, /Gemini image smoke tests/);
+      return true;
     }
   );
 });

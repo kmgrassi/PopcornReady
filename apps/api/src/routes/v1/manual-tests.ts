@@ -30,6 +30,20 @@ export interface ManualProviderAssetTestInput {
   durationSec?: number;
 }
 
+type ManualProviderAssetBody = {
+  kind: ManualProviderAssetTestInput["kind"];
+  provider: GenerativeProviderName;
+  prompt: string;
+  assetRole: string;
+  displayName: string;
+  slug: string;
+  model?: string;
+  size?: string;
+  aspectRatio?: string;
+  resolution?: string;
+  durationSec?: number;
+};
+
 const ADMIN_ROLES = new Set(["admin", "owner"]);
 const PROVIDER_TEST_SUPPORT: Record<
   ManualProviderAssetTestInput["kind"],
@@ -158,6 +172,99 @@ function optionalPositiveNumber(value: unknown, path: string): number | undefine
   return parsed;
 }
 
+function validateAspectRatio(
+  provider: GenerativeProviderName,
+  kind: ManualProviderAssetTestInput["kind"],
+  aspectRatio: string | undefined
+): void {
+  if (!aspectRatio) return;
+  if (aspectRatio !== "16:9" && aspectRatio !== "9:16" && aspectRatio !== "1:1") {
+    throw new ApiError("validation_failed", "aspectRatio is not supported.", {
+      fields: [{ path: "aspectRatio", message: "Must be 16:9, 9:16, or 1:1." }],
+    });
+  }
+  if (kind === "image" && provider === "gemini") {
+    throw new ApiError(
+      "validation_failed",
+      "Gemini image smoke tests do not support aspectRatio.",
+      {
+        fields: [
+          {
+            path: "aspectRatio",
+            message: "Gemini image generation does not consume this field.",
+          },
+        ],
+      }
+    );
+  }
+  if (aspectRatio === "1:1" && !(kind === "image" && provider === "ideogram")) {
+    throw new ApiError(
+      "validation_failed",
+      "aspectRatio 1:1 is not supported by this provider smoke test.",
+      {
+        fields: [
+          {
+            path: "aspectRatio",
+            message: "Use 16:9 or 9:16 for this provider.",
+          },
+        ],
+      }
+    );
+  }
+}
+
+function sizeForAspectRatio(aspectRatio: string | undefined): string | undefined {
+  if (aspectRatio === "16:9") return "1280x720";
+  if (aspectRatio === "9:16") return "720x1280";
+  return undefined;
+}
+
+function nvidiaResolutionForAspectRatio(
+  aspectRatio: string | undefined
+): string | undefined {
+  if (aspectRatio === "16:9") return "480_16_9";
+  if (aspectRatio === "9:16") return "480_9_16";
+  return undefined;
+}
+
+export function buildManualProviderAssetBody(
+  input: ManualProviderAssetTestInput
+): ManualProviderAssetBody {
+  const base: ManualProviderAssetBody = {
+    kind: input.kind,
+    provider: input.provider,
+    prompt: input.prompt,
+    assetRole: "provider_smoke_test",
+    displayName: `Provider smoke test ${input.kind}`,
+    slug: `provider-smoke-${input.kind}`,
+    ...(input.model ? { model: input.model } : {}),
+    ...(input.durationSec ? { durationSec: input.durationSec } : {}),
+  };
+
+  if (input.provider === "ideogram") {
+    return {
+      ...base,
+      ...(input.size ? { resolution: input.size } : {}),
+      ...(input.aspectRatio ? { aspectRatio: input.aspectRatio } : {}),
+    };
+  }
+
+  if (input.provider === "nvidia_api_catalog") {
+    const resolution = nvidiaResolutionForAspectRatio(input.aspectRatio);
+    return {
+      ...base,
+      ...(input.size ? { size: input.size } : {}),
+      ...(resolution ? { resolution } : {}),
+    };
+  }
+
+  const size = input.size ?? sizeForAspectRatio(input.aspectRatio);
+  return {
+    ...base,
+    ...(size ? { size } : {}),
+  };
+}
+
 export function parseManualProviderAssetTestRequest(
   body: unknown
 ): ManualProviderAssetTestInput {
@@ -199,6 +306,7 @@ export function parseManualProviderAssetTestRequest(
   const model = optionalString(body.model, "model");
   const size = optionalString(body.size, "size");
   const aspectRatio = optionalString(body.aspectRatio, "aspectRatio");
+  validateAspectRatio(provider, kind, aspectRatio);
   const durationSec = optionalPositiveNumber(body.durationSec, "durationSec");
 
   return {
@@ -277,18 +385,7 @@ manualTestsRouter.post(
     const result = await createGeneratedAsset({
       auth: ctx.auth,
       projectId: project.id,
-      body: {
-        kind: input.kind,
-        provider: input.provider,
-        prompt: input.prompt,
-        assetRole: "provider_smoke_test",
-        displayName: `Provider smoke test ${input.kind}`,
-        slug: `provider-smoke-${input.kind}`,
-        ...(input.model ? { model: input.model } : {}),
-        ...(input.size ? { size: input.size } : {}),
-        ...(input.aspectRatio ? { aspectRatio: input.aspectRatio } : {}),
-        ...(input.durationSec ? { durationSec: input.durationSec } : {}),
-      },
+      body: buildManualProviderAssetBody(input),
     });
     const job = result.body.job;
 
