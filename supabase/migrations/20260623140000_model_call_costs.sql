@@ -43,6 +43,30 @@ create index model_call_costs_project_idx on public.model_call_costs (project_id
 alter table public.model_call_costs enable row level security;
 revoke all on public.model_call_costs from anon, authenticated;
 
+-- Backfill historical cost from actions into the sidecar BEFORE dropping the
+-- columns, so pre-migration provider cost isn't lost and in-flight run totals
+-- (sumRunCostUsd) stay accurate after deploy. One row per costed action, linked
+-- back to it. Quantity/unit are best-effort from params; cost is the recorded
+-- value (actual when present, else the estimate).
+insert into public.model_call_costs (
+  project_id, run_id, action_id, provider, model, unit, quantity,
+  cost_usd, is_estimate, created_at
+)
+select
+  a.project_id,
+  a.orchestrator_run_id,
+  a.id,
+  coalesce(nullif(a.params->>'provider', ''), 'unknown'),
+  a.params->>'model',
+  case when a.params->>'kind' = 'image' then 'images' else 'seconds' end,
+  case when a.params->>'kind' = 'image' then 1
+       else coalesce(nullif(a.params->>'durationSec', '')::double precision, 0) end,
+  coalesce(a.actual_cost_usd, a.estimated_cost_usd),
+  a.actual_cost_usd is null,
+  a.created_at
+from public.actions a
+where coalesce(a.actual_cost_usd, a.estimated_cost_usd) > 0;
+
 -- Retire the cost columns on actions — cost now lives only in the sidecar.
 alter table public.actions drop column if exists estimated_cost_usd;
 alter table public.actions drop column if exists actual_cost_usd;

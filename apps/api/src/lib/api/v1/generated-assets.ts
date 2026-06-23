@@ -924,19 +924,6 @@ async function runGeneration(
     status: "applied",
     outputAssetIds: [updated.id],
   });
-  // Cost sidecar: one row per provider call, linked to its generation action.
-  if (result.costUsd && result.costUsd > 0) {
-    await recordModelCallCost({
-      projectId,
-      runId: parsed.runId,
-      actionId: action.id,
-      provider: result.provider,
-      model: result.model,
-      unit: result.kind === "image" ? "images" : "seconds",
-      quantity: result.kind === "image" ? 1 : durationSec ?? 0,
-      costUsd: result.costUsd,
-    });
-  }
   return updated;
 }
 
@@ -1127,6 +1114,24 @@ export async function runGeneratedAssetJob(args: {
       }),
       jobIds: [running.id],
     });
+
+    // Reserve this call's cost up front (linked to the generation action), so
+    // concurrent generations in the same run see each other's in-flight spend in
+    // the budget check rather than both passing a one-call budget. Cost is
+    // deterministic from the request; we record the estimate now and don't double
+    // count it later. (is_estimate stays true until rates/usage are measured.)
+    if (estimatedCostUsd > 0) {
+      await recordModelCallCost({
+        projectId,
+        runId: parsed.runId,
+        actionId: action.id,
+        provider: parsed.provider,
+        model: parsed.model,
+        unit: parsed.kind === "image" ? "images" : "seconds",
+        quantity: parsed.kind === "image" ? 1 : parsed.durationSec ?? 0,
+        costUsd: estimatedCostUsd,
+      });
+    }
 
     // Bind a stage item to this asset so the progress UI can show a per-asset
     // card. The item lives for the duration of this call and is closed before

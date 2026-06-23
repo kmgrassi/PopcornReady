@@ -49,8 +49,9 @@ export async function recordModelCallCost(
   );
 }
 
-// Total recorded cost for an orchestrator run (used by budget gating). Only
-// completed calls have rows, so callers add the about-to-spend estimate.
+// Total recorded cost for an orchestrator run (used by budget gating). Calls are
+// reserved at start, so in-flight generations are already counted here; callers
+// add the about-to-spend estimate for the call they're checking.
 export async function sumRunCostUsd(runId: string): Promise<number> {
   const rows = await runQuery(
     "store.sumRunCostUsd",

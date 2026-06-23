@@ -1253,9 +1253,9 @@ export async function assertRunBudgetAllows(input: {
   const budgetUsd = run.budgetUsd;
   if (budgetUsd == null || budgetUsd <= 0) return;
 
-  // Cost lives in the model_call_costs sidecar now; sum the run's recorded calls
-  // and add the about-to-spend estimate. Generations run sequentially, so prior
-  // calls have already recorded by the time the next one is checked.
+  // Cost lives in the model_call_costs sidecar now. Each generation reserves its
+  // cost row at start, so concurrent in-flight calls are already counted here;
+  // add the about-to-spend estimate for the call being checked.
   const committedUsd = await sumRunCostUsd(input.runId);
   if (committedUsd + input.additionalCostUsd > budgetUsd) {
     throw new Error(
