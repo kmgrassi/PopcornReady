@@ -10,7 +10,7 @@ import {
   aspectRatioFromSize,
   authedFetch,
   characterProviderSettings,
-  readAsDataUri,
+  readAsBase64,
   requirePrompt,
 } from "./shared";
 
@@ -123,7 +123,7 @@ async function generateKlingVideo(
     duration: String(duration),
     mode: input.quality === "high" ? "pro" : "std",
     aspect_ratio: aspectRatioFromSize(input.size, "16:9", "9:16"),
-    ...(firstReference ? { image: await readAsDataUri(firstReference) } : {}),
+    ...(firstReference ? { image: await readAsBase64(firstReference) } : {}),
   };
 
   const createRes = await klingFetch(endpoint, {

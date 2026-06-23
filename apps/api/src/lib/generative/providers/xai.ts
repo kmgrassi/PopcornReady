@@ -16,6 +16,7 @@ import {
 const XAI_BASE_URL = "https://api.x.ai/v1";
 const XAI_DEFAULT_IMAGE_MODEL = "grok-imagine-image-quality";
 const XAI_DEFAULT_VIDEO_MODEL = "grok-imagine-video";
+const XAI_IMAGE_TO_VIDEO_MODEL = "grok-imagine-video-1.5";
 
 interface XaiImageResponse {
   data?: Array<{
@@ -138,9 +139,13 @@ async function generateXaiVideo(
   input: Extract<GenerateAssetRequest, { provider: "xai"; kind: "video" }>
 ): Promise<GeneratedAssetResult> {
   const prompt = requirePrompt(input.prompt);
-  const model = input.model || XAI_DEFAULT_VIDEO_MODEL;
   const duration = normalizeXaiVideoSeconds(input.seconds);
   const firstReference = input.referencePaths?.[0];
+  const requestedModel = input.model || XAI_DEFAULT_VIDEO_MODEL;
+  const model =
+    firstReference && requestedModel === XAI_DEFAULT_VIDEO_MODEL
+      ? XAI_IMAGE_TO_VIDEO_MODEL
+      : requestedModel;
   const body = {
     model,
     prompt,

@@ -153,6 +153,7 @@ Supported:
 Default model:
 
 - `bytedance/seedance-2.0/text-to-video`
+- referenced clips are routed to `bytedance/seedance-2.0/image-to-video`
 
 Note:
 
@@ -179,7 +180,8 @@ Supported:
 Default models:
 
 - Image: `grok-imagine-image-quality`
-- Video: `grok-imagine-video`
+- Text-to-video: `grok-imagine-video`
+- Image-to-video/reference video: `grok-imagine-video-1.5`
 
 ## Still Scoped
 

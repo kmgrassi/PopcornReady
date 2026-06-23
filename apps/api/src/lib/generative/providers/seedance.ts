@@ -13,7 +13,8 @@ import {
 } from "./shared";
 
 const FAL_QUEUE_BASE_URL = "https://queue.fal.run";
-const SEEDANCE_DEFAULT_MODEL = "bytedance/seedance-2.0/text-to-video";
+const SEEDANCE_TEXT_TO_VIDEO_MODEL = "bytedance/seedance-2.0/text-to-video";
+const SEEDANCE_IMAGE_TO_VIDEO_MODEL = "bytedance/seedance-2.0/image-to-video";
 
 interface FalQueueSubmitResponse {
   request_id?: string;
@@ -47,9 +48,15 @@ function normalizeSeedanceVideoSeconds(value?: number): number {
   return Math.max(4, Math.min(15, candidate));
 }
 
-function seedanceModelPath(model?: string): string {
-  const value = model?.trim() || SEEDANCE_DEFAULT_MODEL;
-  return value.replace(/^fal-ai\//, "").replace(/^fal:\/\//, "");
+function seedanceModelPath(model: string | undefined, hasReference: boolean): string {
+  const value = model?.trim() || SEEDANCE_TEXT_TO_VIDEO_MODEL;
+  const routed = hasReference
+    ? value.replace(/\/text-to-video$/, "/image-to-video")
+    : value;
+  if (hasReference && routed === value && value === "bytedance/seedance-2.0") {
+    return SEEDANCE_IMAGE_TO_VIDEO_MODEL;
+  }
+  return routed.replace(/^fal-ai\//, "").replace(/^fal:\/\//, "");
 }
 
 async function falFetch(url: string, init: RequestInit): Promise<Response> {
@@ -100,9 +107,9 @@ async function generateSeedanceVideo(
   input: Extract<GenerateAssetRequest, { provider: "seedance"; kind: "video" }>
 ): Promise<GeneratedAssetResult> {
   const prompt = requirePrompt(input.prompt);
-  const model = seedanceModelPath(input.model);
   const duration = normalizeSeedanceVideoSeconds(input.seconds);
   const firstReference = input.referencePaths?.[0];
+  const model = seedanceModelPath(input.model, Boolean(firstReference));
   const body = {
     prompt,
     duration,
