@@ -1,3 +1,4 @@
+import { useId } from "react";
 import type { FaqItem } from "../../content/faqs";
 import styles from "./FaqSection.module.css";
 
@@ -20,16 +21,18 @@ export function FaqSection({
   eyebrow = "FAQ",
   variant = "full",
 }: FaqSectionProps) {
+  const headingId = useId();
+
   if (faqs.length === 0) return null;
 
   return (
     <section
       className={cx(styles.section, variant === "compact" && styles.compact)}
-      aria-labelledby={`${variant}-faq-title`}
+      aria-labelledby={headingId}
     >
       <header className={styles.header}>
         <p className={styles.eyebrow}>{eyebrow}</p>
-        <h2 id={`${variant}-faq-title`}>{title}</h2>
+        <h2 id={headingId}>{title}</h2>
       </header>
       <div className={styles.list}>
         {faqs.map((faq) => (
