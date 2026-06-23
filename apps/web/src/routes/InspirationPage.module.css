@@ -76,6 +76,14 @@
   box-shadow: var(--shadow-sm);
 }
 
+.movieTitle {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: var(--title-md);
+  font-weight: 900;
+  line-height: 1.05;
+}
+
 .logline {
   max-width: 980px;
   margin: 0;

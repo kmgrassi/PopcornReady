@@ -41,6 +41,7 @@ interface InspirationElement {
 
 interface RandomStoryInspiration {
   formula: string;
+  movieTitle?: string;
   logline: string;
   typeOfPerson: string;
   setting: string;
@@ -169,10 +170,10 @@ inspirationRouter.post(
   "/inspiration/poster",
   mutation(async ({ body }) => {
     const inspiration = await parsePosterInspiration(body);
-    const poster = await ensureStoryConceptPoster(inspiration);
+    const concept = await ensureStoryConceptPoster(inspiration);
     return {
-      status: poster.status === "ready" ? 200 : 202,
-      body: { poster },
+      status: concept.poster.status === "ready" ? 200 : 202,
+      body: concept,
       headers: { "Cache-Control": "no-store" },
     };
   })
@@ -470,6 +471,80 @@ function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+const TITLE_STOP_WORDS = new Set([
+  "their",
+  "there",
+  "them",
+  "they",
+  "with",
+  "from",
+  "into",
+  "over",
+  "under",
+  "through",
+  "before",
+  "after",
+  "between",
+  "against",
+  "because",
+  "wants",
+  "blocks",
+  "leading",
+  "truth",
+  "choosing",
+]);
+
+function titleCase(value: string): string {
+  const small = new Set(["a", "an", "and", "as", "at", "for", "in", "of", "on", "or", "the", "to", "with"]);
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word, index) => {
+      const lower = word.toLowerCase();
+      if (index > 0 && small.has(lower)) return lower;
+      return lower.charAt(0).toUpperCase() + lower.slice(1);
+    })
+    .join(" ");
+}
+
+function titlePhrase(value: string, maxWords = 3): string {
+  const words = value
+    .replace(/["'`]/g, "")
+    .replace(/[^a-zA-Z0-9\s-]+/g, " ")
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter((word) => word.length > 2 && !TITLE_STOP_WORDS.has(word.toLowerCase()));
+  return titleCase(words.slice(-maxWords).join(" "));
+}
+
+function templateIndex(inspiration: RandomStoryInspiration, count: number): number {
+  const hash = sha256([
+    inspiration.typeOfPerson,
+    inspiration.setting,
+    inspiration.externalGoal,
+    inspiration.antagonisticForce,
+    inspiration.newTruth,
+    inspiration.endingType,
+  ].join("|"));
+  return parseInt(hash.slice(0, 8), 16) % count;
+}
+
+function movieTitleFor(inspiration: RandomStoryInspiration): string {
+  const goal = titlePhrase(inspiration.externalGoal, 3) || "Impossible Goal";
+  const setting = titlePhrase(inspiration.setting, 3) || "Hidden World";
+  const truth = titlePhrase(inspiration.newTruth, 3) || "Second Chance";
+  const ending = titlePhrase(inspiration.endingType, 3) || "Victory";
+  const templates = [
+    `The ${goal}`,
+    `${setting} Rising`,
+    `The ${truth}`,
+    `Last Night in ${setting}`,
+    `${goal} at ${setting}`,
+    `The ${ending}`,
+  ];
+  return templates[templateIndex(inspiration, templates.length)].slice(0, 64);
+}
+
 function posterPromptFor(inspiration: RandomStoryInspiration): string {
   return [
     "Create cinematic movie poster key art for this story concept.",
@@ -484,8 +559,9 @@ function posterPromptFor(inspiration: RandomStoryInspiration): string {
 
 async function ensureStoryConceptPoster(
   inspiration: RandomStoryInspiration
-): Promise<StoryConceptPoster> {
+): Promise<{ movieTitle: string; poster: StoryConceptPoster }> {
   const db = getServiceSupabase();
+  const movieTitle = movieTitleFor(inspiration);
   const prompt = posterPromptFor(inspiration);
   const promptHash = sha256(prompt);
   const conceptKey = conceptKeyFor(inspiration, promptHash);
@@ -499,6 +575,7 @@ async function ensureStoryConceptPoster(
         {
           concept_key: conceptKey,
           concept_hash: conceptHash,
+          title: movieTitle,
           formula: inspiration.formula ?? null,
           logline: inspiration.logline,
           status: "ready",
@@ -540,18 +617,24 @@ async function ensureStoryConceptPoster(
 
   if (existing?.status === "ready" && existing.poster_asset_id) {
     return {
-      status: "ready",
-      assetId: existing.poster_asset_id,
-      url: await posterUrlForAsset(existing.poster_asset_id),
-      prompt: existing.prompt,
+      movieTitle,
+      poster: {
+        status: "ready",
+        assetId: existing.poster_asset_id,
+        url: await posterUrlForAsset(existing.poster_asset_id),
+        prompt: existing.prompt,
+      },
     };
   }
   if (existing?.status === "queued" || existing?.status === "generating") {
     return {
-      status: existing.status,
-      assetId: existing.poster_asset_id,
-      url: existing.poster_asset_id ? await posterUrlForAsset(existing.poster_asset_id) : null,
-      prompt: existing.prompt,
+      movieTitle,
+      poster: {
+        status: existing.status,
+        assetId: existing.poster_asset_id,
+        url: existing.poster_asset_id ? await posterUrlForAsset(existing.poster_asset_id) : null,
+        prompt: existing.prompt,
+      },
     };
   }
 
@@ -620,10 +703,13 @@ async function ensureStoryConceptPoster(
         .eq("id", posterRow.id)
     );
     return {
-      status: "ready",
-      assetId,
-      url: await posterUrlForAsset(assetId),
-      prompt,
+      movieTitle,
+      poster: {
+        status: "ready",
+        assetId,
+        url: await posterUrlForAsset(assetId),
+        prompt,
+      },
     };
   } catch (error) {
     await runQuery(
@@ -639,10 +725,13 @@ async function ensureStoryConceptPoster(
         .eq("id", posterRow.id)
     );
     return {
-      status: "failed",
-      assetId: null,
-      url: null,
-      prompt,
+      movieTitle,
+      poster: {
+        status: "failed",
+        assetId: null,
+        url: null,
+        prompt,
+      },
     };
   }
 }

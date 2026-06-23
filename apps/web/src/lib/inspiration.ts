@@ -27,6 +27,7 @@ export interface InspirationElement {
 
 export interface RandomStoryInspiration {
   formula: string;
+  movieTitle?: string;
   logline: string;
   typeOfPerson: string;
   setting: string;
@@ -59,6 +60,11 @@ interface RandomStoryInspirationResponse {
   inspiration: RandomStoryInspiration;
 }
 
+interface StoryConceptPosterResponse {
+  movieTitle: string;
+  poster: StoryConceptPoster;
+}
+
 export const inspirationQueryKeys = {
   random: (nonce: number) => ["inspiration", "random", nonce] as const,
 };
@@ -78,7 +84,7 @@ export function useRandomStoryInspiration(nonce: number) {
 export function useStoryConceptPosterMutation() {
   return useMutation({
     mutationFn: (inspiration: RandomStoryInspiration) =>
-      apiRequest<{ poster: StoryConceptPoster }>("/api/v1/inspiration/poster", {
+      apiRequest<StoryConceptPosterResponse>("/api/v1/inspiration/poster", {
         method: "POST",
         body: { inspiration },
       }),
@@ -104,9 +110,10 @@ function buildInspirationDraft(inspiration: RandomStoryInspiration): BriefDraft 
   return {
     ...EMPTY_BRIEF_DRAFT,
     goal: inspirationPrompt(inspiration),
-    projectName: inspiration.logline.slice(0, 96),
+    projectName: (inspiration.movieTitle || inspiration.logline).slice(0, 96),
     targetLengthSec: 30,
     footageChoice: "prompt_only",
+    reviewGates: ["brief_intake"],
   };
 }
 
@@ -114,7 +121,7 @@ export function startInspirationStoryboardRun(
   inspiration: RandomStoryInspiration,
 ): Promise<StartRunResult> {
   return createAndStartRun(buildInspirationDraft(inspiration), {
-    stopAfter: "asset_generation",
+    stopAfter: "storyboard",
   });
 }
 
