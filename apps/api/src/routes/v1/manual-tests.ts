@@ -1,7 +1,13 @@
 import { Router } from "express";
 import { mutation } from "@/core/adapter";
 import { ApiError } from "@/core/errors";
+import { bearerToken } from "@/lib/api/v1/auth";
+import { createGeneratedAsset } from "@/lib/api/v1/generated-assets";
+import type { HandlerCtx } from "@/lib/api/v1/handler";
+import { createProject } from "@/lib/api/v1/store";
 import { providerFor } from "@/lib/generative/providers";
+import { buildUserScopedSupabase } from "@/lib/supabase/clients";
+import type { GenerativeProviderName } from "@popcorn/shared/generative/types";
 import type { IdeogramImageModel } from "@popcorn/shared/generative/types";
 
 export const manualTestsRouter = Router();
@@ -13,6 +19,34 @@ export interface ManualIdeogramImageTestInput {
   prompt: string;
   model?: IdeogramImageModel;
 }
+
+export interface ManualProviderAssetTestInput {
+  kind: "image" | "video";
+  provider: GenerativeProviderName;
+  prompt: string;
+  model?: string;
+  size?: string;
+  aspectRatio?: string;
+  durationSec?: number;
+}
+
+const ADMIN_ROLES = new Set(["admin", "owner"]);
+const PROVIDER_TEST_SUPPORT: Record<
+  ManualProviderAssetTestInput["kind"],
+  GenerativeProviderName[]
+> = {
+  image: ["openai", "gemini", "ideogram", "xai"],
+  video: [
+    "openai",
+    "gemini",
+    "runway",
+    "ltx",
+    "kling",
+    "seedance",
+    "xai",
+    "nvidia_api_catalog",
+  ],
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -48,6 +82,144 @@ export function parseManualIdeogramImageTestRequest(
   };
 }
 
+function claimValues(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === "string");
+  }
+  return [];
+}
+
+function hasAdminAppMetadata(appMetadata: Record<string, unknown> | undefined): boolean {
+  if (!appMetadata) return false;
+  const claims = [
+    ...claimValues(appMetadata.role),
+    ...claimValues(appMetadata.roles),
+    ...claimValues(appMetadata.workspace_role),
+  ];
+  return claims.some((claim) => ADMIN_ROLES.has(claim.toLowerCase()));
+}
+
+async function requireProviderSmokeTestAdmin(
+  ctx: Pick<HandlerCtx, "auth" | "req">
+): Promise<void> {
+  if (ctx.auth.isLocal) return;
+
+  const token = bearerToken(ctx.req);
+  if (!token) {
+    throw new ApiError("forbidden", "Provider smoke-test access requires admin.");
+  }
+
+  const supabase = buildUserScopedSupabase(token);
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data.user || !hasAdminAppMetadata(data.user.app_metadata)) {
+    throw new ApiError("forbidden", "Provider smoke-test access requires admin.");
+  }
+}
+
+function parseProvider(value: unknown): GenerativeProviderName {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new ApiError("validation_failed", "provider is required.", {
+      fields: [{ path: "provider", message: "Must be a non-empty string." }],
+    });
+  }
+  const provider = value.trim() as GenerativeProviderName;
+  const allProviders = new Set<GenerativeProviderName>([
+    ...PROVIDER_TEST_SUPPORT.image,
+    ...PROVIDER_TEST_SUPPORT.video,
+  ]);
+  if (!allProviders.has(provider)) {
+    throw new ApiError("validation_failed", `Unsupported provider: ${provider}.`, {
+      fields: [{ path: "provider", message: "Unsupported provider." }],
+    });
+  }
+  return provider;
+}
+
+function optionalString(value: unknown, path: string): string | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value !== "string") {
+    throw new ApiError("validation_failed", `${path} must be a string.`, {
+      fields: [{ path, message: "Must be a string." }],
+    });
+  }
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function optionalPositiveNumber(value: unknown, path: string): number | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new ApiError("validation_failed", `${path} must be a positive number.`, {
+      fields: [{ path, message: "Must be a positive number." }],
+    });
+  }
+  return parsed;
+}
+
+export function parseManualProviderAssetTestRequest(
+  body: unknown
+): ManualProviderAssetTestInput {
+  if (!isRecord(body)) {
+    throw new ApiError("validation_failed", "Request body must be an object.", {
+      fields: [{ path: "", message: "Must be an object." }],
+    });
+  }
+
+  const kind = body.kind;
+  if (kind !== "image" && kind !== "video") {
+    throw new ApiError("validation_failed", "kind must be image or video.", {
+      fields: [{ path: "kind", message: "Must be image or video." }],
+    });
+  }
+
+  const provider = parseProvider(body.provider);
+  if (!PROVIDER_TEST_SUPPORT[kind].includes(provider)) {
+    throw new ApiError(
+      "validation_failed",
+      `Provider "${provider}" does not support ${kind} smoke tests.`,
+      {
+        fields: [
+          {
+            path: "provider",
+            message: `Must be one of: ${PROVIDER_TEST_SUPPORT[kind].join(", ")}.`,
+          },
+        ],
+      }
+    );
+  }
+
+  const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
+  if (!prompt) {
+    throw new ApiError("validation_failed", "prompt is required.", {
+      fields: [{ path: "prompt", message: "Must be a non-empty string." }],
+    });
+  }
+  const model = optionalString(body.model, "model");
+  const size = optionalString(body.size, "size");
+  const aspectRatio = optionalString(body.aspectRatio, "aspectRatio");
+  const durationSec = optionalPositiveNumber(body.durationSec, "durationSec");
+
+  return {
+    kind,
+    provider,
+    prompt,
+    ...(model ? { model } : {}),
+    ...(size ? { size } : {}),
+    ...(aspectRatio ? { aspectRatio } : {}),
+    ...(durationSec ? { durationSec } : {}),
+  };
+}
+
+function assetIdsFromJob(job: unknown): string[] {
+  if (!isRecord(job) || !isRecord(job.result)) return [];
+  const assetIds = job.result.assetIds;
+  return Array.isArray(assetIds)
+    ? assetIds.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
 // POST /api/v1/manual-tests/ideogram-image
 //
 // Single-purpose manual smoke-test endpoint for Ideogram credentials and model
@@ -76,6 +248,56 @@ manualTestsRouter.post(
         extension: result.extension,
         byteLength: result.bytes.length,
         dataUrl: `data:${result.mimeType};base64,${result.bytes.toString("base64")}`,
+      },
+      headers: { "Cache-Control": "no-store" },
+    };
+  })
+);
+
+// POST /api/v1/manual-tests/provider-asset
+//
+// Admin-only smoke-test endpoint that creates a normal persisted project asset
+// through the generated-assets pipeline. This is intentionally small and
+// operator-facing: it proves saved provider credentials, model wiring, storage,
+// actions, jobs, and asset graph writes all work together.
+manualTestsRouter.post(
+  "/manual-tests/provider-asset",
+  mutation(async (ctx) => {
+    await requireProviderSmokeTestAdmin(ctx);
+
+    const input = parseManualProviderAssetTestRequest(ctx.body);
+    const now = new Date();
+    const timestamp = now.toISOString().replace(/[:.]/g, "-");
+    const { project } = await createProject({
+      workspaceId: ctx.auth.workspaceId,
+      name: `Provider smoke test ${input.kind} ${timestamp}`,
+      slug: `provider-smoke-${input.kind}-${timestamp}`,
+    });
+
+    const result = await createGeneratedAsset({
+      auth: ctx.auth,
+      projectId: project.id,
+      body: {
+        kind: input.kind,
+        provider: input.provider,
+        prompt: input.prompt,
+        assetRole: "provider_smoke_test",
+        displayName: `Provider smoke test ${input.kind}`,
+        slug: `provider-smoke-${input.kind}`,
+        ...(input.model ? { model: input.model } : {}),
+        ...(input.size ? { size: input.size } : {}),
+        ...(input.aspectRatio ? { aspectRatio: input.aspectRatio } : {}),
+        ...(input.durationSec ? { durationSec: input.durationSec } : {}),
+      },
+    });
+    const job = result.body.job;
+
+    return {
+      status: 201,
+      body: {
+        project,
+        job,
+        assetIds: assetIdsFromJob(job),
       },
       headers: { "Cache-Control": "no-store" },
     };

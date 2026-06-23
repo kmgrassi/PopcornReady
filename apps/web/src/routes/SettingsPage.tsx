@@ -6,6 +6,7 @@ import { AnonymousUpgradeBanner } from "../components/auth/AnonymousUpgradeBanne
 import { AccessTokenPanel } from "../components/settings/AccessTokenPanel";
 import { ModelSettingsPanel } from "../components/settings/ModelSettingsPanel";
 import { ProviderApiKeysPanel } from "../components/settings/ProviderApiKeysPanel";
+import { ProviderSmokeTestPanel } from "../components/settings/ProviderSmokeTestPanel";
 import ThemeToggle from "../components/ThemeToggle";
 import { Button } from "../components/ui/Button";
 import { useMeQuery } from "../lib/queryClient";
@@ -131,6 +132,8 @@ export function SettingsPage() {
       <ProviderApiKeysPanel authScope={authScope} enabled={auth.status !== "loading"} />
 
       <AccessTokenPanel />
+
+      {showAdminSurfaces ? <ProviderSmokeTestPanel /> : null}
 
       {showAdminSurfaces ? (
         <section className={styles.section} aria-labelledby="links-heading">
