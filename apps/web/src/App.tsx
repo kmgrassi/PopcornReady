@@ -23,6 +23,7 @@ import { LibraryPage } from "./routes/LibraryPage";
 import { LoginPage } from "./routes/LoginPage";
 import { ProjectCreationPage } from "./routes/ProjectCreationPage";
 import { ProjectDetailPage } from "./routes/ProjectDetailPage";
+import { ProjectStepPage } from "./routes/ProjectStepPage";
 import { ProjectWatchPage } from "./routes/ProjectWatchPage";
 import { PublicProjectPage } from "./routes/PublicProjectPage";
 import { SignupPage } from "./routes/SignupPage";
@@ -67,6 +68,18 @@ export function App() {
           <Route
             path="/projects/:projectId"
             element={<ProjectDetailPage />}
+          />
+          <Route
+            path="/projects/:projectId/concept"
+            element={<ProjectStepPage step="concept" />}
+          />
+          <Route
+            path="/projects/:projectId/brief"
+            element={<ProjectStepPage step="brief" />}
+          />
+          <Route
+            path="/projects/:projectId/script"
+            element={<ProjectStepPage step="script" />}
           />
           <Route
             path="/projects/:projectId/storyboard"

@@ -200,7 +200,7 @@ export function ProjectDetailPage() {
           <div className={styles.projectContent} id="overview">
             <section className={styles.projectTopLayout}>
               <div className={styles.projectPrimaryColumn}>
-                <ProjectConcept project={project} />
+                <ProjectConcept project={project} projectId={projectId} />
               </div>
               <div className={styles.projectStoryboardColumn}>
                 <StoryboardPreview
@@ -221,8 +221,8 @@ export function ProjectDetailPage() {
                   }}
                 />
                 <div className={styles.projectContextGrid}>
-                  <ProjectBrief project={project} />
-                  <ProjectScript project={project} storyboard={storyboard} />
+                  <ProjectBrief project={project} projectId={projectId} />
+                  <ProjectScript project={project} projectId={projectId} storyboard={storyboard} />
                 </div>
               </div>
             </section>
@@ -466,7 +466,7 @@ function ProjectStagePanel({
   );
 }
 
-function ProjectConcept({ project }: { project: V1Project }) {
+function ProjectConcept({ project, projectId }: { project: V1Project; projectId: string }) {
   const brief = project.brief;
   return (
     <section className={styles.hero} id="concept">
@@ -478,11 +478,23 @@ function ProjectConcept({ project }: { project: V1Project }) {
             <span>{project.visibility === "public" ? "Public" : "Private"}</span>
           ) : null}
           <span>Created {formatDate(project.createdAt)}</span>
+          <ButtonLink
+            variant="ghost"
+            size="sm"
+            to={`/projects/${encodeURIComponent(projectId)}/concept`}
+          >
+            Open concept
+          </ButtonLink>
         </div>
         <div>
           <span className={styles.eyebrow}>Concept</span>
           <h2 className={styles.conceptTitle}>
-            {brief?.oneBigIdea ?? brief?.goal ?? project.name}
+            <Link
+              className={styles.sectionTitleLink}
+              to={`/projects/${encodeURIComponent(projectId)}/concept`}
+            >
+              {brief?.oneBigIdea ?? brief?.goal ?? project.name}
+            </Link>
           </h2>
           {brief?.strongestVisual ? (
             <p className={styles.conceptSummary}>{brief.strongestVisual}</p>
@@ -511,7 +523,7 @@ function ProjectConcept({ project }: { project: V1Project }) {
   );
 }
 
-function ProjectBrief({ project }: { project: V1Project }) {
+function ProjectBrief({ project, projectId }: { project: V1Project; projectId: string }) {
   const brief = project.brief;
   return (
     <section className={styles.panel} id="brief">
@@ -519,6 +531,15 @@ function ProjectBrief({ project }: { project: V1Project }) {
         <div>
           <span className={styles.eyebrow}>Brief</span>
           <h2>Project direction</h2>
+        </div>
+        <div className={styles.sectionHeaderActions}>
+          <ButtonLink
+            variant="ghost"
+            size="sm"
+            to={`/projects/${encodeURIComponent(projectId)}/brief`}
+          >
+            Open brief
+          </ButtonLink>
         </div>
       </div>
       {brief ? (
@@ -541,9 +562,11 @@ function ProjectBrief({ project }: { project: V1Project }) {
 
 function ProjectScript({
   project,
+  projectId,
   storyboard,
 }: {
   project: V1Project;
+  projectId: string;
   storyboard: ProjectStoryboard | null;
 }) {
   const scriptLines = storyboardScriptLines(storyboard);
@@ -555,6 +578,15 @@ function ProjectScript({
         <div>
           <span className={styles.eyebrow}>Script</span>
           <h2>Narration and dialogue</h2>
+        </div>
+        <div className={styles.sectionHeaderActions}>
+          <ButtonLink
+            variant="ghost"
+            size="sm"
+            to={`/projects/${encodeURIComponent(projectId)}/script`}
+          >
+            Open script
+          </ButtonLink>
         </div>
       </div>
       {narrationScript ? (
