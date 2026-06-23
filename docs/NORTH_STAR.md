@@ -414,5 +414,6 @@ resolutions as the design record (the "why" behind the as-built schema).
   `docs/scopes/jobs-processing.md`,
   `docs/scopes/generation-review-checkpoints.md`,
   `docs/scopes/character-consistency-generation.md`,
-  `docs/scopes/video-snapshot-review.md`.
+  `docs/scopes/video-snapshot-review.md`,
+  `docs/scopes/north-star-gap-audit.md`.
 - **Research:** `docs/research/character-consistency-video.md`.
