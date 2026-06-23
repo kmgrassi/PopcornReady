@@ -281,6 +281,7 @@ function BeatCard({
         <div className={`${styles.panelImage} ${styles.panelRevising}`} aria-busy="true">
           {image ? <img className={styles.panelGhost} src={image} alt="" /> : null}
           <div className={styles.shimmer} aria-hidden />
+          <span className={styles.beatNumber}>Beat {order}</span>
           <span className={styles.revisingLabel}>
             <span className={styles.spinner} aria-hidden />
             Revising…
@@ -317,17 +318,21 @@ function BeatCard({
                     title: label,
                     subtitle: `Scene ${sceneOrder} · Beat ${order}`,
                   }),
-                mediaOverlay: <span className={styles.editHint}>Click to edit</span>,
+                mediaOverlay: (
+                  <>
+                    <span className={styles.beatNumber}>Beat {order}</span>
+                    <span className={styles.editHint}>Ask AI</span>
+                  </>
+                ),
               }
             : {})}
         />
       )}
       <div className={styles.beatBody}>
-        <span className={styles.beatTag}>Beat {order}</span>
         <p className={styles.beatIntent}>{label}</p>
         {prompt ? (
           <details className={styles.promptDrawer}>
-            <summary>Show image prompt</summary>
+            <summary>Image prompt</summary>
             <p>{prompt}</p>
           </details>
         ) : null}
