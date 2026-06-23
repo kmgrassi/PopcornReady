@@ -94,7 +94,7 @@ export function SettingsPage() {
           <p className={styles.kicker}>Appearance</p>
           <h2 id="appearance-heading">Theme</h2>
         </div>
-        <ThemeToggle />
+        <ThemeToggle variant="settings" />
       </section>
 
       <section className={styles.grid} aria-label="Workspace and account">
