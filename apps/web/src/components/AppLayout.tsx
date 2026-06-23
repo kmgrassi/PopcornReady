@@ -217,6 +217,14 @@ export function AuthenticatedAppLayout() {
             >
               Settings
             </NavLink>
+            <NavLink
+              to="/faq"
+              className={({ isActive }) =>
+                isActive ? `${styles.navLink} ${styles.active}` : styles.navLink
+              }
+            >
+              FAQs
+            </NavLink>
           </nav>
         </div>
       </aside>
