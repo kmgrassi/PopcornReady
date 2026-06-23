@@ -722,6 +722,11 @@ export const v1Api = {
     apiRequest<ProjectResponse>(
       `/api/v1/projects/${encodeURIComponent(projectId)}`
     ),
+  deleteProject: (projectId: string) =>
+    apiRequest<AccountMutationResponse>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}`,
+      { method: "DELETE" }
+    ),
   setProjectPoster: (projectId: string, assetId: string) =>
     apiRequest<ProjectResponse>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/poster`,

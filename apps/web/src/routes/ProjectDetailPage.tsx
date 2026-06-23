@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, Navigate, useLocation, useParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import type {
   GenerationRun,
   ProjectStoryboard,
@@ -19,6 +19,7 @@ import { storyboardProgress, type StoryboardProgress } from "../lib/v1/storyboar
 import {
   useGenerateProjectStoryboardMutation,
   useGenerationRunQuery,
+  useDeleteProjectMutation,
   useProjectQuery,
   useProjectStoryboardJobQuery,
   useProjectStoryboardQuery,
@@ -45,9 +46,11 @@ function useDashboardAuthScope() {
 export function ProjectDetailPage() {
   const { projectId, section } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const activeSection = isProjectSectionId(section) ? section : null;
   const authScope = useDashboardAuthScope();
   const projectQuery = useProjectQuery(projectId ?? "", Boolean(projectId));
+  const deleteProjectMutation = useDeleteProjectMutation(projectId ?? "");
   const generateStoryboardMutation = useGenerateProjectStoryboardMutation(projectId ?? "");
   // Latest job for the project, fetched from the server, so an in-flight
   // generation is rediscovered after a reload (the storyboard row isn't created
@@ -222,6 +225,16 @@ export function ProjectDetailPage() {
               error={outputsQuery.error}
               onRetry={outputsQuery.refetch}
               onLoadMore={() => void outputsQuery.fetchNextPage()}
+            />
+            <ProjectDangerSection
+              project={project}
+              deleting={deleteProjectMutation.isPending}
+              error={deleteProjectMutation.error}
+              onDelete={() => {
+                void deleteProjectMutation.mutateAsync().then(() => {
+                  navigate("/library/projects", { replace: true });
+                });
+              }}
             />
           </div>
           <aside className={styles.stageAside} aria-label="Run pipeline">
@@ -531,6 +544,64 @@ function ProjectScript({
       ) : (
         <p className={styles.muted}>No script or narrated storyboard beats are ready yet.</p>
       )}
+    </section>
+  );
+}
+
+function ProjectDangerSection({
+  project,
+  deleting,
+  error,
+  onDelete,
+}: {
+  project: V1Project;
+  deleting: boolean;
+  error: Error | null;
+  onDelete: () => void;
+}) {
+  const [confirmation, setConfirmation] = useState("");
+  const confirmed = confirmation === project.name;
+
+  return (
+    <section className={`${styles.panel} ${styles.dangerPanel}`} id="danger">
+      <div className={styles.sectionHeader}>
+        <div>
+          <span className={styles.eyebrow}>Danger</span>
+          <h2>Delete project</h2>
+        </div>
+      </div>
+      <p className={styles.muted}>
+        Delete this project from your library. Runs, storyboards, and generated
+        assets for this project will no longer appear in the app.
+      </p>
+      <label className={styles.confirmField}>
+        <span>Type {project.name} to confirm</span>
+        <input
+          value={confirmation}
+          onChange={(event) => setConfirmation(event.target.value)}
+          disabled={deleting}
+          autoComplete="off"
+        />
+      </label>
+      <div className={styles.dangerActions}>
+        <Button
+          variant="secondary"
+          className={styles.dangerButton}
+          disabled={!confirmed || deleting}
+          isLoading={deleting}
+          onClick={onDelete}
+        >
+          Delete project
+        </Button>
+      </div>
+      {error ? (
+        <ErrorState
+          title="Unable to delete project"
+          body="We couldn't delete this project. Check your session and try again."
+          error={error}
+          onRetry={onDelete}
+        />
+      ) : null}
     </section>
   );
 }

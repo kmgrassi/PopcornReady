@@ -78,6 +78,7 @@ import type { GeneratedStoryboardTile } from "@/lib/generative/storyboard-tile";
 import {
   getOrchestratorRun,
   listOrchestratorRunsForProject,
+  updateOrchestratorRun,
   type OrchestratorRun,
 } from "./orchestrator-store";
 import { getRequestSupabase } from "../../supabase/clients";
@@ -3074,6 +3075,43 @@ export async function getProject(
   );
   if (!data) throw notFound(`Project not found: ${projectId}`);
   return mapProjectWithProjection(db, data as ProjectRow);
+}
+
+export async function deleteProject(
+  workspaceId: string,
+  projectId: string
+): Promise<void> {
+  const db = getServiceSupabase();
+  await getProject(workspaceId, projectId);
+  const now = new Date().toISOString();
+  const runs = await listOrchestratorRunsForProject(projectId);
+  await Promise.all(
+    runs
+      .filter(
+        (run) =>
+          run.status === "queued" ||
+          run.status === "running" ||
+          run.status === "waiting"
+      )
+      .map((run) =>
+        updateOrchestratorRun(run.id, {
+          status: "canceled",
+          completedAt: run.completedAt ?? now,
+        })
+      )
+  );
+  const data = await runQuery(
+    "store.deleteProject",
+    db
+      .from("projects")
+      .update({ status: "deleted", updated_at: now })
+      .eq("id", projectId)
+      .eq("workspace_id", workspaceId)
+      .neq("status", "deleted")
+      .select("id")
+      .maybeSingle()
+  );
+  if (!data) throw notFound(`Project not found: ${projectId}`);
 }
 
 // Point the project-scoped 'poster' selection slot at an image asset. Any

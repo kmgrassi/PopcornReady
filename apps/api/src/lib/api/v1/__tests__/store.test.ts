@@ -8,6 +8,7 @@ import {
   addAsset,
   createBriefVersion,
   createProject,
+  deleteProject,
   ensureLocalWorkspace,
   findIdempotencyRecord,
   getProject,
@@ -17,6 +18,10 @@ import {
   setBrief,
   V1Asset,
 } from "../store";
+import {
+  createOrchestratorRun,
+  getOrchestratorRun,
+} from "../orchestrator-store";
 
 // store.ts now persists to Supabase Postgres instead of the .local/ JSON file.
 // Exercising it needs a live PostgREST gateway (supabase-js can't talk straight
@@ -93,6 +98,40 @@ dbTest("getProject is scoped to its workspace", async () => {
     () => getProject("ws_b", project.id),
     /Project not found/
   );
+});
+
+dbTest("deleteProject cancels active orchestrator runs before hiding the project", async () => {
+  const { project } = await createProject({ workspaceId: "ws_a", name: "A" });
+  const queued = await createOrchestratorRun({
+    projectId: project.id,
+    inputSummary: "Queued",
+    status: "queued",
+  });
+  const running = await createOrchestratorRun({
+    projectId: project.id,
+    inputSummary: "Running",
+    status: "running",
+  });
+  const waiting = await createOrchestratorRun({
+    projectId: project.id,
+    inputSummary: "Waiting",
+    status: "waiting",
+  });
+  const succeeded = await createOrchestratorRun({
+    projectId: project.id,
+    inputSummary: "Done",
+    status: "succeeded",
+  });
+
+  await deleteProject("ws_a", project.id);
+
+  await assert.rejects(() => getProject("ws_a", project.id), /Project not found/);
+  for (const run of [queued, running, waiting]) {
+    const after = await getOrchestratorRun(run.id);
+    assert.equal(after.status, "canceled");
+    assert.ok(after.completedAt);
+  }
+  assert.equal((await getOrchestratorRun(succeeded.id)).status, "succeeded");
 });
 
 dbTest("setBrief and createBriefVersion update the project", async () => {

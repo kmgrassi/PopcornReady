@@ -410,6 +410,25 @@ export function useCreateProjectMutation() {
   });
 }
 
+export function useDeleteProjectMutation(projectId: string) {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => v1Api.deleteProject(projectId),
+    meta: {
+      successMessage: "Project deleted",
+      errorMessage: "Could not delete project",
+    },
+    onSuccess: () => {
+      client.removeQueries({ queryKey: queryKeys.project(projectId) });
+      void client.invalidateQueries({ queryKey: ["projects"] });
+      void client.invalidateQueries({ queryKey: ["dashboard"] });
+      void client.invalidateQueries({ queryKey: ["workspaces"] });
+      void client.invalidateQueries({ queryKey: ["studio", "project"] });
+    },
+  });
+}
+
 export function useSetProjectPosterMutation(projectId: string) {
   const client = useQueryClient();
 
