@@ -479,7 +479,7 @@ function ProjectConcept({
             <dd>{stats.scenes}</dd>
           </div>
           <div>
-            <dt>Beats</dt>
+            <dt>Moments</dt>
             <dd>{stats.beats}</dd>
           </div>
         </dl>
@@ -546,7 +546,7 @@ function ProjectScript({
           ))}
         </ol>
       ) : (
-        <p className={styles.muted}>No script or narrated storyboard beats are ready yet.</p>
+        <p className={styles.muted}>No script or narrated storyboard moments are ready yet.</p>
       )}
     </section>
   );
@@ -671,7 +671,7 @@ function StoryboardPreview({
       <div className={styles.storyboardHeader}>
         <div>
           <span className={styles.eyebrow}>Storyboard</span>
-          <h2>Scenes and beats</h2>
+          <h2>Scenes</h2>
           <p>
             {storyboard
               ? "Review the visual plan scene by scene before the run moves into generated shots."
@@ -721,7 +721,7 @@ function StoryboardPreview({
       {!loading && !error && !storyboard && !generating ? (
         <EmptyState
           title="No storyboard yet"
-          body="Create storyboard scenes and beats from this project's current shot plan."
+          body="Create storyboard scenes from this project's current shot plan."
         />
       ) : null}
       {!loading && !error && storyboard ? (
@@ -736,7 +736,7 @@ function StoryboardPreview({
               <dd>{stats.scenes}</dd>
             </div>
             <div>
-              <dt>Beats</dt>
+              <dt>Moments</dt>
               <dd>{stats.beats}</dd>
             </div>
             <div>
@@ -781,7 +781,7 @@ function StoryboardPreview({
 
 function StoryboardBeatCard({ beat }: { beat: StoryboardBeat }) {
   const panel = selectedPanel(beat);
-  const label = `Beat ${beat.beatIndex + 1}`;
+  const label = `Moment ${beat.beatIndex + 1}`;
 
   return (
     <article className={styles.beatCard}>
@@ -817,7 +817,7 @@ function StoryboardGeneratingBanner({
           progress.failed > 0 ? ` · ${progress.failed} failed` : ""
         }`
       : hasStoryboard
-        ? "Preparing scenes and beats…"
+        ? "Preparing scenes…"
         : "Starting generation…";
 
   return (
