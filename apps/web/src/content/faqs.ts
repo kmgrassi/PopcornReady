@@ -25,6 +25,14 @@ export const FAQS: FaqItem[] = [
     placements: ["landing", "dashboard"],
     tags: ["pricing", "cost", "models"],
   },
+  {
+    id: "bring-your-own-videos",
+    question: "Can I bring my own videos?",
+    answer:
+      "Yes, absolutely. Popcorn Ready makes it easy to generate videos, but it is just as easy to use your own videos. You can bring existing footage and use the AI editing workflow to stitch those videos together into a finished piece.",
+    placements: ["landing", "dashboard"],
+    tags: ["uploads", "editing", "footage"],
+  },
 ];
 
 export function faqsForPlacement(placement: FaqPlacement): FaqItem[] {
