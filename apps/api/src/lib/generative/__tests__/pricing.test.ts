@@ -27,6 +27,24 @@ test("video cost is the per-model rate × seconds", () => {
   );
 });
 
+test("versioned snapshot models resolve to their base-model rate", () => {
+  // Dated snapshot of Sora 2 Pro must price at $0.50/s, not the OpenAI default.
+  assert.equal(
+    estimateCostUsd({ provider: "openai", kind: "video", model: "sora-2-pro-2025-10-06", durationSec: 8 }),
+    4
+  );
+  // A sora-2 snapshot resolves to sora-2 ($0.10/s), not the longer sora-2-pro key.
+  assert.equal(
+    estimateCostUsd({ provider: "openai", kind: "video", model: "sora-2-2025-10-06", durationSec: 8 }),
+    0.8
+  );
+  // Boundary guard: a different model that merely shares a prefix is not matched.
+  assert.equal(
+    estimateCostUsd({ provider: "openai", kind: "video", model: "sora-29", durationSec: 10 }),
+    1 // provider fallback ($0.10/s), not a sora-2 prefix hit
+  );
+});
+
 test("unknown/omitted model falls back to the provider video rate", () => {
   // No model → provider fallback (runway = $0.25/s).
   assert.equal(

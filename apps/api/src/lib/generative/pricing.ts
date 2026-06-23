@@ -114,14 +114,41 @@ function roundCents(usd: number): number {
   return Math.round(usd * 10000) / 10000;
 }
 
+// Look up a model rate, tolerating versioned snapshots. Providers ship dated
+// aliases (e.g. "sora-2-pro-2025-10-06") that share a base model's price but miss
+// an exact-key match; without this they'd fall back to the provider default and
+// underreport (Sora 2 Pro at $0.10/s instead of $0.50/s). So after an exact miss,
+// match the LONGEST base-model key that prefixes the id at a "-" boundary —
+// "sora-2-pro-2025-10-06" → "sora-2-pro" (not "sora-2").
+function rateForModel(
+  table: Record<string, number>,
+  model: string | undefined
+): number | undefined {
+  if (!model) return undefined;
+  if (model in table) return table[model];
+  let best: string | undefined;
+  for (const key of Object.keys(table)) {
+    if (model.startsWith(key) && model.charAt(key.length) === "-") {
+      if (best === undefined || key.length > best.length) best = key;
+    }
+  }
+  return best === undefined ? undefined : table[best];
+}
+
 function videoRatePerSec(input: CostEstimateInput): number {
-  const byModel = input.model ? VIDEO_USD_PER_SEC_BY_MODEL[input.model] : undefined;
-  return byModel ?? VIDEO_USD_PER_SEC_FALLBACK[input.provider] ?? 0;
+  return (
+    rateForModel(VIDEO_USD_PER_SEC_BY_MODEL, input.model) ??
+    VIDEO_USD_PER_SEC_FALLBACK[input.provider] ??
+    0
+  );
 }
 
 function imageRatePerGen(input: CostEstimateInput): number {
-  const byModel = input.model ? IMAGE_USD_PER_GEN_BY_MODEL[input.model] : undefined;
-  return byModel ?? IMAGE_USD_PER_GEN_FALLBACK[input.provider] ?? 0;
+  return (
+    rateForModel(IMAGE_USD_PER_GEN_BY_MODEL, input.model) ??
+    IMAGE_USD_PER_GEN_FALLBACK[input.provider] ??
+    0
+  );
 }
 
 export function estimateCostUsd(input: CostEstimateInput): number {
