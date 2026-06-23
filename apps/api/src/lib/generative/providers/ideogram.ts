@@ -13,6 +13,7 @@ import {
   readAsBlob,
   requirePrompt,
 } from "./shared";
+import { resolveProviderApiKey } from "@/lib/provider-keys/resolve";
 
 const IDEOGRAM_BASE_URL = "https://api.ideogram.ai";
 const IDEOGRAM_DEFAULT_IMAGE_MODEL: IdeogramImageModel = "ideogram-v4";
@@ -169,7 +170,7 @@ async function buildIdeogramForm(
 }
 
 async function ideogramFetch(pathName: string, init: RequestInit): Promise<Response> {
-  const apiKey = process.env.IDEOGRAM_API_KEY;
+  const apiKey = await resolveProviderApiKey("ideogram");
   if (!apiKey) throw new Error("IDEOGRAM_API_KEY is not set for the Ideogram provider.");
 
   const headers = new Headers(init.headers);

@@ -10,6 +10,7 @@ import {
   readAsDataUri,
   requirePrompt,
 } from "./shared";
+import { resolveProviderApiKey } from "@/lib/provider-keys/resolve";
 
 const DEFAULT_NVIDIA_VIDEO_GENERATION_BASE_URL =
   "https://ai.api.nvidia.com/v1/genai";
@@ -132,7 +133,7 @@ async function generateNvidiaCosmosVideo(
     { provider: "nvidia_api_catalog"; kind: "video" }
   >
 ): Promise<GeneratedAssetResult> {
-  const apiKey = process.env.NVIDIA_API_KEY;
+  const apiKey = await resolveProviderApiKey("nvidia");
   if (!apiKey) {
     throw new Error(
       "NVIDIA_API_KEY is not set for the NVIDIA API Catalog provider."

@@ -11,6 +11,7 @@ import {
   readAsDataUri,
   requirePrompt,
 } from "./shared";
+import { resolveProviderApiKey } from "@/lib/provider-keys/resolve";
 
 const RUNWAY_BASE_URL = "https://api.dev.runwayml.com/v1";
 const RUNWAY_API_VERSION = "2024-11-06";
@@ -38,12 +39,12 @@ function normalizeRunwayVideoSeconds(value?: number): number {
   return 10;
 }
 
-function runwayFetch(pathName: string, init: RequestInit): Promise<Response> {
+async function runwayFetch(pathName: string, init: RequestInit): Promise<Response> {
   return authedFetch({
     baseUrl: RUNWAY_BASE_URL,
     pathName,
     init,
-    apiKey: process.env.RUNWAYML_API_SECRET || process.env.RUNWAY_API_KEY,
+    apiKey: await resolveProviderApiKey("runway"),
     missingKeyMessage: "RUNWAYML_API_SECRET is not set for the Runway provider.",
     errorPrefix: "Runway",
     headers: { "X-Runway-Version": RUNWAY_API_VERSION },
