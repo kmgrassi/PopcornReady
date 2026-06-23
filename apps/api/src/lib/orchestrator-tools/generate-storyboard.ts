@@ -89,14 +89,17 @@ export function createGenerateStoryboardTool(
   return {
     name: "generate_storyboard",
     description:
-      "Generate a cheap sketch storyboard — one tile per planned beat — and persist it as the project's storyboard. Requires a plan first. Runs asynchronously.",
+      "Generate cheap sketch beat_storyboard tiles — one previsualization image per planned beat — and persist them as the project's storyboard. Requires a plan first. Runs asynchronously. Do not use this to satisfy a missing beat_keyframe; beat_keyframe first-frame assets come from generate_keyframe.",
     usage: {
       preconditions: ["An active shot plan exists (call plan_shots first)."],
       produces: [
-        "A cheap sketch storyboard — one tile per planned beat — persisted as the project's storyboard. Runs asynchronously (parks the run until the job completes).",
+        "Cheap sketch beat_storyboard tiles — one per planned beat — persisted as the project's storyboard. Runs asynchronously (parks the run until the job completes).",
+        "Selected beat_storyboard tiles that generate_keyframe can use as composition references.",
       ],
       useWhen: [
         "The plan (and any visual anchors) is ready and you need a low-cost previsualization before committing to expensive media generation.",
+        "generate_keyframe failed because selected beat_storyboard tiles are missing.",
+        "Do not use when generate_clip failed because beat_keyframe assets are missing; call generate_keyframe instead.",
       ],
     },
     inputSchema: generateStoryboardInputSchema,
