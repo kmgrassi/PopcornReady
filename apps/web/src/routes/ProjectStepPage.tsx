@@ -84,7 +84,7 @@ export function ProjectStepPage({ step }: { step: ProjectStep }) {
     try {
       await v1Api.createProjectAssetRevision(projectId, {
         message,
-        target: editTarget(activeEdit.item),
+        target: editTarget(activeEdit.item, project?.brief ?? null),
       });
       setSentLabel(activeEdit.item.label);
       setActiveEdit(null);
@@ -316,12 +316,16 @@ function Poster({ project }: { project: V1Project }) {
   );
 }
 
-function editTarget(item: FieldItem): BoardRevisionTarget {
+function editTarget(
+  item: FieldItem,
+  currentBrief: VideoBriefInput | null
+): BoardRevisionTarget {
   return {
     scope: item.scope,
     fieldId: item.id,
     label: item.label,
     currentValue: item.value ?? "",
+    ...(currentBrief ? { currentBrief } : {}),
     ...item.target,
   };
 }

@@ -742,6 +742,7 @@ export interface BoardRevisionTarget {
   itemId?: string;
   fieldId?: string;
   currentValue?: string;
+  currentBrief?: VideoBriefInput;
   storyboardId?: string;
   sceneId?: string;
   beatId?: string;

@@ -136,6 +136,9 @@ function parseBoardRevisionTarget(body: unknown, runId: string): BoardRevisionTa
     const value = optionalStringField(target, key);
     if (value) parsed[key] = value;
   }
+  if (isRecord(target.currentBrief)) {
+    parsed.currentBrief = target.currentBrief as unknown as BoardRevisionTarget["currentBrief"];
+  }
   return parsed;
 }
 
