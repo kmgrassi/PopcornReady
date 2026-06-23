@@ -93,6 +93,14 @@
   line-height: 1.42;
 }
 
+.loglineSentence {
+  margin: 0;
+}
+
+.loglineSentence + .loglineSentence {
+  margin-top: var(--space-4);
+}
+
 .promptActions {
   display: flex;
   align-items: center;
