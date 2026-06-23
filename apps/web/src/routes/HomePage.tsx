@@ -145,7 +145,7 @@ const PRICING = [
     name: "Self-host",
     price: "Free",
     cadence: "open source",
-    blurb: "Run the whole studio yourself. Bring your own model keys.",
+    blurb: "Run the whole studio yourself with your own infrastructure.",
     features: [
       "Full studio + editor",
       "Bring your own API keys",
@@ -156,31 +156,31 @@ const PRICING = [
     featured: false,
   },
   {
-    name: "Creator",
-    price: "$19",
-    cadence: "per month",
-    blurb: "Hosted rendering for solo creators shipping short-form video.",
+    name: "Free",
+    price: "Free",
+    cadence: "+ credits",
+    blurb: "Create an account, log in, and generate with our hosted model tokens.",
     features: [
-      "~30 finished videos / mo",
-      "Hosted rendering, no setup",
+      "No subscription required",
+      "Use hosted model tokens",
+      "Pay per credit as you generate",
       "1080p watermark-free export",
-      "1 workspace",
     ],
-    cta: { label: "View projects", href: "/library/projects", external: false },
+    cta: { label: "Start free", href: "/library/projects", external: false },
     featured: true,
   },
   {
-    name: "Pro",
-    price: "$49",
-    cadence: "per month",
-    blurb: "More volume, character consistency, and early API access.",
+    name: "Credits",
+    price: "$0.01",
+    cadence: "per credit",
+    blurb: "Top up only when you need hosted generation capacity.",
     features: [
-      "~150 finished videos / mo",
-      "Character consistency packs",
-      "Priority rendering + 4K export",
-      "Agent API preview",
+      "$10, $25, and $50 credit packs",
+      "Credits spend on hosted generation",
+      "Bring your own keys to avoid credit usage",
+      "No subscription commitment",
     ],
-    cta: { label: "View projects", href: "/library/projects", external: false },
+    cta: { label: "Buy credits", href: "/account", external: false },
     featured: false,
   },
   {
@@ -492,8 +492,8 @@ export function HomePage() {
         <Reveal>
           <LandingSection
             id="pricing"
-            title="Hosted pricing"
-            subtitle="Start free by self-hosting, or let us run the rendering for you."
+            title="Pricing"
+            subtitle="Self-host for free, or create an account and pay per credit when you use our hosted tokens."
           >
             <div className="lp-pricing">
               {PRICING.map((tier) => (
@@ -531,8 +531,8 @@ export function HomePage() {
               ))}
             </div>
             <p className={styles.pricingNote}>
-              Hosted pricing is indicative while we finalize launch tiers. Prefer
-              full control? Self-hosting is always free.
+              1 credit = $0.01 of hosted generation. Self-hosting and
+              bring-your-own-key generation do not spend credits.
             </p>
           </LandingSection>
         </Reveal>

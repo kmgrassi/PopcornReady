@@ -10,6 +10,21 @@ type AuthFormProps = {
   mode: "login" | "signup";
 };
 
+function postAuthRedirectPath(state: unknown): string {
+  if (
+    typeof state === "object" &&
+    state !== null &&
+    "from" in state &&
+    typeof state.from === "string" &&
+    state.from.startsWith("/") &&
+    !state.from.startsWith("//")
+  ) {
+    return state.from;
+  }
+
+  return "/dashboard";
+}
+
 export function AuthForm({ mode }: AuthFormProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -67,9 +82,15 @@ export function AuthForm({ mode }: AuthFormProps) {
       !quickStartResume.hasPending &&
       !quickStartResume.starting
     ) {
-      navigate("/dashboard", { replace: true });
+      navigate(postAuthRedirectPath(location.state), { replace: true });
     }
-  }, [navigate, quickStartResume.hasPending, quickStartResume.starting, status]);
+  }, [
+    location.state,
+    navigate,
+    quickStartResume.hasPending,
+    quickStartResume.starting,
+    status,
+  ]);
 
   useEffect(() => {
     if (!isSignup) {
@@ -203,7 +224,7 @@ export function AuthForm({ mode }: AuthFormProps) {
 
         <p className={styles.switch}>
           {isSignup ? "Already have an account?" : "Don't have an account?"}{" "}
-          <Link to={isSignup ? "/login" : "/signup"}>
+          <Link to={isSignup ? "/login" : "/signup"} state={location.state}>
             {isSignup ? "Sign in" : "Sign up"}
           </Link>
         </p>
