@@ -30,47 +30,80 @@ interface StageRailProps {
 }
 
 const VISIBLE_STAGES: Array<{
-  types: GenerationStageType[];
+  toolName: string;
+  type: GenerationStageType;
   label: string;
   description: string;
 }> = [
   {
-    types: ["brief_intake"],
+    toolName: "create_or_load_brief",
+    type: "brief_intake",
     label: "Concept",
     description: "Project goal, audience, and creative direction.",
   },
   {
-    types: ["creative_plan"],
-    label: "Brief",
-    description: "Structured generation brief ready for approval.",
+    toolName: "develop_story_blueprint",
+    type: "creative_plan",
+    label: "Story Structure",
+    description: "Premise, arc, characters, acts, and ending.",
   },
   {
-    types: ["storyboard"],
+    toolName: "draft_script",
+    type: "creative_plan",
     label: "Script",
     description: "Narrative beats, voiceover, and scene intent.",
   },
   {
-    types: ["storyboard"],
+    toolName: "plan_shots",
+    type: "creative_plan",
+    label: "Shot Plan",
+    description: "Scenes, beats, durations, and visual intent.",
+  },
+  {
+    toolName: "plan_visual_anchors",
+    type: "creative_plan",
+    label: "Continuity Plan",
+    description: "Reusable character, location, and style anchors.",
+  },
+  {
+    toolName: "generate_anchor",
+    type: "asset_generation",
+    label: "Anchor Images",
+    description: "Reference images for recurring subjects and locations.",
+  },
+  {
+    toolName: "generate_storyboard",
+    type: "storyboard",
     label: "Storyboard",
-    description: "Scene-by-scene visual plan.",
+    description: "Low-cost sketch frames for each planned beat.",
   },
   {
-    types: ["asset_generation"],
-    label: "Shots",
-    description: "Generated shot candidates and motion moments.",
+    toolName: "generate_keyframe",
+    type: "asset_generation",
+    label: "Keyframes",
+    description: "Photoreal first frames for planned beats.",
   },
   {
-    types: ["audio_generation", "asset_generation"],
-    label: "Assets",
-    description: "Images, clips, voice, and supporting media.",
+    toolName: "generate_clip",
+    type: "asset_generation",
+    label: "Clips",
+    description: "Motion clips generated from approved keyframes.",
   },
   {
-    types: ["timeline_assembly"],
+    toolName: "generate_audio",
+    type: "audio_generation",
+    label: "Audio",
+    description: "Voiceover, music, and supporting sound.",
+  },
+  {
+    toolName: "assemble_timeline",
+    type: "timeline_assembly",
     label: "Timeline",
     description: "Deterministic edit assembly.",
   },
   {
-    types: ["quality_review", "export"],
+    toolName: "export_video",
+    type: "export",
     label: "Final Render",
     description: "Quality pass and finished video render.",
   },
@@ -119,14 +152,16 @@ export function StageRail({
   stageLinks,
 }: StageRailProps) {
   const ordered = [...stages].sort((a, b) => a.order - b.order);
-  const stagesByType = new Map<GenerationStageType, GenerationStage[]>();
+  const stagesByTool = new Map<string, GenerationStage>();
+  const broadFallback = new Map<GenerationStageType, GenerationStage[]>();
   ordered.forEach((stage) => {
-    const existing = stagesByType.get(stage.type) ?? [];
+    if (stage.toolName) stagesByTool.set(stage.toolName, stage);
+    const existing = broadFallback.get(stage.type) ?? [];
     existing.push(stage);
-    stagesByType.set(stage.type, existing);
+    broadFallback.set(stage.type, existing);
   });
 
-  const occurrenceCounts = new Map<GenerationStageType, number>();
+  const fallbackCounts = new Map<GenerationStageType, number>();
   let nextQueuedShown = false;
   const hasExplicitRunningStage = stages.some((stage) => stage.status === "running");
   const inferCurrentStage =
@@ -135,29 +170,17 @@ export function StageRail({
   return (
     <ol className={styles.stageRail} aria-label="Generation stages">
       {VISIBLE_STAGES.map((visibleStage, idx) => {
-        const matchingStages = visibleStage.types.flatMap((type) => {
-          const occurrence = occurrenceCounts.get(type) ?? 0;
-          return (stagesByType.get(type) ?? []).slice(occurrence);
-        });
-        const stage =
-          matchingStages.find((candidate) => reviewGate?.stageId === candidate.stageId) ??
-          matchingStages.find((candidate) => candidate.status === "running") ??
-          matchingStages.find((candidate) => candidate.status === "failed") ??
-          matchingStages.find((candidate) => candidate.status === "queued") ??
-          matchingStages[0];
-        if (stage) {
-          occurrenceCounts.set(
-            stage.type,
-            (stagesByType.get(stage.type) ?? []).findIndex(
-              (candidate) => candidate.stageId === stage.stageId,
-            ) + 1,
-          );
+        let stage = stagesByTool.get(visibleStage.toolName);
+        if (!stage) {
+          const occurrence = fallbackCounts.get(visibleStage.type) ?? 0;
+          stage = (broadFallback.get(visibleStage.type) ?? [])[occurrence];
+          if (stage) fallbackCounts.set(visibleStage.type, occurrence + 1);
         }
         const isLast = idx === VISIBLE_STAGES.length - 1;
         const inferredRunning = Boolean(
           inferCurrentStage &&
-            stage?.type === inferCurrentStage &&
-            stage?.status === "queued",
+            visibleStage.type === inferCurrentStage &&
+            (!stage || stage.status === "queued"),
         );
         const status = inferredRunning ? "running" : stage?.status ?? "queued";
         const progressPercent = inferredRunning
@@ -169,8 +192,7 @@ export function StageRail({
           visibleStage.description;
         const awaitingReview = Boolean(stage && reviewGate?.stageId === stage.stageId);
         const statusKey = awaitingReview ? "review" : status;
-        const isRealQueuedStage = Boolean(stage && stage.status === "queued");
-        const isUpcoming = isRealQueuedStage && status === "queued" && !nextQueuedShown;
+        const isUpcoming = status === "queued" && !nextQueuedShown;
         if (isUpcoming) nextQueuedShown = true;
         const showStatus =
           awaitingReview ||

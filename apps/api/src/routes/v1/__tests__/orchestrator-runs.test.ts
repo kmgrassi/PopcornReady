@@ -205,7 +205,7 @@ test("projects a reached dynamic approval gate as a resolvable review gate", () 
   assert.deepEqual(qualityStage?.artifactIds, ["preview_1"]);
 });
 
-test("keeps unresolved tool failures within a grouped stage", () => {
+test("keeps sibling tool statuses separate within a broad stage", () => {
   const payload = projectRunDetailFromParts(
     runFixture({ status: "running" }),
     [],
@@ -229,10 +229,15 @@ test("keeps unresolved tool failures within a grouped stage", () => {
     ]
   );
 
-  const stage = payload.stages.find((candidate) => candidate.type === "asset_generation");
-  assert.equal(stage?.status, "failed");
-  assert.equal(stage?.error?.message, "Missing beat id.");
-  assert.deepEqual(stage?.artifactIds, ["clip_asset_1"]);
+  const keyframeStage = payload.stages.find(
+    (candidate) => candidate.toolName === "generate_keyframe"
+  );
+  const clipStage = payload.stages.find((candidate) => candidate.toolName === "generate_clip");
+  assert.equal(keyframeStage?.status, "failed");
+  assert.equal(keyframeStage?.error?.message, "Missing beat id.");
+  assert.deepEqual(keyframeStage?.artifactIds, []);
+  assert.equal(clipStage?.status, "succeeded");
+  assert.deepEqual(clipStage?.artifactIds, ["clip_asset_1"]);
 });
 
 test("projects stage item purpose metadata from orchestrator tools", () => {
@@ -275,6 +280,35 @@ test("projects stage item purpose metadata from orchestrator tools", () => {
       { kind: "video", purpose: "shot", assetId: "clip_asset_1" },
       { kind: "audio", purpose: "audio", assetId: "audio_asset_1" },
       { kind: "timeline", purpose: "timeline", assetId: "timeline_asset_1" },
+    ]
+  );
+});
+
+test("projects data-only tool outputs as non-visual stage items", () => {
+  const payload = projectRunDetailFromParts(
+    runFixture({ status: "running" }),
+    [],
+    [
+      actionFixture("create_or_load_brief", { outputAssetIds: ["brief_asset"] }),
+      actionFixture("develop_story_blueprint", { outputAssetIds: ["blueprint_asset"] }),
+      actionFixture("draft_script", { outputAssetIds: ["script_asset"] }),
+      actionFixture("plan_shots", { outputAssetIds: ["plan_asset"] }),
+      actionFixture("plan_visual_anchors", { outputAssetIds: ["anchor_plan_asset"] }),
+    ]
+  );
+
+  assert.deepEqual(
+    payload.stageItems.map((item) => ({
+      kind: item.kind,
+      purpose: item.purpose,
+      assetId: item.assetId,
+    })),
+    [
+      { kind: "caption", purpose: "brief", assetId: "brief_asset" },
+      { kind: "caption", purpose: "plan", assetId: "blueprint_asset" },
+      { kind: "caption", purpose: "plan", assetId: "script_asset" },
+      { kind: "caption", purpose: "plan", assetId: "plan_asset" },
+      { kind: "caption", purpose: "plan", assetId: "anchor_plan_asset" },
     ]
   );
 });

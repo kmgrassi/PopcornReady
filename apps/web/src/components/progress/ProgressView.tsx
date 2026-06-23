@@ -64,7 +64,7 @@ function isTerminal(status: GenerationRun["status"]): boolean {
   return status === "succeeded" || status === "failed" || status === "canceled";
 }
 
-const VISIBLE_STAGE_COUNT = 8;
+const VISIBLE_STAGE_COUNT = 12;
 
 const ORDERED_STAGE_TYPES = Object.entries(GENERATION_STAGE_ORDER)
   .sort(([, a], [, b]) => a - b)
@@ -84,14 +84,14 @@ const REVIEW_STAGE_LABELS: Record<GenerationStageType, string> = {
 
 const VISIBLE_STAGE_INDEX: Record<GenerationStageType, number> = {
   brief_intake: 1,
-  creative_plan: 2,
-  storyboard: 4,
-  asset_generation: 6,
-  audio_generation: 6,
-  timeline_assembly: 7,
-  quality_review: 8,
-  export: 8,
-  ready: 8,
+  creative_plan: 5,
+  storyboard: 7,
+  asset_generation: 9,
+  audio_generation: 10,
+  timeline_assembly: 11,
+  quality_review: 12,
+  export: 12,
+  ready: 12,
 };
 
 function shortId(id: string): string {
@@ -281,6 +281,10 @@ function splitStoryboardItems(
   return { boardItems, genericItems };
 }
 
+function isVisibleGeneratedItem(item: GenerationStageItem): boolean {
+  return item.kind !== "caption";
+}
+
 function BriefReviewOutput({
   brief,
   loading,
@@ -451,11 +455,15 @@ export function ProgressView({
 
   const terminal = isTerminal(detail.run.status);
   const reviewItems = detail.run.reviewGate
-    ? detail.stageItems.filter((item) => item.stageId === detail.run.reviewGate?.stageId)
+    ? detail.stageItems
+        .filter((item) => item.stageId === detail.run.reviewGate?.stageId)
+        .filter(isVisibleGeneratedItem)
     : [];
   const generatedItems = detail.run.reviewGate
-    ? detail.stageItems.filter((item) => item.stageId !== detail.run.reviewGate?.stageId)
-    : detail.stageItems;
+    ? detail.stageItems
+        .filter((item) => item.stageId !== detail.run.reviewGate?.stageId)
+        .filter(isVisibleGeneratedItem)
+    : detail.stageItems.filter(isVisibleGeneratedItem);
   const stageById = new Map(detail.stages.map((stage) => [stage.stageId, stage]));
   const reviewOutputGroups = splitStoryboardItems(reviewItems, stageById);
   const generatedOutputGroups = splitStoryboardItems(generatedItems, stageById);
@@ -494,8 +502,11 @@ export function ProgressView({
   const progress = progressSummary(detail.run, detail.stages);
   const nextType = nextStageType(detail.run, detail.stages);
   const nextStageLabel = nextType ? reviewStageLabel(nextType) : null;
+  const activeStage = currentRunStage(detail.run, detail.stages);
   const currentStageLabel = detail.run.reviewGate
     ? reviewStageLabel(detail.run.reviewGate.stageType)
+    : activeStage?.label
+      ? activeStage.label
     : detail.run.currentStageType
       ? reviewStageLabel(detail.run.currentStageType)
       : "Final render";

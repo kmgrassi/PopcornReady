@@ -674,6 +674,7 @@ export interface GenerationStage {
   stageId: string;
   runId: string;
   type: GenerationStageType;
+  toolName?: string;
   label: string;
   order: number;
   status: GenerationRunStatus;
