@@ -276,6 +276,7 @@ function StudioFlowView({
   openPanel?: string;
 }) {
   const navigate = useNavigate();
+  const [isRedirectingToRun, setIsRedirectingToRun] = useState(false);
   const flow = useStudioFlow({
     initialBrief,
     draftId: draftId === LOCAL_DRAFT_ID ? undefined : draftId,
@@ -287,6 +288,22 @@ function StudioFlowView({
   useEffect(() => {
     if (initialStep) goToStep(initialStep);
   }, [goToStep, initialStep]);
+
+  if (isRedirectingToRun) {
+    return (
+      <main className={styles.shell}>
+        <StudioStepper step="plan" />
+        <section className={styles.redirecting}>
+          <p className={styles.workspaceEyebrow}>Starting run</p>
+          <h2 className={styles.generatingHeading}>Opening project runs</h2>
+          <p className="muted">
+            Production is starting in the background. The run progress page will
+            take over when the project is ready.
+          </p>
+        </section>
+      </main>
+    );
+  }
 
   if (flow.state === "generating") {
     const runStatus = flow.run?.status ?? "queued";
@@ -393,6 +410,7 @@ function StudioFlowView({
               }`,
             );
           }}
+          onGenerationRedirectingChange={setIsRedirectingToRun}
         />
       </section>
     </main>
@@ -404,11 +422,13 @@ function ActiveStep({
   flow,
   openPanel,
   onGenerationStarted,
+  onGenerationRedirectingChange,
 }: {
   step: StudioStep;
   flow: ReturnType<typeof useStudioFlow>;
   openPanel?: string;
   onGenerationStarted?: (projectId: string, runId: string) => void;
+  onGenerationRedirectingChange?: (isRedirecting: boolean) => void;
 }) {
   const stepProps = {
     draft: flow.brief,
@@ -434,8 +454,14 @@ function ActiveStep({
           {...stepProps}
           error={flow.error}
           onGenerate={async () => {
-            const result = await flow.startGeneration();
-            onGenerationStarted?.(result.projectId, result.runId);
+            onGenerationRedirectingChange?.(true);
+            try {
+              const result = await flow.startGeneration();
+              onGenerationStarted?.(result.projectId, result.runId);
+            } catch (error) {
+              onGenerationRedirectingChange?.(false);
+              throw error;
+            }
           }}
           onEditBrief={() => flow.goTo("brief")}
           onEditFootage={() => flow.goTo("footage")}

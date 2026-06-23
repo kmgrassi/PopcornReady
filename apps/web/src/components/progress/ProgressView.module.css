@@ -273,10 +273,6 @@
   padding: var(--space-5);
 }
 
-.activeRunCard {
-  padding: var(--space-5);
-}
-
 .assetsCard {
   min-height: 180px;
 }
@@ -387,14 +383,6 @@
   line-height: var(--line-heading);
 }
 
-.activeRunMessage {
-  margin: var(--space-2) 0 0;
-  color: var(--muted);
-  font-size: var(--text-md);
-  line-height: var(--line-caption);
-}
-
-.actions,
 .reviewActionRow {
   display: flex;
   align-items: center;
