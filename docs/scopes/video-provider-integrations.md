@@ -16,6 +16,41 @@ Popcorn Ready already has working provider paths for Google Veo through Gemini
 and OpenAI Sora. This scope tracks how to integrate the rest without hiding
 provider-specific constraints.
 
+## Provider URL Index
+
+### Google Veo / Gemini API
+
+- Veo video generation docs: https://ai.google.dev/gemini-api/docs/video
+- Google AI Studio Veo page: https://aistudio.google.com/models/veo-3
+
+### Kling / Kuaishou
+
+- Kling API overview: https://kling.ai/document-api/quickStart/productIntroduction/overview
+- Kling quick start: https://kling.ai/document-api/guides/get-started/quick-start
+- Kling video models reference: https://kling.ai/document-api/apiReference/model/videoModels
+- Kling Omni video generation reference: https://kling.ai/document-api/apiReference/model/OmniVideo
+
+### Seedance 2.0 / ByteDance
+
+- Seedance 2.0 official model page: https://seed.bytedance.com/en/seedance2_0
+- Seedance 2.0 official launch post: https://seed.bytedance.com/en/blog/official-launch-of-seedance-2-0
+- BytePlus Seedance product/API access page: https://www.byteplus.com/en/product/seedance
+- Seedance 2.0 on Replicate: https://replicate.com/bytedance/seedance-2.0
+- Seedance 2.0 Replicate API page: https://replicate.com/bytedance/seedance-2.0/api
+- Seedance 2.0 on fal.ai: https://fal.ai/seedance-2.0
+- fal.ai Seedance 2.0 API docs repository: https://github.com/fal-ai/seedance-2.0-api
+
+Note: first-party global access is less settled than Google or Kling. Treat
+fal.ai, Replicate, and BytePlus as candidate access paths until this project has
+a confirmed direct ByteDance contract and API surface.
+
+### xAI Grok Imagine
+
+- xAI developer docs overview: https://docs.x.ai/overview
+- xAI Imagine API overview: https://docs.x.ai/developers/model-capabilities/imagine
+- xAI video generation docs: https://docs.x.ai/developers/model-capabilities/video/generation
+- xAI Grok Imagine API announcement: https://x.ai/news/grok-imagine-api
+
 ## Implemented In This Pass
 
 ### Runway
