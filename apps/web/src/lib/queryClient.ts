@@ -124,6 +124,10 @@ export const queryClient = new QueryClient({
 
 export const queryKeys = {
   me: (authScope: string) => ["me", authScope] as const,
+  credits: (authScope: string) => ["credits", authScope] as const,
+  creditTransactions: (authScope: string) =>
+    ["credits", authScope, "transactions"] as const,
+  creditPacks: () => ["credits", "packs"] as const,
   providerApiKeys: (authScope: string) => ["provider-api-keys", authScope] as const,
   workspaceModelSettings: (workspaceId: string) =>
     ["workspaces", workspaceId, "model-settings"] as const,
@@ -242,6 +246,65 @@ export function useMeQuery(
     queryKey: queryKeys.me(authScope),
     queryFn: () => v1Api.me(),
     ...options,
+  });
+}
+
+export function useCreditsQuery(
+  authScope: string,
+  options: Omit<
+    UseQueryOptions<
+      Awaited<ReturnType<typeof v1Api.getCredits>>,
+      Error,
+      Awaited<ReturnType<typeof v1Api.getCredits>>,
+      ReturnType<typeof queryKeys.credits>
+    >,
+    "queryKey" | "queryFn"
+  > = {},
+) {
+  return useQuery({
+    queryKey: queryKeys.credits(authScope),
+    queryFn: () => v1Api.getCredits(),
+    ...options,
+  });
+}
+
+export function useCreditTransactionsQuery(
+  authScope: string,
+  options: Omit<
+    UseQueryOptions<
+      Awaited<ReturnType<typeof v1Api.getCreditTransactions>>,
+      Error,
+      Awaited<ReturnType<typeof v1Api.getCreditTransactions>>,
+      ReturnType<typeof queryKeys.creditTransactions>
+    >,
+    "queryKey" | "queryFn"
+  > = {},
+) {
+  return useQuery({
+    queryKey: queryKeys.creditTransactions(authScope),
+    queryFn: () => v1Api.getCreditTransactions(),
+    ...options,
+  });
+}
+
+export function useCreditPacksQuery() {
+  return useQuery({
+    queryKey: queryKeys.creditPacks(),
+    queryFn: () => v1Api.getCreditPacks(),
+    staleTime: 60 * 60 * 1000,
+  });
+}
+
+// Starts Stripe Checkout and redirects the browser to the hosted page.
+export function useBuyCreditsMutation() {
+  return useMutation({
+    mutationFn: async (pack: string) => {
+      const { url } = await v1Api.createCreditCheckout(pack);
+      if (!url) throw new Error("Checkout is not available.");
+      window.location.assign(url);
+      return url;
+    },
+    meta: { errorMessage: "Could not start checkout" },
   });
 }
 

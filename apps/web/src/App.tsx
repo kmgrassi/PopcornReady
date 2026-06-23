@@ -27,6 +27,7 @@ import { ProjectWatchPage } from "./routes/ProjectWatchPage";
 import { PublicProjectPage } from "./routes/PublicProjectPage";
 import { SignupPage } from "./routes/SignupPage";
 import { SpritePage } from "./routes/SpritePage";
+import { AccountPage } from "./routes/AccountPage";
 import { SettingsPage } from "./routes/SettingsPage";
 import { TemplatesPage } from "./routes/TemplatesPage";
 import { UploadsPage } from "./routes/UploadsPage";
@@ -79,6 +80,7 @@ export function App() {
             path="/projects/:projectId/:section"
             element={<ProjectDetailPage />}
           />
+          <Route path="/account" element={<AccountPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/faq" element={<FaqPage />} />
           <Route path="/dev/design-system" element={<DesignSystemPage />} />

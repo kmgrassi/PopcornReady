@@ -616,8 +616,53 @@ function publicAssetToWorkspaceAsset(asset: DiscoverAsset): WorkspaceAsset {
   };
 }
 
+export interface CreditsBalance {
+  balanceCredits: number | null;
+  creditValueUsd: number;
+  isLocal?: boolean;
+}
+
+export interface CreditTransaction {
+  id: string;
+  deltaCredits: number;
+  reason: "signup_grant" | "purchase" | "generation_debit" | "refund" | "adjustment";
+  balanceAfter: number;
+  costUsd: number | null;
+  createdAt: string;
+}
+
+export interface CreditTransactionsResponse {
+  transactions: CreditTransaction[];
+}
+
+export interface CreditPack {
+  id: string;
+  usd: number;
+  credits: number;
+}
+
+export interface CreditPacksResponse {
+  packs: CreditPack[];
+  creditValueUsd: number;
+}
+
+export interface CreditCheckoutResponse {
+  url: string | null;
+}
+
 export const v1Api = {
   me: () => apiRequest<MeResponse>("/api/v1/me"),
+  getCredits: () => apiRequest<CreditsBalance>("/api/v1/credits"),
+  getCreditTransactions: (limit = 50) =>
+    apiRequest<CreditTransactionsResponse>("/api/v1/credits/transactions", {
+      searchParams: { limit },
+    }),
+  getCreditPacks: () => apiRequest<CreditPacksResponse>("/api/v1/credits/packs"),
+  createCreditCheckout: (pack: string) =>
+    apiRequest<CreditCheckoutResponse>("/api/v1/credits/checkout", {
+      method: "POST",
+      body: { pack },
+    }),
   preflightAnonymousAccountUpgrade: (email: string) =>
     apiRequest<AccountMutationResponse>("/api/v1/account/anonymous-upgrade-preflight", {
       method: "POST",
