@@ -27,7 +27,7 @@ export const FAQS: FaqItem[] = [
     id: "approximate-cost",
     question: "Approximately how much does it cost?",
     answer:
-      "The approximate model cost is 30 to 50 cents per minute of finished video at the expensive end. Videos may also use audio or image generation, and those pieces usually cost less. Users can bring their own API keys, or Popcorn Ready can charge per token or usage unit through our own connections to third-party models.",
+      "The approximate model cost for high-end video generation can be 30 to 50 cents per second of finished video. Videos may also use audio or image generation, and those pieces usually cost less. Users can bring their own API keys, or Popcorn Ready can charge per token or usage unit through our own connections to third-party models.",
     placements: ["landing", "dashboard"],
     tags: ["pricing", "cost", "models"],
   },
@@ -43,7 +43,7 @@ export const FAQS: FaqItem[] = [
     id: "full-length-one-shot",
     question: "Can this really generate a full-length video in one shot?",
     answer:
-      "It depends what you mean by full length. If you mean a feature-length 90-minute movie, probably not in one shot. Human taste is still very important, and you will likely need to edit a lot of things along the way. The idea is that Popcorn Ready makes that easier by letting you tell the AI what to do. Instead of manually chopping up audio and video in editing software and stitching everything together yourself, the AI can handle that work for you, while you still bring your taste and direction to the table.",
+      "It depends what you mean by full length. If you mean a feature-length 90-minute movie, probably not in one shot. Human taste is still very important, and you will likely need to edit a lot of things along the way. It is also cost-prohibitive right now: at roughly 50 cents per second, generating a full-length video movie could cost more than $2,000 in model usage. The idea is that Popcorn Ready makes shorter-form creation and longer-form iteration easier by letting you tell the AI what to do. Instead of manually chopping up audio and video in editing software and stitching everything together yourself, the AI can handle that work for you, while you still bring your taste and direction to the table.",
     placements: ["landing", "dashboard"],
     tags: ["limits", "long-form", "editing", "workflow"],
   },
