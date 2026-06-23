@@ -64,7 +64,7 @@ function isTerminal(status: GenerationRun["status"]): boolean {
   return status === "succeeded" || status === "failed" || status === "canceled";
 }
 
-const VISIBLE_STAGE_COUNT = 12;
+const VISIBLE_STAGE_COUNT = 8;
 
 const ORDERED_STAGE_TYPES = Object.entries(GENERATION_STAGE_ORDER)
   .sort(([, a], [, b]) => a - b)
@@ -84,14 +84,14 @@ const REVIEW_STAGE_LABELS: Record<GenerationStageType, string> = {
 
 const VISIBLE_STAGE_INDEX: Record<GenerationStageType, number> = {
   brief_intake: 1,
-  creative_plan: 5,
-  storyboard: 7,
-  asset_generation: 9,
-  audio_generation: 10,
-  timeline_assembly: 11,
-  quality_review: 12,
-  export: 12,
-  ready: 12,
+  creative_plan: 3,
+  storyboard: 4,
+  asset_generation: 5,
+  audio_generation: 6,
+  timeline_assembly: 7,
+  quality_review: 8,
+  export: 8,
+  ready: 8,
 };
 
 function shortId(id: string): string {

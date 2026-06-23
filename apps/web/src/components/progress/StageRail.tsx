@@ -29,85 +29,86 @@ interface StageRailProps {
   stageLinks?: Partial<Record<string, string>>;
 }
 
-const VISIBLE_STAGES: Array<{
-  toolName: string;
+const PIPELINE_GROUPS: Array<{
+  id: string;
   type: GenerationStageType;
   label: string;
   description: string;
+  tools: string[];
 }> = [
   {
-    toolName: "create_or_load_brief",
+    id: "concept",
     type: "brief_intake",
     label: "Concept",
     description: "Project goal, audience, and creative direction.",
+    tools: ["create_or_load_brief"],
   },
   {
-    toolName: "develop_story_blueprint",
+    id: "brief",
     type: "creative_plan",
-    label: "Story Structure",
-    description: "Premise, arc, characters, acts, and ending.",
+    label: "Brief",
+    description: "Story structure, shot plan, and continuity direction.",
+    tools: ["develop_story_blueprint", "plan_shots", "plan_visual_anchors"],
   },
   {
-    toolName: "draft_script",
+    id: "script",
     type: "creative_plan",
     label: "Script",
     description: "Narrative beats, voiceover, and scene intent.",
+    tools: ["draft_script"],
   },
   {
-    toolName: "plan_shots",
-    type: "creative_plan",
-    label: "Shot Plan",
-    description: "Scenes, beats, durations, and visual intent.",
-  },
-  {
-    toolName: "plan_visual_anchors",
-    type: "creative_plan",
-    label: "Continuity Plan",
-    description: "Reusable character, location, and style anchors.",
-  },
-  {
-    toolName: "generate_anchor",
-    type: "asset_generation",
-    label: "Anchor Images",
-    description: "Reference images for recurring subjects and locations.",
-  },
-  {
-    toolName: "generate_storyboard",
+    id: "storyboard",
     type: "storyboard",
     label: "Storyboard",
     description: "Low-cost sketch frames for each planned beat.",
+    tools: ["generate_storyboard"],
   },
   {
-    toolName: "generate_keyframe",
+    id: "shots",
     type: "asset_generation",
-    label: "Keyframes",
-    description: "Photoreal first frames for planned beats.",
+    label: "Shots",
+    description: "Reference images, keyframes, and generated clips.",
+    tools: ["generate_anchor", "generate_keyframe", "generate_clip"],
   },
   {
-    toolName: "generate_clip",
-    type: "asset_generation",
-    label: "Clips",
-    description: "Motion clips generated from approved keyframes.",
-  },
-  {
-    toolName: "generate_audio",
+    id: "assets",
     type: "audio_generation",
-    label: "Audio",
-    description: "Voiceover, music, and supporting sound.",
+    label: "Assets",
+    description: "Voiceover, music, and supporting media.",
+    tools: ["generate_audio"],
   },
   {
-    toolName: "assemble_timeline",
+    id: "timeline",
     type: "timeline_assembly",
     label: "Timeline",
     description: "Deterministic edit assembly.",
+    tools: ["assemble_timeline"],
   },
   {
-    toolName: "export_video",
+    id: "final-render",
     type: "export",
     label: "Final Render",
     description: "Quality pass and finished video render.",
+    tools: ["critique_timeline", "export_video"],
   },
 ];
+
+const TOOL_LABELS: Record<string, string> = {
+  create_or_load_brief: "Create/load brief",
+  develop_story_blueprint: "Develop story blueprint",
+  draft_script: "Draft script",
+  plan_shots: "Plan shots",
+  plan_visual_anchors: "Plan visual anchors",
+  generate_anchor: "Generate anchor images",
+  generate_storyboard: "Generate storyboard",
+  generate_keyframe: "Generate keyframes",
+  generate_clip: "Generate clips",
+  generate_audio: "Generate audio",
+  assemble_timeline: "Assemble timeline",
+  critique_timeline: "Critique timeline",
+  export_video: "Export video",
+};
 
 const STATUS_LABEL: Record<GenerationRunStatus | "review", string> = {
   queued: "Upcoming",
@@ -140,6 +141,31 @@ function LoadingDot() {
   return <span className={styles.inlineSpinner} aria-hidden="true" />;
 }
 
+function statusPriority(status: GenerationRunStatus): number {
+  if (status === "failed") return 5;
+  if (status === "running") return 4;
+  if (status === "canceled") return 3;
+  if (status === "succeeded") return 2;
+  return 1;
+}
+
+function groupedStatus(stages: GenerationStage[]): GenerationRunStatus {
+  if (stages.length === 0) return "queued";
+  return stages.reduce<GenerationRunStatus>(
+    (current, stage) =>
+      statusPriority(stage.status) > statusPriority(current) ? stage.status : current,
+    "queued",
+  );
+}
+
+function latestStage(stages: GenerationStage[]): GenerationStage | undefined {
+  return [...stages].sort((a, b) => a.order - b.order).at(-1);
+}
+
+function toolLabel(toolName: string): string {
+  return TOOL_LABELS[toolName] ?? toolName;
+}
+
 export function StageRail({
   stages,
   runStatus,
@@ -163,34 +189,46 @@ export function StageRail({
 
   const fallbackCounts = new Map<GenerationStageType, number>();
   let nextQueuedShown = false;
+  let inferredRunningShown = false;
   const hasExplicitRunningStage = stages.some((stage) => stage.status === "running");
   const inferCurrentStage =
     runStatus === "running" && !reviewGate && !hasExplicitRunningStage && currentStageType;
 
   return (
     <ol className={styles.stageRail} aria-label="Generation stages">
-      {VISIBLE_STAGES.map((visibleStage, idx) => {
-        let stage = stagesByTool.get(visibleStage.toolName);
-        if (!stage) {
+      {PIPELINE_GROUPS.map((visibleStage, idx) => {
+        let groupStages = visibleStage.tools
+          .map((toolName) => stagesByTool.get(toolName))
+          .filter((stage): stage is GenerationStage => Boolean(stage));
+        if (groupStages.length === 0) {
           const occurrence = fallbackCounts.get(visibleStage.type) ?? 0;
-          stage = (broadFallback.get(visibleStage.type) ?? [])[occurrence];
-          if (stage) fallbackCounts.set(visibleStage.type, occurrence + 1);
+          const fallback = (broadFallback.get(visibleStage.type) ?? [])[occurrence];
+          if (fallback) {
+            groupStages = [fallback];
+            fallbackCounts.set(visibleStage.type, occurrence + 1);
+          }
         }
-        const isLast = idx === VISIBLE_STAGES.length - 1;
+        const stage = latestStage(groupStages);
+        const baseStatus = groupedStatus(groupStages);
         const inferredRunning = Boolean(
           inferCurrentStage &&
             visibleStage.type === inferCurrentStage &&
-            (!stage || stage.status === "queued"),
+            !inferredRunningShown &&
+            baseStatus === "queued",
         );
-        const status = inferredRunning ? "running" : stage?.status ?? "queued";
+        if (inferredRunning) inferredRunningShown = true;
+        const isLast = idx === PIPELINE_GROUPS.length - 1;
+        const runningStage = groupStages.find((candidate) => candidate.status === "running");
+        const failedStage = groupStages.find((candidate) => candidate.status === "failed");
+        const status = inferredRunning ? "running" : baseStatus;
         const progressPercent = inferredRunning
           ? runProgressPercent
-          : stage?.progressPercent;
+          : runningStage?.progressPercent ?? stage?.progressPercent;
         const message =
-          stage?.error?.message ??
-          (inferredRunning ? runMessage : stage?.message) ??
+          failedStage?.error?.message ??
+          (inferredRunning ? runMessage : runningStage?.message) ??
           visibleStage.description;
-        const awaitingReview = Boolean(stage && reviewGate?.stageId === stage.stageId);
+        const awaitingReview = groupStages.some((candidate) => reviewGate?.stageId === candidate.stageId);
         const statusKey = awaitingReview ? "review" : status;
         const isUpcoming = status === "queued" && !nextQueuedShown;
         if (isUpcoming) nextQueuedShown = true;
@@ -251,6 +289,30 @@ export function StageRail({
                     style={{ width: `${Math.max(2, Math.min(100, progressPercent))}%` }}
                   />
                 </div>
+              ) : null}
+              {groupStages.length > 0 ? (
+                <details
+                  className={styles.stageToolDetails}
+                  open={status === "running" || status === "failed" || awaitingReview}
+                >
+                  <summary>Tool activity</summary>
+                  <ul className={styles.stageToolList}>
+                    {visibleStage.tools.map((toolName) => {
+                      const toolStage = stagesByTool.get(toolName);
+                      const toolStatus = toolStage?.status ?? "queued";
+                      return (
+                        <li className={styles.stageToolRow} key={toolName}>
+                          <span className={styles.stageToolName}>{toolLabel(toolName)}</span>
+                          <span
+                            className={`${styles.stageToolStatus} ${styles[`stageStatus_${toolStatus}`]}`}
+                          >
+                            {STATUS_LABEL[toolStatus]}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </details>
               ) : null}
               {isUpcoming && stopAction ? (
                 <div className={styles.stageControlRow}>
