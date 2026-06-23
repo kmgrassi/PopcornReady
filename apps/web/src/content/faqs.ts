@@ -33,6 +33,14 @@ export const FAQS: FaqItem[] = [
     placements: ["landing", "dashboard"],
     tags: ["uploads", "editing", "footage"],
   },
+  {
+    id: "full-length-one-shot",
+    question: "Can this really generate a full-length video in one shot?",
+    answer:
+      "It depends what you mean by full length. If you mean a feature-length 90-minute movie, probably not in one shot. Human taste is still very important, and you will likely need to edit a lot of things along the way. The idea is that Popcorn Ready makes that easier by letting you tell the AI what to do. Instead of manually chopping up audio and video in editing software and stitching everything together yourself, the AI can handle that work for you, while you still bring your taste and direction to the table.",
+    placements: ["landing", "dashboard"],
+    tags: ["limits", "long-form", "editing", "workflow"],
+  },
 ];
 
 export function faqsForPlacement(placement: FaqPlacement): FaqItem[] {
