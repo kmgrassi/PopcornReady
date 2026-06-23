@@ -3,7 +3,9 @@ import { Link, Navigate, useLocation, useNavigate, useParams } from "react-route
 import type {
   GenerationRun,
   ProjectStoryboard,
+  StoryboardBeat,
   StoryboardPanel,
+  StoryboardScene,
   V1Project,
   VideoBriefInput,
 } from "@popcorn/shared/v1/types";
@@ -184,6 +186,8 @@ export function ProjectDetailPage() {
             <section className={styles.projectTopLayout}>
               <div className={styles.projectPrimaryColumn}>
                 <ProjectConcept project={project} storyboard={storyboard} />
+              </div>
+              <div className={styles.projectStoryboardColumn}>
                 <StoryboardPreview
                   projectId={projectId}
                   storyboard={storyboard}
@@ -201,10 +205,10 @@ export function ProjectDetailPage() {
                     });
                   }}
                 />
-              </div>
-              <div className={styles.projectTopRail}>
-                <ProjectBrief project={project} />
-                <ProjectScript project={project} storyboard={storyboard} />
+                <div className={styles.projectContextGrid}>
+                  <ProjectBrief project={project} />
+                  <ProjectScript project={project} storyboard={storyboard} />
+                </div>
               </div>
             </section>
             <RunsPreview
@@ -657,16 +661,25 @@ function StoryboardPreview({
   onGenerate: () => void;
 }) {
   const stats = storyboardStats(storyboard);
-  const panels = firstPanels(storyboard, 4);
+  const scenes = orderedScenes(storyboard);
+  const hasPreviewBeats = storyboard
+    ? scenes.some((scene) => orderedBeats(scene).length > 0)
+    : false;
 
   return (
-    <section className={styles.panel} id="storyboard">
-      <div className={styles.sectionHeader}>
+    <section className={`${styles.panel} ${styles.storyboardFeature}`} id="storyboard">
+      <div className={styles.storyboardHeader}>
         <div>
           <span className={styles.eyebrow}>Storyboard</span>
           <h2>Scenes and beats</h2>
+          <p>
+            {storyboard
+              ? "Review the visual plan scene by scene before the run moves into generated shots."
+              : "Create a visual plan from the current project concept."}
+          </p>
         </div>
-        <div className={styles.sectionHeaderActions}>
+        <div className={styles.storyboardHeaderActions}>
+          {storyboard ? <StatusChip status={storyboard.status} /> : null}
           {storyboard ? (
             <ButtonLink
               variant="ghost"
@@ -713,7 +726,7 @@ function StoryboardPreview({
       ) : null}
       {!loading && !error && storyboard ? (
         <>
-          <dl className={styles.storyStats}>
+          <dl className={styles.storyStats} aria-label="Storyboard summary">
             <div>
               <dt>Status</dt>
               <dd>{titleCase(storyboard.status)}</dd>
@@ -731,11 +744,31 @@ function StoryboardPreview({
               <dd>{stats.panels}</dd>
             </div>
           </dl>
-          {panels.length > 0 ? (
-            <div className={styles.panelGrid}>
-              {panels.map((panel) => (
-                <StoryboardPanelThumb panel={panel} key={panel.id} />
-              ))}
+          {hasPreviewBeats ? (
+            <div className={styles.storyboardBoard}>
+              {scenes.map((scene) => {
+                const beats = orderedBeats(scene);
+                if (beats.length === 0) return null;
+                return (
+                  <article className={styles.sceneGroup} key={scene.id}>
+                    <header className={styles.sceneHeader}>
+                      <div>
+                        <span>Scene {scene.sceneIndex + 1}</span>
+                        <h3>{scene.title ?? scene.summary ?? "Untitled scene"}</h3>
+                      </div>
+                      {scene.durationSec ? (
+                        <strong>{formatDuration(scene.durationSec)}</strong>
+                      ) : null}
+                    </header>
+                    {scene.summary ? <p className={styles.sceneSummary}>{scene.summary}</p> : null}
+                    <div className={styles.beatGrid}>
+                      {beats.map((beat) => (
+                        <StoryboardBeatCard beat={beat} key={beat.id} />
+                      ))}
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           ) : !generating ? (
             <p className={styles.muted}>Storyboard structure exists, but no panel images are ready yet.</p>
@@ -743,6 +776,31 @@ function StoryboardPreview({
         </>
       ) : null}
     </section>
+  );
+}
+
+function StoryboardBeatCard({ beat }: { beat: StoryboardBeat }) {
+  const panel = selectedPanel(beat);
+  const label = `Beat ${beat.beatIndex + 1}`;
+
+  return (
+    <article className={styles.beatCard}>
+      {panel ? (
+        <StoryboardPanelThumb panel={panel} label={label} />
+      ) : (
+        <div className={`${styles.storyImage} ${styles.storyImageEmpty}`}>
+          <span>{titleCase(beat.status)}</span>
+        </div>
+      )}
+      <div className={styles.beatBody}>
+        <div className={styles.beatMeta}>
+          <span>{label}</span>
+          {beat.durationSec ? <span>{formatDuration(beat.durationSec)}</span> : null}
+        </div>
+        <h4>{beat.intent}</h4>
+        {beat.visualDescription ? <p>{beat.visualDescription}</p> : null}
+      </div>
+    </article>
   );
 }
 
@@ -783,7 +841,7 @@ function StoryboardGeneratingBanner({
   );
 }
 
-function StoryboardPanelThumb({ panel }: { panel: StoryboardPanel }) {
+function StoryboardPanelThumb({ panel, label }: { panel: StoryboardPanel; label: string }) {
   return (
     <AssetImage
       kind="image"
@@ -793,6 +851,7 @@ function StoryboardPanelThumb({ panel }: { panel: StoryboardPanel }) {
       status={panel.status}
       mediaClassName={styles.storyImage}
       placeholderClassName={`${styles.storyImage} ${styles.storyImageEmpty}`}
+      alt={`${label} storyboard panel`}
       placeholder={<span>{titleCase(panel.status)}</span>}
     />
   );
@@ -1019,15 +1078,20 @@ function storyboardStats(storyboard: ProjectStoryboard | null) {
   );
 }
 
-function firstPanels(storyboard: ProjectStoryboard | null, limit: number) {
-  if (!storyboard) return [];
-  return storyboard.scenes
-    .flatMap((scene) => scene.beats)
-    .flatMap((beat) => {
-      const selected = beat.panels.find((panel) => panel.isSelected);
-      return selected ? [selected] : beat.panels.slice(0, 1);
-    })
-    .slice(0, limit);
+function orderedScenes(storyboard: ProjectStoryboard | null) {
+  return storyboard ? [...storyboard.scenes].sort((a, b) => a.sceneIndex - b.sceneIndex) : [];
+}
+
+function orderedBeats(scene: StoryboardScene) {
+  return [...scene.beats].sort((a, b) => a.beatIndex - b.beatIndex);
+}
+
+function selectedPanel(beat: StoryboardBeat) {
+  return (
+    beat.panels.find((panel) => panel.isSelected) ??
+    [...beat.panels].sort((a, b) => a.panelIndex - b.panelIndex)[0] ??
+    null
+  );
 }
 
 function storyboardScriptLines(storyboard: ProjectStoryboard | null) {
