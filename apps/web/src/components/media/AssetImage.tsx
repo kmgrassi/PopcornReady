@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import type { AssetMediaResponse } from "../../lib/api-client";
 import { ImageWithSkeleton } from "../ui/ImageWithSkeleton";
 import { RegenerateImageButton } from "./RegenerateImageButton";
 import styles from "./AssetImage.module.css";
@@ -33,6 +34,7 @@ export interface AssetImageProps {
   frameClassName?: string;
   mediaClassName?: string;
   placeholderClassName?: string;
+  recoveryClassName?: string;
   // Content shown when there is no deliverable media (e.g. a role label / beat #).
   placeholder?: ReactNode;
   // Surface chrome layered over healthy media (e.g. badges, a "click to edit"
@@ -58,6 +60,9 @@ export interface AssetImageProps {
   // Class for the activate button, so a surface keeps its clickable styling
   // (border, hover, hint reveal). Only applies when onActivate is set.
   activateClassName?: string;
+  onRegenerateStart?: () => void;
+  onRegenerated?: (assetId: string, media: AssetMediaResponse) => void;
+  onRegenerateSettled?: () => void;
 }
 
 // Standardized media card: renders an asset's image/video (with an onError →
@@ -75,12 +80,16 @@ export function AssetImage({
   frameClassName,
   mediaClassName,
   placeholderClassName,
+  recoveryClassName,
   placeholder,
   mediaOverlay,
   allowRegenerate = true,
   videoControls = false,
   onActivate,
   activateClassName,
+  onRegenerateStart,
+  onRegenerated,
+  onRegenerateSettled,
 }: AssetImageProps) {
   // Track every src that has 404'd/errored, so a video can fall through to its
   // thumbnail poster and an image can fall through to the placeholder.
@@ -172,8 +181,14 @@ export function AssetImage({
         </>
       )}
       {recoverable ? (
-        <div className={styles.recovery}>
-          <RegenerateImageButton assetId={assetId as string} prompt={prompt} />
+        <div className={[styles.recovery, recoveryClassName].filter(Boolean).join(" ")}>
+          <RegenerateImageButton
+            assetId={assetId as string}
+            prompt={prompt}
+            onRegenerateStart={onRegenerateStart}
+            onRegenerated={onRegenerated}
+            onRegenerateSettled={onRegenerateSettled}
+          />
         </div>
       ) : null}
     </div>

@@ -117,7 +117,23 @@ export function StoryboardPage() {
       ) : null}
 
       {!loading && !error && storyboard ? (
-        <StoryboardBody storyboard={storyboard} revisingBeats={revisingBeats} onEdit={setEditTarget} />
+        <StoryboardBody
+          storyboard={storyboard}
+          revisingBeats={revisingBeats}
+          onEdit={setEditTarget}
+          onRegenerateStart={(beatId) => {
+            setRevisingBeats((current) => new Set(current).add(beatId));
+          }}
+          onRegenerateSettled={(beatId) => {
+            void refetchStoryboard().finally(() => {
+              setRevisingBeats((current) => {
+                const next = new Set(current);
+                next.delete(beatId);
+                return next;
+              });
+            });
+          }}
+        />
       ) : null}
 
       <AssetEditModal
@@ -146,10 +162,14 @@ function StoryboardBody({
   storyboard,
   revisingBeats,
   onEdit,
+  onRegenerateStart,
+  onRegenerateSettled,
 }: {
   storyboard: ProjectStoryboard;
   revisingBeats: Set<string>;
   onEdit: (target: EditTarget) => void;
+  onRegenerateStart: (beatId: string) => void;
+  onRegenerateSettled: (beatId: string) => void;
 }) {
   const scenes = [...storyboard.scenes].sort((a, b) => a.sceneIndex - b.sceneIndex);
   if (scenes.length === 0) {
@@ -165,6 +185,8 @@ function StoryboardBody({
           revisingBeats={revisingBeats}
           order={index + 1}
           onEdit={onEdit}
+          onRegenerateStart={onRegenerateStart}
+          onRegenerateSettled={onRegenerateSettled}
         />
       ))}
     </div>
@@ -177,12 +199,16 @@ function SceneSection({
   revisingBeats,
   order,
   onEdit,
+  onRegenerateStart,
+  onRegenerateSettled,
 }: {
   scene: StoryboardScene;
   storyboardId: string;
   revisingBeats: Set<string>;
   order: number;
   onEdit: (target: EditTarget) => void;
+  onRegenerateStart: (beatId: string) => void;
+  onRegenerateSettled: (beatId: string) => void;
 }) {
   const beats = [...scene.beats].sort((a, b) => a.beatIndex - b.beatIndex);
   return (
@@ -208,6 +234,8 @@ function SceneSection({
             order={index + 1}
             sceneOrder={order}
             onEdit={onEdit}
+            onRegenerateStart={onRegenerateStart}
+            onRegenerateSettled={onRegenerateSettled}
           />
         ))}
       </div>
@@ -228,6 +256,8 @@ function BeatCard({
   order,
   sceneOrder,
   onEdit,
+  onRegenerateStart,
+  onRegenerateSettled,
 }: {
   beat: StoryboardBeat;
   storyboardId: string;
@@ -236,11 +266,14 @@ function BeatCard({
   order: number;
   sceneOrder: number;
   onEdit: (target: EditTarget) => void;
+  onRegenerateStart: (beatId: string) => void;
+  onRegenerateSettled: (beatId: string) => void;
 }) {
   const panel = selectedPanel(beat);
   const image = panel?.thumbnailUrl ?? panel?.url ?? null;
   const label = beat.intent || `Beat ${order}`;
   const canEdit = Boolean(panel?.imageAssetId);
+  const prompt = panel?.prompt?.trim() || beat.visualDescription?.trim() || null;
 
   return (
     <article className={styles.beat}>
@@ -260,10 +293,13 @@ function BeatCard({
           assetId={panel?.imageAssetId ?? null}
           prompt={panel?.prompt ?? null}
           alt={label}
+          recoveryClassName={styles.panelRecovery}
           mediaClassName={styles.panelImage}
           placeholderClassName={`${styles.panelImage} ${styles.panelEmpty}`}
           placeholder={<span>No panel image yet</span>}
           activateClassName={styles.panelButton}
+          onRegenerateStart={() => onRegenerateStart(beat.id)}
+          onRegenerateSettled={() => onRegenerateSettled(beat.id)}
           {...(canEdit && image
             ? {
                 onActivate: () =>
@@ -289,8 +325,11 @@ function BeatCard({
       <div className={styles.beatBody}>
         <span className={styles.beatTag}>Beat {order}</span>
         <p className={styles.beatIntent}>{label}</p>
-        {beat.visualDescription ? (
-          <p className={styles.beatDesc}>{beat.visualDescription}</p>
+        {prompt ? (
+          <details className={styles.promptDrawer}>
+            <summary>Show image prompt</summary>
+            <p>{prompt}</p>
+          </details>
         ) : null}
       </div>
     </article>

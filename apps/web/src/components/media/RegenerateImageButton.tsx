@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ApiClientError } from "../../lib/api-client";
+import { ApiClientError, type AssetMediaResponse } from "../../lib/api-client";
 import { useRegenerateImageMutation } from "../../lib/regenerateImage";
 import { RegenerateAssetDialog } from "./RegenerateAssetDialog";
 import styles from "./RegenerateImageButton.module.css";
@@ -14,6 +14,9 @@ export interface RegenerateImageButtonProps {
   label?: string;
   // Extra class for placement (e.g. an absolutely-positioned overlay slot).
   className?: string;
+  onRegenerateStart?: () => void;
+  onRegenerated?: (assetId: string, media: AssetMediaResponse) => void;
+  onRegenerateSettled?: () => void;
 }
 
 function isPromptRequired(error: unknown): boolean {
@@ -28,23 +31,29 @@ export function RegenerateImageButton({
   prompt,
   label = "Regenerate",
   className,
+  onRegenerateStart,
+  onRegenerated,
+  onRegenerateSettled,
 }: RegenerateImageButtonProps) {
   const [promptOpen, setPromptOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const mutation = useRegenerateImageMutation();
+  const mutation = useRegenerateImageMutation({ onRegenerated });
   const savedPrompt = prompt?.trim();
 
   const run = async (nextPrompt: string) => {
     setError(null);
+    setPromptOpen(false);
+    onRegenerateStart?.();
     try {
       await mutation.mutateAsync({ assetId, prompt: nextPrompt });
-      setPromptOpen(false);
     } catch (err) {
       if (isPromptRequired(err)) {
         setPromptOpen(true);
       } else {
         setError(err instanceof Error ? err.message : "Unable to regenerate this image.");
       }
+    } finally {
+      onRegenerateSettled?.();
     }
   };
 
