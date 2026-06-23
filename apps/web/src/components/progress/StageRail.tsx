@@ -188,7 +188,6 @@ export function StageRail({
   });
 
   const fallbackCounts = new Map<GenerationStageType, number>();
-  let nextQueuedShown = false;
   let inferredRunningShown = false;
   const hasExplicitRunningStage = stages.some((stage) => stage.status === "running");
   const inferCurrentStage =
@@ -216,6 +215,7 @@ export function StageRail({
             !inferredRunningShown &&
             baseStatus === "queued",
         );
+        if (groupStages.length === 0 && !inferredRunning) return null;
         if (inferredRunning) inferredRunningShown = true;
         const isLast = idx === PIPELINE_GROUPS.length - 1;
         const runningStage = groupStages.find((candidate) => candidate.status === "running");
@@ -230,15 +230,12 @@ export function StageRail({
           visibleStage.description;
         const awaitingReview = groupStages.some((candidate) => reviewGate?.stageId === candidate.stageId);
         const statusKey = awaitingReview ? "review" : status;
-        const isUpcoming = status === "queued" && !nextQueuedShown;
-        if (isUpcoming) nextQueuedShown = true;
         const showStatus =
           awaitingReview ||
           status === "running" ||
           status === "succeeded" ||
           status === "failed" ||
-          status === "canceled" ||
-          isUpcoming;
+          status === "canceled";
         const stageLink = stageLinks?.[visibleStage.label];
 
         return (
@@ -266,7 +263,7 @@ export function StageRail({
                 )}
                 {showStatus ? (
                   <span className={`${styles.stageStatusPill} ${styles[`stageStatus_${statusKey}`]}`}>
-                    {isUpcoming ? "Up next" : stage?.reviewedAt ? "Complete" : STATUS_LABEL[statusKey]}
+                    {stage?.reviewedAt ? "Complete" : STATUS_LABEL[statusKey]}
                   </span>
                 ) : null}
                 <JudgmentBadge judgment={stage?.judgment} compact />
@@ -297,11 +294,11 @@ export function StageRail({
                 >
                   <summary>Tool activity</summary>
                   <ul className={styles.stageToolList}>
-                    {visibleStage.tools.map((toolName) => {
-                      const toolStage = stagesByTool.get(toolName);
-                      const toolStatus = toolStage?.status ?? "queued";
+                    {groupStages.map((toolStage) => {
+                      const toolName = toolStage.toolName ?? toolStage.label;
+                      const toolStatus = toolStage.status;
                       return (
-                        <li className={styles.stageToolRow} key={toolName}>
+                        <li className={styles.stageToolRow} key={toolStage.stageId}>
                           <span className={styles.stageToolName}>{toolLabel(toolName)}</span>
                           <span
                             className={`${styles.stageToolStatus} ${styles[`stageStatus_${toolStatus}`]}`}
@@ -314,7 +311,7 @@ export function StageRail({
                   </ul>
                 </details>
               ) : null}
-              {isUpcoming && stopAction ? (
+              {status === "running" && stopAction ? (
                 <div className={styles.stageControlRow}>
                   <button
                     type="button"
