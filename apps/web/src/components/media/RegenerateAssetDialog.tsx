@@ -1,5 +1,6 @@
 import { useEffect, useId, useState } from "react";
 import { Button } from "../ui/Button";
+import { CloseButton } from "../ui/CloseButton";
 import styles from "./RegenerateAssetDialog.module.css";
 
 export interface RegenerateAssetDialogProps {
@@ -55,14 +56,7 @@ export function RegenerateAssetDialog({
             <p className={styles.eyebrow}>Regenerate</p>
             <h2 id={titleId}>{title}</h2>
           </div>
-          <button
-            className={styles.closeButton}
-            type="button"
-            onClick={onCancel}
-            aria-label="Close"
-          >
-            ×
-          </button>
+          <CloseButton className={styles.closeButton} onClick={onCancel} />
         </header>
 
         {message ? <p className={styles.message}>{message}</p> : null}

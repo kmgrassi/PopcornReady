@@ -1,6 +1,7 @@
 import { useEffect, useId, useState, type FormEvent } from "react";
 import type { BoardRevisionTarget } from "@popcorn/shared/v1/types";
 import { Button } from "../ui/Button";
+import { CloseButton } from "../ui/CloseButton";
 import { v1Api } from "../../lib/api-client";
 import styles from "./AssetEditModal.module.css";
 
@@ -85,9 +86,7 @@ export function AssetEditModal({
         aria-labelledby={titleId}
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <button className={styles.close} type="button" onClick={onClose} aria-label="Close">
-          ×
-        </button>
+        <CloseButton className={styles.close} onClick={onClose} />
 
         <div className={styles.media}>
           {imageUrl ? (
