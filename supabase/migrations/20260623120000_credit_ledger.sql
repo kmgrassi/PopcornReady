@@ -77,19 +77,32 @@ declare
   v_new     integer;
   v_tx      public.credit_transactions;
 begin
-  -- Idempotency: a key seen before returns its original transaction, unchanged.
+  -- Idempotency fast path: a key already committed returns its original
+  -- transaction without taking the lock.
   if p_idempotency_key is not null then
     select * into v_tx from public.credit_transactions
       where idempotency_key = p_idempotency_key;
     if found then return v_tx; end if;
   end if;
 
-  -- Lock the balance row (materialize at 0 on first touch).
+  -- Lock the balance row (materialize at 0 on first touch). This serializes
+  -- concurrent calls for the same user.
   insert into public.user_credits (user_id, balance_credits)
     values (p_user_id, 0)
     on conflict (user_id) do nothing;
   select balance_credits into v_balance
     from public.user_credits where user_id = p_user_id for update;
+
+  -- Re-check under the lock: a concurrent same-key call may have committed its
+  -- ledger row while we waited for the lock (it was uncommitted, so the fast path
+  -- above missed it). Same key => same user => serialized here, so this sees the
+  -- winner's row and returns it — replays stay idempotent instead of hitting the
+  -- unique index with a 23505.
+  if p_idempotency_key is not null then
+    select * into v_tx from public.credit_transactions
+      where idempotency_key = p_idempotency_key;
+    if found then return v_tx; end if;
+  end if;
 
   v_new := v_balance + p_delta;
   if v_new < 0 then
