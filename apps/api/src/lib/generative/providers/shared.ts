@@ -29,6 +29,11 @@ export async function readAsDataUri(filePath: string): Promise<string> {
   )}`;
 }
 
+export async function readAsBase64(filePath: string): Promise<string> {
+  const bytes = await fs.readFile(filePath);
+  return Buffer.from(bytes).toString("base64");
+}
+
 export function characterProviderSettings(input: GenerateAssetRequest) {
   if (!input.characterContext) return undefined;
   return {

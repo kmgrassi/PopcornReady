@@ -108,46 +108,82 @@ Notes:
 - This implementation requests silent video (`generate_audio: false`) because
   Popcorn Ready already has a separate soundtrack/audio pipeline.
 
-## Still Scoped
+### Kling
 
-### Kling VIDEO 3.0 Omni
+Provider key: `kling`
 
-Kling is strategically important because of long, multi-shot, character-aware
-generation. Before implementation we should confirm:
+Environment:
 
-- Official API host and auth shape for our account.
-- Exact text-to-video and image/reference-video endpoints for Kling 3.0 Omni.
-- Whether references are single-image, multi-image, video, or character-profile
-  resources.
-- Polling/result download shape.
-- Whether native audio should be requested or suppressed for Popcorn Ready's
-  separate soundtrack pipeline.
+- `KLING_API_KEY`
+- AK/SK fallback: `KLING_ACCESS_KEY` + `KLING_SECRET_KEY`
+- optional base URL override: `KLING_BASE_URL`
 
-Implementation shape should match the Runway/LTX provider contract:
+Supported:
 
-- `provider: "kling"`
-- `KLING_API_KEY` or whatever official auth requires
-- text-to-video and image/reference-to-video
-- async job polling
-- output download to local storage
+- Text-to-video through Kling `POST /v1/videos/text2video`
+- Image-to-video through Kling `POST /v1/videos/image2video` when a local
+  reference path is present
+- Polling the created task by id
+- Downloading the returned output URL into Popcorn Ready storage
+- Duration normalization to 5 or 10 seconds
+
+Default model:
+
+- `kling-v3`
 
 ### Seedance 2.0
 
-The cleanest first path is likely through Runway model selection, not a separate
-provider:
+Provider key: `seedance`
 
-- `provider: "runway"`
-- `model: "<seedance model exposed by the workspace>"`
+Environment:
 
-Reason:
+- `FAL_KEY`
+- fallback alias: `SEEDANCE_API_KEY`
+- optional queue URL override: `FAL_QUEUE_BASE_URL`
 
-- First-party global ByteDance/Dreamina API access and governance appear less
-  settled than Runway's API surface.
-- Runway already exposes task polling, output download, and API-key semantics we
-  can support with the current provider abstraction.
+Supported:
 
-If a direct Seedance enterprise API becomes available to this project, add it as
-`provider: "seedance"` with the same `GenerateAssetRequest` contract.
+- Text-to-video through fal.ai queue endpoint
+  `bytedance/seedance-2.0/text-to-video`
+- Image-to-video-style conditioning when a local reference path is present and
+  the selected fal model accepts `image_url`
+- Queue status polling and result fetch
+- Downloading the returned output URL into Popcorn Ready storage
+
+Default model:
+
+- `bytedance/seedance-2.0/text-to-video`
+- referenced clips are routed to `bytedance/seedance-2.0/image-to-video`
+
+Note:
+
+- This is intentionally the fal.ai access path, not a direct ByteDance API
+  wrapper. Replace or add a separate direct provider only after first-party
+  global access is confirmed for this project.
+
+### xAI Grok Imagine
+
+Provider key: `xai`
+
+Environment:
+
+- `XAI_API_KEY`
+
+Supported:
+
+- Image generation through xAI image generation endpoints
+- Image editing/reference conditioning when a local reference path is present
+- Video generation through xAI video generation endpoints
+- Polling the created video request by id
+- Downloading the returned output URL into Popcorn Ready storage
+
+Default models:
+
+- Image: `grok-imagine-image-quality`
+- Text-to-video: `grok-imagine-video`
+- Image-to-video/reference video: `grok-imagine-video-1.5`
+
+## Still Scoped
 
 ### Wan 2.1 VACE
 
@@ -174,7 +210,7 @@ Default one-shot video provider should remain Gemini/Veo for now:
 
 1. `gemini`
 2. fallback `openai`
-3. explicit opt-in to `runway` or `ltx`
+3. explicit opt-in to `runway`, `ltx`, `kling`, `seedance`, or `xai`
 
 Reason:
 
@@ -184,6 +220,9 @@ Reason:
   supported durations differ from Gemini/OpenAI.
 
 ## Manual Test Plan
+
+HTTP smoke examples for xAI, Kling, and Seedance live in
+`docs/examples/agent-video-generation/provider-generation.http`.
 
 Run through `/api/generate-assets`:
 

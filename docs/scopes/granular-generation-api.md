@@ -33,7 +33,7 @@ are locked inside the pipeline** and two execution models have drifted.
 **Already granular (reuse / generalize):**
 - `POST …/generated-assets` `{ kind: image | video | audio, provider, prompt, … }`
   — the low-level per-asset generator (idempotent job + poll). Providers:
-  `openai` (image/video), `gemini`/`runway`/`ltx`/`nvidia_api_catalog` (video),
+  `openai` (image/video), `gemini`/`runway`/`ltx`/`kling`/`seedance`/`xai`/`nvidia_api_catalog` (video),
   `elevenlabs` (audio). **This is the "generate an asset" primitive — keep it.**
 - `…/characters`, `…/characters/:id/references` — character/anchor management.
 - `…/brief`, `…/brief-versions` — the brief.

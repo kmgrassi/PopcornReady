@@ -29,6 +29,9 @@ export type KeyProvider =
   | "elevenlabs"
   | "runway"
   | "ltx"
+  | "kling"
+  | "seedance"
+  | "xai"
   | "nvidia";
 
 // Platform fallback env var per provider. Mirrors what each provider read before.
@@ -40,6 +43,9 @@ const PLATFORM_ENV: Record<KeyProvider, () => string | undefined> = {
   elevenlabs: () => process.env.ELEVENLABS_API_KEY,
   runway: () => process.env.RUNWAYML_API_SECRET || process.env.RUNWAY_API_KEY,
   ltx: () => process.env.LTX_API_KEY,
+  kling: () => process.env.KLING_API_KEY,
+  seedance: () => process.env.FAL_KEY || process.env.SEEDANCE_API_KEY,
+  xai: () => process.env.XAI_API_KEY,
   nvidia: () => process.env.NVIDIA_API_KEY,
 };
 

@@ -18,6 +18,9 @@ const PROVIDERS = [
   "elevenlabs",
   "runway",
   "ltx",
+  "kling",
+  "seedance",
+  "xai",
   "nvidia",
 ] as const;
 

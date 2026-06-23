@@ -57,6 +57,24 @@ const PROVIDERS: Array<{
     use: "Video generation.",
   },
   {
+    id: "kling",
+    label: "Kling",
+    env: "KLING_API_KEY or KLING_ACCESS_KEY + KLING_SECRET_KEY",
+    use: "Kling video generation.",
+  },
+  {
+    id: "seedance",
+    label: "Seedance",
+    env: "FAL_KEY",
+    use: "Seedance 2.0 video generation through fal.ai.",
+  },
+  {
+    id: "xai",
+    label: "xAI",
+    env: "XAI_API_KEY",
+    use: "Grok Imagine image and video generation.",
+  },
+  {
     id: "nvidia",
     label: "NVIDIA API Catalog",
     env: "NVIDIA_API_KEY",

@@ -17,7 +17,7 @@ import { planBeats } from "@popcorn/shared/types";
 import type { ProjectStoryboard } from "@popcorn/shared/v1/types";
 import { createLogger } from "@/lib/v1/logger";
 
-type KeyframeImageProvider = "openai" | "ideogram" | "gemini" | "mock";
+type KeyframeImageProvider = "openai" | "ideogram" | "gemini" | "xai" | "mock";
 
 export interface GenerateKeyframeJobDeps {
   getActiveProjectScopedAsset: typeof realGetActiveProjectScopedAsset;

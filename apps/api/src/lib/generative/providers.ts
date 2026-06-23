@@ -2,11 +2,14 @@ import type { GenerativeProvider } from "@popcorn/shared/generative/types";
 import { elevenLabsProvider } from "./providers/elevenlabs";
 import { geminiProvider } from "./providers/gemini";
 import { ideogramProvider } from "./providers/ideogram";
+import { klingProvider } from "./providers/kling";
 import { ltxProvider } from "./providers/ltx";
 import { mockProvider, unsupportedProvider } from "./providers/mock";
 import { nvidiaCosmosProvider } from "./providers/nvidia-cosmos";
 import { openAIProvider } from "./providers/openai";
 import { runwayProvider } from "./providers/runway";
+import { seedanceProvider } from "./providers/seedance";
+import { xaiProvider } from "./providers/xai";
 
 export { downloadOpenAIVideoById, getOpenAIVideoById } from "./providers/openai";
 
@@ -25,6 +28,19 @@ export function providerFor(name: string): GenerativeProvider {
     case "ltxvideo":
     case "ltx-video":
       return ltxProvider;
+    case "kling":
+    case "klingai":
+    case "kling-ai":
+      return klingProvider;
+    case "seedance":
+    case "seedance2":
+    case "seedance-2":
+    case "seedance-2.0":
+      return seedanceProvider;
+    case "xai":
+    case "grok":
+    case "grok-imagine":
+      return xaiProvider;
     case "nvidia":
     case "nvidia_api_catalog":
     case "nvidia-api-catalog":

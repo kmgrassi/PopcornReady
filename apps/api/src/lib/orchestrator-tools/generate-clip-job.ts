@@ -8,7 +8,16 @@ import {
 import type { GraphAssetInput } from "@/lib/api/v1/asset-graph";
 import type { GenerateClipJobBeat } from "./generate-clip";
 
-type VideoProvider = "openai" | "gemini" | "runway" | "ltx" | "nvidia_api_catalog" | "mock";
+type VideoProvider =
+  | "openai"
+  | "gemini"
+  | "runway"
+  | "ltx"
+  | "kling"
+  | "seedance"
+  | "xai"
+  | "nvidia_api_catalog"
+  | "mock";
 
 export interface GenerateClipJobDeps {
   createGeneratedAsset: typeof realCreateGeneratedAsset;
