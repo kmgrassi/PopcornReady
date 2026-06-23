@@ -48,7 +48,7 @@ assetsRouter.get(
 
 assetsRouter.post(
   "/assets/:assetId/regenerate",
-  mutation(async ({ auth, body }, params) => {
+  mutation(async ({ auth, body, requestId }, params) => {
     const assetId = requiredParam(params, "assetId");
     const rawPrompt = (body as { prompt?: unknown } | null)?.prompt;
     const prompt = typeof rawPrompt === "string" ? rawPrompt : undefined;
@@ -56,6 +56,7 @@ assetsRouter.post(
       workspaceId: auth.workspaceId,
       assetId,
       prompt,
+      requestId,
     });
     return {
       status: 200,
