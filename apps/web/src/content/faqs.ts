@@ -17,6 +17,14 @@ export const FAQS: FaqItem[] = [
     placements: ["landing", "dashboard"],
     tags: ["overview", "creation", "editing"],
   },
+  {
+    id: "approximate-cost",
+    question: "Approximately how much does it cost?",
+    answer:
+      "The approximate model cost is 30 to 50 cents per minute of finished video at the expensive end. Videos may also use audio or image generation, and those pieces usually cost less. Users can bring their own API keys, or Popcorn Ready can charge per token or usage unit through our own connections to third-party models.",
+    placements: ["landing", "dashboard"],
+    tags: ["pricing", "cost", "models"],
+  },
 ];
 
 export function faqsForPlacement(placement: FaqPlacement): FaqItem[] {
