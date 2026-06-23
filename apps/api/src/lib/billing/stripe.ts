@@ -43,9 +43,11 @@ export function stripeWebhookSecret(): string {
 // Where Stripe Checkout returns the user after pay/cancel. Configurable so the
 // deployed web origin can be injected; defaults to the local SPA.
 export function checkoutReturnUrls(): { success: string; cancel: string } {
+  // WEB_ORIGIN can be a comma-separated allowlist (prod sets apex + www), so take
+  // the first origin. CREDITS_RETURN_URL overrides with a single explicit URL.
   const base = (
-    process.env.CREDITS_RETURN_URL ||
-    process.env.WEB_ORIGIN ||
+    process.env.CREDITS_RETURN_URL?.trim() ||
+    process.env.WEB_ORIGIN?.split(",")[0]?.trim() ||
     "http://localhost:3000"
   ).replace(/\/+$/, "");
   return {

@@ -36,17 +36,27 @@ creditsWebhookRouter.post(
     }
 
     try {
-      if (event.type === "checkout.session.completed") {
+      // Immediate methods (card): `completed` arrives already paid. Delayed
+      // methods (ACH/SEPA): `completed` arrives unpaid, then
+      // `async_payment_succeeded` once funds settle — so fulfill on whichever
+      // signals payment. Keyed on the session id (not the event id) so neither
+      // redelivery nor the completed+async pair credits a purchase twice.
+      if (
+        event.type === "checkout.session.completed" ||
+        event.type === "checkout.session.async_payment_succeeded"
+      ) {
         const session = event.data.object as Stripe.Checkout.Session;
+        const paid =
+          event.type === "checkout.session.async_payment_succeeded" ||
+          session.payment_status === "paid";
         const userId = session.metadata?.userId;
         const credits = Number(session.metadata?.credits ?? 0);
-        if (session.payment_status === "paid" && userId && credits > 0) {
+        if (paid && userId && credits > 0) {
           await applyCreditTransaction({
             userId,
             deltaCredits: credits,
             reason: "purchase",
-            // Stripe may deliver an event more than once — dedupe on its id.
-            idempotencyKey: `stripe:${event.id}`,
+            idempotencyKey: `stripe:checkout:${session.id}`,
             metadata: {
               stripeSessionId: session.id,
               stripeEventId: event.id,
@@ -54,7 +64,7 @@ creditsWebhookRouter.post(
             },
           });
           rootLogger.info("credits_purchased", {
-            metadata: { userId, credits, eventId: event.id },
+            metadata: { userId, credits, sessionId: session.id },
           });
         }
       }
