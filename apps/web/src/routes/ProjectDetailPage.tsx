@@ -130,6 +130,13 @@ export function ProjectDetailPage() {
     : hasPlayableOutput
       ? "Watch this project's latest video."
       : "Watch is available after this project has a playable video.";
+  const latestRun = runsQuery.items[0] ?? null;
+  const runsDisabled = runsQuery.loading || !latestRun;
+  const runsTitle = runsQuery.loading
+    ? "Checking for recent runs."
+    : latestRun
+      ? "Open this project's latest run."
+      : "Runs are available after this project starts generation.";
 
   return (
     <main className={styles.shell}>
@@ -148,13 +155,21 @@ export function ProjectDetailPage() {
         <div className={styles.headerActions}>
           <ButtonLink
             variant="secondary"
-            to="#runs"
+            to={
+              latestRun
+                ? `/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(latestRun.runId)}`
+                : `/projects/${encodeURIComponent(projectId)}`
+            }
+            aria-disabled={runsDisabled}
+            title={runsTitle}
           >
             Runs
           </ButtonLink>
           <ButtonLink
             variant="secondary"
-            to="#outputs"
+            to={`/projects/${encodeURIComponent(projectId)}/watch`}
+            aria-disabled={watchDisabled}
+            title={watchTitle}
           >
             Outputs
           </ButtonLink>
@@ -211,25 +226,6 @@ export function ProjectDetailPage() {
                 </div>
               </div>
             </section>
-            <RunsPreview
-              projectId={projectId}
-              runs={runsQuery.items}
-              loading={runsQuery.loading}
-              loadingMore={runsQuery.loadingMore}
-              hasMore={runsQuery.hasMore}
-              error={runsQuery.error}
-              onRetry={runsQuery.refetch}
-              onLoadMore={() => void runsQuery.fetchNextPage()}
-            />
-            <OutputsPreview
-              outputs={outputsQuery.items}
-              loading={outputsQuery.loading}
-              loadingMore={outputsQuery.loadingMore}
-              hasMore={outputsQuery.hasMore}
-              error={outputsQuery.error}
-              onRetry={outputsQuery.refetch}
-              onLoadMore={() => void outputsQuery.fetchNextPage()}
-            />
             <ProjectDangerSection
               project={project}
               deleting={deleteProjectMutation.isPending}
@@ -291,15 +287,18 @@ function ProjectStagePanel({
     .find((stage) => stage.status === "queued");
   const hasReviewGate = Boolean(run?.reviewGate);
   const projectPath = `/projects/${encodeURIComponent(projectId)}`;
+  const runPath = run
+    ? `${projectPath}/runs/${encodeURIComponent(run.runId)}`
+    : projectPath;
   const stageLinks = {
     Concept: `${projectPath}/concept`,
     Brief: `${projectPath}/brief`,
     Script: `${projectPath}/script`,
     Storyboard: `${projectPath}#storyboard`,
-    Shots: `${projectPath}#runs`,
-    Assets: `${projectPath}#runs`,
-    Timeline: `${projectPath}#runs`,
-    "Final Render": `${projectPath}#outputs`,
+    Shots: runPath,
+    Assets: runPath,
+    Timeline: runPath,
+    "Final Render": `${projectPath}/watch`,
   };
 
   function updateGate(action: "approve" | "reject") {
@@ -854,172 +853,6 @@ function StoryboardPanelThumb({ panel, label }: { panel: StoryboardPanel; label:
       alt={`${label} storyboard panel`}
       placeholder={<span>{titleCase(panel.status)}</span>}
     />
-  );
-}
-
-function RunsPreview({
-  projectId,
-  runs,
-  loading,
-  loadingMore,
-  hasMore,
-  error,
-  onRetry,
-  onLoadMore,
-}: {
-  projectId: string;
-  runs: GenerationRun[];
-  loading: boolean;
-  loadingMore: boolean;
-  hasMore: boolean;
-  error: Error | null;
-  onRetry: () => void;
-  onLoadMore: () => void;
-}) {
-  return (
-    <section className={styles.panel} id="runs">
-      <div className={styles.sectionHeader}>
-        <div>
-          <span className={styles.eyebrow}>Runs</span>
-          <h2>Recent generation work</h2>
-        </div>
-        <ButtonLink
-          variant="ghost"
-          size="sm"
-          to={`/projects/${encodeURIComponent(projectId)}`}
-        >
-          Project
-        </ButtonLink>
-      </div>
-      {loading ? <div className={styles.placeholder}>Loading runs...</div> : null}
-      {!loading && error ? (
-        <ErrorState
-          title="Unable to load runs"
-          body="We couldn't load generation runs for this project."
-          error={error}
-          onRetry={onRetry}
-        />
-      ) : null}
-      {!loading && !error && runs.length === 0 ? (
-        <EmptyState
-          title="No runs yet"
-          body="Generation runs for this project will appear here."
-        />
-      ) : null}
-      {!loading && !error && runs.length > 0 ? (
-        <div className={styles.runList}>
-          {runs.map((run) => (
-            <Link
-              className={styles.runRow}
-              to={`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(run.runId)}`}
-              key={run.runId}
-            >
-              <div>
-                <span className={styles.runTitle}>
-                  {run.currentStageType ? titleCase(run.currentStageType) : "Generation run"}
-                </span>
-                <span className={styles.runMeta}>Updated {formatDate(run.updatedAt)}</span>
-              </div>
-              <div className={styles.progress} aria-label={`${run.progressPercent ?? 0}% complete`}>
-                <span style={{ width: `${Math.max(0, Math.min(100, run.progressPercent ?? 0))}%` }} />
-              </div>
-              <StatusChip status={run.status} />
-            </Link>
-          ))}
-        </div>
-      ) : null}
-      {hasMore ? (
-        <div className={styles.loadMore}>
-          <Button variant="secondary" size="sm" disabled={loadingMore} onClick={onLoadMore}>
-            {loadingMore ? "Loading..." : "Load more runs"}
-          </Button>
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
-function OutputsPreview({
-  outputs,
-  loading,
-  loadingMore,
-  hasMore,
-  error,
-  onRetry,
-  onLoadMore,
-}: {
-  outputs: WorkspaceOutput[];
-  loading: boolean;
-  loadingMore: boolean;
-  hasMore: boolean;
-  error: Error | null;
-  onRetry: () => void;
-  onLoadMore: () => void;
-}) {
-  return (
-    <section className={styles.panel} id="outputs">
-      <div className={styles.sectionHeader}>
-        <div>
-          <span className={styles.eyebrow}>Outputs</span>
-          <h2>Finished exports</h2>
-        </div>
-      </div>
-      {loading ? <div className={styles.placeholder}>Loading outputs...</div> : null}
-      {!loading && error ? (
-        <ErrorState
-          title="Unable to load outputs"
-          body="We couldn't load exported videos for this project."
-          error={error}
-          onRetry={onRetry}
-        />
-      ) : null}
-      {!loading && !error && outputs.length === 0 ? (
-        <EmptyState
-          title="No outputs yet"
-          body="Finished exports for this project will appear here."
-        />
-      ) : null}
-      {!loading && !error && outputs.length > 0 ? (
-        <div className={styles.outputGrid}>
-          {outputs.map((output) => {
-            const playbackUrl = output.playbackUrl ?? output.url;
-            const meta = [output.format?.toUpperCase(), formatDuration(output.durationSec)]
-              .filter(Boolean)
-              .join(" - ");
-            return (
-              <article className={styles.outputCard} key={output.artifactId}>
-                <div className={styles.outputMedia}>
-                  {playbackUrl ? (
-                    <video
-                      src={playbackUrl}
-                      poster={output.thumbnailUrl}
-                      muted
-                      playsInline
-                      preload="metadata"
-                    />
-                  ) : output.thumbnailUrl ? (
-                    <ImageWithSkeleton className={styles.outputImage} src={output.thumbnailUrl} alt="" loading="lazy" />
-                  ) : (
-                    <span>Output</span>
-                  )}
-                </div>
-                <div className={styles.outputBody}>
-                  <span className={styles.runTitle}>Exported {formatDate(output.createdAt)}</span>
-                  <span className={styles.runMeta}>{meta || "Finished export"}</span>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      ) : null}
-      {hasMore ? (
-        <div className={styles.loadMore}>
-          <Button variant="secondary" size="sm" disabled={loadingMore} onClick={onLoadMore}>
-            {loadingMore ? "Loading..." : "Load more outputs"}
-          </Button>
-        </div>
-      ) : null}
-    </section>
   );
 }
 
