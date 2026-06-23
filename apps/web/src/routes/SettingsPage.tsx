@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { canAccessAdminSurface } from "../components/auth/AdminRoute";
 import { useAuth } from "../components/auth/AuthProvider";
 import { AnonymousUpgradeBanner } from "../components/auth/AnonymousUpgradeBanner";
 import { AccessTokenPanel } from "../components/settings/AccessTokenPanel";
@@ -70,6 +71,7 @@ export function SettingsPage() {
     me?.isLocal || auth.status === "disabled"
       ? "Local mode"
       : me?.authMode ?? "Hosted mode";
+  const showAdminSurfaces = canAccessAdminSurface(auth);
   const canSignOut = auth.configured && auth.status === "authenticated";
 
   async function signOut() {
@@ -130,20 +132,22 @@ export function SettingsPage() {
 
       <AccessTokenPanel />
 
-      <section className={styles.section} aria-labelledby="links-heading">
-        <div>
-          <p className={styles.kicker}>Secondary</p>
-          <h2 id="links-heading">Available surfaces</h2>
-        </div>
-        <div className={styles.linkGrid}>
-          {QUIET_LINKS.map((item) => (
-            <Link key={item.to} className={styles.quietLink} to={item.to}>
-              <span>{item.label}</span>
-              <small>{item.description}</small>
-            </Link>
-          ))}
-        </div>
-      </section>
+      {showAdminSurfaces ? (
+        <section className={styles.section} aria-labelledby="links-heading">
+          <div>
+            <p className={styles.kicker}>Secondary</p>
+            <h2 id="links-heading">Available surfaces</h2>
+          </div>
+          <div className={styles.linkGrid}>
+            {QUIET_LINKS.map((item) => (
+              <Link key={item.to} className={styles.quietLink} to={item.to}>
+                <span>{item.label}</span>
+                <small>{item.description}</small>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }
