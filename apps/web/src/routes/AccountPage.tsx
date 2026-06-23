@@ -40,7 +40,10 @@ export function AccountPage() {
   const credits = creditsQuery.data;
   const balance = credits?.balanceCredits ?? null;
   const creditValueUsd = credits?.creditValueUsd ?? 0.01;
-  const isLocal = credits?.isLocal === true || balance === null;
+  // Local mode is an explicit server flag — never inferred from a missing balance
+  // (which is just loading/error). Otherwise a hosted account would see the
+  // local-dev message and lose the Buy-credits section while loading or on error.
+  const isLocal = credits?.isLocal === true;
 
   const transactions = useMemo(() => txQuery.data?.transactions ?? [], [txQuery.data]);
 
@@ -56,7 +59,20 @@ export function AccountPage() {
 
       <section className={styles.balanceCard}>
         <span className={styles.balanceLabel}>Balance</span>
-        {isLocal ? (
+        {creditsQuery.isLoading ? (
+          <p className="muted">Loading your balance…</p>
+        ) : creditsQuery.isError ? (
+          <div className={styles.balanceError}>
+            <p className={styles.outOfCredits}>Couldn’t load your balance.</p>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void creditsQuery.refetch()}
+            >
+              Retry
+            </Button>
+          </div>
+        ) : isLocal ? (
           <p className="muted">
             Credits apply to hosted generation. In local dev, generation uses the
             platform keys and isn’t billed.

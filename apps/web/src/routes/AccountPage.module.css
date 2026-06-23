@@ -46,6 +46,16 @@
   color: var(--danger, #d9534f);
 }
 
+.balanceError {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.balanceError .outOfCredits {
+  margin: 0;
+}
+
 .section h2 {
   margin: 0 0 0.5rem;
   font-size: 1.05rem;
