@@ -1,5 +1,9 @@
 import type { Router } from "express";
 import { catalogPublicRouter } from "./catalog.js";
+import {
+  devCharacterReferenceRouter,
+  isCharacterReferenceHarnessEnabled,
+} from "./dev-character-reference.js";
 import { devToolTestsRouter, isToolTestHarnessEnabled } from "./dev-tool-tests.js";
 import { devWebE2ERouter, isWebE2EHarnessEnabled } from "./dev-web-e2e.js";
 import { discoverRouter } from "./discover.js";
@@ -18,5 +22,10 @@ export function mountPublicV1Routes(v1: Router) {
   // Dev-only, flag-gated browser fixture lifecycle. Never mounted in production.
   if (isWebE2EHarnessEnabled()) {
     v1.use(devWebE2ERouter);
+  }
+
+  // Dev-only live-generation character-reference harness. Never mounted in production.
+  if (isCharacterReferenceHarnessEnabled()) {
+    v1.use(devCharacterReferenceRouter);
   }
 }
