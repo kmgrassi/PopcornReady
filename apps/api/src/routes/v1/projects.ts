@@ -13,6 +13,7 @@ import {
 } from "@/lib/api/v1/asset-analysis";
 import {
   createProject,
+  deleteProject,
   getProject,
   getProjectWatchMedia,
   listProjects,
@@ -86,6 +87,17 @@ projectsRouter.patch(
       { actorId: auth.actor.id }
     );
     return { status: 200, body: { project } };
+  })
+);
+
+projectsRouter.delete(
+  "/projects/:projectId",
+  mutation(async ({ auth }, params) => {
+    if (!params.projectId) {
+      throw new ApiError("validation_failed", "projectId is required.");
+    }
+    await deleteProject(auth.workspaceId, params.projectId);
+    return { status: 200, body: { ok: true } };
   })
 );
 
