@@ -84,6 +84,12 @@
   min-width: 0;
 }
 
+.projectPrimaryColumn {
+  display: grid;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
 .projectTopRail {
   display: grid;
   gap: var(--space-5);
@@ -214,11 +220,6 @@
 .hero,
 .panel {
   scroll-margin-top: var(--space-6);
-}
-
-.storyboardLayout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
 }
 
 .stageAside {
