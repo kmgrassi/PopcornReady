@@ -1,5 +1,6 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
 import { Button } from "../ui/Button";
+import { CloseButton } from "../ui/CloseButton";
 import styles from "./AiAssetFeedbackDialog.module.css";
 
 export interface AiAssetFeedbackDialogProps {
@@ -78,15 +79,7 @@ export function AiAssetFeedbackDialog({
             <h2 id={titleId}>{title}</h2>
             {subtitle ? <p>{subtitle}</p> : null}
           </div>
-          <button
-            className={styles.closeButton}
-            type="button"
-            onClick={onClose}
-            disabled={pending}
-            aria-label="Close"
-          >
-            x
-          </button>
+          <CloseButton className={styles.closeButton} onClick={onClose} disabled={pending} />
         </header>
 
         <div className={styles.body}>

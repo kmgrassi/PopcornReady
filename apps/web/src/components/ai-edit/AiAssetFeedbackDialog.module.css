@@ -58,27 +58,7 @@
 }
 
 .closeButton {
-  width: 34px;
-  height: 34px;
-  flex: 0 0 auto;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  color: var(--text);
-  cursor: pointer;
-  font: inherit;
-  font-weight: 900;
-}
-
-.closeButton:hover,
-.closeButton:focus-visible {
-  border-color: var(--accent-border);
-  outline: none;
-}
-
-.closeButton:disabled {
-  cursor: wait;
-  opacity: 0.66;
+  --close-button-size: 34px;
 }
 
 .body {

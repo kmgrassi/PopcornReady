@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { AssetKind } from "@popcorn/shared/v1/types";
+import { CloseButton } from "../ui/CloseButton";
 import { ImageWithSkeleton } from "../ui/ImageWithSkeleton";
 import { RegenerateAssetDialog } from "./RegenerateAssetDialog";
 import styles from "./MediaViewer.module.css";
@@ -183,9 +184,7 @@ export function MediaViewer({
               {media.projectName ? <span>{media.projectName}</span> : null}
             </div>
           </div>
-          <button className={styles.iconButton} type="button" onClick={onClose} aria-label="Close">
-            ×
-          </button>
+          <CloseButton className={styles.iconButton} onClick={onClose} />
         </header>
 
         <div className={styles.stage}>
