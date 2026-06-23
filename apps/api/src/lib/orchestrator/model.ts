@@ -167,7 +167,8 @@ export function buildRoutingContext(priorResults: unknown[] = []): RoutingContex
       })
     ),
   ];
-  const latestFailed = [...parsed].reverse().find((result) => result.status === "failed");
+  const latestResult = parsed.at(-1);
+  const latestFailed = latestResult?.status === "failed" ? latestResult : undefined;
   const latestFailureTool = asToolName(latestFailed?.tool);
   const unmetRequirements = unmetRequirementNames(latestFailed?.error);
   const recoveryTools = recoveryToolsFromError(latestFailed?.error);

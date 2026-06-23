@@ -62,3 +62,33 @@ test("routing context routes missing storyboard tiles back to generate_storyboar
   assert.deepEqual(context.latestFailure?.requiredRecoveryTools, ["generate_storyboard"]);
   assert.equal(context.nextToolHint?.tool, "generate_storyboard");
 });
+
+test("routing context clears recovery hints after a later action resolves the failure", () => {
+  const context = buildRoutingContext([
+    { tool: "plan_shots", status: "applied", outputAssetIds: ["plan_1"] },
+    { tool: "generate_storyboard", status: "applied", outputAssetIds: ["tile_1"] },
+    {
+      tool: "generate_clip",
+      status: "failed",
+      outputAssetIds: [],
+      error: {
+        kind: "precondition_unmet",
+        message: "generate_clip needs active beat_keyframe assets before it can generate clips.",
+        recoverable: true,
+        unmetRequirements: [
+          {
+            requirement: "beat_keyframe",
+            because: "The clip is seeded from the beat's first-frame keyframe.",
+            satisfyWith: { tool: "generate_keyframe", inputHint: {} },
+          },
+        ],
+        suggestedNextTools: [{ tool: "generate_keyframe", inputHint: {} }],
+      },
+    },
+    { tool: "generate_keyframe", status: "applied", outputAssetIds: ["keyframe_1"] },
+  ]);
+
+  assert.equal(context.latestFailure, undefined);
+  assert.equal(context.nextToolHint, undefined);
+  assert.ok(context.completedTools.includes("generate_keyframe"));
+});
