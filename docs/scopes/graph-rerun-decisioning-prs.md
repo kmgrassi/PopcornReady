@@ -67,7 +67,7 @@ Approval is required when any of these are true:
 
 The only proposals that may auto-execute in autonomous mode are `no_op` and
 single-target `regenerate_candidates` proposals with `estimatedCostUsd` equal to
-`0`, `risk: "low"`, and `source: "autonomous_run"`.
+`0`, `risk: "low"`, and a server-derived source of `"autonomous_run"`.
 
 ## Blast-Radius Semantics
 
@@ -107,8 +107,9 @@ The graph query does not decide the rerun. It assembles the packet the agent
 needs to decide. Starting in PR 2, the rerun-decision model call should receive a
 single structured payload with:
 
-- **User intent:** the original message, source (`user_edit` or
-  `autonomous_run`), and the UI surface/object the user pointed at.
+- **User intent:** the original message, the server-derived source
+  (`user_edit` or `autonomous_run`), and the UI surface/object the user pointed
+  at.
 - **Target summary:** id, kind, role, lineage/version, active selection slots,
   content hash/fingerprint, and a compact semantic summary of the target asset.
 - **Prompt/story context:** relevant prompt text, storyboard scene/beat/panel
@@ -268,8 +269,7 @@ Request:
   "changedAssetId": "uuid",
   "message": "Make beat 3 brighter.",
   "runId": "uuid optional",
-  "mode": "preview",
-  "source": "user_edit"
+  "mode": "preview"
 }
 ```
 
@@ -278,8 +278,11 @@ Rules:
 - `changedAssetId` must belong to `projectId`; otherwise return `404`.
 - `runId`, when provided, must belong to `projectId`; otherwise return `400`.
 - `mode` must be `"preview"` in PR 1. Unknown modes return `400`.
-- `source` must be `"user_edit"` or `"autonomous_run"`. Missing source defaults
-  to `"user_edit"`.
+- `source` is not accepted from the request body because it affects approval
+  policy. The public route always derives `source: "user_edit"` server-side.
+  A future autonomous-run caller must use a trusted internal code path or
+  server-only route that derives `source: "autonomous_run"` from authenticated
+  run context.
 - `message` is user intent for the proposal rationale, not direct mutation
   instructions.
 
@@ -356,9 +359,11 @@ Return a deterministic proposal:
 - `no_op` when there are no candidates.
 - `regenerate_candidates` with all candidates selected when candidates exist,
   `estimatedCostUsd: 0`, and `requiresApproval: false` only when
-  `source: "autonomous_run"`, there is at most one selected candidate, and that
-  candidate has at most one active selection. Otherwise the same deterministic
-  proposal sets `requiresApproval: true` and explains the approval reason.
+  the server-derived source is `"autonomous_run"`, there is at most one selected
+  candidate, and that candidate has at most one active selection. Public
+  user-edit requests therefore require approval even if the client sends a
+  forged `source`. Otherwise the same deterministic proposal sets
+  `requiresApproval: true` and explains the approval reason.
 - `restart_stage` is not returned by the deterministic PR 1 placeholder. It is
   reserved for the model-backed decision path or explicit execution fallback.
 
@@ -370,6 +375,8 @@ Acceptance:
 - The endpoint never calls provider/generation tools.
 - The proposal is persisted as an `actions` row with status `proposed`.
 - The endpoint rejects cross-project `changedAssetId`/`runId` mismatches.
+- The endpoint ignores or rejects any client-provided `source`; approval policy
+  uses only the server-derived source.
 - The persisted proposal includes approval fields and enough context pins to
   detect stale execution later.
 - The persisted proposal includes an explicit checklist of selected and
