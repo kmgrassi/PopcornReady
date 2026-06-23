@@ -165,13 +165,15 @@ export function StageRail({
           : stage?.progressPercent;
         const message =
           stage?.error?.message ??
-          (inferredRunning ? runMessage : stage?.message) ??
+          (status === "running" ? runMessage : undefined) ??
+          stage?.message ??
           visibleStage.description;
         const awaitingReview = Boolean(stage && reviewGate?.stageId === stage.stageId);
         const statusKey = awaitingReview ? "review" : status;
         const isRealQueuedStage = Boolean(stage && stage.status === "queued");
         const isUpcoming = isRealQueuedStage && status === "queued" && !nextQueuedShown;
         if (isUpcoming) nextQueuedShown = true;
+        const showStopAction = status === "running" && !awaitingReview && Boolean(stopAction);
         const showStatus =
           awaitingReview ||
           status === "running" ||
@@ -230,7 +232,7 @@ export function StageRail({
                   />
                 </div>
               ) : null}
-              {isUpcoming && stopAction ? (
+              {showStopAction && stopAction ? (
                 <div className={styles.stageControlRow}>
                   <button
                     type="button"
@@ -238,19 +240,14 @@ export function StageRail({
                     onClick={stopAction.onStop}
                     disabled={stopAction.pending}
                     aria-busy={stopAction.pending || undefined}
-                    aria-label={
-                      stopAction.pending
-                        ? "Stopping after current stage"
-                        : "Stop after current stage"
-                    }
                   >
                     {stopAction.pending ? (
                       <>
                         <LoadingDot />
-                        Stopping after current step...
+                        Stopping here...
                       </>
                     ) : (
-                      "Stop after current stage"
+                      "Stop here"
                     )}
                   </button>
                 </div>

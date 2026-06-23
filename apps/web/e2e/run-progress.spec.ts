@@ -84,19 +84,22 @@ test("polls an active run, cancels it, and clears the recovery hint", async ({ p
 
   await page.goto(runPath);
 
-  await expect(page.getByRole("heading", { name: "Stop here or keep producing" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Stop here or keep producing" })).toHaveCount(0);
   const overallProgress = page.getByRole("progressbar", { name: /complete/ });
   await expect(overallProgress).toHaveAttribute("aria-valuenow", "42");
   await expect
     .poll(() => overallProgress.getAttribute("aria-valuenow"))
     .toBe("58");
 
-  await expect(page.getByRole("button", { name: "Stop here" })).toBeVisible();
+  const rail = page.getByRole("complementary", { name: "Stage rail" });
+  await expect(rail.getByText("Shots")).toBeVisible();
+  await expect(rail.getByText("In progress")).toBeVisible();
+  await expect(rail.getByRole("button", { name: "Stop here" })).toBeVisible();
   await expect
     .poll(() => page.evaluate((key) => sessionStorage.getItem(key), lastRunHintKey))
     .toContain(`"status":"running"`);
 
-  await page.getByRole("button", { name: "Stop here" }).click();
+  await rail.getByRole("button", { name: "Stop here" }).click();
 
   await expect(page.getByText("Run canceled")).toBeVisible();
   expect(cancelRequestBody).toEqual({});
