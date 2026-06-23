@@ -56,7 +56,6 @@ approval before any image or video assets are generated.
 | Landing route | `apps/web/src/routes/HomePage.tsx` | Public promise: one idea becomes a production workflow. |
 | Studio shell | `apps/web/src/components/studio/StudioShell.tsx` | Draft start screen, setup flow, generating checklist, review/export handoff. |
 | Studio flow state | `apps/web/src/components/studio/useStudioFlow.ts` | Owns `initial -> generating -> review`, run creation, polling, gates, revision request. |
-| Planning workspace | `apps/web/src/components/studio/PlanningWorkspace.tsx` | Real planning preview and editable planning decisions before generation. |
 | Run progress | `apps/web/src/components/progress/ProgressView.tsx` | Real run detail page, review gate controls, generated assets, stage rail. |
 | Progress rail | `apps/web/src/components/progress/StageRail.tsx` | Maps engine stages into a user-visible pipeline. |
 
@@ -84,8 +83,8 @@ approval before any image or video assets are generated.
   action.
 - `BriefStep` and `SourceFootageStep` keep setup progressive instead of exposing
   every advanced option at once.
-- `PlanningWorkspace` already generates planning decisions before starting the
-  expensive run.
+- The setup flow already collects the brief and source assets before starting
+  the expensive run.
 - `createAndStartRun` in `useStudioFlow` enters the v1 run model rather than the
   legacy one-shot route.
 - `StatusChecklist` in the generating state gives a calm summary of active work.
@@ -98,7 +97,7 @@ approval before any image or video assets are generated.
 
 | Landing montage model | Current dashboard behavior | Product effect |
 | --- | --- | --- |
-| Plan is the first big artifact. | `PlanningWorkspace` is a pre-generation decision grid, then run progress collapses planning into checklist text. | The user may not perceive that the agent created a concrete plan worth approving. |
+| Plan is the first big artifact. | Run progress collapses planning into checklist text. | The user may not perceive that the agent created a concrete plan worth approving. |
 | Continue is a visible moment. | `Start generating`, gate approval, and progress navigation are ordinary buttons in separate surfaces. | The user does not get the same sense of staged agency and control. |
 | Stop points are attached to active stages. | Cancel/reject controls exist, but mostly live in progress panels and gate cards. | Intervention feels like error handling, not a normal creative workflow. |
 | Storyboard/keyframes are a board. | Stage items render as generic cards by kind; storyboard and asset generation are split across stage vocabulary. | Generated visuals feel like system artifacts instead of the emerging movie. |
@@ -159,13 +158,13 @@ Implementation seam:
 
 - `apps/web/src/components/studio/studioSteps.ts`
 - `apps/web/src/components/studio/StudioStepper.tsx`
-- `apps/web/src/components/studio/PlanningWorkspace.tsx`
+- `apps/web/src/components/studio/StudioShell.tsx`
 
-### 2. Turn PlanningWorkspace Into The Real "Act One"
+### 2. Make The Run's Plan Stage The Real "Act One"
 
-`PlanningWorkspace` currently shows three editable cards: story direction,
-opening hook, and poster/visual. Keep those capabilities, but reframe the screen
-as the agent's plan output.
+The retired pre-generation planning screen was removed so creation has one path:
+setup/context, assets, then production. Any future plan preview should live in
+the run/progress experience, not as a separate pre-run route.
 
 Target:
 
@@ -177,19 +176,13 @@ Target:
   - format/platform/length metadata
   - visual direction
   - missing inputs or caveats
-- Secondary editable controls stay available, but should not compete with the
-  plan summary.
-- Footer actions become:
-  - primary: `Continue to production`
-  - secondary: `Revise plan` or `Edit brief`
-  - secondary: `Edit footage`
+- Object-scoped changes should use the existing agent feedback entry points
+  rather than reviving direct plan-edit controls.
 
 Data gap:
 
-- The planning preview currently exposes format, hook, poster direction, status,
-  and missing inputs. It does not yet expose the landing montage's beat list as a
-  first-class structured output. Add a typed beat-outline field to the planning
-  preview response before making the dashboard depend on beat rendering.
+- The run data should expose the landing montage's beat list as a first-class
+  structured output before the dashboard depends on beat rendering.
 
 ### 3. Add A Real Continue Moment Between Plan And Produce
 
@@ -199,10 +192,10 @@ it should make the transition explicit.
 
 Target:
 
-- Replace generic `Start generating` copy on the plan screen with
-  `Continue to production`.
-- Show `Stop here` at the stage boundary.
-- If the user does nothing, auto-continue after about five seconds.
+- Start production from the setup handoff without a separate plan-review screen.
+- Show `Stop here` at stage boundaries inside the run experience.
+- If the user does nothing at a stage boundary, auto-continue after about five
+  seconds.
 - For videos over 30 seconds, do not auto-continue past planning. Hard stop for
   approval before generating real image or video assets.
 - On click, show a compact handoff state:
@@ -215,7 +208,6 @@ Target:
 
 Implementation seam:
 
-- `PlanningWorkspace` submit state.
 - `StudioShell` `onGenerationStarted` route handoff.
 - `useStudioFlow.startGeneration`.
 
@@ -440,11 +432,10 @@ Scope:
 - If the legacy Next-era editor files under `src/components/editor/*` and
   `src/components/Editor.tsx` are not imported by active routes/tests, delete
   them too; otherwise leave a short cleanup note naming the remaining owner.
-- Update `StudioStepper` / `studioSteps` so `Plan` is a visible setup milestone.
-- Rename `PlanningWorkspace` actions from `Start generating` to
-  `Continue to production`.
-- Update copy around the agent handoff: "Agent is writing the plan",
-  "Plan ready", "Continue to production".
+- Update `StudioStepper` / `studioSteps` so the setup handoff leads directly
+  into production.
+- Update copy around the agent handoff: "Starting run" and
+  "Opening project runs".
 - No backend changes unless route cleanup requires removing dead storyboard-page
   client calls.
 
@@ -452,23 +443,25 @@ Definition of done:
 
 - There is no standalone storyboard editing page reachable from app navigation.
 - `/projects/:projectId/storyboard` does not render `StoryboardEditor`.
-- A fresh `/studio` draft visibly reaches a `Plan` step before generation.
+- A fresh Studio draft starts production after setup without rendering a
+  separate plan screen.
 - Existing draft resume behavior still works.
 - Typecheck/build pass.
 
-### PR 2 — Plan Summary Card
+### PR 2 — Plan Summary In Run Progress
 
-Goal: make the plan the first major agent artifact instead of a grid of editable
-decisions.
+Goal: make the plan the first major agent artifact inside the run experience
+instead of a separate grid of editable decisions.
 
 Scope:
 
-- Rework `PlanningWorkspace` to lead with a plan summary card.
+- Add a plan summary card to run progress.
 - Include brief recap, format/platform/length, opening hook, visual direction,
-  and missing inputs/caveats from existing planning preview data.
-- Keep existing story direction, hook, and visual controls secondary.
-- Add the >30s rule at the UI level: videos over 30 seconds stop after planning
-  and require explicit user approval before image/video asset generation.
+  and missing inputs/caveats from run/stage data.
+- Keep edits object-scoped through Ask AI / feedback entry points.
+- Add the >30s rule at the run level: videos over 30 seconds stop after
+  planning and require explicit user approval before image/video asset
+  generation.
 
 Definition of done:
 
