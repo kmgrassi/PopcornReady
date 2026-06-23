@@ -16,6 +16,7 @@ import { resolveWorkspaceGenerationModel } from "./model-settings";
 import { preflightGenerationContent } from "@/lib/generative/preflight";
 import { providerFor } from "@/lib/generative/providers";
 import { estimateCostUsd } from "@/lib/generative/pricing";
+import { recordModelCallCost } from "./model-call-costs";
 import {
   noteBillableGeneration,
   type KeyProvider,
@@ -922,8 +923,20 @@ async function runGeneration(
   await updateAction(action.id, {
     status: "applied",
     outputAssetIds: [updated.id],
-    actualCostUsd: result.costUsd ?? action.estimatedCostUsd,
   });
+  // Cost sidecar: one row per provider call, linked to its generation action.
+  if (result.costUsd && result.costUsd > 0) {
+    await recordModelCallCost({
+      projectId,
+      runId: parsed.runId,
+      actionId: action.id,
+      provider: result.provider,
+      model: result.model,
+      unit: result.kind === "image" ? "images" : "seconds",
+      quantity: result.kind === "image" ? 1 : durationSec ?? 0,
+      costUsd: result.costUsd,
+    });
+  }
   return updated;
 }
 
@@ -1112,7 +1125,6 @@ export async function runGeneratedAssetJob(args: {
         estimatedCostUsd,
         pinnedFingerprints,
       }),
-      estimatedCostUsd,
       jobIds: [running.id],
     });
 

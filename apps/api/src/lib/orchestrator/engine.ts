@@ -131,7 +131,6 @@ export function defaultEngineStore(): OrchestratorEngineStore {
         params: input.params,
         outputAssetIds: input.outputAssetIds,
         jobIds: input.jobIds,
-        estimatedCostUsd: input.costUsd,
         error: input.error,
       });
     },
