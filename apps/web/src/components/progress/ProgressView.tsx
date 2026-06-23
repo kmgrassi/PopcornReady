@@ -695,43 +695,6 @@ export function ProgressView({
 
           <PlanRecap project={project} loading={projectLoading} />
 
-          {showCancelAction ? (
-            <section
-              className={`${styles.card} ${styles.activeRunCard}`}
-              aria-labelledby="run-actions-heading"
-            >
-              <div className={styles.cardHeader}>
-                <div>
-                  <p className={styles.eyebrow}>Run controls</p>
-                  <h2 id="run-actions-heading" className={styles.cardHeading}>
-                    Stop here or keep producing
-                  </h2>
-                  <p className={styles.activeRunMessage}>
-                    {detail.run.message ??
-                      `${currentStageLabel} is in progress.${
-                        nextStageLabel ? ` Next step: ${nextStageLabel}.` : ""
-                      }`} You can stop here and return to the draft instead of letting the run continue.
-                  </p>
-                </div>
-                <div className={styles.actions}>
-                  <button
-                    type="button"
-                    className={styles.secondaryButton}
-                    onClick={cancelAction.onCancel}
-                    disabled={cancelAction.pending}
-                  >
-                    {cancelAction.pending ? "Stopping..." : "Stop here"}
-                  </button>
-                </div>
-              </div>
-              {cancelAction.error ? (
-                <p className={styles.error} role="alert">
-                  {cancelAction.error}
-                </p>
-              ) : null}
-            </section>
-          ) : null}
-
           {detail.run.reviewGate ? (
             <section
               className={styles.reviewPanel}
@@ -903,7 +866,7 @@ export function ProgressView({
           <div className={styles.sidePanelHeader}>
             <div>
               <p className={styles.eyebrow}>Pipeline</p>
-              <h2 className={styles.sidePanelHeading}>Remaining stages</h2>
+              <h2 className={styles.sidePanelHeading}>Stages</h2>
             </div>
           </div>
           {showBackgroundActivity ? (

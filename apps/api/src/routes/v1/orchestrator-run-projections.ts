@@ -107,7 +107,6 @@ function toolItemKind(tool: string): GenerationStageItemKind {
     case "plan_shots":
     case "plan_visual_anchors":
     case "critique_timeline":
-    case "request_approval":
     case "publish_to_catalog":
       return "caption";
     case "generate_clip":

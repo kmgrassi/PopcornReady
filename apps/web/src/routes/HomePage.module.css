@@ -170,15 +170,9 @@
   position: absolute;
   top: var(--space-3);
   right: var(--space-3);
-  width: 36px;
-  height: 36px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  --close-button-size: 36px;
   background: var(--panel-2);
   color: var(--muted);
-  font: inherit;
-  font-weight: 800;
-  cursor: pointer;
 }
 
 .modalKicker {

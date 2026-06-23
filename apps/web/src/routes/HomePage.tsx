@@ -10,6 +10,7 @@ import {
   LandingSectionHeader,
 } from "../components/landing/LandingSection";
 import { WorkflowStages } from "../components/landing/WorkflowStages";
+import { CloseButton } from "../components/ui/CloseButton";
 import { faqsForPlacement } from "../content/faqs";
 import {
   buildPendingLandingPrompt,
@@ -628,14 +629,7 @@ function AccountChoiceModal({
         className={styles.accountModal}
         role="dialog"
       >
-        <button
-          aria-label="Close"
-          className={styles.modalClose}
-          type="button"
-          onClick={onClose}
-        >
-          X
-        </button>
+        <CloseButton className={styles.modalClose} onClick={onClose} />
         <p className={styles.modalKicker}>Ready to generate</p>
         <h2 id="account-choice-title">Do you want to create an account?</h2>
         <p>

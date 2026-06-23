@@ -67,7 +67,6 @@
   background: var(--surface-2);
 }
 
-.iconButton,
 .navButton {
   display: inline-grid;
   place-items: center;
@@ -79,19 +78,13 @@
 }
 
 .iconButton {
-  width: 36px;
-  height: 36px;
-  flex: 0 0 auto;
-  font-size: 25px;
-  line-height: 1;
+  --close-button-size: 36px;
 }
 
-.iconButton:hover,
 .navButton:hover {
   border-color: var(--accent);
 }
 
-.iconButton:focus-visible,
 .navButton:focus-visible {
   outline: none;
   box-shadow: var(--ring);

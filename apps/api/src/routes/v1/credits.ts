@@ -1,8 +1,15 @@
 import { Router } from "express";
-import { route } from "@/core/adapter";
-import { getRequestSupabase } from "@/lib/supabase/clients";
+import { mutation, route } from "@/core/adapter";
+import { ApiError } from "@/core/errors";
+import { getCurrentAppUserId, getRequestSupabase } from "@/lib/supabase/clients";
 import { runQuery } from "@/lib/supabase/db-errors";
 import { CREDIT_VALUE_USD } from "@/lib/api/v1/credits";
+import {
+  CREDIT_PACKS,
+  checkoutReturnUrls,
+  getStripe,
+  isCreditPackId,
+} from "@/lib/billing/stripe";
 
 export const creditsRouter = Router();
 
@@ -73,5 +80,59 @@ creditsRouter.get(
       status: 200,
       body: { transactions: ((rows ?? []) as CreditTxRow[]).map(toWire) },
     };
+  })
+);
+
+// The buyable credit packs (for the purchase UI).
+creditsRouter.get(
+  "/credits/packs",
+  route(async () => ({
+    status: 200,
+    body: {
+      packs: Object.entries(CREDIT_PACKS).map(([id, p]) => ({
+        id,
+        usd: p.usd,
+        credits: p.credits,
+      })),
+      creditValueUsd: CREDIT_VALUE_USD,
+    },
+  }))
+);
+
+// Start a one-time Stripe Checkout for a credit pack. The webhook
+// (POST /credits/webhook) credits the ledger once payment completes.
+creditsRouter.post(
+  "/credits/checkout",
+  mutation(async ({ auth, body }) => {
+    if (auth.isLocal) {
+      throw new ApiError("unauthorized", "Sign in to buy credits.");
+    }
+    const packId = String((body as { pack?: unknown } | null)?.pack ?? "");
+    if (!isCreditPackId(packId)) {
+      throw new ApiError("validation_failed", "Choose a valid credit pack.");
+    }
+    const pack = CREDIT_PACKS[packId];
+    const userId = await getCurrentAppUserId();
+    const urls = checkoutReturnUrls();
+
+    const session = await getStripe().checkout.sessions.create({
+      mode: "payment",
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: "usd",
+            unit_amount: pack.usd * 100,
+            product_data: { name: `${pack.credits.toLocaleString()} Popcorn Ready credits` },
+          },
+        },
+      ],
+      // The webhook trusts these to credit the right user/amount; never the client.
+      metadata: { userId, credits: String(pack.credits), pack: packId },
+      success_url: urls.success,
+      cancel_url: urls.cancel,
+    });
+
+    return { status: 200, body: { url: session.url } };
   })
 );

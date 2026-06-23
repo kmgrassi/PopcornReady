@@ -313,6 +313,29 @@ test("projects data-only tool outputs as non-visual stage items", () => {
   );
 });
 
+test("keeps request approval preview artifacts visible", () => {
+  const payload = projectRunDetailFromParts(
+    runFixture({ status: "waiting" }),
+    [gateFixture("request_approval")],
+    [
+      actionFixture("request_approval", {
+        id: "approval_action",
+        status: "running",
+        outputAssetIds: ["preview_asset_1"],
+      }),
+    ]
+  );
+
+  assert.deepEqual(
+    payload.stageItems.map((item) => ({
+      kind: item.kind,
+      purpose: item.purpose,
+      assetId: item.assetId,
+    })),
+    [{ kind: "image", purpose: "quality_review", assetId: "preview_asset_1" }]
+  );
+});
+
 test("projects full action prompts into stage items", () => {
   const longPrompt = `${"cinematic ".repeat(40)}final frame`;
   const payload = projectRunDetailFromParts(

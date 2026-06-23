@@ -38,6 +38,7 @@
     "express": "^4.21.2",
     "openai": "^4.104.0",
     "remotion": "^4.0.0",
+    "stripe": "^22.2.3",
     "tsx": "^4.22.3"
   },
   "devDependencies": {

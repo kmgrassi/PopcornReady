@@ -230,6 +230,7 @@ export function StageRail({
           visibleStage.description;
         const awaitingReview = groupStages.some((candidate) => reviewGate?.stageId === candidate.stageId);
         const statusKey = awaitingReview ? "review" : status;
+        const showStopAction = status === "running" && !awaitingReview && Boolean(stopAction);
         const showStatus =
           awaitingReview ||
           status === "running" ||
@@ -311,7 +312,7 @@ export function StageRail({
                   </ul>
                 </details>
               ) : null}
-              {status === "running" && stopAction ? (
+              {showStopAction && stopAction ? (
                 <div className={styles.stageControlRow}>
                   <button
                     type="button"
@@ -319,19 +320,14 @@ export function StageRail({
                     onClick={stopAction.onStop}
                     disabled={stopAction.pending}
                     aria-busy={stopAction.pending || undefined}
-                    aria-label={
-                      stopAction.pending
-                        ? "Stopping after current stage"
-                        : "Stop after current stage"
-                    }
                   >
                     {stopAction.pending ? (
                       <>
                         <LoadingDot />
-                        Stopping after current step...
+                        Stopping here...
                       </>
                     ) : (
-                      "Stop after current stage"
+                      "Stop here"
                     )}
                   </button>
                 </div>

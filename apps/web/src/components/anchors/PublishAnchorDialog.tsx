@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import { type CatalogEntryKind } from "../../lib/catalog";
 import { Button } from "../ui/Button";
+import { CloseButton } from "../ui/CloseButton";
 import styles from "./PublishAnchorDialog.module.css";
 
 type PublishAnchorSource =
@@ -84,14 +85,7 @@ export function PublishAnchorDialog({ source, onClose }: PublishAnchorDialogProp
             <p className={styles.eyebrow}>Anchors</p>
             <h2 id={titleId}>Publish as anchor</h2>
           </div>
-          <button
-            className={styles.closeButton}
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            ×
-          </button>
+          <CloseButton className={styles.closeButton} onClick={onClose} />
         </header>
 
         <label className={styles.field}>

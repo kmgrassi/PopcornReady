@@ -35,6 +35,7 @@ const DEV_AUTOPILOT = import.meta.env.DEV;
 const RUN_LIMIT = 6;
 const OUTPUT_LIMIT = 6;
 const PROJECT_SECTIONS = ["concept", "brief", "script"] as const;
+const STAGE_PANEL_COMPACT_QUERY = "(max-width: 900px)";
 
 type ProjectSectionId = (typeof PROJECT_SECTIONS)[number];
 
@@ -271,6 +272,10 @@ function ProjectStagePanel({
 }) {
   const selectedRun = useMemo(() => selectStageRun(runs), [runs]);
   const [pendingGateAction, setPendingGateAction] = useState<"approve" | "reject" | null>(null);
+  const [stageExpanded, setStageExpanded] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return !window.matchMedia(STAGE_PANEL_COMPACT_QUERY).matches;
+  });
   const runDetailQuery = useGenerationRunQuery(
     projectId,
     selectedRun?.runId ?? "",
@@ -287,6 +292,7 @@ function ProjectStagePanel({
     .find((stage) => stage.status === "queued");
   const hasReviewGate = Boolean(run?.reviewGate);
   const projectPath = `/projects/${encodeURIComponent(projectId)}`;
+  const stagePanelBodyId = "project-stage-panel-body";
   const stageLinks = {
     Concept: `${projectPath}/concept`,
     Brief: `${projectPath}/brief`,
@@ -312,122 +318,148 @@ function ProjectStagePanel({
     });
   }
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const query = window.matchMedia(STAGE_PANEL_COMPACT_QUERY);
+    const syncExpanded = () => {
+      setStageExpanded(!query.matches);
+    };
+
+    syncExpanded();
+    query.addEventListener("change", syncExpanded);
+    return () => query.removeEventListener("change", syncExpanded);
+  }, []);
+
   return (
-    <section className={styles.panel} aria-labelledby="project-stage-heading">
+    <section className={`${styles.panel} ${styles.stagePanel}`} aria-labelledby="project-stage-heading">
       <div className={styles.sectionHeader}>
         <div>
           <span className={styles.eyebrow}>Run pipeline</span>
           <h2 id="project-stage-heading">Stage and next step</h2>
         </div>
-        {run ? (
-          <ButtonLink
-            variant="ghost"
+        <div className={styles.sectionHeaderActions}>
+          {run ? (
+            <ButtonLink
+              variant="ghost"
+              size="sm"
+              to={`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(run.runId)}`}
+            >
+              Open run
+            </ButtonLink>
+          ) : null}
+          <Button
+            className={styles.stageToggle}
+            variant="secondary"
             size="sm"
-            to={`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(run.runId)}`}
+            aria-controls={stagePanelBodyId}
+            aria-expanded={stageExpanded}
+            onClick={() => setStageExpanded((expanded) => !expanded)}
           >
-            Open run
-          </ButtonLink>
-        ) : null}
+            {stageExpanded ? "Hide details" : "Show details"}
+          </Button>
+        </div>
       </div>
 
-      {activeLoading ? <div className={styles.placeholder}>Loading stage...</div> : null}
-      {!activeLoading && activeError ? (
-        <ErrorState
-          title="Unable to load stage"
-          body="We couldn't load the latest generation stage for this project."
-          error={activeError}
-          onRetry={() => {
-            onRetry();
-            void runDetailQuery.refetch();
-          }}
-        />
-      ) : null}
-      {!activeLoading && !activeError && !run ? (
-        <EmptyState
-          title="No generation stage yet"
-          body="Start a generation run to see the project's current stage and next step."
-        />
-      ) : null}
-      {!activeLoading && !activeError && run ? (
-        <div className={styles.stagePanelBody}>
-          <div className={styles.stageSummary}>
-            <div>
-              <dt>Current</dt>
-              <dd>
-                {run.reviewGate
-                  ? `${titleCase(run.reviewGate.stageType)} review`
-                  : run.currentStageType
-                    ? titleCase(run.currentStageType)
-                    : titleCase(run.status)}
-              </dd>
+      <div id={stagePanelBodyId} className={styles.stageCollapsible} hidden={!stageExpanded}>
+        {activeLoading ? <div className={styles.placeholder}>Loading stage...</div> : null}
+        {!activeLoading && activeError ? (
+          <ErrorState
+            title="Unable to load stage"
+            body="We couldn't load the latest generation stage for this project."
+            error={activeError}
+            onRetry={() => {
+              onRetry();
+              void runDetailQuery.refetch();
+            }}
+          />
+        ) : null}
+        {!activeLoading && !activeError && !run ? (
+          <EmptyState
+            title="No generation stage yet"
+            body="Start a generation run to see the project's current stage and next step."
+          />
+        ) : null}
+        {!activeLoading && !activeError && run ? (
+          <div className={styles.stagePanelBody}>
+            <div className={styles.stageSummary}>
+              <div>
+                <dt>Current</dt>
+                <dd>
+                  {run.reviewGate
+                    ? `${titleCase(run.reviewGate.stageType)} review`
+                    : run.currentStageType
+                      ? titleCase(run.currentStageType)
+                      : titleCase(run.status)}
+                </dd>
+              </div>
+              <div>
+                <dt>Next</dt>
+                <dd>{nextStage ? titleCase(nextStage.type) : run.status === "succeeded" ? "Complete" : "Pending"}</dd>
+              </div>
+              <div>
+                <dt>Updated</dt>
+                <dd>{formatDate(run.updatedAt)}</dd>
+              </div>
             </div>
-            <div>
-              <dt>Next</dt>
-              <dd>{nextStage ? titleCase(nextStage.type) : run.status === "succeeded" ? "Complete" : "Pending"}</dd>
-            </div>
-            <div>
-              <dt>Updated</dt>
-              <dd>{formatDate(run.updatedAt)}</dd>
-            </div>
-          </div>
 
-          {runDetail?.stages.length ? (
-            <StageRail
-              stages={runDetail.stages}
-              runStatus={run.status}
-              currentStageType={run.currentStageType}
-              runProgressPercent={run.progressPercent}
-              runMessage={run.message}
-              reviewGate={run.reviewGate}
-              stageLinks={stageLinks}
-            />
-          ) : (
-            <p className={styles.muted}>
-              {run.message ?? "Stage details will appear once the run reports its first step."}
-            </p>
-          )}
-
-          <div className={styles.stageActions}>
-            {hasReviewGate ? (
-              <>
-                <Button
-                  variant="primary"
-                  onClick={() => updateGate("approve")}
-                  disabled={updateRunMutation.isPending}
-                  isLoading={updateRunMutation.isPending && pendingGateAction === "approve"}
-                >
-                  Approve and continue
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => updateGate("reject")}
-                  disabled={updateRunMutation.isPending}
-                  isLoading={updateRunMutation.isPending && pendingGateAction === "reject"}
-                >
-                  Request revision
-                </Button>
-              </>
+            {runDetail?.stages.length ? (
+              <StageRail
+                stages={runDetail.stages}
+                runStatus={run.status}
+                currentStageType={run.currentStageType}
+                runProgressPercent={run.progressPercent}
+                runMessage={run.message}
+                reviewGate={run.reviewGate}
+                stageLinks={stageLinks}
+              />
             ) : (
-              <ButtonLink
-                variant="secondary"
-                to={`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(run.runId)}`}
-              >
-                Manage run
-              </ButtonLink>
+              <p className={styles.muted}>
+                {run.message ?? "Stage details will appear once the run reports its first step."}
+              </p>
             )}
+
+            <div className={styles.stageActions}>
+              {hasReviewGate ? (
+                <>
+                  <Button
+                    variant="primary"
+                    onClick={() => updateGate("approve")}
+                    disabled={updateRunMutation.isPending}
+                    isLoading={updateRunMutation.isPending && pendingGateAction === "approve"}
+                  >
+                    Approve and continue
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => updateGate("reject")}
+                    disabled={updateRunMutation.isPending}
+                    isLoading={updateRunMutation.isPending && pendingGateAction === "reject"}
+                  >
+                    Request revision
+                  </Button>
+                </>
+              ) : (
+                <ButtonLink
+                  variant="secondary"
+                  to={`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(run.runId)}`}
+                >
+                  Manage run
+                </ButtonLink>
+              )}
+            </div>
+            {updateRunMutation.error ? (
+              <ErrorState
+                title="Unable to update stage"
+                body="We couldn't apply that stage action. The run may have changed, or your session may need to be refreshed."
+                error={updateRunMutation.error}
+                onRetry={() => {
+                  if (pendingGateAction) updateGate(pendingGateAction);
+                }}
+              />
+            ) : null}
           </div>
-          {updateRunMutation.error ? (
-            <ErrorState
-              title="Unable to update stage"
-              body="We couldn't apply that stage action. The run may have changed, or your session may need to be refreshed."
-              error={updateRunMutation.error}
-              onRetry={() => {
-                if (pendingGateAction) updateGate(pendingGateAction);
-              }}
-            />
-          ) : null}
-        </div>
-      ) : null}
+        ) : null}
+      </div>
     </section>
   );
 }
@@ -664,18 +696,20 @@ function StoryboardPreview({
       <div className={styles.sectionHeader}>
         <div>
           <span className={styles.eyebrow}>Storyboard</span>
-          <h2>Scenes and beats</h2>
+          <h2>
+            {storyboard ? (
+              <Link
+                className={styles.sectionTitleLink}
+                to={`/projects/${encodeURIComponent(projectId)}/storyboard`}
+              >
+                Scenes and beats
+              </Link>
+            ) : (
+              "Scenes and beats"
+            )}
+          </h2>
         </div>
         <div className={styles.sectionHeaderActions}>
-          {storyboard ? (
-            <ButtonLink
-              variant="ghost"
-              size="sm"
-              to={`/projects/${encodeURIComponent(projectId)}/storyboard`}
-            >
-              Open storyboard
-            </ButtonLink>
-          ) : null}
           {/* The generate control only appears once nothing is in flight, so
               the page never offers "Generate again" mid-run. */}
           {!loading && !error && !generating ? (
