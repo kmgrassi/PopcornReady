@@ -147,6 +147,7 @@ export function ProviderApiKeysPanel({
           const saved = savedKeys[provider.id];
           const inputId = `provider-key-${provider.id}`;
           const isBusy = busyProvider === provider.id;
+          const hasDraftKey = Boolean(values[provider.id]?.trim());
 
           return (
             <form
@@ -170,15 +171,16 @@ export function ProviderApiKeysPanel({
                   onChange={(event) => updateValue(provider.id, event.target.value)}
                 />
                 <div className={styles.actions}>
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    size="sm"
-                    isLoading={isBusy && saveMutation.isPending}
-                    disabled={!values[provider.id]?.trim()}
-                  >
-                    {saved ? "Update" : "Save"}
-                  </Button>
+                  {hasDraftKey ? (
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      size="sm"
+                      isLoading={isBusy && saveMutation.isPending}
+                    >
+                      {saved ? "Update" : "Save"}
+                    </Button>
+                  ) : null}
                   {saved ? (
                     <Button
                       variant="secondary"

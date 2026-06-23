@@ -32,10 +32,15 @@ function parseTheme(value: string | null): Theme {
  * They are placed in Settings here; gating them behind a dev/admin flag would
  * be the alternative.
  */
-export default function ThemeToggle() {
+interface ThemeToggleProps {
+  variant?: "menu" | "settings";
+}
+
+export default function ThemeToggle({ variant = "menu" }: ThemeToggleProps) {
   const [theme, setTheme] = useState<Theme>(DEFAULT_THEME);
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const isSettingsVariant = variant === "settings";
 
   useEffect(() => {
     const initialTheme = parseTheme(window.localStorage.getItem(STORAGE_KEY));
@@ -69,9 +74,30 @@ export default function ThemeToggle() {
   }
 
   const activeLabel = THEMES.find((option) => option.id === theme)?.label ?? "Theme";
+  const renderOptions = (role: "radio" | "menuitemradio") =>
+    THEMES.map((option) => (
+      <button
+        key={option.id}
+        type="button"
+        role={role}
+        aria-checked={theme === option.id}
+        className={
+          theme === option.id
+            ? `${styles.option} ${styles.optionActive}`
+            : styles.option
+        }
+        onClick={() => selectTheme(option.id)}
+      >
+        <span className={styles.optionDot} aria-hidden="true" />
+        {option.label}
+      </button>
+    ));
 
   return (
-    <div className={styles.root} ref={rootRef}>
+    <div
+      className={isSettingsVariant ? `${styles.root} ${styles.settings}` : styles.root}
+      ref={rootRef}
+    >
       <button
         type="button"
         className={styles.trigger}
@@ -82,25 +108,14 @@ export default function ThemeToggle() {
         <span className={styles.triggerLabel}>Theme</span>
         <span className={styles.triggerValue}>{activeLabel}</span>
       </button>
+      {isSettingsVariant ? (
+        <div className={styles.inlineOptions} role="radiogroup" aria-label="Theme options">
+          {renderOptions("radio")}
+        </div>
+      ) : null}
       {open ? (
         <div className={styles.menu} role="menu" aria-label="Theme options">
-          {THEMES.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              role="menuitemradio"
-              aria-checked={theme === option.id}
-              className={
-                theme === option.id
-                  ? `${styles.option} ${styles.optionActive}`
-                  : styles.option
-              }
-              onClick={() => selectTheme(option.id)}
-            >
-              <span className={styles.optionDot} aria-hidden="true" />
-              {option.label}
-            </button>
-          ))}
+          {renderOptions("menuitemradio")}
         </div>
       ) : null}
     </div>

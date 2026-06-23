@@ -11,6 +11,7 @@ type PurposeConfig = {
   id: ModelSettingPurpose;
   label: string;
   description: string;
+  icon: "image" | "video" | "audio" | "text";
   providers: Array<{
     id: string;
     label: string;
@@ -23,6 +24,7 @@ const PURPOSES: PurposeConfig[] = [
     id: "image_generation",
     label: "Image generation",
     description: "Keyframes, storyboards, posters, and generated still assets.",
+    icon: "image",
     providers: [
       { id: "openai", label: "OpenAI", models: ["gpt-image-1.5", "gpt-image-1", "gpt-image-1-mini"] },
       { id: "ideogram", label: "Ideogram", models: ["ideogram-v4", "ideogram-v3"] },
@@ -34,6 +36,7 @@ const PURPOSES: PurposeConfig[] = [
     id: "video_generation",
     label: "Video generation",
     description: "Generated clips and motion assets.",
+    icon: "video",
     providers: [
       { id: "gemini", label: "Gemini", models: ["veo-3.1-generate-preview"] },
       { id: "openai", label: "OpenAI", models: ["sora-2"] },
@@ -47,6 +50,7 @@ const PURPOSES: PurposeConfig[] = [
     id: "audio_generation",
     label: "Audio generation",
     description: "Voiceover, dialogue, sound effects, and soundtrack generation.",
+    icon: "audio",
     providers: [
       {
         id: "elevenlabs",
@@ -60,6 +64,7 @@ const PURPOSES: PurposeConfig[] = [
     id: "text_generation",
     label: "Text generation",
     description: "Planning, scripts, critiques, orchestration, and other language tasks.",
+    icon: "text",
     providers: [
       { id: "openai", label: "OpenAI", models: ["gpt-5", "gpt-5-mini"] },
       { id: "anthropic", label: "Anthropic", models: ["claude-opus-4-7", "claude-haiku-4-5"] },
@@ -82,6 +87,46 @@ function providerConfig(purpose: PurposeConfig, provider: string) {
 function errorMessage(error: unknown): string | null {
   if (!error) return null;
   return error instanceof Error ? error.message : String(error);
+}
+
+function PurposeIcon({ icon }: { icon: PurposeConfig["icon"] }) {
+  if (icon === "image") {
+    return (
+      <svg className={styles.purposeIcon} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <rect x="4" y="5" width="16" height="14" rx="3" />
+        <circle cx="9" cy="10" r="1.5" />
+        <path d="m7 17 4.2-4.2a1.4 1.4 0 0 1 2 0L17 16.6" />
+        <path d="m14.5 15 1.3-1.3a1.3 1.3 0 0 1 1.9 0L20 16" />
+      </svg>
+    );
+  }
+
+  if (icon === "video") {
+    return (
+      <svg className={styles.purposeIcon} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <rect x="4" y="6" width="11" height="12" rx="2.5" />
+        <path d="m15 10 4.2-2.4a.6.6 0 0 1 .8.5v7.8a.6.6 0 0 1-.8.5L15 14" />
+      </svg>
+    );
+  }
+
+  if (icon === "audio") {
+    return (
+      <svg className={styles.purposeIcon} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M7 14H5a2 2 0 0 1 0-4h2l5-4v12l-5-4Z" />
+        <path d="M16 9.2a4 4 0 0 1 0 5.6" />
+        <path d="M18.5 6.7a7.5 7.5 0 0 1 0 10.6" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg className={styles.purposeIcon} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M5 6h14" />
+      <path d="M12 6v12" />
+      <path d="M8 18h8" />
+    </svg>
+  );
 }
 
 export function ModelSettingsPanel({
@@ -199,7 +244,10 @@ export function ModelSettingsPanel({
               onSubmit={(event) => void onSubmit(event, purpose)}
             >
               <div className={styles.copy}>
-                <h3>{purpose.label}</h3>
+                <div className={styles.purposeTitle}>
+                  <PurposeIcon icon={purpose.icon} />
+                  <h3>{purpose.label}</h3>
+                </div>
                 <p>{purpose.description}</p>
               </div>
               <div className={styles.controls}>
