@@ -187,9 +187,7 @@ function InspirationResult({
           {inspiration.movieTitle ? (
             <h2 className={styles.movieTitle}>{inspiration.movieTitle}</h2>
           ) : null}
-          <p className={styles.logline}>
-            <HighlightedLogline inspiration={inspiration} />
-          </p>
+          <HighlightedLogline inspiration={inspiration} />
           <div className={styles.promptActions}>
             <Button
               variant="cta"
@@ -273,8 +271,25 @@ function HighlightedLogline({ inspiration }: { inspiration: RandomStoryInspirati
     ],
     [inspiration]
   );
+  const sentences = useMemo(() => splitSentences(inspiration.logline), [inspiration.logline]);
 
-  return <>{highlightText(inspiration.logline, parts)}</>;
+  return (
+    <div className={styles.logline}>
+      {sentences.map((sentence, index) => (
+        <p className={styles.loglineSentence} key={`${sentence}-${index}`}>
+          {highlightText(sentence, parts)}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function splitSentences(text: string): string[] {
+  const normalized = text.trim().replace(/\s+/g, " ");
+  if (!normalized) return [];
+  return normalized.match(/[^.!?]+[.!?]+(?=\s|$)|[^.!?]+$/g)?.map((part) => part.trim()) ?? [
+    normalized,
+  ];
 }
 
 function highlightText(
