@@ -15,9 +15,9 @@ PR #547 owns that cleanup by deleting the orphaned root `src/` tree, including
 
 | Gap | Current status | Recommendation |
 | --- | --- | --- |
-| Feed graph stale candidates into rerun decisions | Not implemented in the restart path. The graph query exists, but restart still uses fixed stage boundaries. | Start here for the highest North Star alignment impact. Add a graph-aware rerun proposal path before changing UI affordances. |
-| Close the OODA prompt-feedback loop | Mostly not implemented. There are transient feedback and board-revision seams, but no first-class feedback entities or learned prompt context. | Scope as a separate feedback data-model/API track after rerun proposals have a stable target model. |
-| Broaden regeneration coverage | Partial. Prompt-based image regeneration is shipped; video/audio/composite/storyboard semantic reruns are handled only through stage/tool reruns or board feedback. | Treat broad regeneration as tool-specific rerun handlers, not as one generic media endpoint. |
+| Feed graph stale candidates into rerun decisions | Not implemented in the restart path. The graph query exists, but restart still uses fixed stage boundaries. | Start with [`graph-rerun-decisioning-prs.md`](graph-rerun-decisioning-prs.md). Add a graph-aware rerun proposal path before changing UI affordances. |
+| Close the OODA prompt-feedback loop | Mostly not implemented. There are transient feedback and board-revision seams, but no first-class feedback entities or learned prompt context. | Use [`ooda-feedback-implementation-prs.md`](ooda-feedback-implementation-prs.md). Scope this as a feedback data-model/API track after rerun proposals have a stable target model. |
+| Broaden regeneration coverage | Partial. Prompt-based image regeneration is shipped; video/audio/composite/storyboard semantic reruns are handled only through stage/tool reruns or board feedback. | Use [`regeneration-coverage-prs.md`](regeneration-coverage-prs.md). Treat broad regeneration as tool-specific rerun handlers, not as one generic media endpoint. |
 
 ## 1. Feed Graph Stale Candidates Into Rerun Decisions
 
@@ -66,6 +66,8 @@ Suggested first PR:
   candidate/provenance payload and a deterministic placeholder proposal. A later
   PR can put the LLM decision behind that stable contract.
 
+Detailed scope: [`graph-rerun-decisioning-prs.md`](graph-rerun-decisioning-prs.md).
+
 ## 2. Close The OODA Prompt-Feedback Loop
 
 Status: mostly not implemented.
@@ -111,6 +113,9 @@ Suggested first PR:
 - Implement only `feedback_events` plus capture from gate approve/reject and
   board feedback. Leave Orient/Decide/Act as follow-up PRs.
 
+Detailed scope:
+[`ooda-feedback-implementation-prs.md`](ooda-feedback-implementation-prs.md).
+
 ## 3. Broaden Regeneration Coverage
 
 Status: partial.
@@ -154,6 +159,8 @@ Suggested first PR:
 - After the rerun-proposal endpoint exists, add a `regenerate_candidate` proposal
   type for one keyframe/clip/audio candidate and wire it to the matching existing
   tool. Keep image endpoint behavior unchanged.
+
+Detailed scope: [`regeneration-coverage-prs.md`](regeneration-coverage-prs.md).
 
 ## Recommended Sequence
 
