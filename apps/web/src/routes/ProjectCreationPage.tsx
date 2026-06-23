@@ -43,6 +43,8 @@ export function ProjectCreationPage() {
   const reviewGates = parseReviewGates(params.get("reviewGates"));
   const draftId = params.get("draft");
   const newDraftRequest = params.get("new") ?? undefined;
+  const autoStartGeneration =
+    params.get("autoStart") === "1" || (Boolean(goal.trim()) && !draftId);
 
   const initialBrief: Partial<BriefDraft> = {
     ...(goal ? { goal } : {}),
@@ -58,6 +60,7 @@ export function ProjectCreationPage() {
       openPanel={openPanel}
       draftId={draftId}
       newDraftRequest={newDraftRequest}
+      autoStartGeneration={autoStartGeneration}
     />
   );
 }

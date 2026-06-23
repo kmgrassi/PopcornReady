@@ -8,7 +8,6 @@
     "./edit-graph": "./src/edit-graph.ts",
     "./types": "./src/types.ts",
     "./v1/dashboard": "./src/v1/dashboard.ts",
-    "./v1/studio-planning": "./src/v1/studio-planning.ts",
     "./v1/studio-drafts": "./src/v1/studio-drafts.ts",
     "./v1/types": "./src/v1/types.ts",
     "./*": "./src/*.ts"
