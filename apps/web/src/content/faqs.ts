@@ -65,6 +65,14 @@ export const FAQS: FaqItem[] = [
     placements: ["landing", "dashboard"],
     tags: ["beginner", "prompting", "editing", "workflow"],
   },
+  {
+    id: "export-finished-video",
+    question: "Can I export the finished video?",
+    answer:
+      "Yes, absolutely. You can export the finished video and upload it to any service you like.",
+    placements: ["landing", "dashboard"],
+    tags: ["export", "sharing", "output"],
+  },
 ];
 
 export function faqsForPlacement(placement: FaqPlacement): FaqItem[] {
