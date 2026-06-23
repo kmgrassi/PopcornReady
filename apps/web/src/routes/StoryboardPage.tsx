@@ -274,6 +274,15 @@ function BeatCard({
   const label = beat.intent || `Beat ${order}`;
   const canEdit = Boolean(panel?.imageAssetId);
   const prompt = panel?.prompt?.trim() || beat.visualDescription?.trim() || null;
+  const mediaOverlay =
+    canEdit && image ? (
+      <>
+        <span className={styles.beatNumber}>Beat {order}</span>
+        <span className={styles.editHint}>Ask AI</span>
+      </>
+    ) : (
+      <span className={styles.beatNumber}>Beat {order}</span>
+    );
 
   return (
     <article className={styles.beat}>
@@ -297,10 +306,16 @@ function BeatCard({
           recoveryClassName={styles.panelRecovery}
           mediaClassName={styles.panelImage}
           placeholderClassName={`${styles.panelImage} ${styles.panelEmpty}`}
-          placeholder={<span>No panel image yet</span>}
+          placeholder={
+            <>
+              <span className={styles.beatNumber}>Beat {order}</span>
+              <span>No panel image yet</span>
+            </>
+          }
           activateClassName={styles.panelButton}
           onRegenerateStart={() => onRegenerateStart(beat.id)}
           onRegenerateSettled={() => onRegenerateSettled(beat.id)}
+          mediaOverlay={mediaOverlay}
           {...(canEdit && image
             ? {
                 onActivate: () =>
@@ -318,12 +333,6 @@ function BeatCard({
                     title: label,
                     subtitle: `Scene ${sceneOrder} · Beat ${order}`,
                   }),
-                mediaOverlay: (
-                  <>
-                    <span className={styles.beatNumber}>Beat {order}</span>
-                    <span className={styles.editHint}>Ask AI</span>
-                  </>
-                ),
               }
             : {})}
         />

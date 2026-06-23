@@ -1,4 +1,8 @@
 .shell {
+  --storyboard-overlay-bg: color-mix(in srgb, var(--bg) 68%, transparent);
+  --storyboard-overlay-border: color-mix(in srgb, var(--text) 24%, transparent);
+  --storyboard-overlay-text: var(--text-strong);
+
   display: grid;
   gap: var(--space-5);
   width: min(
@@ -249,8 +253,8 @@
   gap: var(--space-2);
   padding: 4px 10px;
   border-radius: var(--radius-pill);
-  background: rgba(0, 0, 0, 0.62);
-  color: #fff;
+  background: var(--storyboard-overlay-bg);
+  color: var(--storyboard-overlay-text);
   font-size: var(--text-xs);
   font-weight: 900;
 }
@@ -263,10 +267,10 @@
   align-items: center;
   min-height: 24px;
   padding: 2px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  border: 1px solid var(--storyboard-overlay-border);
   border-radius: var(--radius-pill);
-  background: rgba(0, 0, 0, 0.66);
-  color: #fff;
+  background: var(--storyboard-overlay-bg);
+  color: var(--storyboard-overlay-text);
   font-size: var(--text-xs);
   font-weight: 900;
   text-transform: uppercase;
@@ -277,8 +281,8 @@
   inset: auto var(--space-2) var(--space-2) auto;
   padding: 3px 9px;
   border-radius: var(--radius-pill);
-  background: rgba(0, 0, 0, 0.62);
-  color: #fff;
+  background: var(--storyboard-overlay-bg);
+  color: var(--storyboard-overlay-text);
   font-size: var(--text-xs);
   font-weight: 900;
   opacity: 0;
