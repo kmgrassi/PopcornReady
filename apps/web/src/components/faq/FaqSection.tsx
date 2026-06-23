@@ -36,6 +36,20 @@ export function FaqSection({
           <article className={styles.item} key={faq.id}>
             <h3>{faq.question}</h3>
             <p>{faq.answer}</p>
+            {faq.links && faq.links.length > 0 ? (
+              <div className={styles.links}>
+                {faq.links.map((link) => (
+                  <a
+                    href={link.href}
+                    key={link.href}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {link.label}
+                  </a>
+                ))}
+              </div>
+            ) : null}
           </article>
         ))}
       </div>

@@ -57,6 +57,25 @@
   line-height: var(--line-body);
 }
 
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.links a {
+  color: var(--accent);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.links a:hover,
+.links a:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
 .compact {
   gap: var(--space-4);
 }

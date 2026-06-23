@@ -4,9 +4,15 @@ export interface FaqItem {
   id: string;
   question: string;
   answer: string;
+  links?: Array<{
+    label: string;
+    href: string;
+  }>;
   placements: FaqPlacement[];
   tags: string[];
 }
+
+export const POPCORN_READY_GITHUB_URL = "https://github.com/kmgrassi/popcornready";
 
 export const FAQS: FaqItem[] = [
   {
@@ -72,6 +78,20 @@ export const FAQS: FaqItem[] = [
       "Yes, absolutely. You can export the finished video and upload it to any service you like.",
     placements: ["landing", "dashboard"],
     tags: ["export", "sharing", "output"],
+  },
+  {
+    id: "open-source-or-hosted",
+    question: "Is Popcorn Ready open source or hosted?",
+    answer:
+      "Yes, Popcorn Ready is open source. This is where you can clone the repo and run it yourself.",
+    links: [
+      {
+        label: "View the GitHub repo",
+        href: POPCORN_READY_GITHUB_URL,
+      },
+    ],
+    placements: ["landing", "dashboard"],
+    tags: ["open-source", "self-hosting", "github"],
   },
 ];
 
