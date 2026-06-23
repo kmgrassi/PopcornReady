@@ -81,6 +81,9 @@ rerun policy. The proposal service should separate:
   other semantic inputs that explain how the target was produced.
 - **Related context:** active selections or assets sharing a lineage, anchor,
   character/story element, slot role, or storyboard scene/beat with the target.
+- **Project ID map:** a compact project-wide index of assets, story rows,
+  selections, anchors, and notable actions so the agent can notice affected
+  objects outside the immediate graph neighborhood.
 - **Selected work:** the actual assets/tools the agent proposes to regenerate,
   rewrite, swap, or leave alone.
 
@@ -116,9 +119,15 @@ single structured payload with:
 - **Upstream inputs:** direct input/anchor/child assets with relation metadata
   and compact summaries, so the agent can decide whether the fix should start at
   a prompt, beat, anchor, or other source asset.
-- **Related context:** same-lineage versions, shared anchor/character/story
-  element assets, sibling scene/beat assets, and other active selections that
-  could be affected even if they are not descendants of the target.
+- **Project ID map:** most or all project asset IDs, storyboard scene/beat/panel
+  IDs, selection slots, character/story element IDs, anchor IDs, and current
+  active asset IDs, each with kind, role/name, short description, and key
+  lineage/relationship markers. This is the agent's broad lookup table for
+  determining what else might need to change.
+- **Focused related context:** expanded detail for same-lineage versions, shared
+  anchor/character/story element assets, sibling scene/beat assets, and other
+  active selections that could be affected even if they are not descendants of
+  the target.
 - **Recent decisions:** recent `actions`, tool outputs, failures, approvals, and
   rejections for the run/project, limited to the window needed to understand the
   current state.
@@ -133,8 +142,26 @@ inconsistent, and which tool sequence is the smallest coherent fix?"
 
 If the payload cannot answer that question, the agent must return
 `ask_clarification` or `restart_stage`; it should not guess from an incomplete
-graph slice. The payload should stay bounded by summarizing assets and recent
-actions rather than sending every asset in the project.
+graph slice. The payload should include broad project identifiers and compact
+descriptions, but it should stay bounded by omitting heavy content, raw provider
+responses, full media analysis, and long action histories unless the agent asks
+for a narrower follow-up context fetch.
+
+## Proposal Review Step
+
+The rerun proposal is the intermediate checkpoint before anything is updated.
+It is effectively the agent's checklist of what it believes must change:
+
+- assets, story rows, selections, prompts, anchors, or stages it proposes to
+  update;
+- assets it inspected but intentionally leaves unchanged;
+- why each selected object is in or out of scope;
+- expected tools/stages, rough cost, risk, and approval requirement;
+- fallback reason if the agent cannot produce a narrower graph-aware plan.
+
+Preview/proposal creation never mutates assets, selections, storyboard rows, or
+run gates. The UI should show this checklist before execution for user-initiated
+edits, and execution should only operate on IDs listed in the approved proposal.
 
 ## Resolved Decisions
 
@@ -174,12 +201,20 @@ interface RerunProposal {
   kind: RerunProposalKind;
   targetAssetId: string;
   changedAssetIds: string[];
+  inspectedAssetIds: string[];
   candidateAssetIds: string[];
   upstreamAssetIds: string[];
   relatedAssetIds: string[];
+  unchangedAssetIds: string[];
   selectedCandidateAssetIds: string[];
   selectedUpstreamAssetIds: string[];
   selectedRelatedAssetIds: string[];
+  checklist: Array<{
+    id: string;
+    objectType: "asset" | "storyboard_row" | "selection" | "stage" | "prompt";
+    decision: "update" | "leave_unchanged" | "needs_clarification";
+    reason: string;
+  }>;
   contextPins: {
     assetFingerprints: Record<string, string>;
     selectionSeqs: Array<{
@@ -256,6 +291,7 @@ Response:
   "proposal": { "schemaVersion": "rerun_proposal.v1" },
   "context": {
     "changedAsset": {},
+    "projectIdMap": {},
     "candidates": [],
     "upstreamInputs": [],
     "relatedAssets": [],
@@ -310,6 +346,8 @@ from:
 - `current_selections`
 - recent `actions` for the project/run
 - the user note and changed asset summary
+- a compact project ID map for all project assets/story rows/selections that
+  might be useful for blast-radius reasoning
 - compact semantic summaries/prompt excerpts for target, candidate, upstream,
   and related assets
 
@@ -334,6 +372,8 @@ Acceptance:
 - The endpoint rejects cross-project `changedAssetId`/`runId` mismatches.
 - The persisted proposal includes approval fields and enough context pins to
   detect stale execution later.
+- The persisted proposal includes an explicit checklist of selected and
+  intentionally unchanged IDs.
 - The response includes upstream input context even though the deterministic
   PR 1 proposal only selects downstream candidates.
 - The response includes the structured agent payload PR 2 will pass to the
@@ -351,9 +391,11 @@ Acceptance:
 - Deterministic fallback remains the default.
 - Tests verify invalid model output is rejected and falls back safely.
 - The model cannot invent asset IDs outside changed/candidate/upstream/related
-  context IDs.
+  context IDs or the project ID map.
 - The model cannot mark a proposal approval-free unless it satisfies the
   approval rules above.
+- The model response must include a checklist explaining selected updates and
+  intentionally unchanged assets.
 - Tests cover a user request that points at a generated asset but proposes an
   upstream anchor or prompt change plus dependent downstream regeneration.
 - Tests cover insufficient context returning `ask_clarification` instead of
