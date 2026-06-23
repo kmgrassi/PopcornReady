@@ -15,6 +15,7 @@ import { buildKeyframePrompt } from "@/lib/generative/keyframe";
 import type { Beat, EditPlan } from "@popcorn/shared/types";
 import { planBeats } from "@popcorn/shared/types";
 import type { ProjectStoryboard } from "@popcorn/shared/v1/types";
+import { createLogger } from "@/lib/v1/logger";
 
 type KeyframeImageProvider = "openai" | "ideogram" | "gemini" | "mock";
 
@@ -39,6 +40,7 @@ const defaultDeps: GenerateKeyframeJobDeps = {
   selectGeneratedBeatKeyframeAsset: realSelectGeneratedBeatKeyframeAsset,
   jobs: agentApiStore,
 };
+const logger = createLogger();
 
 function localAuth(workspaceId: string): AuthContext {
   return {
@@ -159,6 +161,12 @@ export async function runGenerateKeyframeJob(
   deps: Partial<GenerateKeyframeJobDeps> = {}
 ): Promise<void> {
   const d = { ...defaultDeps, ...deps };
+  const jobLogger = logger.child({
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    runId: input.orchestratorRunId,
+    jobId: input.jobId,
+  });
   try {
     await d.jobs.setStep(input.jobId, "generating_assets");
     const auth = localAuth(input.workspaceId);
@@ -167,6 +175,13 @@ export async function runGenerateKeyframeJob(
     const generatedAssetIds: string[] = [];
     const skippedAssetIds: string[] = [];
     const beats = planBeats(input.plan);
+    jobLogger.info("generate_keyframe_job.started", {
+      planAssetId: input.planAssetId,
+      storyboardId: input.storyboard.id,
+      beatCount: beats.length,
+      storyboardTileCount: tileByBeat.size,
+      visualAnchorCount: activeVisualAnchors?.visualAnchorPlan.anchors.length ?? 0,
+    });
 
     for (let index = 0; index < beats.length; index += 1) {
       const beat = beats[index];
@@ -178,6 +193,11 @@ export async function runGenerateKeyframeJob(
         expectedRole: "beat_keyframe",
       });
       if (existing?.status === "ready") {
+        jobLogger.info("generate_keyframe_job.beat_skipped_existing", {
+          beatId,
+          existingAssetId: existing.id,
+          existingStatus: existing.status,
+        });
         skippedAssetIds.push(existing.id);
         continue;
       }
@@ -196,6 +216,17 @@ export async function runGenerateKeyframeJob(
         ? await d.getAsset(input.workspaceId, input.projectId, tileAssetId)
         : null;
       const storyboardAsset = tileAsset?.role === "beat_storyboard" ? tileAsset : null;
+      if (tileAsset && !storyboardAsset) {
+        jobLogger.warn("generate_keyframe_job.storyboard_tile_wrong_role", {
+          beatId,
+          tileAssetId,
+          tileRole: tileAsset.role,
+          tileKind: tileAsset.kind,
+          tileStatus: tileAsset.status,
+        });
+      } else if (!tileAssetId) {
+        jobLogger.warn("generate_keyframe_job.storyboard_tile_missing", { beatId });
+      }
       const useStoryboardReference = Boolean(storyboardAsset && anchors.length > 0);
       const graphInputs: GraphAssetInput[] = [
         {
@@ -228,6 +259,16 @@ export async function runGenerateKeyframeJob(
         anchors.map(({ anchor }) => anchor),
         input.provider
       );
+      jobLogger.info("generate_keyframe_job.beat_generating", {
+        beatId,
+        beatIndex: index,
+        provider: provider ?? "workspace_default",
+        anchorAssetIds,
+        storyboardAssetId: storyboardAsset?.id,
+        structuralReferenceAssetIds,
+        graphInputRoles: graphInputs.map((graphInput) => graphInput.role),
+        useStoryboardReference,
+      });
 
       const result = await d.generateBeatKeyframe({
         auth,
@@ -248,22 +289,48 @@ export async function runGenerateKeyframeJob(
         },
       });
       const assetIds = assetIdsFromResult(result);
+      jobLogger.info("generate_keyframe_job.beat_generation_result", {
+        beatId,
+        status: result.status,
+        assetIds,
+      });
       if (assetIds.length === 0) {
         throw new Error(`Keyframe generation returned no assets for ${beatId}.`);
       }
       for (const assetId of assetIds) {
-        await d.selectGeneratedBeatKeyframeAsset({
-          workspaceId: input.workspaceId,
-          projectId: input.projectId,
+        try {
+          await d.selectGeneratedBeatKeyframeAsset({
+            workspaceId: input.workspaceId,
+            projectId: input.projectId,
+            beatId,
+            assetId,
+          });
+        } catch (err) {
+          jobLogger.error("generate_keyframe_job.selection_failed", {
+            beatId,
+            assetId,
+            error: { message: err instanceof Error ? err.message : String(err) },
+          });
+          throw err;
+        }
+        jobLogger.info("generate_keyframe_job.selection_applied", {
           beatId,
           assetId,
+          slotRole: `beat_keyframe:${beatId}`,
         });
         generatedAssetIds.push(assetId);
       }
     }
 
     await d.jobs.succeed(input.jobId, { assetIds: generatedAssetIds, skippedAssetIds });
+    jobLogger.info("generate_keyframe_job.succeeded", {
+      generatedAssetIds,
+      skippedAssetIds,
+    });
   } catch (err) {
+    jobLogger.error("generate_keyframe_job.failed", {
+      error: { message: err instanceof Error ? err.message : String(err) },
+    });
     await d.jobs.fail(input.jobId, {
       code: "job_failed",
       message: err instanceof Error ? err.message : String(err),

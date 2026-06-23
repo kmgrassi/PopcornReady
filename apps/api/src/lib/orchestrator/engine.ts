@@ -38,6 +38,7 @@ import { applyCreditTransaction, getCreditBalance } from "@/lib/api/v1/credits";
 import { ApiError } from "@/core/errors";
 import { createToolExecutionContext } from "./tool-context";
 import type { ToolCallResult, ToolName } from "./types";
+import { createLogger } from "@/lib/v1/logger";
 
 // Credits charged per generation = providerCostUsd * MARGIN, at 1 credit = $0.01.
 const CREDIT_MARGIN = 2;
@@ -46,6 +47,7 @@ const PG_INSUFFICIENT_FUNDS = "23514"; // apply_credit_transaction overdraw guar
 const DEFAULT_MAX_TURNS = 50;
 const DEFAULT_MODEL_TURN_TIMEOUT_MS = 60_000;
 const AFTER_GATE_PREFIX = "after:";
+const logger = createLogger();
 
 export interface InvocationRecord {
   projectId: string;
@@ -420,11 +422,26 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
     }
 
     if (decision.type === "done") {
+      logger.info("orchestrator.done", {
+        workspaceId: r.workspaceId,
+        projectId: run.projectId,
+        runId: run.id,
+        turn,
+        model: decision.model,
+      });
       return finish(run, "succeeded", r);
     }
 
     run = await r.store.getOrchestratorRun(run.id);
     if (run.status !== "running") return run;
+    logger.info("orchestrator.tool_decision", {
+      workspaceId: r.workspaceId,
+      projectId: run.projectId,
+      runId: run.id,
+      turn,
+      tool: decision.toolName,
+      model: decision.model,
+    });
 
     // Gate handling. Pending/reached gates pause before executing. Approved gates
     // fall through. Rejected gates also fall through once: that is the
@@ -438,7 +455,18 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       if (gate.status === "pending") {
         await r.store.markGateReached(run.id, decision.toolName);
       }
-      if (!regeneratingRejectedGate) return park(run, r);
+      if (!regeneratingRejectedGate) {
+        logger.info("orchestrator.parked_before_gate", {
+          workspaceId: r.workspaceId,
+          projectId: run.projectId,
+          runId: run.id,
+          turn,
+          tool: decision.toolName,
+          gateId: gate.id,
+          gateStatus: gate.status,
+        });
+        return park(run, r);
+      }
     }
 
     // Credit pre-check: fail fast before spending on a generation a broke user
@@ -499,6 +527,14 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
         message: err instanceof Error ? err.message : String(err),
         recoverable: false,
       };
+      logger.error("orchestrator.tool_exception", {
+        workspaceId: r.workspaceId,
+        projectId: run.projectId,
+        runId: run.id,
+        turn,
+        tool: decision.toolName,
+        error: { code: error.kind, message: error.message },
+      });
       await r.store.recordInvocation({
         projectId: run.projectId,
         orchestratorRunId: run.id,
@@ -510,6 +546,30 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
         error,
       });
       return finish(run, "failed", r, error);
+    }
+
+    if (result.status === "failed") {
+      const unmet = result.error.unmetRequirements ?? [];
+      logger.warn("orchestrator.tool_failed", {
+        workspaceId: r.workspaceId,
+        projectId: run.projectId,
+        runId: run.id,
+        turn,
+        tool: decision.toolName,
+        error: { code: result.error.kind, message: result.error.message },
+        recoverable: result.error.recoverable,
+        unmetRequirements: unmet.map((miss) => miss.requirement),
+        suggestedNextTools: result.error.suggestedNextTools?.map((call) => call.tool) ?? [],
+      });
+    } else if (result.status === "accepted") {
+      logger.info("orchestrator.tool_accepted", {
+        workspaceId: r.workspaceId,
+        projectId: run.projectId,
+        runId: run.id,
+        turn,
+        tool: decision.toolName,
+        jobId: result.jobId,
+      });
     }
 
     await r.store.recordInvocation({
@@ -581,6 +641,14 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
     }
 
     if (result.status === "accepted" || result.status === "waiting_for_approval") {
+      logger.info("orchestrator.parked_after_tool", {
+        workspaceId: r.workspaceId,
+        projectId: run.projectId,
+        runId: run.id,
+        turn,
+        tool: decision.toolName,
+        resultStatus: result.status,
+      });
       return park(run, r); // parked on a job / approval gate
     }
     if (result.status === "failed" && !result.error.recoverable) {

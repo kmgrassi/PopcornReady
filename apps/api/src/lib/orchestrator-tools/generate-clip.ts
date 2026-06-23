@@ -8,6 +8,7 @@ import type { EditPlan } from "@popcorn/shared/types";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 import { runGenerateClipJob as realRunGenerateClipJob } from "./generate-clip-job";
+import { createLogger } from "@/lib/v1/logger";
 
 type VideoProvider = "openai" | "gemini" | "runway" | "ltx" | "nvidia_api_catalog" | "mock";
 
@@ -49,6 +50,7 @@ const defaultDeps: GenerateClipDeps = {
   createJob: (input) => agentApiStore.createOrGetJob(input),
   runGenerateClipJob: realRunGenerateClipJob,
 };
+const logger = createLogger();
 
 export const generateClipInputSchema = {
   type: "object",
@@ -317,7 +319,14 @@ export function createGenerateClipTool(
       }
 
       const activePlan = await resolved.getActiveProjectPlan(context.projectId);
-      if (!activePlan) return missingPlan();
+      if (!activePlan) {
+        logger.warn("generate_clip.precondition_missing_plan", {
+          workspaceId: context.auth.workspaceId,
+          projectId: context.projectId,
+          runId: context.orchestratorRunId,
+        });
+        return missingPlan();
+      }
 
       const allBeats = new Map(planBeats(activePlan.plan).map((beat) => [beat.id, beat]));
       const requestedBeatIds = selectedBeatIds(input, activePlan);
@@ -336,6 +345,13 @@ export function createGenerateClipTool(
           expectedRole: "beat_clip",
         });
         if (existingClip) {
+          logger.info("generate_clip.beat_skipped_existing_clip", {
+            workspaceId: context.auth.workspaceId,
+            projectId: context.projectId,
+            runId: context.orchestratorRunId,
+            beatId,
+            existingClipAssetId: existingClip.id,
+          });
           skippedBeatIds.push(beatId);
           continue;
         }
@@ -347,6 +363,13 @@ export function createGenerateClipTool(
           expectedRole: "beat_keyframe",
         });
         if (!keyframe) {
+          logger.warn("generate_clip.beat_missing_keyframe", {
+            workspaceId: context.auth.workspaceId,
+            projectId: context.projectId,
+            runId: context.orchestratorRunId,
+            beatId,
+            slotRole: `beat_keyframe:${beatId}`,
+          });
           missingKeyframeBeatIds.push(beatId);
           continue;
         }
@@ -364,8 +387,23 @@ export function createGenerateClipTool(
         });
       }
 
-      if (missingKeyframeBeatIds.length) return missingKeyframes(missingKeyframeBeatIds);
+      if (missingKeyframeBeatIds.length) {
+        logger.warn("generate_clip.precondition_missing_keyframes", {
+          workspaceId: context.auth.workspaceId,
+          projectId: context.projectId,
+          runId: context.orchestratorRunId,
+          missingKeyframeBeatIds,
+          requestedBeatIds,
+        });
+        return missingKeyframes(missingKeyframeBeatIds);
+      }
       if (jobBeats.length === 0) {
+        logger.info("generate_clip.noop_all_clips_exist", {
+          workspaceId: context.auth.workspaceId,
+          projectId: context.projectId,
+          runId: context.orchestratorRunId,
+          skippedBeatIds,
+        });
         return {
           status: "succeeded",
           resourceIds: [],
@@ -376,6 +414,15 @@ export function createGenerateClipTool(
       const { job } = await resolved.createJob({
         type: "asset_generation",
         projectId: context.projectId,
+      });
+      logger.info("generate_clip.accepted", {
+        workspaceId: context.auth.workspaceId,
+        projectId: context.projectId,
+        runId: context.orchestratorRunId,
+        jobId: job.id,
+        beatIds: jobBeats.map((beat) => beat.beatId),
+        keyframeAssetIds: jobBeats.map((beat) => beat.keyframeAssetId),
+        skippedBeatIds,
       });
 
       void resolved.runGenerateClipJob({
