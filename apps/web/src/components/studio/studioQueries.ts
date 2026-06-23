@@ -7,7 +7,10 @@ import {
   type ExportJobResponse,
   type StartTimelineExportInput,
 } from "../../lib/api-client";
-import { requestStudioPlanningDecisions } from "../../lib/studioPlanning";
+import {
+  requestStudioPlanningDecisions,
+  requestStudioPlanningStory,
+} from "../../lib/studioPlanning";
 import type { StudioPlanningPreviewResponse } from "@popcorn/shared/v1/studio-planning";
 import type { GenerationRunResultArtifact } from "../../lib/v1/generation-runs/status";
 import type { BriefDraft } from "./useStudioFlow";
@@ -114,6 +117,15 @@ export function useStudioPlanningDecisionsQuery(
         ? PLANNING_POLL_INTERVAL_MS
         : false,
     retry: false,
+  });
+}
+
+export function useStudioPlanningStoryMutation() {
+  return useMutation({
+    mutationFn: (draft: BriefDraft) => requestStudioPlanningStory(draft),
+    meta: {
+      errorMessage: "Could not generate story",
+    },
   });
 }
 
