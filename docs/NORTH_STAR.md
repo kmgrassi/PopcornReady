@@ -415,5 +415,8 @@ resolutions as the design record (the "why" behind the as-built schema).
   `docs/scopes/generation-review-checkpoints.md`,
   `docs/scopes/character-consistency-generation.md`,
   `docs/scopes/video-snapshot-review.md`,
-  `docs/scopes/north-star-gap-audit.md`.
+  `docs/scopes/north-star-gap-audit.md`,
+  `docs/scopes/graph-rerun-decisioning-prs.md`,
+  `docs/scopes/ooda-feedback-implementation-prs.md`,
+  `docs/scopes/regeneration-coverage-prs.md`.
 - **Research:** `docs/research/character-consistency-video.md`.
