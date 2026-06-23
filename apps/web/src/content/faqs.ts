@@ -49,6 +49,14 @@ export const FAQS: FaqItem[] = [
     placements: ["landing", "dashboard"],
     tags: ["editing", "revision", "workflow"],
   },
+  {
+    id: "what-models",
+    question: "What models does Popcorn Ready use?",
+    answer:
+      "Popcorn Ready's core model stack uses Gemini for video generation, OpenAI or Ideogram for image generation, and ElevenLabs for audio generation. Users can also pick their own models and add their own API keys for different provider options if they prefer.",
+    placements: ["landing", "dashboard"],
+    tags: ["models", "providers", "api-keys"],
+  },
 ];
 
 export function faqsForPlacement(placement: FaqPlacement): FaqItem[] {
