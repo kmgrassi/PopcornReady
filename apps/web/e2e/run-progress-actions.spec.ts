@@ -18,7 +18,10 @@ test.describe("run progress actions", () => {
     const routes = await installRunProgressRoutes(page, { detail: active });
 
     await page.goto(`/projects/${e2eProjectId}/runs/${active.run.runId}`);
-    await expect(page.getByRole("heading", { name: "Stop here or keep producing" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Stop here or keep producing" })).toHaveCount(0);
+    const rail = page.getByRole("complementary", { name: "Stage rail" });
+    await expect(rail.getByText("Final Render")).toBeVisible();
+    await expect(rail.getByText("In progress")).toBeVisible();
 
     await expect(
       page.evaluate((projectId) => {
@@ -33,10 +36,10 @@ test.describe("run progress actions", () => {
       }, e2eProjectId),
     ).resolves.toBeUndefined();
 
-    await page.getByRole("button", { name: "Stop here" }).click();
+    await rail.getByRole("button", { name: "Stop here" }).click();
 
     await expect.poll(() => routes.actionBodies).toEqual([{ action: "cancel", body: {} }]);
-    await expect(page.getByText("Generation was canceled.")).toBeVisible();
+    await expect(page.getByRole("status").getByText("Generation was canceled.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Stop here" })).toHaveCount(0);
     await expect(
       page.evaluate((projectId) =>
@@ -63,7 +66,7 @@ test.describe("run progress actions", () => {
       action: "cancel",
       body: {},
     });
-    await expect(page.getByText("Generation was canceled.")).toBeVisible();
+    await expect(page.getByRole("status").getByText("Generation was canceled.")).toBeVisible();
   });
 
   test("approve and reject review gates post feedback and clear the note", async ({ page }) => {
