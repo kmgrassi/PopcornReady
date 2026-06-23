@@ -52,3 +52,7 @@ export interface StudioPlanningPreview {
 export interface StudioPlanningPreviewResponse {
   preview: StudioPlanningPreview;
 }
+
+export interface StudioPlanningStoryResponse {
+  story: string;
+}

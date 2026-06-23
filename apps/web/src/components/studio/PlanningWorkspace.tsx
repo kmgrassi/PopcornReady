@@ -6,7 +6,10 @@ import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { LONG_VIDEO_PLANNING_REVIEW_THRESHOLD_SEC } from "../../lib/startRun";
 import { formatOptions, platformOptions } from "./copy";
-import { useStudioPlanningDecisionsQuery } from "./studioQueries";
+import {
+  useStudioPlanningDecisionsQuery,
+  useStudioPlanningStoryMutation,
+} from "./studioQueries";
 import styles from "./PlanningWorkspace.module.css";
 
 const formatLabels = new Map(formatOptions.map((option) => [option.value, option.label]));
@@ -85,7 +88,9 @@ export function PlanningWorkspace({
   const hookTouchedRef = useRef(false);
   const visualTouchedRef = useRef(false);
   const planningQuery = useStudioPlanningDecisionsQuery(draft, Boolean(draft.goal.trim()));
+  const storyMutation = useStudioPlanningStoryMutation();
   const preview = planningQuery.data?.preview;
+  const generatedStory = storyMutation.data?.story.trim() ?? "";
 
   const generatedFormat = preview?.storyDirection.format;
   const generatedHook = preview?.openingHook.trim();
@@ -172,6 +177,12 @@ export function PlanningWorkspace({
     }
   }, [onGenerate, submitting]);
 
+  const generateStory = useCallback(async () => {
+    if (!draft.goal.trim() || storyMutation.isPending) return;
+    setAutoContinueStopped(true);
+    await storyMutation.mutateAsync(draft);
+  }, [draft, storyMutation]);
+
   function selectFormat(format: StoryFormat) {
     update({ format });
   }
@@ -227,15 +238,32 @@ export function PlanningWorkspace({
               {draft.goal.trim() || "Draft video plan"}
             </h3>
           </div>
-          <div className={styles.planMeta} aria-label="Plan metadata">
-            {planMetadata.map((item) => (
-              <span key={item}>{item}</span>
-            ))}
-            <span className={planIsReady ? styles.ready : styles.pending}>
-              {planIsReady ? "Ready" : "Writing"}
-            </span>
+          <div className={styles.planHeaderAside}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void generateStory()}
+              disabled={!draft.goal.trim() || storyMutation.isPending}
+              isLoading={storyMutation.isPending}
+            >
+              Smooth story
+            </Button>
+            <div className={styles.planMeta} aria-label="Plan metadata">
+              {planMetadata.map((item) => (
+                <span key={item}>{item}</span>
+              ))}
+              <span className={planIsReady ? styles.ready : styles.pending}>
+                {planIsReady ? "Ready" : "Writing"}
+              </span>
+            </div>
           </div>
         </div>
+        {generatedStory ? (
+          <section className={styles.storyResult}>
+            <p className={styles.summaryLabel}>Story</p>
+            <p className={styles.summaryText}>{generatedStory}</p>
+          </section>
+        ) : null}
         {planBeats.length > 0 ? (
           <ol className={styles.beatList}>
             {planBeats.map((beat, index) => (

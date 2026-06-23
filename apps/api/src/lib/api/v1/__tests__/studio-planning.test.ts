@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { LlmClient, StructuredArgs } from "@popcorn/llm";
 import { ApiError } from "../errors";
 import { parseStudioPlanningPreviewRequest } from "../schemas";
-import { createStudioPlanningPreview } from "../studio-planning";
+import {
+  createStudioPlanningPreview,
+  createStudioPlanningStory,
+} from "../studio-planning";
 
 function expectApiError(fn: () => unknown, code: string): ApiError {
   try {
@@ -150,4 +154,49 @@ test("createStudioPlanningPreview infers direction and reports poster blockers",
     "briefDraft.goal",
     "strongestVisual or footageAssetIds",
   ]);
+});
+
+test("createStudioPlanningStory asks the model for only a one-sentence story", async () => {
+  const structuredCalls: StructuredArgs[] = [];
+  const llm: LlmClient = {
+    provider: "openai",
+    model: "test-model",
+    modelFor: () => "test-model",
+    async structured<T>(args: StructuredArgs): Promise<T> {
+      structuredCalls.push(args);
+      return {
+        story:
+          "Story: A courier races across a flooded city to deliver the final battery that keeps a neighborhood's lights alive. Shot list: open wide.",
+      } as T;
+    },
+    async structuredVision<T>(): Promise<T> {
+      throw new Error("not used");
+    },
+    async chooseTool() {
+      throw new Error("not used");
+    },
+  };
+
+  const response = await createStudioPlanningStory(
+    {
+      briefDraft: {
+        goal: "Make a short film about a courier saving a neighborhood blackout",
+        hook: "What happens when the last battery is across town?",
+        bestVisual: "a bike cutting through rain and neon reflections",
+        payoff: "the block lights up together",
+      },
+    },
+    { llm }
+  );
+
+  assert.equal(
+    response.story,
+    "A courier races across a flooded city to deliver the final battery that keeps a neighborhood's lights alive."
+  );
+  const structuredArgs = structuredCalls[0];
+  assert.ok(structuredArgs);
+  assert.equal(structuredArgs.effort, "minimal");
+  assert.match(structuredArgs.cachedSystem, /Return only the requested story sentence/);
+  assert.match(structuredArgs.user, /deterministicStory/);
+  assert.match(structuredArgs.user, /movie plot\/story/);
 });

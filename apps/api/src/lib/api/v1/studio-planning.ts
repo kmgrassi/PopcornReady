@@ -3,7 +3,9 @@ import type {
   StudioPlanningPreview,
   StudioPlanningPreviewRequest,
   StudioPlanningStoryFormat,
+  StudioPlanningStoryResponse,
 } from "@popcorn/shared/v1/studio-planning";
+import { getLlmClient, type LlmClient } from "@popcorn/llm";
 import { STORY_FORMATS } from "./schemas";
 
 type StoryFormatCopy = {
@@ -115,6 +117,17 @@ function sentence(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) return "";
   return /[.!?]$/u.test(trimmed) ? trimmed : `${trimmed}.`;
+}
+
+function oneSentence(value: string): string {
+  const cleaned = value
+    .trim()
+    .replace(/^["'“”‘’]+|["'“”‘’]+$/gu, "")
+    .replace(/^story\s*:\s*/iu, "")
+    .replace(/\s+/gu, " ");
+  if (!cleaned) return "";
+  const match = cleaned.match(/^.+?[.!?](?=\s|$)/u);
+  return sentence(match?.[0] ?? cleaned);
 }
 
 function createOpeningHook(draft: Record<string, unknown>): string {
@@ -321,4 +334,61 @@ export function createStudioPlanningPreview(
       missingInputs: poster.missingInputs,
     },
   };
+}
+
+export interface CreateStudioPlanningStoryDeps {
+  llm?: LlmClient;
+}
+
+export async function createStudioPlanningStory(
+  request: StudioPlanningPreviewRequest,
+  deps: CreateStudioPlanningStoryDeps = {}
+): Promise<StudioPlanningStoryResponse> {
+  const preview = createStudioPlanningPreview(request);
+  const llm = deps.llm ?? getLlmClient();
+  const result = await llm.structured<{ story: string }>({
+    cachedSystem:
+      "You write concise movie plot loglines for short videos. Return only the requested story sentence. Do not include labels, markdown, lists, beat names, production notes, camera directions, visual prompts, or explanations.",
+    user: JSON.stringify({
+      userPrompt: textField(request.briefDraft, "goal"),
+      draft: request.briefDraft,
+      deterministicStory: {
+        format: preview.storyDirection.label,
+        openingHook: preview.openingHook,
+        beats: preview.beats.map((beat) => beat.text),
+        payoff: textField(request.briefDraft, "payoff"),
+      },
+      instruction:
+        "Smooth the deterministic story into exactly one sentence that describes only the movie plot/story.",
+    }),
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        story: {
+          type: "string",
+          description:
+            "Exactly one sentence containing only the movie plot/story. No prefix, label, markdown, shot list, beat list, or production notes.",
+        },
+      },
+      required: ["story"],
+    },
+    maxTokens: 140,
+    effort: "minimal",
+  });
+
+  const story = oneSentence(result.story);
+  if (!story) {
+    return {
+      story: sentence(
+        [
+          textField(request.briefDraft, "goal"),
+          preview.beats.map((beat) => stripTrailingPunctuation(beat.text)).join(", then "),
+        ]
+          .filter(Boolean)
+          .join(": ")
+      ),
+    };
+  }
+  return { story };
 }
