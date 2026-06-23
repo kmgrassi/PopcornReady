@@ -4,7 +4,14 @@ import test from "node:test";
 process.env.PROVIDER_API_KEYS_ENCRYPTION_SECRET = "test-secret-at-least-32-chars-long-xxxx";
 
 import { decryptApiKey, encryptApiKey, keyHint } from "../crypto";
-import { resolveProviderApiKey, withProviderKeyUser } from "../resolve";
+import {
+  billableUsdSoFar,
+  currentRunUserId,
+  noteBillableGeneration,
+  resolveProviderApiKey,
+  resolveProviderKey,
+  withProviderKeyUser,
+} from "../resolve";
 
 test("encryptApiKey -> decryptApiKey round-trips", () => {
   const secret = "sk-proj-abc123-the-real-key";
@@ -53,4 +60,29 @@ test("runway honors the RUNWAYML_API_SECRET / RUNWAY_API_KEY fallback order", as
   assert.equal(await resolveProviderApiKey("runway"), "legacy-runway");
   process.env.RUNWAYML_API_SECRET = "primary-runway";
   assert.equal(await resolveProviderApiKey("runway"), "primary-runway");
+});
+
+test("billable tally accrues platform cost only, within a run context", async () => {
+  await withProviderKeyUser(null, async () => {
+    // No run user => provider resolves to the platform key => source 'platform'.
+    await resolveProviderKey("openai");
+    noteBillableGeneration("openai", 5);
+    assert.equal(billableUsdSoFar(), 5);
+
+    // A provider whose key was never resolved this run is not billed.
+    noteBillableGeneration("ltx", 3);
+    assert.equal(billableUsdSoFar(), 5);
+
+    // Further platform cost accrues.
+    await resolveProviderKey("gemini");
+    noteBillableGeneration("gemini", 2.5);
+    assert.equal(billableUsdSoFar(), 7.5);
+  });
+});
+
+test("no billing tally or run user outside a run context", () => {
+  assert.equal(currentRunUserId(), null);
+  assert.equal(billableUsdSoFar(), 0);
+  noteBillableGeneration("openai", 10); // no-op: nothing to accrue onto
+  assert.equal(billableUsdSoFar(), 0);
 });

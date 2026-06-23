@@ -28,11 +28,20 @@ import { orchestratorModel, type OrchestratorModel } from "./model";
 import { executeRegisteredTool, type ToolRegistry } from "./registry";
 import { withStoreRetry, type RetryOptions } from "./retry";
 import {
+  billableUsdSoFar,
+  currentRunUserId,
   getWorkspaceOwnerUserId,
+  userHasAnyProviderKey,
   withProviderKeyUser,
 } from "@/lib/provider-keys/resolve";
+import { applyCreditTransaction, getCreditBalance } from "@/lib/api/v1/credits";
+import { ApiError } from "@/core/errors";
 import { createToolExecutionContext } from "./tool-context";
 import type { ToolCallResult, ToolName } from "./types";
+
+// Credits charged per generation = providerCostUsd * MARGIN, at 1 credit = $0.01.
+const CREDIT_MARGIN = 2;
+const PG_INSUFFICIENT_FUNDS = "23514"; // apply_credit_transaction overdraw guard
 
 const DEFAULT_MAX_TURNS = 50;
 const DEFAULT_MODEL_TURN_TIMEOUT_MS = 60_000;
@@ -432,6 +441,38 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       if (!regeneratingRejectedGate) return park(run, r);
     }
 
+    // Credit pre-check: fail fast before spending on a generation a broke user
+    // with no BYO keys can't pay for. Only gates BILLABLE tools (estimate > 0) —
+    // free planning/critique still runs when out of credits. Users who bring their
+    // own keys are never blocked here; any platform spend they incur is still
+    // settled by the post-generation debit below. (No run user => not billed.)
+    const runUserId = currentRunUserId();
+    const toolEstimateUsd =
+      turnRegistry.get(decision.toolName)?.estimateCostUsd(decision.input) ?? 0;
+    if (runUserId && toolEstimateUsd > 0) {
+      const balance = await getCreditBalance(runUserId);
+      if (balance <= 0 && !(await userHasAnyProviderKey(runUserId))) {
+        const error = {
+          kind: "insufficient_credits",
+          message:
+            "Out of credits. Buy credits or add your own provider API keys to keep generating.",
+          recoverable: false,
+        };
+        await r.store.recordInvocation({
+          projectId: run.projectId,
+          orchestratorRunId: run.id,
+          tool: decision.toolName,
+          status: "failed",
+          params: decision.input,
+          outputAssetIds: [],
+          jobIds: [],
+          error,
+        });
+        return finish(run, "failed", r, error);
+      }
+    }
+    const billedBeforeUsd = billableUsdSoFar();
+
     // A wired tool may THROW (DB/provider exception) instead of returning a
     // ToolCallResult. Catch it so the run reaches a terminal 'failed' state with a
     // persisted error rather than being left stuck 'running'.
@@ -492,6 +533,41 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       run = await r.store.updateOrchestratorRun(run.id, {
         spentUsd: run.spentUsd + result.costUsd,
       });
+    }
+
+    // Debit credits for the cost this tool incurred on PLATFORM keys. BYO-key and
+    // local/guest generation leave the run tally empty, so they debit nothing.
+    // 1 credit = $0.01, with a margin. The debit is balance-guarded in Postgres.
+    if (result.status === "succeeded" && runUserId) {
+      const afterUsd = billableUsdSoFar();
+      const billableDeltaUsd = afterUsd - billedBeforeUsd;
+      if (billableDeltaUsd > 0) {
+        const credits = Math.ceil(billableDeltaUsd * CREDIT_MARGIN * 100);
+        try {
+          await applyCreditTransaction({
+            userId: runUserId,
+            deltaCredits: -credits,
+            reason: "generation_debit",
+            runId: run.id,
+            costUsd: billableDeltaUsd,
+            // Cumulative billable USD is monotonic + unique per debit in the run,
+            // so a retried debit is idempotent rather than double-charging.
+            idempotencyKey: `run:${run.id}:billable_usd:${afterUsd}`,
+          });
+        } catch (err) {
+          // Overdraw past the pre-check (e.g. an expensive tool against a thin
+          // balance): stop the run rather than let the balance go negative.
+          if (err instanceof ApiError && err.details?.dbCode === PG_INSUFFICIENT_FUNDS) {
+            const error = {
+              kind: "insufficient_credits",
+              message: "Ran out of credits mid-run.",
+              recoverable: false,
+            };
+            return finish(run, "failed", r, error);
+          }
+          throw err;
+        }
+      }
     }
 
     if (regeneratingRejectedGate && result.status === "succeeded") {
