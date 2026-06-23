@@ -2,10 +2,11 @@
 
 > **Status:** Vision + scope — **the foundation is now largely built.** This
 > remains the authoritative reference for how generation should evolve. The
-> data-model direction (§5) and the orchestrator (§6–§7 P1/P2) have shipped against
-> the asset graph; what's left is retiring the legacy Next monolith and closing the
-> feedback loop (§7 P3). New work (human or agent) should align to it; any deviation
-> should be a conscious, documented decision. Last updated 2026-06-22
+> data-model direction (§5) and the core orchestrator/tool runtime (§6–§7 P1/P2)
+> have shipped against the asset graph; what's left is retiring the legacy Next
+> monolith, feeding graph stale candidates into the agent's rerun decision path, and
+> closing the feedback loop (§7 P3). New work (human or agent) should align to it;
+> any deviation should be a conscious, documented decision. Last updated 2026-06-22
 > (status pass; original design 2026-06-08).
 
 ## Implementation status (2026-06-22)
@@ -27,7 +28,9 @@ since landed. Map below (details inline per section). **§3 describes the model 
 - ✅ **Orchestrator + tools (§6; §7 P2)** — a durable, gated, autonomous-by-default
   run loop (`apps/api/src/lib/orchestrator/engine.ts`; `orchestrator_runs` /
   `orchestrator_run_gates` tables) drives a 15-tool registry
-  (`apps/api/src/lib/orchestrator-tools/default-registry.ts`).
+  (`apps/api/src/lib/orchestrator-tools/default-registry.ts`). **Pending:** restart
+  / rerun decisions still need to consume `downstream_assets()` stale candidates
+  instead of relying on the fixed stage restart path.
 - ✅ **Regeneration = a new immutable version (§5)** — the `regenerate_asset_version`
   RPC mints a new version (same `lineage_id`, `version+1`) and repoints
   selections/panels
@@ -102,11 +105,13 @@ that change touches.
 3. **Non-one-directional / selective regeneration — the agent decides, not a
    rigid cascade.** Changing one input should affect only the impacted
    sub-video(s), never all of them. The dependency graph + fingerprints (§5)
-   cheaply compute a **candidate** "possibly affected" set; that set, **plus the
-   stable IDs and provenance, is passed to the agent, which makes the final
-   call** — and may prune the cascade when it judges a change semantically
-   irrelevant (e.g. a prompt edit that has nothing to do with a given image).
-   Determinism scopes the *possibilities*; the agent decides the *actuals*.
+   cheaply compute a **candidate** "possibly affected" set; the target runtime
+   passes that set, **plus the stable IDs and provenance, to the agent, which
+   makes the final call** — and may prune the cascade when it judges a change
+   semantically irrelevant (e.g. a prompt edit that has nothing to do with a given
+   image). Determinism scopes the *possibilities*; the agent decides the
+   *actuals*. The graph primitive exists; wiring those candidates into the agent
+   rerun path is still pending (§7 P2).
 4. **A dependency/provenance graph is the foundation — not the agent's
    cleverness.** Minimal re-runs are only possible if the data records *what each
    asset was built from* (which beat, which anchors, which audio, which prompt /
@@ -253,7 +258,9 @@ historical — do not build on them.
 
 > **Status:** This was the design direction; it is now **built** as the live asset
 > graph (§4). The bullets below are the intent — read them as "why the schema is
-> shaped this way," with §4 as the as-built map.
+> shaped this way," with §4 as the as-built map. One important gap remains: the
+> graph can compute stale candidates, but the runtime has not yet fed those
+> candidates into the agent's rerun decision path.
 
 - **Stable ids on every node.** Beats get ids; anchors already have ids (PR #89);
   audio, keyframes, and clips are addressable. Derived assets reference the ids
@@ -273,10 +280,10 @@ historical — do not build on them.
 - **Invalidation via input fingerprints — a *signal to the agent*, not a hard
   rule.** Each asset stores a content hash of its semantic inputs (including
   upstream asset hashes), so a change yields a cheap, deterministic **candidate
-  stale set**. The **IDs + provenance + candidate set are passed to the agent**,
-  which makes the final regeneration decision and may prune cascades it judges
-  irrelevant. (Stable IDs on every node are the prerequisite — the agent reasons
-  over IDs.)
+  stale set**. **Pending runtime integration:** pass those IDs, provenance, and
+  candidates to the agent so it can make the final regeneration decision and
+  prune cascades it judges irrelevant. (Stable IDs on every node are the
+  prerequisite — the agent reasons over IDs.)
 - **A regeneration vocabulary** beyond timeline patches: `regenerate_asset`,
   `change_beat`, `swap_anchor`, `rescore_audio`, … — the agent's tools.
 - **Assets live in a reusable pool; locations point at an "active" one.**
@@ -335,12 +342,14 @@ likeness" is the edge from a clip to its anchor.
   the asset graph; the orchestrator is the single engine. **Remaining:** the legacy
   Next monolith (`src/app/api/oneshot`, `.local/` JSON) is not yet retired — it's
   the last of the "two pipelines."
-- **P2 — Orchestrator agent. ✅ Shipped.** The agent calls the tools via the run
-  loop; runs are durable, autonomous-by-default with opt-in gates
+- **P2 — Orchestrator agent. 🟡 Partially shipped.** The agent calls the tools via
+  the run loop; runs are durable, autonomous-by-default with opt-in gates
   (`orchestrator_run_gates`), and carry a budget ceiling
-  (`orchestrator_runs.budget_usd` / `spent_usd`). `actions.proposal` carries the
-  proposed re-run. *Maturing:* the "minimal re-run on any change" decisioning over
-  `downstream_assets()` is wired but still being hardened across all kinds.
+  (`orchestrator_runs.budget_usd` / `spent_usd`). **Pending:** graph-based
+  "minimal re-run on any change" decisioning is not wired into the restart path
+  yet. `downstream_assets()` is exposed through stale-candidate reads, but
+  `apps/api/src/routes/v1/orchestrator-runs.ts` still restarts from fixed
+  `GENERATION_STAGE_ORDER` boundaries and clears selections.
 - **P3 — Inspection, gates & feedback loop. 🟡 In progress:** artifacts are visible
   as they pop (every tool call is an `action`), and approve/regenerate-any-stage
   ships (gates + `regenerate_asset_version`). **Open:** the approvals/edits →
@@ -349,14 +358,15 @@ likeness" is the edge from a clip to its anchor.
 
 ## 8. Design decisions (all resolved 2026-06-01)
 
-These were the open P0 questions; all were decided 2026-06-01 and are **now
-implemented** in the asset graph (§4) + orchestrator (§6). Kept here with their
+These were the open P0 questions; all were decided 2026-06-01 and are implemented
+or in flight in the asset graph (§4) + orchestrator (§6). Kept here with their
 resolutions as the design record (the "why" behind the as-built schema).
 
 - ~~**Invalidation granularity**~~ **— DECIDED:** per-asset content fingerprints
-  (with nested upstream hashes) produce a *candidate* stale set; the agent
-  receives the IDs/provenance/candidates and makes the final call. Stale is a
-  signal, not a command (Principle 3, §5).
+  (with nested upstream hashes) produce a *candidate* stale set. **Shipped:** the
+  graph can compute candidates. **Pending:** the orchestrator restart path must
+  feed those IDs/provenance/candidates to the agent so it can make the final call.
+  Stale is a signal, not a command (Principle 3, §5).
 - ~~**First pass vs edits**~~ **— DECIDED (Principle 7):** no hardcoded order;
   determinism lives in each tool's input validation, and the agent self-heals by
   reacting to structured failures.
