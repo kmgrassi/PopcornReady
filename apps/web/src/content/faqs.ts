@@ -41,6 +41,14 @@ export const FAQS: FaqItem[] = [
     placements: ["landing", "dashboard"],
     tags: ["limits", "long-form", "editing", "workflow"],
   },
+  {
+    id: "edit-after-generation",
+    question: "Can I edit the video after it is generated?",
+    answer:
+      "Yes. You can edit the video at any time, even after it has been generated.",
+    placements: ["landing", "dashboard"],
+    tags: ["editing", "revision", "workflow"],
+  },
 ];
 
 export function faqsForPlacement(placement: FaqPlacement): FaqItem[] {
