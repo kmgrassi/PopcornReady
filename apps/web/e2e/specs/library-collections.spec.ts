@@ -199,14 +199,20 @@ test("covers library pagination, filters, media viewer, visibility, and watch li
 
   await page.getByRole("link", { name: "Project Alpha", exact: true }).click();
   await expect(page).toHaveURL(/\/projects\/proj-alpha$/);
-  await expect(page.getByRole("heading", { name: "Recent generation work" })).toBeVisible();
-  await expect(page.getByText("Timeline Assembly")).toBeVisible();
-  await expect(page.getByRole("link", { name: /Timeline Assembly/i })).toHaveAttribute(
+  await expect(page.getByRole("link", { name: "Runs" })).toHaveAttribute(
     "href",
     "/projects/proj-alpha/runs/run-running",
   );
-  await expect(page.getByRole("heading", { name: "Finished exports" })).toBeVisible();
-  await expect(page.getByText("Exported Jun 16")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Outputs" })).toHaveAttribute(
+    "href",
+    "/projects/proj-alpha/watch",
+  );
+  await expect(page.getByRole("link", { name: "Watch" })).toHaveAttribute(
+    "href",
+    "/projects/proj-alpha/watch",
+  );
+  await expect(page.getByRole("heading", { name: "Recent generation work" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Finished exports" })).toHaveCount(0);
 
   await page.goto("/library/projects");
 
