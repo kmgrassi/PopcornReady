@@ -291,7 +291,7 @@ function BeatCard({
           kind="image"
           url={image}
           assetId={panel?.imageAssetId ?? null}
-          prompt={panel?.prompt ?? null}
+          prompt={prompt}
           alt={label}
           recoveryClassName={styles.panelRecovery}
           mediaClassName={styles.panelImage}
