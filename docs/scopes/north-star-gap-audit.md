@@ -2,58 +2,24 @@
 
 Audit date: 2026-06-23
 
-This audit follows the four gaps called out by the 2026-06-22
+This audit follows the implementation gaps called out by the 2026-06-22
 `docs/NORTH_STAR.md` status pass and checks them against the current
 implementation. The intent is to separate shipped foundations from missing
 runtime/product work before starting implementation PRs.
+
+The legacy Next monolith retirement gap is intentionally excluded here because
+PR #547 owns that cleanup by deleting the orphaned root `src/` tree, including
+`src/app/api/oneshot`.
 
 ## Summary
 
 | Gap | Current status | Recommendation |
 | --- | --- | --- |
-| Retire the legacy Next monolith | Partial. Active Vite/Express flows use the orchestrator, but legacy Next one-shot still exists and is still called by legacy `src/` UI. | Keep as a migration/removal track. Do not extend `/api/oneshot`; retire legacy callers and delete the route after parity checks. |
 | Feed graph stale candidates into rerun decisions | Not implemented in the restart path. The graph query exists, but restart still uses fixed stage boundaries. | Start here for the highest North Star alignment impact. Add a graph-aware rerun proposal path before changing UI affordances. |
 | Close the OODA prompt-feedback loop | Mostly not implemented. There are transient feedback and board-revision seams, but no first-class feedback entities or learned prompt context. | Scope as a separate feedback data-model/API track after rerun proposals have a stable target model. |
 | Broaden regeneration coverage | Partial. Prompt-based image regeneration is shipped; video/audio/composite/storyboard semantic reruns are handled only through stage/tool reruns or board feedback. | Treat broad regeneration as tool-specific rerun handlers, not as one generic media endpoint. |
 
-## 1. Retire The Legacy Next Monolith
-
-Status: partial.
-
-Evidence:
-
-- The active app run-start helper posts to Express generation entrypoints:
-  `apps/web/src/lib/startRun.ts` calls `v1Api.startPromptGenerationRun()` and
-  `v1Api.startUploadedFootageGenerationRun()`.
-- The Express API creates `orchestrator_runs` and immediately starts
-  `runOrchestratorToCompletion()` from
-  `apps/api/src/routes/v1/orchestrator-runs.ts`.
-- The legacy Next one-shot route still exists at `src/app/api/oneshot/route.ts`,
-  has its own planner/generation/assembly flow, and carries `maxDuration = 800`.
-- Legacy `src/` UI still calls `/api/oneshot`: `src/components/PromptComposer.tsx`
-  and `src/components/Editor.tsx`.
-- Legacy Next v1 generation-run routes still exist under
-  `src/app/api/v1/projects/[projectId]/generation-runs/**`, separate from the
-  Express router.
-
-Gap:
-
-The production-direction trunk is Express + orchestrator, but the repository
-still contains a working legacy Next pipeline and legacy callers. The gap is not
-"no orchestrator"; it is route/caller retirement and parity verification.
-
-PR-sized next steps:
-
-1. Inventory remaining reachable legacy Next generation entrypoints and decide
-   which are still user-facing versus dead code.
-2. Move any still-needed legacy UX onto the Vite `startRun` path or remove it if
-   the route is no longer shipped.
-3. Add a parity checklist for behavior that `/api/oneshot` still uniquely covers
-   before deletion.
-4. Delete `src/app/api/oneshot/**` and legacy Next generation-run routes only
-   after the active app no longer imports or routes to them.
-
-## 2. Feed Graph Stale Candidates Into Rerun Decisions
+## 1. Feed Graph Stale Candidates Into Rerun Decisions
 
 Status: not implemented in the runtime restart path.
 
@@ -100,7 +66,7 @@ Suggested first PR:
   candidate/provenance payload and a deterministic placeholder proposal. A later
   PR can put the LLM decision behind that stable contract.
 
-## 3. Close The OODA Prompt-Feedback Loop
+## 2. Close The OODA Prompt-Feedback Loop
 
 Status: mostly not implemented.
 
@@ -118,8 +84,7 @@ Evidence:
   not aggregated into reusable learning.
 - `videoQualityContextForPrompt()` is still imported as static prompt guidance
   in `apps/api/src/lib/agent/index.ts`,
-  `apps/api/src/lib/agent/composition.ts`, and legacy
-  `src/app/api/oneshot/prompts.ts`.
+  `apps/api/src/lib/agent/composition.ts`.
 
 Gap:
 
@@ -146,7 +111,7 @@ Suggested first PR:
 - Implement only `feedback_events` plus capture from gate approve/reject and
   board feedback. Leave Orient/Decide/Act as follow-up PRs.
 
-## 4. Broaden Regeneration Coverage
+## 3. Broaden Regeneration Coverage
 
 Status: partial.
 
@@ -195,8 +160,7 @@ Suggested first PR:
 1. Graph rerun proposal contract.
 2. Feedback event capture at existing approve/reject and board-feedback seams.
 3. Non-image regenerate proposals for one asset kind, probably keyframes.
-4. Legacy Next route retirement inventory and parity checklist.
-5. Broader OODA Orient/Decide/Act once feedback capture exists.
+4. Broader OODA Orient/Decide/Act once feedback capture exists.
 
 This sequence keeps the highest-risk runtime behavior behind explicit proposal
-contracts before adding broader UI affordances or deleting legacy fallback code.
+contracts before adding broader UI affordances.
