@@ -15,6 +15,7 @@ import {
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import { canAccessAdminSurface } from "./auth/AdminRoute";
 import { AuthNavButton } from "./auth/AuthNavButton";
+import { CreditsBadge } from "./credits/CreditsBadge";
 import { LogoMark } from "./LogoMark";
 import { CommandPalette } from "./palette/Palette";
 import ThemeToggle from "./ThemeToggle";
@@ -209,6 +210,15 @@ export function AuthenticatedAppLayout() {
           ) : null}
 
           <nav className={styles.footerNav} aria-label="Account">
+            <span className={styles.footerLabel}>Account</span>
+            <NavLink
+              to="/account"
+              className={({ isActive }) =>
+                isActive ? `${styles.navLink} ${styles.active}` : styles.navLink
+              }
+            >
+              Credits &amp; billing
+            </NavLink>
             <NavLink
               to="/settings"
               className={({ isActive }) =>
@@ -225,7 +235,11 @@ export function AuthenticatedAppLayout() {
         <header className={styles.topbar}>
           <CommandPalette showAdminCommands={showAdmin} />
           <div className={styles.account}>
-            <Link className={styles.accountLink} to="/settings">
+            <CreditsBadge
+              authScope={authScope}
+              enabled={auth.status !== "unauthenticated" || DEV_AUTOPILOT}
+            />
+            <Link className={styles.accountLink} to="/account">
               {accountLabel}
             </Link>
             {canSignOut ? (
