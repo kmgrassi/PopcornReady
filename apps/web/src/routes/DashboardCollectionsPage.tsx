@@ -396,11 +396,11 @@ export function ProjectsPage() {
                 <Link
                   className={styles.cardLink}
                   to={isPublic ? publicProjectPath(project.id) : projectDetailPath(project.id)}
-                  aria-label={`Open ${project.name}`}
+                  aria-label={`Open ${project.name}. Status: ${titleCase(project.status)}`}
                 >
                   <span
                     className={`${styles.statusDot} ${statusDotClass(project.status)}`}
-                    aria-label={`Project status: ${titleCase(project.status)}`}
+                    aria-hidden="true"
                   />
                   <ProjectPoster name={project.name} posterUrl={project.posterUrl} />
                 </Link>
