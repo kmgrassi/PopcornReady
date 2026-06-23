@@ -1,9 +1,46 @@
 # North Star — Agent-Orchestrated, Non-Linear Video Generation
 
-> **Status:** Vision + scope. **Not implemented yet.** This is the authoritative
-> reference for how generation should evolve. New work (human or agent) should
-> align to it, and any deviation should be a conscious, documented decision.
-> Last updated 2026-06-08.
+> **Status:** Vision + scope — **the foundation is now largely built.** This
+> remains the authoritative reference for how generation should evolve. The
+> data-model direction (§5) and the core orchestrator/tool runtime (§6–§7 P1/P2)
+> have shipped against the asset graph; what's left is retiring the legacy Next
+> monolith, feeding graph stale candidates into the agent's rerun decision path, and
+> closing the feedback loop (§7 P3). New work (human or agent) should align to it;
+> any deviation should be a conscious, documented decision. Last updated 2026-06-22
+> (status pass; original design 2026-06-08).
+
+## Implementation status (2026-06-22)
+
+The 2026-06-08 original was forward-looking design; most of the foundation has
+since landed. Map below (details inline per section). **§3 describes the model we
+*replaced* — kept as a guardrail against reintroducing it, not current state.**
+
+- ✅ **Asset-graph data model (§4; intent in §5)** — `assets` + `asset_edges` +
+  `selections` + `actions` are the live trunk, with per-asset `inputs` /
+  `inputs_fingerprint`, immutability + delete guards, and a `downstream_assets()`
+  stale-candidate query
+  (`supabase/migrations/20260610120000_asset_graph_model.sql`). It is now the
+  authoritative model — see the **Asset-Graph Migration Rule** in `CLAUDE.md`.
+- ✅ **Stable ids on every node (§4)** — relational storyboards
+  (`storyboard_scenes` / `storyboard_beats` / `storyboard_panels`) carry stable ids
+  and link to immutable asset snapshots via `*_asset_id`
+  (`supabase/migrations/20260610130000_storyboard_relational_model.sql`).
+- ✅ **Orchestrator + tools (§6; §7 P2)** — a durable, gated, autonomous-by-default
+  run loop (`apps/api/src/lib/orchestrator/engine.ts`; `orchestrator_runs` /
+  `orchestrator_run_gates` tables) drives a 15-tool registry
+  (`apps/api/src/lib/orchestrator-tools/default-registry.ts`). **Pending:** restart
+  / rerun decisions still need to consume `downstream_assets()` stale candidates
+  instead of relying on the fixed stage restart path.
+- ✅ **Regeneration = a new immutable version (§5)** — the `regenerate_asset_version`
+  RPC mints a new version (same `lineage_id`, `version+1`) and repoints
+  selections/panels
+  (`supabase/migrations/20260622150000_regenerate_asset_version_rpc.sql`).
+- 🟡 **One engine (§7 P1)** — the orchestrator *is* the unified trunk, but the
+  legacy Next monolith (`src/app/api/oneshot`, on `.local/` JSON) still exists and
+  is being retired; new generation work targets `apps/api` (`CLAUDE.md`).
+- 🟡 **Inspection / feedback loop (§7 P3)** — artifacts, gates, and approvals ship;
+  the prompt-improving OODA loop (`docs/scopes/ooda-feedback-loop.md`) is the main
+  open piece.
 
 ## 0. What Popcorn Ready is (the positioning)
 
@@ -68,11 +105,13 @@ that change touches.
 3. **Non-one-directional / selective regeneration — the agent decides, not a
    rigid cascade.** Changing one input should affect only the impacted
    sub-video(s), never all of them. The dependency graph + fingerprints (§5)
-   cheaply compute a **candidate** "possibly affected" set; that set, **plus the
-   stable IDs and provenance, is passed to the agent, which makes the final
-   call** — and may prune the cascade when it judges a change semantically
-   irrelevant (e.g. a prompt edit that has nothing to do with a given image).
-   Determinism scopes the *possibilities*; the agent decides the *actuals*.
+   cheaply compute a **candidate** "possibly affected" set; the target runtime
+   passes that set, **plus the stable IDs and provenance, to the agent, which
+   makes the final call** — and may prune the cascade when it judges a change
+   semantically irrelevant (e.g. a prompt edit that has nothing to do with a given
+   image). Determinism scopes the *possibilities*; the agent decides the
+   *actuals*. The graph primitive exists; wiring those candidates into the agent
+   rerun path is still pending (§7 P2).
 4. **A dependency/provenance graph is the foundation — not the agent's
    cleverness.** Minimal re-runs are only possible if the data records *what each
    asset was built from* (which beat, which anchors, which audio, which prompt /
@@ -135,78 +174,93 @@ that change touches.
     the source-of-truth interaction model in
     [docs/ui-interaction-model.md](ui-interaction-model.md).
 
-## 3. Where we are today (the model we must NOT entrench)
+## 3. Where we came from (the model we must NOT re-introduce)
 
-(See the data-model map in §4 for citations.) Today:
+This is the model the legacy Next monolith had and that the asset-graph foundation
+**replaced.** It is kept here as a guardrail: do not rebuild any of it. Each bullet
+notes what superseded it.
 
-- Generation is **forward-only and all-or-nothing.** Plan → timeline flows via
-  append-only patches; any upstream change triggers a **full re-run**.
-- The agent surface (`planEdit`, `critiquePlan`, `critique`, `revise`, …) only
-  edits a **single timeline forward** via `Patch`es keyed by `segmentId`. There
-  is **no patch op that regenerates an asset, changes a beat, or swaps a
-  reference**, and **no orchestrator** that exposes these as tools.
-- There are **two drifted pipelines** (`/api/oneshot` + `src/lib/runs/execute.ts`
-  vs the `/api/v1` job stack) and **two `GenerationRun` definitions**.
-- There are **no dependency edges**: beats have **no stable id** (linked to
-  segments only by a `role` string), and generated assets store the prompt but
-  **not the beat/anchor** they serve. So "beat 3 changed → regenerate clip 3"
-  **cannot be computed from data today.**
+- Generation was **forward-only and all-or-nothing.** Plan → timeline flowed via
+  append-only patches; any upstream change triggered a **full re-run.**
+  → *Replaced by* the dependency graph + `downstream_assets()` candidate stale set
+  and tool-scoped regeneration (§5; Principle 3).
+- The old agent surface (`planEdit`, `critiquePlan`, `critique`, `revise`, …) only
+  edited a **single timeline forward** via `Patch`es keyed by `segmentId`, with
+  **no op to regenerate an asset, change a beat, or swap a reference**, and **no
+  orchestrator.** → *Replaced by* the orchestrator + 15-tool registry (§6) and the
+  `regenerate_asset_version` RPC.
+- There were **two drifted pipelines** and **two `GenerationRun` definitions** (the
+  sync one-shot route and the async job stack). → *Replaced by* one orchestrator
+  engine on `orchestrator_runs`; the legacy `src/app/api/oneshot` monolith still
+  exists but is being retired (§7 P1), not extended.
+- There were **no dependency edges**: beats had **no stable id**, and generated
+  assets stored the prompt but **not the beat/anchor** they served, so "beat 3
+  changed → regenerate clip 3" **could not be computed from data.** → *Replaced by*
+  stable storyboard ids + per-asset `inputs` / `inputs_fingerprint` and
+  `asset_edges` (§4, §5), which make blast radius computable.
 
-## 4. The current data model — seams to build on (grounded)
+## 4. The current data model (the asset graph — shipped)
 
-The good news: provenance is already reasonably rich. The gap is **dependency
-edges + invalidation + an orchestrator**.
+The dependency-edges + invalidation + orchestrator gap that this section used to
+describe is **now built.** The live model is the immutable asset graph in
+`apps/api` on Supabase (migrations `20260610120000_asset_graph_model.sql` and
+`20260610130000_storyboard_relational_model.sql`), read/written through
+`apps/api/src/lib/api/v1/store.ts`. The legacy monolith seams it replaced
+(`Clip.generatedBy`, `VersionedTimeline.provenance`, `EditGraph`,
+`OverlayAnchor`, the per-asset `asset_generation` jobs in `src/lib/…`) are
+historical — do not build on them.
 
-**What already exists (reuse these seams):**
+**The graph (`assets` + `asset_edges` + `selections` + `actions`):**
 
-- **Per-asset provenance.** `Clip.generatedBy { provider, model, prompt,
-  providerPrompt, characterBinding, preflight, costUsd }` and
-  `GeneratedAssetCharacterBinding { referenceIds, consistencyMode, seed,
-  promptInvariantVersion, consistencyReview, videoReview }` (`src/lib/types.ts`).
-  Records *what an asset was made from* — but only character references, plus the
-  free-text prompt.
-- **Timeline-level lineage.** `VersionedTimeline.provenance { briefVersionId,
-  compositionId, sourceAssetIds, generatedAssetJobIds, criticReport,
-  derivedFrom.editGraphId }` (`src/lib/v1/types.ts`) — the strongest lineage
-  record in the codebase.
-- **A per-asset, idempotent job abstraction (v1 only).** `asset_generation` jobs
-  (`src/lib/api/v1/`, `/api/v1/projects/**/generated-assets`) are individually
-  addressable with `Idempotency-Key` and carry `GeneratedAssetProvenance`
-  (`referenceAssetIds`, etc.). A single asset *can* already be regenerated and
-  re-attached.
-- **Versioned, sibling-able timelines** keyed by id in `V1Store`, with
-  `editGraphId` + compiler version.
-- **An operation log with alternatives.** `EditGraph.edit.revisionOperations`
-  (`src/lib/edit-graph.ts`) keeps `patch + rationale + alternatives` per edit.
-- **A typed (but unused) dependency vocabulary.** `OverlayAnchor { type:
-  beat|object|person|spoken_phrase|timeline_time, refId, offsetMs }` in
-  `src/lib/edit-graph/types.ts` — the only place a reference-by-id dependency is
-  modeled. Aspirational, not wired.
-- **Review signals that name the corrective action.** `VideoSnapshotReview
-  .recommendedAction: keep|regenerate|manual_review`, plus `PlanCritiqueReport`
-  and the pre/post critique loops (PR #90).
-- **Anchors** (planner-decided reference subjects + per-beat usage) from the
-  keyframe work (PR #89) — the consistency mechanism this whole model leans on.
+- **Self-describing, immutable assets.** Each `assets` row carries `kind`,
+  `project_id`, `lineage_id` + `version`, `content` / `params`, a write-once
+  `inputs` snapshot (`[{assetId, relation, role?, position?, contentHash}]`), a
+  `content_hash`, and an `inputs_fingerprint`. `assets_guard_immutable` /
+  `assets_guard_delete` triggers forbid mutating semantic fields or deleting —
+  changes mint a **new version**, never edit in place.
+- **Dependency edges, auto-synced.** `asset_edges` (`from_id` consumer → `to_id`
+  input, with `relation` + ordered `position`) is maintained by the
+  `assets_sync_edges` trigger off each asset's `inputs`, and is strictly
+  intra-project. `downstream_assets()` is the recursive **candidate stale set**
+  query (a signal to the agent, per Principle 3).
+- **Active selections, append-only.** `selections` points each slot at the pooled
+  asset it currently uses (`active_asset_id`, with `seq` for CAS); the
+  `current_selections` view reads the head. Regeneration **appends** a new
+  selection rather than mutating — old assets stay reusable (Principle 9).
+- **Actions = the agent decision log.** `actions` records every tool invocation
+  (`tool`, `params`, `input_asset_ids`, `output_asset_ids`, `rationale`,
+  `proposal`, `status`, cost) — the provenance of *why the agent did what it did*.
+- **Relational product surfaces over the graph.** `storyboard_scenes` /
+  `storyboard_beats` / `storyboard_panels` are first-class rows with **stable ids**
+  that link to immutable asset snapshots via `*_asset_id`; a semantic beat edit is
+  forced to mint a new snapshot (`storyboard_beats_require_snapshot`), which moves
+  the fingerprint and makes downstream assets stale.
 
-**What's missing / one-directional (the work):**
+**Formerly "missing" — now shipped:**
 
-1. **No dependency edges.** Beats need **stable ids**; assets must record the
-   `beatId` / `anchorIds` / `audioId` they were generated for (today only the
-   prompt + character `referenceIds` are stored). Without this, minimal re-run is
-   impossible.
-2. **No invalidation / staleness.** No `inputHash`, `stale`, or version pinning
-   on derived assets; no way to detect that an input drifted.
-3. **Generation is not a graph node.** The edit graph models only
-   `select_segment` decisions; *generating* an asset is a side effect outside the
-   graph, so the graph can't express "regenerate this node."
-4. **Patches are timeline-forward only** (no `regenerate_asset` / `change_beat` /
-   `swap_anchor`).
-5. **No central orchestrator** exposing the agent functions as tools; both
-   runtime pipelines are hardcoded linear stages.
-6. **Two drifted run/pipeline models** and **one mutable `Project` / one
-   `timeline` / one `editGraph`** (id `"default"`, no revision array).
+1. ~~No dependency edges / no stable ids.~~ **Shipped** — stable storyboard ids +
+   per-asset `inputs` and `asset_edges`. "Beat 3 changed → which assets are stale"
+   is now computable (`downstream_assets()`).
+2. ~~No invalidation / staleness.~~ **Shipped** — `inputs_fingerprint` (nested
+   upstream hashes) is the deterministic candidate-stale signal.
+3. ~~Generation is not a graph node.~~ **Shipped** — every generation is an
+   `action` with input/output asset ids; regeneration is the
+   `regenerate_asset_version` RPC, not a side effect.
+4. ~~Patches are timeline-forward only.~~ **Shipped** — the orchestrator's tool
+   vocabulary (§6) replaces forward-only patches.
+5. ~~No central orchestrator.~~ **Shipped** — `apps/api/src/lib/orchestrator/`
+   (§6, P2).
+6. ~~Two drifted run models / one mutable `default` project.~~ **Mostly shipped** —
+   one orchestrator engine on `orchestrator_runs`; the legacy Next monolith is the
+   only remaining drift and is being retired (§7 P1).
 
-## 5. Target data model (direction, not a final schema)
+## 5. Target data model (now realized in the asset graph)
+
+> **Status:** This was the design direction; it is now **built** as the live asset
+> graph (§4). The bullets below are the intent — read them as "why the schema is
+> shaped this way," with §4 as the as-built map. One important gap remains: the
+> graph can compute stale candidates, but the runtime has not yet fed those
+> candidates into the agent's rerun decision path.
 
 - **Stable ids on every node.** Beats get ids; anchors already have ids (PR #89);
   audio, keyframes, and clips are addressable. Derived assets reference the ids
@@ -226,10 +280,10 @@ edges + invalidation + an orchestrator**.
 - **Invalidation via input fingerprints — a *signal to the agent*, not a hard
   rule.** Each asset stores a content hash of its semantic inputs (including
   upstream asset hashes), so a change yields a cheap, deterministic **candidate
-  stale set**. The **IDs + provenance + candidate set are passed to the agent**,
-  which makes the final regeneration decision and may prune cascades it judges
-  irrelevant. (Stable IDs on every node are the prerequisite — the agent reasons
-  over IDs.)
+  stale set**. **Pending runtime integration:** pass those IDs, provenance, and
+  candidates to the agent so it can make the final regeneration decision and
+  prune cascades it judges irrelevant. (Stable IDs on every node are the
+  prerequisite — the agent reasons over IDs.)
 - **A regeneration vocabulary** beyond timeline patches: `regenerate_asset`,
   `change_beat`, `swap_anchor`, `rescore_audio`, … — the agent's tools.
 - **Assets live in a reusable pool; locations point at an "active" one.**
@@ -260,41 +314,59 @@ edges + invalidation + an orchestrator**.
   a sensible default order on the first pass, and computes + **proposes** the
   minimal re-run on any change.
 
-## 6. Tool surface (capabilities the orchestrator calls)
+## 6. Tool surface (capabilities the orchestrator calls — shipped)
 
-`plan/replan` · `generate/regenerate anchor` · `generate/regenerate beat keyframe`
-· `generate/regenerate beat clip` · `generate/regenerate audio` ·
-`assemble/re-assemble timeline` · `critique` · `export`. Each is **granular,
-idempotent, and records its inputs** so the graph stays accurate. Each tool also
-**validates its pre/postconditions and returns typed, actionable errors**
-(missing inputs, implied requirements) so the orchestrator can **self-heal and
-retry** (Principle 7). The dependency graph (§5) is largely *expressed* by these
-contracts: a tool declaring "I need a character likeness" is the edge from a clip
-to its anchor.
+Realized as the orchestrator tool registry
+(`apps/api/src/lib/orchestrator-tools/default-registry.ts`), driven by the run
+loop in `apps/api/src/lib/orchestrator/engine.ts`. The 15 registered tools:
+`create_brief` · `develop_story_blueprint` · `draft_script` · `plan_shots` ·
+`plan_visual_anchors` · `generate_anchor` · `generate_audio` ·
+`generate_storyboard` · `generate_keyframe` · `generate_clip` ·
+`assemble_timeline` · `critique_timeline` · `export_video` · `request_approval` ·
+`publish_to_catalog`. Image regeneration is the `regenerate_asset_version` RPC
+(new immutable version + repoint); broader `regenerate *` coverage across kinds is
+still filling in.
+
+Each tool is **granular, idempotent, and records its inputs** (as an `action`) so
+the graph stays accurate. Each tool also **validates its pre/postconditions and
+returns typed, actionable errors** (missing inputs, implied requirements) so the
+orchestrator can **self-heal and retry** (Principle 7). The dependency graph (§4)
+is largely *expressed* by these contracts: a tool declaring "I need a character
+likeness" is the edge from a clip to its anchor.
 
 ## 7. Scope & phasing (each independently shippable — do NOT implement ahead of agreement)
 
-- **P0 — Design (this doc).** North Star + data-model direction agreed.
-- **P1 — Foundation (no behavior change):** stable beat/anchor ids + the
-  dependency/provenance graph + granular idempotent generation tools, and
-  **unify the two pipelines** into one engine (kills the drift, e.g. the 1:1
-  size mismatch). Everything becomes observable and re-runnable.
-- **P2 — Orchestrator agent:** the agent calls the tools; on change it computes
-  the **minimal** re-run and proposes a plan (with rough cost) before spending.
-- **P3 — Inspection, gates & feedback loop:** artifacts visible as they pop;
-  approve/regenerate any stage; approvals/edits feed back to improve prompts
-  (ties into `docs/scopes/ooda-feedback-loop.md`). First pass stays a reliable
-  default ordering; agent latitude shines in the edit/re-run loop.
+- **P0 — Design (this doc). ✅ Shipped.** North Star + data-model direction agreed.
+- **P1 — Foundation. ✅ Shipped** (one caveat): stable storyboard ids + the
+  dependency/provenance graph + granular idempotent generation tools are live on
+  the asset graph; the orchestrator is the single engine. **Remaining:** the legacy
+  Next monolith (`src/app/api/oneshot`, `.local/` JSON) is not yet retired — it's
+  the last of the "two pipelines."
+- **P2 — Orchestrator agent. 🟡 Partially shipped.** The agent calls the tools via
+  the run loop; runs are durable, autonomous-by-default with opt-in gates
+  (`orchestrator_run_gates`), and carry a budget ceiling
+  (`orchestrator_runs.budget_usd` / `spent_usd`). **Pending:** graph-based
+  "minimal re-run on any change" decisioning is not wired into the restart path
+  yet. `downstream_assets()` is exposed through stale-candidate reads, but
+  `apps/api/src/routes/v1/orchestrator-runs.ts` still restarts from fixed
+  `GENERATION_STAGE_ORDER` boundaries and clears selections.
+- **P3 — Inspection, gates & feedback loop. 🟡 In progress:** artifacts are visible
+  as they pop (every tool call is an `action`), and approve/regenerate-any-stage
+  ships (gates + `regenerate_asset_version`). **Open:** the approvals/edits →
+  better-prompts feedback loop (`docs/scopes/ooda-feedback-loop.md`). First pass
+  stays a reliable default ordering; agent latitude shines in the edit/re-run loop.
 
 ## 8. Design decisions (all resolved 2026-06-01)
 
-These were the open P0 questions; all are now decided and are **constraints for
-P1**. Kept here with their resolutions as the design record.
+These were the open P0 questions; all were decided 2026-06-01 and are implemented
+or in flight in the asset graph (§4) + orchestrator (§6). Kept here with their
+resolutions as the design record (the "why" behind the as-built schema).
 
 - ~~**Invalidation granularity**~~ **— DECIDED:** per-asset content fingerprints
-  (with nested upstream hashes) produce a *candidate* stale set; the agent
-  receives the IDs/provenance/candidates and makes the final call. Stale is a
-  signal, not a command (Principle 3, §5).
+  (with nested upstream hashes) produce a *candidate* stale set. **Shipped:** the
+  graph can compute candidates. **Pending:** the orchestrator restart path must
+  feed those IDs/provenance/candidates to the agent so it can make the final call.
+  Stale is a signal, not a command (Principle 3, §5).
 - ~~**First pass vs edits**~~ **— DECIDED (Principle 7):** no hardcoded order;
   determinism lives in each tool's input validation, and the agent self-heals by
   reacting to structured failures.
@@ -329,9 +401,14 @@ P1**. Kept here with their resolutions as the design record.
 - **UI source of truth:** [`docs/ui-interaction-model.md`](ui-interaction-model.md)
   — the observe-first dashboard + "Ask the AI" editing model that Principle 10
   implies. Read it before building any dashboard/editor surface.
+- **As-built reference (the live model):** migrations
+  `supabase/migrations/20260610120000_asset_graph_model.sql` +
+  `20260610130000_storyboard_relational_model.sql` +
+  `20260613120000_orchestrator_runs.sql`; code in `apps/api/src/lib/api/v1/store.ts`
+  and `apps/api/src/lib/orchestrator/`. `CLAUDE.md` — **Asset-Graph Migration Rule.**
 - **Agent memory:** `generation-pipeline-architecture` (mirrors this doc).
 - **PRs:** #89 (per-beat keyframes + planner-decided anchors), #90 (pre/post
-  generation critique loops).
+  generation critique loops), #526 (regenerate as a new immutable asset version).
 - **Related scopes:** `docs/scopes/ooda-feedback-loop.md`,
   `docs/scopes/ai-native-edit-graph.md`, `docs/scopes/project-model-storage.md`,
   `docs/scopes/jobs-processing.md`,
