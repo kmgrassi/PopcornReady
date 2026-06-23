@@ -404,7 +404,7 @@ function ProjectStagePanel({
               </div>
             </div>
 
-            {runDetail?.stages.length ? (
+            {runDetail ? (
               <StageRail
                 stages={runDetail.stages}
                 runStatus={run.status}
