@@ -648,9 +648,7 @@ export function ProgressView({
               </strong>
             </div>
             {detail.run.message ? (
-              <p className={styles.headerStatusMessage} role="status">
-                {detail.run.message}
-              </p>
+              <p className={styles.headerStatusMessage}>{detail.run.message}</p>
             ) : null}
             <div
               className={styles.headerMeter}
