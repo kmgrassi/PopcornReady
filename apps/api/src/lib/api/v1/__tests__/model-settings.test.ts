@@ -48,6 +48,12 @@ test("model setting provider parser validates purpose support", () => {
     normalizeModelSettingsProvider("video_generation", "nvidia"),
     "nvidia_api_catalog"
   );
+  assert.equal(normalizeModelSettingsProvider("image_generation", "grok"), "xai");
+  assert.equal(normalizeModelSettingsProvider("video_generation", "kling-ai"), "kling");
+  assert.equal(
+    normalizeModelSettingsProvider("video_generation", "seedance-2.0"),
+    "seedance"
+  );
   assert.throws(
     () => normalizeModelSettingsProvider("text_generation", "ideogram"),
     (err: unknown) => err instanceof ApiError && err.code === "validation_failed"

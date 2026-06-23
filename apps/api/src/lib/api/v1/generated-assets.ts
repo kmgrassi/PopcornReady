@@ -83,6 +83,9 @@ const BILLABLE_KEY_PROVIDER: Partial<Record<GenerativeProviderName, KeyProvider>
   ideogram: "ideogram",
   runway: "runway",
   ltx: "ltx",
+  kling: "kling",
+  seedance: "seedance",
+  xai: "xai",
   nvidia_api_catalog: "nvidia",
   elevenlabs: "elevenlabs",
 };
@@ -97,6 +100,9 @@ const PROVIDER_KIND_SUPPORT: Record<
   gemini: ["image", "video"],
   runway: ["video"],
   ltx: ["video"],
+  kling: ["video"],
+  seedance: ["video"],
+  xai: ["image", "video"],
   nvidia_api_catalog: ["video"],
   elevenlabs: ["audio"],
   mock: ["image", "video", "audio"],
@@ -280,6 +286,16 @@ function normalizeProvider(
   if (name === "gemini") return "gemini";
   if (name === "runway" || name === "runwayml") return "runway";
   if (name === "ltx" || name === "ltxvideo" || name === "ltx-video") return "ltx";
+  if (name === "kling" || name === "klingai" || name === "kling-ai") return "kling";
+  if (
+    name === "seedance" ||
+    name === "seedance2" ||
+    name === "seedance-2" ||
+    name === "seedance-2.0"
+  ) {
+    return "seedance";
+  }
+  if (name === "xai" || name === "grok" || name === "grok-imagine") return "xai";
   if (
     name === "nvidia" ||
     name === "nvidia_api_catalog" ||
@@ -696,6 +712,30 @@ async function runGeneration(
   } else if (parsed.provider === "ltx" && parsed.kind === "video") {
     result = await provider.generateAsset({
       provider: "ltx",
+      kind: "video",
+      ...baseRequest,
+    });
+  } else if (parsed.provider === "kling" && parsed.kind === "video") {
+    result = await provider.generateAsset({
+      provider: "kling",
+      kind: "video",
+      ...baseRequest,
+    });
+  } else if (parsed.provider === "seedance" && parsed.kind === "video") {
+    result = await provider.generateAsset({
+      provider: "seedance",
+      kind: "video",
+      ...baseRequest,
+    });
+  } else if (parsed.provider === "xai" && parsed.kind === "image") {
+    result = await provider.generateAsset({
+      provider: "xai",
+      kind: "image",
+      ...baseRequest,
+    });
+  } else if (parsed.provider === "xai" && parsed.kind === "video") {
+    result = await provider.generateAsset({
+      provider: "xai",
       kind: "video",
       ...baseRequest,
     });

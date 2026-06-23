@@ -10,6 +10,9 @@ export type GenerativeProviderName =
   | "gemini"
   | "runway"
   | "ltx"
+  | "kling"
+  | "seedance"
+  | "xai"
   | "nvidia_api_catalog"
   | "elevenlabs"
   | "nanobanano"
@@ -199,6 +202,42 @@ export interface LtxVideoRequest extends BaseGenerateAssetRequest {
   seconds?: number;
 }
 
+export interface KlingVideoRequest extends BaseGenerateAssetRequest {
+  provider: "kling";
+  kind: "video";
+  model?: string;
+  size?: string;
+  seconds?: number;
+}
+
+export interface SeedanceVideoRequest extends BaseGenerateAssetRequest {
+  provider: "seedance";
+  kind: "video";
+  model?: string;
+  size?: string;
+  seconds?: number;
+  resolution?: string;
+  seed?: number;
+}
+
+export interface XaiImageRequest extends BaseGenerateAssetRequest {
+  provider: "xai";
+  kind: "image";
+  model?: string;
+  size?: string;
+  resolution?: string;
+  numImages?: number;
+}
+
+export interface XaiVideoRequest extends BaseGenerateAssetRequest {
+  provider: "xai";
+  kind: "video";
+  model?: string;
+  size?: string;
+  seconds?: number;
+  resolution?: string;
+}
+
 export interface NvidiaApiCatalogVideoRequest extends BaseGenerateAssetRequest {
   provider: "nvidia_api_catalog";
   kind: "video";
@@ -267,6 +306,10 @@ export type GenerateAssetRequest =
   | GeminiImageRequest
   | RunwayVideoRequest
   | LtxVideoRequest
+  | KlingVideoRequest
+  | SeedanceVideoRequest
+  | XaiImageRequest
+  | XaiVideoRequest
   | NvidiaApiCatalogVideoRequest
   | MockImageRequest
   | MockVideoRequest

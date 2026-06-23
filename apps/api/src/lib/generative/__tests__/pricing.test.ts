@@ -20,6 +20,18 @@ test("video cost scales at ~$0.50 per second", () => {
     0.36
   );
   assert.equal(
+    estimateCostUsd({ provider: "kling", kind: "video", durationSec: 5 }),
+    0.9
+  );
+  assert.equal(
+    estimateCostUsd({ provider: "seedance", kind: "video", durationSec: 5 }),
+    1.8
+  );
+  assert.equal(
+    estimateCostUsd({ provider: "xai", kind: "video", durationSec: 5 }),
+    1.5
+  );
+  assert.equal(
     estimateCostUsd({
       provider: "nvidia_api_catalog",
       kind: "video",
@@ -32,6 +44,7 @@ test("video cost scales at ~$0.50 per second", () => {
 test("image cost is a flat per-generation rate", () => {
   assert.equal(estimateCostUsd({ provider: "openai", kind: "image" }), 0.05);
   assert.equal(estimateCostUsd({ provider: "gemini", kind: "image" }), 0.05);
+  assert.equal(estimateCostUsd({ provider: "xai", kind: "image" }), 0.05);
 });
 
 test("audio cost scales with measured duration", () => {

@@ -44,8 +44,20 @@ Errors use the stable error envelope:
 { "error": { "code": "audio_timeline_mismatch", "message": "…", "requestId": "req_…", "details": {} } }
 ```
 
-See [revision.http](./revision.http) and [export.http](./export.http) for
-request/response examples.
+See [revision.http](./revision.http), [export.http](./export.http), and
+[provider-generation.http](./provider-generation.http) for request/response
+examples.
+
+## Manual provider-generation smoke calls
+
+[provider-generation.http](./provider-generation.http) exercises the mounted
+beat media endpoints that route into the generated-assets provider pipeline.
+It includes examples for:
+
+- xAI Grok Imagine image generation.
+- xAI Grok Imagine video generation.
+- Kling video generation.
+- Seedance 2.0 video generation through fal.ai.
 
 ## Target agent flows
 

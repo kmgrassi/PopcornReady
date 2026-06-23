@@ -44,6 +44,16 @@ const SUPPORTED_MODES: Record<
   ltx: {
     video: ["prompt_only", "hero_frame", "first_frame_video"],
   },
+  kling: {
+    video: ["prompt_only", "hero_frame", "first_frame_video"],
+  },
+  seedance: {
+    video: ["prompt_only", "hero_frame", "first_frame_video"],
+  },
+  xai: {
+    image: ["prompt_only", "reference_pack", "hero_frame"],
+    video: ["prompt_only", "hero_frame", "first_frame_video"],
+  },
   nvidia_api_catalog: {
     video: ["prompt_only", "hero_frame", "first_frame_video"],
   },

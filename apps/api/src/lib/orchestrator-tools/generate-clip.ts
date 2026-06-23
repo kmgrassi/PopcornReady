@@ -10,7 +10,16 @@ import { ToolInputError } from "./types";
 import { runGenerateClipJob as realRunGenerateClipJob } from "./generate-clip-job";
 import { createLogger } from "@/lib/v1/logger";
 
-type VideoProvider = "openai" | "gemini" | "runway" | "ltx" | "nvidia_api_catalog" | "mock";
+type VideoProvider =
+  | "openai"
+  | "gemini"
+  | "runway"
+  | "ltx"
+  | "kling"
+  | "seedance"
+  | "xai"
+  | "nvidia_api_catalog"
+  | "mock";
 
 export interface GenerateClipInput {
   beatId?: string;
@@ -67,7 +76,17 @@ export const generateClipInputSchema = {
     },
     provider: {
       type: "string",
-      enum: ["openai", "gemini", "runway", "ltx", "nvidia_api_catalog", "mock"],
+      enum: [
+        "openai",
+        "gemini",
+        "runway",
+        "ltx",
+        "kling",
+        "seedance",
+        "xai",
+        "nvidia_api_catalog",
+        "mock",
+      ],
       description:
         "Optional video provider override. Omit to use the workspace video-generation setting.",
     },
@@ -108,6 +127,9 @@ function isProvider(value: unknown): value is VideoProvider {
     value === "gemini" ||
     value === "runway" ||
     value === "ltx" ||
+    value === "kling" ||
+    value === "seedance" ||
+    value === "xai" ||
     value === "nvidia_api_catalog" ||
     value === "mock"
   );
@@ -171,7 +193,7 @@ export function parseGenerateClipInput(input: unknown): GenerateClipInput {
   }
   if (input.provider !== undefined && !isProvider(input.provider)) {
     throw new ToolInputError(
-      "generate_clip provider must be openai, gemini, runway, ltx, nvidia_api_catalog, or mock.",
+      "generate_clip provider must be openai, gemini, runway, ltx, kling, seedance, xai, nvidia_api_catalog, or mock.",
       {}
     );
   }

@@ -1,0 +1,86 @@
+# Manual provider-generation smoke calls.
+#
+# Start the API locally, then create a project and call the beat media wrappers.
+# These wrappers route through the same generated-assets provider pipeline used
+# by agent tools.
+#
+# Required provider env vars:
+# - XAI_API_KEY for xAI image/video
+# - KLING_API_KEY for Kling video, or KLING_ACCESS_KEY + KLING_SECRET_KEY for AK/SK auth
+# - FAL_KEY for Seedance 2.0 via fal.ai
+
+### Create a local project
+POST http://localhost:3000/api/v1/projects
+Content-Type: application/json
+Idempotency-Key: provider-generation-project-001
+
+{
+  "name": "Provider generation smoke",
+  "brief": "A short cinematic product-test project."
+}
+
+### xAI image/keyframe generation
+POST http://localhost:3000/api/v1/projects/{{projectId}}/beats/beat_provider_image/keyframe
+Content-Type: application/json
+Idempotency-Key: xai-image-provider-smoke-001
+
+{
+  "provider": "xai",
+  "model": "grok-imagine-image-quality",
+  "prompt": "A cinematic product keyframe: a film slate beside a glowing bowl of popcorn on a studio table.",
+  "size": "1536x1024",
+  "resolution": "1k"
+}
+
+### Poll xAI image/keyframe job
+GET http://localhost:3000/api/v1/projects/{{projectId}}/beats/beat_provider_image/media/{{jobId}}
+
+### xAI video generation
+POST http://localhost:3000/api/v1/projects/{{projectId}}/beats/beat_xai_video/clip
+Content-Type: application/json
+Idempotency-Key: xai-video-provider-smoke-001
+
+{
+  "provider": "xai",
+  "model": "grok-imagine-video",
+  "prompt": "A smooth cinematic push-in on a film slate beside a glowing bowl of popcorn on a studio table.",
+  "durationSec": 6,
+  "size": "1280x720",
+  "resolution": "720p"
+}
+
+### Poll xAI video job
+GET http://localhost:3000/api/v1/projects/{{projectId}}/beats/beat_xai_video/media/{{jobId}}
+
+### Kling video generation
+POST http://localhost:3000/api/v1/projects/{{projectId}}/beats/beat_kling_video/clip
+Content-Type: application/json
+Idempotency-Key: kling-video-provider-smoke-001
+
+{
+  "provider": "kling",
+  "model": "kling-v3",
+  "prompt": "A cinematic tracking shot through a small editing studio, ending on a laptop previewing a movie trailer.",
+  "durationSec": 5,
+  "size": "1280x720"
+}
+
+### Poll Kling video job
+GET http://localhost:3000/api/v1/projects/{{projectId}}/beats/beat_kling_video/media/{{jobId}}
+
+### Seedance 2.0 video generation through fal.ai
+POST http://localhost:3000/api/v1/projects/{{projectId}}/beats/beat_seedance_video/clip
+Content-Type: application/json
+Idempotency-Key: seedance-video-provider-smoke-001
+
+{
+  "provider": "seedance",
+  "model": "bytedance/seedance-2.0/text-to-video",
+  "prompt": "A lively cinematic shot of popcorn kernels floating in slow motion around a glowing film projector.",
+  "durationSec": 5,
+  "size": "1280x720",
+  "resolution": "720p"
+}
+
+### Poll Seedance video job
+GET http://localhost:3000/api/v1/projects/{{projectId}}/beats/beat_seedance_video/media/{{jobId}}

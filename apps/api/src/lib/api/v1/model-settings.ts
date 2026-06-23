@@ -28,8 +28,18 @@ interface WorkspaceModelSettingRow {
 }
 
 const PROVIDERS_BY_PURPOSE: Record<ModelSettingPurpose, readonly string[]> = {
-  image_generation: ["openai", "ideogram", "gemini", "mock"],
-  video_generation: ["openai", "gemini", "runway", "ltx", "nvidia_api_catalog", "mock"],
+  image_generation: ["openai", "ideogram", "gemini", "xai", "mock"],
+  video_generation: [
+    "openai",
+    "gemini",
+    "runway",
+    "ltx",
+    "kling",
+    "seedance",
+    "xai",
+    "nvidia_api_catalog",
+    "mock",
+  ],
   audio_generation: ["elevenlabs", "mock"],
   text_generation: ["openai", "anthropic"],
 };
@@ -72,6 +82,14 @@ export function normalizeModelSettingsProvider(
   const normalized =
     provider === "nvidia" || provider === "cosmos" || provider === "cosmos3"
       ? "nvidia_api_catalog"
+      : provider === "grok" || provider === "grok-imagine"
+        ? "xai"
+        : provider === "klingai" || provider === "kling-ai"
+          ? "kling"
+          : provider === "seedance2" ||
+              provider === "seedance-2" ||
+              provider === "seedance-2.0"
+            ? "seedance"
       : provider;
   if (!PROVIDERS_BY_PURPOSE[purpose].includes(normalized)) {
     throw new ApiError(

@@ -186,6 +186,9 @@ export type ModelProvider =
   | "elevenlabs"
   | "runway"
   | "ltx"
+  | "kling"
+  | "seedance"
+  | "xai"
   | "nvidia";
 
 export interface ProviderApiKey {
