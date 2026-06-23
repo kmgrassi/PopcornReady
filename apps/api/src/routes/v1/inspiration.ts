@@ -258,10 +258,19 @@ function buildRandomStory(rows: StoryElementRow[]): RandomStoryInspiration {
     newTruth,
     endingType,
   });
+  const movieTitle = movieTitleFor({
+    typeOfPerson,
+    setting: settingText,
+    externalGoal,
+    antagonisticForce: antagonistText,
+    newTruth,
+    endingType,
+  });
 
   return {
     formula:
       "A [type of person] in [setting] wants [external goal], but [antagonistic force] blocks them. To succeed, they must overcome [inner flaw/lie] and choose between [old self] and [new truth], leading to [ending type].",
+    movieTitle,
     logline,
     typeOfPerson,
     setting: settingText,
@@ -311,9 +320,24 @@ async function parsePosterInspiration(body: unknown): Promise<RandomStoryInspira
   const oldSelf = enumField(input, "oldSelf", OLD_SELF_CHOICES);
   const endingType = enumField(input, "endingType", ENDING_TYPES);
   const setting = formatSetting(timeSetting, placeSetting);
-  const antagonisticForce = describeAntagonist(selectedRows.antagonist, selectedRows.theme);
+  const antagonistOptions = describeAntagonistOptions(selectedRows.antagonist, selectedRows.theme);
+  const antagonisticForce = stringField(input, "antagonisticForce");
+  if (!antagonistOptions.includes(antagonisticForce)) {
+    throw new ApiError(
+      "validation_failed",
+      "inspiration.antagonisticForce does not match the selected elements."
+    );
+  }
   const innerFlawOrLie = innerFlawFor(arc, beliefShift);
   const newTruth = newTruthFor(arc, beliefShift);
+  const movieTitle = movieTitleFor({
+    typeOfPerson,
+    setting,
+    externalGoal,
+    antagonisticForce,
+    newTruth,
+    endingType,
+  });
   const logline = buildLogline({
     typeOfPerson,
     setting,
@@ -326,13 +350,13 @@ async function parsePosterInspiration(body: unknown): Promise<RandomStoryInspira
   });
 
   assertFieldMatches(input, "setting", setting);
-  assertFieldMatches(input, "antagonisticForce", antagonisticForce);
   assertFieldMatches(input, "innerFlawOrLie", innerFlawOrLie);
   assertFieldMatches(input, "newTruth", newTruth);
   assertFieldMatches(input, "logline", logline);
 
   return {
     formula: typeof input.formula === "string" ? input.formula : "",
+    movieTitle,
     logline,
     typeOfPerson,
     setting,
@@ -405,6 +429,14 @@ function enumField<T extends readonly string[]>(
 ): T[number] {
   const value = input[field];
   if (typeof value !== "string" || !allowed.includes(value)) {
+    throw new ApiError("validation_failed", `inspiration.${field} is invalid.`);
+  }
+  return value;
+}
+
+function stringField(input: Record<string, unknown>, field: string): string {
+  const value = input[field];
+  if (typeof value !== "string" || !value.trim()) {
     throw new ApiError("validation_failed", `inspiration.${field} is invalid.`);
   }
   return value;
@@ -519,7 +551,13 @@ function titlePhrase(value: string, maxWords = 3): string {
   return titleCase(words.slice(-maxWords).join(" "));
 }
 
-function templateIndex(inspiration: RandomStoryInspiration, count: number): number {
+function templateIndex(
+  inspiration: Pick<
+    RandomStoryInspiration,
+    "typeOfPerson" | "setting" | "externalGoal" | "antagonisticForce" | "newTruth" | "endingType"
+  >,
+  count: number
+): number {
   const hash = sha256([
     inspiration.typeOfPerson,
     inspiration.setting,
@@ -531,11 +569,22 @@ function templateIndex(inspiration: RandomStoryInspiration, count: number): numb
   return parseInt(hash.slice(0, 8), 16) % count;
 }
 
-function movieTitleFor(inspiration: RandomStoryInspiration): string {
+export function movieTitleFor(
+  inspiration: Pick<RandomStoryInspiration, "setting" | "externalGoal" | "newTruth" | "endingType"> &
+    Partial<Pick<RandomStoryInspiration, "typeOfPerson" | "antagonisticForce">>
+): string {
   const goal = titlePhrase(inspiration.externalGoal, 3) || "Impossible Goal";
   const setting = titlePhrase(inspiration.setting, 3) || "Hidden World";
   const truth = titlePhrase(inspiration.newTruth, 3) || "Second Chance";
   const ending = titlePhrase(inspiration.endingType, 3) || "Victory";
+  const titleSeed = {
+    typeOfPerson: inspiration.typeOfPerson ?? "",
+    setting: inspiration.setting,
+    externalGoal: inspiration.externalGoal,
+    antagonisticForce: inspiration.antagonisticForce ?? "",
+    newTruth: inspiration.newTruth,
+    endingType: inspiration.endingType,
+  };
   const templates = [
     `The ${goal}`,
     `${setting} Rising`,
@@ -544,18 +593,20 @@ function movieTitleFor(inspiration: RandomStoryInspiration): string {
     `${goal} at ${setting}`,
     `The ${ending}`,
   ];
-  return templates[templateIndex(inspiration, templates.length)].slice(0, 64);
+  return templates[templateIndex(titleSeed, templates.length)].slice(0, 64);
 }
 
-function posterPromptFor(inspiration: RandomStoryInspiration): string {
+export function posterPromptFor(inspiration: RandomStoryInspiration): string {
+  const movieTitle = inspiration.movieTitle || movieTitleFor(inspiration);
   return [
     "Create cinematic movie poster key art for this story concept.",
+    `Movie title: "${movieTitle}".`,
     `Logline: ${inspiration.logline}`,
     `Hero: ${inspiration.typeOfPerson}.`,
     `Setting: ${inspiration.setting}.`,
     `Antagonistic force: ${inspiration.antagonisticForce}.`,
     `Theme and stakes: ${inspiration.newTruth}; ${inspiration.endingType}.`,
-    "Vertical theatrical one-sheet, bold composition, no readable typography, no logos.",
+    `Vertical theatrical one-sheet with the exact title "${movieTitle}" as large readable poster typography, bold composition, no logos.`,
   ].join(" ");
 }
 
@@ -564,8 +615,8 @@ async function ensureStoryConceptPoster(
   options: { allowGeneration?: boolean } = {}
 ): Promise<{ movieTitle: string; poster: StoryConceptPoster }> {
   const db = getServiceSupabase();
-  const movieTitle = movieTitleFor(inspiration);
-  const prompt = posterPromptFor(inspiration);
+  const movieTitle = inspiration.movieTitle || movieTitleFor(inspiration);
+  const prompt = posterPromptFor({ ...inspiration, movieTitle });
   const promptHash = sha256(prompt);
   const conceptKey = conceptKeyFor(inspiration, promptHash);
   const conceptHash = sha256(conceptKey);
@@ -841,21 +892,72 @@ function randomItem<T>(items: readonly T[]): T {
 }
 
 function describeAntagonist(antagonist: StoryElementRow[], theme: StoryElementRow[]): string {
+  return randomItem(describeAntagonistOptions(antagonist, theme));
+}
+
+export function describeAntagonistOptions(
+  antagonist: StoryElementRow[],
+  theme: StoryElementRow[]
+): string[] {
   const primary = antagonist[0]?.name.toLowerCase() ?? "institution";
   const secondary = antagonist[1]?.name.toLowerCase();
   const themeName = theme[0]?.name.toLowerCase() ?? "power";
   if (primary === "technology" || secondary === "technology") {
-    return `an AI-controlled entertainment monopoly`;
+    return [
+      "an AI-controlled entertainment monopoly",
+      `an algorithmic studio cartel optimizing ${themeName}`,
+      `a predictive entertainment platform suppressing ${themeName}`,
+      `an automated media empire built around ${themeName}`,
+      `a machine-run content syndicate monetizing ${themeName}`,
+    ];
   }
   if (primary === "institution" || secondary === "institution") {
-    return `a powerful institution policing ${themeName}`;
+    return [
+      `a powerful institution policing ${themeName}`,
+      `a legacy authority weaponizing ${themeName}`,
+      `a rule-bound bureaucracy protecting ${themeName}`,
+    ];
   }
-  if (primary === "person") return `a ruthless rival obsessed with ${themeName}`;
-  if (primary === "self") return `their own fear of losing ${themeName}`;
-  if (primary === "society") return `a society built around ${themeName}`;
-  if (primary === "nature") return `a worsening disaster tied to ${themeName}`;
-  if (primary === "supernatural force") return `a supernatural bargain tied to ${themeName}`;
-  return `a force tied to ${themeName}`;
+  if (primary === "person") {
+    return [
+      `a ruthless rival obsessed with ${themeName}`,
+      `a charismatic enemy exploiting ${themeName}`,
+      `a former ally chasing control of ${themeName}`,
+    ];
+  }
+  if (primary === "self") {
+    return [
+      `their own fear of losing ${themeName}`,
+      `their worst impulse turning ${themeName} against them`,
+      `a private shame wrapped around ${themeName}`,
+    ];
+  }
+  if (primary === "society") {
+    return [
+      `a society built around ${themeName}`,
+      `a public consensus hostile to ${themeName}`,
+      `a culture that punishes anyone who questions ${themeName}`,
+    ];
+  }
+  if (primary === "nature") {
+    return [
+      `a worsening disaster tied to ${themeName}`,
+      `an unforgiving environment reshaping ${themeName}`,
+      `a natural catastrophe exposing the cost of ${themeName}`,
+    ];
+  }
+  if (primary === "supernatural force") {
+    return [
+      `a supernatural bargain tied to ${themeName}`,
+      `an otherworldly curse feeding on ${themeName}`,
+      `a mythic force demanding the price of ${themeName}`,
+    ];
+  }
+  return [
+    `a force tied to ${themeName}`,
+    `an escalating pressure built around ${themeName}`,
+    `a hidden opposition exploiting ${themeName}`,
+  ];
 }
 
 function formatSetting(timeSetting: StoryElementRow, placeSetting: StoryElementRow): string {
