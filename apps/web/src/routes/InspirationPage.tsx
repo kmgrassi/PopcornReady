@@ -42,6 +42,8 @@ const ELEMENT_FIELD_PATCHES: Record<IngredientKey, (keyof RandomStoryInspiration
   structure: ["oldSelf"],
 };
 
+const DISABLE_LOCAL_POSTER_GENERATION = import.meta.env.DEV;
+
 export function InspirationPage() {
   const navigate = useNavigate();
   const [nonce, setNonce] = useState(0);
@@ -61,6 +63,7 @@ export function InspirationPage() {
   useEffect(() => {
     if (!story) return;
     posterMutation.reset();
+    if (DISABLE_LOCAL_POSTER_GENERATION) return;
     posterMutation.mutate(story, {
       onSuccess: ({ movieTitle, poster }) => {
         setStory((current) => (current ? { ...current, movieTitle, poster } : current));
@@ -129,6 +132,7 @@ export function InspirationPage() {
           poster={poster}
           posterError={posterMutation.error}
           posterGenerating={posterMutation.isPending}
+          posterDisabled={DISABLE_LOCAL_POSTER_GENERATION}
           regeneratingKey={regeneratingKey}
           onRegenerateIngredient={(key) => void regenerateIngredient(key)}
           startingRun={startRunMutation.isPending}
@@ -151,6 +155,7 @@ function InspirationResult({
   poster,
   posterError,
   posterGenerating,
+  posterDisabled,
   regeneratingKey,
   onRegenerateIngredient,
   startingRun,
@@ -161,6 +166,7 @@ function InspirationResult({
   poster: StoryConceptPoster | null;
   posterError: Error | null;
   posterGenerating: boolean;
+  posterDisabled: boolean;
   regeneratingKey: IngredientKey | null;
   onRegenerateIngredient: (key: IngredientKey) => void;
   startingRun: boolean;
@@ -170,7 +176,12 @@ function InspirationResult({
   return (
     <>
       <section className={styles.hero} aria-label="Generated story">
-        <PosterPanel poster={poster} error={posterError} generating={posterGenerating} />
+        <PosterPanel
+          poster={poster}
+          error={posterError}
+          generating={posterGenerating}
+          disabled={posterDisabled}
+        />
         <div className={styles.promptPanel}>
           <p className={styles.promptLabel}>Generated plot</p>
           {inspiration.movieTitle ? (
@@ -220,10 +231,12 @@ function PosterPanel({
   poster,
   error,
   generating,
+  disabled,
 }: {
   poster: StoryConceptPoster | null;
   error: Error | null;
   generating: boolean;
+  disabled: boolean;
 }) {
   if (poster?.url) {
     return <img className={styles.poster} src={poster.url} alt="Generated movie poster concept" />;
@@ -231,11 +244,13 @@ function PosterPanel({
 
   const status = error
     ? "Poster generation failed"
-    : poster?.status === "failed"
-      ? "Poster generation failed"
-      : generating || poster?.status === "generating" || poster?.status === "queued"
-        ? "Generating poster"
-        : "Poster pending";
+    : disabled
+      ? "Poster disabled locally"
+      : poster?.status === "failed"
+        ? "Poster generation failed"
+        : generating || poster?.status === "generating" || poster?.status === "queued"
+          ? "Generating poster"
+          : "Poster pending";
 
   return (
     <div className={`${styles.poster} ${styles.posterEmpty}`} aria-live="polite">
