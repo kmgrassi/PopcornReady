@@ -46,18 +46,51 @@ const PLATFORM_ENV: Record<KeyProvider, () => string | undefined> = {
 interface ProviderKeyContext {
   /** The acting user's public.users.id, or null for guest/local runs. */
   userId: string | null;
+  /**
+   * The key source last resolved per provider this run. A run uses one key per
+   * provider, so this is how a later generation knows whether its provider ran
+   * on the user's own key (free) or the platform's (billable).
+   */
+  providerSource: Partial<Record<KeyProvider, KeySource>>;
+  /** Running tally of provider cost incurred on PLATFORM keys (USD) — the billable amount. */
+  billing: { platformUsd: number };
 }
 
 const providerKeyContext = new AsyncLocalStorage<ProviderKeyContext>();
 
 // Run a function with an explicit acting user for key resolution. The engine
 // wraps each (initial + resumed) orchestrator run in this so detached runs still
-// resolve the owner's BYO keys.
+// resolve the owner's BYO keys, and so the billable-cost tally is run-scoped.
 export function withProviderKeyUser<T>(
   userId: string | null,
   fn: () => Promise<T>
 ): Promise<T> {
-  return providerKeyContext.run({ userId }, fn);
+  return providerKeyContext.run(
+    { userId, providerSource: {}, billing: { platformUsd: 0 } },
+    fn
+  );
+}
+
+// Total provider cost charged to platform keys so far in the current run (USD).
+// The engine snapshots this around each tool to debit only the billable delta.
+export function billableUsdSoFar(): number {
+  return providerKeyContext.getStore()?.billing.platformUsd ?? 0;
+}
+
+// The acting user of the current run context (null if none / in-request).
+export function currentRunUserId(): string | null {
+  return providerKeyContext.getStore()?.userId ?? null;
+}
+
+// Record a completed generation's cost against billing. No-op unless the
+// provider ran on a platform key in a run-scoped context (BYO + in-request +
+// local all skip billing). Providers call this once where they compute costUsd.
+export function noteBillableGeneration(provider: KeyProvider, costUsd: number): void {
+  const ctx = providerKeyContext.getStore();
+  if (!ctx || !(costUsd > 0)) return;
+  if (ctx.providerSource[provider] === "platform") {
+    ctx.billing.platformUsd += costUsd;
+  }
 }
 
 // The owning user of a workspace (public.users.id), or null for a guest/throwaway
@@ -73,6 +106,18 @@ export async function getWorkspaceOwnerUserId(
     .maybeSingle();
   if (error || !data) return null;
   return (data as { owner_id: string | null }).owner_id ?? null;
+}
+
+// Whether a user has stored at least one BYO provider key. Used by the credit
+// pre-check to avoid false-blocking a user who funds generation with their own
+// keys (their platform spend, if any, is still caught by the post-gen debit).
+export async function userHasAnyProviderKey(userId: string): Promise<boolean> {
+  const { count, error } = await getServiceSupabase()
+    .from("provider_api_keys")
+    .select("provider", { count: "exact", head: true })
+    .eq("user_id", userId);
+  if (error) return false;
+  return (count ?? 0) > 0;
 }
 
 function actingUserId(): string | null {
@@ -92,6 +137,17 @@ export interface ResolvedProviderKey {
 // `apiKey: undefined` only when neither a user key nor a platform env key exists
 // (the provider then raises its existing "key is not set" error).
 export async function resolveProviderKey(
+  provider: KeyProvider
+): Promise<ResolvedProviderKey> {
+  const resolved = await resolveProviderKeyInner(provider);
+  // Remember the source so noteBillableGeneration can attribute this provider's
+  // cost to user (free) vs platform (billable) without re-resolving.
+  const ctx = providerKeyContext.getStore();
+  if (ctx) ctx.providerSource[provider] = resolved.source;
+  return resolved;
+}
+
+async function resolveProviderKeyInner(
   provider: KeyProvider
 ): Promise<ResolvedProviderKey> {
   const userId = actingUserId();

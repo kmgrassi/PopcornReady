@@ -17,6 +17,10 @@ import { preflightGenerationContent } from "@/lib/generative/preflight";
 import { providerFor } from "@/lib/generative/providers";
 import { estimateCostUsd } from "@/lib/generative/pricing";
 import {
+  noteBillableGeneration,
+  type KeyProvider,
+} from "@/lib/provider-keys/resolve";
+import {
   AudioGenerationMode,
   DialogueInput,
   GenerativeAssetKind,
@@ -66,6 +70,20 @@ export interface ApiResult {
 
 const CHARACTER_PROMPT_INVARIANT_VERSION = "char.invariant.v1";
 const AUDIO_MODES = new Set(["speech", "dialogue", "sound_effect", "music"]);
+
+// Map a generative provider to the user-key provider its cost is billed/credited
+// under (matches the name each provider passes to resolveProviderApiKey). `mock`
+// and unbilled providers map to undefined → never metered.
+const BILLABLE_KEY_PROVIDER: Partial<Record<GenerativeProviderName, KeyProvider>> = {
+  openai: "openai",
+  gemini: "gemini",
+  nanobanano: "gemini",
+  ideogram: "ideogram",
+  runway: "runway",
+  ltx: "ltx",
+  nvidia_api_catalog: "nvidia",
+  elevenlabs: "elevenlabs",
+};
 
 // provider -> supported kinds for the agent endpoint.
 const PROVIDER_KIND_SUPPORT: Record<
@@ -657,6 +675,15 @@ async function runGeneration(
     });
   } else {
     throw new Error(`${parsed.provider} provider does not support ${parsed.kind}.`);
+  }
+
+  // Meter this generation against the run's credit balance. Only cost incurred on
+  // PLATFORM keys is billable; the run tally ignores BYO-key providers, and there
+  // is no tally at all for local/guest/in-request generation — so this is a no-op
+  // in those cases. The engine debits the accumulated billable cost per tool.
+  const billProvider = BILLABLE_KEY_PROVIDER[parsed.provider];
+  if (billProvider && result.costUsd) {
+    noteBillableGeneration(billProvider, result.costUsd);
   }
 
   const storageName = randomUUID();
