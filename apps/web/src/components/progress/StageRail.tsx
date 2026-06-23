@@ -29,52 +29,90 @@ interface StageRailProps {
   stageLinks?: Partial<Record<string, string>>;
 }
 
-const VISIBLE_STAGES: Array<{
-  types: GenerationStageType[];
+const PIPELINE_GROUPS: Array<{
+  id: string;
+  type: GenerationStageType;
+  activeTypes?: GenerationStageType[];
+  fallbackTypes?: GenerationStageType[];
   label: string;
   description: string;
+  tools: string[];
 }> = [
   {
-    types: ["brief_intake"],
+    id: "concept",
+    type: "brief_intake",
     label: "Concept",
     description: "Project goal, audience, and creative direction.",
+    tools: ["create_or_load_brief"],
   },
   {
-    types: ["creative_plan"],
+    id: "brief",
+    type: "creative_plan",
     label: "Brief",
-    description: "Structured generation brief ready for approval.",
+    description: "Story structure, shot plan, and continuity direction.",
+    tools: ["develop_story_blueprint", "plan_shots", "plan_visual_anchors"],
   },
   {
-    types: ["storyboard"],
+    id: "script",
+    type: "creative_plan",
     label: "Script",
     description: "Narrative beats, voiceover, and scene intent.",
+    tools: ["draft_script"],
   },
   {
-    types: ["storyboard"],
+    id: "storyboard",
+    type: "storyboard",
     label: "Storyboard",
-    description: "Scene-by-scene visual plan.",
+    description: "Low-cost sketch frames for each planned beat.",
+    tools: ["generate_storyboard"],
   },
   {
-    types: ["asset_generation"],
+    id: "shots",
+    type: "asset_generation",
     label: "Shots",
-    description: "Generated shot candidates and motion moments.",
+    description: "Reference images, keyframes, and generated clips.",
+    tools: ["generate_anchor", "generate_keyframe", "generate_clip"],
   },
   {
-    types: ["audio_generation", "asset_generation"],
+    id: "assets",
+    type: "audio_generation",
     label: "Assets",
-    description: "Images, clips, voice, and supporting media.",
+    description: "Voiceover, music, and supporting media.",
+    tools: ["generate_audio"],
   },
   {
-    types: ["timeline_assembly"],
+    id: "timeline",
+    type: "timeline_assembly",
     label: "Timeline",
     description: "Deterministic edit assembly.",
+    tools: ["assemble_timeline"],
   },
   {
-    types: ["quality_review", "export"],
+    id: "final-render",
+    type: "export",
+    activeTypes: ["quality_review", "export"],
+    fallbackTypes: ["quality_review", "export"],
     label: "Final Render",
     description: "Quality pass and finished video render.",
+    tools: ["critique_timeline", "export_video"],
   },
 ];
+
+const TOOL_LABELS: Record<string, string> = {
+  create_or_load_brief: "Create/load brief",
+  develop_story_blueprint: "Develop story blueprint",
+  draft_script: "Draft script",
+  plan_shots: "Plan shots",
+  plan_visual_anchors: "Plan visual anchors",
+  generate_anchor: "Generate anchor images",
+  generate_storyboard: "Generate storyboard",
+  generate_keyframe: "Generate keyframes",
+  generate_clip: "Generate clips",
+  generate_audio: "Generate audio",
+  assemble_timeline: "Assemble timeline",
+  critique_timeline: "Critique timeline",
+  export_video: "Export video",
+};
 
 const STATUS_LABEL: Record<GenerationRunStatus | "review", string> = {
   queued: "Upcoming",
@@ -107,6 +145,37 @@ function LoadingDot() {
   return <span className={styles.inlineSpinner} aria-hidden="true" />;
 }
 
+function statusPriority(status: GenerationRunStatus): number {
+  if (status === "failed") return 5;
+  if (status === "running") return 4;
+  if (status === "canceled") return 3;
+  if (status === "succeeded") return 2;
+  return 1;
+}
+
+function groupedStatus(stages: GenerationStage[]): GenerationRunStatus {
+  if (stages.length === 0) return "queued";
+  return stages.reduce<GenerationRunStatus>(
+    (current, stage) =>
+      statusPriority(stage.status) > statusPriority(current) ? stage.status : current,
+    "queued",
+  );
+}
+
+function latestStage(stages: GenerationStage[]): GenerationStage | undefined {
+  return [...stages].sort((a, b) => a.order - b.order).at(-1);
+}
+
+function toolLabel(toolName: string): string {
+  return TOOL_LABELS[toolName] ?? toolName;
+}
+
+function toolStatusLabel(status: GenerationRunStatus): string {
+  if (status === "running") return "Running";
+  if (status === "succeeded") return "Done";
+  return STATUS_LABEL[status];
+}
+
 export function StageRail({
   stages,
   runStatus,
@@ -119,68 +188,68 @@ export function StageRail({
   stageLinks,
 }: StageRailProps) {
   const ordered = [...stages].sort((a, b) => a.order - b.order);
-  const stagesByType = new Map<GenerationStageType, GenerationStage[]>();
+  const stagesByTool = new Map<string, GenerationStage>();
+  const broadFallback = new Map<GenerationStageType, GenerationStage[]>();
   ordered.forEach((stage) => {
-    const existing = stagesByType.get(stage.type) ?? [];
+    if (stage.toolName) stagesByTool.set(stage.toolName, stage);
+    const existing = broadFallback.get(stage.type) ?? [];
     existing.push(stage);
-    stagesByType.set(stage.type, existing);
+    broadFallback.set(stage.type, existing);
   });
 
-  const occurrenceCounts = new Map<GenerationStageType, number>();
-  let nextQueuedShown = false;
+  const fallbackCounts = new Map<GenerationStageType, number>();
+  let inferredRunningShown = false;
   const hasExplicitRunningStage = stages.some((stage) => stage.status === "running");
   const inferCurrentStage =
     runStatus === "running" && !reviewGate && !hasExplicitRunningStage && currentStageType;
 
   return (
     <ol className={styles.stageRail} aria-label="Generation stages">
-      {VISIBLE_STAGES.map((visibleStage, idx) => {
-        const matchingStages = visibleStage.types.flatMap((type) => {
-          const occurrence = occurrenceCounts.get(type) ?? 0;
-          return (stagesByType.get(type) ?? []).slice(occurrence);
-        });
-        const stage =
-          matchingStages.find((candidate) => reviewGate?.stageId === candidate.stageId) ??
-          matchingStages.find((candidate) => candidate.status === "running") ??
-          matchingStages.find((candidate) => candidate.status === "failed") ??
-          matchingStages.find((candidate) => candidate.status === "queued") ??
-          matchingStages[0];
-        if (stage) {
-          occurrenceCounts.set(
-            stage.type,
-            (stagesByType.get(stage.type) ?? []).findIndex(
-              (candidate) => candidate.stageId === stage.stageId,
-            ) + 1,
-          );
+      {PIPELINE_GROUPS.map((visibleStage, idx) => {
+        let groupStages = visibleStage.tools
+          .map((toolName) => stagesByTool.get(toolName))
+          .filter((stage): stage is GenerationStage => Boolean(stage));
+        if (groupStages.length === 0) {
+          for (const fallbackType of visibleStage.fallbackTypes ?? [visibleStage.type]) {
+            const occurrence = fallbackCounts.get(fallbackType) ?? 0;
+            const fallback = (broadFallback.get(fallbackType) ?? [])[occurrence];
+            if (fallback) {
+              groupStages = [fallback];
+              fallbackCounts.set(fallbackType, occurrence + 1);
+              break;
+            }
+          }
         }
-        const isLast = idx === VISIBLE_STAGES.length - 1;
+        const stage = latestStage(groupStages);
+        const baseStatus = groupedStatus(groupStages);
         const inferredRunning = Boolean(
           inferCurrentStage &&
-            stage?.type === inferCurrentStage &&
-            stage?.status === "queued",
+            (visibleStage.activeTypes ?? [visibleStage.type]).includes(inferCurrentStage) &&
+            !inferredRunningShown &&
+            baseStatus === "queued",
         );
-        const status = inferredRunning ? "running" : stage?.status ?? "queued";
+        if (groupStages.length === 0 && !inferredRunning) return null;
+        if (inferredRunning) inferredRunningShown = true;
+        const isLast = idx === PIPELINE_GROUPS.length - 1;
+        const runningStage = groupStages.find((candidate) => candidate.status === "running");
+        const failedStage = groupStages.find((candidate) => candidate.status === "failed");
+        const status = inferredRunning ? "running" : baseStatus;
         const progressPercent = inferredRunning
           ? runProgressPercent
-          : stage?.progressPercent;
+          : runningStage?.progressPercent ?? stage?.progressPercent;
         const message =
-          stage?.error?.message ??
-          (status === "running" ? runMessage : undefined) ??
-          stage?.message ??
+          failedStage?.error?.message ??
+          (inferredRunning ? runMessage : runningStage?.message) ??
           visibleStage.description;
-        const awaitingReview = Boolean(stage && reviewGate?.stageId === stage.stageId);
+        const awaitingReview = groupStages.some((candidate) => reviewGate?.stageId === candidate.stageId);
         const statusKey = awaitingReview ? "review" : status;
-        const isRealQueuedStage = Boolean(stage && stage.status === "queued");
-        const isUpcoming = isRealQueuedStage && status === "queued" && !nextQueuedShown;
-        if (isUpcoming) nextQueuedShown = true;
         const showStopAction = status === "running" && !awaitingReview && Boolean(stopAction);
         const showStatus =
           awaitingReview ||
           status === "running" ||
           status === "succeeded" ||
           status === "failed" ||
-          status === "canceled" ||
-          isUpcoming;
+          status === "canceled";
         const stageLink = stageLinks?.[visibleStage.label];
 
         return (
@@ -208,7 +277,7 @@ export function StageRail({
                 )}
                 {showStatus ? (
                   <span className={`${styles.stageStatusPill} ${styles[`stageStatus_${statusKey}`]}`}>
-                    {isUpcoming ? "Up next" : stage?.reviewedAt ? "Complete" : STATUS_LABEL[statusKey]}
+                    {stage?.reviewedAt ? "Complete" : STATUS_LABEL[statusKey]}
                   </span>
                 ) : null}
                 <JudgmentBadge judgment={stage?.judgment} compact />
@@ -231,6 +300,30 @@ export function StageRail({
                     style={{ width: `${Math.max(2, Math.min(100, progressPercent))}%` }}
                   />
                 </div>
+              ) : null}
+              {groupStages.length > 0 ? (
+                <details
+                  className={styles.stageToolDetails}
+                  open={status === "running" || status === "failed" || awaitingReview}
+                >
+                  <summary>Tool activity</summary>
+                  <ul className={styles.stageToolList}>
+                    {groupStages.map((toolStage) => {
+                      const toolName = toolStage.toolName ?? toolStage.label;
+                      const toolStatus = toolStage.status;
+                      return (
+                        <li className={styles.stageToolRow} key={toolStage.stageId}>
+                          <span className={styles.stageToolName}>{toolLabel(toolName)}</span>
+                          <span
+                            className={`${styles.stageToolStatus} ${styles[`stageStatus_${toolStatus}`]}`}
+                          >
+                            {toolStatusLabel(toolStatus)}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </details>
               ) : null}
               {showStopAction && stopAction ? (
                 <div className={styles.stageControlRow}>

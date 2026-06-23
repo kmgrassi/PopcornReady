@@ -144,8 +144,8 @@ export function StoryboardBoard({
   const tiles = useMemo(
     () =>
       storyboard
-        ? storyboardTiles(runId, storyboard, visualItems)
-        : itemTiles(runId, visualItems),
+        ? storyboardTiles(runId, storyboard, visualItems).filter((tile) => Boolean(tile.mediaUrl))
+        : itemTiles(runId, visualItems).filter((tile) => Boolean(tile.mediaUrl)),
     [runId, storyboard, visualItems],
   );
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);

@@ -18,6 +18,41 @@ import {
 
 const BOARD_FEEDBACK_TOOL = "board_feedback";
 const AFTER_GATE_PREFIX = "after:";
+const TOOL_ORDER: Record<string, number> = {
+  create_or_load_brief: 0,
+  develop_story_blueprint: 1,
+  draft_script: 2,
+  plan_shots: 3,
+  plan_visual_anchors: 4,
+  generate_anchor: 5,
+  generate_storyboard: 6,
+  generate_keyframe: 7,
+  generate_clip: 8,
+  generate_audio: 9,
+  assemble_timeline: 10,
+  critique_timeline: 11,
+  request_approval: 12,
+  export_video: 13,
+  publish_to_catalog: 14,
+};
+
+const TOOL_LABELS: Record<string, string> = {
+  create_or_load_brief: "Concept",
+  develop_story_blueprint: "Story Structure",
+  draft_script: "Script",
+  plan_shots: "Shot Plan",
+  plan_visual_anchors: "Continuity Plan",
+  generate_anchor: "Anchor Images",
+  generate_storyboard: "Storyboard",
+  generate_keyframe: "Keyframes",
+  generate_clip: "Clips",
+  generate_audio: "Audio",
+  assemble_timeline: "Timeline",
+  critique_timeline: "Quality Review",
+  request_approval: "Approval",
+  export_video: "Final Render",
+  publish_to_catalog: "Publish",
+};
 
 export interface GenerationRunDetail {
   run: GenerationRun;
@@ -66,6 +101,14 @@ export function toolStage(tool: string): GenerationStageType {
 
 function toolItemKind(tool: string): GenerationStageItemKind {
   switch (tool) {
+    case "create_or_load_brief":
+    case "develop_story_blueprint":
+    case "draft_script":
+    case "plan_shots":
+    case "plan_visual_anchors":
+    case "critique_timeline":
+    case "publish_to_catalog":
+      return "caption";
     case "generate_clip":
       return "video";
     case "generate_audio":
@@ -188,6 +231,18 @@ function stageId(runId: string, type: GenerationStageType): string {
   return `${runId}:${type}`;
 }
 
+function toolStageId(runId: string, tool: string): string {
+  return `${runId}:tool:${tool}`;
+}
+
+function toolOrder(tool: string): number {
+  return TOOL_ORDER[tool] ?? 100 + GENERATION_STAGE_ORDER[toolStage(tool)];
+}
+
+function toolLabel(tool: string): string {
+  return TOOL_LABELS[tool] ?? GENERATION_STAGE_LABELS[toolStage(tool)];
+}
+
 function toErrorSummary(error: Record<string, unknown> | undefined) {
   if (!error) return undefined;
   return {
@@ -208,7 +263,7 @@ export function projectRun(
   const reviewGate = reachedGate
     ? {
         stageType: toolStage(reachedGate.stage) as GateableGenerationStageType,
-        stageId: stageId(run.id, toolStage(reachedGate.stage)),
+        stageId: toolStageId(run.id, reachedGate.stage),
         state: "awaiting_review" as const,
         enteredAt: reachedGate.updatedAt,
       }
@@ -264,14 +319,14 @@ function projectResultArtifacts(
 }
 
 function projectStages(run: OrchestratorRun, actions: RunActionSummary[]): GenerationStage[] {
-  const grouped = new Map<GenerationStageType, RunActionSummary[]>();
+  const grouped = new Map<string, RunActionSummary[]>();
   for (const action of generationActions(actions)) {
-    const type = toolStage(action.tool);
-    grouped.set(type, [...(grouped.get(type) ?? []), action]);
+    grouped.set(action.tool, [...(grouped.get(action.tool) ?? []), action]);
   }
 
   return [...grouped.entries()]
-    .map(([type, stageActions]) => {
+    .map(([tool, stageActions]) => {
+      const type = toolStage(tool);
       const latest = stageActions.at(-1);
       const latestByTool = new Map<string, RunActionSummary>();
       for (const action of stageActions) {
@@ -290,11 +345,12 @@ function projectStages(run: OrchestratorRun, actions: RunActionSummary[]): Gener
           : "queued";
       const statusAction = latestFailed ?? latest;
       return {
-        stageId: stageId(run.id, type),
+        stageId: toolStageId(run.id, tool),
         runId: run.id,
         type,
-        label: GENERATION_STAGE_LABELS[type],
-        order: GENERATION_STAGE_ORDER[type],
+        toolName: tool,
+        label: toolLabel(tool),
+        order: toolOrder(tool),
         status,
         progressPercent: status === "succeeded" ? 100 : status === "running" ? 50 : 0,
         message: statusAction ? `${statusAction.tool} ${statusAction.status}.` : undefined,
@@ -330,7 +386,7 @@ function projectStageItems(run: OrchestratorRun, actions: RunActionSummary[]): G
     const prompt = actionPrompt(action);
     return action.outputAssetIds.map((assetId, index) => ({
       itemId: `${action.id}:${assetId}`,
-      stageId: stageId(run.id, type),
+      stageId: toolStageId(run.id, action.tool),
       kind: toolItemKind(action.tool),
       purpose: toolItemPurpose(action.tool),
       label: `${action.tool} output ${index + 1}`,
