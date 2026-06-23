@@ -62,6 +62,8 @@ import {
   downloadAssetObjectToTemp,
   useSupabaseStorage,
 } from "../../supabase/storage";
+import { readStorageConfig } from "@/lib/storage/config";
+import { createLogger } from "@/lib/v1/logger";
 
 export interface ApiResult {
   status: number;
@@ -100,6 +102,7 @@ const PROVIDER_KIND_SUPPORT: Record<
   mock: ["image", "video", "audio"],
   nanobanano: [],
 };
+const logger = createLogger();
 
 async function localPathForAssetBytes(asset: V1Asset): Promise<string> {
   if (!asset.storageKey) {
@@ -109,10 +112,44 @@ async function localPathForAssetBytes(asset: V1Asset): Promise<string> {
       { assetIds: [asset.id] }
     );
   }
-  if (useSupabaseStorage()) {
-    return downloadAssetObjectToTemp(asset.storageKey);
+  const storageConfig = readStorageConfig();
+  const usesSupabaseStorage = useSupabaseStorage();
+  const logFields = {
+    workspaceId: asset.workspaceId,
+    projectId: asset.projectId,
+    assetId: asset.id,
+    assetRole: asset.role,
+    assetKind: asset.kind,
+    storageBackend: storageConfig.backend,
+    dbBackend: process.env.DB_BACKEND ?? "local",
+    useSupabaseStorage: usesSupabaseStorage,
+    storageBucket: asset.storageBucket,
+    storageKey: asset.storageKey,
+  };
+  logger.info("generated_asset.reference_resolve_started", logFields);
+  if (usesSupabaseStorage) {
+    try {
+      const localPath = await downloadAssetObjectToTemp(asset.storageKey);
+      logger.info("generated_asset.reference_resolve_succeeded", {
+        ...logFields,
+        resolver: "supabase_storage",
+      });
+      return localPath;
+    } catch (err) {
+      logger.error("generated_asset.reference_resolve_failed", {
+        ...logFields,
+        resolver: "supabase_storage",
+        error: { message: err instanceof Error ? err.message : String(err) },
+      });
+      throw err;
+    }
   }
-  return path.join(localDir(), asset.storageKey);
+  const localPath = path.join(localDir(), asset.storageKey);
+  logger.info("generated_asset.reference_resolve_succeeded", {
+    ...logFields,
+    resolver: "local_path",
+  });
+  return localPath;
 }
 
 interface ParsedRequest {
@@ -528,13 +565,38 @@ async function runGeneration(
   for (const id of parsed.referenceAssetIds) {
     const asset = await getAsset(auth.workspaceId, projectId, id); // throws not_found
     if (asset.status !== "ready" || !asset.storageKey) {
+      logger.warn("generated_asset.reference_not_ready", {
+        workspaceId: auth.workspaceId,
+        projectId,
+        runId: parsed.runId,
+        assetId: asset.id,
+        assetRole: asset.role,
+        assetKind: asset.kind,
+        status: asset.status,
+        hasStorageKey: Boolean(asset.storageKey),
+      });
       throw new ApiError(
         "asset_not_ready",
         `Reference asset is not ready: ${id}.`,
         { assetIds: [id] }
       );
     }
-    referencePaths.push(await localPathForAssetBytes(asset));
+    try {
+      referencePaths.push(await localPathForAssetBytes(asset));
+    } catch (err) {
+      logger.error("generated_asset.reference_download_failed", {
+        workspaceId: auth.workspaceId,
+        projectId,
+        runId: parsed.runId,
+        assetId: asset.id,
+        assetRole: asset.role,
+        assetKind: asset.kind,
+        storageBucket: asset.storageBucket,
+        storageKey: asset.storageKey,
+        error: { message: err instanceof Error ? err.message : String(err) },
+      });
+      throw err;
+    }
   }
 
   if (item) {

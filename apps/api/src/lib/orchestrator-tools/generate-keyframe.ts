@@ -6,6 +6,7 @@ import {
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 import { runGenerateKeyframeJob as realRunGenerateKeyframeJob } from "./generate-keyframe-job";
+import { createLogger } from "@/lib/v1/logger";
 
 type KeyframeImageProvider = "openai" | "ideogram" | "gemini" | "mock";
 
@@ -31,6 +32,7 @@ const defaultDeps: GenerateKeyframeDeps = {
   createJob: (input) => agentApiStore.createOrGetJob(input),
   runGenerateKeyframeJob: realRunGenerateKeyframeJob,
 };
+const logger = createLogger();
 
 export const generateKeyframeInputSchema = {
   type: "object",
@@ -178,19 +180,49 @@ export function createGenerateKeyframeTool(
       }
 
       const active = await resolved.getActiveProjectPlan(context.projectId);
-      if (!active) return planRequired();
+      if (!active) {
+        logger.warn("generate_keyframe.precondition_missing_plan", {
+          workspaceId: context.auth.workspaceId,
+          projectId: context.projectId,
+          runId: context.orchestratorRunId,
+        });
+        return planRequired();
+      }
 
       const storyboard = await resolved.getProjectStoryboard(
         context.auth.workspaceId,
         context.projectId
       );
       if (!storyboard || storyboard.planAssetId !== active.assetId) {
+        logger.warn("generate_keyframe.precondition_missing_storyboard", {
+          workspaceId: context.auth.workspaceId,
+          projectId: context.projectId,
+          runId: context.orchestratorRunId,
+          planAssetId: active.assetId,
+          storyboardId: storyboard?.id,
+          storyboardPlanAssetId: storyboard?.planAssetId,
+        });
         return storyboardRequired();
       }
 
       const { job } = await resolved.createJob({
         type: "asset_generation",
         projectId: context.projectId,
+      });
+      logger.info("generate_keyframe.accepted", {
+        workspaceId: context.auth.workspaceId,
+        projectId: context.projectId,
+        runId: context.orchestratorRunId,
+        jobId: job.id,
+        planAssetId: active.assetId,
+        storyboardId: storyboard.id,
+        sceneCount: storyboard.scenes.length,
+        beatCount: storyboard.scenes.reduce((count, scene) => count + scene.beats.length, 0),
+        panelCount: storyboard.scenes.reduce(
+          (count, scene) =>
+            count + scene.beats.reduce((beatCount, beat) => beatCount + beat.panels.length, 0),
+          0
+        ),
       });
 
       void resolved.runGenerateKeyframeJob({
