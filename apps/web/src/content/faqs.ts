@@ -57,6 +57,14 @@ export const FAQS: FaqItem[] = [
     placements: ["landing", "dashboard"],
     tags: ["models", "providers", "api-keys"],
   },
+  {
+    id: "editing-experience",
+    question: "Do I need video editing experience to use it?",
+    answer:
+      "No. You do not need video editing experience. You need taste and the ability to prompt the model, and Popcorn Ready helps with example prompts along the way. The idea behind Popcorn Ready is that anyone can and should be able to create their own cinematic videos.",
+    placements: ["landing", "dashboard"],
+    tags: ["beginner", "prompting", "editing", "workflow"],
+  },
 ];
 
 export function faqsForPlacement(placement: FaqPlacement): FaqItem[] {
