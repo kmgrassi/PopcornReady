@@ -89,9 +89,16 @@ function projectWatchPath(projectId: string) {
 
 function statusChipClass(status: string) {
   if (status === "running" || status === "processing") return styles.statusRunning;
-  if (status === "succeeded" || status === "ready") return styles.statusSucceeded;
+  if (status === "succeeded" || status === "ready" || status === "active") return styles.statusSucceeded;
   if (status === "failed" || status === "canceled") return styles.statusFailed;
   return "";
+}
+
+function statusDotClass(status: string) {
+  if (status === "running" || status === "processing") return styles.statusDotRunning;
+  if (status === "succeeded" || status === "ready" || status === "active") return styles.statusDotActive;
+  if (status === "failed" || status === "canceled" || status === "deleted") return styles.statusDotFailed;
+  return styles.statusDotNeutral;
 }
 
 function StatusChip({ status }: { status: GenerationRunStatus | WorkspaceAsset["status"] }) {
@@ -389,8 +396,12 @@ export function ProjectsPage() {
                 <Link
                   className={styles.cardLink}
                   to={isPublic ? publicProjectPath(project.id) : projectDetailPath(project.id)}
-                  aria-label={`Open ${project.name} overview`}
+                  aria-label={`Open ${project.name}`}
                 >
+                  <span
+                    className={`${styles.statusDot} ${statusDotClass(project.status)}`}
+                    aria-label={`Project status: ${titleCase(project.status)}`}
+                  />
                   <ProjectPoster name={project.name} posterUrl={project.posterUrl} />
                 </Link>
                 <div className={styles.projectCardBody}>
@@ -404,41 +415,10 @@ export function ProjectsPage() {
                     <span className={styles.rowSub}>Updated {formatDate(project.updatedAt)}</span>
                   </div>
                   <div className={styles.cardMeta}>
-                    <span className={`${styles.chip} ${statusChipClass(project.status)}`}>
-                      {titleCase(project.status)}
-                    </span>
                     <span>{project.hasStoryboard ? "Storyboard ready" : "No storyboard yet"}</span>
                     <span>Created {formatDate(project.createdAt)}</span>
                   </div>
                 </div>
-                {isPublic ? (
-                  <div className={styles.cardActions}>
-                    <ButtonLink
-                      variant="secondary"
-                      size="sm"
-                      to={publicProjectPath(project.id)}
-                    >
-                      Open
-                    </ButtonLink>
-                  </div>
-                ) : (
-                  <div className={styles.cardActions}>
-                    <ButtonLink
-                      variant="secondary"
-                      size="sm"
-                      to={projectDetailPath(project.id)}
-                    >
-                      Overview
-                    </ButtonLink>
-                    <ButtonLink
-                      variant="ghost"
-                      size="sm"
-                      to={projectDetailPath(project.id)}
-                    >
-                      Open
-                    </ButtonLink>
-                  </div>
-                )}
               </article>
             ))}
           </div>
