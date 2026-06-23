@@ -7,6 +7,8 @@ import { Button } from "../components/ui/Button";
 import { ErrorState } from "../components/ui/StateCard";
 import { useAuth } from "../components/auth/AuthProvider";
 import { AnonymousUpgradeBanner } from "../components/auth/AnonymousUpgradeBanner";
+import { FaqSection } from "../components/faq/FaqSection";
+import { faqsForPlacement } from "../content/faqs";
 import { deriveNextAction } from "../lib/nextAction";
 import { useDashboardSummaryQuery } from "../lib/queryClient";
 import styles from "./LaunchpadPage.module.css";
@@ -40,13 +42,25 @@ export function LaunchpadPage() {
 
       {!loading && !error ? (
         action.type === "start" ? (
-          <EmptyDashboard action={action} />
+          <>
+            <EmptyDashboard action={action} />
+            <FaqSection
+              faqs={faqsForPlacement("dashboard")}
+              title="Quick answers"
+              variant="compact"
+            />
+          </>
         ) : (
           <>
             <HeroCard action={action} />
             <OverviewStats counts={pulse?.counts ?? EMPTY_COUNTS} />
             <ActiveRunsPanel runs={pulse?.activeRuns ?? []} />
             <RecentOutputsStrip outputs={pulse?.recentOutputs ?? []} />
+            <FaqSection
+              faqs={faqsForPlacement("dashboard")}
+              title="Quick answers"
+              variant="compact"
+            />
           </>
         )
       ) : null}

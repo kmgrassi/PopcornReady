@@ -4,11 +4,13 @@ import { AgentRunPreview } from "../components/AgentRunPreview";
 import { HeatLogoMark } from "../components/HeatLogoMark";
 import { Reveal } from "../components/Reveal";
 import { useAuth } from "../components/auth/AuthProvider";
+import { FaqSection } from "../components/faq/FaqSection";
 import {
   LandingSection,
   LandingSectionHeader,
 } from "../components/landing/LandingSection";
 import { WorkflowStages } from "../components/landing/WorkflowStages";
+import { faqsForPlacement } from "../content/faqs";
 import {
   buildPendingLandingPrompt,
   canStartGuestRun,
@@ -531,6 +533,12 @@ export function HomePage() {
               Hosted pricing is indicative while we finalize launch tiers. Prefer
               full control? Self-hosting is always free.
             </p>
+          </LandingSection>
+        </Reveal>
+
+        <Reveal>
+          <LandingSection spacing="normal" align="start">
+            <FaqSection faqs={faqsForPlacement("landing")} />
           </LandingSection>
         </Reveal>
 
