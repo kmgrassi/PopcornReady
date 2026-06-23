@@ -5,7 +5,6 @@ import type {
   ProjectStoryboard,
   StoryboardBeat,
   StoryboardPanel,
-  StoryboardScene,
   V1Project,
   VideoBriefInput,
 } from "@popcorn/shared/v1/types";
@@ -201,7 +200,7 @@ export function ProjectDetailPage() {
           <div className={styles.projectContent} id="overview">
             <section className={styles.projectTopLayout}>
               <div className={styles.projectPrimaryColumn}>
-                <ProjectConcept project={project} storyboard={storyboard} />
+                <ProjectConcept project={project} />
               </div>
               <div className={styles.projectStoryboardColumn}>
                 <StoryboardPreview
@@ -467,14 +466,7 @@ function ProjectStagePanel({
   );
 }
 
-function ProjectConcept({
-  project,
-  storyboard,
-}: {
-  project: V1Project;
-  storyboard: ProjectStoryboard | null;
-}) {
-  const stats = useMemo(() => storyboardStats(storyboard), [storyboard]);
+function ProjectConcept({ project }: { project: V1Project }) {
   const brief = project.brief;
   return (
     <section className={styles.hero} id="concept">
@@ -506,12 +498,12 @@ function ProjectConcept({
             <dd>{brief?.aspectRatio ?? "Unset"}</dd>
           </div>
           <div>
-            <dt>Scenes</dt>
-            <dd>{stats.scenes}</dd>
+            <dt>Format</dt>
+            <dd>{brief?.format ?? "Unset"}</dd>
           </div>
           <div>
-            <dt>Moments</dt>
-            <dd>{stats.beats}</dd>
+            <dt>Platform</dt>
+            <dd>{brief?.platform ?? "Unset"}</dd>
           </div>
         </dl>
       </div>
@@ -691,11 +683,9 @@ function StoryboardPreview({
   generationError: Error | null;
   onGenerate: () => void;
 }) {
-  const stats = storyboardStats(storyboard);
-  const scenes = orderedScenes(storyboard);
-  const hasPreviewBeats = storyboard
-    ? scenes.some((scene) => orderedBeats(scene).length > 0)
-    : false;
+  const scenes = storyboardScenes(storyboard);
+  const momentCount = scenes.reduce((count, scene) => count + scene.beats.length, 0);
+  const hasPreviewBeats = scenes.some((scene) => scene.beats.length > 0);
 
   return (
     <section className={`${styles.panel} ${styles.storyboardFeature}`} id="storyboard">
@@ -716,12 +706,13 @@ function StoryboardPreview({
           </h2>
           <p>
             {storyboard
-              ? "Review the visual plan scene by scene before the run moves into generated shots."
+              ? `${scenes.length} ${scenes.length === 1 ? "scene" : "scenes"} · ${momentCount} ${
+                  momentCount === 1 ? "moment" : "moments"
+                }`
               : "Create a visual plan from the current project concept."}
           </p>
         </div>
         <div className={styles.storyboardHeaderActions}>
-          {storyboard ? <StatusChip status={storyboard.status} /> : null}
           {storyboard ? (
             <ButtonLink
               variant="ghost"
@@ -767,55 +758,33 @@ function StoryboardPreview({
         />
       ) : null}
       {!loading && !error && storyboard ? (
-        <>
-          <dl className={styles.storyStats} aria-label="Storyboard summary">
-            <div>
-              <dt>Status</dt>
-              <dd>{titleCase(storyboard.status)}</dd>
-            </div>
-            <div>
-              <dt>Scenes</dt>
-              <dd>{stats.scenes}</dd>
-            </div>
-            <div>
-              <dt>Moments</dt>
-              <dd>{stats.beats}</dd>
-            </div>
-            <div>
-              <dt>Panels</dt>
-              <dd>{stats.panels}</dd>
-            </div>
-          </dl>
-          {hasPreviewBeats ? (
-            <div className={styles.storyboardBoard}>
-              {scenes.map((scene) => {
-                const beats = orderedBeats(scene);
-                if (beats.length === 0) return null;
-                return (
-                  <article className={styles.sceneGroup} key={scene.id}>
-                    <header className={styles.sceneHeader}>
-                      <div>
-                        <span>Scene {scene.sceneIndex + 1}</span>
-                        <h3>{scene.title ?? scene.summary ?? "Untitled scene"}</h3>
-                      </div>
-                      {scene.durationSec ? (
-                        <strong>{formatDuration(scene.durationSec)}</strong>
-                      ) : null}
-                    </header>
-                    {scene.summary ? <p className={styles.sceneSummary}>{scene.summary}</p> : null}
-                    <div className={styles.beatGrid}>
-                      {beats.map((beat) => (
-                        <StoryboardBeatCard beat={beat} key={beat.id} />
-                      ))}
+        hasPreviewBeats ? (
+          <div className={styles.storyboardBoard}>
+            {scenes.map((scene) => {
+              if (scene.beats.length === 0) return null;
+              return (
+                <article className={styles.sceneGroup} key={scene.id}>
+                  <header className={styles.sceneHeader}>
+                    <div>
+                      <span>Scene {scene.sceneIndex + 1}</span>
+                      <h3>{scene.title ?? scene.summary ?? "Untitled scene"}</h3>
                     </div>
-                  </article>
-                );
-              })}
-            </div>
-          ) : !generating ? (
+                    {scene.durationSec ? (
+                      <strong>{formatDuration(scene.durationSec)}</strong>
+                    ) : null}
+                  </header>
+                  <div className={styles.beatGrid}>
+                    {scene.beats.map((beat) => (
+                      <StoryboardBeatCard beat={beat} key={beat.id} />
+                    ))}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ) : !generating ? (
             <p className={styles.muted}>Storyboard structure exists, but no panel images are ready yet.</p>
-          ) : null}
-        </>
+        ) : null
       ) : null}
     </section>
   );
@@ -824,6 +793,7 @@ function StoryboardPreview({
 function StoryboardBeatCard({ beat }: { beat: StoryboardBeat }) {
   const panel = selectedPanel(beat);
   const label = `Moment ${beat.beatIndex + 1}`;
+  const prompt = panel?.prompt?.trim() || beat.visualDescription?.trim() || null;
 
   return (
     <article className={styles.beatCard}>
@@ -839,8 +809,12 @@ function StoryboardBeatCard({ beat }: { beat: StoryboardBeat }) {
           <span>{label}</span>
           {beat.durationSec ? <span>{formatDuration(beat.durationSec)}</span> : null}
         </div>
-        <h4>{beat.intent}</h4>
-        {beat.visualDescription ? <p>{beat.visualDescription}</p> : null}
+        {prompt ? (
+          <details className={styles.storyPrompt}>
+            <summary>Scene description prompt</summary>
+            <p>{prompt}</p>
+          </details>
+        ) : null}
       </div>
     </article>
   );
@@ -941,28 +915,17 @@ function isPlayableOutput(output: WorkspaceOutput) {
   return Boolean(output.playbackUrl ?? output.url);
 }
 
-function storyboardStats(storyboard: ProjectStoryboard | null) {
-  if (!storyboard) return { scenes: 0, beats: 0, panels: 0 };
-  return storyboard.scenes.reduce(
-    (stats, scene) => {
-      stats.scenes += 1;
-      stats.beats += scene.beats.length;
-      stats.panels += scene.beats.reduce((count, beat) => count + beat.panels.length, 0);
-      return stats;
-    },
-    { scenes: 0, beats: 0, panels: 0 },
-  );
+function storyboardScenes(storyboard: ProjectStoryboard | null) {
+  if (!storyboard) return [];
+  return storyboard.scenes
+    .map((scene) => ({
+      ...scene,
+      beats: [...scene.beats].sort((a, b) => a.beatIndex - b.beatIndex),
+    }))
+    .sort((a, b) => a.sceneIndex - b.sceneIndex);
 }
 
-function orderedScenes(storyboard: ProjectStoryboard | null) {
-  return storyboard ? [...storyboard.scenes].sort((a, b) => a.sceneIndex - b.sceneIndex) : [];
-}
-
-function orderedBeats(scene: StoryboardScene) {
-  return [...scene.beats].sort((a, b) => a.beatIndex - b.beatIndex);
-}
-
-function selectedPanel(beat: StoryboardBeat) {
+function selectedPanel(beat: StoryboardBeat): StoryboardPanel | null {
   return (
     beat.panels.find((panel) => panel.isSelected) ??
     [...beat.panels].sort((a, b) => a.panelIndex - b.panelIndex)[0] ??
