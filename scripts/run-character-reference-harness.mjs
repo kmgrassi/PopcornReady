@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 
-const baseUrl = process.env.POPCORNREADY_URL || "http://localhost:3000";
-const endpoint = new URL("/api/debug/character-reference-video", baseUrl);
+const baseUrl =
+  process.env.POPCORNREADY_API_URL ||
+  process.env.POPCORNREADY_URL ||
+  "http://localhost:4000";
+const endpoint = new URL("/api/v1/dev/character-reference-video", baseUrl);
 
 const body = {
   seconds: Number(process.env.HARNESS_VIDEO_SECONDS || "2"),
