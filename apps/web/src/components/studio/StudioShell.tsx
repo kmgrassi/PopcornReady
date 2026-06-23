@@ -12,6 +12,7 @@ import { StudioStepper } from "./StudioStepper";
 import { buildChecklistItems } from "./statusChecklist";
 import {
   EMPTY_BRIEF_DRAFT,
+  STUDIO_STEPS,
   useStudioFlow,
   type BriefDraft,
   type StudioStep,
@@ -150,7 +151,18 @@ export function StudioShell({
     openDraft(draftId);
   }, [activeDraftId, draftId, openDraft]);
 
-  const startNewDraft = useCallback(async (step: StudioStep = "brief") => {
+  const startUnsavedDraft = useCallback((step: StudioStep = "brief") => {
+    setDraftActionError(null);
+    setPendingDraftRequest(null);
+    setActiveDraftId(LOCAL_DRAFT_ID);
+    setInitialPayload(null);
+    setFlowKey((current) => current + 1);
+    navigate(studioDraftPath({ step, openPanel, started: initialStarted }), {
+      replace: true,
+    });
+  }, [initialStarted, navigate, openPanel]);
+
+  const createPersistedDraft = useCallback(async (step: StudioStep = "brief") => {
     if (createDraftInFlightRef.current) return;
 
     createDraftInFlightRef.current = true;
@@ -180,6 +192,33 @@ export function StudioShell({
     }
   }, [createDraftMutation, initialStarted, navigate, openPanel, seededBrief]);
 
+  const persistLocalDraft = useCallback(
+    async (draft: BriefDraft, step: StudioStep) => {
+      if (activeDraftId !== LOCAL_DRAFT_ID) return activeDraftId;
+      if (createDraftInFlightRef.current) return null;
+
+      createDraftInFlightRef.current = true;
+      setDraftActionError(null);
+      try {
+        const record = await createDraftMutation.mutateAsync({ draft, step });
+        setActiveDraftId(record.draftId);
+        setInitialPayload(record.payload);
+        setFlowKey((current) => current + 1);
+        navigate(studioDraftPath({ draftId: record.draftId, step, openPanel }), {
+          replace: true,
+        });
+        return record.draftId;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Could not create draft.";
+        setDraftActionError(message);
+        return null;
+      } finally {
+        createDraftInFlightRef.current = false;
+      }
+    },
+    [activeDraftId, createDraftMutation, navigate, openPanel],
+  );
+
   useEffect(() => {
     if (!initialStarted || draftId) {
       autoStartRequestedRef.current = false;
@@ -188,14 +227,20 @@ export function StudioShell({
     if (newDraftRequest) return;
     if (activeDraftId || autoStartRequestedRef.current) return;
     autoStartRequestedRef.current = true;
-    void startNewDraft(initialStep ?? "brief");
+    if (seededBrief.goal?.trim()) {
+      void createPersistedDraft(initialStep ?? "brief");
+    } else {
+      startUnsavedDraft(initialStep ?? "brief");
+    }
   }, [
     activeDraftId,
+    createPersistedDraft,
     draftId,
     initialStarted,
     initialStep,
     newDraftRequest,
-    startNewDraft,
+    seededBrief.goal,
+    startUnsavedDraft,
   ]);
 
   useEffect(() => {
@@ -203,8 +248,8 @@ export function StudioShell({
       return;
     }
     handledNewDraftRequestRef.current = newDraftRequest;
-    void startNewDraft(initialStep ?? "brief");
-  }, [initialStep, newDraftRequest, startNewDraft]);
+    startUnsavedDraft(initialStep ?? "brief");
+  }, [initialStep, newDraftRequest, startUnsavedDraft]);
 
   async function removeDraft(nextDraftId: string) {
     setDraftActionError(null);
@@ -242,7 +287,7 @@ export function StudioShell({
           loading={draftsLoading}
           error={draftsError}
           creating={createDraftMutation.isPending}
-          onCreate={() => void startNewDraft("brief")}
+          onCreate={() => startUnsavedDraft("brief")}
           onResume={(id) => void openDraft(id)}
           onDelete={(id) => void removeDraft(id)}
         />
@@ -258,6 +303,8 @@ export function StudioShell({
       initialPayload={initialPayload}
       initialStep={initialStep}
       openPanel={openPanel}
+      draftActionError={draftActionError}
+      onPersistLocalDraft={persistLocalDraft}
     />
   );
 }
@@ -268,12 +315,16 @@ function StudioFlowView({
   initialPayload,
   initialStep,
   openPanel,
+  draftActionError,
+  onPersistLocalDraft,
 }: {
   draftId: string;
   initialBrief?: Partial<BriefDraft>;
   initialPayload: StudioDraftPayload | null;
   initialStep?: StudioStep;
   openPanel?: string;
+  draftActionError?: string | null;
+  onPersistLocalDraft: (draft: BriefDraft, step: StudioStep) => Promise<string | null>;
 }) {
   const navigate = useNavigate();
   const [isRedirectingToRun, setIsRedirectingToRun] = useState(false);
@@ -283,11 +334,30 @@ function StudioFlowView({
     initialPayload,
     initialStep,
   });
-  const goToStep = flow.goTo;
+  const briefRef = useRef(flow.brief);
 
   useEffect(() => {
-    if (initialStep) goToStep(initialStep);
-  }, [goToStep, initialStep]);
+    briefRef.current = flow.brief;
+  }, [flow.brief]);
+
+  const guardedGoToStep = useCallback(
+    (nextStep: StudioStep) => {
+      if (draftId === LOCAL_DRAFT_ID && nextStep !== "brief") {
+        if (!briefRef.current.goal.trim()) {
+          flow.goTo("brief");
+          return;
+        }
+        void onPersistLocalDraft(briefRef.current, nextStep);
+        return;
+      }
+      flow.goTo(nextStep);
+    },
+    [draftId, flow.goTo, onPersistLocalDraft],
+  );
+
+  useEffect(() => {
+    if (initialStep) guardedGoToStep(initialStep);
+  }, [guardedGoToStep, initialStep]);
 
   if (isRedirectingToRun) {
     return (
@@ -360,7 +430,7 @@ function StudioFlowView({
 
     return (
       <main className={styles.shell}>
-        <StudioStepper step={flow.step} onStepClick={flow.goTo} />
+        <StudioStepper step={flow.step} onStepClick={guardedGoToStep} />
         {flow.step === "export" ? (
           <section className={styles.stepBody}>
             <ExportStep {...stepProps} />
@@ -379,7 +449,7 @@ function StudioFlowView({
             onFeedback={flow.requestRevision}
             onSegmentChange={flow.updateReviewSegment}
             onSegmentNoteChange={flow.updateReviewSegmentNote}
-            onExport={() => flow.goTo("export")}
+            onExport={() => guardedGoToStep("export")}
           />
         )}
       </main>
@@ -391,7 +461,7 @@ function StudioFlowView({
     <main className={styles.shell}>
       <StudioStepper
         step={flow.step}
-        onStepClick={flow.goTo}
+        onStepClick={guardedGoToStep}
         clickableThroughStep="footage"
       />
       <section className={styles.stepBody}>
@@ -400,6 +470,8 @@ function StudioFlowView({
           step={flow.step}
           flow={flow}
           openPanel={openPanel}
+          draftActionError={draftActionError}
+          onGoToStep={guardedGoToStep}
           onGenerationStarted={(projectId, runId) => {
             const params = new URLSearchParams();
             if (draftId !== LOCAL_DRAFT_ID) params.set("studioDraft", draftId);
@@ -421,27 +493,44 @@ function ActiveStep({
   step,
   flow,
   openPanel,
+  draftActionError,
+  onGoToStep,
   onGenerationStarted,
   onGenerationRedirectingChange,
 }: {
   step: StudioStep;
   flow: ReturnType<typeof useStudioFlow>;
   openPanel?: string;
+  draftActionError?: string | null;
+  onGoToStep: (step: StudioStep) => void;
   onGenerationStarted?: (projectId: string, runId: string) => void;
   onGenerationRedirectingChange?: (isRedirecting: boolean) => void;
 }) {
+  const guardedNext = useCallback(() => {
+    const currentIndex = STUDIO_STEPS.indexOf(flow.step);
+    const nextStep = STUDIO_STEPS[Math.min(currentIndex + 1, STUDIO_STEPS.length - 1)];
+    onGoToStep(nextStep);
+  }, [flow.step, onGoToStep]);
+
   const stepProps = {
     draft: flow.brief,
     projectId: flow.projectId,
     update: flow.update,
-    next: flow.next,
+    next: guardedNext,
     back: flow.back,
     completeDraft: flow.completeDraft,
   };
 
   switch (step) {
     case "brief":
-      return <BriefStep {...stepProps} openPanel={openPanel} />;
+      return (
+        <>
+          <BriefStep {...stepProps} openPanel={openPanel} />
+          {draftActionError ? (
+            <p className="new-project-error">{draftActionError}</p>
+          ) : null}
+        </>
+      );
     case "footage":
       return <SourceFootageStep {...stepProps} />;
     case "plan":
@@ -464,7 +553,7 @@ function ActiveStep({
             }
           }}
           onEditBrief={() => flow.goTo("brief")}
-          onEditFootage={() => flow.goTo("footage")}
+          onEditFootage={() => onGoToStep("footage")}
         />
       );
     default:
