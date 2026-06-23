@@ -94,17 +94,35 @@ function parseBoardRevisionTarget(body: unknown, runId: string): BoardRevisionTa
     throw new ApiError("validation_failed", "Request body must be an object.");
   }
   const target = isRecord(body.target) ? body.target : {};
-  const scope = target.scope === "board" || target.scope === "tile" ? target.scope : undefined;
+  const scope =
+    target.scope === "concept" ||
+    target.scope === "brief" ||
+    target.scope === "script" ||
+    target.scope === "board" ||
+    target.scope === "tile"
+      ? target.scope
+      : undefined;
   if (!scope) {
-    throw new ApiError("validation_failed", "target.scope must be board or tile.", {
-      fields: [{ path: "target.scope", message: "Expected board or tile." }],
-    });
+    throw new ApiError(
+      "validation_failed",
+      "target.scope must be concept, brief, script, board, or tile.",
+      {
+        fields: [
+          {
+            path: "target.scope",
+            message: "Expected concept, brief, script, board, or tile.",
+          },
+        ],
+      }
+    );
   }
 
   const parsed: BoardRevisionTarget = { scope, runId };
   for (const key of [
     "stageId",
     "itemId",
+    "fieldId",
+    "currentValue",
     "storyboardId",
     "sceneId",
     "beatId",

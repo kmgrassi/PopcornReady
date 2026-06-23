@@ -736,10 +736,12 @@ export interface GenerationStageItem {
 }
 
 export interface BoardRevisionTarget {
-  scope: "board" | "tile";
+  scope: "concept" | "brief" | "script" | "board" | "tile";
   runId?: string;
   stageId?: string;
   itemId?: string;
+  fieldId?: string;
+  currentValue?: string;
   storyboardId?: string;
   sceneId?: string;
   beatId?: string;
