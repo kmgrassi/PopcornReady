@@ -190,6 +190,14 @@
   line-height: var(--line-caption);
 }
 
+.headerStatusMessage {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--line-body);
+}
+
 .headerMeter {
   grid-column: 1 / -1;
   height: 8px;

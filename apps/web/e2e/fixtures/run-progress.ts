@@ -61,7 +61,7 @@ export function makeRunDetail(
 
   return {
     run,
-    stages: makeStages(runId, status, options.reviewGate),
+    stages: makeStages(runId, status, options.reviewGate, currentStageType),
     stageItems: options.reviewGate ? makeStageItems(options.reviewGate.stageId) : [],
   };
 }
@@ -202,13 +202,20 @@ function defaultActionResult(
     run: {
       ...current.run,
       reviewGate: null,
-      currentStageType: "export",
+      currentStageType:
+        action === "approve" ? "export" : current.run.currentStageType ?? "quality_review",
       message:
         action === "approve"
           ? "Review approved. Final render is in progress."
           : "Feedback received. Regenerating this stage.",
       updatedAt: now,
     },
+    stages: makeStages(
+      current.run.runId,
+      current.run.status,
+      null,
+      action === "approve" ? "export" : current.run.currentStageType ?? "quality_review",
+    ),
   };
 }
 
@@ -216,6 +223,7 @@ function makeStages(
   runId: string,
   status: GenerationRunStatus,
   gate: RunReviewGate | null | undefined,
+  currentStageType: GenerationStageType = gate?.stageType ?? "quality_review",
 ): GenerationStage[] {
   const stageTypes: GenerationStageType[] = [
     "brief_intake",
@@ -232,9 +240,10 @@ function makeStages(
   return stageTypes.map((type, index) => {
     const stageId = type === gate?.stageType ? gate.stageId : `${type}-stage`;
     const terminal = status === "succeeded" || status === "failed" || status === "canceled";
-    const beforeGate = gate ? index < stageTypes.indexOf(gate.stageType) : index < 6;
+    const activeIndex = Math.max(0, stageTypes.indexOf(gate?.stageType ?? currentStageType));
+    const beforeGate = index < activeIndex;
     const isGate = gate?.stageId === stageId;
-    const isCurrent = type === "quality_review" && !gate && !terminal;
+    const isCurrent = type === currentStageType && !gate && !terminal;
 
     return {
       stageId,

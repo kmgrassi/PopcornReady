@@ -647,6 +647,11 @@ export function ProgressView({
                 Stage {progress.currentStage} of {VISIBLE_STAGE_COUNT}
               </strong>
             </div>
+            {detail.run.message ? (
+              <p className={styles.headerStatusMessage} role="status">
+                {detail.run.message}
+              </p>
+            ) : null}
             <div
               className={styles.headerMeter}
               role="progressbar"

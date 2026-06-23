@@ -32,6 +32,8 @@ interface StageRailProps {
 const PIPELINE_GROUPS: Array<{
   id: string;
   type: GenerationStageType;
+  activeTypes?: GenerationStageType[];
+  fallbackTypes?: GenerationStageType[];
   label: string;
   description: string;
   tools: string[];
@@ -88,6 +90,8 @@ const PIPELINE_GROUPS: Array<{
   {
     id: "final-render",
     type: "export",
+    activeTypes: ["quality_review", "export"],
+    fallbackTypes: ["quality_review", "export"],
     label: "Final Render",
     description: "Quality pass and finished video render.",
     tools: ["critique_timeline", "export_video"],
@@ -166,6 +170,12 @@ function toolLabel(toolName: string): string {
   return TOOL_LABELS[toolName] ?? toolName;
 }
 
+function toolStatusLabel(status: GenerationRunStatus): string {
+  if (status === "running") return "Running";
+  if (status === "succeeded") return "Done";
+  return STATUS_LABEL[status];
+}
+
 export function StageRail({
   stages,
   runStatus,
@@ -200,18 +210,21 @@ export function StageRail({
           .map((toolName) => stagesByTool.get(toolName))
           .filter((stage): stage is GenerationStage => Boolean(stage));
         if (groupStages.length === 0) {
-          const occurrence = fallbackCounts.get(visibleStage.type) ?? 0;
-          const fallback = (broadFallback.get(visibleStage.type) ?? [])[occurrence];
-          if (fallback) {
-            groupStages = [fallback];
-            fallbackCounts.set(visibleStage.type, occurrence + 1);
+          for (const fallbackType of visibleStage.fallbackTypes ?? [visibleStage.type]) {
+            const occurrence = fallbackCounts.get(fallbackType) ?? 0;
+            const fallback = (broadFallback.get(fallbackType) ?? [])[occurrence];
+            if (fallback) {
+              groupStages = [fallback];
+              fallbackCounts.set(fallbackType, occurrence + 1);
+              break;
+            }
           }
         }
         const stage = latestStage(groupStages);
         const baseStatus = groupedStatus(groupStages);
         const inferredRunning = Boolean(
           inferCurrentStage &&
-            visibleStage.type === inferCurrentStage &&
+            (visibleStage.activeTypes ?? [visibleStage.type]).includes(inferCurrentStage) &&
             !inferredRunningShown &&
             baseStatus === "queued",
         );
@@ -304,7 +317,7 @@ export function StageRail({
                           <span
                             className={`${styles.stageToolStatus} ${styles[`stageStatus_${toolStatus}`]}`}
                           >
-                            {STATUS_LABEL[toolStatus]}
+                            {toolStatusLabel(toolStatus)}
                           </span>
                         </li>
                       );
