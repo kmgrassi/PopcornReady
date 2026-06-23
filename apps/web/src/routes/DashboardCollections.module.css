@@ -285,7 +285,7 @@
 
 .projectCard {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -294,9 +294,42 @@
 }
 
 .projectCard .cardLink {
+  position: relative;
   height: clamp(240px, 38vh, 420px);
   overflow: hidden;
   background: var(--media-bg);
+}
+
+.statusDot {
+  position: absolute;
+  top: var(--space-3);
+  left: var(--space-3);
+  z-index: 1;
+  display: block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid color-mix(in srgb, var(--surface) 86%, transparent);
+  border-radius: var(--radius-pill);
+  background: var(--muted);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--text) 14%, transparent),
+    var(--shadow-sm);
+}
+
+.statusDotActive {
+  background: var(--good);
+}
+
+.statusDotRunning {
+  background: var(--accent-2);
+}
+
+.statusDotFailed {
+  background: var(--danger-text);
+}
+
+.statusDotNeutral {
+  background: var(--muted);
 }
 
 .projectCardBody {

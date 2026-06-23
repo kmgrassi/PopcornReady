@@ -197,7 +197,7 @@ test("covers library pagination, filters, media viewer, visibility, and watch li
   await expect(tabs.getByRole("link", { name: "Outputs", exact: true })).toHaveCount(0);
   await expect(tabs.getByRole("link", { name: "Evals", exact: true })).toHaveCount(0);
 
-  await page.getByRole("link", { name: "Overview" }).first().click();
+  await page.getByRole("link", { name: "Project Alpha", exact: true }).click();
   await expect(page).toHaveURL(/\/projects\/proj-alpha$/);
   await expect(page.getByRole("heading", { name: "Recent generation work" })).toBeVisible();
   await expect(page.getByText("Timeline Assembly")).toBeVisible();
