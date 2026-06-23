@@ -98,6 +98,44 @@ targets from the supplied context, but it still cannot invent ids outside the
 context; if the context is insufficient, it returns `ask_clarification` or
 `restart_stage`.
 
+## Agent Decision Payload
+
+The graph query does not decide the rerun. It assembles the packet the agent
+needs to decide. Starting in PR 2, the rerun-decision model call should receive a
+single structured payload with:
+
+- **User intent:** the original message, source (`user_edit` or
+  `autonomous_run`), and the UI surface/object the user pointed at.
+- **Target summary:** id, kind, role, lineage/version, active selection slots,
+  content hash/fingerprint, and a compact semantic summary of the target asset.
+- **Prompt/story context:** relevant prompt text, storyboard scene/beat/panel
+  rows, character/story element labels, and any saved provider prompt or params
+  needed to understand what the target represents.
+- **Downstream candidates:** ids, kinds, roles, depths, active selection refs,
+  and compact summaries for assets that may need regeneration.
+- **Upstream inputs:** direct input/anchor/child assets with relation metadata
+  and compact summaries, so the agent can decide whether the fix should start at
+  a prompt, beat, anchor, or other source asset.
+- **Related context:** same-lineage versions, shared anchor/character/story
+  element assets, sibling scene/beat assets, and other active selections that
+  could be affected even if they are not descendants of the target.
+- **Recent decisions:** recent `actions`, tool outputs, failures, approvals, and
+  rejections for the run/project, limited to the window needed to understand the
+  current state.
+- **Execution constraints:** available tools, known fallback stage mapping,
+  run budget/spend, cheap cost estimates, approval rules, and context pins for
+  fingerprints and selection `seq` values.
+
+IDs alone are not enough. The agent needs enough typed, compact semantic context
+to answer: "what did the user mean, what object did they point at, which
+upstream facts define it, which downstream/related assets would become
+inconsistent, and which tool sequence is the smallest coherent fix?"
+
+If the payload cannot answer that question, the agent must return
+`ask_clarification` or `restart_stage`; it should not guess from an incomplete
+graph slice. The payload should stay bounded by summarizing assets and recent
+actions rather than sending every asset in the project.
+
 ## Resolved Decisions
 
 - **Ownership:** Persist every proposal as a project-level `actions` row with
@@ -222,7 +260,8 @@ Response:
     "upstreamInputs": [],
     "relatedAssets": [],
     "currentSelections": [],
-    "recentActions": []
+    "recentActions": [],
+    "agentPayload": {}
   }
 }
 ```
@@ -271,6 +310,8 @@ from:
 - `current_selections`
 - recent `actions` for the project/run
 - the user note and changed asset summary
+- compact semantic summaries/prompt excerpts for target, candidate, upstream,
+  and related assets
 
 Return a deterministic proposal:
 
@@ -295,6 +336,8 @@ Acceptance:
   detect stale execution later.
 - The response includes upstream input context even though the deterministic
   PR 1 proposal only selects downstream candidates.
+- The response includes the structured agent payload PR 2 will pass to the
+  model, even though PR 1 does not call the model.
 
 ### PR 2 - Agent Decision Behind A Flag
 
@@ -313,6 +356,8 @@ Acceptance:
   approval rules above.
 - Tests cover a user request that points at a generated asset but proposes an
   upstream anchor or prompt change plus dependent downstream regeneration.
+- Tests cover insufficient context returning `ask_clarification` instead of
+  guessing.
 
 ### PR 3 - Proposal UI Surface
 
