@@ -168,9 +168,11 @@ inspirationRouter.get(
 
 inspirationRouter.post(
   "/inspiration/poster",
-  mutation(async ({ body }) => {
+  mutation(async ({ auth, body }) => {
     const inspiration = await parsePosterInspiration(body);
-    const concept = await ensureStoryConceptPoster(inspiration);
+    const concept = await ensureStoryConceptPoster(inspiration, {
+      allowGeneration: !auth.isLocal,
+    });
     return {
       status: concept.poster.status === "ready" ? 200 : 202,
       body: concept,
@@ -558,7 +560,8 @@ function posterPromptFor(inspiration: RandomStoryInspiration): string {
 }
 
 async function ensureStoryConceptPoster(
-  inspiration: RandomStoryInspiration
+  inspiration: RandomStoryInspiration,
+  options: { allowGeneration?: boolean } = {}
 ): Promise<{ movieTitle: string; poster: StoryConceptPoster }> {
   const db = getServiceSupabase();
   const movieTitle = movieTitleFor(inspiration);
@@ -634,6 +637,18 @@ async function ensureStoryConceptPoster(
         assetId: existing.poster_asset_id,
         url: existing.poster_asset_id ? await posterUrlForAsset(existing.poster_asset_id) : null,
         prompt: existing.prompt,
+      },
+    };
+  }
+
+  if (options.allowGeneration === false) {
+    return {
+      movieTitle,
+      poster: {
+        status: "queued",
+        assetId: existing?.poster_asset_id ?? null,
+        url: existing?.poster_asset_id ? await posterUrlForAsset(existing.poster_asset_id) : null,
+        prompt: existing?.prompt ?? prompt,
       },
     };
   }

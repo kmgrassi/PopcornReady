@@ -15,6 +15,7 @@ import { AnchorDetailPage } from "./routes/anchors/AnchorDetailPage";
 import { AnchorsPage } from "./routes/anchors/AnchorsPage";
 import { AnchorsMinePage } from "./routes/AnchorsMinePage";
 import { BrandKitPage } from "./routes/BrandKitPage";
+import { FaqPage } from "./routes/FaqPage";
 import { HomePage } from "./routes/HomePage";
 import { InspirationPage } from "./routes/InspirationPage";
 import { LaunchpadPage } from "./routes/LaunchpadPage";
@@ -79,6 +80,7 @@ export function App() {
             element={<ProjectDetailPage />}
           />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/faq" element={<FaqPage />} />
           <Route path="/dev/design-system" element={<DesignSystemPage />} />
           <Route path="/dev/generation-cards" element={<GenerationCardsPage />} />
           <Route path="/evals" element={<Navigate to="/admin/evals" replace />} />
