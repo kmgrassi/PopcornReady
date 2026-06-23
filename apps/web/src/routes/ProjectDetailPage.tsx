@@ -625,18 +625,20 @@ function StoryboardPreview({
       <div className={styles.sectionHeader}>
         <div>
           <span className={styles.eyebrow}>Storyboard</span>
-          <h2>Scenes and beats</h2>
+          <h2>
+            {storyboard ? (
+              <Link
+                className={styles.sectionTitleLink}
+                to={`/projects/${encodeURIComponent(projectId)}/storyboard`}
+              >
+                Scenes and beats
+              </Link>
+            ) : (
+              "Scenes and beats"
+            )}
+          </h2>
         </div>
         <div className={styles.sectionHeaderActions}>
-          {storyboard ? (
-            <ButtonLink
-              variant="ghost"
-              size="sm"
-              to={`/projects/${encodeURIComponent(projectId)}/storyboard`}
-            >
-              Open storyboard
-            </ButtonLink>
-          ) : null}
           {/* The generate control only appears once nothing is in flight, so
               the page never offers "Generate again" mid-run. */}
           {!loading && !error && !generating ? (
