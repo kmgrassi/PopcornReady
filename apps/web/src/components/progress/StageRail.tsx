@@ -27,6 +27,7 @@ interface StageRailProps {
     onRestart: (stageType: GenerationStageType) => void;
   };
   stageLinks?: Partial<Record<string, string>>;
+  showUpcomingStages?: boolean;
 }
 
 const PIPELINE_GROUPS: Array<{
@@ -186,6 +187,7 @@ export function StageRail({
   stopAction,
   restartAction,
   stageLinks,
+  showUpcomingStages = false,
 }: StageRailProps) {
   const ordered = [...stages].sort((a, b) => a.order - b.order);
   const stagesByTool = new Map<string, GenerationStage>();
@@ -228,7 +230,7 @@ export function StageRail({
             !inferredRunningShown &&
             baseStatus === "queued",
         );
-        if (groupStages.length === 0 && !inferredRunning) return null;
+        if (groupStages.length === 0 && !inferredRunning && !showUpcomingStages) return null;
         if (inferredRunning) inferredRunningShown = true;
         const isLast = idx === PIPELINE_GROUPS.length - 1;
         const runningStage = groupStages.find((candidate) => candidate.status === "running");

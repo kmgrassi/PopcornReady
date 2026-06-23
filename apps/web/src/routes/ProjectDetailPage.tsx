@@ -413,6 +413,7 @@ function ProjectStagePanel({
                 runMessage={run.message}
                 reviewGate={run.reviewGate}
                 stageLinks={stageLinks}
+                showUpcomingStages
               />
             ) : (
               <p className={styles.muted}>
