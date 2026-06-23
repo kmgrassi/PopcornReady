@@ -4,8 +4,11 @@
 
 Replace coarse "restart from stage" behavior with graph-aware rerun proposals.
 When a user asks for a change, the system should inspect the changed graph node,
-compute candidate stale descendants, and let the agent propose the smallest
-useful rerun plan before spending provider dollars.
+compute graph context around that node, and let the agent propose the smallest
+useful rerun plan before spending provider dollars. The changed node is the
+user's starting point, not a command to rerun only descendants: the agent may
+decide the right fix starts upstream, downstream, or across sibling assets that
+share a story element or character anchor.
 
 This scope closes gap 1 from
 [`north-star-gap-audit.md`](north-star-gap-audit.md): `downstream_assets()` is
@@ -27,8 +30,9 @@ Shipped:
 Missing:
 
 - No API accepts a semantic change target and produces a rerun proposal.
-- No model turn receives stale candidates, active selections, recent actions,
-  user intent, and budget/cost context as one rerun-decision payload.
+- No model turn receives stale candidates, upstream inputs, related active
+  selections, recent actions, user intent, and budget/cost context as one
+  rerun-decision payload.
 - No persisted action represents "proposed rerun plan; awaiting execution."
 - No executor translates a proposal into targeted tool calls. The only generic
   escape hatch is stage restart.
@@ -42,8 +46,9 @@ For a user-visible edit such as "make beat 3 brighter":
    backing asset, the API returns `ask_clarification` rather than guessing.
    Multi-target edits are a later contract extension.
 2. Compute stale candidates with `getStaleCandidates()` for the changed asset.
-3. Build a proposal context: changed asset, candidates, active selections,
-   recent run actions, user note, budget, and cheap cost estimates.
+3. Build a proposal context: changed asset, downstream candidates, direct input
+   assets, related active selections, recent run actions, user note, budget, and
+   cheap cost estimates.
 4. Ask the agent for a rerun plan, or return a deterministic placeholder while
    the LLM decision is behind a flag.
 5. Persist the proposal as an `actions` row with no output assets yet.
@@ -63,6 +68,35 @@ Approval is required when any of these are true:
 The only proposals that may auto-execute in autonomous mode are `no_op` and
 single-target `regenerate_candidates` proposals with `estimatedCostUsd` equal to
 `0`, `risk: "low"`, and `source: "autonomous_run"`.
+
+## Blast-Radius Semantics
+
+`downstream_assets()` is a deterministic stale-candidate primitive, not the full
+rerun policy. The proposal service should separate:
+
+- **Target asset:** the graph asset the user pointed at.
+- **Downstream candidates:** assets that consume the target directly or
+  transitively and may now be stale.
+- **Upstream context:** direct input assets, story rows, prompts, anchors, or
+  other semantic inputs that explain how the target was produced.
+- **Related context:** active selections or assets sharing a lineage, anchor,
+  character/story element, slot role, or storyboard scene/beat with the target.
+- **Selected work:** the actual assets/tools the agent proposes to regenerate,
+  rewrite, swap, or leave alone.
+
+For example, if the user says "make this character look older" while pointing at
+a generated keyframe, the proposal should be allowed to target the character
+anchor or likeness prompt first, then regenerate every selected scene/keyframe/
+clip that depends on that anchor. Conversely, if the user says "brighten this
+shot," the agent may keep the upstream beat and anchor unchanged and regenerate
+only the selected image/clip descendants.
+
+PR 1 can return a deterministic downstream-only placeholder because there is no
+model decision yet. Starting in PR 2, the model-backed decision must treat the
+downstream list as evidence, not a boundary. It may add upstream or related
+targets from the supplied context, but it still cannot invent ids outside the
+context; if the context is insufficient, it returns `ask_clarification` or
+`restart_stage`.
 
 ## Resolved Decisions
 
@@ -100,9 +134,14 @@ type RerunProposalKind =
 interface RerunProposal {
   schemaVersion: "rerun_proposal.v1";
   kind: RerunProposalKind;
+  targetAssetId: string;
   changedAssetIds: string[];
   candidateAssetIds: string[];
+  upstreamAssetIds: string[];
+  relatedAssetIds: string[];
   selectedCandidateAssetIds: string[];
+  selectedUpstreamAssetIds: string[];
+  selectedRelatedAssetIds: string[];
   contextPins: {
     assetFingerprints: Record<string, string>;
     selectionSeqs: Array<{
@@ -180,6 +219,8 @@ Response:
   "context": {
     "changedAsset": {},
     "candidates": [],
+    "upstreamInputs": [],
+    "relatedAssets": [],
     "currentSelections": [],
     "recentActions": []
   }
@@ -226,6 +267,7 @@ Add the `rerun-proposals` route and a service that assembles proposal context
 from:
 
 - `getStaleCandidates()`
+- the changed asset's direct graph inputs
 - `current_selections`
 - recent `actions` for the project/run
 - the user note and changed asset summary
@@ -251,6 +293,8 @@ Acceptance:
 - The endpoint rejects cross-project `changedAssetId`/`runId` mismatches.
 - The persisted proposal includes approval fields and enough context pins to
   detect stale execution later.
+- The response includes upstream input context even though the deterministic
+  PR 1 proposal only selects downstream candidates.
 
 ### PR 2 - Agent Decision Behind A Flag
 
@@ -263,9 +307,12 @@ Acceptance:
 
 - Deterministic fallback remains the default.
 - Tests verify invalid model output is rejected and falls back safely.
-- The model cannot invent asset IDs outside changed/candidate/context IDs.
+- The model cannot invent asset IDs outside changed/candidate/upstream/related
+  context IDs.
 - The model cannot mark a proposal approval-free unless it satisfies the
   approval rules above.
+- Tests cover a user request that points at a generated asset but proposes an
+  upstream anchor or prompt change plus dependent downstream regeneration.
 
 ### PR 3 - Proposal UI Surface
 
