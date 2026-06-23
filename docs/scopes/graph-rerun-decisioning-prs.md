@@ -37,10 +37,12 @@ Missing:
 
 For a user-visible edit such as "make beat 3 brighter":
 
-1. Resolve the edit target to one or more changed graph assets or storyboard
-   rows.
-2. Compute stale candidates with `getStaleCandidates()` for each changed asset.
-3. Build a proposal context: changed assets, candidates, active selections,
+1. Resolve the edit target to exactly one graph asset in PR 1. Storyboard rows
+   resolve through their `*_asset_id` snapshot; if the UI cannot identify a
+   backing asset, the API returns `ask_clarification` rather than guessing.
+   Multi-target edits are a later contract extension.
+2. Compute stale candidates with `getStaleCandidates()` for the changed asset.
+3. Build a proposal context: changed asset, candidates, active selections,
    recent run actions, user note, budget, and cheap cost estimates.
 4. Ask the agent for a rerun plan, or return a deterministic placeholder while
    the LLM decision is behind a flag.
@@ -49,6 +51,40 @@ For a user-visible edit such as "make beat 3 brighter":
    and whether it falls back to a stage restart.
 7. Execute only after explicit user approval when the plan is expensive,
    fan-out-heavy, or generated from a manual edit surface.
+
+Approval is required when any of these are true:
+
+- `estimatedCostUsd` is greater than `0`.
+- More than one active selection would be repointed.
+- The proposal falls back to `restart_stage`.
+- The proposal was requested from a user edit surface rather than from an
+  already-autonomous run loop.
+
+The only proposals that may auto-execute in autonomous mode are `no_op` and
+single-target `regenerate_candidates` proposals with `estimatedCostUsd` equal to
+`0`, `risk: "low"`, and `source: "autonomous_run"`.
+
+## Resolved Decisions
+
+- **Ownership:** Persist every proposal as a project-level `actions` row with
+  `tool: "rerun_proposal"` and `status: "proposed"`. Set
+  `orchestratorRunId` only when the request names an active run; proposals
+  remain valid for project edits when no run exists.
+- **Immutability:** The proposal action's decision fields are immutable. Approval
+  or execution changes only lifecycle fields (`status`, costs, jobs, outputs,
+  error), matching the existing `actions` guard.
+- **Preview mode:** PR 1 supports only `"preview"`. Preview assembles context and
+  persists a proposed action; it never calls provider tools, mutates selections,
+  supersedes actions, or resets gates.
+- **Input cardinality:** PR 1 accepts one `changedAssetId`. Multi-asset changes
+  should be added later as `changedAssetIds` only after the single-asset
+  proposal and execution flow is tested.
+- **Target resolution:** The API takes graph asset ids, not freeform storyboard
+  ids. UI code that starts from a scene/beat/panel must resolve that row to its
+  current snapshot asset before calling the endpoint.
+- **Cost threshold:** Any non-zero estimated provider spend requires approval.
+  Later autonomous policies can raise this threshold after budget enforcement and
+  UI confirmation are proven.
 
 ## Proposal Contract
 
@@ -67,10 +103,20 @@ interface RerunProposal {
   changedAssetIds: string[];
   candidateAssetIds: string[];
   selectedCandidateAssetIds: string[];
+  contextPins: {
+    assetFingerprints: Record<string, string>;
+    selectionSeqs: Array<{
+      slotOwnerLineageId: string | null;
+      slotRole: string;
+      seq: number;
+    }>;
+  };
   reason: string;
   userFacingSummary: string;
   estimatedCostUsd?: number;
   risk: "low" | "medium" | "high";
+  requiresApproval: boolean;
+  approvalReasons: string[];
   execution?: RerunExecutionPlan;
 }
 
@@ -110,9 +156,20 @@ Request:
   "changedAssetId": "uuid",
   "message": "Make beat 3 brighter.",
   "runId": "uuid optional",
-  "mode": "preview"
+  "mode": "preview",
+  "source": "user_edit"
 }
 ```
+
+Rules:
+
+- `changedAssetId` must belong to `projectId`; otherwise return `404`.
+- `runId`, when provided, must belong to `projectId`; otherwise return `400`.
+- `mode` must be `"preview"` in PR 1. Unknown modes return `400`.
+- `source` must be `"user_edit"` or `"autonomous_run"`. Missing source defaults
+  to `"user_edit"`.
+- `message` is user intent for the proposal rationale, not direct mutation
+  instructions.
 
 Response:
 
@@ -129,10 +186,37 @@ Response:
 }
 ```
 
+The persisted action uses:
+
+```json
+{
+  "tool": "rerun_proposal",
+  "status": "proposed",
+  "params": {
+    "schemaVersion": "rerun_proposal_params.v1",
+    "changedAssetId": "uuid",
+    "message": "Make beat 3 brighter.",
+    "mode": "preview",
+    "source": "user_edit"
+  },
+  "inputAssetIds": ["uuid"],
+  "proposal": { "schemaVersion": "rerun_proposal.v1" }
+}
+```
+
+If a previous identical preview exists, PR 1 may either create another proposal
+action or add idempotency later; do not update an existing action in place.
+
 Later:
 
 - `POST /api/v1/projects/:projectId/rerun-proposals/:proposalActionId/execute`
 - `POST /api/v1/projects/:projectId/rerun-proposals/:proposalActionId/cancel`
+
+Execution should transition the proposal action from `proposed` to `approved`,
+then `running`, then `applied` or `failed`. Cancellation marks it `rejected`.
+Those endpoints must reject proposals whose pinned fingerprints or selection
+sequence numbers no longer match the preview context, forcing the user/agent to
+create a fresh proposal.
 
 ## PR Plan
 
@@ -149,7 +233,13 @@ from:
 Return a deterministic proposal:
 
 - `no_op` when there are no candidates.
-- `regenerate_candidates` with all candidates selected when candidates exist.
+- `regenerate_candidates` with all candidates selected when candidates exist,
+  `estimatedCostUsd: 0`, and `requiresApproval: false` only when
+  `source: "autonomous_run"`, there is at most one selected candidate, and that
+  candidate has at most one active selection. Otherwise the same deterministic
+  proposal sets `requiresApproval: true` and explains the approval reason.
+- `restart_stage` is not returned by the deterministic PR 1 placeholder. It is
+  reserved for the model-backed decision path or explicit execution fallback.
 
 No LLM call, no execution, no selection mutation.
 
@@ -158,6 +248,9 @@ Acceptance:
 - Unit tests cover no-candidate and candidate payloads.
 - The endpoint never calls provider/generation tools.
 - The proposal is persisted as an `actions` row with status `proposed`.
+- The endpoint rejects cross-project `changedAssetId`/`runId` mismatches.
+- The persisted proposal includes approval fields and enough context pins to
+  detect stale execution later.
 
 ### PR 2 - Agent Decision Behind A Flag
 
@@ -171,6 +264,8 @@ Acceptance:
 - Deterministic fallback remains the default.
 - Tests verify invalid model output is rejected and falls back safely.
 - The model cannot invent asset IDs outside changed/candidate/context IDs.
+- The model cannot mark a proposal approval-free unless it satisfies the
+  approval rules above.
 
 ### PR 3 - Proposal UI Surface
 
@@ -181,18 +276,30 @@ Acceptance:
 - User can inspect affected assets and rough cost.
 - Expensive or multi-candidate proposals require explicit confirmation.
 - Existing `restart-from` controls remain available as a fallback.
+- The UI treats proposal actions as read-only until the user approves, cancels,
+  or asks the agent for a revised proposal.
 
 ### PR 4 - Execution For One Asset Kind
 
-Execute `regenerate_candidates` for one kind first, preferably keyframe/image
-candidates that already map cleanly to existing generation tooling.
+Execute `regenerate_candidates` for image assets first by wrapping the existing
+`regenerateImageAsset()` / `regenerate_asset_version` path used by
+`POST /api/v1/assets/:assetId/regenerate`.
+
+Scope this to candidate assets whose API asset kind is `"image"` and whose graph
+candidate is actively selected. The execution path should call the existing
+image regeneration service, let it create the `regenerate_asset` action and new
+immutable asset version, then link the new output asset back to the proposal
+action lifecycle. Do not add video, audio, composite, or storyboard semantic
+execution in this PR.
 
 Acceptance:
 
 - Execution records action input/output assets.
 - New versions or new selected assets are created without mutating old assets.
-- If execution cannot map a candidate to a tool, it refuses and suggests
+- If execution receives a non-image candidate, it refuses and suggests
   `restart_stage`.
+- Execution rechecks pinned fingerprints and selection `seq` values before any
+  tool call or selection append.
 
 ### PR 5 - Stage Restart Fallback Integration
 
@@ -210,11 +317,6 @@ Acceptance:
 - Do not add first-class OODA learning tables here.
 - Do not create a generic media regenerate endpoint for all kinds.
 - Do not auto-execute expensive proposals without an approval path.
-
-## Open Questions
-
-- Should proposals be project-level actions or run-level actions when no active
-  run exists?
-- What cost threshold requires approval in autonomous mode?
-- Should `changedAssetId` accept multiple assets in PR 1, or should multi-target
-  edits wait for the model-backed proposal?
+- Do not add preview idempotency in PR 1. Repeated previews may create repeated
+  `rerun_proposal` actions; a later UI PR can add an explicit idempotency key if
+  live typing makes duplicates noisy.
