@@ -94,6 +94,33 @@
    * are the dark-default fallback. */
   --cta: #ffc23d;
   --cta-contrast: #1a0d07;
+
+  /* Inspiration page Cinema presentation. These are consumed only when the
+   * route-level Cinema view is selected, but still follow the app-wide theme. */
+  --inspiration-cinema-bg: #0d0e0a;
+  --inspiration-cinema-bg-end: #0a0b08;
+  --inspiration-cinema-panel: #17150f;
+  --inspiration-cinema-panel-2: #1d1a12;
+  --inspiration-cinema-story-panel: #19170f;
+  --inspiration-cinema-border: rgba(245, 181, 32, 0.16);
+  --inspiration-cinema-border-soft: rgba(241, 182, 34, 0.14);
+  --inspiration-cinema-border-faint: rgba(241, 182, 34, 0.08);
+  --inspiration-cinema-text: #f7f0df;
+  --inspiration-cinema-muted: #b9ae97;
+  --inspiration-cinema-description: rgba(245, 238, 220, 0.72);
+  --inspiration-cinema-accent: #f1b622;
+  --inspiration-cinema-accent-hover: #ffc941;
+  --inspiration-cinema-button-text: #171000;
+  --inspiration-cinema-green-soft: rgba(126, 151, 114, 0.24);
+  --inspiration-cinema-clay-soft: rgba(167, 101, 72, 0.25);
+  --inspiration-cinema-ambient: rgba(241, 182, 34, 0.07);
+  --inspiration-cinema-poster-glow: rgba(241, 182, 34, 0.08);
+  --inspiration-cinema-poster-sheen: rgba(255, 255, 255, 0.05);
+  --inspiration-cinema-poster-wash: rgba(255, 255, 255, 0.03);
+  --inspiration-cinema-poster-icon-border: rgba(241, 182, 34, 0.2);
+  --inspiration-cinema-poster-icon-mark: rgba(241, 182, 34, 0.22);
+  --inspiration-cinema-poster-icon-fill: rgba(241, 182, 34, 0.14);
+  --inspiration-cinema-ingredient-border: rgba(241, 182, 34, 0.12);
 }
 
 /* Per-theme danger tuning. Only the new tokens are declared here — the base
@@ -103,6 +130,30 @@
   --danger-text: #ffb3b3;
   --danger-soft: rgba(255, 107, 107, 0.12);
   --danger-border: rgba(255, 107, 107, 0.4);
+  --inspiration-cinema-bg: #0d0e0a;
+  --inspiration-cinema-bg-end: #0a0b08;
+  --inspiration-cinema-panel: #17150f;
+  --inspiration-cinema-panel-2: #1d1a12;
+  --inspiration-cinema-story-panel: #19170f;
+  --inspiration-cinema-border: rgba(245, 181, 32, 0.16);
+  --inspiration-cinema-border-soft: rgba(241, 182, 34, 0.14);
+  --inspiration-cinema-border-faint: rgba(241, 182, 34, 0.08);
+  --inspiration-cinema-text: #f7f0df;
+  --inspiration-cinema-muted: #b9ae97;
+  --inspiration-cinema-description: rgba(245, 238, 220, 0.72);
+  --inspiration-cinema-accent: #f1b622;
+  --inspiration-cinema-accent-hover: #ffc941;
+  --inspiration-cinema-button-text: #171000;
+  --inspiration-cinema-green-soft: rgba(126, 151, 114, 0.24);
+  --inspiration-cinema-clay-soft: rgba(167, 101, 72, 0.25);
+  --inspiration-cinema-ambient: rgba(241, 182, 34, 0.07);
+  --inspiration-cinema-poster-glow: rgba(241, 182, 34, 0.08);
+  --inspiration-cinema-poster-sheen: rgba(255, 255, 255, 0.05);
+  --inspiration-cinema-poster-wash: rgba(255, 255, 255, 0.03);
+  --inspiration-cinema-poster-icon-border: rgba(241, 182, 34, 0.2);
+  --inspiration-cinema-poster-icon-mark: rgba(241, 182, 34, 0.22);
+  --inspiration-cinema-poster-icon-fill: rgba(241, 182, 34, 0.14);
+  --inspiration-cinema-ingredient-border: rgba(241, 182, 34, 0.12);
 }
 
 :root[data-theme="popcorn-warm"] {
@@ -110,6 +161,30 @@
   --danger-text: #97300f;
   --danger-soft: rgba(184, 58, 29, 0.1);
   --danger-border: rgba(184, 58, 29, 0.34);
+  --inspiration-cinema-bg: #f4e3af;
+  --inspiration-cinema-bg-end: #ead08e;
+  --inspiration-cinema-panel: #fff7df;
+  --inspiration-cinema-panel-2: #f7e8bd;
+  --inspiration-cinema-story-panel: #fff3d1;
+  --inspiration-cinema-border: rgba(161, 111, 18, 0.22);
+  --inspiration-cinema-border-soft: rgba(161, 111, 18, 0.18);
+  --inspiration-cinema-border-faint: rgba(161, 111, 18, 0.1);
+  --inspiration-cinema-text: #1e1206;
+  --inspiration-cinema-muted: #6f5a31;
+  --inspiration-cinema-description: rgba(48, 33, 8, 0.72);
+  --inspiration-cinema-accent: #d99f1c;
+  --inspiration-cinema-accent-hover: #efb326;
+  --inspiration-cinema-button-text: #211300;
+  --inspiration-cinema-green-soft: rgba(89, 126, 73, 0.18);
+  --inspiration-cinema-clay-soft: rgba(159, 83, 48, 0.18);
+  --inspiration-cinema-ambient: rgba(161, 111, 18, 0.1);
+  --inspiration-cinema-poster-glow: rgba(161, 111, 18, 0.11);
+  --inspiration-cinema-poster-sheen: rgba(255, 255, 255, 0.42);
+  --inspiration-cinema-poster-wash: rgba(255, 255, 255, 0.26);
+  --inspiration-cinema-poster-icon-border: rgba(161, 111, 18, 0.24);
+  --inspiration-cinema-poster-icon-mark: rgba(161, 111, 18, 0.24);
+  --inspiration-cinema-poster-icon-fill: rgba(161, 111, 18, 0.12);
+  --inspiration-cinema-ingredient-border: rgba(161, 111, 18, 0.16);
 }
 
 :root[data-theme="popcorn-night"] {
@@ -117,4 +192,28 @@
   --danger-text: #ffb59c;
   --danger-soft: rgba(255, 122, 77, 0.1);
   --danger-border: rgba(255, 122, 77, 0.42);
+  --inspiration-cinema-bg: #12110e;
+  --inspiration-cinema-bg-end: #0d0c0a;
+  --inspiration-cinema-panel: #1c1912;
+  --inspiration-cinema-panel-2: #272115;
+  --inspiration-cinema-story-panel: #201c13;
+  --inspiration-cinema-border: rgba(227, 173, 43, 0.18);
+  --inspiration-cinema-border-soft: rgba(227, 173, 43, 0.14);
+  --inspiration-cinema-border-faint: rgba(227, 173, 43, 0.09);
+  --inspiration-cinema-text: #f8f3e8;
+  --inspiration-cinema-muted: #c2b9a4;
+  --inspiration-cinema-description: rgba(248, 243, 232, 0.72);
+  --inspiration-cinema-accent: #f0b733;
+  --inspiration-cinema-accent-hover: #ffc84d;
+  --inspiration-cinema-button-text: #241600;
+  --inspiration-cinema-green-soft: rgba(97, 153, 83, 0.22);
+  --inspiration-cinema-clay-soft: rgba(170, 95, 62, 0.23);
+  --inspiration-cinema-ambient: rgba(227, 173, 43, 0.07);
+  --inspiration-cinema-poster-glow: rgba(227, 173, 43, 0.08);
+  --inspiration-cinema-poster-sheen: rgba(255, 255, 255, 0.05);
+  --inspiration-cinema-poster-wash: rgba(255, 255, 255, 0.03);
+  --inspiration-cinema-poster-icon-border: rgba(227, 173, 43, 0.2);
+  --inspiration-cinema-poster-icon-mark: rgba(227, 173, 43, 0.22);
+  --inspiration-cinema-poster-icon-fill: rgba(227, 173, 43, 0.14);
+  --inspiration-cinema-ingredient-border: rgba(227, 173, 43, 0.12);
 }
