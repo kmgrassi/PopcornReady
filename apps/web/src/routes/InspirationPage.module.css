@@ -198,6 +198,21 @@
   z-index: 1;
 }
 
+.posterSpinner {
+  position: relative;
+  z-index: 1;
+  flex-direction: column;
+  color: var(--muted);
+}
+
+.posterSpinner span {
+  position: static;
+}
+
+.cinemaTheme .posterSpinner {
+  color: var(--inspiration-cinema-description);
+}
+
 .promptPanel {
   display: grid;
   align-content: center;
