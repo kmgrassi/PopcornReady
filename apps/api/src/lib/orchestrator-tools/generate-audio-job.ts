@@ -8,7 +8,7 @@ import {
 import type { V1Asset } from "@/lib/api/v1/store";
 import type { VideoBrief } from "@/lib/api/v1/schemas";
 import type { GraphAssetInput } from "@/lib/api/v1/asset-graph";
-import type { EditPlan } from "@popcorn/shared/types";
+import type { ShotPlan } from "@popcorn/shared/types";
 
 type AudioProvider = "elevenlabs" | "mock";
 
@@ -65,7 +65,7 @@ type PlanBeat = {
   dialogue?: string;
 };
 
-function planBeats(plan: EditPlan): PlanBeat[] {
+function planBeats(plan: ShotPlan): PlanBeat[] {
   const beats: PlanBeat[] = [];
   for (const scene of plan.scenes ?? []) {
     for (const beat of scene.beats ?? []) {
@@ -91,7 +91,7 @@ function narrationTextForBeat(beat: PlanBeat): string {
 }
 
 function soundtrackPrompt(input: {
-  plan: EditPlan;
+  plan: ShotPlan;
   brief?: VideoBrief;
   feedback?: string;
 }): string {
@@ -153,7 +153,7 @@ export interface GenerateAudioJobInput {
   workspaceId: string;
   projectId: string;
   orchestratorRunId?: string;
-  plan: EditPlan;
+  plan: ShotPlan;
   planAssetId: string;
   planContentHash: string;
   brief?: VideoBrief;

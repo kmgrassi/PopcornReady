@@ -1,7 +1,7 @@
 import React from "react";
 import {
   Clip,
-  EditPlan,
+  ShotPlan,
   planBeats,
   Timeline,
   timelineDurationSec,
@@ -25,7 +25,7 @@ interface PreviewPanelProps {
   exportResult: ExportResult | null;
   galleryLoading: boolean;
   loadedVideoThumbs: Record<string, boolean>;
-  plan?: EditPlan;
+  plan?: ShotPlan;
   selectedAudioClipId: string;
   setDurationPolicy: (value: DurationPolicy) => void;
   setLoadedVideoThumbs: React.Dispatch<

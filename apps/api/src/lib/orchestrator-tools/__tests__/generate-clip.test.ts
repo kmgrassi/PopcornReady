@@ -3,7 +3,7 @@ import test from "node:test";
 
 import type { AuthContext } from "@/lib/api/v1/auth";
 import type { ActiveProjectPlan, V1Asset } from "@/lib/api/v1/store";
-import type { EditPlan } from "@popcorn/shared/types";
+import type { ShotPlan } from "@popcorn/shared/types";
 import { createGenerateClipTool, parseGenerateClipInput } from "../generate-clip";
 import { runGenerateClipJob } from "../generate-clip-job";
 import { ToolInputError } from "../types";
@@ -16,7 +16,7 @@ const auth: AuthContext = {
   isLocal: true,
 };
 
-const plan: EditPlan = {
+const plan: ShotPlan = {
   targetLengthSec: 12,
   style: "warm documentary",
   aspectRatio: "16:9",

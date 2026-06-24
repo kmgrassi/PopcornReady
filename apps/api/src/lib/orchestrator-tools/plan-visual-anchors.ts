@@ -5,7 +5,7 @@ import {
   type VisualAnchorPlan,
   type VisualAnchorPlanItem,
 } from "@/lib/api/v1/store";
-import type { EditPlan, Scene } from "@popcorn/shared/types";
+import type { ShotPlan, Scene } from "@popcorn/shared/types";
 import type { ProjectStoryboard, StoryboardScene } from "@popcorn/shared/v1/types";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
@@ -147,7 +147,7 @@ function upsertAnchor(
   });
 }
 
-export function deriveVisualAnchorPlan(plan: EditPlan, feedback?: string): VisualAnchorPlan {
+export function deriveVisualAnchorPlan(plan: ShotPlan, feedback?: string): VisualAnchorPlan {
   const anchors = new Map<string, VisualAnchorPlanItem>();
 
   for (const scene of plan.scenes ?? []) {

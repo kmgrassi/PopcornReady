@@ -4,7 +4,7 @@ import test from "node:test";
 import type { AuthContext } from "@/lib/api/v1/auth";
 import type { ApiResult } from "@/lib/api/v1/generated-assets";
 import type { V1Asset, VisualAnchorPlan } from "@/lib/api/v1/store";
-import type { EditPlan } from "@popcorn/shared/types";
+import type { ShotPlan } from "@popcorn/shared/types";
 import type { ProjectStoryboard } from "@popcorn/shared/v1/types";
 import { createGenerateKeyframeTool } from "../generate-keyframe";
 import { runGenerateKeyframeJob } from "../generate-keyframe-job";
@@ -18,7 +18,7 @@ const auth: AuthContext = {
   isLocal: true,
 };
 
-const plan: EditPlan = {
+const plan: ShotPlan = {
   targetLengthSec: 10,
   style: "warm documentary",
   aspectRatio: "16:9",

@@ -3,14 +3,14 @@ import test from "node:test";
 
 import type { AuthContext } from "@/lib/api/v1/auth";
 import type { VideoBrief } from "@/lib/api/v1/schemas";
-import type { EditPlan } from "@popcorn/shared/types";
+import type { ShotPlan } from "@popcorn/shared/types";
 import type { V1Action, V1Asset } from "@/lib/api/v1/store";
 import { createAssembleTimelineTool } from "../assemble-timeline";
 import { createBriefInputSchema } from "../create-or-load-brief";
 import { createDefaultToolRegistry } from "../default-registry";
 import {
   createPlanShotsTool,
-  persistedEditPlanSchema,
+  persistedShotPlanSchema,
   type PlanShotsOutput,
 } from "../plan-shots";
 import { ToolRegistry } from "../registry";
@@ -23,7 +23,7 @@ const auth: AuthContext = {
   isLocal: true,
 };
 
-const samplePlan: EditPlan = {
+const samplePlan: ShotPlan = {
   targetLengthSec: 20,
   style: "playful",
   aspectRatio: "16:9",
@@ -122,7 +122,7 @@ test("create_or_load_brief schema constrains enum fields to validator values", (
 });
 
 test("plan_shots output schema describes the post-processed plan ids", () => {
-  const scenes = persistedEditPlanSchema.properties.scenes as {
+  const scenes = persistedShotPlanSchema.properties.scenes as {
     items: { properties: Record<string, unknown>; required: string[] };
   };
   const beats = scenes.items.properties.beats as {
@@ -195,7 +195,7 @@ test("plan_shots returns precondition_unmet (suggesting the brief) when none exi
 test("plan_shots derives the plan from the brief and persists it with brief provenance", async () => {
   let planEditInput: { goal: string; aspectRatio: string } | undefined;
   let planInput:
-    | { plan: EditPlan; briefAssetId?: string; briefContentHash?: string }
+    | { plan: ShotPlan; briefAssetId?: string; briefContentHash?: string }
     | undefined;
   const registry = createDefaultToolRegistry({
     planShots: planShotsDeps({
@@ -220,7 +220,7 @@ test("plan_shots derives the plan from the brief and persists it with brief prov
   // inputs are derived from the brief, not supplied by the model
   assert.equal(planEditInput?.goal, sampleBrief.goal);
   assert.equal(planEditInput?.aspectRatio, sampleBrief.aspectRatio);
-  // the planned EditPlan is what gets persisted
+  // the generated ShotPlan is what gets persisted
   assert.equal(planInput?.plan, samplePlan);
   // the active brief is recorded as the plan's input (provenance / stale graph)
   assert.equal(planInput?.briefAssetId, "brief_asset_1");

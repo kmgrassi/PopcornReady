@@ -3,7 +3,7 @@ import test from "node:test";
 
 import type { AuthContext } from "@/lib/api/v1/auth";
 import type { VisualAnchorPlan } from "@/lib/api/v1/store";
-import type { EditPlan } from "@popcorn/shared/types";
+import type { ShotPlan } from "@popcorn/shared/types";
 import {
   createPlanVisualAnchorsTool,
   deriveVisualAnchorPlan,
@@ -20,7 +20,7 @@ const auth: AuthContext = {
   isLocal: true,
 };
 
-const samplePlan: EditPlan = {
+const samplePlan: ShotPlan = {
   targetLengthSec: 20,
   style: "warm documentary",
   aspectRatio: "16:9",
@@ -153,7 +153,7 @@ test("plan_visual_anchors requires a shot plan and suggests plan_shots", async (
 });
 
 test("plan_visual_anchors accepts approval retry revisionInstruction", async () => {
-  const noAnchorPlan: EditPlan = {
+  const noAnchorPlan: ShotPlan = {
     targetLengthSec: 12,
     style: "warm documentary",
     aspectRatio: "16:9",

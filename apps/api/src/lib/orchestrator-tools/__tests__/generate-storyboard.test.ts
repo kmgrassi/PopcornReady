@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { AuthContext } from "@/lib/api/v1/auth";
-import type { EditPlan } from "@popcorn/shared/types";
+import type { ShotPlan } from "@popcorn/shared/types";
 import { createGenerateStoryboardTool } from "../generate-storyboard";
 import { runStoryboardJob } from "../storyboard-job";
 import type { ToolCallResult } from "../types";
@@ -14,7 +14,7 @@ const auth: AuthContext = {
   isLocal: true,
 };
 
-const samplePlan: EditPlan = {
+const samplePlan: ShotPlan = {
   targetLengthSec: 15,
   style: "playful",
   aspectRatio: "9:16",
