@@ -22,7 +22,7 @@ import {
   runTimelineCritique,
 } from "../assemble";
 import { V1Store, createStore } from "../store";
-import { planBeats } from "@popcorn/shared/types";
+import { ensureBeatIds, planBeats } from "@popcorn/shared/types";
 import {
   AspectRatio,
   SCHEMA,
@@ -32,6 +32,32 @@ import {
 } from "@popcorn/shared/v1/types";
 
 const NOW = "2026-06-05T12:00:00.000Z";
+
+test("ensureBeatIds normalizes legacy plans and backfills scene ids", () => {
+  const plan: {
+    targetLengthSec: number;
+    style: string;
+    aspectRatio: AspectRatio;
+    scenes?: { id?: string; beats?: { id?: string; name: string }[] }[];
+    beats?: { name: string; durationSec: number; intent: string }[];
+  } = {
+    targetLengthSec: 8,
+    style: "punchy",
+    aspectRatio: "9:16" as AspectRatio,
+    beats: [
+      { name: "hook", durationSec: 4, intent: "grab attention" },
+      { name: "payoff", durationSec: 4, intent: "land the idea" },
+    ],
+  };
+
+  ensureBeatIds(plan);
+
+  assert.equal("beats" in plan, false);
+  assert.ok(plan.scenes);
+  assert.equal(plan.scenes[0]?.id, "scene_1");
+  assert.equal(plan.scenes[0]?.beats?.[0]?.id, "beat_1_hook");
+  assert.equal(plan.scenes[0]?.beats?.[1]?.id, "beat_2_payoff");
+});
 
 // Offline, deterministic stand-in for the model-backed selectClips. One segment
 // per visual clip, so we exercise resolve -> select -> persist without network.
