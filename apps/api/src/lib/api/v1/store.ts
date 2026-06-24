@@ -3086,6 +3086,23 @@ export async function deleteProject(
   if (!data) throw notFound(`Project not found: ${projectId}`);
 }
 
+export async function deletePublicProjectAsAdmin(projectId: string): Promise<void> {
+  const db = getServiceSupabase();
+  const data = await runQuery(
+    "store.deletePublicProjectAsAdmin project",
+    db
+      .from("projects")
+      .select("workspace_id")
+      .eq("id", projectId)
+      .eq("visibility", "public")
+      .neq("status", "deleted")
+      .maybeSingle()
+  );
+  const row = data as { workspace_id: string } | null;
+  if (!row) throw notFound(`Public project not found: ${projectId}`);
+  await deleteProject(row.workspace_id, projectId);
+}
+
 // Point the project-scoped 'poster' selection slot at an image asset. Any
 // ready image in the project qualifies (a keyframe can be the poster until a
 // dedicated poster-kind asset is generated); history stays in selections.

@@ -512,6 +512,25 @@ export function useDeleteProjectMutation(projectId: string) {
   });
 }
 
+export function useAdminDeletePublicProjectMutation(projectId: string) {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => v1Api.deletePublicProjectAsAdmin(projectId),
+    meta: {
+      successMessage: "Project deleted",
+      errorMessage: "Could not delete project",
+    },
+    onSuccess: () => {
+      client.removeQueries({ queryKey: ["public-project", projectId] });
+      client.removeQueries({ queryKey: queryKeys.project(projectId) });
+      void client.invalidateQueries({ queryKey: ["dashboard"] });
+      void client.invalidateQueries({ queryKey: ["projects"] });
+      void client.invalidateQueries({ queryKey: ["workspaces"] });
+    },
+  });
+}
+
 export function useSetProjectPosterMutation(projectId: string) {
   const client = useQueryClient();
 
