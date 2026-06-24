@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { mutation, route } from "@/core/adapter";
 import { ApiError } from "@/core/errors";
-import { bearerToken } from "@/lib/api/v1/auth";
+import { authMode, bearerToken } from "@/lib/api/v1/auth";
 import type { HandlerCtx } from "@/lib/api/v1/handler";
 import {
   parseAnalyzeBatch,
@@ -51,7 +51,7 @@ function hasAdminAppMetadata(appMetadata: Record<string, unknown> | undefined): 
 }
 
 async function requireProjectAdmin(ctx: Pick<HandlerCtx, "auth" | "req">): Promise<void> {
-  if (ctx.auth.isLocal) return;
+  if (authMode() === "local") return;
 
   const token = bearerToken(ctx.req);
   if (!token) {

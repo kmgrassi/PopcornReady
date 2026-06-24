@@ -42,6 +42,7 @@ export function PublicProjectPage() {
         progress: storyboardProgress(storyboard),
         generationError: null,
       }}
+      media={data?.media ?? null}
       dangerSection={
         canAdminDelete && project ? (
           <ProjectDangerSection

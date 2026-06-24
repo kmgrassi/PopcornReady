@@ -8,7 +8,7 @@ import type {
   V1Project,
   VideoBriefInput,
 } from "@popcorn/shared/v1/types";
-import type { WorkspaceOutput } from "../lib/api-client";
+import type { ProjectWatchMedia, WorkspaceOutput } from "../lib/api-client";
 import { useAuth } from "../components/auth/AuthProvider";
 import { Button, ButtonLink } from "../components/ui/Button";
 import { ImageWithSkeleton } from "../components/ui/ImageWithSkeleton";
@@ -195,6 +195,7 @@ export function ProjectDetailPage() {
           });
         },
       }}
+      media={null}
       dangerSection={
         project ? (
           <ProjectDangerSection
@@ -235,6 +236,7 @@ export function ProjectOverviewPage({
   readOnly,
   headerActions,
   storyboardPreview,
+  media,
   dangerSection,
   stagePanel,
 }: {
@@ -258,6 +260,7 @@ export function ProjectOverviewPage({
     generationError: Error | null;
     onGenerate?: () => void;
   };
+  media?: ProjectWatchMedia | null;
   dangerSection?: ReactNode;
   stagePanel?: ReactNode;
 }) {
@@ -316,6 +319,7 @@ export function ProjectOverviewPage({
                 </div>
               </div>
             </section>
+            {media ? <ProjectWatchVideo media={media} /> : null}
             {dangerSection}
           </div>
           {stagePanel ? (
@@ -326,6 +330,27 @@ export function ProjectOverviewPage({
         </div>
       ) : null}
     </main>
+  );
+}
+
+function ProjectWatchVideo({ media }: { media: ProjectWatchMedia }) {
+  return (
+    <section className={styles.panel} id="watch">
+      <div className={styles.sectionHeader}>
+        <div>
+          <span className={styles.eyebrow}>Watch</span>
+          <h2>Final video</h2>
+        </div>
+      </div>
+      <video
+        className={styles.watchVideo}
+        src={media.url}
+        poster={media.posterUrl}
+        controls
+        playsInline
+        preload="metadata"
+      />
+    </section>
   );
 }
 
