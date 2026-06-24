@@ -6,6 +6,11 @@
 -- the selection slot `transition:${fromBeatId}`; endpoints are recorded as
 -- asset_edges (role 'from' / 'to'). Full design: docs/scopes/transitions-as-assets.md.
 --
+-- The `transition` enum value is added in the preceding migration
+-- (20260625110000_transition_asset_kind_enum.sql); a new graph_asset_kind value
+-- cannot be referenced in the same transaction that adds it, so the constraint
+-- update lives here, after that change has committed.
+--
 -- Additive (drop + recreate) per the no-history-rewrite rule. Both objects are
 -- recreated from their current definition (20260616121000_story_blueprints.sql)
 -- plus the `transition` kind/ref.
