@@ -26,7 +26,7 @@ const PURPOSES: PurposeConfig[] = [
     description: "Keyframes, storyboards, posters, and generated still assets.",
     icon: "image",
     providers: [
-      { id: "openai", label: "OpenAI", models: ["gpt-image-1.5", "gpt-image-1", "gpt-image-1-mini"] },
+      { id: "openai", label: "OpenAI", models: ["gpt-image-2", "gpt-image-1.5", "gpt-image-1", "gpt-image-1-mini"] },
       { id: "ideogram", label: "Ideogram", models: ["ideogram-v4", "ideogram-v3"] },
       { id: "gemini", label: "Gemini", models: ["gemini-2.5-flash-image"] },
       { id: "xai", label: "xAI", models: ["grok-imagine-image-quality"] },
