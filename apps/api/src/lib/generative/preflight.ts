@@ -1,7 +1,7 @@
 import { getLlmClient } from "../llm";
 import {
   Clip,
-  EditPlan,
+  ShotPlan,
   GenerationPreflightIssue,
   GenerationPreflightPass,
   GenerationPreflightResult,
@@ -77,7 +77,7 @@ function clampIterations(value: unknown): number {
   return Math.max(0, Math.min(MAX_PREFLIGHT_ITERATIONS, Math.floor(parsed)));
 }
 
-function planForPrompt(plan?: EditPlan | null): string {
+function planForPrompt(plan?: ShotPlan | null): string {
   if (!plan) return "No storyboard/edit plan has been generated yet.";
   return [
     `target length: ${plan.targetLengthSec}s`,
@@ -121,7 +121,7 @@ export interface PreflightGenerationContentInput {
   dialogueInputs?: DialogueInput[];
   audioMode?: AudioGenerationMode;
   storyContext?: StoryContext | null;
-  plan?: EditPlan | null;
+  plan?: ShotPlan | null;
   clips?: Clip[];
 }
 

@@ -73,7 +73,7 @@ import {
   type StudioDraftStep,
   type StudioDraftSummary,
 } from "@popcorn/shared/v1/studio-drafts";
-import type { EditPlan, ScriptDraft, Timeline } from "@popcorn/shared/types";
+import type { ShotPlan, ScriptDraft, Timeline } from "@popcorn/shared/types";
 import type { Asset } from "@popcorn/shared/assets/types";
 import type { GeneratedStoryboardTile } from "@/lib/generative/storyboard-tile";
 import {
@@ -1888,7 +1888,7 @@ export async function getActiveProjectBrief(
 export async function addProjectPlan(input: {
   workspaceId: string;
   projectId: string;
-  plan: EditPlan;
+  plan: ShotPlan;
   briefAssetId?: string;
   briefContentHash?: string;
 }): Promise<{ planAssetId: string }> {
@@ -2571,7 +2571,7 @@ export async function addProjectTimelineCritique(input: {
 }
 
 export interface ActiveProjectPlan {
-  plan: EditPlan;
+  plan: ShotPlan;
   /** The plan asset id — recorded as the input of anything derived from it. */
   assetId: string;
   /** The plan asset's content hash — the stale-detection fingerprint. */
@@ -2587,7 +2587,7 @@ export async function getActiveProjectPlan(
   const planAsset = await selectedDataAsset(db, projectId, "plan", "plan", "current_plan");
   if (!planAsset) return null;
   return {
-    plan: unmarkedContent<EditPlan>(planAsset.content),
+    plan: unmarkedContent<ShotPlan>(planAsset.content),
     assetId: planAsset.id,
     contentHash: planAsset.content_hash ?? "",
   };

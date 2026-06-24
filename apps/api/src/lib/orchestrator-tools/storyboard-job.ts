@@ -10,7 +10,7 @@ import type { AuthContext } from "@/lib/api/v1/auth";
 import { addStoryboardTiles } from "@/lib/api/v1/store";
 import { buildStoryboardForPlan } from "@/lib/api/v1/storyboards";
 import { generateStoryboardTilesForPlan } from "@/lib/v1/generation/storyboard";
-import type { EditPlan } from "@popcorn/shared/types";
+import type { ShotPlan } from "@popcorn/shared/types";
 
 export interface StoryboardJobDeps {
   generateStoryboardTilesForPlan: typeof generateStoryboardTilesForPlan;
@@ -57,7 +57,7 @@ export interface StoryboardJobInput {
   workspaceId: string;
   projectId: string;
   orchestratorRunId?: string;
-  plan: EditPlan;
+  plan: ShotPlan;
   planAssetId: string;
   planContentHash: string;
   createdByActionId?: string;

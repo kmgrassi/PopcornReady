@@ -12,7 +12,7 @@ import {
 } from "@/lib/api/v1/store";
 import type { GraphAssetInput } from "@/lib/api/v1/asset-graph";
 import { buildKeyframePrompt } from "@/lib/generative/keyframe";
-import type { Beat, EditPlan } from "@popcorn/shared/types";
+import type { Beat, ShotPlan } from "@popcorn/shared/types";
 import { planBeats } from "@popcorn/shared/types";
 import type { ProjectStoryboard } from "@popcorn/shared/v1/types";
 import { createLogger } from "@/lib/v1/logger";
@@ -69,7 +69,7 @@ function assetIdsFromResult(result: Awaited<ReturnType<typeof realGenerateBeatKe
 }
 
 function storyboardTileByPlanBeat(
-  plan: EditPlan,
+  plan: ShotPlan,
   storyboard: ProjectStoryboard
 ): Map<string, string> {
   const map = new Map<string, string>();
@@ -149,7 +149,7 @@ export interface GenerateKeyframeJobInput {
   workspaceId: string;
   projectId: string;
   orchestratorRunId?: string;
-  plan: EditPlan;
+  plan: ShotPlan;
   planAssetId: string;
   planContentHash: string;
   storyboard: ProjectStoryboard;

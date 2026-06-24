@@ -6,7 +6,7 @@ import { getLlmClient } from "@popcorn/llm";
 import {
   type Beat,
   type CharacterProfile,
-  type EditPlan,
+  type ShotPlan,
   planBeats,
   type VideoSnapshotReview,
 } from "@popcorn/shared/types";
@@ -88,7 +88,7 @@ export async function extractVideoSnapshots(input: {
   return snapshots;
 }
 
-function beatMap(plan: EditPlan): string {
+function beatMap(plan: ShotPlan): string {
   return planBeats(plan)
     .map((beat, index) => `${index + 1}. ${beat.name}: ${beat.intent}`)
     .join("\n");
@@ -116,7 +116,7 @@ function characterContextText(profiles: CharacterProfile[]): string {
 
 export async function reviewGeneratedVideoSnapshots(input: {
   goal: string;
-  plan: EditPlan;
+  plan: ShotPlan;
   beat: Beat;
   beatIndex: number;
   providerPrompt: string;

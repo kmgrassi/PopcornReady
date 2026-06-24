@@ -7,7 +7,7 @@ import {
 import { critique as realCritique } from "@/lib/agent";
 import {
   type Clip,
-  type EditPlan,
+  type ShotPlan,
   singleSceneFromBeats,
   type Timeline,
 } from "@popcorn/shared/types";
@@ -119,7 +119,7 @@ function isTimeline(value: unknown): value is Timeline {
   );
 }
 
-function planFromTimeline(timeline: Timeline): EditPlan {
+function planFromTimeline(timeline: Timeline): ShotPlan {
   const beatsByName = new Map<string, { id?: string; name: string; intent: string }>();
   for (const segment of timeline.segments) {
     const name = segment.role || segment.beatId || "beat";

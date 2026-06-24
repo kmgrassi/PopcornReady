@@ -4,7 +4,7 @@ import {
   getActiveProjectPlan as realGetActiveProjectPlan,
   type ActiveProjectPlan,
 } from "@/lib/api/v1/store";
-import type { EditPlan } from "@popcorn/shared/types";
+import type { ShotPlan } from "@popcorn/shared/types";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 import { runGenerateClipJob as realRunGenerateClipJob } from "./generate-clip-job";
@@ -225,7 +225,7 @@ export function parseGenerateClipInput(input: unknown): GenerateClipInput {
   };
 }
 
-function planBeats(plan: EditPlan): Array<{ id: string; prompt: string; durationSec: number }> {
+function planBeats(plan: ShotPlan): Array<{ id: string; prompt: string; durationSec: number }> {
   return plan.scenes.flatMap((scene) =>
     scene.beats.flatMap((beat) => {
       if (!beat.id) return [];

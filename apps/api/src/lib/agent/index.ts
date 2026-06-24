@@ -2,10 +2,10 @@ import { getLlmClient } from "../llm";
 import {
   Clip,
   CriticReport,
-  EditPlan,
   Patch,
   planBeats,
   PlanCritiqueReport,
+  ShotPlan,
   StoryContext,
   Timeline,
   TimelineSegment,
@@ -61,7 +61,7 @@ Hard rules:
 - Match clips to beats using the clip descriptions and filenames as your only
   signal about content.`;
 
-function planText(p: EditPlan): string {
+function planText(p: ShotPlan): string {
   const lines = [
     `target length: ${p.targetLengthSec}s`,
     `style: ${p.style}`,
@@ -83,7 +83,7 @@ function planText(p: EditPlan): string {
   return lines.join("\n");
 }
 
-function storyPlanText(p: EditPlan): string {
+function storyPlanText(p: ShotPlan): string {
   return [
     planText(p),
     "story beat ids:",
@@ -101,7 +101,7 @@ export async function planEdit(input: {
   aspectRatio: string;
   storyContext?: StoryContext | null;
   feedback?: string | null;
-}): Promise<EditPlan> {
+}): Promise<ShotPlan> {
   const sys = `${PREAMBLE}
 
 TASK: Convert the user's creative goal into a storyboard plan organized as
@@ -130,7 +130,7 @@ ${feedback}
 
 Produce the edit plan.`;
 
-  const plan = await getLlmClient().structured<EditPlan>({
+  const plan = await getLlmClient().structured<ShotPlan>({
     cachedSystem: sys,
     user,
     schema: planSchema,
@@ -143,7 +143,7 @@ Produce the edit plan.`;
     effort: "high", // creative planning: goal -> structured storyboard/beats
   });
   // Honor the user's explicit aspect ratio choice.
-  plan.aspectRatio = input.aspectRatio as EditPlan["aspectRatio"];
+  plan.aspectRatio = input.aspectRatio as ShotPlan["aspectRatio"];
   // Mint stable beat ids at creation so the whole chain links by id, not role.
   ensureBeatIds(plan);
   return plan;
@@ -151,7 +151,7 @@ Produce the edit plan.`;
 
 export async function critiquePlan(input: {
   goal: string;
-  plan: EditPlan;
+  plan: ShotPlan;
   style: string;
   aspectRatio: string;
   storyContext?: StoryContext | null;
@@ -197,7 +197,7 @@ Critique and revise this plan before media generation.`;
 
   report.revisedPlan.targetLengthSec = input.plan.targetLengthSec;
   report.revisedPlan.style = input.style;
-  report.revisedPlan.aspectRatio = input.aspectRatio as EditPlan["aspectRatio"];
+  report.revisedPlan.aspectRatio = input.aspectRatio as ShotPlan["aspectRatio"];
   // The revised plan is a fresh plan; ensure its beats are addressable.
   ensureBeatIds(report.revisedPlan);
   return report;
@@ -205,7 +205,7 @@ Critique and revise this plan before media generation.`;
 
 export async function critiqueUploadedFootagePlan(input: {
   goal: string;
-  plan: EditPlan;
+  plan: ShotPlan;
   style: string;
   aspectRatio: string;
   storyContext?: StoryContext | null;
@@ -249,13 +249,13 @@ Review source coverage and return a revised plan for the timeline selector.`;
 
   report.revisedPlan.targetLengthSec = input.plan.targetLengthSec;
   report.revisedPlan.style = input.style;
-  report.revisedPlan.aspectRatio = input.aspectRatio as EditPlan["aspectRatio"];
+  report.revisedPlan.aspectRatio = input.aspectRatio as ShotPlan["aspectRatio"];
   ensureBeatIds(report.revisedPlan);
   return report;
 }
 
 export async function selectClips(input: {
-  plan: EditPlan;
+  plan: ShotPlan;
   clips: Clip[];
   goal?: string;
   storyContext?: StoryContext | null;
@@ -333,7 +333,7 @@ Produce the edit decisions now.`;
 }
 
 export async function critique(input: {
-  plan: EditPlan;
+  plan: ShotPlan;
   timeline: Timeline;
   clips: Clip[];
   storyContext?: StoryContext | null;
@@ -375,7 +375,7 @@ Score it and propose improvement patches.`;
 
 export async function revise(input: {
   message: string;
-  plan: EditPlan | null;
+  plan: ShotPlan | null;
   timeline: Timeline;
   clips: Clip[];
   storyContext?: StoryContext | null;

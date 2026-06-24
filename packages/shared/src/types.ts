@@ -79,7 +79,7 @@ export interface PlanCritiqueReport {
   visualFeasibility: ReviewGrade;
   summary: string;
   issues: PlanCritiqueIssue[];
-  revisedPlan: EditPlan;
+  revisedPlan: ShotPlan;
 }
 
 export type UploadedFootageEditMode = "asset_driven" | "hybrid";
@@ -94,7 +94,7 @@ export interface UploadedFootagePlanReview {
     | "hybrid_generate_gaps"
     | "needs_more_source";
   summary: string;
-  revisedPlan: EditPlan;
+  revisedPlan: ShotPlan;
 }
 
 export interface VideoSnapshotReview {
@@ -191,12 +191,25 @@ export interface Scene {
   beats: Beat[]; // ≈ shots; inherit the scene's setting/cast/look
 }
 
-export interface EditPlan {
+export interface ShotBeat extends Beat {
+  shotType?: string;
+  camera?: string;
+  framing?: string;
+}
+
+export interface ShotScene extends Omit<Scene, "beats"> {
+  beats: ShotBeat[];
+}
+
+export interface ShotPlan {
   targetLengthSec: number;
   style: string;
   aspectRatio: AspectRatio;
-  scenes: Scene[];
+  scenes: ShotScene[];
 }
+
+/** @deprecated Use ShotPlan for live generation. Kept for legacy EditGraph/API compatibility. */
+export type EditPlan = ShotPlan;
 
 export type StoryDurationClass = "micro" | "short" | "medium" | "long" | "feature";
 
@@ -250,7 +263,7 @@ export interface ScriptDraft {
 // Read-helper: flatten a plan's scenes into their ordered beats. Consumers that
 // only care about the beat sequence (timeline, edit-graph, storyboard tiles)
 // use this rather than reaching into `scene.beats` directly.
-export function planBeats(plan: Pick<EditPlan, "scenes">): Beat[] {
+export function planBeats(plan: Pick<ShotPlan, "scenes">): ShotBeat[] {
   if (!plan.scenes) {
     const flat = (plan as { beats?: Beat[] }).beats;
     return Array.isArray(flat) ? flat : [];
@@ -490,7 +503,7 @@ export interface Project {
   id: string;
   goal: string;
   storyContext?: StoryContext;
-  plan: EditPlan | null;
+  plan: ShotPlan | null;
   editGraph?: EditGraph;
   timeline: Timeline | null;
   renderPlan?: RenderPlan | null;

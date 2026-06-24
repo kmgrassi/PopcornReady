@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { AuthContext } from "@/lib/api/v1/auth";
-import type { EditPlan } from "@popcorn/shared/types";
+import type { ShotPlan } from "@popcorn/shared/types";
 import { createGenerateAudioTool } from "../generate-audio";
 import { runGenerateAudioJob } from "../generate-audio-job";
 import { ToolInputError } from "../types";
@@ -15,7 +15,7 @@ const auth: AuthContext = {
   isLocal: true,
 };
 
-const plan: EditPlan = {
+const plan: ShotPlan = {
   targetLengthSec: 12,
   style: "warm documentary",
   aspectRatio: "16:9",

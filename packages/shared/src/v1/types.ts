@@ -11,7 +11,7 @@ import {
   EDIT_GRAPH_SCHEMA_VERSION,
   EditGraphDocument,
 } from "../edit-graph";
-import { AspectRatio, CriticReport, EditPlan, StoryContext, TimelineSegment } from "../types";
+import { AspectRatio, CriticReport, ShotPlan, StoryContext, TimelineSegment } from "../types";
 
 export type { AspectRatio } from "../types";
 

@@ -5,21 +5,21 @@ import {
   getActiveProjectBrief as realGetActiveProjectBrief,
 } from "@/lib/api/v1/store";
 import { briefToStoryContext } from "@/lib/v1/generation/prepare";
-import type { EditPlan } from "@popcorn/shared/types";
+import type { ShotPlan } from "@popcorn/shared/types";
 import type { VideoBriefInput } from "@popcorn/shared/v1/types";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 
-// plan_shots derives the plan from the project's persisted brief (the stage→stage
-// handoff through the asset graph) and persists the result as the active 'plan'
-// asset. The model just decides *when* to plan; the brief is the source of truth.
+// plan_shots derives the shot plan from the project's persisted brief. This live
+// stage contract is intentionally named ShotPlan so it can move onto relational
+// story beats without carrying the legacy EditPlan vocabulary forward.
 export interface PlanShotsInput {
   /** Optional instruction to revise an existing plan. */
   feedback?: string;
 }
 
 export interface PlanShotsOutput {
-  plan: EditPlan;
+  plan: ShotPlan;
   planAssetId: string;
 }
 
@@ -67,7 +67,7 @@ const persistedSceneSchema = {
   required: ["id", "name", "beats"],
 };
 
-export const persistedEditPlanSchema = {
+export const persistedShotPlanSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
@@ -101,7 +101,7 @@ export const planShotsOutputSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
-    plan: persistedEditPlanSchema,
+    plan: persistedShotPlanSchema,
     planAssetId: str,
   },
   required: ["plan", "planAssetId"],
