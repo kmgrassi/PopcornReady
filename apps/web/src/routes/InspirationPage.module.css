@@ -6,6 +6,22 @@
   gap: var(--space-6);
 }
 
+.cinemaTheme {
+  width: min(var(--content-max), calc(100% - var(--space-8)));
+  margin-top: calc(var(--space-4) * -1);
+  padding: var(--space-7);
+  border: 1px solid var(--inspiration-cinema-border-faint);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at 12% 0%, var(--inspiration-cinema-ambient), transparent 30%),
+    linear-gradient(
+      180deg,
+      var(--inspiration-cinema-bg),
+      var(--inspiration-cinema-bg-end) 78%
+    );
+  box-shadow: var(--shadow-lg);
+}
+
 .header {
   display: flex;
   align-items: flex-end;
@@ -20,11 +36,21 @@
   line-height: 1.1;
 }
 
+.cinemaTheme .header h1 {
+  color: var(--inspiration-cinema-text);
+}
+
 .helper,
 .coreIdea {
   margin: var(--space-2) 0 0;
   color: var(--muted);
   font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.cinemaTheme .helper {
+  color: var(--inspiration-cinema-description);
+  font-size: 14px;
   line-height: 1.5;
 }
 
@@ -35,6 +61,67 @@
   font-size: var(--text-sm);
   font-weight: 800;
   text-transform: uppercase;
+}
+
+.cinemaTheme .eyebrow,
+.cinemaTheme .promptLabel {
+  color: color-mix(in srgb, var(--inspiration-cinema-muted) 88%, var(--inspiration-cinema-text));
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.themeToggle {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--panel);
+}
+
+.themeToggle button {
+  min-height: 30px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.themeToggle button:hover {
+  color: var(--text);
+}
+
+.themeToggleActive {
+  background: var(--surface-2) !important;
+  color: var(--text-strong) !important;
+}
+
+.cinemaTheme .themeToggle {
+  border-color: var(--inspiration-cinema-border);
+  background: var(--inspiration-cinema-panel);
+}
+
+.cinemaTheme .themeToggle button {
+  color: var(--inspiration-cinema-muted);
+}
+
+.cinemaTheme .themeToggle button:hover {
+  color: var(--inspiration-cinema-text);
+}
+
+.cinemaTheme .themeToggleActive {
+  background: var(--inspiration-cinema-panel-2) !important;
+  color: var(--inspiration-cinema-text) !important;
 }
 
 .hero {
@@ -54,7 +141,14 @@
   object-fit: cover;
 }
 
+.cinemaTheme .poster {
+  border-color: var(--inspiration-cinema-border-soft);
+  background: var(--inspiration-cinema-panel);
+}
+
 .posterEmpty {
+  position: relative;
+  overflow: hidden;
   display: grid;
   place-items: center;
   padding: var(--space-5);
@@ -62,6 +156,46 @@
   font-size: var(--text-sm);
   font-weight: 800;
   text-align: center;
+}
+
+.cinemaTheme .posterEmpty {
+  border: 1px solid var(--inspiration-cinema-border-soft);
+  background:
+    radial-gradient(circle at 50% 35%, var(--inspiration-cinema-poster-glow), transparent 35%),
+    linear-gradient(180deg, var(--inspiration-cinema-poster-wash), transparent),
+    var(--inspiration-cinema-panel);
+  color: var(--inspiration-cinema-description);
+}
+
+.cinemaTheme .posterEmpty::before {
+  content: "";
+  width: 52px;
+  height: 52px;
+  margin-bottom: var(--space-3);
+  border: 1px solid var(--inspiration-cinema-poster-icon-border);
+  border-radius: 50%;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 42%,
+      var(--inspiration-cinema-poster-icon-mark) 42% 58%,
+      transparent 58%
+    ),
+    radial-gradient(circle, var(--inspiration-cinema-poster-icon-fill), transparent 62%);
+}
+
+.cinemaTheme .posterEmpty::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, var(--inspiration-cinema-poster-sheen), transparent);
+  animation: posterShimmer 1800ms ease-in-out infinite;
+}
+
+.cinemaTheme .posterEmpty span {
+  position: relative;
+  z-index: 1;
 }
 
 .promptPanel {
@@ -76,12 +210,28 @@
   box-shadow: var(--shadow-sm);
 }
 
+.cinemaTheme .promptPanel {
+  align-content: center;
+  padding: 32px;
+  border: 1px solid var(--inspiration-cinema-border-soft);
+  border-radius: 14px;
+  background: var(--inspiration-cinema-story-panel);
+}
+
 .movieTitle {
   margin: 0;
   color: var(--text-strong);
   font-size: var(--title-md);
   font-weight: 900;
   line-height: 1.05;
+}
+
+.cinemaTheme .movieTitle {
+  color: var(--inspiration-cinema-text);
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.04em;
 }
 
 .logline {
@@ -91,6 +241,15 @@
   font-size: var(--title-sm);
   font-weight: 750;
   line-height: 1.42;
+}
+
+.cinemaTheme .logline {
+  max-width: 720px;
+  color: var(--inspiration-cinema-text);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.55;
+  letter-spacing: -0.01em;
 }
 
 .loglineSentence {
@@ -113,6 +272,25 @@
   color: var(--danger);
   font-size: var(--text-sm);
   font-weight: 750;
+}
+
+.cinemaTheme .primaryAction,
+.cinemaTheme .ctaAction {
+  border-radius: 9px;
+  background: var(--inspiration-cinema-accent);
+  color: var(--inspiration-cinema-button-text);
+  font-weight: 700;
+}
+
+.cinemaTheme .primaryAction:hover:not(:disabled),
+.cinemaTheme .ctaAction:hover:not(:disabled) {
+  background: var(--inspiration-cinema-accent-hover);
+  filter: none;
+}
+
+.cinemaTheme .ctaAction {
+  min-height: 42px;
+  padding: 0 18px;
 }
 
 .highlight {
@@ -140,11 +318,37 @@
   background: color-mix(in srgb, var(--accent-2) 16%, transparent);
 }
 
+.cinemaTheme .highlight {
+  padding: 0 3px;
+  border-radius: 4px;
+  color: inherit;
+  font-weight: 650;
+}
+
+.cinemaTheme .person,
+.cinemaTheme .goal,
+.cinemaTheme .truth,
+.cinemaTheme .setting,
+.cinemaTheme .ending {
+  background: var(--inspiration-cinema-green-soft);
+}
+
+.cinemaTheme .antagonist,
+.cinemaTheme .flaw,
+.cinemaTheme .oldSelf {
+  background: var(--inspiration-cinema-clay-soft);
+}
+
 .drawer {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--panel);
   overflow: hidden;
+}
+
+.cinemaTheme .drawer {
+  border-color: var(--inspiration-cinema-border);
+  background: var(--inspiration-cinema-panel);
 }
 
 .drawer summary {
@@ -160,10 +364,18 @@
   font-weight: 850;
 }
 
+.cinemaTheme .drawer summary {
+  color: var(--inspiration-cinema-text);
+}
+
 .drawer summary span:last-child {
   color: var(--muted);
   font-size: var(--text-sm);
   font-weight: 750;
+}
+
+.cinemaTheme .drawer summary span:last-child {
+  color: var(--inspiration-cinema-description);
 }
 
 .breakdown {
@@ -184,6 +396,11 @@
   background: var(--surface);
 }
 
+.cinemaTheme .ingredient {
+  border-color: var(--inspiration-cinema-ingredient-border);
+  background: var(--inspiration-cinema-panel-2);
+}
+
 .ingredientHeader {
   display: flex;
   align-items: flex-start;
@@ -197,12 +414,20 @@
   font-size: var(--text-md);
 }
 
+.cinemaTheme .ingredient h2 {
+  color: var(--inspiration-cinema-text);
+}
+
 .ingredientHeader p {
   margin: var(--space-1) 0 0;
   color: var(--text-strong);
   font-size: var(--text-sm);
   font-weight: 750;
   line-height: 1.45;
+}
+
+.cinemaTheme .ingredientHeader p {
+  color: var(--inspiration-cinema-text);
 }
 
 .chips {
@@ -222,6 +447,16 @@
   color: var(--text);
   font-size: var(--text-sm);
   font-weight: 650;
+}
+
+.cinemaTheme .chip {
+  border-color: var(--inspiration-cinema-border);
+  background: var(--inspiration-cinema-panel);
+  color: var(--inspiration-cinema-text);
+}
+
+.cinemaTheme .coreIdea {
+  color: var(--inspiration-cinema-description);
 }
 
 .skeleton {
@@ -269,15 +504,30 @@
   }
 }
 
+@keyframes posterShimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
 @media (max-width: 900px) {
   .header {
     align-items: stretch;
     flex-direction: column;
   }
 
+  .headerActions {
+    justify-content: flex-start;
+  }
+
   .hero,
   .breakdown {
     grid-template-columns: 1fr;
+  }
+
+  .cinemaTheme {
+    width: min(var(--content-max), calc(100% - var(--space-4)));
+    padding: var(--space-4);
   }
 
   .promptPanel {

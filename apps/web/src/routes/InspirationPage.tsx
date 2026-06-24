@@ -48,6 +48,7 @@ export function InspirationPage() {
   const navigate = useNavigate();
   const [nonce, setNonce] = useState(0);
   const [story, setStory] = useState<RandomStoryInspiration | null>(null);
+  const [visualTheme, setVisualTheme] = useState<"classic" | "cinema">("classic");
   const [regeneratingKey, setRegeneratingKey] = useState<IngredientKey | null>(null);
   const query = useRandomStoryInspiration(nonce);
   const posterMutation = useStoryConceptPosterMutation();
@@ -99,20 +100,44 @@ export function InspirationPage() {
   }
 
   return (
-    <div className={styles.page}>
+    <div
+      className={`${styles.page} ${visualTheme === "cinema" ? styles.cinemaTheme : ""}`}
+      data-inspiration-theme={visualTheme}
+    >
       <header className={styles.header}>
         <div>
           <p className={styles.eyebrow}>Inspiration</p>
           <h1>Story generator</h1>
           <p className={styles.helper}>These are randomly generated story plots that you can use.</p>
         </div>
-        <Button
-          variant="primary"
-          onClick={() => setNonce((current) => current + 1)}
-          disabled={query.isFetching}
-        >
-          {query.isFetching ? "Generating" : "Regenerate"}
-        </Button>
+        <div className={styles.headerActions}>
+          <div className={styles.themeToggle} aria-label="Inspiration page theme">
+            <button
+              type="button"
+              className={visualTheme === "classic" ? styles.themeToggleActive : undefined}
+              onClick={() => setVisualTheme("classic")}
+              aria-pressed={visualTheme === "classic"}
+            >
+              Classic
+            </button>
+            <button
+              type="button"
+              className={visualTheme === "cinema" ? styles.themeToggleActive : undefined}
+              onClick={() => setVisualTheme("cinema")}
+              aria-pressed={visualTheme === "cinema"}
+            >
+              Cinema
+            </button>
+          </div>
+          <Button
+            variant="primary"
+            onClick={() => setNonce((current) => current + 1)}
+            disabled={query.isFetching}
+            className={styles.primaryAction}
+          >
+            {query.isFetching ? "Generating" : "Regenerate"}
+          </Button>
+        </div>
       </header>
 
       {query.isLoading ? <InspirationSkeleton /> : null}
@@ -144,6 +169,7 @@ export function InspirationPage() {
                 : null
           }
           onStartFromPrompt={(inspiration) => void startFromPrompt(inspiration)}
+          visualTheme={visualTheme}
         />
       ) : null}
     </div>
@@ -161,6 +187,7 @@ function InspirationResult({
   startingRun,
   startRunError,
   onStartFromPrompt,
+  visualTheme,
 }: {
   inspiration: RandomStoryInspiration;
   poster: StoryConceptPoster | null;
@@ -172,6 +199,7 @@ function InspirationResult({
   startingRun: boolean;
   startRunError: string | null;
   onStartFromPrompt: (inspiration: RandomStoryInspiration) => void;
+  visualTheme: "classic" | "cinema";
 }) {
   return (
     <>
@@ -187,14 +215,15 @@ function InspirationResult({
           {inspiration.movieTitle ? (
             <h2 className={styles.movieTitle}>{inspiration.movieTitle}</h2>
           ) : null}
-          <HighlightedLogline inspiration={inspiration} />
+          <HighlightedLogline inspiration={inspiration} visualTheme={visualTheme} />
           <div className={styles.promptActions}>
             <Button
               variant="cta"
               onClick={() => onStartFromPrompt(inspiration)}
               isLoading={startingRun}
+              className={styles.ctaAction}
             >
-              Start from this prompt
+              Turn this into a video
             </Button>
             {startRunError ? (
               <p className={styles.promptError}>{startRunError}</p>
@@ -257,19 +286,33 @@ function PosterPanel({
   );
 }
 
-function HighlightedLogline({ inspiration }: { inspiration: RandomStoryInspiration }) {
+function HighlightedLogline({
+  inspiration,
+  visualTheme,
+}: {
+  inspiration: RandomStoryInspiration;
+  visualTheme: "classic" | "cinema";
+}) {
   const parts = useMemo(
-    () => [
-      { value: inspiration.typeOfPerson, className: styles.person },
-      { value: inspiration.setting, className: styles.setting },
-      { value: inspiration.externalGoal, className: styles.goal },
-      { value: inspiration.antagonisticForce, className: styles.antagonist },
-      { value: inspiration.innerFlawOrLie, className: styles.flaw },
-      { value: inspiration.oldSelf, className: styles.oldSelf },
-      { value: inspiration.newTruth, className: styles.truth },
-      { value: inspiration.endingType, className: styles.ending },
-    ],
-    [inspiration]
+    () =>
+      visualTheme === "cinema"
+        ? [
+            { value: inspiration.typeOfPerson, className: styles.person },
+            { value: inspiration.externalGoal, className: styles.goal },
+            { value: inspiration.antagonisticForce, className: styles.antagonist },
+            { value: inspiration.endingType, className: styles.ending },
+          ]
+        : [
+            { value: inspiration.typeOfPerson, className: styles.person },
+            { value: inspiration.setting, className: styles.setting },
+            { value: inspiration.externalGoal, className: styles.goal },
+            { value: inspiration.antagonisticForce, className: styles.antagonist },
+            { value: inspiration.innerFlawOrLie, className: styles.flaw },
+            { value: inspiration.oldSelf, className: styles.oldSelf },
+            { value: inspiration.newTruth, className: styles.truth },
+            { value: inspiration.endingType, className: styles.ending },
+          ],
+    [inspiration, visualTheme]
   );
   const sentences = useMemo(() => splitSentences(inspiration.logline), [inspiration.logline]);
 
