@@ -173,6 +173,10 @@ export async function generatePoster(
     workspaceId: auth.workspaceId,
     kind: "image",
     ...(requestedOrSafetyProvider ? { explicitProvider: requestedOrSafetyProvider } : {}),
+    // Posters default to Ideogram (strong at key-art / typographic composition).
+    // An explicit per-request provider, minor-safety (Gemini), and a configured
+    // workspace image model all still take precedence.
+    defaultProvider: "ideogram",
   });
   const provider = resolved.provider;
   const graphInputs = graphInputsForPoster({

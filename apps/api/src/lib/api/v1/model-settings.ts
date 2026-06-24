@@ -192,6 +192,11 @@ export async function resolveWorkspaceGenerationModel(input: {
   kind: GenerativeAssetKind;
   explicitProvider?: string;
   explicitModel?: string;
+  // Caller-specific default used when the workspace has no configured setting,
+  // in place of the global per-purpose default (e.g. posters default to Ideogram).
+  // An explicit per-request provider and a configured workspace setting still win.
+  defaultProvider?: string;
+  defaultModel?: string;
 }): Promise<{ provider: GenerativeProviderName; model?: string }> {
   if (input.explicitProvider) {
     return {
@@ -207,7 +212,9 @@ export async function resolveWorkspaceGenerationModel(input: {
         ? "audio_generation"
         : "image_generation";
 
-  const fallback = DEFAULT_BY_PURPOSE[purpose];
+  const fallback: { provider: string; model?: string } = input.defaultProvider
+    ? { provider: input.defaultProvider, model: input.defaultModel }
+    : DEFAULT_BY_PURPOSE[purpose];
   let setting: WorkspaceModelSetting | null = null;
   try {
     setting = await getWorkspaceModelSetting(input.workspaceId, purpose, {
