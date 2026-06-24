@@ -25,7 +25,7 @@ import styles from "./AppLayout.module.css";
 
 const STORAGE_KEY = "popcorn-ready-theme";
 const DEFAULT_THEME = "popcorn";
-const VALID_THEMES = new Set(["popcorn", "popcorn-warm", "popcorn-night"]);
+const VALID_THEMES = new Set(["popcorn", "popcorn-warm", "popcorn-night", "popcorn-studio"]);
 
 // Primary workspace nav. Library groups the collection routes until PR 5 gives
 // it a dedicated tab shell.
