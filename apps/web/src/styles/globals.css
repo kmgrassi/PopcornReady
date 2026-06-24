@@ -1,3 +1,8 @@
+/* Display serif used only by the "popcorn-studio" theme below. The font file is
+ * fetched lazily by the browser — it only downloads when text actually renders
+ * with this family, so the dark default themes pay nothing for it. */
+@import url("https://fonts.googleapis.com/css2?family=Hedvig+Letters+Serif:opsz@12..24&display=swap");
+
 /* Default "popcorn" (Accent) theme — the dark, AI-native aurora palette shared
  * with the landing page: deep near-black violet surfaces, amber/coral accents.
  * Kept in sync with the landing override in HomePage.module.css. */
@@ -83,6 +88,34 @@
   --accent-border: rgba(227, 173, 43, 0.28);
   --media-panel: rgba(28, 25, 18, 0.86);
   --media-bg: #2a1805;
+}
+
+/* "popcorn-studio" theme — a light, minimal agency look modeled on the "Last
+ * Studio" Framer template: near-white surfaces, near-black text, a single bright
+ * yellow accent, a playful purple secondary, hairline gray borders, and serif
+ * display headings (see --font-display, applied in base.css). Added alongside
+ * the existing themes so we can compare which palette reads best. */
+:root[data-theme="popcorn-studio"] {
+  --bg: #f7f7f7;
+  --panel: #ffffff;
+  --panel-2: #f0f0f0;
+  --border: #ebebeb;
+  --text: #0a0a0a;
+  --muted: #757575;
+  --accent: #ffd400;
+  --accent-2: #9e7ffa;
+  --good: #1c9b62;
+  /* Black label on the bright-yellow buttons, matching the template. */
+  --button-text: #0a0a0a;
+  --cta: #ffd400;
+  --cta-contrast: #1a1a1a;
+  --nav-bg: rgba(255, 255, 255, 0.8);
+  --accent-soft: rgba(255, 212, 0, 0.18);
+  --accent-border: rgba(10, 10, 10, 0.1);
+  --media-panel: rgba(255, 255, 255, 0.92);
+  /* Pale cream placeholder instead of the dark amber the dark themes use. */
+  --media-bg: #fffae0;
+  --font-display: "Hedvig Letters Serif", Georgia, "Times New Roman", serif;
 }
 
 .web-shell {

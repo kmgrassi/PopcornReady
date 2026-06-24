@@ -217,3 +217,12 @@
   --inspiration-cinema-poster-icon-fill: rgba(227, 173, 43, 0.14);
   --inspiration-cinema-ingredient-border: rgba(227, 173, 43, 0.12);
 }
+
+/* Light "Studio" theme — a clear red that stays legible on the near-white
+ * surfaces, distinct from the bright-yellow accent. */
+:root[data-theme="popcorn-studio"] {
+  --danger: #d92d20;
+  --danger-text: #b42318;
+  --danger-soft: rgba(217, 45, 32, 0.08);
+  --danger-border: rgba(217, 45, 32, 0.3);
+}

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import styles from "./ThemeToggle.module.css";
 
-type Theme = "popcorn" | "popcorn-warm" | "popcorn-night";
+type Theme = "popcorn" | "popcorn-warm" | "popcorn-night" | "popcorn-studio";
 
 const STORAGE_KEY = "popcorn-ready-theme";
 const DEFAULT_THEME: Theme = "popcorn";
@@ -10,6 +10,7 @@ const THEMES: { id: Theme; label: string }[] = [
   { id: "popcorn", label: "Accent" },
   { id: "popcorn-warm", label: "Warm" },
   { id: "popcorn-night", label: "Night" },
+  { id: "popcorn-studio", label: "Studio" },
 ];
 
 function applyTheme(theme: Theme) {

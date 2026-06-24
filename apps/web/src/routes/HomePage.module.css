@@ -328,31 +328,17 @@
  * failed to link, the effect is only a missing decorative animation.)
  * ================================================================ */
 
-/* 1 — Dark marketing palette: the landing always renders dark, independent of
- * the user's chosen app theme. */
+/* 1 — Marketing palette. The landing now inherits the active app theme's
+ * palette, so the footer theme switcher re-themes it like every other surface.
+ * Only the landing-only design helpers (--lp-*) live here; the dark set is the
+ * default (Accent/Night), with light-theme variants overridden below. */
 :global(html:has(.landing)) {
-  background: #08070a;
+  background: var(--bg);
 }
 
 :global(.web-shell:has(.landing)) {
-  --bg: #08070a;
-  --panel: #14111c;
-  --panel-2: #1c1827;
-  --border: #2a2440;
-  --text: #f6f2ff;
-  --muted: #a59bc0;
-  --accent: #f5b62a;
-  --accent-2: #ff7a4d;
-  --good: #5fd39a;
-  --button-text: #1a1206;
-  --cta: #f5b62a;
-  --cta-contrast: #1a1206;
-  --nav-bg: rgba(10, 8, 16, 0.66);
-  --accent-soft: rgba(245, 182, 42, 0.14);
-  --accent-border: rgba(245, 182, 42, 0.32);
-
-  /* Landing-only design helpers (consumed here + by the AgentRunPreview
-   * module, which inherits them as a descendant). */
+  /* Landing-only design helpers (also consumed by the AgentRunPreview module,
+   * which inherits them as a descendant). Tuned for dark surfaces. */
   --lp-glass: rgba(255, 255, 255, 0.04);
   --lp-edge: rgba(255, 255, 255, 0.1);
   --lp-edge-soft: rgba(255, 255, 255, 0.03);
@@ -362,18 +348,41 @@
   --lp-violet: rgba(124, 92, 255, 0.16);
   /* "Human" accent — distinguishes the user's input from the agent's amber. */
   --lp-human: #7aa2ff;
+  /* Hero headline gradient stops + hero dot-grid texture; flipped for light. */
+  --lp-heading-1: #ffffff;
+  --lp-heading-2: #cfc6e6;
+  --lp-dot: rgba(255, 255, 255, 0.05);
 
   color-scheme: dark;
 }
 
+/* Light themes (Warm, Studio): flip the white-alpha glass/edges/texture to
+ * dark-alpha so glass surfaces keep visible frosting + hairline borders on pale
+ * backgrounds, soften the drop shadows, and darken the hero headline so it
+ * stays legible. The accent-tinted aurora glow works on either background. */
+:global(html[data-theme="popcorn-warm"] .web-shell:has(.landing)),
+:global(html[data-theme="popcorn-studio"] .web-shell:has(.landing)) {
+  --lp-glass: rgba(0, 0, 0, 0.03);
+  --lp-edge: rgba(0, 0, 0, 0.12);
+  --lp-edge-soft: rgba(0, 0, 0, 0.04);
+  --lp-glow: 0 24px 70px rgba(0, 0, 0, 0.12);
+  --lp-glow-accent: 0 18px 50px rgba(245, 120, 60, 0.14);
+  --lp-overlay: rgba(255, 255, 255, 0.72);
+  --lp-heading-1: var(--text);
+  --lp-heading-2: color-mix(in srgb, var(--text) 62%, var(--accent-2));
+  --lp-dot: rgba(0, 0, 0, 0.05);
+
+  color-scheme: light;
+}
+
 :global(.web-shell:has(.landing) .web-shell-header) {
-  border-bottom-color: rgba(255, 255, 255, 0.06);
+  border-bottom-color: var(--border);
   backdrop-filter: blur(18px) saturate(120%);
 }
 
 :global(.web-shell:has(.landing) .web-shell-footer) {
   background: transparent;
-  border-top-color: rgba(255, 255, 255, 0.06);
+  border-top-color: var(--border);
 }
 
 /* 2 — Generative hero backdrop: aurora glow + masked dot grid sit behind the
@@ -466,7 +475,7 @@
   height: 960px;
   transform: translateX(-50%);
   pointer-events: none;
-  background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-image: radial-gradient(var(--lp-dot) 1px, transparent 1px);
   background-size: 30px 30px;
   -webkit-mask-image: radial-gradient(70% 58% at 50% 0%, #000 28%, transparent 76%);
   mask-image: radial-gradient(70% 58% at 50% 0%, #000 28%, transparent 76%);
@@ -488,7 +497,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--lp-glass);
   border-color: var(--accent-border);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
@@ -520,7 +529,7 @@
 
 :global(.web-shell:has(.landing) .lp-hero h1) {
   letter-spacing: -0.035em;
-  background: linear-gradient(180deg, #ffffff 30%, #cfc6e6);
+  background: linear-gradient(180deg, var(--lp-heading-1) 30%, var(--lp-heading-2));
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -572,7 +581,7 @@
 :global(.web-shell:has(.landing) .lp-price-card:hover) {
   transform: translateY(-4px);
   box-shadow:
-    0 30px 80px rgba(0, 0, 0, 0.6),
+    var(--lp-glow),
     var(--lp-glow-accent),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }

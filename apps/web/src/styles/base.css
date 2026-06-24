@@ -12,6 +12,18 @@ body {
   font-size: 15px;
 }
 
+/* Headings adopt the active theme's display face. --font-display is unset for
+ * the dark default themes, so the keyword fallback `inherit` keeps them on the
+ * body sans stack; only the "popcorn-studio" theme sets a serif. */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-display, inherit);
+}
+
 a {
   color: var(--accent-2);
 }
