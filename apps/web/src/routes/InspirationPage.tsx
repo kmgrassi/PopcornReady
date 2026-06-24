@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiRequest } from "../lib/api-client";
 import { Button } from "../components/ui/Button";
+import { Spinner } from "../components/ui/Spinner";
 import { ErrorState } from "../components/ui/StateCard";
 import {
   type InspirationElement,
@@ -269,19 +270,27 @@ function PosterPanel({
     return <img className={styles.poster} src={poster.url} alt="Generated movie poster concept" />;
   }
 
+  const isGenerating = generating || poster?.status === "generating" || poster?.status === "queued";
   const status = error
     ? "Poster generation failed"
     : disabled
       ? "Poster disabled locally"
       : poster?.status === "failed"
         ? "Poster generation failed"
-        : generating || poster?.status === "generating" || poster?.status === "queued"
+        : isGenerating
           ? "Generating poster"
           : "Poster pending";
 
   return (
-    <div className={`${styles.poster} ${styles.posterEmpty}`} aria-live="polite">
-      <span>{status}</span>
+    <div
+      className={`${styles.poster} ${styles.posterEmpty}`}
+      aria-live={isGenerating ? undefined : "polite"}
+    >
+      {isGenerating ? (
+        <Spinner size="lg" label={status} className={styles.posterSpinner} />
+      ) : (
+        <span>{status}</span>
+      )}
     </div>
   );
 }
