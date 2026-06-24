@@ -461,6 +461,9 @@ function timelineToAssetRow(
       ...(isUuid(t.compositionId)
         ? [{ assetId: t.compositionId, relation: "input", role: "plan", position: 0 }]
         : []),
+      ...(isUuid(t.briefVersionId) && t.briefVersionId !== t.compositionId
+        ? [{ assetId: t.briefVersionId, relation: "input", role: "brief", position: 0 }]
+        : []),
     ],
     created_at: t.createdAt,
     updated_at: t.createdAt,
