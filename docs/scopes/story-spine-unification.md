@@ -257,3 +257,39 @@ docs in this branch. "Request Changes" is now the canonical name of the interact
    retire the `plan` asset carrier.
 5. **Retire EditGraph**: delete edit-graph.ts, `edit_graphs` table + v1 store surface,
    legacy patch agent functions.
+
+### PR 3 readiness audit
+
+PR 3 is a destructive schema cleanup and must not land before PRs 1 and 2 are
+present in the target branch. On current `main` as of June 24, 2026, those
+prerequisites are not yet present:
+
+- No migration has created `story_beats` or `story_panels`.
+- `story_blueprint_scenes` has not absorbed the storyboard scene fields needed
+  for the surviving unified spine (`setting`, `mood`, `scene_asset_id`, `status`).
+- Live API code still reads/writes `storyboards`, `storyboard_scenes`,
+  `storyboard_beats`, and `storyboard_panels`.
+- DB projections/RPCs still depend on the legacy tables:
+  `project_manifest`, `storyboard_search_chunks`,
+  `search_storyboard_chunks`, and `regenerate_asset_version`.
+- Tool tests and smoke scripts still seed or assert against the legacy tables.
+
+Before writing the PR 3 drop migration, run this audit from the repository root
+and verify that only historical migrations and migration docs still mention the
+retired containers:
+
+```sh
+rg -n "storyboards|storyboard_scenes" apps packages supabase \
+  -g '!supabase/migrations/20260610130000_storyboard_relational_model.sql'
+```
+
+The PR 3 migration should then:
+
+- replace any remaining DB functions/views that project storyboard container
+  rows with projections from `story_blueprints` / `story_blueprint_scenes`;
+- remove policies, triggers, indexes, and FKs owned by `storyboards` and
+  `storyboard_scenes`;
+- drop `storyboards` and `storyboard_scenes` without cascading into
+  `story_beats` / `story_panels`;
+- keep `storyboard_item_status` until the surviving beat/panel tables no longer
+  depend on it, or rename it in a separate non-destructive migration.
