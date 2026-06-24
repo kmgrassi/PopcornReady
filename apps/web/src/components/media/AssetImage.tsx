@@ -54,7 +54,7 @@ export interface AssetImageProps {
   // Run-progress opts in. Ignored for non-video media.
   videoControls?: boolean;
 
-  // Activate the healthy media (open the surface's viewer / Ask-the-AI modal).
+  // Activate the healthy media (open the surface's viewer / Request Changes modal).
   // Content edits on a healthy image route through the surface's modal, not here.
   onActivate?: () => void;
   // Class for the activate button, so a surface keeps its clickable styling

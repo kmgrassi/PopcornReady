@@ -1,5 +1,10 @@
 # AI-Native Edit Graph Scope
 
+> **Superseded — the EditGraph is being retired.** The layered patch / `EditGraph`
+> model is replaced by the orchestrator's live edit path (`board_feedback` + approval
+> gates + `selections`) over the asset graph; see
+> [`story-spine-unification.md`](story-spine-unification.md). Kept for historical context.
+
 ## Objective
 
 Move the canonical edit representation from a timeline-as-source-of-truth model

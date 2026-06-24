@@ -64,8 +64,10 @@ deleted by the harness.
 **`projects`** — a single video project (the main unit of work) inside a workspace.
 `id, schema_version, workspace_id, name, status, visibility, created_at, updated_at`
 → `workspace_id` → `workspaces`.
-Briefs, plans, and storyboard state are no longer columns on `projects`; they
-live as assets plus relational storyboard rows. `status` ∈ active|deleted,
+Briefs are no longer columns on `projects`; they live as assets, and story
+structure lives in the relational **story spine** (acts/scenes/beats/panels under
+`story_blueprints`). The legacy `plan` shot-list is being retired — its data folds
+onto `story_beats`. `status` ∈ active|deleted,
 `visibility` ∈ public|private.
 
 **`assets`** — the immutable project-scoped pool for generated/imported
@@ -73,7 +75,9 @@ artifacts and typed snapshots.
 `id, schema_version, workspace_id, project_id, ref, lineage_id, version, kind, media, status, role, content, params, inputs, content_hash, inputs_fingerprint, created_by_action_id, filename, url, remote_url, storage_key, storage_bucket, source, duration_sec, description, context, semantic_analysis, visibility, created_at, updated_at`
 → `workspace_id` → `workspaces`, `project_id` → `projects`,
 `created_by_action_id` → `actions`. `kind` ∈ source_footage|brief|beat|anchor|
-keyframe|clip|audio_track|narration_script|critique|plan|composite|render.
+keyframe|clip|audio_track|narration_script|critique|plan|composite|render. The
+`plan` kind is being retired alongside the EditPlan/EditGraph removal (shot data
+folds onto `story_beats`) — see [`scopes/story-spine-unification.md`](scopes/story-spine-unification.md).
 `media` ∈ data|image|video|audio. Semantic asset fields are immutable; insert a
 new version with the same `lineage_id` to revise.
 
@@ -99,29 +103,53 @@ immutable; lifecycle/cost/output/error fields may update.
 
 ---
 
-## 3. Storyboards, composition & jobs
+## 3. Story spine, composition & jobs
 
-**`storyboards`** — the first-class storyboard product object.
-`id, project_id, plan_asset_id, status, created_by_action_id, created_at, updated_at`
-→ `project_id` → `projects`, `(project_id, plan_asset_id)` → `assets` (composite,
-same-project), `created_by_action_id` → `actions`. `status` ∈ draft|generating|
-ready|reviewing|approved|archived.
+> **Target model — story-spine unification in progress.** This section describes
+> the unified `act → scene → beat → panel` spine. Live migrations still carry the
+> separate `storyboards` / `storyboard_scenes` tables until the migration PRs land;
+> see [`scopes/story-spine-unification.md`](scopes/story-spine-unification.md). The
+> "storyboard" survives as a **UI view** of this spine (act mockups + beat panels),
+> not its own table family.
 
-**`storyboard_scenes`** — ordered scenes in a storyboard.
-`id, project_id, storyboard_id, scene_index, title, summary, setting, mood, duration_sec, scene_asset_id, status, created_at, updated_at`
-→ `(project_id, storyboard_id)` → `storyboards` (composite chain),
-`(project_id, scene_asset_id)` → `assets`.
+The story spine is one FK-linked hierarchy under the project's story blueprint:
+the narrative arc (acts/scenes) and the operational/visual layer (beats/panels)
+are the same structure at two fidelities. Each level links to an `assets` row for
+provenance. `beat` is the universal join key everything downstream references.
 
-**`storyboard_beats`** — ordered beats/shots in a scene; the **mutable head**
-of the beat. `beat_asset_id` is its immutable snapshot lineage — once set,
-semantic edits must mint a new snapshot asset and move `beat_asset_id` in the
-same write (trigger-enforced) so the dependency graph sees the change.
+**`story_blueprints`** — the versioned narrative document (the story head).
+`id, schema_version, workspace_id, project_id, brief_asset_id, asset_id, supersedes_id, status, snapshot, provenance, created_by, created_at, updated_at`
+→ `project_id` → `projects`, `brief_asset_id`/`asset_id` → `assets`. `status` ∈
+draft|approved|superseded. `projects.current_story_blueprint_id` points at the active one.
+
+**`story_blueprint_characters`** — cast for a blueprint (name/role/description + arcs).
+`id, story_blueprint_id, project_id, stable_id, position, name, role, description, created_at, updated_at`
+→ `story_blueprint_id` → `story_blueprints`.
+
+**`story_blueprint_acts`** — the high-level arc beats; also the act-level
+"storyboard" unit (UI mockups).
+`id, story_blueprint_id, project_id, stable_id, position, title, purpose, summary, target_duration_sec, mockup_asset_id, status, created_at, updated_at`
+→ `story_blueprint_id` → `story_blueprints`, `(project_id, mockup_asset_id)` → `assets`.
+
+**`story_blueprint_scenes`** — scenes within an act; absorbs the former
+storyboard-scene visual fields (`setting`, `mood`, `scene_asset_id`).
+`id, story_blueprint_id, story_blueprint_act_id, project_id, stable_id, position, title, summary, target_duration_sec, setting, mood, scene_asset_id, status, created_at, updated_at`
+→ `story_blueprint_act_id` → `story_blueprint_acts`, `(project_id, scene_asset_id)` → `assets`.
+
+**`story_beats`** — ordered beats/shots in a scene; the **mutable head** of the
+beat and the universal join key (`beat_keyframe:${beatId}`, `beat_clip:${beatId}`,
+`TimelineSegment.beatId`). `beat_asset_id` is its immutable snapshot lineage —
+once set, semantic edits must mint a new snapshot asset and move `beat_asset_id`
+in the same write (trigger-enforced). Reparented from the former `storyboard_beats`,
+**preserving ids**; absorbs the retired shot-plan fields (shape — columns vs a
+`beat_shots` child — TBD, see scope).
 `id, project_id, scene_id, beat_index, intent, visual_description, dialogue_summary, narration, duration_sec, status, beat_asset_id, created_at, updated_at`
-→ `(project_id, scene_id)` → `storyboard_scenes`, `(project_id, beat_asset_id)` → `assets`.
+→ `(project_id, scene_id)` → `story_blueprint_scenes`, `(project_id, beat_asset_id)` → `assets`.
 
-**`storyboard_panels`** — generated or uploaded storyboard panels for a beat.
+**`story_panels`** — generated/uploaded preview tiles for a beat (the visual
+storyboard). Reparented from the former `storyboard_panels`, preserving ids.
 `id, project_id, beat_id, panel_index, image_asset_id, prompt_asset_id, status, is_selected, approved_at, created_at, updated_at`
-→ `(project_id, beat_id)` → `storyboard_beats`,
+→ `(project_id, beat_id)` → `story_beats`,
 `(project_id, image_asset_id)`/`(project_id, prompt_asset_id)` → `assets`.
 At most one panel is selected per beat; `is_selected` is the single source of
 truth for panel choice (`selections` is for asset-lineage slots, not panels).
@@ -141,7 +169,7 @@ assets, following the storyboard pattern.
 ## 4. Generation pipeline (live runs)
 
 A **run** is one end-to-end generation session. Progress should be projected from
-`actions`, `jobs`, storyboard rows, and assets rather than stored in legacy stage
+`actions`, `jobs`, story-spine rows, and assets rather than stored in legacy stage
 tables.
 
 **`orchestrator_runs`** — one agent-driven generation attempt for a project; the
@@ -208,10 +236,12 @@ auth.users ─(auth_id)─ users ─(owner_id)─ workspaces ─< workspace_memb
                                          │     │  ├──< asset_edges
                                          │     │  ├──< selections/current_selections
                                          │     │  ├──< actions
-                                         │     │  ├──< storyboards
-                                         │     │  │       └──< storyboard_scenes
-                                         │     │  │              └──< storyboard_beats
-                                         │     │  │                     └──< storyboard_panels
+                                         │     │  ├──< story_blueprints
+                                         │     │  │       ├──< story_blueprint_characters
+                                         │     │  │       └──< story_blueprint_acts
+                                         │     │  │              └──< story_blueprint_scenes
+                                         │     │  │                     └──< story_beats
+                                         │     │  │                            └──< story_panels
                                          │     │  ├──< jobs
                                          │     │  └──< orchestrator_runs
                                          │     │          └──< orchestrator_run_gates
@@ -224,7 +254,7 @@ eval_suites ──< eval_cases                judgments ── point at either a
 ```
 
 **How a generation flows:** `projects` → an `orchestrator_runs` row and `actions`
-for tool decisions → relational storyboard rows for user-facing story structure
+for tool decisions → the relational story spine for user-facing story structure
 → `jobs` for async media work → generated `assets` linked by `asset_edges` and
 activated through `selections`. A `judgments` row may attach to a run or loose
 artifact pointer. The final renderable output is a selected `composite` asset

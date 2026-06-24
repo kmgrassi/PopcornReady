@@ -18,7 +18,7 @@ export interface AssetEditModalProps {
   onSubmitted?: (runId: string) => void;
 }
 
-// Universal "click an asset, ask the AI to edit it" modal. The edit is routed
+// Universal "click an asset, request changes to it" modal. The edit is routed
 // through the project's AGENT (not a raw image regen): it submits feedback the
 // orchestrator processes in context, so it can place the change correctly and
 // propagate to downstream assets when they exist.
@@ -98,7 +98,7 @@ export function AssetEditModal({
 
         <form className={styles.panel} onSubmit={submit}>
           <div className={styles.heading}>
-            <p className={styles.eyebrow}>Ask the AI to edit</p>
+            <p className={styles.eyebrow}>Request Changes</p>
             <h2 id={titleId}>{title}</h2>
             {subtitle ? <p className={styles.subtitle}>{subtitle}</p> : null}
           </div>

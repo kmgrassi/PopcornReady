@@ -15,7 +15,7 @@ section and surfaces the avatar in the dashboard chrome.
 ## Interaction-model note (read first)
 
 Per [ui-interaction-model.md](../ui-interaction-model.md), every authenticated
-surface is observe-first and content changes flow through the **"Ask the AI"**
+surface is observe-first and content changes flow through the **"Request Changes"**
 modal. **A profile does not.** Name/avatar/bio are **account & identity
 metadata**, not generated content the provenance graph reasons about — they fall
 squarely under the §5 carve-out ("navigation & organization metadata… naming a

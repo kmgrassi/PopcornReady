@@ -1,5 +1,9 @@
 # Stepwise, human-in-the-loop story generation — scope & parallel PR plan
 
+> **Related / being reframed.** The deterministic per-stage stepping described here
+> is carried forward under the orchestrator stage model and the unified story spine;
+> see [`story-spine-unification.md`](story-spine-unification.md).
+
 ## Goal
 
 Let a user drive a generation **one step at a time from the dashboard**, instead of

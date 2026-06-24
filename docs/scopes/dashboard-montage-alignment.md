@@ -458,7 +458,7 @@ Scope:
 - Add a plan summary card to run progress.
 - Include brief recap, format/platform/length, opening hook, visual direction,
   and missing inputs/caveats from run/stage data.
-- Keep edits object-scoped through Ask AI / feedback entry points.
+- Keep edits object-scoped through Request Changes / feedback entry points.
 - Add the >30s rule at the run level: videos over 30 seconds stop after
   planning and require explicit user approval before image/video asset
   generation.
@@ -547,7 +547,7 @@ Scope:
 
 Definition of done:
 
-- A user can select a beat/tile and ask the AI to change it.
+- A user can select a beat/tile and request changes to it.
 - The backend receives both the freeform message and stable target ids.
 - The agent has enough context to decide whether to update beat text, panel,
   keyframe, shot, timeline, or propose a broader change.
