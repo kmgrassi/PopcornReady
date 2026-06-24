@@ -4077,26 +4077,45 @@ interface ForkProjectSelectionRow {
   active_asset_id: string;
 }
 
-function remapDeep(value: unknown, ids: Map<string, string>): unknown {
-  if (typeof value === "string") return ids.get(value) ?? value;
-  if (Array.isArray(value)) return value.map((item) => remapDeep(item, ids));
+function remapDeep(
+  value: unknown,
+  ids: Map<string, string>,
+  scrubIds: Set<string> = new Set()
+): unknown {
+  if (typeof value === "string") {
+    if (ids.has(value)) return ids.get(value);
+    if (scrubIds.has(value)) return null;
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => remapDeep(item, ids, scrubIds))
+      .filter((item) => item !== null);
+  }
   if (!value || typeof value !== "object") return value;
   return Object.fromEntries(
     Object.entries(value as Record<string, unknown>).map(([key, item]) => [
       key,
-      remapDeep(item, ids),
+      remapDeep(item, ids, scrubIds),
     ])
   );
 }
 
 function remapAssetInputs(
   inputs: GraphAssetInput[] | null | undefined,
-  assetIds: Map<string, string>
+  assetIds: Map<string, string>,
+  scrubIds: Set<string>
 ): GraphAssetInput[] {
-  return (inputs ?? []).map((input) => ({
-    ...input,
-    assetId: assetIds.get(input.assetId) ?? input.assetId,
-  }));
+  return (inputs ?? [])
+    .map((input) => {
+      const mappedAssetId = assetIds.get(input.assetId);
+      if (!mappedAssetId && scrubIds.has(input.assetId)) return null;
+      return {
+        ...input,
+        assetId: mappedAssetId ?? input.assetId,
+      };
+    })
+    .filter((input): input is GraphAssetInput => Boolean(input));
 }
 
 async function copyForkedAssetObject(input: {
@@ -4136,13 +4155,23 @@ async function clonePublicProjectAssets(input: {
   targetVisibility: AssetVisibility;
   assetIds: Map<string, string>;
   lineageIds: Map<string, string>;
+  sourceAssetIds: Set<string>;
 }): Promise<void> {
+  const sourceAssetIdsData = await runQuery(
+    "store.forkPublicProject source asset ids",
+    input.db.from("assets").select("id").eq("project_id", input.sourceProjectId)
+  );
+  for (const row of (sourceAssetIdsData ?? []) as Array<{ id: string }>) {
+    input.sourceAssetIds.add(row.id);
+  }
+
   const assetsData = await runQuery(
     "store.forkPublicProject assets",
     input.db
       .from("assets")
       .select("*")
       .eq("project_id", input.sourceProjectId)
+      .eq("visibility", "public")
       .order("created_at", { ascending: true })
   );
   const assets = (assetsData ?? []) as AssetRow[];
@@ -4188,19 +4217,19 @@ async function clonePublicProjectAssets(input: {
           name: asset.name,
           slug: asset.slug,
           filename: asset.filename,
-          content: remapDeep(asset.content, idMap),
-          params: remapDeep(asset.params, idMap),
-          inputs: remapAssetInputs(asset.inputs, idMap),
+          content: remapDeep(asset.content, idMap, input.sourceAssetIds),
+          params: remapDeep(asset.params, idMap, input.sourceAssetIds),
+          inputs: remapAssetInputs(asset.inputs, idMap, input.sourceAssetIds),
           content_hash: asset.content_hash,
           inputs_fingerprint: asset.inputs_fingerprint,
           remote_url: copiedStorage.storageKey ? null : asset.remote_url,
           storage_key: copiedStorage.storageKey,
           storage_bucket: copiedStorage.storageBucket,
-          source: remapDeep(asset.source, idMap),
+          source: remapDeep(asset.source, idMap, input.sourceAssetIds),
           duration_sec: asset.duration_sec,
           description: asset.description,
-          context: remapDeep(asset.context, idMap),
-          semantic_analysis: remapDeep(asset.semantic_analysis, idMap),
+          context: remapDeep(asset.context, idMap, input.sourceAssetIds),
+          semantic_analysis: remapDeep(asset.semantic_analysis, idMap, input.sourceAssetIds),
           visibility: input.targetVisibility,
           created_at: now,
           updated_at: now,
@@ -4219,6 +4248,7 @@ async function clonePublicProjectStoryboard(input: {
   sceneIds: Map<string, string>;
   beatIds: Map<string, string>;
   panelIds: Map<string, string>;
+  sourceAssetIds: Set<string>;
 }): Promise<void> {
   const blueprintsData = await runQuery(
     "store.forkPublicProject story blueprints",
@@ -4235,6 +4265,19 @@ async function clonePublicProjectStoryboard(input: {
     input.storyBlueprintIds.set(blueprint.id, randomUUID());
   }
   const now = new Date().toISOString();
+
+  const charactersData = await runQuery(
+    "store.forkPublicProject characters",
+    input.db
+      .from("story_blueprint_characters")
+      .select("*")
+      .eq("project_id", input.sourceProject.id)
+      .order("position", { ascending: true })
+  );
+  const characterIds = new Map<string, string>();
+  for (const character of (charactersData ?? []) as Array<{ id: string }>) {
+    characterIds.set(character.id, randomUUID());
+  }
 
   const actsData = await runQuery(
     "store.forkPublicProject acts",
@@ -4288,6 +4331,7 @@ async function clonePublicProjectStoryboard(input: {
   const fullIdMap = new Map([
     ...input.assetIds,
     ...input.storyBlueprintIds,
+    ...characterIds,
     ...actIds,
     ...input.sceneIds,
     ...input.beatIds,
@@ -4309,7 +4353,7 @@ async function clonePublicProjectStoryboard(input: {
             : null,
           asset_id: blueprint.asset_id ? input.assetIds.get(blueprint.asset_id) ?? null : null,
           status: blueprint.status === "superseded" ? "superseded" : blueprint.status,
-          snapshot: remapDeep(blueprint.snapshot, fullIdMap),
+          snapshot: remapDeep(blueprint.snapshot, fullIdMap, input.sourceAssetIds),
           provenance: markedJson("story_blueprint_provenance.v1", {
             ...((unmarkedJson(blueprint.provenance) as Record<string, unknown> | null) ?? {}),
             forkedFromProjectId: input.sourceProject.id,
@@ -4324,12 +4368,29 @@ async function clonePublicProjectStoryboard(input: {
     );
   }
 
+  if (characterIds.size > 0) {
+    await runQuery(
+      "store.forkPublicProject insert characters",
+      input.db.from("story_blueprint_characters").insert(
+        ((charactersData ?? []) as Array<Record<string, unknown>>).map((character) => ({
+          ...(remapDeep(character, fullIdMap, input.sourceAssetIds) as Record<string, unknown>),
+          id: characterIds.get(String(character.id)),
+          story_blueprint_id: input.storyBlueprintIds.get(String(character.story_blueprint_id)),
+          workspace_id: input.targetWorkspaceId,
+          project_id: input.targetProjectId,
+          created_at: now,
+          updated_at: now,
+        }))
+      )
+    );
+  }
+
   if (actIds.size > 0) {
     await runQuery(
       "store.forkPublicProject insert acts",
       input.db.from("story_blueprint_acts").insert(
         ((actsData ?? []) as Array<Record<string, unknown>>).map((act) => ({
-          ...(remapDeep(act, fullIdMap) as Record<string, unknown>),
+          ...(remapDeep(act, fullIdMap, input.sourceAssetIds) as Record<string, unknown>),
           id: actIds.get(String(act.id)),
           story_blueprint_id: input.storyBlueprintIds.get(String(act.story_blueprint_id)),
           workspace_id: input.targetWorkspaceId,
@@ -4346,7 +4407,7 @@ async function clonePublicProjectStoryboard(input: {
       "store.forkPublicProject insert scenes",
       input.db.from("story_blueprint_scenes").insert(
         ((scenesData ?? []) as Array<Record<string, unknown>>).map((scene) => ({
-          ...(remapDeep(scene, fullIdMap) as Record<string, unknown>),
+          ...(remapDeep(scene, fullIdMap, input.sourceAssetIds) as Record<string, unknown>),
           id: input.sceneIds.get(String(scene.id)),
           story_blueprint_id: input.storyBlueprintIds.get(String(scene.story_blueprint_id)),
           story_blueprint_act_id:
@@ -4371,7 +4432,7 @@ async function clonePublicProjectStoryboard(input: {
       "store.forkPublicProject insert beats",
       input.db.from("story_beats").insert(
         ((beatsData ?? []) as Array<Record<string, unknown>>).map((beat) => ({
-          ...(remapDeep(beat, fullIdMap) as Record<string, unknown>),
+          ...(remapDeep(beat, fullIdMap, input.sourceAssetIds) as Record<string, unknown>),
           id: input.beatIds.get(String(beat.id)),
           project_id: input.targetProjectId,
           scene_id: input.sceneIds.get(String(beat.scene_id)),
@@ -4391,7 +4452,7 @@ async function clonePublicProjectStoryboard(input: {
       "store.forkPublicProject insert panels",
       input.db.from("story_panels").insert(
         ((panelsData ?? []) as Array<Record<string, unknown>>).map((panel) => ({
-          ...(remapDeep(panel, fullIdMap) as Record<string, unknown>),
+          ...(remapDeep(panel, fullIdMap, input.sourceAssetIds) as Record<string, unknown>),
           id: input.panelIds.get(String(panel.id)),
           project_id: input.targetProjectId,
           beat_id: input.beatIds.get(String(panel.beat_id)),
@@ -4519,6 +4580,7 @@ export async function forkPublicProject(input: {
 
   const assetIds = new Map<string, string>();
   const lineageIds = new Map<string, string>();
+  const sourceAssetIds = new Set<string>();
   const storyBlueprintIds = new Map<string, string>();
   const sceneIds = new Map<string, string>();
   const beatIds = new Map<string, string>();
@@ -4532,6 +4594,7 @@ export async function forkPublicProject(input: {
     targetVisibility: visibility,
     assetIds,
     lineageIds,
+    sourceAssetIds,
   });
   await clonePublicProjectStoryboard({
     db,
@@ -4543,6 +4606,7 @@ export async function forkPublicProject(input: {
     sceneIds,
     beatIds,
     panelIds,
+    sourceAssetIds,
   });
   await clonePublicProjectSelections({
     db,
