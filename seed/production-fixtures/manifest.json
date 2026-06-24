@@ -1,0 +1,696 @@
+{
+  "schemaVersion": "production-asset-smoke-corpus.v1",
+  "slug": "asset-generation-smoke-corpus",
+  "name": "Asset generation smoke corpus",
+  "description": "A broad list of production-style assets to generate through the real app flow. This corpus checks mechanics, not creative quality.",
+  "workspace": {
+    "purpose": "fixture",
+    "namePrefix": "__fixture__asset_smoke__"
+  },
+  "mechanicalChecks": [
+    "the API accepts the generation request",
+    "a job or orchestrator action is created",
+    "the job reaches a successful terminal state",
+    "a production assets row is created with the requested kind/media/role",
+    "media assets have delivery metadata such as storage_key or url",
+    "failed jobs expose a structured error instead of crashing the flow"
+  ],
+  "defaults": {
+    "status": "ready_to_generate",
+    "publishableExample": true,
+    "visibility": "private",
+    "projectStrategy": "one_project_per_asset"
+  },
+  "assets": [
+    {
+      "id": "poster-neon-heist",
+      "kind": "keyframe",
+      "media": "image",
+      "role": "movie_poster",
+      "aspectRatio": "2:3",
+      "prompt": "Movie poster for Neon Heist: rain-slick cyberpunk alley, masked getaway driver leaning against a glowing magenta sports car, high-contrast neon reflections, dramatic noir lighting, no readable text."
+    },
+    {
+      "id": "poster-orbital-garden",
+      "kind": "keyframe",
+      "media": "image",
+      "role": "movie_poster",
+      "aspectRatio": "2:3",
+      "prompt": "Movie poster for The Orbital Garden: lush greenhouse inside a space station ring, Earth visible through curved glass, lone botanist silhouette, hopeful sci-fi tone, no readable text."
+    },
+    {
+      "id": "poster-last-train-sundown",
+      "kind": "keyframe",
+      "media": "image",
+      "role": "movie_poster",
+      "aspectRatio": "2:3",
+      "prompt": "Movie poster for Last Train at Sundown: dusty desert station at golden hour, steam locomotive arriving, two figures separated on opposite platforms, cinematic western drama, no readable text."
+    },
+    {
+      "id": "poster-deep-sea-cathedral",
+      "kind": "keyframe",
+      "media": "image",
+      "role": "movie_poster",
+      "aspectRatio": "2:3",
+      "prompt": "Movie poster for Deep Sea Cathedral: divers entering a vast underwater ruin lit by shafts of blue light, coral-covered arches, mysterious adventure mood, no readable text."
+    },
+    {
+      "id": "poster-glass-orchestra",
+      "kind": "keyframe",
+      "media": "image",
+      "role": "movie_poster",
+      "aspectRatio": "2:3",
+      "prompt": "Movie poster for The Glass Orchestra: elegant concert hall filled with transparent instruments, conductor in silhouette, prismatic reflections, magical realist tone, no readable text."
+    },
+    {
+      "id": "poster-midnight-bakery",
+      "kind": "keyframe",
+      "media": "image",
+      "role": "movie_poster",
+      "aspectRatio": "2:3",
+      "prompt": "Movie poster for Midnight Bakery: warm bakery window glowing on an empty snowy street, baker dusted with flour holding a lantern, cozy mystery atmosphere, no readable text."
+    },
+    {
+      "id": "poster-canyon-signal",
+      "kind": "keyframe",
+      "media": "image",
+      "role": "movie_poster",
+      "aspectRatio": "2:3",
+      "prompt": "Movie poster for Canyon Signal: red-rock canyon at dusk, old radio tower blinking above a parked pickup, storm clouds gathering, suspense thriller mood, no readable text."
+    },
+    {
+      "id": "poster-paper-moon-market",
+      "kind": "keyframe",
+      "media": "image",
+      "role": "movie_poster",
+      "aspectRatio": "2:3",
+      "prompt": "Movie poster for Paper Moon Market: floating night market of lantern boats under a huge paper moon, families browsing colorful stalls, whimsical fantasy adventure, no readable text."
+    },
+    {
+      "id": "poster-river-of-static",
+      "kind": "keyframe",
+      "media": "image",
+      "role": "movie_poster",
+      "aspectRatio": "2:3",
+      "prompt": "Movie poster for River of Static: black-and-white river valley interrupted by bands of television noise, lone hiker with a flashlight, eerie analog sci-fi tone, no readable text."
+    },
+    {
+      "id": "poster-clockwork-orchard",
+      "kind": "keyframe",
+      "media": "image",
+      "role": "movie_poster",
+      "aspectRatio": "2:3",
+      "prompt": "Movie poster for Clockwork Orchard: apple trees made of brass gears, child reaching toward a glowing mechanical fruit, autumn mist, family fantasy tone, no readable text."
+    },
+    {
+      "id": "poster-silent-lighthouse",
+      "kind": "keyframe",
+      "media": "image",
+      "role": "movie_poster",
+      "aspectRatio": "2:3",
+      "prompt": "Movie poster for The Silent Lighthouse: storm-battered lighthouse on a black cliff, keeper's silhouette in a high window, cold moonlit sea, gothic mystery mood, no readable text."
+    },
+    {
+      "id": "poster-solar-rodeo",
+      "kind": "keyframe",
+      "media": "image",
+      "role": "movie_poster",
+      "aspectRatio": "2:3",
+      "prompt": "Movie poster for Solar Rodeo: futuristic cowgirls riding hover-bikes across a sunlit salt flat, dust trails and chrome helmets, energetic sci-fi western tone, no readable text."
+    },
+    {
+      "id": "poster-archive-of-rain",
+      "kind": "keyframe",
+      "media": "image",
+      "role": "movie_poster",
+      "aspectRatio": "2:3",
+      "prompt": "Movie poster for The Archive of Rain: endless library with water dripping from shelves, archivist holding a glowing folder, moody literary fantasy atmosphere, no readable text."
+    },
+    {
+      "id": "poster-velvet-comet",
+      "kind": "keyframe",
+      "media": "image",
+      "role": "movie_poster",
+      "aspectRatio": "2:3",
+      "prompt": "Movie poster for Velvet Comet: glamorous 1970s lounge singer on a stage shaped like a comet tail, deep reds and golds, retro cosmic musical tone, no readable text."
+    },
+    {
+      "id": "poster-harbor-after-tomorrow",
+      "kind": "keyframe",
+      "media": "image",
+      "role": "movie_poster",
+      "aspectRatio": "2:3",
+      "prompt": "Movie poster for Harbor After Tomorrow: flooded coastal town at sunrise, small fishing boat passing rooftop antennas, resilient drama mood, no readable text."
+    },
+    {
+      "id": "poster-museum-of-shadows",
+      "kind": "keyframe",
+      "media": "image",
+      "role": "movie_poster",
+      "aspectRatio": "2:3",
+      "prompt": "Movie poster for Museum of Shadows: grand museum gallery after hours, paintings casting impossible silhouettes onto marble floors, supernatural mystery mood, no readable text."
+    },
+    {
+      "id": "poster-saffron-road",
+      "kind": "keyframe",
+      "media": "image",
+      "role": "movie_poster",
+      "aspectRatio": "2:3",
+      "prompt": "Movie poster for Saffron Road: vibrant spice market alley at sunset, chef carrying a worn notebook through golden dust, heartfelt culinary journey tone, no readable text."
+    },
+    {
+      "id": "poster-north-star-hotel",
+      "kind": "keyframe",
+      "media": "image",
+      "role": "movie_poster",
+      "aspectRatio": "2:3",
+      "prompt": "Movie poster for The North Star Hotel: isolated art deco hotel under aurora borealis, snow-covered cars outside, warm windows in a blue night, elegant suspense tone, no readable text."
+    },
+    {
+      "id": "poster-bicycle-planet",
+      "kind": "keyframe",
+      "media": "image",
+      "role": "movie_poster",
+      "aspectRatio": "2:3",
+      "prompt": "Movie poster for Bicycle Planet: tiny spherical world covered in bike paths, cyclist riding along the horizon curve, bright optimistic animated adventure tone, no readable text."
+    },
+    {
+      "id": "poster-plastic-sunrise",
+      "kind": "keyframe",
+      "media": "image",
+      "role": "movie_poster",
+      "aspectRatio": "2:3",
+      "prompt": "Movie poster for Plastic Sunrise: beach cleanup crew facing a glowing sunrise over waves filled with translucent debris, hopeful environmental documentary tone, no readable text."
+    },
+    {
+      "id": "character-maya-coffee-founder",
+      "kind": "anchor",
+      "media": "image",
+      "role": "character_reference",
+      "aspectRatio": "1:1",
+      "prompt": "Character reference portrait of Maya, woman late 20s, warm brown skin, shoulder-length curly black hair, small gold hoop earrings, oatmeal cable-knit sweater, sunlit kitchen background, natural documentary photo look, no text."
+    },
+    {
+      "id": "character-eli-bike-courier",
+      "kind": "anchor",
+      "media": "image",
+      "role": "character_reference",
+      "aspectRatio": "1:1",
+      "prompt": "Character reference portrait of Eli, nonbinary bike courier in their early 30s, olive skin, close-cropped dark hair, reflective green windbreaker, messenger bag strap, overcast city street background, no text."
+    },
+    {
+      "id": "character-june-retired-astronomer",
+      "kind": "anchor",
+      "media": "image",
+      "role": "character_reference",
+      "aspectRatio": "1:1",
+      "prompt": "Character reference portrait of June, retired astronomer in her 70s, silver bob haircut, round tortoise glasses, navy cardigan with star pin, observatory control room background, calm expression, no text."
+    },
+    {
+      "id": "character-omar-food-truck-chef",
+      "kind": "anchor",
+      "media": "image",
+      "role": "character_reference",
+      "aspectRatio": "1:1",
+      "prompt": "Character reference portrait of Omar, food truck chef in his 40s, medium brown skin, trimmed beard, red apron over denim shirt, warm market lights behind him, friendly confident expression, no text."
+    },
+    {
+      "id": "character-nora-climate-engineer",
+      "kind": "anchor",
+      "media": "image",
+      "role": "character_reference",
+      "aspectRatio": "1:1",
+      "prompt": "Character reference portrait of Nora, climate engineer in her mid 30s, fair skin with freckles, auburn hair in a low ponytail, yellow field jacket, wind farm background, practical focused expression, no text."
+    },
+    {
+      "id": "character-sam-night-baker",
+      "kind": "anchor",
+      "media": "image",
+      "role": "character_reference",
+      "aspectRatio": "1:1",
+      "prompt": "Character reference portrait of Sam, night baker in his 50s, tan skin, salt-and-pepper mustache, flour-dusted black apron, warm bakery shelves behind him, gentle tired smile, no text."
+    },
+    {
+      "id": "character-ivy-robotics-student",
+      "kind": "anchor",
+      "media": "image",
+      "role": "character_reference",
+      "aspectRatio": "1:1",
+      "prompt": "Illustrated character reference of Ivy, middle-school robotics student, protective goggles, blue hoodie, hands near a small wheeled robot on a classroom table, respectful non-photoreal style, no text."
+    },
+    {
+      "id": "character-lena-field-journalist",
+      "kind": "anchor",
+      "media": "image",
+      "role": "character_reference",
+      "aspectRatio": "1:1",
+      "prompt": "Character reference portrait of Lena, field journalist in her late 30s, dark brown skin, short natural hair, tan utility vest, compact camera strap, rainy city background, alert expression, no text."
+    },
+    {
+      "id": "character-rafael-museum-guard",
+      "kind": "anchor",
+      "media": "image",
+      "role": "character_reference",
+      "aspectRatio": "1:1",
+      "prompt": "Character reference portrait of Rafael, museum guard in his 60s, warm beige skin, gray goatee, dark tailored security jacket, marble gallery background, watchful kind expression, no text."
+    },
+    {
+      "id": "character-tessa-indie-musician",
+      "kind": "anchor",
+      "media": "image",
+      "role": "character_reference",
+      "aspectRatio": "1:1",
+      "prompt": "Character reference portrait of Tessa, indie musician in her mid 20s, pale skin, black pixie cut, silver ear cuffs, burgundy velvet jacket, small club stage lights behind her, no text."
+    },
+    {
+      "id": "character-bao-tea-farmer",
+      "kind": "anchor",
+      "media": "image",
+      "role": "character_reference",
+      "aspectRatio": "1:1",
+      "prompt": "Character reference portrait of Bao, tea farmer in his late 50s, weathered face, straw hat, indigo work shirt, terraced green hills behind him, serene expression, no text."
+    },
+    {
+      "id": "character-amelia-hotel-concierge",
+      "kind": "anchor",
+      "media": "image",
+      "role": "character_reference",
+      "aspectRatio": "1:1",
+      "prompt": "Character reference portrait of Amelia, hotel concierge in her early 40s, deep brown skin, sleek braids, charcoal suit with brass lapel pin, art deco lobby background, poised expression, no text."
+    },
+    {
+      "id": "character-miko-game-designer",
+      "kind": "anchor",
+      "media": "image",
+      "role": "character_reference",
+      "aspectRatio": "1:1",
+      "prompt": "Character reference portrait of Miko, game designer in their late 20s, light brown skin, round clear-frame glasses, oversized black hoodie, cozy desk with controller prototypes behind them, no text."
+    },
+    {
+      "id": "character-grace-paramedic",
+      "kind": "anchor",
+      "media": "image",
+      "role": "character_reference",
+      "aspectRatio": "1:1",
+      "prompt": "Character reference portrait of Grace, paramedic in her mid 30s, brown skin, hair tucked under navy cap, reflective emergency jacket, ambulance bay background, steady composed expression, no text."
+    },
+    {
+      "id": "character-hugo-retro-mechanic",
+      "kind": "anchor",
+      "media": "image",
+      "role": "character_reference",
+      "aspectRatio": "1:1",
+      "prompt": "Character reference portrait of Hugo, retro mechanic in his late 40s, light olive skin, thick black mustache, rolled white sleeves, grease-stained suspenders, vintage garage background, no text."
+    },
+    {
+      "id": "character-priya-architect",
+      "kind": "anchor",
+      "media": "image",
+      "role": "character_reference",
+      "aspectRatio": "1:1",
+      "prompt": "Character reference portrait of Priya, architect in her early 30s, South Asian woman, long dark hair tied back, cream blazer over black turtleneck, model buildings behind her, no text."
+    },
+    {
+      "id": "character-cass-forest-ranger",
+      "kind": "anchor",
+      "media": "image",
+      "role": "character_reference",
+      "aspectRatio": "1:1",
+      "prompt": "Character reference portrait of Cass, forest ranger in their mid 40s, tan skin, short sandy hair, green ranger jacket, pine forest trail background, calm protective expression, no text."
+    },
+    {
+      "id": "character-marin-opera-stagehand",
+      "kind": "anchor",
+      "media": "image",
+      "role": "character_reference",
+      "aspectRatio": "1:1",
+      "prompt": "Character reference portrait of Marin, opera stagehand in her late 20s, light skin, copper curls in a bandana, black work shirt, ropes and painted flats behind her, no text."
+    },
+    {
+      "id": "character-devon-startup-founder",
+      "kind": "anchor",
+      "media": "image",
+      "role": "character_reference",
+      "aspectRatio": "1:1",
+      "prompt": "Character reference portrait of Devon, startup founder in his early 30s, Black man, close beard, slate overshirt, quiet coworking space background, thoughtful expression, no text."
+    },
+    {
+      "id": "character-alma-lighthouse-keeper",
+      "kind": "anchor",
+      "media": "image",
+      "role": "character_reference",
+      "aspectRatio": "1:1",
+      "prompt": "Character reference portrait of Alma, lighthouse keeper in her 60s, windblown white hair, heavy navy wool coat, stormy lighthouse interior background, resilient expression, no text."
+    },
+    {
+      "id": "product-drift-scooter-hero",
+      "kind": "keyframe",
+      "media": "image",
+      "role": "product_hero",
+      "aspectRatio": "1:1",
+      "prompt": "Product hero image of a compact matte-black electric scooter on a neutral concrete studio floor, three-quarter front angle, soft key light, subtle rim light, no text."
+    },
+    {
+      "id": "product-hearth-coffee-box",
+      "kind": "keyframe",
+      "media": "image",
+      "role": "product_hero",
+      "aspectRatio": "1:1",
+      "prompt": "Product hero image of a premium coffee subscription box beside a ceramic mug and folded tasting card, warm kitchen counter light, shallow depth of field, no readable text."
+    },
+    {
+      "id": "product-ledgerly-dashboard",
+      "kind": "keyframe",
+      "media": "image",
+      "role": "product_hero",
+      "aspectRatio": "16:9",
+      "prompt": "Clean product hero image of a laptop showing an abstract invoicing dashboard with unreadable placeholder UI, tidy small-business desk, neutral daylight, no real logos."
+    },
+    {
+      "id": "product-stillwater-app-phone",
+      "kind": "keyframe",
+      "media": "image",
+      "role": "product_hero",
+      "aspectRatio": "4:5",
+      "prompt": "Product hero image of a phone running an abstract meditation app interface with soft water-inspired shapes, linen surface, dawn light, no readable text."
+    },
+    {
+      "id": "product-fieldkit-sensor",
+      "kind": "keyframe",
+      "media": "image",
+      "role": "product_hero",
+      "aspectRatio": "1:1",
+      "prompt": "Product hero image of a rugged environmental sensor device on mossy ground, compact orange casing, soft forest light, practical industrial design, no text."
+    },
+    {
+      "id": "clip-city-scooter-reveal",
+      "kind": "clip",
+      "media": "video",
+      "role": "short_clip",
+      "aspectRatio": "9:16",
+      "durationSec": 5,
+      "prompt": "5-second vertical video clip: low tracking shot of a matte-black scooter rolling into a rain-slick city sidewalk scene at morning rush hour, handheld cinematic motion, no text."
+    },
+    {
+      "id": "clip-coffee-first-sip",
+      "kind": "clip",
+      "media": "video",
+      "role": "short_clip",
+      "aspectRatio": "16:9",
+      "durationSec": 5,
+      "prompt": "5-second video clip: person lifts a white ceramic mug for a first sip in a sunlit kitchen, small satisfied smile, warm documentary style, no text."
+    },
+    {
+      "id": "clip-robot-line-follow",
+      "kind": "clip",
+      "media": "video",
+      "role": "short_clip",
+      "aspectRatio": "16:9",
+      "durationSec": 6,
+      "prompt": "6-second video clip: small classroom robot successfully follows a black line across a table while students' hands celebrate at the edge of frame, non-identifying respectful view, no text."
+    },
+    {
+      "id": "clip-stillwater-ripple",
+      "kind": "clip",
+      "media": "video",
+      "role": "short_clip",
+      "aspectRatio": "9:16",
+      "durationSec": 6,
+      "prompt": "6-second vertical video clip: overhead view of still water at dawn as one soft ripple expands slowly outward, calm minimal motion, no text."
+    },
+    {
+      "id": "clip-neon-city-loop",
+      "kind": "clip",
+      "media": "video",
+      "role": "short_clip",
+      "aspectRatio": "16:9",
+      "durationSec": 8,
+      "prompt": "8-second cinematic loop: rain-slicked downtown street at night with neon reflections and steam from a manhole, no people, no readable text."
+    },
+    {
+      "id": "video-trailer-neon-heist-teaser",
+      "kind": "clip",
+      "media": "video",
+      "role": "movie_trailer_teaser",
+      "aspectRatio": "16:9",
+      "durationSec": 10,
+      "prompt": "10-second movie trailer teaser for Neon Heist: quick cuts of neon rain, a masked driver starting a car, gloved hands opening a glowing case, final shot of headlights bursting through fog, cinematic suspense, no readable text."
+    },
+    {
+      "id": "video-trailer-orbital-garden-teaser",
+      "kind": "clip",
+      "media": "video",
+      "role": "movie_trailer_teaser",
+      "aspectRatio": "16:9",
+      "durationSec": 10,
+      "prompt": "10-second movie trailer teaser for The Orbital Garden: quiet greenhouse inside a space station, leaves floating in zero gravity, botanist seeing Earth through curved glass, hopeful sci-fi reveal, no readable text."
+    },
+    {
+      "id": "video-trailer-deep-sea-cathedral-teaser",
+      "kind": "clip",
+      "media": "video",
+      "role": "movie_trailer_teaser",
+      "aspectRatio": "16:9",
+      "durationSec": 10,
+      "prompt": "10-second movie trailer teaser for Deep Sea Cathedral: divers descend through blue darkness, lights reveal massive underwater arches, bubbles rise, one diver turns toward a glowing doorway, mystery adventure mood, no readable text."
+    },
+    {
+      "id": "video-trailer-last-train-sundown-teaser",
+      "kind": "clip",
+      "media": "video",
+      "role": "movie_trailer_teaser",
+      "aspectRatio": "2.39:1",
+      "durationSec": 10,
+      "prompt": "10-second western movie trailer teaser: empty desert platform at sundown, train smoke on the horizon, boots stepping onto dusty boards, two figures lock eyes across the tracks, dramatic cinematic tension, no text."
+    },
+    {
+      "id": "video-trailer-museum-shadows-teaser",
+      "kind": "clip",
+      "media": "video",
+      "role": "movie_trailer_teaser",
+      "aspectRatio": "16:9",
+      "durationSec": 10,
+      "prompt": "10-second supernatural mystery trailer teaser: empty museum after closing, security flashlight sweeps over paintings, shadows move against the wrong wall, marble hallway lights flicker, no readable text."
+    },
+    {
+      "id": "video-info-recycling-process",
+      "kind": "clip",
+      "media": "video",
+      "role": "informational_video",
+      "aspectRatio": "16:9",
+      "durationSec": 12,
+      "prompt": "12-second informational video: clean visual explanation of household recycling moving from blue bin to sorting belt to bundled material, bright documentary style, simple clear steps, no readable labels or text."
+    },
+    {
+      "id": "video-info-water-cycle",
+      "kind": "clip",
+      "media": "video",
+      "role": "informational_video",
+      "aspectRatio": "16:9",
+      "durationSec": 12,
+      "prompt": "12-second informational video showing the water cycle with realistic nature visuals: ocean evaporation, clouds forming, rain over hills, stream returning to river, smooth educational pacing, no on-screen text."
+    },
+    {
+      "id": "video-info-solar-panel-basics",
+      "kind": "clip",
+      "media": "video",
+      "role": "informational_video",
+      "aspectRatio": "16:9",
+      "durationSec": 12,
+      "prompt": "12-second informational video: sunlight hits rooftop solar panels, simplified animated energy flow moves to a home battery and lamp turning on, clean hybrid real/graphic style, no readable text."
+    },
+    {
+      "id": "video-info-coffee-roasting",
+      "kind": "clip",
+      "media": "video",
+      "role": "informational_video",
+      "aspectRatio": "16:9",
+      "durationSec": 12,
+      "prompt": "12-second informational video about coffee roasting: green beans pour into a roaster, beans tumble and darken, steam rises, finished beans cool in a tray, warm documentary close-ups, no text."
+    },
+    {
+      "id": "video-info-robot-sensor-demo",
+      "kind": "clip",
+      "media": "video",
+      "role": "informational_video",
+      "aspectRatio": "16:9",
+      "durationSec": 12,
+      "prompt": "12-second informational video: small robot uses a front sensor to detect an obstacle, slows down, turns, and continues through a simple course, clean classroom demo view, no readable text."
+    },
+    {
+      "id": "video-product-demo-ledgerly-invoice",
+      "kind": "clip",
+      "media": "video",
+      "role": "product_demo",
+      "aspectRatio": "16:9",
+      "durationSec": 12,
+      "prompt": "12-second product demo video: laptop on tidy desk showing an abstract invoicing app flow with unreadable placeholder UI, user clicks create invoice, preview appears, status changes visually, no real company logos."
+    },
+    {
+      "id": "video-product-demo-stillwater-session",
+      "kind": "clip",
+      "media": "video",
+      "role": "product_demo",
+      "aspectRatio": "9:16",
+      "durationSec": 10,
+      "prompt": "10-second vertical product demo video: hand opens a meditation app with abstract unreadable UI, taps a calm breathing session, soft animated circle expands and contracts, dawn light on phone, no readable text."
+    },
+    {
+      "id": "video-product-demo-fieldkit-sensor",
+      "kind": "clip",
+      "media": "video",
+      "role": "product_demo",
+      "aspectRatio": "16:9",
+      "durationSec": 12,
+      "prompt": "12-second product demo video: rugged environmental sensor clipped to a fence post, indicator light turns on, phone nearby shows abstract unreadable data cards, forest field test feel, no text."
+    },
+    {
+      "id": "video-product-demo-drift-fold",
+      "kind": "clip",
+      "media": "video",
+      "role": "product_demo",
+      "aspectRatio": "9:16",
+      "durationSec": 10,
+      "prompt": "10-second vertical product demo video: compact electric scooter folds smoothly beside an apartment doorway, hand locks the latch, scooter is carried into an elevator, clean urban lifestyle style, no text."
+    },
+    {
+      "id": "video-product-demo-hearth-unbox",
+      "kind": "clip",
+      "media": "video",
+      "role": "product_demo",
+      "aspectRatio": "4:5",
+      "durationSec": 10,
+      "prompt": "10-second product demo video: coffee subscription box unboxing on a kitchen counter, hands reveal bag of beans, tasting card with unreadable design, mug beside window light, warm calm style."
+    },
+    {
+      "id": "video-social-ad-gym-bag",
+      "kind": "clip",
+      "media": "video",
+      "role": "social_ad",
+      "aspectRatio": "9:16",
+      "durationSec": 8,
+      "prompt": "8-second vertical social ad clip: organized gym bag opens with shoes, towel, water bottle, and compact headphones neatly packed, quick satisfying cuts, bright morning energy, no readable text."
+    },
+    {
+      "id": "video-social-ad-meal-kit",
+      "kind": "clip",
+      "media": "video",
+      "role": "social_ad",
+      "aspectRatio": "9:16",
+      "durationSec": 8,
+      "prompt": "8-second vertical social ad clip: meal kit ingredients laid out, quick cuts of chopping vegetables and plating a colorful bowl, upbeat kitchen energy, no brand logos, no readable text."
+    },
+    {
+      "id": "video-tutorial-camera-setup",
+      "kind": "clip",
+      "media": "video",
+      "role": "tutorial",
+      "aspectRatio": "16:9",
+      "durationSec": 12,
+      "prompt": "12-second tutorial-style video: hands set up a small camera on a tripod, adjust angle, plug in a microphone, and check framing on a flip-out screen, clean creator studio, no readable text."
+    },
+    {
+      "id": "video-tutorial-plant-repotting",
+      "kind": "clip",
+      "media": "video",
+      "role": "tutorial",
+      "aspectRatio": "16:9",
+      "durationSec": 12,
+      "prompt": "12-second tutorial-style video: hands repot a small houseplant with fresh soil, gently loosen roots, place in ceramic pot, water lightly, bright apartment window, no text."
+    },
+    {
+      "id": "video-doc-farmers-market-morning",
+      "kind": "clip",
+      "media": "video",
+      "role": "documentary_broll",
+      "aspectRatio": "16:9",
+      "durationSec": 10,
+      "prompt": "10-second documentary b-roll: farmers market at sunrise, vendors arranging produce, canvas tents opening, close-ups of hands stacking tomatoes and flowers, natural light, no readable signs."
+    },
+    {
+      "id": "video-doc-remote-team-standup",
+      "kind": "clip",
+      "media": "video",
+      "role": "documentary_broll",
+      "aspectRatio": "16:9",
+      "durationSec": 10,
+      "prompt": "10-second documentary b-roll: remote worker at home desk joins a video call shown as abstract unreadable tiles, takes notes, nods, natural window light, no readable screen text."
+    },
+    {
+      "id": "video-event-gallery-opening",
+      "kind": "clip",
+      "media": "video",
+      "role": "event_promo",
+      "aspectRatio": "16:9",
+      "durationSec": 10,
+      "prompt": "10-second event promo video: small art gallery opening, guests entering, glasses clinking, close-up of abstract paintings without readable labels, warm evening lighting, polished social style."
+    },
+    {
+      "id": "video-event-food-festival",
+      "kind": "clip",
+      "media": "video",
+      "role": "event_promo",
+      "aspectRatio": "9:16",
+      "durationSec": 10,
+      "prompt": "10-second vertical event promo video: outdoor food festival with sizzling grill, colorful plates handed across a counter, people browsing in soft background, festive daylight, no readable signs."
+    },
+    {
+      "id": "video-catalog-forest-light-loop",
+      "kind": "clip",
+      "media": "video",
+      "role": "catalog_background_loop",
+      "aspectRatio": "16:9",
+      "durationSec": 8,
+      "prompt": "8-second loopable background video: sunbeams moving through a quiet pine forest, dust and pollen drifting in the air, gentle camera push, no people, no text."
+    },
+    {
+      "id": "video-catalog-abstract-gradient-loop",
+      "kind": "clip",
+      "media": "video",
+      "role": "catalog_background_loop",
+      "aspectRatio": "16:9",
+      "durationSec": 8,
+      "prompt": "8-second loopable abstract background video: soft glassy color fields moving slowly from teal to amber with subtle light refraction, clean modern motion, no text."
+    },
+    {
+      "id": "audio-urban-mobility-bed",
+      "kind": "audio_track",
+      "media": "audio",
+      "role": "background_music",
+      "durationSec": 30,
+      "prompt": "30-second instrumental electronic bed for a fast-paced urban mobility ad, 112 BPM, clean kick, muted synth pulse, light shaker, confident CTA sting, no vocals, no copyrighted melody."
+    },
+    {
+      "id": "audio-warm-coffee-underscore",
+      "kind": "audio_track",
+      "media": "audio",
+      "role": "background_music",
+      "durationSec": 60,
+      "prompt": "60-second warm acoustic underscore for a coffee brand film, felt piano, soft upright bass, brushed percussion, narration-friendly midrange, gentle rise at the end, no vocals."
+    },
+    {
+      "id": "audio-calm-meditation-teaser",
+      "kind": "audio_track",
+      "media": "audio",
+      "role": "background_music",
+      "durationSec": 15,
+      "prompt": "15-second calm meditation app teaser music, slow breathy ambient pads, soft bell texture, very gentle release, no vocals, no recognizable melody."
+    },
+    {
+      "id": "audio-documentary-focus-bed",
+      "kind": "audio_track",
+      "media": "audio",
+      "role": "background_music",
+      "durationSec": 45,
+      "prompt": "45-second restrained documentary underscore, soft marimba pulses, low warm pad, subtle organic percussion, steady thoughtful pace, no vocals, no copyrighted melody."
+    },
+    {
+      "id": "audio-light-office-explainer",
+      "kind": "audio_track",
+      "media": "audio",
+      "role": "background_music",
+      "durationSec": 30,
+      "prompt": "30-second light neutral office explainer music, gentle plucked guitar, soft synth bass, minimal percussion, optimistic but not flashy, narration-friendly, no vocals."
+    }
+  ]
+}
