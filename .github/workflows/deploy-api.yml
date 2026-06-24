@@ -1,0 +1,64 @@
+name: Deploy API (Railway)
+
+# Canonical production deploy path for the Express API (@popcorn/api on Railway).
+#
+# Why this exists: Railway's native GitHub auto-deploy was the only trigger, and
+# a manual/env-triggered redeploy once resurrected a stale image built from an
+# OLD commit — silently rolling production *backward* and 404'ing routes that
+# only exist on newer main. This workflow makes "what's live == main HEAD" a
+# hard guarantee: every push to main runs `railway up`, which uploads THIS
+# checked-out commit and builds it on Railway, so the live image can never lag
+# or revert to an older build.
+#
+# Railway's native auto-deploy for this service MUST be turned off so the two
+# triggers don't double-fire (see railway.toml).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+# Serialize deploys in push order. The last push's job runs last and deploys
+# last, so production deterministically converges on the newest commit. We do
+# NOT cancel in-progress jobs: a cancelled GitHub job would not stop a Railway
+# build it already kicked off, which could let an older build win the race.
+concurrency:
+  group: railway-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Build gate: mirror railway.toml's buildCommand so a broken build fails
+      # the deploy here (red, visible) instead of leaving prod on an old image.
+      - name: Build @popcorn/api
+        run: pnpm --filter @popcorn/api... build
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli@5.20.0
+
+      # `railway up` uploads the checked-out source and builds it on Railway,
+      # producing a deployment from this exact commit. RAILWAY_TOKEN is a
+      # project token scoped to the production environment, so project +
+      # environment are implied; --service selects the API service. --ci streams
+      # build logs and exits non-zero if the Railway build fails.
+      - name: Deploy to Railway
+        run: railway up --ci --service popcornready
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
