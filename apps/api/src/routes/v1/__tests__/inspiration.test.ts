@@ -27,6 +27,7 @@ test("poster prompt asks for the movie title as readable typography", () => {
     movieTitle: "The Stranded Crew",
     logline: "A disgraced lawyer must rescue a stranded crew before dawn.",
     premise: "A salvage diver races a collapsing rig to save the people who wrote her off.",
+    signature: "test-signature",
     ingredients: {
       plot: { emoji: "🎯", summary: "Impossible rescue" },
       setting: { emoji: "🌊", summary: "Doomed offshore rig" },

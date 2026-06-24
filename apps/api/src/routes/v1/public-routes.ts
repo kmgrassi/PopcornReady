@@ -9,12 +9,16 @@ import { devToolTestsRouter, isToolTestHarnessEnabled } from "./dev-tool-tests.j
 import { devWebE2ERouter, isWebE2EHarnessEnabled } from "./dev-web-e2e.js";
 import { discoverRouter } from "./discover.js";
 import { healthRouter } from "./health.js";
+import { inspirationRouter } from "./inspiration.js";
 
 export function mountPublicV1Routes(v1: Router) {
   v1.use(healthRouter);
   v1.use(discoverRouter);
   v1.use(catalogPublicRouter);
   v1.use(creditsWebhookRouter);
+  // Public, unauthenticated: the inspiration generator is linked from the
+  // landing page. Poster generation is bounded by a signed-concept check.
+  v1.use(inspirationRouter);
 
   // Dev-only, flag-gated tool-call test harness. Never mounted in production.
   if (isToolTestHarnessEnabled()) {

@@ -1,11 +1,10 @@
-import { Router } from "express";
-import { createHash } from "crypto";
-import { mutation, route } from "@/core/adapter";
+import { Router, type Request, type RequestHandler } from "express";
+import { createHash, createHmac, timingSafeEqual } from "crypto";
 import { ApiError } from "@/core/errors";
 import { createGeneratedAsset } from "@/lib/api/v1/generated-assets";
 import { resolveWorkspaceGenerationModel } from "@/lib/api/v1/model-settings";
 import { posterTextMentionsMinor } from "@/lib/api/v1/poster-generation";
-import type { AuthContext } from "@/lib/api/v1/auth";
+import { authMode, type AuthContext } from "@/lib/api/v1/auth";
 import type { V1Job } from "@/lib/api/v1/jobs";
 import { setAssetVisibility } from "@/lib/api/v1/store";
 import { getServiceSupabase } from "@/lib/supabase/clients";
@@ -53,6 +52,10 @@ interface RandomStoryInspiration {
   movieTitle: string;
   logline: string;
   premise: string;
+  // HMAC over the prose + element provenance, minted when /random serves the
+  // concept. /poster re-verifies it so this public endpoint only ever generates
+  // posters for concepts WE authored — not arbitrary client-supplied prompts.
+  signature: string;
   ingredients: Record<InspirationElementGroup, InspirationIngredientSummary>;
   elements: {
     plot: InspirationElement[];
@@ -102,9 +105,33 @@ let inspirationBufferedAt = 0;
 
 export const inspirationRouter = Router();
 
+// Inspiration is a public, unauthenticated surface (linked from the landing
+// page), so it mounts before authMiddleware and must NOT go through the
+// auth-resolving route()/mutation() adapter — that throws 401 for anonymous
+// callers in AUTH_MODE=supabase. This thin wrapper mirrors the discover feed.
+type PublicResult = { status: number; body: unknown; headers?: Record<string, string> };
+
+function publicEndpoint(fn: (req: Request) => Promise<PublicResult>): RequestHandler {
+  return async (req, res) => {
+    try {
+      const result = await fn(req);
+      for (const [name, value] of Object.entries(result.headers ?? {})) {
+        res.setHeader(name, value);
+      }
+      res.status(result.status).json(result.body);
+    } catch (err) {
+      const apiError =
+        err instanceof ApiError
+          ? err
+          : new ApiError("internal_error", err instanceof Error ? err.message : "Internal error.");
+      res.status(apiError.status).json(apiError.envelope(req.requestId));
+    }
+  };
+}
+
 inspirationRouter.get(
   "/inspiration/random",
-  route(async () => {
+  publicEndpoint(async () => {
     const inspiration = await nextInspiration();
     return {
       status: 200,
@@ -116,10 +143,12 @@ inspirationRouter.get(
 
 inspirationRouter.post(
   "/inspiration/poster",
-  mutation(async ({ auth, body }) => {
-    const inspiration = await parsePosterInspiration(body);
+  publicEndpoint(async (req) => {
+    const inspiration = await parsePosterInspiration(req.body);
+    // Only the hosted (supabase) deployment spends real image-generation
+    // credits; local/hybrid dev returns a queued placeholder.
     const concept = await ensureStoryConceptPoster(inspiration, {
-      allowGeneration: !auth.isLocal,
+      allowGeneration: authMode() === "supabase",
     });
     return {
       status: concept.poster.status === "ready" ? 200 : 202,
@@ -148,13 +177,16 @@ async function generateRankedBatch(count: number): Promise<RandomStoryInspiratio
   const rows = await listStoryElements();
   const sets = Array.from({ length: count }, () => pickIngredientSet(rows));
   const ranked = await rankStoryConcepts(sets.map(toCandidate));
-  return ranked.map((concept) => ({
-    movieTitle: concept.movieTitle,
-    logline: concept.logline,
-    premise: concept.premise,
-    ingredients: concept.ingredients,
-    elements: sets[concept.index],
-  }));
+  return ranked.map((concept) => {
+    const base = {
+      movieTitle: concept.movieTitle,
+      logline: concept.logline,
+      premise: concept.premise,
+      ingredients: concept.ingredients,
+      elements: sets[concept.index],
+    };
+    return { ...base, signature: signConcept(base) };
+  });
 }
 
 async function listStoryElements(): Promise<StoryElementRow[]> {
@@ -256,11 +288,10 @@ async function parsePosterInspiration(body: unknown): Promise<RandomStoryInspira
   const rowsById = new Map(rows.map((row) => [row.id, row]));
   const selectedRows = parseSelectedElementRows(input.elements, rowsById);
 
-  return {
+  const built: SignableConcept = {
     movieTitle: requireString(input, "movieTitle"),
     logline: requireString(input, "logline"),
     premise: typeof input.premise === "string" ? input.premise.slice(0, 4000) : "",
-    ingredients: parseIngredients(input.ingredients),
     elements: {
       plot: selectedRows.plot.map(toElement),
       setting: selectedRows.setting.map(toElement),
@@ -270,6 +301,18 @@ async function parsePosterInspiration(body: unknown): Promise<RandomStoryInspira
       stakes: selectedRows.stakes.map(toElement),
       structure: selectedRows.structure.map(toElement),
     },
+  };
+
+  // The prose feeds a system-account image prompt, so it must be one WE
+  // authored: reject anything whose signature does not match the served concept.
+  if (!verifyConceptSignature(built, input.signature)) {
+    throw new ApiError("validation_failed", "inspiration.signature is missing or invalid.");
+  }
+
+  return {
+    ...built,
+    signature: input.signature as string,
+    ingredients: parseIngredients(input.ingredients),
   };
 }
 
@@ -383,6 +426,39 @@ function normalizeKeyPart(value: string): string {
 
 function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+// The signed surface: prose that lands in the poster prompt + element provenance.
+type SignableConcept = Pick<
+  RandomStoryInspiration,
+  "movieTitle" | "logline" | "premise" | "elements"
+>;
+
+// Server-only HMAC key. Always present in the hosted (supabase) deployment; the
+// dev fallback is harmless because dev never generates real posters.
+function conceptSigningSecret(): string {
+  return process.env.SUPABASE_SERVICE_ROLE_KEY || "inspiration-local-signing-secret";
+}
+
+function conceptSignaturePayload(concept: SignableConcept): string {
+  const elementKey = conceptElementEntries(concept as RandomStoryInspiration)
+    .map(({ element, role, position }) => `${role}:${position}:${element.slug || element.id}`)
+    .sort()
+    .join("|");
+  return JSON.stringify([concept.movieTitle, concept.logline, concept.premise, elementKey]);
+}
+
+function signConcept(concept: SignableConcept): string {
+  return createHmac("sha256", conceptSigningSecret())
+    .update(conceptSignaturePayload(concept))
+    .digest("hex");
+}
+
+function verifyConceptSignature(concept: SignableConcept, signature: unknown): boolean {
+  if (typeof signature !== "string" || signature.length === 0) return false;
+  const expected = signConcept(concept);
+  if (signature.length !== expected.length) return false;
+  return timingSafeEqual(Buffer.from(signature, "utf8"), Buffer.from(expected, "utf8"));
 }
 
 export function posterPromptFor(inspiration: RandomStoryInspiration): string {

@@ -43,6 +43,9 @@ export interface RandomStoryInspiration {
   movieTitle: string;
   logline: string;
   premise: string;
+  // Opaque server signature; echoed back to /poster so it only generates
+  // posters for concepts the server authored. Not rendered.
+  signature: string;
   ingredients: Record<InspirationIngredientGroup, InspirationIngredientSummary>;
   elements: Record<InspirationIngredientGroup, InspirationElement[]>;
   poster?: StoryConceptPoster;
