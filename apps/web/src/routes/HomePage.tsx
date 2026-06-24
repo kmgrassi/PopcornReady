@@ -347,19 +347,6 @@ export function HomePage() {
                 : `Guests can start ${guestRunLabel} before creating an account.`}
             </p>
           </form>
-          <div className="lp-cta-buttons">
-            <Link className="lp-price-cta" to="/library/projects">
-              View projects
-            </Link>
-            <a
-              className="lp-price-cta"
-              href={GITHUB_URL}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Self-host
-            </a>
-          </div>
         </section>
 
         <Reveal>
