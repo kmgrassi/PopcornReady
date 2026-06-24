@@ -109,13 +109,54 @@ function resolveIdeogramModel(
   return normalizeIdeogramModel(input.model);
 }
 
+// Ideogram only accepts resolutions from this fixed list (others 400). Requests
+// elsewhere use free-form sizes like "1024x1536" (the poster's 2:3), so map any
+// non-listed size to the closest allowed resolution by aspect ratio.
+const IDEOGRAM_RESOLUTIONS = [
+  "2048x2048", "1440x2880", "2880x1440", "1664x2496", "2496x1664",
+  "1792x2240", "2240x1792", "1440x2560", "2560x1440", "1600x2560",
+  "2560x1600", "1728x2304", "2304x1728", "1296x3168", "3168x1296",
+  "1152x2944", "2944x1152", "1248x3328", "3328x1248", "1280x3072",
+  "3072x1280", "1024x3072", "3072x1024",
+] as const;
+
+function parseSize(value: string): { w: number; h: number } | null {
+  const match = /^(\d+)\s*[x×]\s*(\d+)$/.exec(value.trim().toLowerCase());
+  if (!match) return null;
+  const w = Number(match[1]);
+  const h = Number(match[2]);
+  return w > 0 && h > 0 ? { w, h } : null;
+}
+
+export function normalizeIdeogramResolution(value?: string): string | undefined {
+  if (!value) return undefined;
+  const normalized = value.trim().toLowerCase();
+  if ((IDEOGRAM_RESOLUTIONS as readonly string[]).includes(normalized)) {
+    return normalized;
+  }
+  const requested = parseSize(normalized);
+  if (!requested) return undefined;
+  const targetRatio = requested.w / requested.h;
+  let best: string | undefined;
+  let bestDelta = Infinity;
+  for (const candidate of IDEOGRAM_RESOLUTIONS) {
+    const size = parseSize(candidate)!;
+    const delta = Math.abs(size.w / size.h - targetRatio);
+    if (delta < bestDelta) {
+      bestDelta = delta;
+      best = candidate;
+    }
+  }
+  return best;
+}
+
 export function buildIdeogramImageOptions(
   input: Extract<GenerateAssetRequest, { provider: "ideogram"; kind: "image" }>
 ): IdeogramImageOptions {
   return {
     model: resolveIdeogramModel(input),
     prompt: requirePrompt(input.prompt),
-    resolution: input.resolution || input.size,
+    resolution: normalizeIdeogramResolution(input.resolution || input.size),
     aspectRatio: input.aspectRatio,
     renderingSpeed: normalizeSpeed(input.renderingSpeed),
     magicPrompt: normalizeMagicPrompt(input.magicPrompt),

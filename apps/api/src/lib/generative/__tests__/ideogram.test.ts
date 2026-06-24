@@ -4,6 +4,19 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { providerFor } from "../providers";
+import { normalizeIdeogramResolution } from "../providers/ideogram";
+
+test("normalizeIdeogramResolution maps free-form sizes to allowed resolutions", () => {
+  // An already-allowed resolution passes through unchanged.
+  assert.equal(normalizeIdeogramResolution("2048x2048"), "2048x2048");
+  // Poster 2:3 ("1024x1536") → nearest allowed 2:3 resolution (was rejected 400).
+  assert.equal(normalizeIdeogramResolution("1024x1536"), "1664x2496");
+  // 16:9 landscape → nearest allowed.
+  assert.equal(normalizeIdeogramResolution("1280x720"), "2560x1440");
+  // Unparseable / missing → undefined, letting Ideogram apply its own default.
+  assert.equal(normalizeIdeogramResolution("auto"), undefined);
+  assert.equal(normalizeIdeogramResolution(undefined), undefined);
+});
 
 function formValue(body: unknown, key: string): FormDataEntryValue | null {
   assert.ok(body instanceof FormData, "request body should be FormData");
