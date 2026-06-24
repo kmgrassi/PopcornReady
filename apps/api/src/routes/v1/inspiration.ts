@@ -7,7 +7,12 @@ import { resolveWorkspaceGenerationModel } from "@/lib/api/v1/model-settings";
 import { posterTextMentionsMinor } from "@/lib/api/v1/poster-generation";
 import type { AuthContext } from "@/lib/api/v1/auth";
 import type { V1Job } from "@/lib/api/v1/jobs";
-import { setAssetVisibility } from "@/lib/api/v1/store";
+import {
+  createProject,
+  setAssetVisibility,
+  setProjectVisibility,
+} from "@/lib/api/v1/store";
+import type { VideoBrief } from "@/lib/api/v1/schemas";
 import { getServiceSupabase } from "@/lib/supabase/clients";
 import { runQuery } from "@/lib/supabase/db-errors";
 import { remoteAssetUrlForDelivery, resolveAssetUrl } from "@/lib/storage/asset-urls";
@@ -152,7 +157,6 @@ const ENDING_TYPES = [
 ] as const;
 
 const SYSTEM_WORKSPACE_ID = "00000000-0000-4000-a000-000000000002";
-const INSPIRATION_POSTER_CACHE_PROJECT_ID = "00000000-0000-4000-a000-000000000003";
 
 export const inspirationRouter = Router();
 
@@ -612,6 +616,58 @@ export function posterPromptFor(inspiration: RandomStoryInspiration): string {
   ].join(" ");
 }
 
+function projectBriefForInspiration(inspiration: RandomStoryInspiration): VideoBrief {
+  return {
+    goal: [
+      inspiration.logline,
+      "",
+      `Hero: ${inspiration.typeOfPerson}`,
+      `Setting: ${inspiration.setting}`,
+      `External goal: ${inspiration.externalGoal}`,
+      `Antagonistic force: ${inspiration.antagonisticForce}`,
+      `Inner flaw or lie: ${inspiration.innerFlawOrLie}`,
+      `Old self: ${inspiration.oldSelf}`,
+      `New truth: ${inspiration.newTruth}`,
+      `Ending: ${inspiration.endingType}`,
+    ].join("\n"),
+    targetLengthSec: 30,
+    aspectRatio: "9:16",
+    platform: "general",
+    style: "cinematic movie trailer",
+    hookQuestion: inspiration.externalGoal,
+    strongestVisual: `${inspiration.typeOfPerson} in ${inspiration.setting}`,
+    oneBigIdea: inspiration.newTruth,
+    payoff: inspiration.endingType,
+    constraints: {
+      requiredBeats: [
+        inspiration.externalGoal,
+        inspiration.antagonisticForce,
+        inspiration.newTruth,
+      ],
+    },
+  };
+}
+
+async function createInspirationPosterProject(input: {
+  inspiration: RandomStoryInspiration;
+  movieTitle: string;
+  conceptHash: string;
+}): Promise<string> {
+  const { project } = await createProject({
+    workspaceId: SYSTEM_WORKSPACE_ID,
+    name: input.movieTitle,
+    slug: `inspiration-${input.conceptHash.slice(0, 12)}`,
+    brief: projectBriefForInspiration(input.inspiration),
+  });
+  await setProjectVisibility(
+    SYSTEM_WORKSPACE_ID,
+    project.id,
+    "public",
+    { actorId: "system_inspiration_poster" }
+  );
+  return project.id;
+}
+
 async function ensureStoryConceptPoster(
   inspiration: RandomStoryInspiration,
   options: { allowGeneration?: boolean } = {}
@@ -775,9 +831,14 @@ async function ensureStoryConceptPoster(
       ) as { id: string };
 
   try {
+    const posterProjectId = await createInspirationPosterProject({
+      inspiration: { ...inspiration, movieTitle },
+      movieTitle,
+      conceptHash,
+    });
     const result = await createGeneratedAsset({
       auth: systemAuth(),
-      projectId: INSPIRATION_POSTER_CACHE_PROJECT_ID,
+      projectId: posterProjectId,
       body: {
         kind: "image",
         prompt,
@@ -793,7 +854,7 @@ async function ensureStoryConceptPoster(
     const assetId = jobAssetId(result.body.job as V1Job);
     await setAssetVisibility(
       SYSTEM_WORKSPACE_ID,
-      INSPIRATION_POSTER_CACHE_PROJECT_ID,
+      posterProjectId,
       assetId,
       "public",
       { actorId: "system_inspiration_poster" }
