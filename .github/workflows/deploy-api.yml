@@ -12,6 +12,10 @@ name: Deploy API (Railway)
 #
 # Railway's native auto-deploy for this service MUST be turned off so the two
 # triggers don't double-fire (see railway.toml).
+#
+# workflow_dispatch is allowed for manual redeploys, but the job is gated to
+# refs/heads/main so a manual run against a stale branch can't ship non-main
+# code to production with the prod token.
 
 on:
   push:
@@ -30,6 +34,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Only ever deploy main. push already filters to main; this also blocks a
+    # workflow_dispatch run targeting any other branch from reaching the prod
+    # token (mirrors .github/workflows/supabase-migrations.yml).
+    if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
 
@@ -53,12 +61,44 @@ jobs:
       - name: Install Railway CLI
         run: npm install -g @railway/cli@5.20.0
 
+      # Stamp the commit being shipped into the environment (without triggering a
+      # redeploy) so the running app can report it at /api/v1/health. The next
+      # `railway up` bakes this value into the new deployment.
+      - name: Set deploy commit marker
+        run: railway variables set "APP_COMMIT_SHA=${GITHUB_SHA}" --service popcornready --skip-deploys
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
       # `railway up` uploads the checked-out source and builds it on Railway,
       # producing a deployment from this exact commit. RAILWAY_TOKEN is a
       # project token scoped to the production environment, so project +
       # environment are implied; --service selects the API service. --ci streams
-      # build logs and exits non-zero if the Railway build fails.
+      # build logs and exits non-zero if the Railway BUILD fails.
       - name: Deploy to Railway
         run: railway up --ci --service popcornready
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      # `railway up` (and any run with CI=true, which GitHub Actions sets) returns
+      # when the BUILD finishes, not when the deployment boots and passes the
+      # healthcheck. Poll the public health endpoint until it reports this exact
+      # commit so a build that ships but fails to start/healthcheck fails the job
+      # — preserving the "what's live == main HEAD" guarantee — instead of going
+      # green while prod is still on the previous image.
+      - name: Verify production is serving this commit
+        run: |
+          set -euo pipefail
+          url="https://popcornready-production.up.railway.app/api/v1/health"
+          echo "Waiting for $url to report commit $GITHUB_SHA"
+          for attempt in $(seq 1 60); do
+            live="$(curl -fsS --max-time 10 "$url" | jq -r '.commit // ""' || true)"
+            # Match by prefix so a short or full SHA both satisfy the check.
+            if [ -n "$live" ] && [ "${GITHUB_SHA#"$live"}" != "$GITHUB_SHA" ]; then
+              echo "✓ Production is live on $live"
+              exit 0
+            fi
+            echo "  attempt $attempt/60: live commit=${live:-<none>}; retrying in 10s"
+            sleep 10
+          done
+          echo "::error::Production never reported commit $GITHUB_SHA — the deploy likely failed to boot or failed its healthcheck, so prod is still on the previous image."
+          exit 1
