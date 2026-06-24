@@ -17,7 +17,12 @@ test.describe("local auth and routing smoke", () => {
 
   test("renders public auth routes", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByRole("link", { name: "View projects" }).first()).toBeVisible();
+    await expect(
+      page.getByRole("textbox", { name: "What should the video be about?" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Create my 30-second video" }),
+    ).toBeVisible();
 
     await page.goto("/login");
     await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
