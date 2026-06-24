@@ -202,7 +202,10 @@ export function createGenerateKeyframeTool(
         context.auth.workspaceId,
         context.projectId
       );
-      if (!storyboard || storyboard.planAssetId !== active.assetId) {
+      if (
+        !storyboard ||
+        (storyboard.planAssetId !== null && storyboard.planAssetId !== active.assetId)
+      ) {
         logger.warn("generate_keyframe.precondition_missing_storyboard", {
           workspaceId: context.auth.workspaceId,
           projectId: context.projectId,
