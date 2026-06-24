@@ -170,7 +170,7 @@ that change touches.
     slot at an already-generated pooled asset (§5, "I like image 10 — use it
     here") re-points an active selection rather than authoring content; even then
     the agent reconciles any downstream effect. The UI consequence — an
-    observe-first dashboard whose primary edit affordance is **"Ask the AI"** — is
+    observe-first dashboard whose primary edit affordance is **"Request Changes"** — is
     the source-of-truth interaction model in
     [docs/ui-interaction-model.md](ui-interaction-model.md).
 
@@ -399,7 +399,7 @@ resolutions as the design record (the "why" behind the as-built schema).
 ## 9. Provenance & related reading
 
 - **UI source of truth:** [`docs/ui-interaction-model.md`](ui-interaction-model.md)
-  — the observe-first dashboard + "Ask the AI" editing model that Principle 10
+  — the observe-first dashboard + "Request Changes" editing model that Principle 10
   implies. Read it before building any dashboard/editor surface.
 - **As-built reference (the live model):** migrations
   `supabase/migrations/20260610120000_asset_graph_model.sql` +

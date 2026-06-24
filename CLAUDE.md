@@ -16,10 +16,10 @@ timeline with patches" model.
 **[docs/ui-interaction-model.md](docs/ui-interaction-model.md)** is the
 authoritative companion for how the **UI behaves**: the dashboard is
 observe-first (read-optimized, minimal direct-edit controls), and the *only* way
-to change content is the object-scoped **"Ask the AI"** modal — every change
+to change content is the object-scoped **"Request Changes"** modal — every change
 flows through the agent (NORTH_STAR Principle 10), nothing is edited in
 isolation. Read it before building any dashboard/editor surface; default new
-object surfaces to read-only + an "Ask the AI" entry point rather than form
+object surfaces to read-only + a "Request Changes" entry point rather than form
 fields.
 
 ## Direction (target architecture)

@@ -273,7 +273,7 @@ function FieldButton({ item, onClick }: { item: FieldItem; onClick: () => void }
     <button type="button" className={styles.fieldButton} onClick={onClick}>
       <span className={styles.fieldTopline}>
         <span>{item.label}</span>
-        <span>Ask AI</span>
+        <span>Request Changes</span>
       </span>
       <p className={`${styles.fieldValue} ${item.value ? "" : styles.emptyValue}`}>
         {item.value || "Not set"}

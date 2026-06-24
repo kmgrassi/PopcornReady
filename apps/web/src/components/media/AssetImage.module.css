@@ -20,7 +20,7 @@
 }
 
 /* Wrapper used when the healthy media is itself activatable (opens the surface's
-   viewer / Ask-the-AI modal). Strips native button chrome. */
+   viewer / Request Changes modal). Strips native button chrome. */
 .activate {
   display: block;
   width: 100%;

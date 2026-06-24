@@ -75,7 +75,7 @@ export function StoryboardPage() {
             {project?.name ?? "Project"}
           </Link>
           <h1>Storyboard</h1>
-          <p>Click any panel to ask the AI to edit it.</p>
+          <p>Click any panel to request changes.</p>
         </div>
         <div className={styles.headerActions}>
           {revising ? (
@@ -278,7 +278,7 @@ function BeatCard({
     canEdit && image ? (
       <>
         <span className={styles.beatNumber}>Beat {order}</span>
-        <span className={styles.editHint}>Ask AI</span>
+        <span className={styles.editHint}>Request Changes</span>
       </>
     ) : (
       <span className={styles.beatNumber}>Beat {order}</span>

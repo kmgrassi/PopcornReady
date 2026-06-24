@@ -2,7 +2,7 @@
 
 > **Read [docs/ui-interaction-model.md](../ui-interaction-model.md) first.** It is
 > the source of truth for UI *behavior*: observe-first surfaces, and content
-> changes only via the object-scoped **"Ask the AI"** modal (no direct-edit
+> changes only via the object-scoped **"Request Changes"** modal (no direct-edit
 > forms). The dense form panels / "advanced options" inputs below are a
 > transitional state — the target is **no direct-edit fields**, not collapsed
 > ones. Reconcile this scope's inspector/wizard work to that model as it's built.

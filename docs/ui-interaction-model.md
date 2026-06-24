@@ -14,7 +14,7 @@
 Every authenticated surface — project, storyboard, scene, beat, asset, timeline
 item, export — is **observe-first**: it exists to let the user understand what
 the system has produced and what state it's in. The **only** way to change any of
-it is to **ask the AI**. There is no direct-edit form that mutates content in
+it is to **request changes**. There is no direct-edit form that mutates content in
 isolation.
 
 This is the direct UI consequence of [NORTH_STAR.md](NORTH_STAR.md) **Principle
@@ -64,25 +64,25 @@ Read-optimized presentation of state. The user can:
 Observe surfaces carry **no input boxes and no edit buttons.** Their job is to
 make "what's going on" legible at a glance.
 
-### 2.2 Ask the AI (the single edit affordance)
+### 2.2 Request Changes (the single edit affordance)
 
 The **only** path to changing content. Selecting an object and choosing to change
-it opens the **Ask-the-AI modal** (§3) — a scoped prompt to the agent. The user
+it opens the **Request Changes modal** (§3) — a scoped prompt to the agent. The user
 describes intent in natural language; the agent does the rest.
 
 There is no third primitive. If a proposed interaction is neither "observe" nor
-"ask the AI," it does not belong in the product without an explicit, documented
+"request changes," it does not belong in the product without an explicit, documented
 exception (§5).
 
-## 3. The "Ask the AI" modal
+## 3. The "Request Changes" modal
 
 Clicking an object the user wants to change — a project, a storyboard, a scene, a
 beat, an asset card, a timeline item — opens a modal whose primary content is
-**"Ask the AI for changes"**: a prompt box scoped to that object.
+**"Request Changes"**: a prompt box scoped to that object.
 
 **Scope & context.** The modal is **anchored to the object that opened it** and
 passes that object's identity to the agent: its stable ID, its kind, its current
-value, and its provenance/dependency context. "Ask the AI" from a beat is
+value, and its provenance/dependency context. "Request Changes" from a beat is
 implicitly *about that beat*; from the whole project, it's about the project. The
 user types intent ("brighter," "swap the jacket for a hoodie," "cut two seconds
 off the open"); they do **not** restate which thing they mean.
@@ -93,7 +93,7 @@ off the open"); they do **not** restate which thing they mean.
    cut) — so the ask is grounded in what the user is looking at.
 2. Its **provenance/lineage** (what it was built from) — context for both the
    user and the agent.
-3. A **prompt box** + submit: "Ask the AI for changes."
+3. A **prompt box** + submit: "Request Changes."
 4. After submit: the agent's **proposed plan and blast radius** — what it will
    recompute, what stays, and (for expensive/fan-out work) a rough cost — per
    NORTH_STAR Principle 5. The user **confirms**; the agent executes and
@@ -111,7 +111,7 @@ STAR §0) focused on one object.
 
 ## 4. What this looks like per object
 
-| User clicks… | They see (observe) | "Ask the AI" changes… |
+| User clicks… | They see (observe) | "Request Changes" changes… |
 |---|---|---|
 | **Project** | overview: status, runs, latest output, the story at a glance | anything project-wide ("make the whole thing more upbeat," "rename the hero everywhere") |
 | **Storyboard / story** | the beats/scenes in order, with state per beat | structure ("add a beat after the reveal," "reorder," "tighten the arc") |
@@ -127,7 +127,7 @@ modal**. No row has a third "edit it directly" column.
 
 A short, explicit allowlist of direct interactions that are **not** content
 mutations and therefore don't go through the agent. Anything not on this list is
-"Ask the AI."
+"Request Changes."
 
 - **Selection among existing pooled assets** — pointing a slot at an
   already-generated asset ("I like image 10, use it here"). This re-points an
@@ -142,10 +142,10 @@ mutations and therefore don't go through the agent. Anything not on this list is
   aspect preview, expand provenance. Pure view state.
 - **Navigation & organization metadata** — open/close panels, project
   **name/title**, tags, archive/delete a project. Naming a container is not
-  authoring its content. (Borderline cases lean toward "Ask the AI.")
+  authoring its content. (Borderline cases lean toward "Request Changes.")
 
 If you find yourself wanting to add a control that *creates or alters generated
-content* and it isn't on this list, the answer is the Ask-the-AI modal — or a
+content* and it isn't on this list, the answer is the Request Changes modal — or a
 documented amendment to this list, not a quiet new form field.
 
 ## 6. Anti-patterns (what this reframes)
@@ -160,7 +160,7 @@ this doc as they're touched:
   Hiding these inputs behind an inspector or a wizard step is an improvement, but
   the end state is **not "collapsed forms"** — it's "no direct-edit forms."
   Configuration the agent needs becomes either an **initial prompt/brief to the
-  agent** or an **Ask-the-AI** instruction, not a field the user saves against an
+  agent** or a **Request Changes** instruction, not a field the user saves against an
   asset.
 - **Per-asset prompt boxes that re-run one asset in isolation** — these must
   route through the agent so blast radius is computed, not fire a lone
@@ -173,36 +173,36 @@ The redesign scopes ([`scopes/studio-dashboard-redesign.md`](scopes/studio-dashb
 dashboard-ui's "the dashboard reads and navigates" non-goal is exactly right;
 this doc extends that stance from the cross-project dashboard down into **every**
 object detail and editor surface, and replaces "inspector full of inputs" with
-"inspector that shows state + an Ask-the-AI button."
+"inspector that shows state + a Request Changes button."
 
 ## 7. Implications for builders
 
-- Default any new object surface to **read-only + an "Ask the AI" entry point.**
+- Default any new object surface to **read-only + a "Request Changes" entry point.**
   Adding an input box is the exception that needs justification against §5.
-- The Ask-the-AI modal is a **reusable, object-scoped component**, not a
+- The Request Changes modal is a **reusable, object-scoped component**, not a
   per-screen reimplementation. It takes `{ objectId, objectKind, context }` and
   owns the prompt → propose → confirm → recompute loop.
 - "Propose before expensive redo" (NORTH_STAR Principle 5) is **part of the
   modal's contract**, not an afterthought: show the plan and blast radius before
   the user commits.
 - Front-end server state still lives in **TanStack Query** (see CLAUDE.md): the
-  observe surfaces are queries; the Ask-the-AI submit is a mutation that
+  observe surfaces are queries; the Request Changes submit is a mutation that
   invalidates the affected query keys when the agent's recompute lands.
 
 ## 8. Open decisions
 
-- **Modal vs. side panel vs. docked chat** for "Ask the AI." A modal is the
+- **Modal vs. side panel vs. docked chat** for "Request Changes." A modal is the
   baseline framing here; a persistent docked agent chat that *focuses* on the
   selected object is an acceptable equivalent so long as the scoping/propose/
   confirm contract holds.
 - **Naming as content** — is a project/scene title a §5 carve-out (organization
   metadata) or an agent-mediated change once it appears *in* the video (a title
   card)? Leaning: editing the label is direct; changing what renders on screen is
-  Ask-the-AI.
+  Request Changes.
 - **Selection vs. ask** boundary for pool picking when a manual selection would
   itself desync dependents — when does a "choose image 10" flip warrant an agent
   reconciliation pass vs. a silent re-point?
-- **Bulk asks** — "Ask the AI" scoped to a multi-select (several beats at once)
+- **Bulk asks** — "Request Changes" scoped to a multi-select (several beats at once)
   vs. always single-object.
 
 ## 9. Related reading
