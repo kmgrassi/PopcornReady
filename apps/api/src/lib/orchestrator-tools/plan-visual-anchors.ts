@@ -1,10 +1,12 @@
 import {
   addProjectVisualAnchorPlan as realAddProjectVisualAnchorPlan,
   getActiveProjectPlan as realGetActiveProjectPlan,
+  getProjectStoryboard as realGetProjectStoryboard,
   type VisualAnchorPlan,
   type VisualAnchorPlanItem,
 } from "@/lib/api/v1/store";
 import type { EditPlan, Scene } from "@popcorn/shared/types";
+import type { ProjectStoryboard, StoryboardScene } from "@popcorn/shared/v1/types";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 
@@ -19,11 +21,13 @@ export interface PlanVisualAnchorsOutput {
 
 export interface PlanVisualAnchorsDeps {
   getActiveProjectPlan: typeof realGetActiveProjectPlan;
+  getProjectStoryboard: typeof realGetProjectStoryboard;
   addProjectVisualAnchorPlan: typeof realAddProjectVisualAnchorPlan;
 }
 
 const defaultDeps: PlanVisualAnchorsDeps = {
   getActiveProjectPlan: realGetActiveProjectPlan,
+  getProjectStoryboard: realGetProjectStoryboard,
   addProjectVisualAnchorPlan: realAddProjectVisualAnchorPlan,
 };
 
@@ -193,6 +197,56 @@ export function deriveVisualAnchorPlan(plan: EditPlan, feedback?: string): Visua
   };
 }
 
+function storyboardSceneSummary(scene: StoryboardScene): string {
+  const parts = [
+    scene.setting,
+    scene.mood,
+    scene.summary,
+    ...scene.beats.map((beat) => beat.intent),
+  ];
+  return parts.filter(Boolean).join(" ");
+}
+
+export function deriveVisualAnchorPlanFromStoryboard(
+  storyboard: ProjectStoryboard,
+  style: string,
+  feedback?: string
+): VisualAnchorPlan {
+  const anchors = new Map<string, VisualAnchorPlanItem>();
+
+  for (const scene of storyboard.scenes) {
+    const sceneBeatIds = scene.beats.map((beat) => beat.id);
+    if (scene.setting?.trim()) {
+      const setting = scene.setting.trim();
+      upsertAnchor(anchors, {
+        id: `location_${slug(setting)}`,
+        kind: "location",
+        label: setting,
+        description:
+          storyboardSceneSummary(scene) || `Recurring location for ${scene.title ?? "scene"}.`,
+        sourceSceneIds: [scene.id],
+        sourceBeatIds: sceneBeatIds,
+      });
+    }
+  }
+
+  if (anchors.size === 0) {
+    anchors.set("style_primary", {
+      id: "style_primary",
+      kind: "style",
+      label: style,
+      description: feedback ? `${style}. Bias: ${feedback}` : `Overall visual style anchor.`,
+      sourceSceneIds: storyboard.scenes.map((scene) => scene.id),
+      sourceBeatIds: storyboard.scenes.flatMap((scene) => scene.beats.map((beat) => beat.id)),
+    });
+  }
+
+  return {
+    schemaVersion: "visual_anchor_plan.v1",
+    anchors: [...anchors.values()],
+  };
+}
+
 function planRequired(): ToolCallResult<PlanVisualAnchorsOutput> {
   return {
     status: "failed",
@@ -255,7 +309,14 @@ export function createPlanVisualAnchorsTool(
       const active = await resolved.getActiveProjectPlan(context.projectId);
       if (!active) return planRequired();
 
-      const visualAnchorPlan = deriveVisualAnchorPlan(active.plan, input.feedback);
+      const storyboard = await resolved.getProjectStoryboard(
+        context.auth.workspaceId,
+        context.projectId
+      );
+      const visualAnchorPlan =
+        storyboard && storyboard.scenes.length > 0
+          ? deriveVisualAnchorPlanFromStoryboard(storyboard, active.plan.style, input.feedback)
+          : deriveVisualAnchorPlan(active.plan, input.feedback);
       const { visualAnchorPlanAssetId } = await resolved.addProjectVisualAnchorPlan({
         workspaceId: context.auth.workspaceId,
         projectId: context.projectId,

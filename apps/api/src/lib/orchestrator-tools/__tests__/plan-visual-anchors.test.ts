@@ -7,6 +7,7 @@ import type { EditPlan } from "@popcorn/shared/types";
 import {
   createPlanVisualAnchorsTool,
   deriveVisualAnchorPlan,
+  deriveVisualAnchorPlanFromStoryboard,
   type PlanVisualAnchorsOutput,
 } from "../plan-visual-anchors";
 import { ToolRegistry } from "../registry";
@@ -53,6 +54,61 @@ test("deriveVisualAnchorPlan extracts character and location anchors from the pl
     ["character_barista_maya", "location_sunny_neighborhood_cafe"]
   );
   assert.deepEqual(plan.anchors[0].sourceBeatIds, ["beat_1", "beat_2"]);
+});
+
+test("deriveVisualAnchorPlanFromStoryboard extracts location anchors from persisted beats", () => {
+  const plan = deriveVisualAnchorPlanFromStoryboard(
+    {
+      id: "story_1",
+      projectId: "proj_1",
+      planAssetId: null,
+      status: "ready",
+      createdAt: new Date(0).toISOString(),
+      updatedAt: new Date(0).toISOString(),
+      scenes: [
+        {
+          id: "scene_row_1",
+          projectId: "proj_1",
+          storyboardId: "story_1",
+          sceneIndex: 0,
+          title: "Cafe opening",
+          summary: "Maya opens the cafe.",
+          setting: "sunny neighborhood cafe",
+          mood: "welcoming",
+          durationSec: 10,
+          sceneAssetId: null,
+          status: "ready",
+          createdAt: new Date(0).toISOString(),
+          updatedAt: new Date(0).toISOString(),
+          beats: [
+            {
+              id: "beat_row_1",
+              projectId: "proj_1",
+              sceneId: "scene_row_1",
+              beatIndex: 0,
+              intent: "Maya opens the cafe.",
+              visualDescription: null,
+              dialogueSummary: null,
+              narration: null,
+              durationSec: 5,
+              status: "ready",
+              beatAssetId: null,
+              panels: [],
+              createdAt: new Date(0).toISOString(),
+              updatedAt: new Date(0).toISOString(),
+            },
+          ],
+        },
+      ],
+    },
+    "warm documentary"
+  );
+
+  assert.deepEqual(plan.anchors.map((anchor) => anchor.id), [
+    "location_sunny_neighborhood_cafe",
+  ]);
+  assert.deepEqual(plan.anchors[0]?.sourceSceneIds, ["scene_row_1"]);
+  assert.deepEqual(plan.anchors[0]?.sourceBeatIds, ["beat_row_1"]);
 });
 
 test("plan_visual_anchors validates input before reading the plan", async () => {
@@ -119,6 +175,7 @@ test("plan_visual_anchors accepts approval retry revisionInstruction", async () 
       ...activePlan,
       plan: noAnchorPlan,
     }),
+    getProjectStoryboard: async () => null,
     addProjectVisualAnchorPlan: async (input) => {
       persisted = input;
       return { visualAnchorPlanAssetId: "anchors_1" };
@@ -147,6 +204,7 @@ test("plan_visual_anchors persists a typed anchor plan with plan provenance", as
     | undefined;
   const tool = createPlanVisualAnchorsTool({
     getActiveProjectPlan: async () => activePlan,
+    getProjectStoryboard: async () => null,
     addProjectVisualAnchorPlan: async (input) => {
       persisted = input;
       return { visualAnchorPlanAssetId: "anchors_1" };

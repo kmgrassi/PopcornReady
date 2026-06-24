@@ -512,6 +512,7 @@ interface ProjectRow {
   slug?: string | null;
   status: "active" | "deleted";
   visibility?: "public" | "private";
+  current_story_blueprint_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -3170,6 +3171,22 @@ interface StoryboardSceneRow {
   updated_at: string;
 }
 
+interface StorySpineSceneRow {
+  id: string;
+  project_id: string;
+  story_blueprint_id: string;
+  position: number;
+  title: string | null;
+  summary: string | null;
+  setting: string | null;
+  mood: string | null;
+  target_duration_sec: number | null;
+  scene_asset_id: string | null;
+  status: StoryboardItemStatus;
+  created_at: string;
+  updated_at: string;
+}
+
 interface StoryboardBeatRow {
   id: string;
   project_id: string;
@@ -3292,6 +3309,25 @@ function mapStoryboardScene(
   };
 }
 
+function mapSpineScene(row: StorySpineSceneRow, beats: StoryboardBeat[]): StoryboardScene {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    storyboardId: row.story_blueprint_id,
+    sceneIndex: row.position,
+    title: row.title,
+    summary: row.summary,
+    setting: row.setting,
+    mood: row.mood,
+    durationSec: row.target_duration_sec,
+    sceneAssetId: row.scene_asset_id,
+    status: row.status,
+    beats,
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+  };
+}
+
 function mapStoryboard(
   row: StoryboardRow,
   scenes: StoryboardScene[]
@@ -3301,6 +3337,22 @@ function mapStoryboard(
     projectId: row.project_id,
     planAssetId: row.plan_asset_id,
     status: row.status,
+    scenes,
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+  };
+}
+
+function mapSpineStoryboard(
+  row: ProjectRow,
+  storyBlueprintId: string,
+  scenes: StoryboardScene[]
+): ProjectStoryboard {
+  return {
+    id: storyBlueprintId,
+    projectId: row.id,
+    planAssetId: null,
+    status: "ready",
     scenes,
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
@@ -3424,7 +3476,90 @@ export async function getProjectStoryboard(
   projectId: string
 ): Promise<ProjectStoryboard | null> {
   const db = getServiceSupabase();
-  await requireProjectRow(db, workspaceId, projectId);
+  const project = await requireProjectRow(db, workspaceId, projectId);
+  const storyBlueprintId = project.current_story_blueprint_id ?? null;
+
+  if (storyBlueprintId) {
+    const scenesData = await runQuery(
+      "store.getProjectStoryboard spine scenes",
+      db
+        .from("story_blueprint_scenes")
+        .select(
+          "id, project_id, story_blueprint_id, position, title, summary, setting, mood, target_duration_sec, scene_asset_id, status, created_at, updated_at"
+        )
+        .eq("project_id", projectId)
+        .eq("story_blueprint_id", storyBlueprintId)
+        .order("position", { ascending: true })
+    );
+    const spineSceneRows = (scenesData ?? []) as StorySpineSceneRow[];
+    const sceneIds = spineSceneRows.map((scene) => scene.id);
+
+    const beatsData = sceneIds.length
+      ? await runQuery(
+          "store.getProjectStoryboard spine beats",
+          db
+            .from("story_beats")
+            .select("*")
+            .eq("project_id", projectId)
+            .in("scene_id", sceneIds)
+            .order("beat_index", { ascending: true })
+        )
+      : [];
+    const beatRows = (beatsData ?? []) as StoryboardBeatRow[];
+    const beatIds = beatRows.map((beat) => beat.id);
+
+    const panelsData = beatIds.length
+      ? await runQuery(
+          "store.getProjectStoryboard spine panels",
+          db
+            .from("story_panels")
+            .select("*")
+            .eq("project_id", projectId)
+            .in("beat_id", beatIds)
+            .order("panel_index", { ascending: true })
+        )
+      : [];
+    const panelRows = (panelsData ?? []) as StoryboardPanelRow[];
+
+    // Blueprint scenes can exist before the storyboard backfill has populated
+    // story_beats. In that intermediate state, keep serving the complete legacy
+    // storyboard so panels and keyframe references do not disappear.
+    if (beatRows.length > 0) {
+      const panelMedia = await resolvePanelMediaByAssetId(
+        db,
+        workspaceId,
+        projectId,
+        panelRows
+          .map((row) => row.image_asset_id)
+          .filter((id): id is string => Boolean(id))
+      );
+
+      const panelsByBeat = new Map<string, StoryboardPanel[]>();
+      for (const row of panelRows) {
+        const panel = mapStoryboardPanel(row);
+        const media = panel.imageAssetId ? panelMedia.get(panel.imageAssetId) : undefined;
+        if (media?.url) {
+          panel.url = media.url;
+          if (media.thumbnailUrl) panel.thumbnailUrl = media.thumbnailUrl;
+        }
+        if (media?.prompt) panel.prompt = media.prompt;
+        panelsByBeat.set(panel.beatId, [...(panelsByBeat.get(panel.beatId) ?? []), panel]);
+      }
+
+      const beatsByScene = new Map<string, StoryboardBeat[]>();
+      for (const beatRow of beatRows) {
+        const beat = mapStoryboardBeat(beatRow, panelsByBeat.get(beatRow.id) ?? []);
+        beatsByScene.set(beat.sceneId, [...(beatsByScene.get(beat.sceneId) ?? []), beat]);
+      }
+
+      return mapSpineStoryboard(
+        project,
+        storyBlueprintId,
+        spineSceneRows.map((scene) => mapSpineScene(scene, beatsByScene.get(scene.id) ?? []))
+      );
+    }
+  }
+
   const storyboard = await getStoryboardRow(db, projectId);
   if (!storyboard) return null;
 
