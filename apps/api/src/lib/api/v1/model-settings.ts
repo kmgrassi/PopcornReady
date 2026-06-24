@@ -48,7 +48,7 @@ const DEFAULT_BY_PURPOSE: Record<
   ModelSettingPurpose,
   { provider: string; model: string }
 > = {
-  image_generation: { provider: "openai", model: "gpt-image-1.5" },
+  image_generation: { provider: "ideogram", model: "ideogram-v4" },
   video_generation: { provider: "gemini", model: "veo-3.1-generate-preview" },
   audio_generation: { provider: "elevenlabs", model: "eleven_multilingual_v2" },
   text_generation: { provider: "openai", model: "gpt-5" },

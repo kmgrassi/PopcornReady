@@ -17,7 +17,7 @@ test("model settings expose defaults for each purpose", () => {
   );
   assert.equal(
     defaults.find((setting) => setting.purpose === "image_generation")?.provider,
-    "openai"
+    "ideogram"
   );
   assert.equal(
     defaults.find((setting) => setting.purpose === "video_generation")?.provider,
