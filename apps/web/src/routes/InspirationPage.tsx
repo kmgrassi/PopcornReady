@@ -282,7 +282,10 @@ function PosterPanel({
           : "Poster pending";
 
   return (
-    <div className={`${styles.poster} ${styles.posterEmpty}`} aria-live="polite">
+    <div
+      className={`${styles.poster} ${styles.posterEmpty}`}
+      aria-live={isGenerating ? undefined : "polite"}
+    >
       {isGenerating ? (
         <Spinner size="lg" label={status} className={styles.posterSpinner} />
       ) : (
