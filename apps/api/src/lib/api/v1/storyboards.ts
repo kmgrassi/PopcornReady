@@ -50,6 +50,7 @@ interface StoryBlueprintRow {
   project_id: string;
   asset_id: string | null;
   status: "draft" | "approved" | "superseded";
+  provenance: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 }
@@ -95,10 +96,12 @@ function iso(value: string | null | undefined): string {
 }
 
 function mapStoryboardFromBlueprint(row: StoryBlueprintRow): Storyboard {
+  const planAssetId =
+    typeof row.provenance?.planAssetId === "string" ? row.provenance.planAssetId : null;
   return {
     id: row.id,
     projectId: row.project_id,
-    planAssetId: null,
+    planAssetId,
     status: row.status === "approved" ? "approved" : "ready",
     createdByActionId: null,
     createdAt: iso(row.created_at),
@@ -133,7 +136,7 @@ async function getStoryboardRow(
     "storyboards.getStoryboard",
     db
       .from("story_blueprints")
-      .select("id, project_id, asset_id, status, created_at, updated_at")
+      .select("id, project_id, asset_id, status, provenance, created_at, updated_at")
       .eq("project_id", projectId)
       .eq("id", storyboardId)
       .maybeSingle()
@@ -417,7 +420,7 @@ export async function listStoryboards(input: {
     "storyboards.listStoryboards",
     db
       .from("story_blueprints")
-      .select("id, project_id, asset_id, status, created_at, updated_at")
+      .select("id, project_id, asset_id, status, provenance, created_at, updated_at")
       .eq("project_id", input.projectId)
       .order("created_at", { ascending: false })
   );
@@ -481,7 +484,7 @@ export async function createStoryboard(input: {
           tool: "storyboards.createStoryboard",
         },
       })
-      .select("id, project_id, asset_id, status, created_at, updated_at")
+      .select("id, project_id, asset_id, status, provenance, created_at, updated_at")
       .single()
   );
   const storyboard = data as StoryBlueprintRow;
@@ -520,6 +523,12 @@ export async function updateStoryboard(input: {
   if (input.data.status !== undefined) {
     updates.status = input.data.status === "approved" ? "approved" : "draft";
   }
+  if (input.data.planAssetId !== undefined) {
+    updates.provenance = {
+      ...(existing.provenance ?? {}),
+      planAssetId: input.data.planAssetId,
+    };
+  }
   if (Object.keys(updates).length === 0) return mapStoryboardFromBlueprint(existing);
   const data = await runQuery(
     "storyboards.updateStoryboard",
@@ -528,7 +537,7 @@ export async function updateStoryboard(input: {
       .update(updates)
       .eq("project_id", input.projectId)
       .eq("id", input.storyboardId)
-      .select("id, project_id, asset_id, status, created_at, updated_at")
+      .select("id, project_id, asset_id, status, provenance, created_at, updated_at")
       .single()
   );
   return mapStoryboardFromBlueprint(data as StoryBlueprintRow);

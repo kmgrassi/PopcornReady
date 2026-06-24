@@ -618,6 +618,7 @@ interface StoryBlueprintRow {
   asset_id: string | null;
   status: "draft" | "approved" | "superseded";
   snapshot: unknown;
+  provenance: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 }
@@ -3284,12 +3285,13 @@ function mapSpineScene(row: StorySpineSceneRow, beats: StoryboardBeat[]): Storyb
 function mapSpineStoryboard(
   row: ProjectRow,
   storyBlueprintId: string,
+  planAssetId: string | null,
   scenes: StoryboardScene[]
 ): ProjectStoryboard {
   return {
     id: storyBlueprintId,
     projectId: row.id,
-    planAssetId: null,
+    planAssetId,
     status: "ready",
     scenes,
     createdAt: iso(row.created_at),
@@ -3418,6 +3420,12 @@ export async function getProjectStoryboard(
   const storyBlueprintId = project.current_story_blueprint_id ?? null;
 
   if (storyBlueprintId) {
+    const storyBlueprint = await getStoryBlueprintRow(db, projectId, storyBlueprintId);
+    if (!storyBlueprint) return null;
+    const planAssetId =
+      typeof storyBlueprint.provenance?.planAssetId === "string"
+        ? storyBlueprint.provenance.planAssetId
+        : null;
     const scenesData = await runQuery(
       "store.getProjectStoryboard spine scenes",
       db
@@ -3489,6 +3497,7 @@ export async function getProjectStoryboard(
     return mapSpineStoryboard(
       project,
       storyBlueprintId,
+      planAssetId,
       spineSceneRows.map((scene) => mapSpineScene(scene, beatsByScene.get(scene.id) ?? []))
     );
   }
