@@ -19,6 +19,7 @@ import type {
   CreateTimelineRevisionInput,
   ExportArtifactResponse,
   ExportJobResponse,
+  ForkProjectResponse,
   GenerationRunArtifactResponse,
   ListPagination,
   MeResponse,
@@ -294,6 +295,11 @@ export const v1Api = {
     apiRequest<AccountMutationResponse>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/admin-delete`,
       { method: "DELETE" }
+    ),
+  forkPublicProject: (projectId: string) =>
+    apiRequest<ForkProjectResponse>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/fork`,
+      { method: "POST" }
     ),
   setProjectPoster: (projectId: string, assetId: string) =>
     apiRequest<ProjectResponse>(

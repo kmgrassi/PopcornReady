@@ -531,6 +531,24 @@ export function useAdminDeletePublicProjectMutation(projectId: string) {
   });
 }
 
+export function useForkPublicProjectMutation(projectId: string) {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => v1Api.forkPublicProject(projectId),
+    meta: {
+      successMessage: "Project copied to your library",
+      errorMessage: "Could not copy project",
+    },
+    onSuccess: (data) => {
+      client.setQueryData(queryKeys.project(data.project.id), data);
+      void client.invalidateQueries({ queryKey: ["projects"] });
+      void client.invalidateQueries({ queryKey: ["dashboard"] });
+      void client.invalidateQueries({ queryKey: ["workspaces"] });
+    },
+  });
+}
+
 export function useSetProjectPosterMutation(projectId: string) {
   const client = useQueryClient();
 
