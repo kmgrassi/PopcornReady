@@ -12,6 +12,7 @@ import { ImageWithSkeleton } from "../components/ui/ImageWithSkeleton";
 import { EmptyState, ErrorState } from "../components/ui/StateCard";
 import { useProjectQuery, useProjectStoryboardQuery } from "../lib/queryClient";
 import { v1Api } from "../lib/api-client";
+import { modelPurposeForAssetKind } from "../lib/modelOptions";
 import styles from "./ProjectStepPage.module.css";
 
 type ProjectStep = "concept" | "brief" | "script";
@@ -77,7 +78,10 @@ export function ProjectStepPage({ step }: { step: ProjectStep }) {
   const loading = projectQuery.isLoading || (step === "script" && storyboardQuery.isLoading);
   const error = projectQuery.error ?? (step === "script" ? storyboardQuery.error : null);
 
-  async function submitEdit(message: string) {
+  async function submitEdit(
+    message: string,
+    generationModel?: { provider: string; model: string }
+  ) {
     if (!activeEdit || !projectId) return;
     setPending(true);
     setEditError(null);
@@ -85,6 +89,7 @@ export function ProjectStepPage({ step }: { step: ProjectStep }) {
       await v1Api.createProjectAssetRevision(projectId, {
         message,
         target: editTarget(activeEdit.item, project?.brief ?? null),
+        generationModel,
       });
       setSentLabel(activeEdit.item.label);
       setActiveEdit(null);
@@ -201,6 +206,11 @@ export function ProjectStepPage({ step }: { step: ProjectStep }) {
         subtitle={activeEdit?.subtitle}
         pending={pending}
         error={editError}
+        modelPurpose={
+          activeEdit?.item.kind === "poster"
+            ? modelPurposeForAssetKind("image")
+            : null
+        }
         onClose={() => {
           if (!pending) setActiveEdit(null);
         }}

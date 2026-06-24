@@ -3,6 +3,7 @@ import type { BoardRevisionTarget } from "@popcorn/shared/v1/types";
 import { Button } from "../ui/Button";
 import { CloseButton } from "../ui/CloseButton";
 import { v1Api } from "../../lib/api-client";
+import { modelPurposeConfig, providerConfig } from "../../lib/modelOptions";
 import styles from "./AssetEditModal.module.css";
 
 export interface AssetEditModalProps {
@@ -37,6 +38,10 @@ export function AssetEditModal({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  const purposeConfig = modelPurposeConfig("image_generation");
+  const [provider, setProvider] = useState(purposeConfig.providers[0].id);
+  const [model, setModel] = useState(providerConfig(purposeConfig, provider).models[0]);
+  const [modelTouched, setModelTouched] = useState(false);
 
   // Reset whenever the modal (re)opens for a (possibly different) target.
   useEffect(() => {
@@ -45,8 +50,11 @@ export function AssetEditModal({
       setError(null);
       setPending(false);
       setSent(false);
+      setProvider(purposeConfig.providers[0].id);
+      setModel(providerConfig(purposeConfig, purposeConfig.providers[0].id).models[0]);
+      setModelTouched(false);
     }
-  }, [open, target]);
+  }, [open, purposeConfig, target]);
 
   useEffect(() => {
     if (!open) return;
@@ -66,7 +74,11 @@ export function AssetEditModal({
     setPending(true);
     setError(null);
     try {
-      const res = await v1Api.createProjectAssetRevision(projectId, { message: trimmed, target });
+      const res = await v1Api.createProjectAssetRevision(projectId, {
+        message: trimmed,
+        target,
+        ...(modelTouched ? { generationModel: { provider, model } } : {}),
+      });
       setSent(true);
       setPrompt("");
       onSubmitted?.(res.runId);
@@ -120,6 +132,45 @@ export function AssetEditModal({
               onChange={(event) => setPrompt(event.target.value)}
             />
           </label>
+
+          <fieldset className={styles.modelPane} disabled={pending}>
+            <legend>Generation model</legend>
+            <label>
+              <span>Provider</span>
+              <select
+                value={provider}
+                onChange={(event) => {
+                  const nextProvider = event.target.value;
+                  const nextConfig = providerConfig(purposeConfig, nextProvider);
+                  setProvider(nextProvider);
+                  setModel(nextConfig.models[0] ?? "");
+                  setModelTouched(true);
+                }}
+              >
+                {purposeConfig.providers.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Model</span>
+              <select
+                value={model}
+                onChange={(event) => {
+                  setModel(event.target.value);
+                  setModelTouched(true);
+                }}
+              >
+                {providerConfig(purposeConfig, provider).models.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </fieldset>
 
           {error ? (
             <p className={styles.error} role="alert">

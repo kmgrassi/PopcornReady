@@ -14,8 +14,17 @@ export function useRegenerateImageMutation(options?: {
 }) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ assetId, prompt }: { assetId: string; prompt?: string }) =>
-      v1Api.regenerateAsset(assetId, prompt),
+    mutationFn: ({
+      assetId,
+      prompt,
+      provider,
+      model,
+    }: {
+      assetId: string;
+      prompt?: string;
+      provider?: string;
+      model?: string;
+    }) => v1Api.regenerateAsset(assetId, { prompt, provider, model }),
     onSuccess: (media, { assetId }) => {
       options?.onRegenerated?.(assetId, media);
       for (const namespace of IMAGE_QUERY_NAMESPACES) {

@@ -747,6 +747,10 @@ export interface BoardRevisionTarget {
 export interface BoardRevisionRequest {
   message: string;
   target: BoardRevisionTarget;
+  generationModel?: {
+    provider: string;
+    model: string;
+  };
 }
 
 export interface BoardRevisionResponse {

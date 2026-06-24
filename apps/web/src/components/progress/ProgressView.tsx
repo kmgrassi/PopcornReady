@@ -22,6 +22,7 @@ import {
 } from "../../lib/v1/generation-runs/client";
 import { useProjectQuery } from "../../lib/queryClient";
 import { v1Api } from "../../lib/api-client";
+import { modelPurposeForAssetKind } from "../../lib/modelOptions";
 import { StageRail } from "./StageRail";
 import {
   StoryboardBoard as FeedbackStoryboardBoard,
@@ -594,6 +595,7 @@ export function ProgressView({
   async function submitBoardFeedback(input: {
     message: string;
     target: BoardRevisionTarget;
+    generationModel?: { provider: string; model: string };
   }) {
     const key = storyboardFeedbackTargetKey(input.target);
     setBoardFeedbackPendingKey(key);
@@ -853,12 +855,19 @@ export function ProgressView({
                 subtitle={selectedAssetItem?.promptPreview ?? selectedAssetItem?.purpose}
                 pending={selectedAssetPending}
                 error={selectedAssetItem ? boardFeedbackError : null}
+                modelPurpose={
+                  selectedAssetItem?.kind ? modelPurposeForAssetKind(selectedAssetItem.kind) : null
+                }
                 onClose={() => {
                   if (!selectedAssetPending) setSelectedAssetItemId(null);
                 }}
-                onSubmit={async (message) => {
+                onSubmit={async (message, generationModel) => {
                   if (!selectedAssetTarget) return;
-                  await submitBoardFeedback({ message, target: selectedAssetTarget });
+                  await submitBoardFeedback({
+                    message,
+                    target: selectedAssetTarget,
+                    generationModel,
+                  });
                   setSelectedAssetItemId(null);
                 }}
                 asset={

@@ -39,6 +39,9 @@ export interface RegenerateImageAssetArgs {
   assetId: string;
   /** Caller-supplied prompt; wins over the asset's saved prompt when present. */
   prompt?: string | null;
+  /** Caller-supplied provider/model; wins over the asset's saved provenance. */
+  provider?: string | null;
+  model?: string | null;
   requestId?: string;
   deps?: Partial<RegenerateImageAssetDeps>;
 }
@@ -145,7 +148,7 @@ export async function regenerateImageAsset(
     );
     const assetLogger = logger.child({
       projectId: asset.projectId,
-      provider: asset.provenance?.provider || DEFAULT_IMAGE_PROVIDER,
+      provider: args.provider?.trim() || asset.provenance?.provider || DEFAULT_IMAGE_PROVIDER,
     });
 
     // Only images regenerate from a text prompt; video/audio need their own
@@ -169,8 +172,15 @@ export async function regenerateImageAsset(
       );
     }
 
-    const provider = asset.provenance?.provider || DEFAULT_IMAGE_PROVIDER;
-    const model = asset.provenance?.model;
+    const requestedProvider = args.provider?.trim();
+    const requestedModel = args.model?.trim();
+    const savedProvider = asset.provenance?.provider;
+    const provider = requestedProvider || savedProvider || DEFAULT_IMAGE_PROVIDER;
+    const model =
+      requestedModel ||
+      (!requestedProvider || requestedProvider === savedProvider
+        ? asset.provenance?.model
+        : undefined);
     assetLogger.info("asset_regenerate.asset_ready", {
       assetId,
       projectId: asset.projectId,

@@ -155,6 +155,32 @@ function parseBoardRevisionRequest(body: unknown, runId: string) {
   return {
     message,
     target: parseBoardRevisionTarget(body, runId),
+    generationModel: parseGenerationModel(body.generationModel),
+  };
+}
+
+function parseGenerationModel(value: unknown) {
+  if (!isRecord(value)) return undefined;
+  const provider = typeof value.provider === "string" ? value.provider.trim() : "";
+  const model = typeof value.model === "string" ? value.model.trim() : "";
+  if (!provider || !model) return undefined;
+  return { provider, model };
+}
+
+function boardRevisionPayload(request: ReturnType<typeof parseBoardRevisionRequest>) {
+  return {
+    schemaVersion: "board_revision_request.v1",
+    message: request.message,
+    target: request.target,
+    ...(request.generationModel ? { generationModel: request.generationModel } : {}),
+  };
+}
+
+function boardRevisionProposal(request: ReturnType<typeof parseBoardRevisionRequest>) {
+  return {
+    message: request.message,
+    target: request.target,
+    ...(request.generationModel ? { generationModel: request.generationModel } : {}),
   };
 }
 
@@ -643,21 +669,14 @@ orchestratorRunsRouter.post(
       orchestratorRunId: runId,
       tool: BOARD_FEEDBACK_TOOL,
       status: "applied",
-      params: {
-        schemaVersion: "board_revision_request.v1",
-        message: request.message,
-        target: request.target,
-      },
+      params: boardRevisionPayload(request),
       inputAssetIds: [
         request.target.clipAssetId,
         request.target.keyframeAssetId,
         request.target.assetId,
       ].filter((id): id is string => Boolean(id)),
       rationale: "User requested an AI-mediated board or tile revision.",
-      proposal: {
-        message: request.message,
-        target: request.target,
-      },
+      proposal: boardRevisionProposal(request),
     });
     if (run.status === "queued" || run.status === "succeeded") {
       await updateOrchestratorRun(runId, {
@@ -708,18 +727,14 @@ orchestratorRunsRouter.post(
       orchestratorRunId: run.id,
       tool: BOARD_FEEDBACK_TOOL,
       status: "applied",
-      params: {
-        schemaVersion: "board_revision_request.v1",
-        message: request.message,
-        target: request.target,
-      },
+      params: boardRevisionPayload(request),
       inputAssetIds: [
         request.target.assetId,
         request.target.keyframeAssetId,
         request.target.clipAssetId,
       ].filter((id): id is string => Boolean(id)),
       rationale: "User asked the agent to revise an asset from the storyboard view.",
-      proposal: { message: request.message, target: request.target },
+      proposal: boardRevisionProposal(request),
     });
     if (run.status !== "running" && run.status !== "waiting") {
       await updateOrchestratorRun(run.id, {

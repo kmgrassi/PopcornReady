@@ -4957,6 +4957,10 @@ export async function applyRegeneratedAssetMedia(
     projectId,
     tool: "regenerate_asset",
     status: "running",
+    params: {
+      provider: update.provenance.provider,
+      model: update.provenance.model,
+    },
     inputAssetIds: [assetId],
     rationale: "Regenerate image asset as a new immutable version.",
   });

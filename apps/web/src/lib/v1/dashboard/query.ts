@@ -429,8 +429,17 @@ export function useAssetRegenerateMutation(
     : null;
 
   return useMutation({
-    mutationFn: ({ assetId, prompt }: { assetId: string; prompt?: string }) =>
-      v1Api.regenerateAsset(assetId, prompt),
+    mutationFn: ({
+      assetId,
+      prompt,
+      provider,
+      model,
+    }: {
+      assetId: string;
+      prompt?: string;
+      provider?: string;
+      model?: string;
+    }) => v1Api.regenerateAsset(assetId, { prompt, provider, model }),
     onSuccess: (media: AssetMediaResponse, { assetId }) => {
       if (!queryKey) return;
       queryClient.setQueryData<
