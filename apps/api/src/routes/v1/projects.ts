@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { mutation, route } from "@/core/adapter";
 import { ApiError } from "@/core/errors";
+import { authMode, bearerToken } from "@/lib/api/v1/auth";
+import type { HandlerCtx } from "@/lib/api/v1/handler";
 import {
   parseAnalyzeBatch,
   parseCreateProject,
@@ -14,17 +16,54 @@ import {
 import {
   createProject,
   deleteProject,
+  deletePublicProjectAsAdmin,
   getProject,
   getProjectWatchMedia,
   listProjects,
   setProjectPoster,
   setProjectVisibility,
 } from "@/lib/api/v1/store";
+import { buildUserScopedSupabase } from "@/lib/supabase/clients";
 import { generatePoster } from "@/lib/api/v1/poster-generation";
 import { startPosterGenerationInBackground } from "@/lib/api/v1/poster-background";
 import { getStoryboard, putStoryboard } from "@/lib/api/v1/storyboard";
 
 export const projectsRouter = Router();
+
+const ADMIN_ROLES = new Set(["admin", "owner"]);
+
+function claimValues(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === "string");
+  }
+  return [];
+}
+
+function hasAdminAppMetadata(appMetadata: Record<string, unknown> | undefined): boolean {
+  if (!appMetadata) return false;
+  const claims = [
+    ...claimValues(appMetadata.role),
+    ...claimValues(appMetadata.roles),
+    ...claimValues(appMetadata.workspace_role),
+  ];
+  return claims.some((claim) => ADMIN_ROLES.has(claim.toLowerCase()));
+}
+
+async function requireProjectAdmin(ctx: Pick<HandlerCtx, "auth" | "req">): Promise<void> {
+  if (authMode() === "local") return;
+
+  const token = bearerToken(ctx.req);
+  if (!token) {
+    throw new ApiError("forbidden", "Project admin access required.");
+  }
+
+  const supabase = buildUserScopedSupabase(token);
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data.user || !hasAdminAppMetadata(data.user.app_metadata)) {
+    throw new ApiError("forbidden", "Project admin access required.");
+  }
+}
 
 projectsRouter.get(
   "/projects",
@@ -97,6 +136,18 @@ projectsRouter.delete(
       throw new ApiError("validation_failed", "projectId is required.");
     }
     await deleteProject(auth.workspaceId, params.projectId);
+    return { status: 200, body: { ok: true } };
+  })
+);
+
+projectsRouter.delete(
+  "/projects/:projectId/admin-delete",
+  mutation(async (ctx, params) => {
+    if (!params.projectId) {
+      throw new ApiError("validation_failed", "projectId is required.");
+    }
+    await requireProjectAdmin(ctx);
+    await deletePublicProjectAsAdmin(params.projectId);
     return { status: 200, body: { ok: true } };
   })
 );

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import type {
   GenerationRun,
@@ -8,7 +8,7 @@ import type {
   V1Project,
   VideoBriefInput,
 } from "@popcorn/shared/v1/types";
-import type { WorkspaceOutput } from "../lib/api-client";
+import type { ProjectWatchMedia, WorkspaceOutput } from "../lib/api-client";
 import { useAuth } from "../components/auth/AuthProvider";
 import { Button, ButtonLink } from "../components/ui/Button";
 import { ImageWithSkeleton } from "../components/ui/ImageWithSkeleton";
@@ -139,20 +139,19 @@ export function ProjectDetailPage() {
       : "Runs are available after this project starts generation.";
 
   return (
-    <main className={styles.shell}>
-      <header className={styles.header}>
-        <div>
-          <Link className={styles.backLink} to="/library/projects">
-            Projects
-          </Link>
-          <h1>{project?.name ?? "Project overview"}</h1>
-          <p>
-            {project
-              ? `Updated ${formatDate(project.updatedAt)}`
-              : "Loading project details."}
-          </p>
-        </div>
-        <div className={styles.headerActions}>
+    <ProjectOverviewPage
+      projectId={projectId}
+      project={project}
+      storyboard={storyboard}
+      loading={loading}
+      error={error}
+      onProjectRetry={() => void projectQuery.refetch()}
+      backLink={{ to: "/library/projects", label: "Projects" }}
+      titleFallback="Project overview"
+      loadingSubtitle="Loading project details."
+      readOnly={false}
+      headerActions={
+        <>
           <ButtonLink
             variant="secondary"
             to={
@@ -181,7 +180,101 @@ export function ProjectDetailPage() {
           >
             Watch
           </ButtonLink>
+        </>
+      }
+      storyboardPreview={{
+        loading: storyboardQuery.isLoading,
+        error: storyboardQuery.error,
+        onRetry: () => void storyboardQuery.refetch(),
+        generating: storyboardGenerating,
+        progress: storyboardProgressState,
+        generationError: generateStoryboardMutation.error ?? storyboardGenerationError,
+        onGenerate: () => {
+          void generateStoryboardMutation.mutateAsync().then(() => {
+            void storyboardQuery.refetch();
+          });
+        },
+      }}
+      media={null}
+      dangerSection={
+        project ? (
+          <ProjectDangerSection
+            project={project}
+            deleting={deleteProjectMutation.isPending}
+            error={deleteProjectMutation.error}
+            onDelete={() => {
+              void deleteProjectMutation.mutateAsync().then(() => {
+                navigate("/library/projects", { replace: true });
+              });
+            }}
+          />
+        ) : null
+      }
+      stagePanel={
+        <ProjectStagePanel
+          projectId={projectId}
+          runs={runsQuery.items}
+          loading={runsQuery.loading}
+          error={runsQuery.error}
+          onRetry={runsQuery.refetch}
+        />
+      }
+    />
+  );
+}
+
+export function ProjectOverviewPage({
+  projectId,
+  project,
+  storyboard,
+  loading,
+  error,
+  onProjectRetry,
+  backLink,
+  titleFallback,
+  loadingSubtitle,
+  readOnly,
+  headerActions,
+  storyboardPreview,
+  media,
+  dangerSection,
+  stagePanel,
+}: {
+  projectId: string;
+  project: V1Project | null;
+  storyboard: ProjectStoryboard | null;
+  loading: boolean;
+  error: Error | null;
+  onProjectRetry: () => void;
+  backLink: { to: string; label: string };
+  titleFallback: string;
+  loadingSubtitle: string;
+  readOnly: boolean;
+  headerActions?: ReactNode;
+  storyboardPreview: {
+    loading: boolean;
+    error: Error | null;
+    onRetry: () => void;
+    generating: boolean;
+    progress: StoryboardProgress;
+    generationError: Error | null;
+    onGenerate?: () => void;
+  };
+  media?: ProjectWatchMedia | null;
+  dangerSection?: ReactNode;
+  stagePanel?: ReactNode;
+}) {
+  return (
+    <main className={styles.shell}>
+      <header className={styles.header}>
+        <div>
+          <Link className={styles.backLink} to={backLink.to}>
+            {backLink.label}
+          </Link>
+          <h1>{project?.name ?? titleFallback}</h1>
+          <p>{project ? `Updated ${formatDate(project.updatedAt)}` : loadingSubtitle}</p>
         </div>
+        {headerActions ? <div className={styles.headerActions}>{headerActions}</div> : null}
       </header>
 
       {loading ? <ProjectSkeleton /> : null}
@@ -191,64 +284,73 @@ export function ProjectDetailPage() {
           title="Unable to load project"
           body="We couldn't load this project overview."
           error={error}
-          onRetry={() => void projectQuery.refetch()}
+          onRetry={onProjectRetry}
         />
       ) : null}
 
       {!loading && !error && project ? (
-        <div className={styles.projectPageLayout}>
-          <div className={styles.projectContent} id="overview">
+        <div className={stagePanel ? styles.projectPageLayout : styles.projectContent} id="overview">
+          <div className={stagePanel ? styles.projectContent : undefined}>
             <section className={styles.projectTopLayout}>
               <div className={styles.projectPrimaryColumn}>
-                <ProjectConcept project={project} projectId={projectId} />
+                <ProjectConcept project={project} projectId={projectId} readOnly={readOnly} />
               </div>
               <div className={styles.projectStoryboardColumn}>
                 <StoryboardPreview
                   projectId={projectId}
                   storyboard={storyboard}
-                  loading={storyboardQuery.isLoading}
-                  error={storyboardQuery.error}
-                  onRetry={() => void storyboardQuery.refetch()}
-                  generating={storyboardGenerating}
-                  progress={storyboardProgressState}
-                  generationError={
-                    generateStoryboardMutation.error ?? storyboardGenerationError
-                  }
-                  onGenerate={() => {
-                    void generateStoryboardMutation.mutateAsync().then(() => {
-                      void storyboardQuery.refetch();
-                    });
-                  }}
+                  loading={storyboardPreview.loading}
+                  error={storyboardPreview.error}
+                  onRetry={storyboardPreview.onRetry}
+                  generating={storyboardPreview.generating}
+                  progress={storyboardPreview.progress}
+                  generationError={storyboardPreview.generationError}
+                  onGenerate={storyboardPreview.onGenerate}
+                  readOnly={readOnly}
                 />
                 <div className={styles.projectContextGrid}>
-                  <ProjectBrief project={project} projectId={projectId} />
-                  <ProjectScript project={project} projectId={projectId} storyboard={storyboard} />
+                  <ProjectBrief project={project} projectId={projectId} readOnly={readOnly} />
+                  <ProjectScript
+                    project={project}
+                    projectId={projectId}
+                    storyboard={storyboard}
+                    readOnly={readOnly}
+                  />
                 </div>
               </div>
             </section>
-            <ProjectDangerSection
-              project={project}
-              deleting={deleteProjectMutation.isPending}
-              error={deleteProjectMutation.error}
-              onDelete={() => {
-                void deleteProjectMutation.mutateAsync().then(() => {
-                  navigate("/library/projects", { replace: true });
-                });
-              }}
-            />
+            {media ? <ProjectWatchVideo media={media} /> : null}
+            {dangerSection}
           </div>
-          <aside className={styles.stageAside} aria-label="Run pipeline">
-            <ProjectStagePanel
-              projectId={projectId}
-              runs={runsQuery.items}
-              loading={runsQuery.loading}
-              error={runsQuery.error}
-              onRetry={runsQuery.refetch}
-            />
-          </aside>
+          {stagePanel ? (
+            <aside className={styles.stageAside} aria-label="Run pipeline">
+              {stagePanel}
+            </aside>
+          ) : null}
         </div>
       ) : null}
     </main>
+  );
+}
+
+function ProjectWatchVideo({ media }: { media: ProjectWatchMedia }) {
+  return (
+    <section className={styles.panel} id="watch">
+      <div className={styles.sectionHeader}>
+        <div>
+          <span className={styles.eyebrow}>Watch</span>
+          <h2>Final video</h2>
+        </div>
+      </div>
+      <video
+        className={styles.watchVideo}
+        src={media.url}
+        poster={media.posterUrl}
+        controls
+        playsInline
+        preload="metadata"
+      />
+    </section>
   );
 }
 
@@ -467,8 +569,17 @@ function ProjectStagePanel({
   );
 }
 
-function ProjectConcept({ project, projectId }: { project: V1Project; projectId: string }) {
+function ProjectConcept({
+  project,
+  projectId,
+  readOnly,
+}: {
+  project: V1Project;
+  projectId: string;
+  readOnly: boolean;
+}) {
   const brief = project.brief;
+  const title = brief?.oneBigIdea ?? brief?.goal ?? project.name;
   return (
     <section className={styles.hero} id="concept">
       <ProjectPoster name={project.name} posterUrl={project.posterUrl} />
@@ -479,23 +590,29 @@ function ProjectConcept({ project, projectId }: { project: V1Project; projectId:
             <span>{project.visibility === "public" ? "Public" : "Private"}</span>
           ) : null}
           <span>Created {formatDate(project.createdAt)}</span>
-          <ButtonLink
-            variant="ghost"
-            size="sm"
-            to={`/projects/${encodeURIComponent(projectId)}/concept`}
-          >
-            Open concept
-          </ButtonLink>
+          {!readOnly ? (
+            <ButtonLink
+              variant="ghost"
+              size="sm"
+              to={`/projects/${encodeURIComponent(projectId)}/concept`}
+            >
+              Open concept
+            </ButtonLink>
+          ) : null}
         </div>
         <div>
           <span className={styles.eyebrow}>Concept</span>
           <h2 className={styles.conceptTitle}>
-            <Link
-              className={styles.sectionTitleLink}
-              to={`/projects/${encodeURIComponent(projectId)}/concept`}
-            >
-              {brief?.oneBigIdea ?? brief?.goal ?? project.name}
-            </Link>
+            {readOnly ? (
+              title
+            ) : (
+              <Link
+                className={styles.sectionTitleLink}
+                to={`/projects/${encodeURIComponent(projectId)}/concept`}
+              >
+                {title}
+              </Link>
+            )}
           </h2>
           {brief?.strongestVisual ? (
             <p className={styles.conceptSummary}>{brief.strongestVisual}</p>
@@ -524,7 +641,15 @@ function ProjectConcept({ project, projectId }: { project: V1Project; projectId:
   );
 }
 
-function ProjectBrief({ project, projectId }: { project: V1Project; projectId: string }) {
+function ProjectBrief({
+  project,
+  projectId,
+  readOnly,
+}: {
+  project: V1Project;
+  projectId: string;
+  readOnly: boolean;
+}) {
   const brief = project.brief;
   return (
     <section className={styles.panel} id="brief">
@@ -533,15 +658,17 @@ function ProjectBrief({ project, projectId }: { project: V1Project; projectId: s
           <span className={styles.eyebrow}>Brief</span>
           <h2>Project direction</h2>
         </div>
-        <div className={styles.sectionHeaderActions}>
-          <ButtonLink
-            variant="ghost"
-            size="sm"
-            to={`/projects/${encodeURIComponent(projectId)}/brief`}
-          >
-            Open brief
-          </ButtonLink>
-        </div>
+        {!readOnly ? (
+          <div className={styles.sectionHeaderActions}>
+            <ButtonLink
+              variant="ghost"
+              size="sm"
+              to={`/projects/${encodeURIComponent(projectId)}/brief`}
+            >
+              Open brief
+            </ButtonLink>
+          </div>
+        ) : null}
       </div>
       {brief ? (
         <dl className={styles.detailList}>
@@ -565,10 +692,12 @@ function ProjectScript({
   project,
   projectId,
   storyboard,
+  readOnly,
 }: {
   project: V1Project;
   projectId: string;
   storyboard: ProjectStoryboard | null;
+  readOnly: boolean;
 }) {
   const scriptLines = storyboardScriptLines(storyboard);
   const narrationScript = project.brief?.narration?.script?.trim();
@@ -580,15 +709,17 @@ function ProjectScript({
           <span className={styles.eyebrow}>Script</span>
           <h2>Narration and dialogue</h2>
         </div>
-        <div className={styles.sectionHeaderActions}>
-          <ButtonLink
-            variant="ghost"
-            size="sm"
-            to={`/projects/${encodeURIComponent(projectId)}/script`}
-          >
-            Open script
-          </ButtonLink>
-        </div>
+        {!readOnly ? (
+          <div className={styles.sectionHeaderActions}>
+            <ButtonLink
+              variant="ghost"
+              size="sm"
+              to={`/projects/${encodeURIComponent(projectId)}/script`}
+            >
+              Open script
+            </ButtonLink>
+          </div>
+        ) : null}
       </div>
       {narrationScript ? (
         <p className={styles.scriptBlock}>{narrationScript}</p>
@@ -608,7 +739,7 @@ function ProjectScript({
   );
 }
 
-function ProjectDangerSection({
+export function ProjectDangerSection({
   project,
   deleting,
   error,
@@ -705,6 +836,7 @@ function StoryboardPreview({
   progress,
   generationError,
   onGenerate,
+  readOnly,
 }: {
   projectId: string;
   storyboard: ProjectStoryboard | null;
@@ -714,7 +846,8 @@ function StoryboardPreview({
   generating: boolean;
   progress: StoryboardProgress;
   generationError: Error | null;
-  onGenerate: () => void;
+  onGenerate?: () => void;
+  readOnly: boolean;
 }) {
   const scenes = storyboardScenes(storyboard);
   const momentCount = scenes.reduce((count, scene) => count + scene.beats.length, 0);
@@ -726,7 +859,7 @@ function StoryboardPreview({
         <div>
           <span className={styles.eyebrow}>Storyboard</span>
           <h2>
-            {storyboard ? (
+            {storyboard && !readOnly ? (
               <Link
                 className={styles.sectionTitleLink}
                 to={`/projects/${encodeURIComponent(projectId)}/storyboard`}
@@ -746,7 +879,7 @@ function StoryboardPreview({
           </p>
         </div>
         <div className={styles.storyboardHeaderActions}>
-          {storyboard ? (
+          {storyboard && !readOnly ? (
             <ButtonLink
               variant="ghost"
               size="sm"
@@ -757,7 +890,7 @@ function StoryboardPreview({
           ) : null}
           {/* The generate control only appears once nothing is in flight, so
               the page never offers "Generate again" mid-run. */}
-          {!loading && !error && !generating ? (
+          {!readOnly && onGenerate && !loading && !error && !generating ? (
             <Button variant="secondary" size="sm" onClick={onGenerate}>
               {storyboard ? "Generate again" : "Create storyboard"}
             </Button>
@@ -781,7 +914,7 @@ function StoryboardPreview({
           title="Unable to generate storyboard"
           body="We couldn't finish storyboard generation for this project."
           error={generationError}
-          onRetry={onGenerate}
+          onRetry={onGenerate ?? onRetry}
         />
       ) : null}
       {!loading && !error && !storyboard && !generating ? (

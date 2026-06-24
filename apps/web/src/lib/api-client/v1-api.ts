@@ -290,6 +290,11 @@ export const v1Api = {
       `/api/v1/projects/${encodeURIComponent(projectId)}`,
       { method: "DELETE" }
     ),
+  deletePublicProjectAsAdmin: (projectId: string) =>
+    apiRequest<AccountMutationResponse>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/admin-delete`,
+      { method: "DELETE" }
+    ),
   setProjectPoster: (projectId: string, assetId: string) =>
     apiRequest<ProjectResponse>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/poster`,
