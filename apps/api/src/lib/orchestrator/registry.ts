@@ -82,6 +82,8 @@ function toolDescription(name: ToolName): string {
       return "Generate a motion clip for a beat.";
     case "generate_audio":
       return "Generate narration, dialogue, music, or sound assets.";
+    case "plan_transitions":
+      return "Decide the transition between each pair of consecutive beats and persist the non-default ones as transition assets.";
     case "assemble_timeline":
       return "Assemble available assets into a deterministic timeline.";
     case "critique_timeline":
