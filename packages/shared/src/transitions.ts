@@ -57,10 +57,13 @@ export interface TransitionAlternative {
 
 /**
  * The typed `content` payload of a `kind='transition'` asset.
- * Persisted under the {@link TRANSITION_SCHEMA_VERSION} schema marker.
+ *
+ * The store wraps this under the {@link TRANSITION_SCHEMA_VERSION} marker
+ * (`schema_version`) on write and strips it on read — the convention shared by
+ * every data-asset payload (e.g. `VideoBrief`) — so the marker is not a field
+ * here.
  */
 export interface TransitionContent {
-  schema_version: typeof TRANSITION_SCHEMA_VERSION;
   method: TransitionMethod;
   type: TransitionType;
   /** Effect duration (or generated-bridge length) in milliseconds. */
@@ -82,4 +85,23 @@ export function transitionSlotRole(fromBeatId: string): string {
 export function fromBeatIdOfTransitionSlot(slotRole: string): string | null {
   const prefix = "transition:";
   return slotRole.startsWith(prefix) ? slotRole.slice(prefix.length) : null;
+}
+
+/** A boundary between two consecutive beats. The from-beat owns its transition. */
+export interface BeatBoundary {
+  fromBeatId: string;
+  toBeatId: string;
+}
+
+/**
+ * Derive boundaries from beat order — every consecutive pair. Boundaries come
+ * from the spine, not from which transitions happen to exist, so an empty
+ * boundary (no transition asset = hard cut) stays addressable.
+ */
+export function beatBoundaries(orderedBeatIds: string[]): BeatBoundary[] {
+  const boundaries: BeatBoundary[] = [];
+  for (let i = 0; i < orderedBeatIds.length - 1; i += 1) {
+    boundaries.push({ fromBeatId: orderedBeatIds[i], toBeatId: orderedBeatIds[i + 1] });
+  }
+  return boundaries;
 }

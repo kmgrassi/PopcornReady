@@ -75,6 +75,13 @@ import {
 } from "@popcorn/shared/v1/studio-drafts";
 import type { ShotPlan, ScriptDraft, Timeline } from "@popcorn/shared/types";
 import type { Asset } from "@popcorn/shared/assets/types";
+import {
+  beatBoundaries,
+  fromBeatIdOfTransitionSlot,
+  transitionSlotRole,
+  type BeatBoundary,
+  type TransitionContent,
+} from "@popcorn/shared/transitions";
 import type { GeneratedStoryboardTile } from "@/lib/generative/storyboard-tile";
 import {
   getOrchestratorRun,
@@ -607,7 +614,8 @@ function markedContent(
     | "script_draft"
     | "timeline"
     | "narration_script"
-    | "critique",
+    | "critique"
+    | "transition",
   content: unknown
 ): Record<string, unknown> {
   const schema =
@@ -1328,7 +1336,8 @@ async function insertDataAsset(input: {
     | "story_blueprint"
     | "narration_script"
     | "composite"
-    | "critique";
+    | "critique"
+    | "transition";
   contentSchemaKind?:
     | "brief"
     | "beat"
@@ -1338,7 +1347,8 @@ async function insertDataAsset(input: {
     | "script_draft"
     | "timeline"
     | "narration_script"
-    | "critique";
+    | "critique"
+    | "transition";
   role: string;
   content: unknown;
   // Upstream asset snapshot. The DB trigger mirrors this into asset_edges, so the
@@ -6095,4 +6105,205 @@ export async function saveIdempotencyRecord(
       { onConflict: "scope,key", ignoreDuplicates: true }
     )
   );
+}
+
+// --- transitions -----------------------------------------------------------
+// A transition is its own asset (kind='transition'). Its boundary identity is
+// the project-scoped selection slot `transition:${fromBeatId}` (the outgoing
+// beat owns its trailing transition); endpoints are asset_edges to the from/to
+// clips, and a generated bridge is a child edge. An empty slot renders as a hard
+// cut. See docs/scopes/transitions-as-assets.md.
+
+export interface ProjectTransition {
+  id: string;
+  fromBeatId: string;
+  content: TransitionContent;
+}
+
+// Persist a transition for a boundary and make it the active selection. For an
+// 'effect' transition pass only the endpoint clips; for 'generated_clip' also
+// pass the bridge clip (recorded as a child edge).
+export async function insertProjectTransition(input: {
+  workspaceId: string;
+  projectId: string;
+  fromBeatId: string;
+  fromClipAssetId: string;
+  toClipAssetId?: string | null;
+  bridgeClipAssetId?: string | null;
+  content: TransitionContent;
+}): Promise<{ transitionAssetId: string }> {
+  const db = getServiceSupabase();
+  const graphInputs: GraphAssetInput[] = [
+    { assetId: input.fromClipAssetId, relation: "input", role: "from", position: 0 },
+  ];
+  if (input.toClipAssetId) {
+    graphInputs.push({ assetId: input.toClipAssetId, relation: "input", role: "to", position: 1 });
+  }
+  if (input.bridgeClipAssetId) {
+    graphInputs.push({
+      assetId: input.bridgeClipAssetId,
+      relation: "child",
+      role: "bridge",
+      position: 0,
+    });
+  }
+  const action = await createAction({
+    projectId: input.projectId,
+    tool: "plan_transitions",
+    status: "running",
+    params: { source: "plan_transitions", fromBeatId: input.fromBeatId },
+    inputAssetIds: graphInputs.map((edge) => edge.assetId),
+    rationale: `Persist the transition for boundary ${input.fromBeatId}.`,
+  });
+  const asset = await insertDataAsset({
+    db,
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    kind: "transition",
+    role: "transition",
+    content: input.content,
+    inputs: graphInputs,
+    createdByActionId: action.id,
+  });
+  await setActiveProjectScopedAssetSelection(
+    db,
+    input.projectId,
+    transitionSlotRole(input.fromBeatId),
+    asset.id,
+    action.id
+  );
+  await updateAction(action.id, { status: "applied", outputAssetIds: [asset.id] });
+  return { transitionAssetId: asset.id };
+}
+
+// Resolve the active transition for one boundary, or null (= hard cut).
+export async function getActiveProjectTransition(input: {
+  projectId: string;
+  fromBeatId: string;
+}): Promise<ProjectTransition | null> {
+  const db = getServiceSupabase();
+  const selection = await runQuery(
+    "store.getActiveProjectTransition selection",
+    db
+      .from("current_selections")
+      .select("active_asset_id")
+      .eq("project_id", input.projectId)
+      .eq("slot_role", transitionSlotRole(input.fromBeatId))
+      .maybeSingle()
+  );
+  const activeAssetId = (selection as { active_asset_id?: string } | null)?.active_asset_id;
+  if (!activeAssetId) return null;
+  const assetRow = await runQuery(
+    "store.getActiveProjectTransition asset",
+    db
+      .from("assets")
+      .select("id, content")
+      .eq("project_id", input.projectId)
+      .eq("id", activeAssetId)
+      .eq("status", "ready")
+      .maybeSingle()
+  );
+  if (!assetRow) return null;
+  const row = assetRow as { id: string; content: unknown };
+  return {
+    id: row.id,
+    fromBeatId: input.fromBeatId,
+    content: unmarkedContent<TransitionContent>(row.content),
+  };
+}
+
+// All active transitions for a project, keyed by their owning (from) beat.
+export async function listProjectTransitions(input: {
+  projectId: string;
+}): Promise<ProjectTransition[]> {
+  const db = getServiceSupabase();
+  const selections = await runQuery(
+    "store.listProjectTransitions selections",
+    db
+      .from("current_selections")
+      .select("slot_role, active_asset_id")
+      .eq("project_id", input.projectId)
+      .like("slot_role", "transition:%")
+  );
+  const rows = (selections ?? []) as Array<{ slot_role: string; active_asset_id: string }>;
+  if (!rows.length) return [];
+  const slotRoleByAssetId = new Map(rows.map((r) => [r.active_asset_id, r.slot_role]));
+  const assets = await runQuery(
+    "store.listProjectTransitions assets",
+    db
+      .from("assets")
+      .select("id, content")
+      .eq("project_id", input.projectId)
+      .eq("status", "ready")
+      .in("id", [...slotRoleByAssetId.keys()])
+  );
+  const assetRows = (assets ?? []) as Array<{ id: string; content: unknown }>;
+  const out: ProjectTransition[] = [];
+  for (const asset of assetRows) {
+    const slotRole = slotRoleByAssetId.get(asset.id);
+    const fromBeatId = slotRole ? fromBeatIdOfTransitionSlot(slotRole) : null;
+    if (!fromBeatId) continue;
+    out.push({
+      id: asset.id,
+      fromBeatId,
+      content: unmarkedContent<TransitionContent>(asset.content),
+    });
+  }
+  return out;
+}
+
+// Ordered beat ids for the project's active story blueprint (scene position,
+// then beat_index) — the spine ordering transitions sit between.
+export async function listOrderedProjectBeatIds(input: {
+  projectId: string;
+}): Promise<string[]> {
+  const db = getServiceSupabase();
+  const project = await runQuery(
+    "store.listOrderedProjectBeatIds project",
+    db
+      .from("projects")
+      .select("current_story_blueprint_id")
+      .eq("id", input.projectId)
+      .maybeSingle()
+  );
+  const blueprintId = (project as { current_story_blueprint_id?: string | null } | null)
+    ?.current_story_blueprint_id;
+  if (!blueprintId) return [];
+  const scenes = await runQuery(
+    "store.listOrderedProjectBeatIds scenes",
+    db
+      .from("story_blueprint_scenes")
+      .select("id, position")
+      .eq("project_id", input.projectId)
+      .eq("story_blueprint_id", blueprintId)
+      .order("position", { ascending: true })
+  );
+  const sceneRows = (scenes ?? []) as Array<{ id: string; position: number }>;
+  if (!sceneRows.length) return [];
+  const scenePosition = new Map(sceneRows.map((scene) => [scene.id, scene.position]));
+  const beats = await runQuery(
+    "store.listOrderedProjectBeatIds beats",
+    db
+      .from("story_beats")
+      .select("id, scene_id, beat_index")
+      .eq("project_id", input.projectId)
+      .in("scene_id", [...scenePosition.keys()])
+  );
+  const beatRows = (beats ?? []) as Array<{ id: string; scene_id: string; beat_index: number }>;
+  return beatRows
+    .sort((a, b) => {
+      const sceneDelta =
+        (scenePosition.get(a.scene_id) ?? 0) - (scenePosition.get(b.scene_id) ?? 0);
+      return sceneDelta !== 0 ? sceneDelta : a.beat_index - b.beat_index;
+    })
+    .map((beat) => beat.id);
+}
+
+// Boundaries between consecutive beats, derived from the spine ordering (every
+// pair, regardless of whether a transition asset exists there yet).
+export async function listProjectBeatBoundaries(input: {
+  projectId: string;
+}): Promise<BeatBoundary[]> {
+  const orderedBeatIds = await listOrderedProjectBeatIds(input);
+  return beatBoundaries(orderedBeatIds);
 }
