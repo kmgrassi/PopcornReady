@@ -111,6 +111,19 @@ test("generatePoster creates a poster asset and auto-selects it", async () => {
   );
 });
 
+test("generatePoster defaults to Ideogram when no provider is requested", async () => {
+  let sentBody: Record<string, unknown> | null = null;
+  await generatePoster(auth, "project_1", {}, deps({
+    createGeneratedAsset: async ({ body }) => {
+      sentBody = body as Record<string, unknown>;
+      return deps().createGeneratedAsset({ auth, projectId: "project_1", body });
+    },
+  }));
+
+  assert.ok(sentBody);
+  assert.equal((sentBody as Record<string, unknown>).provider, "ideogram");
+});
+
 test("generatePoster routes minor poster content through Gemini", async () => {
   let sentBody: Record<string, unknown> | null = null;
   await generatePoster(auth, "project_1", { provider: "openai" }, deps({
