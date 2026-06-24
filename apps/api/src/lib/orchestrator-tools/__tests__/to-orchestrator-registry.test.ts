@@ -43,6 +43,24 @@ test("bridged tools expose composed usage guidance to the model", () => {
   assert.match(planShots.description, /Use this when:/);
 });
 
+test("bridged tools delegate cost estimates to the real registry", async () => {
+  const registry = toOrchestratorRegistry(createDefaultToolRegistry());
+  const generateClip = registry.get("generate_clip");
+  assert.ok(generateClip, "generate_clip must be in the bridged registry");
+
+  const estimate = await generateClip.estimateCostUsd(
+    { provider: "openai", durationSec: 8 },
+    {
+      workspaceId: "ws_1",
+      projectId: "proj_1",
+      orchestratorRunId: "run_1",
+      toolCallId: "tool_call_1",
+    }
+  );
+
+  assert.equal(estimate, 4);
+});
+
 test("every wired tool ships model-facing usage guidance", () => {
   const registry = toOrchestratorRegistry(createDefaultToolRegistry());
   for (const definition of registry.values()) {

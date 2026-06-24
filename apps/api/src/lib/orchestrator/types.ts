@@ -90,7 +90,10 @@ export interface ToolDefinition {
   outputSchema: Record<string, unknown>;
   requiredResourceIds: string[];
   mode: "sync" | "async" | "approval";
-  estimateCostUsd(input: unknown): number | undefined;
+  estimateCostUsd(
+    input: unknown,
+    context: ToolExecutionContext
+  ): number | undefined | Promise<number | undefined>;
   execute(input: unknown, context: ToolExecutionContext): Promise<ToolCallResult>;
 }
 
