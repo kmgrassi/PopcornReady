@@ -50,7 +50,7 @@ import {
 } from "@popcorn/shared/v1/dashboard";
 import { ApiError, notFound } from "./errors";
 import { GeneratedAssetProvenance } from "./provenance";
-import { AssetSemanticAnalysis } from "../../edit-graph/types";
+import type { AssetSemanticAnalysis } from "../../assets/semantic-analysis";
 import {
   type CompositionPlan as ContractCompositionPlan,
   type GenerationRun,

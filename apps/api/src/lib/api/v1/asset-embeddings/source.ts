@@ -1,5 +1,5 @@
 import { createHash } from "crypto";
-import type { AssetSemanticAnalysis } from "@/lib/edit-graph/types";
+import type { AssetSemanticAnalysis } from "@/lib/assets/semantic-analysis";
 import type { V1Asset } from "../store";
 
 export type AssetEmbeddingChunkKind = "asset_summary" | "transcript" | "planning";

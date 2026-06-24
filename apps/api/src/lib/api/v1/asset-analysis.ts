@@ -2,7 +2,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { buildSemanticAnalysis } from "@/lib/edit-graph/semantic-analysis";
+import { buildSemanticAnalysis } from "@/lib/assets/semantic-analysis";
 import { AuthContext } from "./auth";
 import { ApiError, validationError } from "./errors";
 import { createJob, getJob, updateJob, V1Job } from "./jobs";

@@ -12,7 +12,7 @@ import { randomUUID } from "crypto";
 import { writeAssetObject } from "@/lib/storage/asset-write";
 import { AuthContext } from "./auth";
 import { sha256Hex } from "./asset-graph";
-import { buildSemanticAnalysis } from "../../edit-graph/semantic-analysis";
+import { buildSemanticAnalysis } from "../../assets/semantic-analysis";
 import { enqueueAssetEmbeddingRefresh } from "./asset-embeddings/jobs";
 import { ApiError } from "./errors";
 import {
