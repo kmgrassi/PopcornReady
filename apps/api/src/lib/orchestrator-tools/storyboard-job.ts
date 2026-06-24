@@ -1,9 +1,9 @@
 // Background worker for the async generate_storyboard tool. Generates one sketch
 // tile per beat, persists each as an image asset (recording the plan as its
-// input), builds the relational storyboard (storyboards/scenes/panels linked to
-// the plan), marks the job terminal, and — completion-driven — resumes the
-// parked orchestrator run. Workers run inline today (fire-and-forget from the
-// tool's execute), so by the time the run resumes the assets are already written.
+// input), writes the story spine scenes/beats/panels, marks the job terminal,
+// and — completion-driven — resumes the parked orchestrator run. Workers run
+// inline today (fire-and-forget from the tool's execute), so by the time the run
+// resumes the assets are already written.
 
 import { agentApiStore, type AgentApiStore } from "@/lib/agent-api/jobs";
 import type { AuthContext } from "@/lib/api/v1/auth";
