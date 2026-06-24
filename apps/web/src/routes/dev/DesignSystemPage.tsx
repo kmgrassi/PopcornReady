@@ -5,6 +5,7 @@ import { ChoiceCard } from "../../components/ui/ChoiceCard";
 import { Inline, Stack } from "../../components/ui/Stack";
 import { Eyebrow, Heading, Text } from "../../components/ui/Typography";
 import { Toggle } from "../../components/ui/Toggle";
+import ThemeToggle from "../../components/ThemeToggle";
 import styles from "./DesignSystemPage.module.css";
 
 export function DesignSystemPage() {
@@ -23,6 +24,14 @@ export function DesignSystemPage() {
             Shared components for buttons, toggles, spacing, and typography. New UI should use these primitives before adding route-specific CSS.
           </Text>
         </Stack>
+
+        <Card padding="lg">
+          <Stack gap="sm">
+            <Heading as="h2" size="md">Theme</Heading>
+            <Text tone="muted">Switch palettes to compare how the primitives below read in each one.</Text>
+            <ThemeToggle variant="settings" />
+          </Stack>
+        </Card>
 
         <Card elevated padding="lg">
           <Stack gap="lg">
