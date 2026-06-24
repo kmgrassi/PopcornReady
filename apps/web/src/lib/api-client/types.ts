@@ -50,6 +50,8 @@ export interface MeResponse {
       };
   workspaceId: string;
   workspaceName?: string;
+  workspaceRole?: "owner" | "admin" | "member" | null;
+  isWorkspaceAdmin?: boolean;
   authMode: string;
   isLocal: boolean;
 }

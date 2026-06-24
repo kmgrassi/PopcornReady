@@ -4,7 +4,11 @@ import { ApiError } from "@/core/errors";
 import { bearerToken } from "@/lib/api/v1/auth";
 import { createGeneratedAsset } from "@/lib/api/v1/generated-assets";
 import type { HandlerCtx } from "@/lib/api/v1/handler";
-import { createProject } from "@/lib/api/v1/store";
+import {
+  createProject,
+  getWorkspaceRole,
+  isWorkspaceAdminRole,
+} from "@/lib/api/v1/store";
 import { providerFor } from "@/lib/generative/providers";
 import { buildUserScopedSupabase } from "@/lib/supabase/clients";
 import type { GenerativeProviderName } from "@popcorn/shared/generative/types";
@@ -44,7 +48,7 @@ type ManualProviderAssetBody = {
   durationSec?: number;
 };
 
-const ADMIN_ROLES = new Set(["admin", "owner"]);
+const OPERATOR_ROLES = new Set(["admin", "owner"]);
 const PROVIDER_TEST_SUPPORT: Record<
   ManualProviderAssetTestInput["kind"],
   GenerativeProviderName[]
@@ -104,20 +108,25 @@ function claimValues(value: unknown): string[] {
   return [];
 }
 
-function hasAdminAppMetadata(appMetadata: Record<string, unknown> | undefined): boolean {
+function hasOperatorAppMetadata(appMetadata: Record<string, unknown> | undefined): boolean {
   if (!appMetadata) return false;
   const claims = [
     ...claimValues(appMetadata.role),
     ...claimValues(appMetadata.roles),
     ...claimValues(appMetadata.workspace_role),
   ];
-  return claims.some((claim) => ADMIN_ROLES.has(claim.toLowerCase()));
+  return claims.some((claim) => OPERATOR_ROLES.has(claim.toLowerCase()));
 }
 
 async function requireProviderSmokeTestAdmin(
   ctx: Pick<HandlerCtx, "auth" | "req">
 ): Promise<void> {
   if (ctx.auth.isLocal) return;
+
+  const role = await getWorkspaceRole(ctx.auth.workspaceId, ctx.auth.actor.id);
+  if (!isWorkspaceAdminRole(role)) {
+    throw new ApiError("forbidden", "Provider smoke-test access requires admin.");
+  }
 
   const token = bearerToken(ctx.req);
   if (!token) {
@@ -126,7 +135,7 @@ async function requireProviderSmokeTestAdmin(
 
   const supabase = buildUserScopedSupabase(token);
   const { data, error } = await supabase.auth.getUser(token);
-  if (error || !data.user || !hasAdminAppMetadata(data.user.app_metadata)) {
+  if (error || !data.user || !hasOperatorAppMetadata(data.user.app_metadata)) {
     throw new ApiError("forbidden", "Provider smoke-test access requires admin.");
   }
 }
