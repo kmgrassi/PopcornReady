@@ -3,6 +3,12 @@
 # Railway deploys the Express API (apps/api) from the monorepo root.
 # Set the Railway service Root Directory to the repo root so pnpm workspaces
 # resolve; the commands below filter to the @popcorn/api workspace.
+#
+# Deploys are driven by .github/workflows/deploy-api.yml (`railway up` on every
+# push to main), NOT by Railway's native GitHub auto-deploy. Keep native
+# auto-deploy DISABLED for this service so the two triggers don't double-fire
+# and so an env-change redeploy can't resurrect a stale image (which once rolled
+# production backward to an old commit and 404'd newer routes).
 
 [build]
 builder = "RAILPACK"
