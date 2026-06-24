@@ -1,17 +1,9 @@
 // Job workers for the /api/v1 agent surface.
 //
-// PR6 implements two workers:
-//   - runRevisionJob: wired to the real editorial agent (revise + applyPatches).
-//   - runExportJob:   a skeleton that validates the request, resolves the
-//                     export duration policy, and emits a pending_render
-//                     artifact. Real rendering is deferred (see below).
-//
-// Both accept injectable dependencies so the smoke test can run them with mock
-// providers and without network or Remotion.
+// Export jobs validate the request, resolve the duration policy, and emit a
+// pending_render artifact. Real rendering is deferred (see below).
 
-import { revise as defaultRevise } from "../agent";
 import { createRenderPlanFromTimeline } from "@popcorn/timeline/render-plan";
-import { applyPatchesViaEditGraph as defaultApplyPatchesViaEditGraph } from "@popcorn/timeline/timeline";
 import { Clip, Project, timelineDurationSec } from "@popcorn/shared/types";
 import { ApiError, newId } from "./runtime";
 import {
@@ -19,66 +11,7 @@ import {
   DURATION_POLICIES,
   DurationPolicy,
   ExportRenderPlan,
-  RevisionJobResult,
 } from "./types";
-
-// ---------------------------------------------------------------------------
-// Revision job (implemented)
-// ---------------------------------------------------------------------------
-
-export interface RevisionDeps {
-  revise: typeof defaultRevise;
-  applyPatchesViaEditGraph: typeof defaultApplyPatchesViaEditGraph;
-}
-
-export async function runRevisionJob(input: {
-  project: Project;
-  timelineId: string;
-  message: string;
-  deps?: Partial<RevisionDeps>;
-}): Promise<RevisionJobResult> {
-  const revise = input.deps?.revise ?? defaultRevise;
-  const applyPatchesViaEditGraph =
-    input.deps?.applyPatchesViaEditGraph ?? defaultApplyPatchesViaEditGraph;
-
-  const message = input.message.trim();
-  if (!message) {
-    throw new ApiError("invalid_request", 400, "Revision message is required.");
-  }
-
-  // The single-project store holds one timeline, so the requested timelineId
-  // resolves to project.timeline. TODO(PR4): look up an addressable Timeline
-  // resource by id and create the revision as a true sibling timeline.
-  const base = input.project.timeline;
-  if (!base || base.segments.length === 0) {
-    throw new ApiError(
-      "timeline_not_ready",
-      409,
-      "The project has no generated timeline to revise yet.",
-      { timelineId: input.timelineId }
-    );
-  }
-
-  const { summary, patches } = await revise({
-    message,
-    plan: input.project.plan,
-    timeline: base,
-    clips: input.project.clips,
-    storyContext: input.project.storyContext,
-  });
-
-  // Derive the sibling cut from edit-graph operations without mutating the base
-  // timeline. The compiled timeline remains the compatibility projection.
-  const revision = applyPatchesViaEditGraph(base, patches, input.project.clips);
-  return {
-    timeline: revision.timeline,
-    editGraph: revision.editGraph,
-    graphOperations: revision.graphOperations,
-    appliedPatches: patches.length,
-    patches,
-    summary,
-  };
-}
 
 // ---------------------------------------------------------------------------
 // Export job (skeleton)

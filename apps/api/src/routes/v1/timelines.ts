@@ -1,11 +1,11 @@
 import { Router } from "express";
 import { mutation, route } from "@/core/adapter";
 import { ApiError } from "@/core/errors";
-import { errorResponse, getIdempotencyKey, loadProject } from "@/lib/agent-api/http";
+import { errorResponse, getIdempotencyKey } from "@/lib/agent-api/http";
 import { agentApiStore } from "@/lib/agent-api/jobs";
 import { ApiError as AgentApiError, toErrorEnvelope } from "@/lib/agent-api/runtime";
 import type { Artifact, Job, JobType } from "@/lib/agent-api/types";
-import { type ExportOptions, runExportJob, runRevisionJob } from "@/lib/agent-api/workers";
+import { type ExportOptions, runExportJob } from "@/lib/agent-api/workers";
 import type { ApiResult, HandlerCtx } from "@/lib/api/v1/handler";
 import type { Project } from "@popcorn/shared/types";
 import {
@@ -128,15 +128,6 @@ function parseRevisionTarget(body: unknown): BoardRevisionTarget | undefined {
   return parsed;
 }
 
-function messageWithRevisionTarget(message: string, target?: BoardRevisionTarget): string {
-  if (!target) return message;
-  const fields = Object.entries(target)
-    .filter(([, value]) => typeof value === "string" && value.trim())
-    .map(([key, value]) => `${key}: ${value}`)
-    .join("\n");
-  return `Targeted board revision:\n${fields}\n\nUser request:\n${message}`;
-}
-
 function parseExportOptions(body: unknown): ExportOptions {
   const input = bodyRecord(body);
   return {
@@ -221,35 +212,18 @@ async function createRevision(
   params: RouteParams
 ): Promise<ApiResult> {
   try {
-    const projectId = param(params, "projectId");
-    const timelineId = param(params, "timelineId");
+    param(params, "projectId");
+    param(params, "timelineId");
     const message = parseRevisionMessage(body);
     const target = parseRevisionTarget(body);
-
-    const { job, created } = await agentApiStore.createOrGetJob({
-      type: "revision",
-      projectId,
-      idempotencyKey: scopedIdempotencyKey(req, projectId),
-    });
-    if (!created) {
-      return { status: 200, body: { job } };
-    }
-
-    try {
-      await agentApiStore.setStep(job.id, "planning_timeline");
-      const project = await loadProject(projectId);
-      const result = await runRevisionJob({
-        project,
-        timelineId,
-        message: messageWithRevisionTarget(message, target),
-      });
-      const finished = await agentApiStore.succeed(job.id, result);
-      return { status: 201, body: { job: finished } };
-    } catch (workerErr) {
-      const { body: errBody } = toErrorEnvelope(workerErr, requestId);
-      await agentApiStore.fail(job.id, errBody.error);
-      return agentErrorResult(workerErr, requestId);
-    }
+    void req;
+    void message;
+    void target;
+    throw new AgentApiError(
+      "revision_retired",
+      410,
+      "Timeline patch revisions are retired. Use object-scoped Request Changes instead."
+    );
   } catch (err) {
     return agentErrorResult(err, requestId);
   }

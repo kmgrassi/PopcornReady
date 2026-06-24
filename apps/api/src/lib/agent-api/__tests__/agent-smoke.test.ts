@@ -1,8 +1,7 @@
 // End-to-end-ish smoke harness for the /api/v1 agent surface (PR6).
 //
-// What runs today: the job lifecycle, idempotency, the revision worker (wired
-// to the real applyPatches with a mock editorial agent), the export duration
-// policy, and local-mode actor resolution.
+// What runs today: the job lifecycle, idempotency, the export duration policy,
+// and local-mode actor resolution.
 //
 // The three full prompt->MP4 flows from the scope doc's PR6 acceptance criteria
 // are declared as test.todo below. They cannot pass until PR1–PR5 land
@@ -17,8 +16,8 @@ import test from "node:test";
 
 import { AgentApiStore } from "../jobs";
 import { ApiError, resolveActor } from "../runtime";
-import { resolveExportDuration, runExportJob, runRevisionJob } from "../workers";
-import { Patch, Project } from "@popcorn/shared/types";
+import { resolveExportDuration, runExportJob } from "../workers";
+import { Project } from "@popcorn/shared/types";
 
 async function tempStore(): Promise<AgentApiStore> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "popcornready-jobs-"));
@@ -124,45 +123,6 @@ test("findLatestJobForProject recovers the newest in-flight job (reload case)", 
   assert.equal(
     await store.findLatestJobForProject({ type: "export", projectId: "proj_1" }),
     null
-  );
-});
-
-test("revision worker produces a sibling timeline without mutating the base", async () => {
-  const project = projectFixture();
-  const patches: Patch[] = [
-    { op: "set_caption", segmentId: "seg_1", caption: "Hello", reason: "" },
-  ];
-  const mockRevise = async () => ({ summary: "Added a caption.", patches });
-
-  const result = await runRevisionJob({
-    project,
-    timelineId: "tl_requested",
-    message: "Add a caption to the hook.",
-    deps: { revise: mockRevise as any },
-  });
-
-  assert.equal(result.appliedPatches, 1);
-  assert.equal(result.summary, "Added a caption.");
-  assert.equal(result.timeline.segments[0].caption, "Hello");
-  assert.equal(result.editGraph.schemaVersion, "editGraph.v1");
-  assert.equal(result.graphOperations[0].targetLayer, "edit");
-  assert.equal(result.graphOperations[0].alternatives.length, 2);
-  // Base timeline is untouched — the revision is a sibling cut.
-  assert.equal(project.timeline?.segments[0].caption, undefined);
-});
-
-test("revision worker rejects a project with no timeline", async () => {
-  const project = projectFixture();
-  project.timeline = null;
-  await assert.rejects(
-    () =>
-      runRevisionJob({
-        project,
-        timelineId: "tl_requested",
-        message: "tighten the intro",
-        deps: { revise: (async () => ({ summary: "", patches: [] })) as any },
-      }),
-    (err: unknown) => err instanceof ApiError && err.code === "timeline_not_ready"
   );
 });
 

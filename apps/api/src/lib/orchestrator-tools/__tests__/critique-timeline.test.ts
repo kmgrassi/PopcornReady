@@ -109,7 +109,6 @@ test("critique_timeline reads the active timeline graph asset and persists linke
           },
           summary: "Strong cut; tighten the middle beat.",
         },
-        patches: [],
       };
     },
     addProjectTimelineCritique: async (input) => {
@@ -130,7 +129,6 @@ test("critique_timeline reads the active timeline graph asset and persists linke
           },
           summary: "Strong cut; tighten the middle beat.",
         },
-        patches: [],
       });
       return { critiqueAssetId: "critique_asset_1" };
     },

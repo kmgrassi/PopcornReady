@@ -8,7 +8,6 @@ import {
   Job,
   V1Asset,
   V1Project,
-  VersionedEditGraph,
   VersionedTimeline,
 } from "@popcorn/shared/v1/types";
 import { getServiceSupabase } from "./supabase-client";
@@ -18,10 +17,10 @@ import { runQuery } from "../supabase/db-errors";
 //
 // The store reads/writes the v1 data model in Supabase Postgres (tables defined
 // in supabase/migrations/20260603000000_init_v1_model.sql): compositions, jobs,
-// timelines, edit_graphs, and the project/brief/asset readers. Snake_case
+// timelines, and the project/brief/asset readers. Snake_case
 // columns are mapped to/from the camelCase domain objects below; loosely-shaped
 // or churning structures (job progress/input/result/error, timeline
-// segments/provenance, the edit-graph document, etc.) round-trip through jsonb
+// segments/provenance, etc.) round-trip through jsonb
 // columns.
 //
 // Two implementations share the V1Store interface:
@@ -49,8 +48,6 @@ export interface V1Store {
   // Writes owned by PR4.
   getJob(id: string): Promise<Job | null>;
   saveJob(job: Job): Promise<Job>;
-  getEditGraph(id: string): Promise<VersionedEditGraph | null>;
-  saveEditGraph(graph: VersionedEditGraph): Promise<VersionedEditGraph>;
   getTimeline(id: string): Promise<VersionedTimeline | null>;
   listTimelinesForProject(projectId: string): Promise<VersionedTimeline[]>;
   saveTimeline(timeline: VersionedTimeline): Promise<VersionedTimeline>;
@@ -391,39 +388,6 @@ function jobToRow(j: Job): JobRow {
   };
 }
 
-interface EditGraphRow {
-  id: string;
-  schema_version: string;
-  project_id: string;
-  brief_version_id: string | null;
-  composition_id: string | null;
-  document: VersionedEditGraph;
-  created_at: string;
-  updated_at: string;
-}
-
-function rowToEditGraph(r: EditGraphRow): VersionedEditGraph {
-  // The full EditGraphDocument is stored in `document`; the relational columns
-  // are extracted copies for FK integrity and indexing. The document is the
-  // source of truth on read, EXCEPT its top-level `id`: that is the DB-generated
-  // row id (the document's internal node ids are seeded from its own in-JSON id,
-  // which is exempt and may differ from the row id).
-  return { ...r.document, id: r.id };
-}
-
-function editGraphToRow(g: VersionedEditGraph): EditGraphRow {
-  return {
-    id: g.id,
-    schema_version: g.schemaVersion,
-    project_id: g.projectId,
-    brief_version_id: g.briefVersionId || null,
-    composition_id: g.compositionId ?? null,
-    document: g,
-    created_at: g.createdAt,
-    updated_at: g.updatedAt,
-  };
-}
-
 interface TimelineRow {
   id: string;
   schema_version: string;
@@ -435,7 +399,7 @@ interface TimelineRow {
   show_captions: boolean | null;
   segments: VersionedTimeline["segments"];
   provenance: VersionedTimeline["provenance"];
-  derived_from: VersionedTimeline["derivedFrom"] | null;
+  derived_from: unknown | null;
   created_by: VersionedTimeline["createdBy"];
   created_at: string;
 }
@@ -455,7 +419,6 @@ function rowToTimeline(r: TimelineRow): VersionedTimeline {
   };
   if (r.composition_id != null) timeline.compositionId = r.composition_id;
   if (r.show_captions != null) timeline.showCaptions = r.show_captions;
-  if (r.derived_from != null) timeline.derivedFrom = r.derived_from;
   return timeline;
 }
 
@@ -471,7 +434,7 @@ function timelineToRow(t: VersionedTimeline): TimelineRow {
     show_captions: t.showCaptions ?? null,
     segments: t.segments ?? [],
     provenance: t.provenance,
-    derived_from: t.derivedFrom ?? null,
+    derived_from: null,
     created_by: t.createdBy,
     created_at: t.createdAt,
   };
@@ -561,14 +524,6 @@ export function createSupabaseStore(
     async saveJob(job) {
       const id = await saveWithGeneratedId("jobs", jobToRow(job));
       return { ...job, id };
-    },
-    async getEditGraph(id) {
-      const row = await getOne<EditGraphRow>("edit_graphs", "id", id);
-      return row ? rowToEditGraph(row) : null;
-    },
-    async saveEditGraph(graph) {
-      const id = await saveWithGeneratedId("edit_graphs", editGraphToRow(graph));
-      return { ...graph, id };
     },
     async getTimeline(id) {
       const row = await getOne<TimelineRow>("timelines", "id", id);
@@ -686,7 +641,6 @@ const COLLECTIONS = {
   briefVersions: "brief-versions",
   assets: "assets",
   compositions: "compositions",
-  editGraphs: "edit-graphs",
   jobs: "jobs",
   timelines: "timelines",
   idempotency: "idempotency",
@@ -764,8 +718,6 @@ export function createStore(rootDir: string): V1Store {
 
     getJob: (id) => readJson<Job>(COLLECTIONS.jobs, id),
     saveJob: (job) => saveWithId(COLLECTIONS.jobs, job),
-    getEditGraph: (id) => readJson<VersionedEditGraph>(COLLECTIONS.editGraphs, id),
-    saveEditGraph: (graph) => saveWithId(COLLECTIONS.editGraphs, graph),
     getTimeline: (id) => readJson<VersionedTimeline>(COLLECTIONS.timelines, id),
     async listTimelinesForProject(projectId) {
       const all = await readAll<VersionedTimeline>(COLLECTIONS.timelines);

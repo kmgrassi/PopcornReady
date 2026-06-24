@@ -2,21 +2,17 @@ import { getLlmClient } from "../llm";
 import {
   Clip,
   CriticReport,
-  Patch,
   planBeats,
   PlanCritiqueReport,
   ShotPlan,
+  ensureBeatIds,
+  storyBeatId,
   StoryContext,
   Timeline,
   TimelineSegment,
   UploadedFootagePlanReview,
 } from "@popcorn/shared/types";
-import { clipCatalog, timelineForPrompt } from "@popcorn/timeline/timeline";
-import {
-  compileTimelineViaEditGraph,
-  editGraphBeatId,
-  ensureBeatIds,
-} from "@popcorn/shared/edit-graph";
+import { clipCatalog, sanitizeTimeline, timelineForPrompt } from "@popcorn/timeline/timeline";
 import { storyContextForPrompt } from "@popcorn/shared/story-context";
 import {
   estimateWordsForDuration,
@@ -29,7 +25,6 @@ import {
   narrationRewriteSchema,
   planCritiqueSchema,
   planSchema,
-  reviseSchema,
   uploadedFootagePlanReviewSchema,
 } from "./schemas";
 
@@ -89,7 +84,7 @@ function storyPlanText(p: ShotPlan): string {
     "story beat ids:",
     ...planBeats(p).map(
       (beat, index) =>
-        `  - ${beat.id || editGraphBeatId(index, beat.name)}: ${beat.name}`
+        `  - ${beat.id || storyBeatId(index, beat.name)}: ${beat.name}`
     ),
   ].join("\n");
 }
@@ -299,7 +294,7 @@ Produce the edit decisions now.`;
 
   const beatsById = new Map(
     planBeats(input.plan).map((beat, index) => [
-      beat.id || editGraphBeatId(index, beat.name),
+      beat.id || storyBeatId(index, beat.name),
       beat,
     ])
   );
@@ -322,14 +317,7 @@ Produce the edit decisions now.`;
     ...(showCaptions === undefined ? {} : { showCaptions }),
   };
 
-  return compileTimelineViaEditGraph({
-    id: "rough_cut",
-    goal: input.goal || planBeats(input.plan).map((beat) => beat.intent).join(" "),
-    plan: input.plan,
-    timeline,
-    clips: input.clips,
-    storyContext: input.storyContext,
-  });
+  return sanitizeTimeline(timeline, input.clips);
 }
 
 export async function critique(input: {
@@ -337,20 +325,18 @@ export async function critique(input: {
   timeline: Timeline;
   clips: Clip[];
   storyContext?: StoryContext | null;
-}): Promise<{ report: CriticReport; patches: Patch[] }> {
+}): Promise<{ report: CriticReport }> {
   const sys = `${PREAMBLE}
 
 CLIP CATALOG:
 ${clipCatalog(input.clips)}
 
 TASK: You are the critic. Score the current cut 0–10 on each rubric dimension
-(repetition_penalty is 0=none, 10=severe). Then output concrete timeline
-patches that would improve the weakest areas. Only patch what helps; an empty
-patch list is fine if the cut is already strong. Reference real segmentIds and
-clipIds. Prioritize fixes that improve story clarity, momentum, purpose,
-cohesion, and payoff before decorative transitions or effects.`;
+(repetition_penalty is 0=none, 10=severe). Summarize the highest-impact
+improvements. Do not emit timeline patches; object-scoped changes flow through
+the orchestrator Request Changes tools.`;
 
-const user = `Edit plan:
+  const user = `Edit plan:
 ${planText(input.plan)}
 
 Story context:
@@ -359,54 +345,16 @@ ${storyContextForPrompt(input.storyContext)}
 Current timeline:
 ${timelineForPrompt(input.timeline, input.clips)}
 
-Score it and propose improvement patches.`;
+Score it and summarize the highest-impact improvements.`;
 
   const out = await getLlmClient().structured<{
     scores: CriticReport["scores"];
     summary: string;
-    patches: Patch[];
   }>({ cachedSystem: sys, user, schema: criticSchema, maxTokens: 6000, effort: "medium" });
 
   return {
     report: { scores: out.scores, summary: out.summary },
-    patches: out.patches,
   };
-}
-
-export async function revise(input: {
-  message: string;
-  plan: ShotPlan | null;
-  timeline: Timeline;
-  clips: Clip[];
-  storyContext?: StoryContext | null;
-}): Promise<{ summary: string; patches: Patch[] }> {
-  const sys = `${PREAMBLE}
-
-CLIP CATALOG:
-${clipCatalog(input.clips)}
-
-TASK: The user wants to revise the current cut conversationally. Translate
-their request into concrete timeline patches. Make the smallest set of changes
-that satisfies the request. Reference real segmentIds and clipIds. Briefly
-summarize what you changed.`;
-
-  const user = `${input.plan ? `Edit plan:\n${planText(input.plan)}\n\n` : ""}Story context:
-${storyContextForPrompt(input.storyContext)}
-
-Current timeline:
-${timelineForPrompt(input.timeline, input.clips)}
-
-User request: "${input.message}"
-
-Produce patches and a summary.`;
-
-  return getLlmClient().structured<{ summary: string; patches: Patch[] }>({
-    cachedSystem: sys,
-    user,
-    schema: reviseSchema,
-    maxTokens: 6000,
-    effort: "medium", // chat note -> targeted timeline patches
-  });
 }
 
 // Rewrites a narration script so that, read at a natural pace, it fills a

@@ -11,7 +11,7 @@ import {
   CompositionPlan,
   Project,
 } from "@popcorn/shared/types";
-import { ensureBeatIds } from "@popcorn/shared/edit-graph";
+import { ensureBeatIds } from "@popcorn/shared/types";
 import type { Asset } from "@popcorn/shared/assets/types";
 import { poolAssets } from "./assets/pool";
 import {

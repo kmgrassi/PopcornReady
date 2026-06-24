@@ -209,81 +209,6 @@ export const editDecisionTimelineSchema = {
   required: ["decisions"],
 };
 
-const patchSchema = {
-  anyOf: [
-    {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        op: { type: "string", enum: ["replace_clip"] },
-        segmentId: str,
-        newClipId: str,
-        sourceInSec: num,
-        sourceOutSec: num,
-        reason: str,
-      },
-      required: ["op", "segmentId", "newClipId", "sourceInSec", "sourceOutSec", "reason"],
-    },
-    {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        op: { type: "string", enum: ["set_trim"] },
-        segmentId: str,
-        sourceInSec: num,
-        sourceOutSec: num,
-        reason: str,
-      },
-      required: ["op", "segmentId", "sourceInSec", "sourceOutSec", "reason"],
-    },
-    {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        op: { type: "string", enum: ["remove_segment"] },
-        segmentId: str,
-        reason: str,
-      },
-      required: ["op", "segmentId", "reason"],
-    },
-    {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        op: { type: "string", enum: ["reorder"] },
-        segmentIdsInOrder: { type: "array", items: str },
-        reason: str,
-      },
-      required: ["op", "segmentIdsInOrder", "reason"],
-    },
-    {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        op: { type: "string", enum: ["add_segment"] },
-        clipId: str,
-        sourceInSec: num,
-        sourceOutSec: num,
-        role: str,
-        afterSegmentId: { type: ["string", "null"] },
-        reason: str,
-      },
-      required: ["op", "clipId", "sourceInSec", "sourceOutSec", "role", "afterSegmentId", "reason"],
-    },
-    {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        op: { type: "string", enum: ["set_caption"] },
-        segmentId: str,
-        caption: str,
-        reason: str,
-      },
-      required: ["op", "segmentId", "caption", "reason"],
-    },
-  ],
-};
-
 export const criticSchema = {
   type: "object",
   additionalProperties: false,
@@ -311,19 +236,8 @@ export const criticSchema = {
       ],
     },
     summary: str,
-    patches: { type: "array", items: patchSchema },
   },
-  required: ["scores", "summary", "patches"],
-};
-
-export const reviseSchema = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    summary: str,
-    patches: { type: "array", items: patchSchema },
-  },
-  required: ["summary", "patches"],
+  required: ["scores", "summary"],
 };
 
 export const narrationRewriteSchema = {

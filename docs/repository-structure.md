@@ -45,9 +45,9 @@ apps/
                            supabase/ v1/ uploaded-footage.ts
 
 packages/   shared workspace libraries (apps import them as `@popcorn/* : workspace:*`)
-  shared/    (@popcorn/shared)    core types + data contracts: types.ts, edit-graph.ts (legacy, being retired — see scopes/story-spine-unification.md),
+  shared/    (@popcorn/shared)    core types + data contracts: types.ts,
                                   assets/, generative/, story-context.ts, audio-alignment.ts
-  agent/     (@popcorn/agent)     Claude/LLM functions (planEdit, critique, revise,
+  agent/     (@popcorn/agent)     Claude/LLM functions (planEdit, critique,
                                   stitch-continuity-review) + the Anthropic client
   timeline/  (@popcorn/timeline)  timeline model, composition, render-plan
   renderer/  (@popcorn/renderer)  Remotion compositions (Root, VideoComposition) — render/export
@@ -72,7 +72,7 @@ Root config: `pnpm-workspace.yaml`, `turbo.json` (task graph), `tsconfig.base.js
 | HTTP API endpoints | `apps/api/src/routes/v1/` |
 | The agent (LLM) functions | `packages/agent/src/` (+ `apps/api/src/lib/agent*`) |
 | Generation pipeline / jobs | `apps/api/src/lib/generation-run/`, `generative/`, `oneshot/` |
-| Core types & data contracts | `packages/shared/src/types.ts`, `edit-graph.ts` (being retired — see [story-spine-unification](scopes/story-spine-unification.md)) |
+| Core types & data contracts | `packages/shared/src/types.ts`, `packages/shared/src/assets/` |
 | DB schema / migrations | `supabase/migrations/` |
 | Styling conventions | `AGENTS.md` (CSS Modules + token layer) |
 | Identity / RLS model | `docs/supabase-identity-and-rls.md` |
