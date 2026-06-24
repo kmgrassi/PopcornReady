@@ -200,6 +200,60 @@ test("plan rejects both prompt and briefVersionId", async () => {
   );
 });
 
+test("plan rejects malformed storyContext fields before calling the agent", async () => {
+  const { deps, calls } = makeDeps();
+  await assert.rejects(
+    createPlan({
+      auth,
+      projectId: PROJECT_ID,
+      body: {
+        prompt: "a launch teaser",
+        storyContext: { platform: "instagram", strongestVisual: 42 },
+      },
+      deps,
+    }),
+    (err: unknown) => {
+      assert.ok(err instanceof ApiError);
+      assert.equal(err.code, "validation_failed");
+      assert.match(err.message, /request body is invalid/i);
+      return true;
+    }
+  );
+  assert.equal(calls.planEdit, 0);
+});
+
+test("plan rejects malformed nested plan payloads before replanning", async () => {
+  const { deps, calls } = makeDeps();
+  await assert.rejects(
+    createPlan({
+      auth,
+      projectId: PROJECT_ID,
+      body: {
+        prompt: "revise the concept",
+        plan: {
+          targetLengthSec: 30,
+          style: "fast-paced social ad",
+          aspectRatio: "9:16",
+          scenes: [
+            {
+              id: "scene_1",
+              name: "Scene 1",
+              beats: [{ name: "hook", durationSec: "6", intent: "grab attention" }],
+            },
+          ],
+        },
+      },
+      deps,
+    }),
+    (err: unknown) => {
+      assert.ok(err instanceof ApiError);
+      assert.equal(err.code, "validation_failed");
+      return true;
+    }
+  );
+  assert.equal(calls.planEdit, 0);
+});
+
 test("plan critique: runs critiquePlan on an inline plan and returns a succeeded job", async () => {
   const { deps, calls } = makeDeps();
   const res = await createPlanCritique({
@@ -214,6 +268,64 @@ test("plan critique: runs critiquePlan on an inline plan and returns a succeeded
   assert.equal(job.status, "succeeded");
   assert.equal(job.result.report.summary, "looks good");
   assert.equal(calls.critiquePlan, 1);
+});
+
+test("plan critique rejects malformed inline plans before calling critiquePlan", async () => {
+  const { deps, calls } = makeDeps();
+  await assert.rejects(
+    createPlanCritique({
+      auth,
+      projectId: PROJECT_ID,
+      body: {
+        plan: {
+          targetLengthSec: 30,
+          style: "playful",
+          aspectRatio: "9:16",
+          scenes: [
+            {
+              id: "scene_1",
+              name: "Scene 1",
+              beats: [{ name: "hook", durationSec: 6, intent: 42 }],
+            },
+          ],
+        },
+      },
+      deps,
+    }),
+    (err: unknown) => {
+      assert.ok(err instanceof ApiError);
+      assert.equal(err.code, "validation_failed");
+      return true;
+    }
+  );
+  assert.equal(calls.critiquePlan, 0);
+});
+
+test("plan critique accepts inline scenes without ids and normalizes them", async () => {
+  const { deps } = makeDeps();
+  const res = await createPlanCritique({
+    auth,
+    projectId: PROJECT_ID,
+    body: {
+      plan: {
+        targetLengthSec: 30,
+        style: "playful",
+        aspectRatio: "9:16",
+        scenes: [
+          {
+            name: "Scene 1",
+            beats: [{ name: "hook", durationSec: 6, intent: "grab attention" }],
+          },
+        ],
+      },
+    },
+    deps,
+  });
+
+  assert.equal(res.status, 202);
+  const job = res.body.job as { result: { report: PlanCritiqueReport } };
+  assert.equal(job.result.report.revisedPlan.scenes[0]?.id, "scene_1");
+  assert.equal(job.result.report.revisedPlan.scenes[0]?.beats[0]?.id, "beat_1_hook");
 });
 
 test("plan critique precondition: missing compositionId and plan throws a typed validation error", async () => {

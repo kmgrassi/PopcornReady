@@ -26,11 +26,15 @@ import {
 } from "@/lib/agent";
 import { briefToStoryContext } from "@/lib/v1/generation/prepare";
 import type {
+  AspectRatio,
+  Beat,
   EditPlan,
   PlanCritiqueReport,
+  ShotBeat,
+  ShotScene,
   StoryContext,
 } from "@popcorn/shared/types";
-import { planBeats, singleSceneFromBeats } from "@popcorn/shared/types";
+import { ensureBeatIds, planBeats, singleSceneFromBeats } from "@popcorn/shared/types";
 import type {
   CompositionPlan,
   PlannedBeat,
@@ -84,18 +88,39 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-const ASPECT_RATIOS = new Set(["9:16", "16:9", "1:1"]);
+const ASPECT_RATIOS = new Set<AspectRatio>(["9:16", "16:9", "1:1"]);
+const STORY_CONTEXT_PLATFORMS = new Set<NonNullable<StoryContext["platform"]>>([
+  "youtube",
+  "tiktok",
+  "reels",
+  "facebook",
+  "vimeo",
+  "general",
+]);
+const STORY_CONTEXT_FORMATS = new Set<NonNullable<StoryContext["format"]>>([
+  "mystery_to_model",
+  "visual_reveal",
+  "challenge",
+  "misconception",
+  "animated_explainer",
+  "classroom_demo",
+  "aesthetic_montage",
+]);
+
+function isAspectRatio(value: unknown): value is AspectRatio {
+  return typeof value === "string" && ASPECT_RATIOS.has(value as AspectRatio);
+}
 
 function parseAspectRatio(value: unknown, fields: FieldError[]): EditPlan["aspectRatio"] {
   const raw = value === undefined ? "9:16" : String(value);
-  if (!ASPECT_RATIOS.has(raw)) {
+  if (!isAspectRatio(raw)) {
     fields.push({
       path: "aspectRatio",
       message: "Must be one of: 9:16, 16:9, 1:1.",
     });
     return "9:16";
   }
-  return raw as EditPlan["aspectRatio"];
+  return raw;
 }
 
 function parseTargetLength(value: unknown, fields: FieldError[]): number {
@@ -113,6 +138,246 @@ function parseTargetLength(value: unknown, fields: FieldError[]): number {
     return 30;
   }
   return value;
+}
+
+function isOptionalString(value: unknown): value is string | undefined {
+  return value === undefined || typeof value === "string";
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+type ParsedShotScene = Omit<ShotScene, "id"> & { id?: string };
+type ParsedEditPlan = Omit<EditPlan, "scenes"> & { scenes: ParsedShotScene[] };
+
+function parseStoryContext(
+  value: unknown,
+  fields: FieldError[],
+  path: string
+): StoryContext | null {
+  if (!isPlainObject(value)) {
+    fields.push({ path, message: "Must be an object." });
+    return null;
+  }
+
+  const platform = value.platform;
+  if (
+    platform !== undefined &&
+    (typeof platform !== "string" ||
+      !STORY_CONTEXT_PLATFORMS.has(platform as NonNullable<StoryContext["platform"]>))
+  ) {
+    fields.push({
+      path: `${path}.platform`,
+      message: "Must be one of: youtube, tiktok, reels, facebook, vimeo, general.",
+    });
+  }
+
+  const format = value.format;
+  if (
+    format !== undefined &&
+    (typeof format !== "string" ||
+      !STORY_CONTEXT_FORMATS.has(format as NonNullable<StoryContext["format"]>))
+  ) {
+    fields.push({
+      path: `${path}.format`,
+      message:
+        "Must be one of: mystery_to_model, visual_reveal, challenge, misconception, animated_explainer, classroom_demo, aesthetic_montage.",
+    });
+  }
+
+  const stringFields = [
+    "audience",
+    "hookQuestion",
+    "strongestVisual",
+    "emotionalPull",
+    "oneBigIdea",
+    "simpleModel",
+    "caveat",
+    "payoff",
+    "callToAction",
+  ] as const;
+
+  for (const key of stringFields) {
+    if (!isOptionalString(value[key])) {
+      fields.push({ path: `${path}.${key}`, message: "Must be a string." });
+    }
+  }
+
+  if (fields.length) return null;
+
+  const audience = value.audience;
+  const hookQuestion = value.hookQuestion;
+  const strongestVisual = value.strongestVisual;
+  const emotionalPull = value.emotionalPull;
+  const oneBigIdea = value.oneBigIdea;
+  const simpleModel = value.simpleModel;
+  const caveat = value.caveat;
+  const payoff = value.payoff;
+  const callToAction = value.callToAction;
+
+  return {
+    audience: audience as string | undefined,
+    platform: platform as StoryContext["platform"],
+    format: format as StoryContext["format"],
+    hookQuestion: hookQuestion as string | undefined,
+    strongestVisual: strongestVisual as string | undefined,
+    emotionalPull: emotionalPull as string | undefined,
+    oneBigIdea: oneBigIdea as string | undefined,
+    simpleModel: simpleModel as string | undefined,
+    caveat: caveat as string | undefined,
+    payoff: payoff as string | undefined,
+    callToAction: callToAction as string | undefined,
+  };
+}
+
+function parseShotBeat(value: unknown, fields: FieldError[], path: string): ShotBeat | null {
+  if (!isPlainObject(value)) {
+    fields.push({ path, message: "Must be an object." });
+    return null;
+  }
+  if (typeof value.name !== "string" || !value.name.trim()) {
+    fields.push({ path: `${path}.name`, message: "Must be a non-empty string." });
+  }
+  if (
+    typeof value.durationSec !== "number" ||
+    !Number.isFinite(value.durationSec) ||
+    value.durationSec <= 0
+  ) {
+    fields.push({ path: `${path}.durationSec`, message: "Must be a positive number." });
+  }
+  if (typeof value.intent !== "string" || !value.intent.trim()) {
+    fields.push({ path: `${path}.intent`, message: "Must be a non-empty string." });
+  }
+  for (const key of ["id", "shotType", "camera", "framing"] as const) {
+    if (!isOptionalString(value[key])) {
+      fields.push({ path: `${path}.${key}`, message: "Must be a string." });
+    }
+  }
+  if (fields.length) return null;
+
+  const id = value.id;
+  const name = value.name;
+  const durationSec = value.durationSec;
+  const intent = value.intent;
+  const shotType = value.shotType;
+  const camera = value.camera;
+  const framing = value.framing;
+
+  return {
+    ...(id ? { id: id as string } : {}),
+    name: name as string,
+    durationSec: durationSec as number,
+    intent: intent as string,
+    ...(shotType ? { shotType: shotType as string } : {}),
+    ...(camera ? { camera: camera as string } : {}),
+    ...(framing ? { framing: framing as string } : {}),
+  };
+}
+
+function parseShotScene(value: unknown, fields: FieldError[], path: string): ParsedShotScene | null {
+  if (!isPlainObject(value)) {
+    fields.push({ path, message: "Must be an object." });
+    return null;
+  }
+  if (value.id !== undefined && (typeof value.id !== "string" || !value.id.trim())) {
+    fields.push({ path: `${path}.id`, message: "Must be a non-empty string." });
+  }
+  if (typeof value.name !== "string" || !value.name.trim()) {
+    fields.push({ path: `${path}.name`, message: "Must be a non-empty string." });
+  }
+  for (const key of ["setting", "mood", "anchorAssetId"] as const) {
+    if (!isOptionalString(value[key])) {
+      fields.push({ path: `${path}.${key}`, message: "Must be a string." });
+    }
+  }
+  if (value.characterIds !== undefined && !isStringArray(value.characterIds)) {
+    fields.push({ path: `${path}.characterIds`, message: "Must be an array of strings." });
+  }
+  if (!Array.isArray(value.beats)) {
+    fields.push({ path: `${path}.beats`, message: "Must be an array." });
+    return null;
+  }
+
+  const beats = value.beats
+    .map((beat, index) => parseShotBeat(beat, fields, `${path}.beats[${index}]`))
+    .filter((beat): beat is ShotBeat => beat !== null);
+  if (fields.length) return null;
+
+  const id = value.id;
+  const name = value.name;
+  const setting = value.setting;
+  const mood = value.mood;
+  const characterIds = value.characterIds;
+  const anchorAssetId = value.anchorAssetId;
+
+  return {
+    ...(id ? { id: id as string } : {}),
+    name: name as string,
+    ...(setting ? { setting: setting as string } : {}),
+    ...(mood ? { mood: mood as string } : {}),
+    ...(characterIds ? { characterIds: characterIds as string[] } : {}),
+    ...(anchorAssetId ? { anchorAssetId: anchorAssetId as string } : {}),
+    beats,
+  };
+}
+
+function parseLegacyBeat(value: unknown, fields: FieldError[], path: string): Beat | null {
+  return parseShotBeat(value, fields, path);
+}
+
+function parseEditPlan(value: unknown, fields: FieldError[], path: string): EditPlan | null {
+  if (!isPlainObject(value)) {
+    fields.push({ path, message: "Must be an object." });
+    return null;
+  }
+  if (
+    typeof value.targetLengthSec !== "number" ||
+    !Number.isFinite(value.targetLengthSec) ||
+    value.targetLengthSec <= 0
+  ) {
+    fields.push({ path: `${path}.targetLengthSec`, message: "Must be a positive number." });
+  }
+  if (typeof value.style !== "string" || !value.style.trim()) {
+    fields.push({ path: `${path}.style`, message: "Must be a non-empty string." });
+  }
+  if (!isAspectRatio(value.aspectRatio)) {
+    fields.push({
+      path: `${path}.aspectRatio`,
+      message: "Must be one of: 9:16, 16:9, 1:1.",
+    });
+  }
+
+  let scenes: ParsedShotScene[] | null = null;
+  if (Array.isArray(value.scenes)) {
+    scenes = value.scenes
+      .map((scene, index) => parseShotScene(scene, fields, `${path}.scenes[${index}]`))
+      .filter((scene): scene is ParsedShotScene => scene !== null);
+  } else if (Array.isArray((value as { beats?: unknown[] }).beats)) {
+    const beats = (value as { beats: unknown[] }).beats
+      .map((beat, index) => parseLegacyBeat(beat, fields, `${path}.beats[${index}]`))
+      .filter((beat): beat is Beat => beat !== null);
+    if (!fields.length) {
+      scenes = singleSceneFromBeats(beats);
+    }
+  } else {
+    fields.push({ path: `${path}.scenes`, message: "Must be an array." });
+  }
+
+  if (fields.length || !scenes) return null;
+
+  const targetLengthSec = value.targetLengthSec;
+  const style = value.style;
+  const aspectRatio = value.aspectRatio;
+  const parsedPlan: ParsedEditPlan = {
+    targetLengthSec: targetLengthSec as number,
+    style: style as string,
+    aspectRatio: aspectRatio as AspectRatio,
+    scenes,
+  };
+  ensureBeatIds(parsedPlan);
+
+  return parsedPlan as EditPlan;
 }
 
 // EditPlan beats → composition PlannedBeats. A bare plan has no asset bindings
@@ -231,26 +496,13 @@ async function resolvePlanInputs(
 
   const inlineStoryContext =
     body.storyContext !== undefined && body.storyContext !== null
-      ? isPlainObject(body.storyContext)
-        ? (body.storyContext as StoryContext)
-        : (() => {
-            fields.push({
-              path: "storyContext",
-              message: "Must be an object.",
-            });
-            return null;
-          })()
+      ? parseStoryContext(body.storyContext, fields, "storyContext")
       : null;
 
   // Replan (§3): a prior plan + feedback re-runs planning with the feedback.
   const priorPlan =
     body.plan !== undefined && body.plan !== null
-      ? isPlainObject(body.plan)
-        ? (body.plan as unknown as EditPlan)
-        : (() => {
-            fields.push({ path: "plan", message: "Must be an object." });
-            return null;
-          })()
+      ? parseEditPlan(body.plan, fields, "plan")
       : null;
   const feedback =
     typeof body.feedback === "string" ? body.feedback.trim() : "";
@@ -413,12 +665,7 @@ export async function createPlanCritique(
     typeof body.compositionId === "string" ? body.compositionId.trim() : "";
   const inlinePlan =
     body.plan !== undefined && body.plan !== null
-      ? isPlainObject(body.plan)
-        ? (body.plan as unknown as EditPlan)
-        : (() => {
-            fields.push({ path: "plan", message: "Must be an object." });
-            return null;
-          })()
+      ? parseEditPlan(body.plan, fields, "plan")
       : null;
 
   if (!compositionId && !inlinePlan) {
