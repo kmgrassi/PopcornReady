@@ -494,9 +494,7 @@ with latest_imported as (
     ss.project_id,
     ss.story_blueprint_id
   from story_spine_storyboards ss
-  join public.projects p
-    on p.id = ss.project_id
-  where p.current_story_blueprint_id is null
+  where not ss.uses_existing_blueprint
   order by ss.project_id, ss.storyboard_created_at desc, ss.storyboard_id
 )
 update public.projects p
