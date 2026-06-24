@@ -1,13 +1,68 @@
-import {
-  EDIT_GRAPH_ASSET_SEMANTIC_ANALYSIS_SCHEMA_VERSION,
-  EDIT_GRAPH_EDIT_DECISION_SCHEMA_VERSION,
-  AssetSemanticAnalysis,
-  EditDecision,
-  MediaSegment,
-  TextEditOperation,
-  TranscriptSpan,
-  WordTiming,
-} from "./types";
+export const ASSET_SEMANTIC_ANALYSIS_SCHEMA_VERSION =
+  "semanticAnalysis.v1" as const;
+
+export interface WordTiming {
+  id: string;
+  word: string;
+  startMs: number;
+  endMs: number;
+  confidence: number;
+}
+
+export interface TranscriptSpan {
+  id: string;
+  assetId: string;
+  startMs: number;
+  endMs: number;
+  speakerId?: string;
+  text: string;
+  words: WordTiming[];
+}
+
+export type SceneType =
+  | "talking_head"
+  | "b_roll"
+  | "screen_recording"
+  | "product_shot"
+  | "title_card";
+
+export interface AudioFeatures {
+  energy: number;
+  silence: boolean;
+  music?: boolean;
+  speech?: boolean;
+}
+
+export interface QualitySignals {
+  sharpness?: number;
+  exposure?: number;
+  audioClarity?: number;
+  faceVisible?: boolean;
+  cameraMotion?: "static" | "smooth" | "shaky";
+}
+
+export interface MediaSegment {
+  id: string;
+  assetId: string;
+  startMs: number;
+  endMs: number;
+  transcriptSpanIds?: string[];
+  transcript?: TranscriptSpan[];
+  visualDescription?: string;
+  detectedObjects?: string[];
+  sceneType?: SceneType;
+  audioFeatures?: AudioFeatures;
+  qualitySignals?: QualitySignals;
+  semanticTags: string[];
+}
+
+export interface AssetSemanticAnalysis {
+  schemaVersion: typeof ASSET_SEMANTIC_ANALYSIS_SCHEMA_VERSION;
+  assetId: string;
+  transcript: TranscriptSpan[];
+  segments: MediaSegment[];
+  createdAt: string;
+}
 
 export interface SemanticAssetInput {
   id: string;
@@ -31,13 +86,6 @@ export interface SemanticAssetInput {
 
 interface BuildOptions {
   now?: string;
-}
-
-interface TextEditDecisionOptions {
-  id?: string;
-  beatId?: string;
-  rationale?: string;
-  confidence?: number;
 }
 
 function clampMs(value: number, min: number, max: number): number {
@@ -250,85 +298,10 @@ export function buildSemanticAnalysis(
   const segments = decomposeAssetIntoSegments(asset, scopedTranscript);
 
   return {
-    schemaVersion: EDIT_GRAPH_ASSET_SEMANTIC_ANALYSIS_SCHEMA_VERSION,
+    schemaVersion: ASSET_SEMANTIC_ANALYSIS_SCHEMA_VERSION,
     assetId: asset.id,
     transcript: scopedTranscript,
     segments,
     createdAt: options.now ?? new Date().toISOString(),
-  };
-}
-
-function segmentIdsForTextEdit(
-  analysis: Pick<AssetSemanticAnalysis, "transcript" | "segments">,
-  textEdit: TextEditOperation
-): string[] {
-  const spanIds = new Set<string>();
-  const wordRanges: { startMs: number; endMs: number }[] = [];
-  if ("transcriptSpanIds" in textEdit) {
-    for (const id of textEdit.transcriptSpanIds) spanIds.add(id);
-  }
-  if ("wordIds" in textEdit) {
-    for (const span of analysis.transcript) {
-      const matchingWords = span.words.filter((word) => textEdit.wordIds.includes(word.id));
-      if (matchingWords.length > 0) {
-        spanIds.add(span.id);
-        wordRanges.push(
-          ...matchingWords.map((word) => ({ startMs: word.startMs, endMs: word.endMs }))
-        );
-      }
-    }
-  }
-
-  return analysis.segments
-    .filter(
-      (segment) =>
-        (segment.transcriptSpanIds ?? []).some((id) => spanIds.has(id)) ||
-        wordRanges.some((word) =>
-          overlaps(word.startMs, word.endMs, segment.startMs, segment.endMs)
-        )
-    )
-    .map((segment) => segment.id);
-}
-
-function decisionOperationFor(textEdit: TextEditOperation): EditDecision["operation"] {
-  switch (textEdit.type) {
-    case "remove_words":
-    case "reorder_sentence":
-      return "cut";
-    case "compress_pause":
-      return "remove_silence";
-    case "bleep":
-      return "sound_effect";
-    case "caption_emphasis":
-      return "caption";
-  }
-}
-
-export function textEditToEditDecision(
-  analysis: Pick<AssetSemanticAnalysis, "transcript" | "segments">,
-  textEdit: TextEditOperation,
-  options: TextEditDecisionOptions = {}
-): EditDecision {
-  const sourceSegmentIds = segmentIdsForTextEdit(analysis, textEdit);
-  const mustIncludeWords =
-    "wordIds" in textEdit
-      ? analysis.transcript
-          .flatMap((span) => span.words)
-          .filter((word) => textEdit.wordIds.includes(word.id))
-          .map((word) => word.word)
-      : undefined;
-
-  return {
-    id: options.id ?? `decision_${Math.random().toString(36).slice(2, 10)}`,
-    schemaVersion: EDIT_GRAPH_EDIT_DECISION_SCHEMA_VERSION,
-    beatId: options.beatId ?? "transcript_edit",
-    operation: decisionOperationFor(textEdit),
-    sourceSegmentIds,
-    rationale: options.rationale ?? textEdit.reason,
-    ...(mustIncludeWords && mustIncludeWords.length > 0
-      ? { constraints: { mustIncludeWords } }
-      : {}),
-    textEdit,
-    confidence: options.confidence ?? 0.8,
   };
 }

@@ -31,7 +31,7 @@ import {
   IdeogramStyleType,
 } from "@popcorn/shared/generative/types";
 import type { GeneratedAssetCharacterBinding } from "@popcorn/shared/types";
-import { buildSemanticAnalysis } from "@/lib/edit-graph/semantic-analysis";
+import { buildSemanticAnalysis } from "@/lib/assets/semantic-analysis";
 import type { AssetInputRelation, GraphAssetInput } from "./asset-graph";
 import { sha256Hex } from "./asset-graph";
 import { randomUUID } from "crypto";
