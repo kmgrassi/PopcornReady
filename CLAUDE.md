@@ -84,9 +84,10 @@ user edits it, or the agent targets it by name, prefer relational columns/rows.
   removed; the active code lives in `apps/web`, `apps/api`, and `packages/*`.
 - Live generation: `src/app/api/oneshot/` (sync) + `src/lib/runs/execute.ts`.
 - Versioned/job stack: `src/lib/v1/`, `src/lib/api/v1/`, `src/app/api/v1/`.
-- The agent (LLM) functions: `src/lib/agent/` (`planEdit`, `critiquePlan`,
-  `critique`, `revise`, …). Generation/keyframes: `src/lib/generative/`.
-- Core types: `src/lib/types.ts`. Edit graph: `src/lib/edit-graph.ts`.
+- The agent (LLM) functions: `apps/api/src/lib/agent/` (`planEdit`,
+  `critiquePlan`, `critique`, …). Generation/keyframes:
+  `apps/api/src/lib/generative/`.
+- Core types: `packages/shared/src/types.ts`.
 - Scopes & design docs: `docs/scopes/`, `docs/research/`.
 
 ## Conventions

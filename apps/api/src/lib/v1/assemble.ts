@@ -6,24 +6,17 @@
 // generation.ts (the engine-unification is a separate, later PR): assemble runs
 // `selectClips` over a plan's beats + the project's selected/ready assets and
 // persists the result as a first-class `VersionedTimeline`; critique runs
-// `critique` over a stored timeline and returns scores + patches.
+// `critique` over a stored timeline and returns scores.
 //
 // Both are driven by the same v1 Job + GET-poll pattern that `generations.ts`
 // uses, so a caller polls them exactly like every other stage.
 
 import { critique as realCritique, selectClips as realSelectClips } from "../agent";
-import {
-  EDIT_GRAPH_COMPILER_VERSION,
-  buildEditGraphFromTimeline,
-  compileEditGraphToTimeline,
-  ensureBeatIds,
-  markGraphTimelineProjection,
-} from "@popcorn/shared/edit-graph";
 import { sanitizeTimeline } from "@popcorn/timeline/timeline";
-import { randomUUID } from "crypto";
 import {
   Clip,
   EditPlan,
+  ensureBeatIds,
   planBeats,
   singleSceneFromBeats,
   StoryContext,
@@ -291,12 +284,10 @@ export async function resolveAssemble(
 
 export interface AssembleResult {
   timelineId: string;
-  editGraphId: string;
   segmentCount: number;
 }
 
-// Run `selectClips`, build the edit graph, and persist a VersionedTimeline.
-// Mirrors generation.ts's persistence path but as a standalone single stage.
+// Run `selectClips` and persist a VersionedTimeline as the canonical projection.
 export async function runAssemble(args: {
   store: V1Store;
   jobId: string;
@@ -325,37 +316,20 @@ export async function runAssemble(args: {
   }
 
   const now = new Date().toISOString();
-  const timelineForGraph =
+  const timeline =
     input.showCaptions === undefined
       ? draft
       : { ...draft, showCaptions: input.showCaptions };
-
-  const editGraph = buildEditGraphFromTimeline({
-    id: randomUUID(),
-    projectId,
-    briefVersionId: input.briefVersionId,
-    ...(input.compositionId ? { compositionId: input.compositionId } : {}),
-    jobId,
-    goal: input.goal,
-    storyContext: input.storyContext,
-    plan: input.plan,
-    clips: input.clips,
-    timeline: timelineForGraph,
-    createdAt: now,
-  });
-  const compiledTimeline = compileEditGraphToTimeline(editGraph);
-
-  const savedGraph = await store.saveEditGraph(editGraph);
   const versioned: VersionedTimeline = {
     id: "",
     schemaVersion: SCHEMA.timeline,
     projectId,
     briefVersionId: input.briefVersionId,
     ...(input.compositionId ? { compositionId: input.compositionId } : {}),
-    aspectRatio: compiledTimeline.aspectRatio,
-    fps: compiledTimeline.fps,
+    aspectRatio: timeline.aspectRatio,
+    fps: timeline.fps,
     ...(input.showCaptions === undefined ? {} : { showCaptions: input.showCaptions }),
-    segments: compiledTimeline.segments,
+    segments: timeline.segments,
     provenance: {
       briefVersionId: input.briefVersionId,
       ...(input.compositionId ? { compositionId: input.compositionId } : {}),
@@ -364,23 +338,14 @@ export async function runAssemble(args: {
       criticReport: null,
       appliedPatchCount: 0,
     },
-    derivedFrom: {
-      editGraphId: savedGraph.id,
-      compilerVersion: EDIT_GRAPH_COMPILER_VERSION,
-      compiledAt: now,
-    },
     createdBy: { jobId },
     createdAt: now,
   };
   const savedTimeline = await store.saveTimeline(versioned);
-  await store.saveEditGraph(
-    markGraphTimelineProjection(savedGraph, savedTimeline.id, now)
-  );
 
   return {
     timelineId: savedTimeline.id,
-    editGraphId: savedGraph.id,
-    segmentCount: compiledTimeline.segments.length,
+    segmentCount: timeline.segments.length,
   };
 }
 
@@ -389,7 +354,6 @@ export async function runAssemble(args: {
 export interface CritiqueResult {
   timelineId: string;
   report: CriticReport;
-  patches: Awaited<ReturnType<typeof realCritique>>["patches"];
 }
 
 // Run `critique` over a stored timeline. Strict precondition: an unknown (or
@@ -415,8 +379,7 @@ export async function runTimelineCritique(args: {
 
   // The critic needs the timeline + the clips its segments reference, plus a
   // light plan for context. Reconstruct a minimal EditPlan from the segments'
-  // beats (the timeline is the source of truth here; we deliberately avoid
-  // re-deriving from the edit-graph's distinct story schema).
+  // beats because the timeline is the source of truth here.
   const beatsByName = new Map<string, { id?: string; name: string; intent: string }>();
   for (const seg of timeline.segments) {
     const name = seg.role || seg.beatId || "beat";
@@ -460,5 +423,5 @@ export async function runTimelineCritique(args: {
     storyContext: null,
   });
 
-  return { timelineId, report: result.report, patches: result.patches };
+  return { timelineId, report: result.report };
 }

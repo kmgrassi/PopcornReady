@@ -8,7 +8,7 @@
 
 - **Upload media and descriptions**
 - **Generate a rough cut automatically**
-- **Revise with chat**
+- **Request AI changes**
 - **Preview in-browser and export MP4**
 
 🌐 **Website:** https://popcornready.ai
@@ -25,9 +25,7 @@ planEdit()      goal → beats              (Claude, structured JSON)
    ↓
 selectClips()   beats + clips → timeline  (Claude, structured JSON)
    ↓
-critique()      timeline → scores + patches → applied  (Claude)
-   ↓
-revise()        chat message → patches → applied        (Claude)
+critique()      timeline → scores                       (Claude)
    ↓
 Remotion        timeline → <Player> preview + MP4 export
 ```
@@ -35,13 +33,14 @@ Remotion        timeline → <Player> preview + MP4 export
 1. Upload your video and image assets with short descriptions.
 2. Give the app a creative goal, target length, and style.
 3. Generate a first-pass timeline and a critic response.
-4. Refine the cut with conversational prompts.
+4. Request object-scoped changes through the agent.
 5. Preview in Remotion and export to MP4.
 
-The editor never directly manipulates raw footage. It plans and patches a
-structured timeline model (`src/lib/types.ts`) and then renders it deterministically.
+The editor never directly manipulates raw footage. It plans a structured
+timeline model (`packages/shared/src/types.ts`) and then renders it
+deterministically.
 
-- Timeline changes are generated as validated patches.
+- Changes flow through graph-linked actions and selected assets.
 - Asset metadata and generated media are organized per project store.
 - Rendering is reproducible across preview and export.
 

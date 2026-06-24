@@ -22,7 +22,7 @@ import {
   runTimelineCritique,
 } from "../assemble";
 import { V1Store, createStore } from "../store";
-import { planBeats } from "@popcorn/shared/types";
+import { ensureBeatIds, planBeats } from "@popcorn/shared/types";
 import {
   AspectRatio,
   SCHEMA,
@@ -32,6 +32,32 @@ import {
 } from "@popcorn/shared/v1/types";
 
 const NOW = "2026-06-05T12:00:00.000Z";
+
+test("ensureBeatIds normalizes legacy plans and backfills scene ids", () => {
+  const plan: {
+    targetLengthSec: number;
+    style: string;
+    aspectRatio: AspectRatio;
+    scenes?: { id?: string; beats?: { id?: string; name: string }[] }[];
+    beats?: { name: string; durationSec: number; intent: string }[];
+  } = {
+    targetLengthSec: 8,
+    style: "punchy",
+    aspectRatio: "9:16" as AspectRatio,
+    beats: [
+      { name: "hook", durationSec: 4, intent: "grab attention" },
+      { name: "payoff", durationSec: 4, intent: "land the idea" },
+    ],
+  };
+
+  ensureBeatIds(plan);
+
+  assert.equal("beats" in plan, false);
+  assert.ok(plan.scenes);
+  assert.equal(plan.scenes[0]?.id, "scene_1");
+  assert.equal(plan.scenes[0]?.beats?.[0]?.id, "beat_1_hook");
+  assert.equal(plan.scenes[0]?.beats?.[1]?.id, "beat_2_payoff");
+});
 
 // Offline, deterministic stand-in for the model-backed selectClips. One segment
 // per visual clip, so we exercise resolve -> select -> persist without network.
@@ -70,15 +96,6 @@ const fakeCritiqueDeps: CritiqueDeps = {
         },
         summary: "solid cut",
       },
-      patches: [
-        {
-          op: "set_trim",
-          segmentId: "seg_1",
-          sourceInSec: 0,
-          sourceOutSec: 1.5,
-          reason: "tighten the hook",
-        },
-      ],
     };
   },
 };
@@ -165,7 +182,7 @@ test("assemble runs selectClips and persists a VersionedTimeline", async () => {
     assert.equal(timeline.segments.length, 2);
     assert.deepEqual(timeline.provenance.sourceAssetIds, ["asset_1", "asset_2"]);
     assert.equal(timeline.createdBy.jobId, "job_assemble_1");
-    assert.ok(timeline.derivedFrom?.editGraphId, "links to its edit graph");
+    assert.equal(timeline.provenance.appliedPatchCount, 0);
   });
 });
 
@@ -253,7 +270,7 @@ test("assemble with no ready visual assets is a structured error", async () => {
 
 // --- critique happy path ---------------------------------------------------
 
-test("critique runs over a persisted timeline and returns scores + patches", async () => {
+test("critique runs over a persisted timeline and returns scores", async () => {
   await withStore(async (store) => {
     const project = await seedProject(store);
     await seedAsset(store, project.id, { id: "asset_1" });
@@ -281,8 +298,6 @@ test("critique runs over a persisted timeline and returns scores + patches", asy
     assert.equal(result.timelineId, assembled.timelineId);
     assert.equal(result.report.scores.hook_score, 7);
     assert.equal(result.report.summary, "solid cut");
-    assert.equal(result.patches.length, 1);
-    assert.equal(result.patches[0]?.op, "set_trim");
   });
 });
 

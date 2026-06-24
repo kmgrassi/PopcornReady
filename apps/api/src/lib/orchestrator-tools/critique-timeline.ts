@@ -21,7 +21,6 @@ export interface CritiqueTimelineOutput {
   timelineAssetId: string;
   critiqueAssetId: string;
   report: Awaited<ReturnType<typeof realCritique>>["report"];
-  patches: Awaited<ReturnType<typeof realCritique>>["patches"];
 }
 
 export interface CritiqueTimelineDeps {
@@ -85,9 +84,8 @@ export const critiqueTimelineOutputSchema = {
       },
       required: ["scores", "summary"],
     },
-    patches: { type: "array", items: { type: "object" } },
   },
-  required: ["timelineId", "timelineAssetId", "critiqueAssetId", "report", "patches"],
+  required: ["timelineId", "timelineAssetId", "critiqueAssetId", "report"],
 } as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -259,7 +257,6 @@ export function createCritiqueTimelineTool(
         critique: {
           timelineId: activeTimeline.timelineId,
           report: critique.report,
-          patches: critique.patches,
         },
       });
 
@@ -272,7 +269,6 @@ export function createCritiqueTimelineTool(
           timelineAssetId: activeTimeline.assetId,
           critiqueAssetId,
           report: critique.report,
-          patches: critique.patches,
         },
       };
     },

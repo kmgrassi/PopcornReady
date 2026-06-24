@@ -37,11 +37,11 @@ const FEATURES = [
   },
   {
     title: "Revise by conversation",
-    body: "Every message becomes validated timeline edits.",
+    body: "Requests flow through the agent and update the selected assets.",
   },
   {
     title: "Inspectable & safe",
-    body: "Every cut traces back to source clips, prompts, and patches. Bad model output is clamped, not rendered.",
+    body: "Every cut traces back to source clips, prompts, actions, and selected assets.",
   },
 ];
 
@@ -82,7 +82,7 @@ const POPCORN_READY_HEATMAP_EXPLANATIONS: Record<string, string> = {
   "Manual edit":
     "Popcorn Ready does not currently provide a manual timeline UI for hand-stitching or editing without AI.",
   "Timeline model":
-    "Popcorn Ready produces and patches a structured timeline, so the output remains inspectable even though edits are AI-driven.",
+    "Popcorn Ready produces a structured timeline from graph-linked assets, so the output remains inspectable even though edits are AI-driven.",
   Audio:
     "Popcorn Ready can generate or overlay audio and render it with the finished video, but it is not a full audio-post workstation.",
   VFX: "Popcorn Ready focuses on generated shots and deterministic assembly, not deep manual compositing or effects work.",

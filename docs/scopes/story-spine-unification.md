@@ -190,13 +190,12 @@ Also: `storyboard_search_chunks` (embeddings) likely references storyboard rows 
 
 ## EditGraph retirement (separate, more careful)
 
-- Delete `packages/shared/src/edit-graph.ts` (`EditGraph`, `Patch`, `revisionOperations`,
-  alternatives), the `edit_graphs` table + `getEditGraph`/`saveEditGraph` in
-  `lib/v1/store.ts`, and the old `critique`/`revise`/`compileTimelineViaEditGraph` agent
-  functions that emit `Patch[]`.
-- Verify nothing in the live timeline path depends on `compileTimelineViaEditGraph`
-  before removal (initial check: `assemble_timeline` does not). Treat as its own PR,
-  not folded into the schema migration.
+- **Applied in PR 5:** deleted `packages/shared/src/edit-graph.ts` (`EditGraph`,
+  `Patch`, `revisionOperations`, alternatives), removed the v1
+  `getEditGraph`/`saveEditGraph` store surface, removed
+  `compileTimelineViaEditGraph`, and retired old patch-emitting
+  `critique`/`revise` behavior. The current migration chain had already dropped
+  `public.edit_graphs` in `20260610120000_asset_graph_model.sql`.
 
 ## How AI edits work (for context — unchanged by this scope)
 
@@ -256,7 +255,7 @@ docs in this branch. "Request Changes" is now the canonical name of the interact
 4. **Retire EditPlan**: remove the structure, repoint `EditPlan` readers to `story_beats`,
    retire the `plan` asset carrier.
 5. **Retire EditGraph**: delete edit-graph.ts, `edit_graphs` table + v1 store surface,
-   legacy patch agent functions.
+   legacy patch agent functions. **Applied.**
 
 ### PR 3 readiness audit
 

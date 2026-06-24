@@ -1,4 +1,3 @@
-import type { EditGraph } from "./edit-graph";
 import type { Asset, AssetSelection } from "./assets/types";
 
 // Core domain types. The whole product revolves around the Timeline — the AI
@@ -208,8 +207,41 @@ export interface ShotPlan {
   scenes: ShotScene[];
 }
 
-/** @deprecated Use ShotPlan for live generation. Kept for legacy EditGraph/API compatibility. */
+/** @deprecated Use ShotPlan for live generation. Kept for legacy API compatibility. */
 export type EditPlan = ShotPlan;
+
+export function storyBeatId(index: number, name: string): string {
+  return `beat_${index + 1}_${name || "untitled"}`;
+}
+
+// Fold a flat `{ beats: [...] }` plan into a single default scene, in place.
+// Older persisted plans and some model outputs may not have the Scene tier yet.
+export function normalizePlanScenes(plan: {
+  scenes?: { id?: string; name?: string; beats?: { id?: string; name: string }[] }[];
+  beats?: { id?: string; name: string }[];
+}): void {
+  if (!plan.scenes) {
+    plan.scenes = Array.isArray(plan.beats) && plan.beats.length
+      ? [{ id: "scene_1", name: "Main", beats: plan.beats }]
+      : [];
+  }
+  delete plan.beats;
+}
+
+export function ensureBeatIds(plan: {
+  scenes?: { id?: string; beats?: { id?: string; name: string }[] }[];
+  beats?: { id?: string; name: string }[];
+}): void {
+  normalizePlanScenes(plan);
+  let index = 0;
+  for (const [sceneIndex, scene] of (plan.scenes ?? []).entries()) {
+    if (!scene.id) scene.id = `scene_${sceneIndex + 1}`;
+    for (const beat of scene.beats ?? []) {
+      if (!beat.id) beat.id = storyBeatId(index, beat.name);
+      index += 1;
+    }
+  }
+}
 
 export type StoryDurationClass = "micro" | "short" | "medium" | "long" | "feature";
 
@@ -261,7 +293,7 @@ export interface ScriptDraft {
 }
 
 // Read-helper: flatten a plan's scenes into their ordered beats. Consumers that
-// only care about the beat sequence (timeline, edit-graph, storyboard tiles)
+// only care about the beat sequence (timeline, storyboard tiles)
 // use this rather than reaching into `scene.beats` directly.
 export function planBeats(plan: Pick<ShotPlan, "scenes">): ShotBeat[] {
   if (!plan.scenes) {
@@ -394,35 +426,6 @@ export interface GenerationPreflightResult {
   passes: GenerationPreflightPass[];
 }
 
-export type Patch =
-  | {
-      op: "replace_clip";
-      segmentId: string;
-      newClipId: string;
-      sourceInSec: number;
-      sourceOutSec: number;
-      reason: string;
-    }
-  | {
-      op: "set_trim";
-      segmentId: string;
-      sourceInSec: number;
-      sourceOutSec: number;
-      reason: string;
-    }
-  | { op: "remove_segment"; segmentId: string; reason: string }
-  | { op: "reorder"; segmentIdsInOrder: string[]; reason: string }
-  | {
-      op: "add_segment";
-      clipId: string;
-      sourceInSec: number;
-      sourceOutSec: number;
-      role: string;
-      afterSegmentId: string | null;
-      reason: string;
-    }
-  | { op: "set_caption"; segmentId: string; caption: string; reason: string };
-
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
@@ -504,7 +507,6 @@ export interface Project {
   goal: string;
   storyContext?: StoryContext;
   plan: ShotPlan | null;
-  editGraph?: EditGraph;
   timeline: Timeline | null;
   renderPlan?: RenderPlan | null;
   clips: Clip[];

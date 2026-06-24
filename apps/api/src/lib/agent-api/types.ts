@@ -1,14 +1,9 @@
 // Versioned agent API (/api/v1) job and artifact types.
 //
-// Scope: this file backs PR6 of docs/scopes/agent-video-generation-api.md
-// (revision jobs, export jobs, artifacts). The full set of job types and steps
-// from the scope doc is declared here for stable typing, but only `revision`
-// and `export` are implemented in PR6. The rest depend on PR1–PR5 (project,
-// asset, generated-asset, composition, generation, and audio-alignment
-// surfaces) and are marked accordingly where referenced.
+// Timeline-forward revision jobs are retired; the `revision` job type remains
+// for timeline critique polling compatibility.
 
-import type { EditGraph, EditGraphRevisionOperation } from "@popcorn/shared/edit-graph";
-import { Patch, RenderPlan, Timeline } from "@popcorn/shared/types";
+import { RenderPlan } from "@popcorn/shared/types";
 
 export type JobType =
   | "asset_ingest" // PR1
@@ -16,7 +11,7 @@ export type JobType =
   | "composition" // PR3
   | "timeline_generation" // PR4
   | "audio_alignment" // PR5
-  | "revision" // PR6 (implemented)
+  | "revision" // timeline critique polling compatibility
   | "export"; // PR6 (skeleton)
 
 // Terminal states match the scope doc acceptance criteria.
@@ -58,18 +53,6 @@ export interface Job<TResult = unknown> {
   idempotencyKey?: string;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface RevisionJobResult {
-  // The revised cut. Returned inline because first-class, addressable Timeline
-  // resources (with stable ids and sibling lineage) require PR4. TODO(PR4):
-  // persist this as a sibling Timeline and return a timelineId instead.
-  timeline: Timeline;
-  editGraph: EditGraph;
-  graphOperations: EditGraphRevisionOperation[];
-  appliedPatches: number;
-  patches: Patch[];
-  summary: string;
 }
 
 export type ArtifactStatus = "pending_render" | "ready" | "failed";
