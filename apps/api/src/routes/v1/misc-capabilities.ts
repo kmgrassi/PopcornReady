@@ -431,7 +431,7 @@ miscCapabilitiesRouter.post(
     if (!timelineId) {
       throw new ApiError(
         "validation_failed",
-        "timelineId is required. Use /projects/:projectId/timelines/:timelineId/exports once timeline routes are mounted."
+        "timelineId is required. Use /projects/:projectId/timelines/:timelineId/exports."
       );
     }
     const job = await createJob({

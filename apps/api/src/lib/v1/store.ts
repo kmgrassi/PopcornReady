@@ -15,13 +15,11 @@ import { runQuery } from "../supabase/db-errors";
 
 // Persistence repository for /api/v1's job + timeline stack.
 //
-// The store reads/writes the v1 data model in Supabase Postgres (tables defined
-// in supabase/migrations/20260603000000_init_v1_model.sql): compositions, jobs,
-// timelines, and the project/brief/asset readers. Snake_case
-// columns are mapped to/from the camelCase domain objects below; loosely-shaped
-// or churning structures (job progress/input/result/error, timeline
-// segments/provenance, etc.) round-trip through jsonb
-// columns.
+// The store reads/writes the v1 compatibility model in Supabase Postgres. Briefs,
+// composition plans, and timelines are projections over graph assets; jobs and
+// idempotency stay in their own tables. Snake_case columns are mapped to/from
+// the camelCase domain objects below; loosely-shaped or churning structures
+// round-trip through jsonb columns.
 //
 // Two implementations share the V1Store interface:
 //   * createSupabaseStore() — the production store, used by getStore(). Runs with
@@ -70,6 +68,12 @@ export interface V1Store {
 // filename. The composite (scope, key) primary key in the schema is a superset
 // shared with the api/v1 foundation store.
 const IDEMPOTENCY_KEY = "";
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isUuid(value: string | undefined): value is string {
+  return typeof value === "string" && UUID_PATTERN.test(value);
+}
 
 // --- row <-> object mappers ------------------------------------------------
 
@@ -155,6 +159,21 @@ interface AssetRow {
   updated_at: string;
 }
 
+interface DataAssetRow {
+  id: string;
+  schema_version: string;
+  workspace_id: string;
+  project_id: string;
+  kind: "plan" | "composite";
+  media: "data";
+  status: "ready" | "pending";
+  role: string | null;
+  content: Record<string, unknown>;
+  inputs: unknown[];
+  created_at: string;
+  updated_at: string;
+}
+
 const JSONB_SCHEMA_KEY = "schema_version";
 
 function markJsonbPayload<T extends object>(
@@ -165,6 +184,13 @@ function markJsonbPayload<T extends object>(
     [JSONB_SCHEMA_KEY]: schemaVersion,
     ...(payload as Record<string, unknown>),
   } as T & { schema_version: string };
+}
+
+function unmarkJsonbPayload<T>(payload: unknown): T {
+  if (!isRecord(payload)) return payload as T;
+  const { [JSONB_SCHEMA_KEY]: _schemaVersion, ...rest } = payload;
+  void _schemaVersion;
+  return rest as T;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -282,51 +308,44 @@ function assetToRow(a: V1Asset): AssetRow {
   };
 }
 
-interface CompositionRow {
-  id: string;
-  schema_version: string;
-  project_id: string;
-  brief_version_id: string | null;
-  mode: CompositionPlan["mode"];
-  status: CompositionPlan["status"];
-  planned_beats: CompositionPlan["plannedBeats"];
-  generated_asset_job_ids: string[];
-  ready_asset_ids: string[];
-  narration_strategy: CompositionPlan["narrationStrategy"] | null;
-  created_at: string;
-  updated_at: string;
-}
-
-function rowToComposition(r: CompositionRow): CompositionPlan {
+function rowToComposition(r: DataAssetRow): CompositionPlan {
+  const content = unmarkJsonbPayload<Partial<CompositionPlan>>(r.content);
   const plan: CompositionPlan = {
     id: r.id,
-    schemaVersion: r.schema_version as CompositionPlan["schemaVersion"],
+    schemaVersion: "composition.v1",
     projectId: r.project_id,
-    briefVersionId: r.brief_version_id ?? "",
-    mode: r.mode,
-    status: r.status,
-    plannedBeats: r.planned_beats ?? [],
-    generatedAssetJobIds: r.generated_asset_job_ids ?? [],
-    readyAssetIds: r.ready_asset_ids ?? [],
+    briefVersionId: content.briefVersionId ?? "",
+    mode: content.mode ?? "hybrid",
+    status: content.status ?? "planning",
+    plannedBeats: content.plannedBeats ?? [],
+    generatedAssetJobIds: content.generatedAssetJobIds ?? [],
+    readyAssetIds: content.readyAssetIds ?? [],
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
-  if (r.narration_strategy) plan.narrationStrategy = r.narration_strategy;
+  if (content.narrationStrategy) plan.narrationStrategy = content.narrationStrategy;
   return plan;
 }
 
-function compositionToRow(c: CompositionPlan): CompositionRow {
+function compositionToAssetRow(
+  c: CompositionPlan,
+  project: Pick<ProjectRow, "workspace_id">
+): DataAssetRow {
+  const { id: _id, ...content } = c;
+  void _id;
   return {
     id: c.id,
-    schema_version: c.schemaVersion,
+    schema_version: "asset.v2",
+    workspace_id: project.workspace_id,
     project_id: c.projectId,
-    brief_version_id: c.briefVersionId || null,
-    mode: c.mode,
-    status: c.status,
-    planned_beats: c.plannedBeats ?? [],
-    generated_asset_job_ids: c.generatedAssetJobIds ?? [],
-    ready_asset_ids: c.readyAssetIds ?? [],
-    narration_strategy: c.narrationStrategy ?? null,
+    kind: "plan",
+    media: "data",
+    status: "ready",
+    role: "composition_plan",
+    content: markJsonbPayload("composition.v1", content),
+    inputs: isUuid(c.briefVersionId)
+      ? [{ assetId: c.briefVersionId, relation: "input", role: "brief", position: 0 }]
+      : [],
     created_at: c.createdAt,
     updated_at: c.updatedAt,
   };
@@ -388,55 +407,63 @@ function jobToRow(j: Job): JobRow {
   };
 }
 
-interface TimelineRow {
-  id: string;
-  schema_version: string;
-  project_id: string;
-  brief_version_id: string | null;
-  composition_id: string | null;
-  aspect_ratio: string;
-  fps: number;
-  show_captions: boolean | null;
-  segments: VersionedTimeline["segments"];
-  provenance: VersionedTimeline["provenance"];
-  derived_from: unknown | null;
-  created_by: VersionedTimeline["createdBy"];
-  created_at: string;
-}
-
-function rowToTimeline(r: TimelineRow): VersionedTimeline {
+function rowToTimeline(r: DataAssetRow): VersionedTimeline {
+  const content = unmarkJsonbPayload<Partial<VersionedTimeline>>(r.content);
   const timeline: VersionedTimeline = {
     id: r.id,
-    schemaVersion: r.schema_version as VersionedTimeline["schemaVersion"],
+    schemaVersion: "timeline.v1",
     projectId: r.project_id,
-    briefVersionId: r.brief_version_id ?? "",
-    aspectRatio: r.aspect_ratio as VersionedTimeline["aspectRatio"],
-    fps: r.fps,
-    segments: r.segments ?? [],
-    provenance: r.provenance,
-    createdBy: r.created_by,
+    briefVersionId: content.briefVersionId ?? "",
+    aspectRatio: content.aspectRatio ?? "16:9",
+    fps: content.fps ?? 30,
+    segments: content.segments ?? [],
+    provenance:
+      content.provenance ?? {
+        briefVersionId: content.briefVersionId ?? "",
+        sourceAssetIds: [],
+        generatedAssetJobIds: [],
+        criticReport: null,
+        appliedPatchCount: 0,
+      },
+    createdBy: content.createdBy ?? { jobId: "" },
     createdAt: r.created_at,
   };
-  if (r.composition_id != null) timeline.compositionId = r.composition_id;
-  if (r.show_captions != null) timeline.showCaptions = r.show_captions;
+  if (content.compositionId) timeline.compositionId = content.compositionId;
+  if (content.showCaptions !== undefined) timeline.showCaptions = content.showCaptions;
   return timeline;
 }
 
-function timelineToRow(t: VersionedTimeline): TimelineRow {
+function timelineToAssetRow(
+  t: VersionedTimeline,
+  project: Pick<ProjectRow, "workspace_id">
+): DataAssetRow {
+  const { id: _id, ...content } = t;
+  void _id;
   return {
     id: t.id,
-    schema_version: t.schemaVersion,
+    schema_version: "asset.v2",
+    workspace_id: project.workspace_id,
     project_id: t.projectId,
-    brief_version_id: t.briefVersionId || null,
-    composition_id: t.compositionId ?? null,
-    aspect_ratio: t.aspectRatio,
-    fps: t.fps,
-    show_captions: t.showCaptions ?? null,
-    segments: t.segments ?? [],
-    provenance: t.provenance,
-    derived_from: null,
-    created_by: t.createdBy,
+    kind: "composite",
+    media: "data",
+    status: "ready",
+    role: "timeline",
+    content: markJsonbPayload("timeline.v1", content),
+    inputs: [
+      ...t.provenance.sourceAssetIds
+        .filter(isUuid)
+        .map((assetId, position) => ({
+          assetId,
+          relation: "child",
+          role: "segment",
+          position,
+        })),
+      ...(isUuid(t.compositionId)
+        ? [{ assetId: t.compositionId, relation: "input", role: "plan", position: 0 }]
+        : []),
+    ],
     created_at: t.createdAt,
+    updated_at: t.createdAt,
   };
 }
 
@@ -513,8 +540,10 @@ export function createSupabaseStore(
       return ((data as AssetRow[]) ?? []).map(rowToAsset);
     },
     async getComposition(id) {
-      const row = await getOne<CompositionRow>("compositions", "id", id);
-      return row ? rowToComposition(row) : null;
+      const row = await getOne<DataAssetRow>("assets", "id", id);
+      return row && row.kind === "plan" && row.media === "data" && row.role === "composition_plan"
+        ? rowToComposition(row)
+        : null;
     },
 
     async getJob(id) {
@@ -526,22 +555,29 @@ export function createSupabaseStore(
       return { ...job, id };
     },
     async getTimeline(id) {
-      const row = await getOne<TimelineRow>("timelines", "id", id);
-      return row ? rowToTimeline(row) : null;
+      const row = await getOne<DataAssetRow>("assets", "id", id);
+      return row && row.kind === "composite" && row.media === "data" && row.role === "timeline"
+        ? rowToTimeline(row)
+        : null;
     },
     async listTimelinesForProject(projectId) {
       const data = await runQuery(
         "v1 store.listTimelinesForProject",
         db
-          .from("timelines")
+          .from("assets")
           .select("*")
           .eq("project_id", projectId)
+          .eq("kind", "composite")
+          .eq("media", "data")
+          .eq("role", "timeline")
           .order("created_at", { ascending: false })
       );
-      return (data ?? []).map((row) => rowToTimeline(row as TimelineRow));
+      return (data ?? []).map((row) => rowToTimeline(row as DataAssetRow));
     },
     async saveTimeline(timeline) {
-      const id = await saveWithGeneratedId("timelines", timelineToRow(timeline));
+      const project = await getOne<ProjectRow>("projects", "id", timeline.projectId);
+      if (!project) throw new Error(`project not found for timeline: ${timeline.projectId}`);
+      const id = await saveWithGeneratedId("assets", timelineToAssetRow(timeline, project));
       return { ...timeline, id };
     },
     async getIdempotency(scope) {
@@ -626,7 +662,12 @@ export function createSupabaseStore(
       return { ...asset, id };
     },
     async saveComposition(composition) {
-      const id = await saveWithGeneratedId("compositions", compositionToRow(composition));
+      const project = await getOne<ProjectRow>("projects", "id", composition.projectId);
+      if (!project) throw new Error(`project not found for composition: ${composition.projectId}`);
+      const id = await saveWithGeneratedId(
+        "assets",
+        compositionToAssetRow(composition, project)
+      );
       return { ...composition, id };
     },
   };

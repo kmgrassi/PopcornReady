@@ -5634,52 +5634,23 @@ export async function listCharacterAnchorAssets(
 }
 
 // ---------------------------------------------------------------------------
-// Compositions and jobs
+// Plan compatibility and jobs
 // ---------------------------------------------------------------------------
-interface CompositionRow {
-  id: string;
-  schema_version: string;
-  project_id: string;
-  brief_version_id: string | null;
-  mode: ContractCompositionPlan["mode"];
-  status: ContractCompositionPlan["status"];
-  planned_beats: ContractCompositionPlan["plannedBeats"];
-  generated_asset_job_ids: string[];
-  ready_asset_ids: string[];
-  narration_strategy: ContractCompositionPlan["narrationStrategy"] | null;
-  created_at: string;
-  updated_at: string;
-}
+const COMPOSITION_PLAN_ROLE = "composition_plan";
 
-function compositionToRow(composition: ContractCompositionPlan): CompositionRow {
-  return {
-    id: composition.id,
-    schema_version: composition.schemaVersion,
-    project_id: composition.projectId,
-    brief_version_id: composition.briefVersionId || null,
-    mode: composition.mode,
-    status: composition.status,
-    planned_beats: composition.plannedBeats,
-    generated_asset_job_ids: composition.generatedAssetJobIds,
-    ready_asset_ids: composition.readyAssetIds,
-    narration_strategy: composition.narrationStrategy ?? null,
-    created_at: composition.createdAt,
-    updated_at: composition.updatedAt,
-  };
-}
-
-function mapComposition(row: CompositionRow): ContractCompositionPlan {
+function mapCompositionAsset(row: DataAssetRow): ContractCompositionPlan {
+  const content = unmarkedContent<Partial<ContractCompositionPlan>>(row.content);
   return {
     id: row.id,
     schemaVersion: CONTRACT_SCHEMA.composition,
     projectId: row.project_id,
-    briefVersionId: row.brief_version_id ?? "",
-    mode: row.mode,
-    status: row.status,
-    plannedBeats: row.planned_beats ?? [],
-    generatedAssetJobIds: row.generated_asset_job_ids ?? [],
-    readyAssetIds: row.ready_asset_ids ?? [],
-    narrationStrategy: row.narration_strategy ?? undefined,
+    briefVersionId: content.briefVersionId ?? "",
+    mode: content.mode ?? "hybrid",
+    status: content.status ?? "planning",
+    plannedBeats: content.plannedBeats ?? [],
+    generatedAssetJobIds: content.generatedAssetJobIds ?? [],
+    readyAssetIds: content.readyAssetIds ?? [],
+    ...(content.narrationStrategy ? { narrationStrategy: content.narrationStrategy } : {}),
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
   };
@@ -5749,14 +5720,46 @@ export async function saveCompositionPlan(
 ): Promise<ContractCompositionPlan> {
   await getProject(workspaceId, composition.projectId);
   const db = getServiceSupabase();
-  // Omit `id` so Postgres assigns it; the caller's composition.id is a placeholder.
-  const { id: _omit, ...row } = compositionToRow(composition);
-  void _omit;
-  const data = await runQuery(
-    "store.saveCompositionPlan",
-    db.from("compositions").insert(row).select("*").single()
-  );
-  return mapComposition(data as CompositionRow);
+  const briefAsset = composition.briefVersionId
+    ? await dataAssetById(db, composition.briefVersionId)
+    : null;
+  const inputs: GraphAssetInput[] =
+    briefAsset && briefAsset.project_id === composition.projectId
+      ? [
+          {
+            assetId: briefAsset.id,
+            relation: "input",
+            role: "brief",
+            position: 0,
+            ...(briefAsset.content_hash ? { contentHash: briefAsset.content_hash } : {}),
+          },
+        ]
+      : [];
+  const action = await createAction({
+    projectId: composition.projectId,
+    tool: "save_composition_plan",
+    status: "running",
+    params: { source: "composition_compat" },
+    inputAssetIds: inputs.map((input) => input.assetId),
+    rationale: "Persist a legacy composition-plan projection as an immutable plan asset.",
+  });
+  const { id: _placeholder, ...content } = composition;
+  void _placeholder;
+  const data = await insertDataAsset({
+    db,
+    workspaceId,
+    projectId: composition.projectId,
+    kind: "plan",
+    role: COMPOSITION_PLAN_ROLE,
+    content,
+    inputs,
+    createdByActionId: action.id,
+  });
+  await updateAction(action.id, {
+    status: "applied",
+    outputAssetIds: [data.id],
+  });
+  return mapCompositionAsset(data);
 }
 
 export async function getCompositionPlan(
@@ -5769,14 +5772,17 @@ export async function getCompositionPlan(
   const data = await runQuery(
     "store.getCompositionPlan",
     db
-      .from("compositions")
+      .from("assets")
       .select("*")
       .eq("id", compositionId)
       .eq("project_id", projectId)
+      .eq("kind", "plan")
+      .eq("media", "data")
+      .eq("role", COMPOSITION_PLAN_ROLE)
       .maybeSingle()
   );
   if (!data) throw notFound(`Composition not found: ${compositionId}`);
-  return mapComposition(data as CompositionRow);
+  return mapCompositionAsset(data as DataAssetRow);
 }
 
 export async function listCompositionPlans(
@@ -5789,9 +5795,15 @@ export async function listCompositionPlans(
   const db = getServiceSupabase();
   const data = await runQuery(
     "store.listCompositionPlans",
-    db.from("compositions").select("*").eq("project_id", projectId)
+    db
+      .from("assets")
+      .select("*")
+      .eq("project_id", projectId)
+      .eq("kind", "plan")
+      .eq("media", "data")
+      .eq("role", COMPOSITION_PLAN_ROLE)
   );
-  const all = (data as CompositionRow[]).map(mapComposition);
+  const all = (data as DataAssetRow[]).map(mapCompositionAsset);
   return paginate(all, limit, cursor);
 }
 
