@@ -34,7 +34,7 @@ import type {
   ShotScene,
   StoryContext,
 } from "@popcorn/shared/types";
-import { planBeats, singleSceneFromBeats } from "@popcorn/shared/types";
+import { ensureBeatIds, planBeats, singleSceneFromBeats } from "@popcorn/shared/types";
 import type {
   CompositionPlan,
   PlannedBeat,
@@ -147,6 +147,9 @@ function isOptionalString(value: unknown): value is string | undefined {
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
+
+type ParsedShotScene = Omit<ShotScene, "id"> & { id?: string };
+type ParsedEditPlan = Omit<EditPlan, "scenes"> & { scenes: ParsedShotScene[] };
 
 function parseStoryContext(
   value: unknown,
@@ -272,12 +275,12 @@ function parseShotBeat(value: unknown, fields: FieldError[], path: string): Shot
   };
 }
 
-function parseShotScene(value: unknown, fields: FieldError[], path: string): ShotScene | null {
+function parseShotScene(value: unknown, fields: FieldError[], path: string): ParsedShotScene | null {
   if (!isPlainObject(value)) {
     fields.push({ path, message: "Must be an object." });
     return null;
   }
-  if (typeof value.id !== "string" || !value.id.trim()) {
+  if (value.id !== undefined && (typeof value.id !== "string" || !value.id.trim())) {
     fields.push({ path: `${path}.id`, message: "Must be a non-empty string." });
   }
   if (typeof value.name !== "string" || !value.name.trim()) {
@@ -309,7 +312,7 @@ function parseShotScene(value: unknown, fields: FieldError[], path: string): Sho
   const anchorAssetId = value.anchorAssetId;
 
   return {
-    id: id as string,
+    ...(id ? { id: id as string } : {}),
     name: name as string,
     ...(setting ? { setting: setting as string } : {}),
     ...(mood ? { mood: mood as string } : {}),
@@ -345,11 +348,11 @@ function parseEditPlan(value: unknown, fields: FieldError[], path: string): Edit
     });
   }
 
-  let scenes: ShotScene[] | null = null;
+  let scenes: ParsedShotScene[] | null = null;
   if (Array.isArray(value.scenes)) {
     scenes = value.scenes
       .map((scene, index) => parseShotScene(scene, fields, `${path}.scenes[${index}]`))
-      .filter((scene): scene is ShotScene => scene !== null);
+      .filter((scene): scene is ParsedShotScene => scene !== null);
   } else if (Array.isArray((value as { beats?: unknown[] }).beats)) {
     const beats = (value as { beats: unknown[] }).beats
       .map((beat, index) => parseLegacyBeat(beat, fields, `${path}.beats[${index}]`))
@@ -366,13 +369,15 @@ function parseEditPlan(value: unknown, fields: FieldError[], path: string): Edit
   const targetLengthSec = value.targetLengthSec;
   const style = value.style;
   const aspectRatio = value.aspectRatio;
-
-  return {
+  const parsedPlan: ParsedEditPlan = {
     targetLengthSec: targetLengthSec as number,
     style: style as string,
     aspectRatio: aspectRatio as AspectRatio,
     scenes,
   };
+  ensureBeatIds(parsedPlan);
+
+  return parsedPlan as EditPlan;
 }
 
 // EditPlan beats → composition PlannedBeats. A bare plan has no asset bindings

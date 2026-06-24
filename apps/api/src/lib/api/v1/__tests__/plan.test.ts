@@ -301,6 +301,33 @@ test("plan critique rejects malformed inline plans before calling critiquePlan",
   assert.equal(calls.critiquePlan, 0);
 });
 
+test("plan critique accepts inline scenes without ids and normalizes them", async () => {
+  const { deps } = makeDeps();
+  const res = await createPlanCritique({
+    auth,
+    projectId: PROJECT_ID,
+    body: {
+      plan: {
+        targetLengthSec: 30,
+        style: "playful",
+        aspectRatio: "9:16",
+        scenes: [
+          {
+            name: "Scene 1",
+            beats: [{ name: "hook", durationSec: 6, intent: "grab attention" }],
+          },
+        ],
+      },
+    },
+    deps,
+  });
+
+  assert.equal(res.status, 202);
+  const job = res.body.job as { result: { report: PlanCritiqueReport } };
+  assert.equal(job.result.report.revisedPlan.scenes[0]?.id, "scene_1");
+  assert.equal(job.result.report.revisedPlan.scenes[0]?.beats[0]?.id, "beat_1_hook");
+});
+
 test("plan critique precondition: missing compositionId and plan throws a typed validation error", async () => {
   const { deps, calls } = makeDeps();
   await assert.rejects(
