@@ -119,6 +119,14 @@ function textValues(value: unknown): string[] {
   return Object.values(value as Record<string, unknown>).flatMap(textValues);
 }
 
+// Shared minor-safety gate: OpenAI image generation rejects photorealistic
+// minors, so any poster whose source text mentions a minor must route to Gemini.
+// Exported so other poster paths (e.g. the inspiration poster cache, which only
+// has a prompt string) can apply the same rule without duplicating the pattern.
+export function posterTextMentionsMinor(text: string): boolean {
+  return MINOR_RE.test(text);
+}
+
 function mentionsMinor(input: {
   brief: VideoBrief;
   planAsset: PosterGenerationAssetRef | null;
@@ -129,7 +137,7 @@ function mentionsMinor(input: {
     ...textValues(input.planAsset?.content),
     input.heroAnchorAsset?.description ?? "",
   ].join(" ");
-  return MINOR_RE.test(text);
+  return posterTextMentionsMinor(text);
 }
 
 function providerName(input: {

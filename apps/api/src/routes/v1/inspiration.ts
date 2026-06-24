@@ -3,6 +3,8 @@ import { createHash } from "crypto";
 import { mutation, route } from "@/core/adapter";
 import { ApiError } from "@/core/errors";
 import { createGeneratedAsset } from "@/lib/api/v1/generated-assets";
+import { resolveWorkspaceGenerationModel } from "@/lib/api/v1/model-settings";
+import { posterTextMentionsMinor } from "@/lib/api/v1/poster-generation";
 import type { AuthContext } from "@/lib/api/v1/auth";
 import type { V1Job } from "@/lib/api/v1/jobs";
 import { setAssetVisibility } from "@/lib/api/v1/store";
@@ -658,18 +660,46 @@ async function ensureStoryConceptPoster(
     );
   }
 
+  // Posters are key-art / typographic, so they default to Ideogram (strong at
+  // composition + readable title text) rather than the global image default
+  // (openai/gpt-image), which produces the "ChatGPT-looking" output. Mirrors the
+  // project poster path (generatePoster). Minor-safety still forces Gemini, and a
+  // workspace-configured image model would still win if one were set.
+  const safetyProvider = posterTextMentionsMinor(prompt) ? "gemini" : undefined;
+  const posterModel = await resolveWorkspaceGenerationModel({
+    workspaceId: SYSTEM_WORKSPACE_ID,
+    kind: "image",
+    ...(safetyProvider ? { explicitProvider: safetyProvider } : {}),
+    defaultProvider: "ideogram",
+  });
+
   const existing = await runQuery(
     "inspiration.findStoryConceptPoster",
     db
       .from("story_concept_posters")
-      .select("id,status,poster_asset_id,prompt")
+      .select("id,status,poster_asset_id,prompt,provider,model")
       .eq("story_concept_id", concept.id)
       .eq("prompt_hash", promptHash)
       .eq("is_primary", true)
       .maybeSingle()
-  ) as { id: string; status: StoryConceptPoster["status"]; poster_asset_id: string | null; prompt: string } | null;
+  ) as {
+    id: string;
+    status: StoryConceptPoster["status"];
+    poster_asset_id: string | null;
+    prompt: string;
+    provider: string | null;
+    model: string | null;
+  } | null;
 
-  if (existing?.status === "ready" && existing.poster_asset_id) {
+  const existingUsesPosterModel =
+    existing?.provider === posterModel.provider &&
+    (existing.model ?? undefined) === (posterModel.model ?? undefined);
+
+  if (
+    existingUsesPosterModel &&
+    existing?.status === "ready" &&
+    existing.poster_asset_id
+  ) {
     return {
       movieTitle,
       poster: {
@@ -680,7 +710,10 @@ async function ensureStoryConceptPoster(
       },
     };
   }
-  if (existing?.status === "queued" || existing?.status === "generating") {
+  if (
+    existingUsesPosterModel &&
+    (existing?.status === "queued" || existing?.status === "generating")
+  ) {
     return {
       movieTitle,
       poster: {
@@ -697,9 +730,11 @@ async function ensureStoryConceptPoster(
       movieTitle,
       poster: {
         status: "queued",
-        assetId: existing?.poster_asset_id ?? null,
-        url: existing?.poster_asset_id ? await posterUrlForAsset(existing.poster_asset_id) : null,
-        prompt: existing?.prompt ?? prompt,
+        assetId: existingUsesPosterModel ? existing?.poster_asset_id ?? null : null,
+        url: existingUsesPosterModel && existing?.poster_asset_id
+          ? await posterUrlForAsset(existing.poster_asset_id)
+          : null,
+        prompt: existingUsesPosterModel ? existing?.prompt ?? prompt : prompt,
       },
     };
   }
@@ -715,6 +750,8 @@ async function ensureStoryConceptPoster(
             poster_asset_id: null,
             status: "generating",
             error: null,
+            provider: posterModel.provider,
+            model: posterModel.model ?? null,
           })
           .eq("id", existing.id)
           .select("id")
@@ -730,6 +767,8 @@ async function ensureStoryConceptPoster(
             prompt_hash: promptHash,
             status: "generating",
             is_primary: true,
+            provider: posterModel.provider,
+            model: posterModel.model ?? null,
           })
           .select("id")
           .single()
@@ -747,6 +786,8 @@ async function ensureStoryConceptPoster(
         assetRole: "poster",
         displayName: "Inspiration poster",
         slug: `inspiration-poster-${conceptHash.slice(0, 12)}`,
+        provider: posterModel.provider,
+        ...(posterModel.model ? { model: posterModel.model } : {}),
       },
     });
     const assetId = jobAssetId(result.body.job as V1Job);
@@ -765,6 +806,8 @@ async function ensureStoryConceptPoster(
           poster_asset_id: assetId,
           status: "ready",
           error: null,
+          provider: posterModel.provider,
+          model: posterModel.model ?? null,
         })
         .eq("id", posterRow.id)
     );
