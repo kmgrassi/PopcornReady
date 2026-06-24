@@ -73,6 +73,8 @@ export function SettingsPage() {
       ? "Local mode"
       : me?.authMode ?? "Hosted mode";
   const showAdminSurfaces = canAccessAdminSurface(auth);
+  const canCreateProviderSmokeAsset =
+    showAdminSurfaces && me?.isWorkspaceAdmin === true;
   const canSignOut = auth.configured && auth.status === "authenticated";
 
   async function signOut() {
@@ -133,7 +135,7 @@ export function SettingsPage() {
 
       <AccessTokenPanel />
 
-      {showAdminSurfaces ? <ProviderSmokeTestPanel /> : null}
+      {canCreateProviderSmokeAsset ? <ProviderSmokeTestPanel /> : null}
 
       {showAdminSurfaces ? (
         <section className={styles.section} aria-labelledby="links-heading">

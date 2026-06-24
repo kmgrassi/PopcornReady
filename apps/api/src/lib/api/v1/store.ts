@@ -114,6 +114,8 @@ export interface V1Workspace {
   updatedAt: string;
 }
 
+export type WorkspaceRole = "owner" | "admin" | "member";
+
 export interface V1Project {
   id: string;
   schemaVersion: typeof SCHEMA_VERSIONS.project;
@@ -501,6 +503,32 @@ function mapWorkspace(row: WorkspaceRow): V1Workspace {
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
   };
+}
+
+function parseWorkspaceRole(value: unknown): WorkspaceRole | null {
+  return value === "owner" || value === "admin" || value === "member" ? value : null;
+}
+
+export function isWorkspaceAdminRole(role: WorkspaceRole | null | undefined): boolean {
+  return role === "owner" || role === "admin";
+}
+
+export async function getWorkspaceRole(
+  workspaceId: string,
+  userId: string
+): Promise<WorkspaceRole | null> {
+  const db = getServiceSupabase();
+  const row = await runQuery(
+    "store.getWorkspaceRole",
+    db
+      .from("workspace_members")
+      .select("role")
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", userId)
+      .maybeSingle(),
+    { allowMissing: true }
+  );
+  return parseWorkspaceRole((row as { role?: unknown } | null)?.role);
 }
 
 // --- projects --------------------------------------------------------------
