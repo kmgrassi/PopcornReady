@@ -172,8 +172,15 @@ export async function regenerateImageAsset(
       );
     }
 
-    const provider = args.provider?.trim() || asset.provenance?.provider || DEFAULT_IMAGE_PROVIDER;
-    const model = args.model?.trim() || asset.provenance?.model;
+    const requestedProvider = args.provider?.trim();
+    const requestedModel = args.model?.trim();
+    const savedProvider = asset.provenance?.provider;
+    const provider = requestedProvider || savedProvider || DEFAULT_IMAGE_PROVIDER;
+    const model =
+      requestedModel ||
+      (!requestedProvider || requestedProvider === savedProvider
+        ? asset.provenance?.model
+        : undefined);
     assetLogger.info("asset_regenerate.asset_ready", {
       assetId,
       projectId: asset.projectId,

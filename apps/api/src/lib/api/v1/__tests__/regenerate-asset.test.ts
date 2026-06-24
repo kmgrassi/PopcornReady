@@ -162,6 +162,23 @@ test("caller-supplied provider and model override saved provenance", async () =>
   assert.equal(calls.applyMedia?.update.provenance.model, "ideogram-v4");
 });
 
+test("provider-only override does not reuse an incompatible saved model", async () => {
+  const asset = imageAsset({
+    provenance: { provider: "ideogram", model: "ideogram-v4", prompt: "a saved prompt" },
+  });
+  const { calls, deps } = makeDeps(asset);
+
+  await regenerateImageAsset({
+    workspaceId: "ws-1",
+    assetId: asset.id,
+    provider: "openai",
+    deps,
+  });
+
+  assert.equal(calls.generateImage?.provider, "openai");
+  assert.equal(calls.generateImage?.model, undefined);
+});
+
 test("throws prompt_required when no prompt is saved or provided", async () => {
   const asset = imageAsset({ provenance: undefined });
   const { deps } = makeDeps(asset);

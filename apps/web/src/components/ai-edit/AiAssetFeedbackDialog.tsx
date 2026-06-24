@@ -48,12 +48,14 @@ export function AiAssetFeedbackDialog({
     (purposeConfig ? providerConfig(purposeConfig, initialProvider).models[0] : "");
   const [provider, setProvider] = useState(initialProvider);
   const [model, setModel] = useState(initialModel);
+  const [modelTouched, setModelTouched] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setMessage("");
     setProvider(initialProvider);
     setModel(initialModel);
+    setModelTouched(false);
   }, [initialModel, initialProvider, open]);
 
   useEffect(() => {
@@ -78,7 +80,7 @@ export function AiAssetFeedbackDialog({
     if (!canSubmit) return;
     await onSubmit(
       trimmed,
-      purposeConfig && provider && model.trim()
+      modelTouched && purposeConfig && provider && model.trim()
         ? { provider, model: model.trim() }
         : undefined
     );
@@ -138,6 +140,7 @@ export function AiAssetFeedbackDialog({
                     const nextConfig = providerConfig(purposeConfig, nextProvider);
                     setProvider(nextProvider);
                     setModel(nextConfig.models[0] ?? "");
+                    setModelTouched(true);
                   }}
                 >
                   {purposeConfig.providers.map((option) => (
@@ -149,7 +152,13 @@ export function AiAssetFeedbackDialog({
               </label>
               <label>
                 <span>Model</span>
-                <select value={model} onChange={(event) => setModel(event.target.value)}>
+                <select
+                  value={model}
+                  onChange={(event) => {
+                    setModel(event.target.value);
+                    setModelTouched(true);
+                  }}
+                >
                   {selectedProviderConfig.models.map((option) => (
                     <option key={option} value={option}>
                       {option}

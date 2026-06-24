@@ -40,6 +40,7 @@ export function RegenerateAssetDialog({
   const initialModel = purposeConfig ? providerConfig(purposeConfig, initialProvider).models[0] : "";
   const [provider, setProvider] = useState(initialProvider);
   const [model, setModel] = useState(initialModel);
+  const [modelTouched, setModelTouched] = useState(false);
 
   // Reset the field whenever the dialog (re)opens so a stale draft never leaks
   // between assets.
@@ -48,6 +49,7 @@ export function RegenerateAssetDialog({
     setPrompt(initialPrompt);
     setProvider(initialProvider);
     setModel(initialModel);
+    setModelTouched(false);
   }, [initialModel, initialProvider, initialPrompt, open]);
 
   if (!open) return null;
@@ -68,7 +70,7 @@ export function RegenerateAssetDialog({
           if (canSubmit) {
             onSubmit(
               trimmed,
-              purposeConfig && provider && model.trim()
+              modelTouched && purposeConfig && provider && model.trim()
                 ? { provider, model: model.trim() }
                 : undefined
             );
@@ -108,6 +110,7 @@ export function RegenerateAssetDialog({
                   const nextConfig = providerConfig(purposeConfig, nextProvider);
                   setProvider(nextProvider);
                   setModel(nextConfig.models[0] ?? "");
+                  setModelTouched(true);
                 }}
               >
                 {purposeConfig.providers.map((option) => (
@@ -119,7 +122,13 @@ export function RegenerateAssetDialog({
             </label>
             <label>
               <span>Model</span>
-              <select value={model} onChange={(event) => setModel(event.target.value)}>
+              <select
+                value={model}
+                onChange={(event) => {
+                  setModel(event.target.value);
+                  setModelTouched(true);
+                }}
+              >
                 {selectedProviderConfig.models.map((option) => (
                   <option key={option} value={option}>
                     {option}

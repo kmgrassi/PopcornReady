@@ -41,6 +41,7 @@ export function AssetEditModal({
   const purposeConfig = modelPurposeConfig("image_generation");
   const [provider, setProvider] = useState(purposeConfig.providers[0].id);
   const [model, setModel] = useState(providerConfig(purposeConfig, provider).models[0]);
+  const [modelTouched, setModelTouched] = useState(false);
 
   // Reset whenever the modal (re)opens for a (possibly different) target.
   useEffect(() => {
@@ -51,6 +52,7 @@ export function AssetEditModal({
       setSent(false);
       setProvider(purposeConfig.providers[0].id);
       setModel(providerConfig(purposeConfig, purposeConfig.providers[0].id).models[0]);
+      setModelTouched(false);
     }
   }, [open, purposeConfig, target]);
 
@@ -75,7 +77,7 @@ export function AssetEditModal({
       const res = await v1Api.createProjectAssetRevision(projectId, {
         message: trimmed,
         target,
-        generationModel: { provider, model },
+        ...(modelTouched ? { generationModel: { provider, model } } : {}),
       });
       setSent(true);
       setPrompt("");
@@ -142,6 +144,7 @@ export function AssetEditModal({
                   const nextConfig = providerConfig(purposeConfig, nextProvider);
                   setProvider(nextProvider);
                   setModel(nextConfig.models[0] ?? "");
+                  setModelTouched(true);
                 }}
               >
                 {purposeConfig.providers.map((option) => (
@@ -153,7 +156,13 @@ export function AssetEditModal({
             </label>
             <label>
               <span>Model</span>
-              <select value={model} onChange={(event) => setModel(event.target.value)}>
+              <select
+                value={model}
+                onChange={(event) => {
+                  setModel(event.target.value);
+                  setModelTouched(true);
+                }}
+              >
                 {providerConfig(purposeConfig, provider).models.map((option) => (
                   <option key={option} value={option}>
                     {option}
