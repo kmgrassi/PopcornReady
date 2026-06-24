@@ -11,6 +11,12 @@ import { setAssetVisibility } from "@/lib/api/v1/store";
 import { getServiceSupabase } from "@/lib/supabase/clients";
 import { runQuery } from "@/lib/supabase/db-errors";
 import { remoteAssetUrlForDelivery, resolveAssetUrl } from "@/lib/storage/asset-urls";
+import {
+  rankStoryConcepts,
+  INSPIRATION_INGREDIENT_GROUPS,
+  type InspirationCandidate,
+  type InspirationIngredientSummary,
+} from "@/lib/agent/inspiration";
 
 type StoryElementCategory =
   | "plot_type"
@@ -41,18 +47,13 @@ interface InspirationElement {
   coreIdea: string | null;
 }
 
+// The model authors the prose (title/logline/premise) and a per-ingredient
+// emoji + summary; the `elements` keep the provenance back to the catalog.
 interface RandomStoryInspiration {
-  formula: string;
-  movieTitle?: string;
+  movieTitle: string;
   logline: string;
-  typeOfPerson: string;
-  setting: string;
-  externalGoal: string;
-  antagonisticForce: string;
-  innerFlawOrLie: string;
-  oldSelf: string;
-  newTruth: string;
-  endingType: string;
+  premise: string;
+  ingredients: Record<InspirationElementGroup, InspirationIngredientSummary>;
   elements: {
     plot: InspirationElement[];
     setting: InspirationElement[];
@@ -66,6 +67,7 @@ interface RandomStoryInspiration {
 }
 
 type InspirationElementGroup = keyof RandomStoryInspiration["elements"];
+type InspirationElements = RandomStoryInspiration["elements"];
 
 interface StoryConceptPoster {
   status: "queued" | "generating" | "ready" | "failed";
@@ -85,84 +87,28 @@ const CATEGORIES: StoryElementCategory[] = [
   "theme",
 ];
 
-const ELEMENT_GROUPS: InspirationElementGroup[] = [
-  "plot",
-  "setting",
-  "arc",
-  "antagonist",
-  "theme",
-  "stakes",
-  "structure",
-];
-
-const PERSON_TYPES = [
-  "failed teenage magician",
-  "burned-out nurse",
-  "small-town mechanic",
-  "disgraced junior lawyer",
-  "lonely arcade champion",
-  "retired stunt driver",
-  "first-generation scholarship student",
-  "struggling street chef",
-  "former child star",
-  "anxious climate scientist",
-  "rookie union organizer",
-  "widowed radio host",
-] as const;
-
-const EXTERNAL_GOALS = [
-  "win a national talent competition",
-  "save their neighborhood venue",
-  "clear their family name",
-  "find a missing friend",
-  "win the last open seat in a citywide election",
-  "deliver a dangerous prototype before sunrise",
-  "earn a place in an elite academy",
-  "expose a corporate cover-up",
-  "rebuild a failing restaurant",
-  "rescue a stranded crew",
-  "solve a decades-old mystery",
-  "lead an impossible comeback season",
-] as const;
-
-const OLD_SELF_CHOICES = [
-  "chasing approval",
-  "hiding from responsibility",
-  "winning by cheating",
-  "staying invisible",
-  "protecting a comfortable lie",
-  "controlling everyone around them",
-  "choosing ambition over loyalty",
-  "running from grief",
-  "trusting the system to stay fair",
-  "believing they have to act alone",
-] as const;
-
-const ENDING_TYPES = [
-  "a redemptive public victory",
-  "a bittersweet personal win",
-  "a costly but honest triumph",
-  "a restored community",
-  "an open-ended second chance",
-  "a hard-won reconciliation",
-  "a quiet act of courage",
-  "a final reversal that exposes the truth",
-  "a sacrifice that saves what matters",
-  "a new beginning on their own terms",
-] as const;
+const ELEMENT_GROUPS: InspirationElementGroup[] = [...INSPIRATION_INGREDIENT_GROUPS];
 
 const SYSTEM_WORKSPACE_ID = "00000000-0000-4000-a000-000000000002";
 const INSPIRATION_POSTER_CACHE_PROJECT_ID = "00000000-0000-4000-a000-000000000003";
+
+// How many concepts the model develops + ranks per batch. The winner is served
+// immediately; the runners-up are handed out on the next few requests.
+const BATCH_SIZE = 5;
+// In-memory only: a redeploy or second instance just triggers a fresh batch.
+const BUFFER_TTL_MS = 15 * 60 * 1000;
+let inspirationBuffer: RandomStoryInspiration[] = [];
+let inspirationBufferedAt = 0;
 
 export const inspirationRouter = Router();
 
 inspirationRouter.get(
   "/inspiration/random",
   route(async () => {
-    const rows = await listStoryElements();
+    const inspiration = await nextInspiration();
     return {
       status: 200,
-      body: { inspiration: buildRandomStory(rows) },
+      body: { inspiration },
       headers: { "Cache-Control": "no-store" },
     };
   })
@@ -182,6 +128,34 @@ inspirationRouter.post(
     };
   })
 );
+
+// Serve the next ranked concept: pop a warm runner-up, or generate a fresh
+// batch when the buffer is empty or stale.
+async function nextInspiration(): Promise<RandomStoryInspiration> {
+  if (inspirationBuffer.length && Date.now() - inspirationBufferedAt < BUFFER_TTL_MS) {
+    return inspirationBuffer.shift() as RandomStoryInspiration;
+  }
+  const batch = await generateRankedBatch(BATCH_SIZE);
+  const [best, ...rest] = batch;
+  inspirationBuffer = rest;
+  inspirationBufferedAt = Date.now();
+  return best;
+}
+
+// Draw `count` random ingredient sets, have the model develop + rank them, and
+// stitch the prose back onto each set's catalog elements (best-first).
+async function generateRankedBatch(count: number): Promise<RandomStoryInspiration[]> {
+  const rows = await listStoryElements();
+  const sets = Array.from({ length: count }, () => pickIngredientSet(rows));
+  const ranked = await rankStoryConcepts(sets.map(toCandidate));
+  return ranked.map((concept) => ({
+    movieTitle: concept.movieTitle,
+    logline: concept.logline,
+    premise: concept.premise,
+    ingredients: concept.ingredients,
+    elements: sets[concept.index],
+  }));
+}
 
 async function listStoryElements(): Promise<StoryElementRow[]> {
   // Global reference catalog only: no workspace/project rows are returned here.
@@ -226,7 +200,9 @@ async function listStoryElements(): Promise<StoryElementRow[]> {
   });
 }
 
-function buildRandomStory(rows: StoryElementRow[]): RandomStoryInspiration {
+// Pick one random set of catalog ingredients. Selection is unchanged from the
+// previous template generator; only the prose stage moved to the model.
+function pickIngredientSet(rows: StoryElementRow[]): InspirationElements {
   const grouped = groupByCategory(rows);
   const plot = pickMany(preferred(grouped.plot_type, "competition"), 2);
   const timeSetting = pickOne(preferred(grouped.setting, "time_settings"));
@@ -234,7 +210,6 @@ function buildRandomStory(rows: StoryElementRow[]): RandomStoryInspiration {
     ...preferred(grouped.setting, "place_settings"),
     ...preferred(grouped.setting, "world_scale_settings"),
   ]);
-  const settings = [timeSetting, placeSetting];
   const arc = pickOne(grouped.character_arc);
   const beliefShift = pickOne(grouped.belief_shift);
   const antagonist = pickMany(grouped.antagonist_type, 2);
@@ -242,55 +217,28 @@ function buildRandomStory(rows: StoryElementRow[]): RandomStoryInspiration {
   const stakes = pickMany(grouped.stakes, 3);
   const structure = pickOne(preferred(grouped.structure, "competition"));
 
-  const typeOfPerson = randomItem(PERSON_TYPES);
-  const settingText = formatSetting(timeSetting, placeSetting);
-  const externalGoal = randomItem(EXTERNAL_GOALS);
-  const antagonistText = describeAntagonist(antagonist, theme);
-  const innerFlawOrLie = innerFlawFor(arc, beliefShift);
-  const newTruth = newTruthFor(arc, beliefShift);
-  const oldSelf = randomItem(OLD_SELF_CHOICES);
-  const endingType = randomItem(ENDING_TYPES);
-  const logline = buildLogline({
-    typeOfPerson,
-    setting: settingText,
-    externalGoal,
-    antagonisticForce: antagonistText,
-    innerFlawOrLie,
-    oldSelf,
-    newTruth,
-    endingType,
-  });
-  const movieTitle = movieTitleFor({
-    typeOfPerson,
-    setting: settingText,
-    externalGoal,
-    antagonisticForce: antagonistText,
-    newTruth,
-    endingType,
-  });
-
   return {
-    formula:
-      "A [type of person] in [setting] wants [external goal], but [antagonistic force] blocks them. To succeed, they must overcome [inner flaw/lie] and choose between [old self] and [new truth], leading to [ending type].",
-    movieTitle,
-    logline,
-    typeOfPerson,
-    setting: settingText,
-    externalGoal,
-    antagonisticForce: antagonistText,
-    innerFlawOrLie,
-    oldSelf,
-    newTruth,
-    endingType,
-    elements: {
-      plot: plot.map(toElement),
-      setting: settings.map(toElement),
-      arc: [arc, beliefShift].filter(Boolean).map(toElement),
-      antagonist: antagonist.map(toElement),
-      theme: theme.map(toElement),
-      stakes: stakes.map(toElement),
-      structure: [structure].map(toElement),
-    },
+    plot: plot.map(toElement),
+    setting: [timeSetting, placeSetting].map(toElement),
+    arc: [arc, beliefShift].filter(Boolean).map(toElement),
+    antagonist: antagonist.map(toElement),
+    theme: theme.map(toElement),
+    stakes: stakes.map(toElement),
+    structure: [structure].map(toElement),
+  };
+}
+
+function toCandidate(elements: InspirationElements): InspirationCandidate {
+  const brief = (els: InspirationElement[]) =>
+    els.map((el) => ({ name: el.name, coreIdea: el.coreIdea }));
+  return {
+    plot: brief(elements.plot),
+    setting: brief(elements.setting),
+    arc: brief(elements.arc),
+    antagonist: brief(elements.antagonist),
+    theme: brief(elements.theme),
+    stakes: brief(elements.stakes),
+    structure: brief(elements.structure),
   };
 }
 
@@ -308,66 +256,11 @@ async function parsePosterInspiration(body: unknown): Promise<RandomStoryInspira
   const rowsById = new Map(rows.map((row) => [row.id, row]));
   const selectedRows = parseSelectedElementRows(input.elements, rowsById);
 
-  const timeSetting = selectedRows.setting[0];
-  const placeSetting = selectedRows.setting[1];
-  const arc = selectedRows.arc.find((row) => row.category_slug === "character_arc");
-  const beliefShift = selectedRows.arc.find((row) => row.category_slug === "belief_shift");
-  const structure = selectedRows.structure[0];
-  if (!timeSetting || !placeSetting || !arc || !beliefShift || !structure) {
-    throw new ApiError("validation_failed", "inspiration.elements is incomplete.");
-  }
-
-  const typeOfPerson = enumField(input, "typeOfPerson", PERSON_TYPES);
-  const externalGoal = enumField(input, "externalGoal", EXTERNAL_GOALS);
-  const oldSelf = enumField(input, "oldSelf", OLD_SELF_CHOICES);
-  const endingType = enumField(input, "endingType", ENDING_TYPES);
-  const setting = formatSetting(timeSetting, placeSetting);
-  const antagonistOptions = describeAntagonistOptions(selectedRows.antagonist, selectedRows.theme);
-  const antagonisticForce = stringField(input, "antagonisticForce");
-  if (!antagonistOptions.includes(antagonisticForce)) {
-    throw new ApiError(
-      "validation_failed",
-      "inspiration.antagonisticForce does not match the selected elements."
-    );
-  }
-  const innerFlawOrLie = innerFlawFor(arc, beliefShift);
-  const newTruth = newTruthFor(arc, beliefShift);
-  const movieTitle = movieTitleFor({
-    typeOfPerson,
-    setting,
-    externalGoal,
-    antagonisticForce,
-    newTruth,
-    endingType,
-  });
-  const logline = buildLogline({
-    typeOfPerson,
-    setting,
-    externalGoal,
-    antagonisticForce,
-    innerFlawOrLie,
-    oldSelf,
-    newTruth,
-    endingType,
-  });
-
-  assertFieldMatches(input, "setting", setting);
-  assertFieldMatches(input, "innerFlawOrLie", innerFlawOrLie);
-  assertFieldMatches(input, "newTruth", newTruth);
-  assertFieldMatches(input, "logline", logline);
-
   return {
-    formula: typeof input.formula === "string" ? input.formula : "",
-    movieTitle,
-    logline,
-    typeOfPerson,
-    setting,
-    externalGoal,
-    antagonisticForce,
-    innerFlawOrLie,
-    oldSelf,
-    newTruth,
-    endingType,
+    movieTitle: requireString(input, "movieTitle"),
+    logline: requireString(input, "logline"),
+    premise: typeof input.premise === "string" ? input.premise.slice(0, 4000) : "",
+    ingredients: parseIngredients(input.ingredients),
     elements: {
       plot: selectedRows.plot.map(toElement),
       setting: selectedRows.setting.map(toElement),
@@ -424,34 +317,32 @@ function elementGroupAllowsCategory(
   return group === category;
 }
 
-function enumField<T extends readonly string[]>(
-  input: Record<string, unknown>,
-  field: string,
-  allowed: T
-): T[number] {
-  const value = input[field];
-  if (typeof value !== "string" || !allowed.includes(value)) {
-    throw new ApiError("validation_failed", `inspiration.${field} is invalid.`);
-  }
-  return value;
-}
-
-function stringField(input: Record<string, unknown>, field: string): string {
+function requireString(input: Record<string, unknown>, field: string): string {
   const value = input[field];
   if (typeof value !== "string" || !value.trim()) {
-    throw new ApiError("validation_failed", `inspiration.${field} is invalid.`);
+    throw new ApiError("validation_failed", `inspiration.${field} is required.`);
   }
-  return value;
+  return value.slice(0, 4000);
 }
 
-function assertFieldMatches(
-  input: Record<string, unknown>,
-  field: string,
-  expected: string
-): void {
-  if (input[field] !== expected) {
-    throw new ApiError("validation_failed", `inspiration.${field} does not match the selected elements.`);
+function parseIngredients(
+  raw: unknown
+): Record<InspirationElementGroup, InspirationIngredientSummary> {
+  const record = raw && typeof raw === "object" && !Array.isArray(raw)
+    ? (raw as Record<string, unknown>)
+    : {};
+  const result = {} as Record<InspirationElementGroup, InspirationIngredientSummary>;
+  for (const group of ELEMENT_GROUPS) {
+    const value = record[group];
+    const obj = value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+    result[group] = {
+      emoji: typeof obj.emoji === "string" ? obj.emoji.slice(0, 8) : "",
+      summary: typeof obj.summary === "string" ? obj.summary.slice(0, 200) : "",
+    };
   }
+  return result;
 }
 
 function conceptElementEntries(inspiration: RandomStoryInspiration) {
@@ -483,20 +374,7 @@ function conceptKeyFor(inspiration: RandomStoryInspiration, promptHash: string):
     .map(({ element, role, position }) => `${role}:${position}:${element.slug || element.id}`)
     .sort()
     .join("|");
-  const promptParts = [
-    inspiration.typeOfPerson,
-    inspiration.setting,
-    inspiration.externalGoal,
-    inspiration.antagonisticForce,
-    inspiration.innerFlawOrLie,
-    inspiration.oldSelf,
-    inspiration.newTruth,
-    inspiration.endingType,
-    promptHash,
-  ]
-    .map(normalizeKeyPart)
-    .join("|");
-  return `${elementKey}|prompt:${promptParts}`;
+  return `${elementKey}|prompt:${normalizeKeyPart(inspiration.logline)}|${promptHash}`;
 }
 
 function normalizeKeyPart(value: string): string {
@@ -507,109 +385,20 @@ function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-const TITLE_STOP_WORDS = new Set([
-  "their",
-  "there",
-  "them",
-  "they",
-  "with",
-  "from",
-  "into",
-  "over",
-  "under",
-  "through",
-  "before",
-  "after",
-  "between",
-  "against",
-  "because",
-  "wants",
-  "blocks",
-  "leading",
-  "truth",
-  "choosing",
-]);
-
-function titleCase(value: string): string {
-  const small = new Set(["a", "an", "and", "as", "at", "for", "in", "of", "on", "or", "the", "to", "with"]);
-  return value
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((word, index) => {
-      const lower = word.toLowerCase();
-      if (index > 0 && small.has(lower)) return lower;
-      return lower.charAt(0).toUpperCase() + lower.slice(1);
-    })
-    .join(" ");
-}
-
-function titlePhrase(value: string, maxWords = 3): string {
-  const words = value
-    .replace(/["'`]/g, "")
-    .replace(/[^a-zA-Z0-9\s-]+/g, " ")
-    .split(/\s+/)
-    .map((word) => word.trim())
-    .filter((word) => word.length > 2 && !TITLE_STOP_WORDS.has(word.toLowerCase()));
-  return titleCase(words.slice(-maxWords).join(" "));
-}
-
-function templateIndex(
-  inspiration: Pick<
-    RandomStoryInspiration,
-    "typeOfPerson" | "setting" | "externalGoal" | "antagonisticForce" | "newTruth" | "endingType"
-  >,
-  count: number
-): number {
-  const hash = sha256([
-    inspiration.typeOfPerson,
-    inspiration.setting,
-    inspiration.externalGoal,
-    inspiration.antagonisticForce,
-    inspiration.newTruth,
-    inspiration.endingType,
-  ].join("|"));
-  return parseInt(hash.slice(0, 8), 16) % count;
-}
-
-export function movieTitleFor(
-  inspiration: Pick<RandomStoryInspiration, "setting" | "externalGoal" | "newTruth" | "endingType"> &
-    Partial<Pick<RandomStoryInspiration, "typeOfPerson" | "antagonisticForce">>
-): string {
-  const goal = titlePhrase(inspiration.externalGoal, 3) || "Impossible Goal";
-  const setting = titlePhrase(inspiration.setting, 3) || "Hidden World";
-  const truth = titlePhrase(inspiration.newTruth, 3) || "Second Chance";
-  const ending = titlePhrase(inspiration.endingType, 3) || "Victory";
-  const titleSeed = {
-    typeOfPerson: inspiration.typeOfPerson ?? "",
-    setting: inspiration.setting,
-    externalGoal: inspiration.externalGoal,
-    antagonisticForce: inspiration.antagonisticForce ?? "",
-    newTruth: inspiration.newTruth,
-    endingType: inspiration.endingType,
-  };
-  const templates = [
-    `The ${goal}`,
-    `${setting} Rising`,
-    `The ${truth}`,
-    `Last Night in ${setting}`,
-    `${goal} at ${setting}`,
-    `The ${ending}`,
-  ];
-  return templates[templateIndex(titleSeed, templates.length)].slice(0, 64);
-}
-
 export function posterPromptFor(inspiration: RandomStoryInspiration): string {
-  const movieTitle = inspiration.movieTitle || movieTitleFor(inspiration);
+  const names = (els: InspirationElement[]) => els.map((el) => el.name).join(", ");
   return [
     "Create cinematic movie poster key art for this story concept.",
-    `Movie title: "${movieTitle}".`,
+    `Movie title: "${inspiration.movieTitle}".`,
     `Logline: ${inspiration.logline}`,
-    `Hero: ${inspiration.typeOfPerson}.`,
-    `Setting: ${inspiration.setting}.`,
-    `Antagonistic force: ${inspiration.antagonisticForce}.`,
-    `Theme and stakes: ${inspiration.newTruth}; ${inspiration.endingType}.`,
-    `Vertical theatrical one-sheet with the exact title "${movieTitle}" as large readable poster typography, bold composition, no logos.`,
-  ].join(" ");
+    inspiration.premise ? `Premise: ${inspiration.premise}` : "",
+    `Setting: ${names(inspiration.elements.setting)}.`,
+    `Antagonist: ${names(inspiration.elements.antagonist)}.`,
+    `Theme: ${names(inspiration.elements.theme)}.`,
+    `Vertical theatrical one-sheet with the exact title "${inspiration.movieTitle}" as large readable poster typography, bold composition, no logos.`,
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 async function ensureStoryConceptPoster(
@@ -617,8 +406,8 @@ async function ensureStoryConceptPoster(
   options: { allowGeneration?: boolean } = {}
 ): Promise<{ movieTitle: string; poster: StoryConceptPoster }> {
   const db = getServiceSupabase();
-  const movieTitle = inspiration.movieTitle || movieTitleFor(inspiration);
-  const prompt = posterPromptFor({ ...inspiration, movieTitle });
+  const movieTitle = inspiration.movieTitle;
+  const prompt = posterPromptFor(inspiration);
   const promptHash = sha256(prompt);
   const conceptKey = conceptKeyFor(inspiration, promptHash);
   const conceptHash = sha256(conceptKey);
@@ -632,7 +421,6 @@ async function ensureStoryConceptPoster(
           concept_key: conceptKey,
           concept_hash: conceptHash,
           title: movieTitle,
-          formula: inspiration.formula ?? null,
           logline: inspiration.logline,
           status: "ready",
         },
@@ -693,7 +481,7 @@ async function ensureStoryConceptPoster(
 
   const existingUsesPosterModel =
     existing?.provider === posterModel.provider &&
-    (existing.model ?? undefined) === (posterModel.model ?? undefined);
+    (existing?.model ?? undefined) === (posterModel.model ?? undefined);
 
   if (
     existingUsesPosterModel &&
@@ -932,131 +720,6 @@ function pickMany(rows: StoryElementRow[], count: number): StoryElementRow[] {
 
 function randomItem<T>(items: readonly T[]): T {
   return items[Math.floor(Math.random() * items.length)];
-}
-
-function describeAntagonist(antagonist: StoryElementRow[], theme: StoryElementRow[]): string {
-  return randomItem(describeAntagonistOptions(antagonist, theme));
-}
-
-export function describeAntagonistOptions(
-  antagonist: StoryElementRow[],
-  theme: StoryElementRow[]
-): string[] {
-  const primary = antagonist[0]?.name.toLowerCase() ?? "institution";
-  const secondary = antagonist[1]?.name.toLowerCase();
-  const themeName = theme[0]?.name.toLowerCase() ?? "power";
-  if (primary === "technology" || secondary === "technology") {
-    return [
-      "an AI-controlled entertainment monopoly",
-      `an algorithmic studio cartel optimizing ${themeName}`,
-      `a predictive entertainment platform suppressing ${themeName}`,
-      `an automated media empire built around ${themeName}`,
-      `a machine-run content syndicate monetizing ${themeName}`,
-    ];
-  }
-  if (primary === "institution" || secondary === "institution") {
-    return [
-      `a powerful institution policing ${themeName}`,
-      `a legacy authority weaponizing ${themeName}`,
-      `a rule-bound bureaucracy protecting ${themeName}`,
-    ];
-  }
-  if (primary === "person") {
-    return [
-      `a ruthless rival obsessed with ${themeName}`,
-      `a charismatic enemy exploiting ${themeName}`,
-      `a former ally chasing control of ${themeName}`,
-    ];
-  }
-  if (primary === "self") {
-    return [
-      `their own fear of losing ${themeName}`,
-      `their worst impulse turning ${themeName} against them`,
-      `a private shame wrapped around ${themeName}`,
-    ];
-  }
-  if (primary === "society") {
-    return [
-      `a society built around ${themeName}`,
-      `a public consensus hostile to ${themeName}`,
-      `a culture that punishes anyone who questions ${themeName}`,
-    ];
-  }
-  if (primary === "nature") {
-    return [
-      `a worsening disaster tied to ${themeName}`,
-      `an unforgiving environment reshaping ${themeName}`,
-      `a natural catastrophe exposing the cost of ${themeName}`,
-    ];
-  }
-  if (primary === "supernatural force") {
-    return [
-      `a supernatural bargain tied to ${themeName}`,
-      `an otherworldly curse feeding on ${themeName}`,
-      `a mythic force demanding the price of ${themeName}`,
-    ];
-  }
-  return [
-    `a force tied to ${themeName}`,
-    `an escalating pressure built around ${themeName}`,
-    `a hidden opposition exploiting ${themeName}`,
-  ];
-}
-
-function formatSetting(timeSetting: StoryElementRow, placeSetting: StoryElementRow): string {
-  const time = settingLabel(timeSetting.name);
-  const place = settingLabel(placeSetting.name);
-  return `${articleFor(place)} ${place} in the ${time}`;
-}
-
-function settingLabel(name: string): string {
-  return name.toLowerCase().replace(/\s*\/\s*/g, " or ");
-}
-
-function innerFlawFor(arc: StoryElementRow, beliefShift: StoryElementRow | undefined): string {
-  return beliefShift
-    ? `the belief that ${quote(stripSentenceEnd(beliefShift.name))}`
-    : lowerFirst(arc.name);
-}
-
-function newTruthFor(arc: StoryElementRow, beliefShift: StoryElementRow | undefined): string {
-  return beliefShift?.core_idea
-    ? stripSentenceEnd(beliefShift.core_idea)
-    : lowerFirst(stripSentenceEnd(arc.core_idea ?? "they can choose a better self"));
-}
-
-function buildLogline(input: {
-  typeOfPerson: string;
-  setting: string;
-  externalGoal: string;
-  antagonisticForce: string;
-  innerFlawOrLie: string;
-  oldSelf: string;
-  newTruth: string;
-  endingType: string;
-}): string {
-  return (
-    `A ${input.typeOfPerson} in ${input.setting} wants to ${input.externalGoal}, ` +
-    `but ${input.antagonisticForce} blocks them. To succeed, they must overcome ` +
-    `${input.innerFlawOrLie} and choose between ${input.oldSelf} and ${quote(input.newTruth)}, ` +
-    `leading to ${input.endingType}.`
-  );
-}
-
-function lowerFirst(value: string): string {
-  return value ? `${value[0].toLowerCase()}${value.slice(1)}` : value;
-}
-
-function articleFor(value: string): "a" | "an" {
-  return /^[aeiou]/i.test(value) ? "an" : "a";
-}
-
-function stripSentenceEnd(value: string): string {
-  return value.trim().replace(/[.!?]+$/, "");
-}
-
-function quote(value: string): string {
-  return `"${value}"`;
 }
 
 function toElement(row: StoryElementRow): InspirationElement {

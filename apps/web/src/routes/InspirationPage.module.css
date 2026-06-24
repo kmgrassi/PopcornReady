@@ -308,50 +308,30 @@
   padding: 0 18px;
 }
 
-.highlight {
-  padding: 0.02em 0.18em;
-  border-radius: var(--radius-sm);
-  background: var(--accent-soft);
-  color: var(--text-strong);
-  font-weight: 850;
+.emojiRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-size: var(--title-sm);
+  line-height: 1;
 }
 
-.person,
-.goal,
-.truth {
-  background: var(--accent-soft);
+.premise {
+  max-width: 980px;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-md);
+  line-height: 1.5;
 }
 
-.setting,
-.ending {
-  background: color-mix(in srgb, var(--good) 16%, transparent);
+.cinemaTheme .premise {
+  max-width: 720px;
+  color: var(--inspiration-cinema-description);
 }
 
-.antagonist,
-.flaw,
-.oldSelf {
-  background: color-mix(in srgb, var(--accent-2) 16%, transparent);
-}
-
-.cinemaTheme .highlight {
-  padding: 0 3px;
-  border-radius: 4px;
-  color: inherit;
-  font-weight: 650;
-}
-
-.cinemaTheme .person,
-.cinemaTheme .goal,
-.cinemaTheme .truth,
-.cinemaTheme .setting,
-.cinemaTheme .ending {
-  background: var(--inspiration-cinema-green-soft);
-}
-
-.cinemaTheme .antagonist,
-.cinemaTheme .flaw,
-.cinemaTheme .oldSelf {
-  background: var(--inspiration-cinema-clay-soft);
+.ingredientEmoji {
+  font-size: var(--text-lg);
+  line-height: 1;
 }
 
 .drawer {
