@@ -149,6 +149,10 @@ export interface ProjectResponse {
   project: V1Project;
 }
 
+export interface ForkProjectResponse {
+  project: V1Project;
+}
+
 export interface ProjectStoryboardResponse {
   storyboard: ProjectStoryboard | null;
 }

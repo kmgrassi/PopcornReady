@@ -17,6 +17,7 @@ import {
   createProject,
   deleteProject,
   deletePublicProjectAsAdmin,
+  forkPublicProject,
   getProject,
   getProjectWatchMedia,
   listProjects,
@@ -109,6 +110,20 @@ projectsRouter.get(
     }
     const project = await getProject(auth.workspaceId, params.projectId);
     return { status: 200, body: { project } };
+  })
+);
+
+projectsRouter.post(
+  "/projects/:projectId/fork",
+  mutation(async ({ auth }, params) => {
+    if (!params.projectId) {
+      throw new ApiError("validation_failed", "projectId is required.");
+    }
+    const { project } = await forkPublicProject({
+      workspaceId: auth.workspaceId,
+      sourceProjectId: params.projectId,
+    });
+    return { status: 201, body: { project } };
   })
 );
 
