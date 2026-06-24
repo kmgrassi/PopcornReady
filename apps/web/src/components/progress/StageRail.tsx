@@ -177,6 +177,13 @@ function toolStatusLabel(status: GenerationRunStatus): string {
   return STATUS_LABEL[status];
 }
 
+function groupLinkComplete(
+  toolNames: string[],
+  stagesByTool: Map<string, GenerationStage>,
+): boolean {
+  return toolNames.every((toolName) => stagesByTool.get(toolName)?.status === "succeeded");
+}
+
 export function StageRail({
   stages,
   runStatus,
@@ -252,7 +259,9 @@ export function StageRail({
           status === "succeeded" ||
           status === "failed" ||
           status === "canceled";
-        const stageLink = status === "succeeded" ? stageLinks?.[visibleStage.label] : undefined;
+        const stageLink = groupLinkComplete(visibleStage.tools, stagesByTool)
+          ? stageLinks?.[visibleStage.label]
+          : undefined;
 
         return (
           <li
