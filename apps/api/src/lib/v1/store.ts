@@ -456,28 +456,27 @@ export function createSupabaseStore(
     return (data as Row) ?? null;
   }
 
-  async function upsert<Row extends object>(
-    table: string,
-    row: Row,
-    conflict: string
-  ): Promise<void> {
-    await runQuery(
-      `v1 store.save ${table}`,
-      db.from(table).upsert(row as Record<string, unknown>, { onConflict: conflict })
-    );
-  }
-
-  // Create-or-update keyed on the DB-generated id. When the entity has no id yet
-  // (first save), INSERT omitting `id` so Postgres assigns it (gen_random_uuid)
-  // and read the generated id back. When it already has an id (subsequent save
-  // = update), upsert by id. Returns the id that was persisted.
+  // Create-or-update keyed on the DB-generated id. A caller-supplied id only
+  // updates an existing row; first saves always omit `id` so Postgres assigns it.
   async function saveWithGeneratedId<Row extends { id: string }>(
     table: string,
     row: Row
   ): Promise<string> {
     if (row.id) {
-      await upsert(table, row, "id");
-      return row.id;
+      const existing = await getOne<{ id: string }>(table, "id", row.id);
+      if (existing) {
+        const { id, ...updates } = row;
+        await runQuery(
+          `v1 store.save ${table}`,
+          db
+            .from(table)
+            .update(updates as Record<string, unknown>)
+            .eq("id", id)
+            .select("id")
+            .single()
+        );
+        return id;
+      }
     }
     const { id: _omit, ...insertable } = row;
     void _omit;

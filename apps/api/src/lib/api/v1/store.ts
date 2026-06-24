@@ -3744,53 +3744,57 @@ export async function saveProjectStoryboard(
     projectId,
     input.id ?? project.current_story_blueprint_id ?? null
   );
-  const storyBlueprintId = storyBlueprint?.id ?? input.id ?? randomUUID();
+  let storyBlueprintId = storyBlueprint?.id ?? null;
+  if (!storyBlueprint) {
+    const createRow: Record<string, unknown> = {
+      schema_version: "storyBlueprint.v1",
+      workspace_id: workspaceId,
+      project_id: projectId,
+      status: input.status === "approved" ? "approved" : "draft",
+      snapshot: markedContent("story_blueprint", {
+        schemaVersion: "storyBlueprint.v1",
+        title: project.name,
+        characters: [],
+        acts: [],
+        scenes: [],
+      }),
+      provenance: markedJson("story_blueprint_provenance.v1", {
+        source: "saveProjectStoryboard",
+      }),
+      created_by: markedJson("story_blueprint_creator.v1", {
+        tool: "save_project_storyboard",
+      }),
+      created_at: now,
+      updated_at: now,
+    };
+    const data = await runQuery(
+      "store.saveProjectStoryboard create story blueprint",
+      db
+        .from("story_blueprints")
+        .insert(createRow)
+        .select("*")
+        .single()
+    );
+    storyBlueprint = data as StoryBlueprintRow;
+    storyBlueprintId = storyBlueprint.id;
+    await runQuery(
+      "store.saveProjectStoryboard current pointer",
+      db
+        .from("projects")
+        .update({ current_story_blueprint_id: storyBlueprint.id })
+        .eq("id", projectId)
+        .eq("workspace_id", workspaceId)
+    );
+  }
+  if (!storyBlueprintId) {
+    throw new Error("story blueprint insert did not return an id");
+  }
   await assertStoryboardRowsAreWritable({
     db,
     projectId,
     storyBlueprintId,
     storyboard: input,
   });
-  if (!storyBlueprint) {
-    const data = await runQuery(
-      "store.saveProjectStoryboard create story blueprint",
-      db
-        .from("story_blueprints")
-        .insert({
-          id: storyBlueprintId,
-          schema_version: "storyBlueprint.v1",
-          workspace_id: workspaceId,
-          project_id: projectId,
-          status: input.status === "approved" ? "approved" : "draft",
-          snapshot: markedContent("story_blueprint", {
-            schemaVersion: "storyBlueprint.v1",
-            title: project.name,
-            characters: [],
-            acts: [],
-            scenes: [],
-          }),
-          provenance: markedJson("story_blueprint_provenance.v1", {
-            source: "saveProjectStoryboard",
-          }),
-          created_by: markedJson("story_blueprint_creator.v1", {
-            tool: "save_project_storyboard",
-          }),
-          created_at: now,
-          updated_at: now,
-        })
-        .select("*")
-        .single()
-    );
-    storyBlueprint = data as StoryBlueprintRow;
-    await runQuery(
-      "store.saveProjectStoryboard current pointer",
-      db
-        .from("projects")
-        .update({ current_story_blueprint_id: storyBlueprintId })
-        .eq("id", projectId)
-        .eq("workspace_id", workspaceId)
-    );
-  }
   const actRows = await runQuery(
     "store.saveProjectStoryboard act lookup",
     db
