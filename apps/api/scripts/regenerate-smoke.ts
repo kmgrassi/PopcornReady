@@ -105,18 +105,42 @@ async function seed(projectId?: string): Promise<{ assetId: string; workspaceId:
     storage_bucket: "assets",
   });
 
-  const sb = await insert<{ id: string }>("storyboards", { project_id: project.id });
-  const scene = await insert<{ id: string }>("storyboard_scenes", {
+  const sb = await insert<{ id: string }>("story_blueprints", {
+    workspace_id: project.workspace_id,
     project_id: project.id,
-    storyboard_id: sb.id,
-    scene_index: 0,
+    status: "draft",
+    snapshot: { schema: "storyBlueprint.v1", source: "regenerate_smoke" },
+    provenance: { schema: "regenerateSmoke.v1" },
   });
-  const beat = await insert<{ id: string }>("storyboard_beats", {
+  const act = await insert<{ id: string }>("story_blueprint_acts", {
+    story_blueprint_id: sb.id,
+    workspace_id: project.workspace_id,
+    project_id: project.id,
+    stable_id: "act-1",
+    position: 0,
+    title: "Smoke act",
+    purpose: "",
+    summary: "",
+    target_duration_sec: 0,
+  });
+  const scene = await insert<{ id: string }>("story_blueprint_scenes", {
+    story_blueprint_id: sb.id,
+    story_blueprint_act_id: act.id,
+    workspace_id: project.workspace_id,
+    project_id: project.id,
+    stable_id: "scene-1",
+    position: 0,
+    title: "Smoke scene",
+    summary: "",
+    target_duration_sec: 0,
+  });
+  const beat = await insert<{ id: string }>("story_beats", {
     project_id: project.id,
     scene_id: scene.id,
     beat_index: 0,
+    intent: "Exercise regeneration repointing",
   });
-  await insert("storyboard_panels", {
+  await insert("story_panels", {
     project_id: project.id,
     beat_id: beat.id,
     image_asset_id: asset.id,
@@ -153,7 +177,7 @@ async function inspect(assetId: string): Promise<void> {
   }
 
   const { data: panels } = await db
-    .from("storyboard_panels")
+    .from("story_panels")
     .select("id, image_asset_id")
     .eq("project_id", project_id);
   const ids = new Set(((versions ?? []) as Json[]).map((v) => v.id));
