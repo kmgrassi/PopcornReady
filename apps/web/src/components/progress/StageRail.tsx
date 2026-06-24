@@ -252,7 +252,7 @@ export function StageRail({
           status === "succeeded" ||
           status === "failed" ||
           status === "canceled";
-        const stageLink = stageLinks?.[visibleStage.label];
+        const stageLink = status === "succeeded" ? stageLinks?.[visibleStage.label] : undefined;
 
         return (
           <li
