@@ -23,7 +23,7 @@ import {
 import { resolveProviderApiKey } from "@/lib/provider-keys/resolve";
 
 const OPENAI_BASE_URL = "https://api.openai.com/v1";
-const OPENAI_DEFAULT_IMAGE_MODEL: OpenAIImageModel = "gpt-image-1.5";
+const OPENAI_DEFAULT_IMAGE_MODEL: OpenAIImageModel = "gpt-image-2";
 const OPENAI_DEFAULT_VIDEO_MODEL: OpenAIVideoModel = "sora-2";
 const DEFAULT_OPENAI_VIDEO_POLL_MS = 5_000;
 const DEFAULT_OPENAI_VIDEO_TIMEOUT_MS = 8 * 60 * 1_000;
