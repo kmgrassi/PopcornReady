@@ -1,5 +1,10 @@
 # Storyboard & Scenes — Scope
 
+> **Superseded by [`story-spine-unification.md`](story-spine-unification.md).** The
+> separate `storyboards` / `storyboard_scenes` tables this doc introduced are being
+> folded into the unified `act → scene → beat → panel` story spine (beats/panels
+> reparented onto the blueprint). Kept for historical context.
+
 ## Objective
 
 Two linked changes that turn the plan from an invisible beat list into a real,

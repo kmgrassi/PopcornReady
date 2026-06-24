@@ -1,5 +1,9 @@
 # Generation Review Checkpoints Scope
 
+> **Related / being reframed.** The review gates / stop-after stages here relate to
+> the deterministic stage stops in the orchestrator redesign; see
+> [`story-spine-unification.md`](story-spine-unification.md).
+
 ## Objective
 
 Let a user choose which generation stages to **review before the run
