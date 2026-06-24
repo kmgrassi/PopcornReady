@@ -3,6 +3,8 @@ import { createHash } from "crypto";
 import { mutation, route } from "@/core/adapter";
 import { ApiError } from "@/core/errors";
 import { createGeneratedAsset } from "@/lib/api/v1/generated-assets";
+import { resolveWorkspaceGenerationModel } from "@/lib/api/v1/model-settings";
+import { posterTextMentionsMinor } from "@/lib/api/v1/poster-generation";
 import type { AuthContext } from "@/lib/api/v1/auth";
 import type { V1Job } from "@/lib/api/v1/jobs";
 import { setAssetVisibility } from "@/lib/api/v1/store";
@@ -735,6 +737,19 @@ async function ensureStoryConceptPoster(
           .single()
       ) as { id: string };
 
+  // Posters are key-art / typographic, so they default to Ideogram (strong at
+  // composition + readable title text) rather than the global image default
+  // (openai/gpt-image), which produces the "ChatGPT-looking" output. Mirrors the
+  // project poster path (generatePoster). Minor-safety still forces Gemini, and a
+  // workspace-configured image model would still win if one were set.
+  const safetyProvider = posterTextMentionsMinor(prompt) ? "gemini" : undefined;
+  const posterModel = await resolveWorkspaceGenerationModel({
+    workspaceId: SYSTEM_WORKSPACE_ID,
+    kind: "image",
+    ...(safetyProvider ? { explicitProvider: safetyProvider } : {}),
+    defaultProvider: "ideogram",
+  });
+
   try {
     const result = await createGeneratedAsset({
       auth: systemAuth(),
@@ -747,6 +762,8 @@ async function ensureStoryConceptPoster(
         assetRole: "poster",
         displayName: "Inspiration poster",
         slug: `inspiration-poster-${conceptHash.slice(0, 12)}`,
+        provider: posterModel.provider,
+        ...(posterModel.model ? { model: posterModel.model } : {}),
       },
     });
     const assetId = jobAssetId(result.body.job as V1Job);
@@ -765,6 +782,8 @@ async function ensureStoryConceptPoster(
           poster_asset_id: assetId,
           status: "ready",
           error: null,
+          provider: posterModel.provider,
+          model: posterModel.model ?? null,
         })
         .eq("id", posterRow.id)
     );
