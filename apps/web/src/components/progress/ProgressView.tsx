@@ -520,6 +520,14 @@ export function ProgressView({
     terminal,
     succeeded: detail.run.status === "succeeded",
   });
+  const projectPath = `/projects/${encodeURIComponent(detail.run.projectId)}`;
+  const stageLinks = {
+    Concept: `${projectPath}/concept`,
+    Brief: `${projectPath}/brief`,
+    Script: `${projectPath}/script`,
+    Storyboard: `${projectPath}/storyboard`,
+    "Final Render": `${projectPath}/watch`,
+  };
 
   async function approveFallback() {
     const reviewGate = detail.run.reviewGate;
@@ -889,6 +897,7 @@ export function ProgressView({
             runProgressPercent={detail.run.progressPercent}
             runMessage={detail.run.message}
             reviewGate={detail.run.reviewGate}
+            stageLinks={stageLinks}
             stopAction={
               showCancelAction && cancelAction
                 ? {
