@@ -8,9 +8,7 @@ import { runQuery } from "@/lib/supabase/db-errors";
 import {
   mapBeat,
   mapPanel,
-  mapScene,
   mapSearchChunk,
-  mapStoryboard,
 } from "./storyboards-mappers";
 import type {
   BeatAssetRow,
@@ -23,9 +21,7 @@ import type {
   StoryboardInput,
   StoryboardPanel,
   StoryboardPanelRow,
-  StoryboardRow,
   StoryboardScene,
-  StoryboardSceneRow,
   StoryboardSearchChunkRow,
   StoryboardSearchResult,
 } from "./storyboards-types";
@@ -49,6 +45,35 @@ export type {
   StoryboardSearchResult,
 } from "./storyboards-types";
 
+interface StoryBlueprintRow {
+  id: string;
+  project_id: string;
+  asset_id: string | null;
+  status: "draft" | "approved" | "superseded";
+  created_at: string;
+  updated_at: string;
+}
+
+interface StoryBlueprintActRow {
+  id: string;
+}
+
+interface StoryBlueprintSceneRow {
+  id: string;
+  project_id: string;
+  story_blueprint_id: string;
+  position: number;
+  title: string | null;
+  summary: string | null;
+  setting: string | null;
+  mood: string | null;
+  target_duration_sec: number | null;
+  scene_asset_id: string | null;
+  status: "draft" | "queued" | "generating" | "ready" | "approved" | "rejected" | "failed";
+  created_at: string;
+  updated_at: string;
+}
+
 async function assertProject(auth: AuthContext, projectId: string): Promise<void> {
   await getProject(auth.workspaceId, projectId);
 }
@@ -64,22 +89,57 @@ async function defaultVisibilityForWorkspace(
   return data === "paid" ? "private" : "public";
 }
 
+function iso(value: string | null | undefined): string {
+  if (!value) return new Date(0).toISOString();
+  return new Date(value).toISOString();
+}
+
+function mapStoryboardFromBlueprint(row: StoryBlueprintRow): Storyboard {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    planAssetId: null,
+    status: row.status === "approved" ? "approved" : "ready",
+    createdByActionId: null,
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+  };
+}
+
+function mapSceneFromSpine(row: StoryBlueprintSceneRow): StoryboardScene {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    storyboardId: row.story_blueprint_id,
+    sceneIndex: row.position,
+    title: row.title,
+    summary: row.summary,
+    setting: row.setting,
+    mood: row.mood,
+    durationSec: row.target_duration_sec,
+    sceneAssetId: row.scene_asset_id,
+    status: row.status,
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+  };
+}
+
 async function getStoryboardRow(
   db: SupabaseClient,
   projectId: string,
   storyboardId: string
-): Promise<StoryboardRow> {
+): Promise<StoryBlueprintRow> {
   const data = await runQuery(
     "storyboards.getStoryboard",
     db
-      .from("storyboards")
-      .select("*")
+      .from("story_blueprints")
+      .select("id, project_id, asset_id, status, created_at, updated_at")
       .eq("project_id", projectId)
       .eq("id", storyboardId)
       .maybeSingle()
   );
-  if (!data) throw notFound(`Storyboard not found: ${storyboardId}`);
-  return data as StoryboardRow;
+  if (!data) throw notFound(`Story blueprint not found: ${storyboardId}`);
+  return data as StoryBlueprintRow;
 }
 
 async function getSceneRow(
@@ -87,19 +147,19 @@ async function getSceneRow(
   projectId: string,
   storyboardId: string,
   sceneId: string
-): Promise<StoryboardSceneRow> {
+): Promise<StoryBlueprintSceneRow> {
   const data = await runQuery(
     "storyboards.getScene",
     db
-      .from("storyboard_scenes")
+      .from("story_blueprint_scenes")
       .select("*")
       .eq("project_id", projectId)
-      .eq("storyboard_id", storyboardId)
+      .eq("story_blueprint_id", storyboardId)
       .eq("id", sceneId)
       .maybeSingle()
   );
   if (!data) throw notFound(`Storyboard scene not found: ${sceneId}`);
-  return data as StoryboardSceneRow;
+  return data as StoryBlueprintSceneRow;
 }
 
 async function getBeatRow(
@@ -111,7 +171,7 @@ async function getBeatRow(
   const data = await runQuery(
     "storyboards.getBeat",
     db
-      .from("storyboard_beats")
+      .from("story_beats")
       .select("*")
       .eq("project_id", projectId)
       .eq("scene_id", sceneId)
@@ -131,7 +191,7 @@ async function getPanelRow(
   const data = await runQuery(
     "storyboards.getPanel",
     db
-      .from("storyboard_panels")
+      .from("story_panels")
       .select("*")
       .eq("project_id", projectId)
       .eq("beat_id", beatId)
@@ -144,10 +204,10 @@ async function getPanelRow(
 
 async function nextIndex(
   db: SupabaseClient,
-  table: "storyboard_scenes" | "storyboard_beats" | "storyboard_panels",
-  parentColumn: "storyboard_id" | "scene_id" | "beat_id",
+  table: "story_blueprint_scenes" | "story_beats" | "story_panels",
+  parentColumn: "story_blueprint_id" | "scene_id" | "beat_id",
   parentId: string,
-  indexColumn: "scene_index" | "beat_index" | "panel_index"
+  indexColumn: "position" | "beat_index" | "panel_index"
 ): Promise<number> {
   const data = await runQuery(
     `storyboards.nextIndex ${table}`,
@@ -164,10 +224,9 @@ async function nextIndex(
 
 async function swapIndex(input: {
   db: SupabaseClient;
-  table: "storyboard_scenes" | "storyboard_beats" | "storyboard_panels";
-  idColumn?: "id";
-  parentColumn: "storyboard_id" | "scene_id" | "beat_id";
-  indexColumn: "scene_index" | "beat_index" | "panel_index";
+  table: "story_blueprint_scenes" | "story_beats" | "story_panels";
+  parentColumn: "story_blueprint_id" | "scene_id" | "beat_id";
+  indexColumn: "position" | "beat_index" | "panel_index";
   projectId: string;
   parentId: string;
   rowId: string;
@@ -209,6 +268,47 @@ async function swapIndex(input: {
   return true;
 }
 
+async function ensureStoryboardAct(input: {
+  db: SupabaseClient;
+  auth: AuthContext;
+  projectId: string;
+  storyboardId: string;
+}): Promise<string> {
+  const rows = await runQuery(
+    "storyboards.ensureAct lookup",
+    input.db
+      .from("story_blueprint_acts")
+      .select("id")
+      .eq("project_id", input.projectId)
+      .eq("story_blueprint_id", input.storyboardId)
+      .order("position", { ascending: true })
+      .limit(1)
+  );
+  const existing = ((rows as StoryBlueprintActRow[]) ?? [])[0]?.id;
+  if (existing) return existing;
+
+  const data = await runQuery(
+    "storyboards.ensureAct create",
+    input.db
+      .from("story_blueprint_acts")
+      .insert({
+        story_blueprint_id: input.storyboardId,
+        workspace_id: input.auth.workspaceId,
+        project_id: input.projectId,
+        stable_id: "act_1",
+        position: 0,
+        title: "Act 1",
+        purpose: "Storyboard",
+        summary: "Storyboard scenes.",
+        target_duration_sec: 0,
+        status: "draft",
+      })
+      .select("id")
+      .single()
+  );
+  return (data as StoryBlueprintActRow).id;
+}
+
 async function setSelectedPanel(
   db: SupabaseClient,
   projectId: string,
@@ -220,7 +320,7 @@ async function setSelectedPanel(
     await runQuery(
       "storyboards.clearSelectedPanels",
       db
-        .from("storyboard_panels")
+        .from("story_panels")
         .update({ is_selected: false })
         .eq("project_id", projectId)
         .eq("beat_id", beatId)
@@ -230,7 +330,7 @@ async function setSelectedPanel(
   await runQuery(
     "storyboards.setSelectedPanel",
     db
-      .from("storyboard_panels")
+      .from("story_panels")
       .update({ is_selected: isSelected })
       .eq("project_id", projectId)
       .eq("beat_id", beatId)
@@ -316,12 +416,12 @@ export async function listStoryboards(input: {
   const data = await runQuery(
     "storyboards.listStoryboards",
     db
-      .from("storyboards")
-      .select("*")
+      .from("story_blueprints")
+      .select("id, project_id, asset_id, status, created_at, updated_at")
       .eq("project_id", input.projectId)
       .order("created_at", { ascending: false })
   );
-  return (data as StoryboardRow[]).map(mapStoryboard);
+  return (data as StoryBlueprintRow[]).map(mapStoryboardFromBlueprint);
 }
 
 export async function searchStoryboardChunks(input: {
@@ -354,21 +454,46 @@ export async function createStoryboard(input: {
   projectId: string;
   data: StoryboardInput;
 }): Promise<Storyboard> {
-  await assertProject(input.auth, input.projectId);
+  const project = await getProject(input.auth.workspaceId, input.projectId);
   const db = getServiceSupabase();
   const data = await runQuery(
     "storyboards.createStoryboard",
     db
-      .from("storyboards")
+      .from("story_blueprints")
       .insert({
+        schema_version: "storyBlueprint.v1",
+        workspace_id: input.auth.workspaceId,
         project_id: input.projectId,
-        plan_asset_id: input.data.planAssetId ?? null,
-        status: input.data.status ?? "draft",
+        status: input.data.status === "approved" ? "approved" : "draft",
+        snapshot: {
+          schema_version: "storyBlueprint.v1",
+          title: project.name,
+          characters: [],
+          acts: [],
+          scenes: [],
+        },
+        provenance: {
+          schema_version: "story_blueprint_provenance.v1",
+          planAssetId: input.data.planAssetId ?? null,
+        },
+        created_by: {
+          schema_version: "story_blueprint_creator.v1",
+          tool: "storyboards.createStoryboard",
+        },
       })
-      .select("*")
+      .select("id, project_id, asset_id, status, created_at, updated_at")
       .single()
   );
-  return mapStoryboard(data as StoryboardRow);
+  const storyboard = data as StoryBlueprintRow;
+  await runQuery(
+    "storyboards.createStoryboard current pointer",
+    db
+      .from("projects")
+      .update({ current_story_blueprint_id: storyboard.id })
+      .eq("id", input.projectId)
+      .eq("workspace_id", input.auth.workspaceId)
+  );
+  return mapStoryboardFromBlueprint(storyboard);
 }
 
 export async function getStoryboard(input: {
@@ -377,7 +502,7 @@ export async function getStoryboard(input: {
   storyboardId: string;
 }): Promise<Storyboard> {
   await assertProject(input.auth, input.projectId);
-  return mapStoryboard(
+  return mapStoryboardFromBlueprint(
     await getStoryboardRow(getServiceSupabase(), input.projectId, input.storyboardId)
   );
 }
@@ -392,20 +517,21 @@ export async function updateStoryboard(input: {
   const db = getServiceSupabase();
   const existing = await getStoryboardRow(db, input.projectId, input.storyboardId);
   const updates: Record<string, unknown> = {};
-  if (input.data.planAssetId !== undefined) updates.plan_asset_id = input.data.planAssetId;
-  if (input.data.status !== undefined) updates.status = input.data.status;
-  if (Object.keys(updates).length === 0) return mapStoryboard(existing);
+  if (input.data.status !== undefined) {
+    updates.status = input.data.status === "approved" ? "approved" : "draft";
+  }
+  if (Object.keys(updates).length === 0) return mapStoryboardFromBlueprint(existing);
   const data = await runQuery(
     "storyboards.updateStoryboard",
     db
-      .from("storyboards")
+      .from("story_blueprints")
       .update(updates)
       .eq("project_id", input.projectId)
       .eq("id", input.storyboardId)
-      .select("*")
+      .select("id, project_id, asset_id, status, created_at, updated_at")
       .single()
   );
-  return mapStoryboard(data as StoryboardRow);
+  return mapStoryboardFromBlueprint(data as StoryBlueprintRow);
 }
 
 export async function deleteStoryboard(input: {
@@ -419,7 +545,7 @@ export async function deleteStoryboard(input: {
   await runQuery(
     "storyboards.deleteStoryboard",
     db
-      .from("storyboards")
+      .from("story_blueprints")
       .delete()
       .eq("project_id", input.projectId)
       .eq("id", input.storyboardId)
@@ -437,13 +563,13 @@ export async function listScenes(input: {
   const data = await runQuery(
     "storyboards.listScenes",
     db
-      .from("storyboard_scenes")
+      .from("story_blueprint_scenes")
       .select("*")
       .eq("project_id", input.projectId)
-      .eq("storyboard_id", input.storyboardId)
-      .order("scene_index", { ascending: true })
+      .eq("story_blueprint_id", input.storyboardId)
+      .order("position", { ascending: true })
   );
-  return (data as StoryboardSceneRow[]).map(mapScene);
+  return (data as StoryBlueprintSceneRow[]).map(mapSceneFromSpine);
 }
 
 export async function createScene(input: {
@@ -455,29 +581,38 @@ export async function createScene(input: {
   await assertProject(input.auth, input.projectId);
   const db = getServiceSupabase();
   await getStoryboardRow(db, input.projectId, input.storyboardId);
+  const actId = await ensureStoryboardAct({
+    db,
+    auth: input.auth,
+    projectId: input.projectId,
+    storyboardId: input.storyboardId,
+  });
   const sceneIndex =
     input.data.sceneIndex ??
-    (await nextIndex(db, "storyboard_scenes", "storyboard_id", input.storyboardId, "scene_index"));
+    (await nextIndex(db, "story_blueprint_scenes", "story_blueprint_id", input.storyboardId, "position"));
   const data = await runQuery(
     "storyboards.createScene",
     db
-      .from("storyboard_scenes")
+      .from("story_blueprint_scenes")
       .insert({
+        story_blueprint_id: input.storyboardId,
+        story_blueprint_act_id: actId,
+        workspace_id: input.auth.workspaceId,
         project_id: input.projectId,
-        storyboard_id: input.storyboardId,
-        scene_index: sceneIndex,
-        title: input.data.title ?? null,
-        summary: input.data.summary ?? null,
+        stable_id: `scene_${sceneIndex + 1}`,
+        position: sceneIndex,
+        title: input.data.title ?? `Scene ${sceneIndex + 1}`,
+        summary: input.data.summary ?? "",
         setting: input.data.setting ?? null,
         mood: input.data.mood ?? null,
-        duration_sec: input.data.durationSec ?? null,
+        target_duration_sec: input.data.durationSec ?? 0,
         scene_asset_id: input.data.sceneAssetId ?? null,
         status: input.data.status ?? "draft",
       })
       .select("*")
       .single()
   );
-  return mapScene(data as StoryboardSceneRow);
+  return mapSceneFromSpine(data as StoryBlueprintSceneRow);
 }
 
 export async function updateScene(input: {
@@ -491,46 +626,46 @@ export async function updateScene(input: {
   const db = getServiceSupabase();
   const existing = await getSceneRow(db, input.projectId, input.storyboardId, input.sceneId);
   const updates: Record<string, unknown> = {};
-  if (input.data.sceneIndex !== undefined) updates.scene_index = input.data.sceneIndex;
-  if (input.data.title !== undefined) updates.title = input.data.title;
-  if (input.data.summary !== undefined) updates.summary = input.data.summary;
+  if (input.data.sceneIndex !== undefined) updates.position = input.data.sceneIndex;
+  if (input.data.title !== undefined) updates.title = input.data.title ?? "";
+  if (input.data.summary !== undefined) updates.summary = input.data.summary ?? "";
   if (input.data.setting !== undefined) updates.setting = input.data.setting;
   if (input.data.mood !== undefined) updates.mood = input.data.mood;
-  if (input.data.durationSec !== undefined) updates.duration_sec = input.data.durationSec;
+  if (input.data.durationSec !== undefined) updates.target_duration_sec = input.data.durationSec ?? 0;
   if (input.data.sceneAssetId !== undefined) updates.scene_asset_id = input.data.sceneAssetId;
   if (input.data.status !== undefined) updates.status = input.data.status;
 
   if (input.data.sceneIndex !== undefined) {
     const swapped = await swapIndex({
       db,
-      table: "storyboard_scenes",
-      parentColumn: "storyboard_id",
-      indexColumn: "scene_index",
+      table: "story_blueprint_scenes",
+      parentColumn: "story_blueprint_id",
+      indexColumn: "position",
       projectId: input.projectId,
       parentId: input.storyboardId,
       rowId: input.sceneId,
-      fromIndex: existing.scene_index,
+      fromIndex: existing.position,
       toIndex: input.data.sceneIndex,
     });
-    if (swapped) delete updates.scene_index;
+    if (swapped) delete updates.position;
   }
 
   if (Object.keys(updates).length === 0) {
-    return mapScene(await getSceneRow(db, input.projectId, input.storyboardId, input.sceneId));
+    return mapSceneFromSpine(await getSceneRow(db, input.projectId, input.storyboardId, input.sceneId));
   }
 
   const data = await runQuery(
     "storyboards.updateScene",
     db
-      .from("storyboard_scenes")
+      .from("story_blueprint_scenes")
       .update(updates)
       .eq("project_id", input.projectId)
-      .eq("storyboard_id", input.storyboardId)
+      .eq("story_blueprint_id", input.storyboardId)
       .eq("id", input.sceneId)
       .select("*")
       .single()
   );
-  return mapScene(data as StoryboardSceneRow);
+  return mapSceneFromSpine(data as StoryBlueprintSceneRow);
 }
 
 export async function deleteScene(input: {
@@ -545,10 +680,10 @@ export async function deleteScene(input: {
   await runQuery(
     "storyboards.deleteScene",
     db
-      .from("storyboard_scenes")
+      .from("story_blueprint_scenes")
       .delete()
       .eq("project_id", input.projectId)
-      .eq("storyboard_id", input.storyboardId)
+      .eq("story_blueprint_id", input.storyboardId)
       .eq("id", input.sceneId)
   );
 }
@@ -565,7 +700,7 @@ export async function listBeats(input: {
   const data = await runQuery(
     "storyboards.listBeats",
     db
-      .from("storyboard_beats")
+      .from("story_beats")
       .select("*")
       .eq("project_id", input.projectId)
       .eq("scene_id", input.sceneId)
@@ -586,11 +721,11 @@ export async function createBeat(input: {
   await getSceneRow(db, input.projectId, input.storyboardId, input.sceneId);
   const beatIndex =
     input.data.beatIndex ??
-    (await nextIndex(db, "storyboard_beats", "scene_id", input.sceneId, "beat_index"));
+    (await nextIndex(db, "story_beats", "scene_id", input.sceneId, "beat_index"));
   const data = await runQuery(
     "storyboards.createBeat",
     db
-      .from("storyboard_beats")
+      .from("story_beats")
       .insert({
         project_id: input.projectId,
         scene_id: input.sceneId,
@@ -640,12 +775,8 @@ export async function updateBeat(input: {
   const updates: Record<string, unknown> = {};
   if (input.data.beatIndex !== undefined) updates.beat_index = input.data.beatIndex;
   if (input.data.intent !== undefined) updates.intent = input.data.intent;
-  if (input.data.visualDescription !== undefined) {
-    updates.visual_description = input.data.visualDescription;
-  }
-  if (input.data.dialogueSummary !== undefined) {
-    updates.dialogue_summary = input.data.dialogueSummary;
-  }
+  if (input.data.visualDescription !== undefined) updates.visual_description = input.data.visualDescription;
+  if (input.data.dialogueSummary !== undefined) updates.dialogue_summary = input.data.dialogueSummary;
   if (input.data.narration !== undefined) updates.narration = input.data.narration;
   if (input.data.durationSec !== undefined) updates.duration_sec = input.data.durationSec;
   if (input.data.status !== undefined) updates.status = input.data.status;
@@ -671,7 +802,7 @@ export async function updateBeat(input: {
   if (input.data.beatIndex !== undefined) {
     const swapped = await swapIndex({
       db,
-      table: "storyboard_beats",
+      table: "story_beats",
       parentColumn: "scene_id",
       indexColumn: "beat_index",
       projectId: input.projectId,
@@ -690,7 +821,7 @@ export async function updateBeat(input: {
   const data = await runQuery(
     "storyboards.updateBeat",
     db
-      .from("storyboard_beats")
+      .from("story_beats")
       .update(updates)
       .eq("project_id", input.projectId)
       .eq("scene_id", input.sceneId)
@@ -715,7 +846,7 @@ export async function deleteBeat(input: {
   await runQuery(
     "storyboards.deleteBeat",
     db
-      .from("storyboard_beats")
+      .from("story_beats")
       .delete()
       .eq("project_id", input.projectId)
       .eq("scene_id", input.sceneId)
@@ -737,7 +868,7 @@ export async function listPanels(input: {
   const data = await runQuery(
     "storyboards.listPanels",
     db
-      .from("storyboard_panels")
+      .from("story_panels")
       .select("*")
       .eq("project_id", input.projectId)
       .eq("beat_id", input.beatId)
@@ -760,12 +891,12 @@ export async function createPanel(input: {
   await getBeatRow(db, input.projectId, input.sceneId, input.beatId);
   const panelIndex =
     input.data.panelIndex ??
-    (await nextIndex(db, "storyboard_panels", "beat_id", input.beatId, "panel_index"));
+    (await nextIndex(db, "story_panels", "beat_id", input.beatId, "panel_index"));
   if (input.data.isSelected) {
     await runQuery(
       "storyboards.createPanel clearSelected",
       db
-        .from("storyboard_panels")
+        .from("story_panels")
         .update({ is_selected: false })
         .eq("project_id", input.projectId)
         .eq("beat_id", input.beatId)
@@ -775,7 +906,7 @@ export async function createPanel(input: {
   const data = await runQuery(
     "storyboards.createPanel",
     db
-      .from("storyboard_panels")
+      .from("story_panels")
       .insert({
         project_id: input.projectId,
         beat_id: input.beatId,
@@ -816,7 +947,7 @@ export async function updatePanel(input: {
   if (input.data.panelIndex !== undefined) {
     const swapped = await swapIndex({
       db,
-      table: "storyboard_panels",
+      table: "story_panels",
       parentColumn: "beat_id",
       indexColumn: "panel_index",
       projectId: input.projectId,
@@ -844,7 +975,7 @@ export async function updatePanel(input: {
   const data = await runQuery(
     "storyboards.updatePanel",
     db
-      .from("storyboard_panels")
+      .from("story_panels")
       .update(updates)
       .eq("project_id", input.projectId)
       .eq("beat_id", input.beatId)
@@ -871,7 +1002,7 @@ export async function deletePanel(input: {
   await runQuery(
     "storyboards.deletePanel",
     db
-      .from("storyboard_panels")
+      .from("story_panels")
       .delete()
       .eq("project_id", input.projectId)
       .eq("beat_id", input.beatId)
@@ -879,16 +1010,12 @@ export async function deletePanel(input: {
   );
 }
 
-// Build the relational storyboard for a plan: one scene per plan scene, one beat
-// per plan beat, and a selected panel per beat linking to its generated tile
-// asset. The storyboard links to the plan via plan_asset_id (provenance), and the
-// per-beat tile assets independently record the plan as their input (stale graph).
 export async function buildStoryboardForPlan(input: {
   auth: AuthContext;
   projectId: string;
   planAssetId: string;
   plan: EditPlan;
-  /** beatId -> persisted tile image asset id. */
+  /** plan beat id -> persisted tile image asset id. */
   tileAssetByBeatId: Map<string, string>;
 }): Promise<{ storyboardId: string; panelCount: number }> {
   const storyboard = await createStoryboard({

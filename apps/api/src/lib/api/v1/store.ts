@@ -1131,7 +1131,7 @@ async function projectProjection(
     runQuery(
       "store.projectProjection storyboard",
       db
-        .from("storyboards")
+        .from("story_beats")
         .select("id")
         .eq("project_id", projectId)
         .limit(1)
@@ -2948,8 +2948,8 @@ export interface PersistedStoryboardTile {
 
 // Persist generated storyboard tiles (one per beat) as image asset rows, each
 // recording the plan as its input so a plan/brief change marks the tiles stale.
-// The relational storyboard (storyboards/scenes/panels) links to these via
-// panel.image_asset_id — see buildStoryboardForPlan.
+// The story spine links to these via story_panels.image_asset_id — see
+// buildStoryboardForPlan.
 //
 // Tiles go through the same persistence path as every other generated image
 // (createGeneratedAsset): insert pending → upload the bytes to the object store →
@@ -3146,31 +3146,6 @@ export async function setProjectPoster(
   return mapProjectWithProjection(db, projectRow);
 }
 
-interface StoryboardRow {
-  id: string;
-  project_id: string;
-  plan_asset_id: string | null;
-  status: StoryboardStatus;
-  created_at: string;
-  updated_at: string;
-}
-
-interface StoryboardSceneRow {
-  id: string;
-  project_id: string;
-  storyboard_id: string;
-  scene_index: number;
-  title: string | null;
-  summary: string | null;
-  setting: string | null;
-  mood: string | null;
-  duration_sec: number | null;
-  scene_asset_id: string | null;
-  status: StoryboardItemStatus;
-  created_at: string;
-  updated_at: string;
-}
-
 interface StorySpineSceneRow {
   id: string;
   project_id: string;
@@ -3287,28 +3262,6 @@ function mapStoryboardBeat(
   };
 }
 
-function mapStoryboardScene(
-  row: StoryboardSceneRow,
-  beats: StoryboardBeat[]
-): StoryboardScene {
-  return {
-    id: row.id,
-    projectId: row.project_id,
-    storyboardId: row.storyboard_id,
-    sceneIndex: row.scene_index,
-    title: row.title,
-    summary: row.summary,
-    setting: row.setting,
-    mood: row.mood,
-    durationSec: row.duration_sec,
-    sceneAssetId: row.scene_asset_id,
-    status: row.status,
-    beats,
-    createdAt: iso(row.created_at),
-    updatedAt: iso(row.updated_at),
-  };
-}
-
 function mapSpineScene(row: StorySpineSceneRow, beats: StoryboardBeat[]): StoryboardScene {
   return {
     id: row.id,
@@ -3323,21 +3276,6 @@ function mapSpineScene(row: StorySpineSceneRow, beats: StoryboardBeat[]): Storyb
     sceneAssetId: row.scene_asset_id,
     status: row.status,
     beats,
-    createdAt: iso(row.created_at),
-    updatedAt: iso(row.updated_at),
-  };
-}
-
-function mapStoryboard(
-  row: StoryboardRow,
-  scenes: StoryboardScene[]
-): ProjectStoryboard {
-  return {
-    id: row.id,
-    projectId: row.project_id,
-    planAssetId: row.plan_asset_id,
-    status: row.status,
-    scenes,
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
   };
@@ -3359,21 +3297,21 @@ function mapSpineStoryboard(
   };
 }
 
-async function getStoryboardRow(
+async function getStoryBlueprintRow(
   db: SupabaseClient,
   projectId: string,
-  storyboardId?: string | null
-): Promise<StoryboardRow | null> {
+  storyBlueprintId?: string | null
+): Promise<StoryBlueprintRow | null> {
   let query = db
-    .from("storyboards")
+    .from("story_blueprints")
     .select("*")
     .eq("project_id", projectId);
-  if (storyboardId) query = query.eq("id", storyboardId);
+  if (storyBlueprintId) query = query.eq("id", storyBlueprintId);
   const data = await runQuery(
-    "store.getStoryboardRow",
+    "store.getStoryBlueprintRow",
     query.order("created_at", { ascending: false }).limit(1).maybeSingle()
   );
-  return (data as StoryboardRow | null) ?? null;
+  return (data as StoryBlueprintRow | null) ?? null;
 }
 
 async function requireProjectRow(
@@ -3521,123 +3459,41 @@ export async function getProjectStoryboard(
       : [];
     const panelRows = (panelsData ?? []) as StoryboardPanelRow[];
 
-    // Blueprint scenes can exist before the storyboard backfill has populated
-    // story_beats. In that intermediate state, keep serving the complete legacy
-    // storyboard so panels and keyframe references do not disappear.
-    if (beatRows.length > 0) {
-      const panelMedia = await resolvePanelMediaByAssetId(
-        db,
-        workspaceId,
-        projectId,
-        panelRows
-          .map((row) => row.image_asset_id)
-          .filter((id): id is string => Boolean(id))
-      );
+    const panelMedia = await resolvePanelMediaByAssetId(
+      db,
+      workspaceId,
+      projectId,
+      panelRows
+        .map((row) => row.image_asset_id)
+        .filter((id): id is string => Boolean(id))
+    );
 
-      const panelsByBeat = new Map<string, StoryboardPanel[]>();
-      for (const row of panelRows) {
-        const panel = mapStoryboardPanel(row);
-        const media = panel.imageAssetId ? panelMedia.get(panel.imageAssetId) : undefined;
-        if (media?.url) {
-          panel.url = media.url;
-          if (media.thumbnailUrl) panel.thumbnailUrl = media.thumbnailUrl;
-        }
-        if (media?.prompt) panel.prompt = media.prompt;
-        panelsByBeat.set(panel.beatId, [...(panelsByBeat.get(panel.beatId) ?? []), panel]);
+    const panelsByBeat = new Map<string, StoryboardPanel[]>();
+    for (const row of panelRows) {
+      const panel = mapStoryboardPanel(row);
+      const media = panel.imageAssetId ? panelMedia.get(panel.imageAssetId) : undefined;
+      if (media?.url) {
+        panel.url = media.url;
+        if (media.thumbnailUrl) panel.thumbnailUrl = media.thumbnailUrl;
       }
-
-      const beatsByScene = new Map<string, StoryboardBeat[]>();
-      for (const beatRow of beatRows) {
-        const beat = mapStoryboardBeat(beatRow, panelsByBeat.get(beatRow.id) ?? []);
-        beatsByScene.set(beat.sceneId, [...(beatsByScene.get(beat.sceneId) ?? []), beat]);
-      }
-
-      return mapSpineStoryboard(
-        project,
-        storyBlueprintId,
-        spineSceneRows.map((scene) => mapSpineScene(scene, beatsByScene.get(scene.id) ?? []))
-      );
+      if (media?.prompt) panel.prompt = media.prompt;
+      panelsByBeat.set(panel.beatId, [...(panelsByBeat.get(panel.beatId) ?? []), panel]);
     }
-  }
 
-  const storyboard = await getStoryboardRow(db, projectId);
-  if (!storyboard) return null;
-
-  const scenesData = await runQuery(
-    "store.getProjectStoryboard scenes",
-    db
-      .from("storyboard_scenes")
-      .select("*")
-      .eq("project_id", projectId)
-      .eq("storyboard_id", storyboard.id)
-      .order("scene_index", { ascending: true })
-  );
-  const sceneRows = (scenesData ?? []) as StoryboardSceneRow[];
-  const sceneIds = sceneRows.map((scene) => scene.id);
-
-  const beatsData = sceneIds.length
-    ? await runQuery(
-        "store.getProjectStoryboard beats",
-        db
-          .from("storyboard_beats")
-          .select("*")
-          .eq("project_id", projectId)
-          .in("scene_id", sceneIds)
-          .order("beat_index", { ascending: true })
-      )
-    : [];
-  const beatRows = (beatsData ?? []) as StoryboardBeatRow[];
-  const beatIds = beatRows.map((beat) => beat.id);
-
-  const panelsData = beatIds.length
-    ? await runQuery(
-        "store.getProjectStoryboard panels",
-        db
-          .from("storyboard_panels")
-          .select("*")
-          .eq("project_id", projectId)
-          .in("beat_id", beatIds)
-          .order("panel_index", { ascending: true })
-      )
-    : [];
-  const panelRows = (panelsData ?? []) as StoryboardPanelRow[];
-
-  // Resolve each panel's image to a deliverable url. Panels reference an asset by
-  // id; mapStoryboardPanel alone carries no url, so without this every storyboard
-  // surface (StoryboardPage, ProjectDetailPage, the feedback board) rendered a
-  // blank panel. Resolution follows the lineage HEAD so a regenerated keyframe's
-  // fresh bytes appear without repointing image_asset_id.
-  const panelMedia = await resolvePanelMediaByAssetId(
-    db,
-    workspaceId,
-    projectId,
-    panelRows
-      .map((row) => row.image_asset_id)
-      .filter((id): id is string => Boolean(id))
-  );
-
-  const panelsByBeat = new Map<string, StoryboardPanel[]>();
-  for (const row of panelRows) {
-    const panel = mapStoryboardPanel(row);
-    const media = panel.imageAssetId ? panelMedia.get(panel.imageAssetId) : undefined;
-    if (media?.url) {
-      panel.url = media.url;
-      if (media.thumbnailUrl) panel.thumbnailUrl = media.thumbnailUrl;
+    const beatsByScene = new Map<string, StoryboardBeat[]>();
+    for (const beatRow of beatRows) {
+      const beat = mapStoryboardBeat(beatRow, panelsByBeat.get(beatRow.id) ?? []);
+      beatsByScene.set(beat.sceneId, [...(beatsByScene.get(beat.sceneId) ?? []), beat]);
     }
-    if (media?.prompt) panel.prompt = media.prompt;
-    panelsByBeat.set(panel.beatId, [...(panelsByBeat.get(panel.beatId) ?? []), panel]);
+
+    return mapSpineStoryboard(
+      project,
+      storyBlueprintId,
+      spineSceneRows.map((scene) => mapSpineScene(scene, beatsByScene.get(scene.id) ?? []))
+    );
   }
 
-  const beatsByScene = new Map<string, StoryboardBeat[]>();
-  for (const beatRow of beatRows) {
-    const beat = mapStoryboardBeat(beatRow, panelsByBeat.get(beatRow.id) ?? []);
-    beatsByScene.set(beat.sceneId, [...(beatsByScene.get(beat.sceneId) ?? []), beat]);
-  }
-
-  return mapStoryboard(
-    storyboard,
-    sceneRows.map((scene) => mapStoryboardScene(scene, beatsByScene.get(scene.id) ?? []))
-  );
+  return null;
 }
 
 function semanticBeatChanged(
@@ -3705,26 +3561,26 @@ function isAssetIdShape(assetId: string): boolean {
   return UUID_RE.test(assetId);
 }
 
-async function assertStoryboardIdAvailable(
+async function assertStoryBlueprintIdAvailable(
   db: SupabaseClient,
   projectId: string,
-  storyboardId: string | null | undefined
+  storyBlueprintId: string | null | undefined
 ): Promise<void> {
-  assertUuid(storyboardId, "id");
-  if (!storyboardId) return;
+  assertUuid(storyBlueprintId, "id");
+  if (!storyBlueprintId) return;
   const data = await runQuery(
-    "store.assertStoryboardIdAvailable",
-    db.from("storyboards").select("id, project_id").eq("id", storyboardId).maybeSingle()
+    "store.assertStoryBlueprintIdAvailable",
+    db.from("story_blueprints").select("id, project_id").eq("id", storyBlueprintId).maybeSingle()
   );
-  if (data && (data as StoryboardRow).project_id !== projectId) {
-    throw new ApiError("validation_failed", "Storyboard id belongs to another project.");
+  if (data && (data as StoryBlueprintRow).project_id !== projectId) {
+    throw new ApiError("validation_failed", "Story blueprint id belongs to another project.");
   }
 }
 
 async function assertStoryboardRowsAreWritable(input: {
   db: SupabaseClient;
   projectId: string;
-  storyboardId: string;
+  storyBlueprintId: string;
   storyboard: SaveStoryboardInput;
 }): Promise<void> {
   const sceneIds = input.storyboard.scenes.map((scene) => scene.id);
@@ -3742,15 +3598,15 @@ async function assertStoryboardRowsAreWritable(input: {
     const data = await runQuery(
       "store.assertStoryboardRowsAreWritable scenes",
       input.db
-        .from("storyboard_scenes")
-        .select("id, project_id, storyboard_id")
+        .from("story_blueprint_scenes")
+        .select("id, project_id, story_blueprint_id")
         .in("id", sceneIds)
     );
-    for (const row of (data ?? []) as StoryboardSceneRow[]) {
-      if (row.project_id !== input.projectId || row.storyboard_id !== input.storyboardId) {
+    for (const row of (data ?? []) as StorySpineSceneRow[]) {
+      if (row.project_id !== input.projectId || row.story_blueprint_id !== input.storyBlueprintId) {
         throw new ApiError(
           "validation_failed",
-          `Scene id belongs to another storyboard: ${row.id}.`
+          `Scene id belongs to another story blueprint: ${row.id}.`
         );
       }
     }
@@ -3760,7 +3616,7 @@ async function assertStoryboardRowsAreWritable(input: {
   const beatsData = await runQuery(
     "store.assertStoryboardRowsAreWritable beats",
     input.db
-      .from("storyboard_beats")
+      .from("story_beats")
       .select("id, project_id, scene_id")
       .in("id", beatIds)
   );
@@ -3775,13 +3631,13 @@ async function assertStoryboardRowsAreWritable(input: {
     ? await runQuery(
         "store.assertStoryboardRowsAreWritable beat scenes",
         input.db
-          .from("storyboard_scenes")
-          .select("id, project_id, storyboard_id")
+          .from("story_blueprint_scenes")
+          .select("id, project_id, story_blueprint_id")
           .in("id", existingBeatSceneIds)
       )
     : [];
   const sceneById = new Map(
-    ((beatScenesData ?? []) as StoryboardSceneRow[]).map((scene) => [scene.id, scene])
+    ((beatScenesData ?? []) as StorySpineSceneRow[]).map((scene) => [scene.id, scene])
   );
   for (const row of existingBeatRows) {
     const scene = sceneById.get(row.scene_id);
@@ -3789,11 +3645,11 @@ async function assertStoryboardRowsAreWritable(input: {
       row.project_id !== input.projectId ||
       !scene ||
       scene.project_id !== input.projectId ||
-      scene.storyboard_id !== input.storyboardId
+      scene.story_blueprint_id !== input.storyBlueprintId
     ) {
       throw new ApiError(
         "validation_failed",
-        `Beat id belongs to another storyboard: ${row.id}.`
+        `Beat id belongs to another story blueprint: ${row.id}.`
       );
     }
   }
@@ -3809,8 +3665,8 @@ async function restoreStoryboardOrder(
     await runQuery(
       "store.restoreStoryboardOrder scene",
       db
-        .from("storyboard_scenes")
-        .update({ scene_index: scene.sceneIndex })
+        .from("story_blueprint_scenes")
+        .update({ position: scene.sceneIndex })
         .eq("project_id", projectId)
         .eq("id", scene.id)
     );
@@ -3819,7 +3675,7 @@ async function restoreStoryboardOrder(
     await runQuery(
       "store.restoreStoryboardOrder beat",
       db
-        .from("storyboard_beats")
+        .from("story_beats")
         .update({ beat_index: beat.beatIndex })
         .eq("project_id", projectId)
         .eq("id", beat.id)
@@ -3833,33 +3689,96 @@ export async function saveProjectStoryboard(
   input: SaveStoryboardInput
 ): Promise<ProjectStoryboard> {
   const db = getServiceSupabase();
-  await requireProjectRow(db, workspaceId, projectId);
+  const project = await requireProjectRow(db, workspaceId, projectId);
   const now = new Date().toISOString();
-  await assertStoryboardIdAvailable(db, projectId, input.id);
-  let storyboard = await getStoryboardRow(db, projectId, input.id);
-  const storyboardId = storyboard?.id ?? input.id ?? randomUUID();
+  await assertStoryBlueprintIdAvailable(db, projectId, input.id);
+  let storyBlueprint = await getStoryBlueprintRow(
+    db,
+    projectId,
+    input.id ?? project.current_story_blueprint_id ?? null
+  );
+  const storyBlueprintId = storyBlueprint?.id ?? input.id ?? randomUUID();
   await assertStoryboardRowsAreWritable({
     db,
     projectId,
-    storyboardId,
+    storyBlueprintId,
     storyboard: input,
   });
-  if (!storyboard) {
+  if (!storyBlueprint) {
     const data = await runQuery(
-      "store.saveProjectStoryboard create storyboard",
+      "store.saveProjectStoryboard create story blueprint",
       db
-        .from("storyboards")
+        .from("story_blueprints")
         .insert({
-          id: storyboardId,
+          id: storyBlueprintId,
+          schema_version: "storyBlueprint.v1",
+          workspace_id: workspaceId,
           project_id: projectId,
-          status: input.status ?? "draft",
+          status: input.status === "approved" ? "approved" : "draft",
+          snapshot: markedContent("story_blueprint", {
+            schemaVersion: "storyBlueprint.v1",
+            title: project.name,
+            characters: [],
+            acts: [],
+            scenes: [],
+          }),
+          provenance: markedJson("story_blueprint_provenance.v1", {
+            source: "saveProjectStoryboard",
+          }),
+          created_by: markedJson("story_blueprint_creator.v1", {
+            tool: "save_project_storyboard",
+          }),
           created_at: now,
           updated_at: now,
         })
         .select("*")
         .single()
     );
-    storyboard = data as StoryboardRow;
+    storyBlueprint = data as StoryBlueprintRow;
+    await runQuery(
+      "store.saveProjectStoryboard current pointer",
+      db
+        .from("projects")
+        .update({ current_story_blueprint_id: storyBlueprintId })
+        .eq("id", projectId)
+        .eq("workspace_id", workspaceId)
+    );
+  }
+  const actRows = await runQuery(
+    "store.saveProjectStoryboard act lookup",
+    db
+      .from("story_blueprint_acts")
+      .select("id")
+      .eq("project_id", projectId)
+      .eq("story_blueprint_id", storyBlueprintId)
+      .order("position", { ascending: true })
+      .limit(1)
+  );
+  let storyBlueprintActId = ((actRows as Array<{ id: string }>) ?? [])[0]?.id;
+  if (!storyBlueprintActId) {
+    const act = await runQuery(
+      "store.saveProjectStoryboard create act",
+      db
+        .from("story_blueprint_acts")
+        .insert({
+          story_blueprint_id: storyBlueprintId,
+          workspace_id: workspaceId,
+          project_id: projectId,
+          stable_id: "act_1",
+          position: 0,
+          title: "Act 1",
+          purpose: "Storyboard",
+          summary: "Storyboard scenes.",
+          target_duration_sec: input.scenes.reduce(
+            (total, scene) => total + (scene.durationSec ?? 0),
+            0
+          ),
+          status: "draft",
+        })
+        .select("id")
+        .single()
+    );
+    storyBlueprintActId = (act as { id: string }).id;
   }
 
   const current = await getProjectStoryboard(workspaceId, projectId);
@@ -3889,14 +3808,17 @@ export async function saveProjectStoryboard(
 
   const sceneRows = input.scenes.map((scene, index) => ({
     id: scene.id,
+    story_blueprint_id: storyBlueprintId,
+    story_blueprint_act_id: storyBlueprintActId,
+    workspace_id: workspaceId,
     project_id: projectId,
-    storyboard_id: storyboardId,
-    scene_index: index,
-    title: scene.title,
-    summary: scene.summary ?? null,
+    stable_id: scene.id,
+    position: index,
+    title: scene.title ?? `Scene ${index + 1}`,
+    summary: scene.summary ?? "",
     setting: scene.setting ?? null,
     mood: scene.mood ?? null,
-    duration_sec: scene.durationSec ?? null,
+    target_duration_sec: scene.durationSec ?? 0,
     status: scene.status ?? "draft",
     updated_at: now,
   }));
@@ -3949,8 +3871,8 @@ export async function saveProjectStoryboard(
     if (existingSceneIds.length > 0) {
       const updates = existingSceneIds.map((id, index) =>
         db
-          .from("storyboard_scenes")
-          .update({ scene_index: 10000 + index })
+          .from("story_blueprint_scenes")
+          .update({ position: 10000 + index })
           .eq("project_id", projectId)
           .eq("id", id)
       );
@@ -3964,7 +3886,7 @@ export async function saveProjectStoryboard(
         await runQuery(
           "store.saveProjectStoryboard update scene",
           db
-            .from("storyboard_scenes")
+            .from("story_blueprint_scenes")
             .update(sceneRow)
             .eq("project_id", projectId)
             .eq("id", sceneRow.id)
@@ -3972,7 +3894,7 @@ export async function saveProjectStoryboard(
       } else {
         await runQuery(
           "store.saveProjectStoryboard insert scene",
-          db.from("storyboard_scenes").insert(sceneRow)
+          db.from("story_blueprint_scenes").insert(sceneRow)
         );
       }
     }
@@ -3982,7 +3904,7 @@ export async function saveProjectStoryboard(
       await runQuery(
         "store.saveProjectStoryboard offset beats",
         db
-          .from("storyboard_beats")
+          .from("story_beats")
           .update({ beat_index: 10000 + index })
           .eq("project_id", projectId)
           .eq("id", id)
@@ -3996,7 +3918,7 @@ export async function saveProjectStoryboard(
           await runQuery(
             "store.saveProjectStoryboard update beat",
             db
-              .from("storyboard_beats")
+              .from("story_beats")
               .update(beatRow)
               .eq("project_id", projectId)
               .eq("id", id)
@@ -4004,7 +3926,7 @@ export async function saveProjectStoryboard(
         } else {
           await runQuery(
             "store.saveProjectStoryboard insert beat",
-            db.from("storyboard_beats").insert(beatRow)
+            db.from("story_beats").insert(beatRow)
           );
         }
       }
@@ -4014,7 +3936,7 @@ export async function saveProjectStoryboard(
       await runQuery(
         "store.saveProjectStoryboard remove beats",
         db
-          .from("storyboard_beats")
+          .from("story_beats")
           .delete()
           .eq("project_id", projectId)
           .in("id", removeBeatIds)
@@ -4024,7 +3946,7 @@ export async function saveProjectStoryboard(
       await runQuery(
         "store.saveProjectStoryboard remove scenes",
         db
-          .from("storyboard_scenes")
+          .from("story_blueprint_scenes")
           .delete()
           .eq("project_id", projectId)
           .in("id", removeSceneIds)
@@ -4032,12 +3954,15 @@ export async function saveProjectStoryboard(
     }
 
     await runQuery(
-      "store.saveProjectStoryboard update storyboard",
+      "store.saveProjectStoryboard update story blueprint",
       db
-        .from("storyboards")
-        .update({ status: input.status ?? storyboard.status, updated_at: now })
+        .from("story_blueprints")
+        .update({
+          status: input.status === "approved" ? "approved" : storyBlueprint.status,
+          updated_at: now,
+        })
         .eq("project_id", projectId)
-        .eq("id", storyboard.id)
+        .eq("id", storyBlueprint.id)
     );
   } catch (err) {
     await restoreStoryboardOrder(db, projectId, sceneOrderBackup, beatOrderBackup);
@@ -4045,7 +3970,7 @@ export async function saveProjectStoryboard(
   }
 
   const saved = await getProjectStoryboard(workspaceId, projectId);
-  if (!saved) throw notFound(`Storyboard not found: ${storyboard.id}`);
+  if (!saved) throw notFound(`Story blueprint not found: ${storyBlueprint.id}`);
   return saved;
 }
 

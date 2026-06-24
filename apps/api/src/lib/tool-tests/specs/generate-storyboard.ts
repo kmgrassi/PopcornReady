@@ -115,19 +115,17 @@ export const generateStoryboardBattery: ToolBattery = {
           .eq("kind", "plan");
         const planId = plans?.[0]?.id as string | undefined;
 
-        // Relational storyboard linked to the plan, with a panel per beat.
-        const { data: storyboards } = await db
-          .from("storyboards")
-          .select("id, plan_asset_id")
+        // Story spine linked to generated panels, with a panel per beat.
+        const { data: storyBlueprints } = await db
+          .from("story_blueprints")
+          .select("id")
           .eq("project_id", sandbox.projectId);
-        if (!storyboards || storyboards.length === 0) {
-          failures.push("no storyboard row was created");
-        } else if (planId && storyboards[0].plan_asset_id !== planId) {
-          failures.push("storyboard is not linked to the active plan asset");
+        if (!storyBlueprints || storyBlueprints.length === 0) {
+          failures.push("no story blueprint row was created");
         }
 
         const { data: panels } = await db
-          .from("storyboard_panels")
+          .from("story_panels")
           .select("image_asset_id")
           .eq("project_id", sandbox.projectId);
         if (!panels || panels.length !== 2) {
