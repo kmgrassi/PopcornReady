@@ -9,6 +9,7 @@ import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 import { runGenerateClipJob as realRunGenerateClipJob } from "./generate-clip-job";
 import { createLogger } from "@/lib/v1/logger";
+import { estimateCostUsd as estimateGenerativeCostUsd } from "@/lib/generative/pricing";
 
 type VideoProvider =
   | "openai"
@@ -60,6 +61,8 @@ const defaultDeps: GenerateClipDeps = {
   runGenerateClipJob: realRunGenerateClipJob,
 };
 const logger = createLogger();
+const DEFAULT_CLIP_ESTIMATE_PROVIDER: VideoProvider = "openai";
+const DEFAULT_CLIP_ESTIMATE_DURATION_SEC = 8;
 
 export const generateClipInputSchema = {
   type: "object",
@@ -322,7 +325,13 @@ export function createGenerateClipTool(
     execution: "async",
     parseInput: parseGenerateClipInput,
     estimateCost: (input) => ({
-      estimatedCostUsd: undefined,
+      estimatedCostUsd:
+        estimateGenerativeCostUsd({
+          provider: input.provider ?? DEFAULT_CLIP_ESTIMATE_PROVIDER,
+          kind: "video",
+          durationSec:
+            input.durationSec ?? input.seconds ?? DEFAULT_CLIP_ESTIMATE_DURATION_SEC,
+        }) * (input.beatIds?.length ?? 1),
       unit: "video_generation",
       notes: `One video generation per missing beat_clip slot${
         input.provider ? ` using ${input.provider}` : ""

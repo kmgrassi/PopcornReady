@@ -80,7 +80,10 @@ function bridgeTool(real: RealToolRegistry, name: ToolName): OrchestratorToolDef
     outputSchema: definition.outputSchema,
     requiredResourceIds: [],
     mode: definition.execution,
-    estimateCostUsd: () => undefined,
+    estimateCostUsd: async (input, context) => {
+      const estimate = await real.estimateCost(name, input, bridgeContext(context));
+      return estimate.estimatedCostUsd;
+    },
     // Delegate to the registry's execute (which runs parseInput + maps
     // ToolInputError to a failed result) so validation matches production.
     execute: (input, context) => real.execute(name, input, bridgeContext(context)),

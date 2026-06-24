@@ -42,6 +42,7 @@ import { createLogger } from "@/lib/v1/logger";
 
 // Credits charged per generation = providerCostUsd * MARGIN, at 1 credit = $0.01.
 const CREDIT_MARGIN = 2;
+const CREDITS_PER_USD = 100;
 const PG_INSUFFICIENT_FUNDS = "23514"; // apply_credit_transaction overdraw guard
 
 const DEFAULT_MAX_TURNS = 50;
@@ -113,6 +114,9 @@ export interface EngineDeps {
    * Supabase lookup.
    */
   resolveOwnerUserId?: (workspaceId: string) => Promise<string | null>;
+  getCreditBalance?: typeof getCreditBalance;
+  userHasAnyProviderKey?: typeof userHasAnyProviderKey;
+  applyCreditTransaction?: typeof applyCreditTransaction;
 }
 
 export function defaultEngineStore(): OrchestratorEngineStore {
@@ -199,6 +203,9 @@ function resolved(deps: EngineDeps) {
     maxTurns: deps.maxTurns ?? DEFAULT_MAX_TURNS,
     modelTurnTimeoutMs: deps.modelTurnTimeoutMs ?? DEFAULT_MODEL_TURN_TIMEOUT_MS,
     resolveOwnerUserId: deps.resolveOwnerUserId ?? getWorkspaceOwnerUserId,
+    getCreditBalance: deps.getCreditBalance ?? getCreditBalance,
+    userHasAnyProviderKey: deps.userHasAnyProviderKey ?? userHasAnyProviderKey,
+    applyCreditTransaction: deps.applyCreditTransaction ?? applyCreditTransaction,
     workspaceId: deps.workspaceId,
     actorId: deps.actorId,
     agentId: deps.agentId,
@@ -441,6 +448,16 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       tool: decision.toolName,
       model: decision.model,
     });
+    const toolContext = createToolExecutionContext({
+      workspaceId: r.workspaceId,
+      projectId: run.projectId,
+      orchestratorRunId: run.id,
+      actorId: r.actorId ?? "orchestrator",
+      agentId: r.agentId ?? "orchestrator",
+      messageId: r.messageId,
+      requestId: r.requestId,
+      metadata: r.metadata,
+    });
 
     // Gate handling. Pending/reached gates pause before executing. Approved gates
     // fall through. Rejected gates also fall through once: that is the
@@ -475,10 +492,13 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
     // settled by the post-generation debit below. (No run user => not billed.)
     const runUserId = currentRunUserId();
     const toolEstimateUsd =
-      turnRegistry.get(decision.toolName)?.estimateCostUsd(decision.input) ?? 0;
+      (await turnRegistry
+        .get(decision.toolName)
+        ?.estimateCostUsd(decision.input, toolContext)) ?? 0;
     if (runUserId && toolEstimateUsd > 0) {
-      const balance = await getCreditBalance(runUserId);
-      if (balance <= 0 && !(await userHasAnyProviderKey(runUserId))) {
+      const estimatedCredits = Math.ceil(toolEstimateUsd * CREDIT_MARGIN * CREDITS_PER_USD);
+      const balance = await r.getCreditBalance(runUserId);
+      if (balance < estimatedCredits && !(await r.userHasAnyProviderKey(runUserId))) {
         const error = {
           kind: "insufficient_credits",
           message:
@@ -509,16 +529,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
         registry: turnRegistry,
         toolName: decision.toolName,
         input: decision.input,
-        context: createToolExecutionContext({
-          workspaceId: r.workspaceId,
-          projectId: run.projectId,
-          orchestratorRunId: run.id,
-          actorId: r.actorId ?? "orchestrator",
-          agentId: r.agentId ?? "orchestrator",
-          messageId: r.messageId,
-          requestId: r.requestId,
-          metadata: r.metadata,
-        }),
+        context: toolContext,
       });
     } catch (err) {
       const error = {
@@ -601,9 +612,9 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       const afterUsd = billableUsdSoFar();
       const billableDeltaUsd = afterUsd - billedBeforeUsd;
       if (billableDeltaUsd > 0) {
-        const credits = Math.ceil(billableDeltaUsd * CREDIT_MARGIN * 100);
+        const credits = Math.ceil(billableDeltaUsd * CREDIT_MARGIN * CREDITS_PER_USD);
         try {
-          await applyCreditTransaction({
+          await r.applyCreditTransaction({
             userId: runUserId,
             deltaCredits: -credits,
             reason: "generation_debit",

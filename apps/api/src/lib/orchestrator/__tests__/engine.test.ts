@@ -103,18 +103,20 @@ class FakeStore implements OrchestratorEngineStore {
 }
 
 function fakeRegistry(
-  handlers: Partial<Record<ToolName, (context: ToolExecutionContext) => ToolCallResult>>
+  handlers: Partial<Record<ToolName, (context: ToolExecutionContext) => ToolCallResult>>,
+  estimates: Partial<Record<ToolName, number>> = {}
 ): ToolRegistry {
   const map: ToolRegistry = new Map();
   for (const [name, fn] of Object.entries(handlers)) {
+    const toolName = name as ToolName;
     map.set(name as ToolName, {
-      name: name as ToolName,
+      name: toolName,
       description: "",
       inputSchema: {},
       outputSchema: {},
       requiredResourceIds: [],
       mode: "sync",
-      estimateCostUsd: () => undefined,
+      estimateCostUsd: () => estimates[toolName],
       execute: async (_input, context) => fn!(context),
     });
   }
@@ -684,4 +686,66 @@ test("stops the run when the budget is exhausted", async () => {
   assert.equal(run.status, "failed");
   assert.equal((run.error as { kind?: string }).kind, "budget_exceeded");
   assert.equal(store.actions.length, 1, "only the first tool runs before the budget trips");
+});
+
+test("blocks estimated platform-key generation when the balance cannot cover it", async () => {
+  const store = new FakeStore(runFixture());
+  const { model } = scriptedModel([{ type: "tool_call", toolName: "generate_clip" }]);
+  let executed = false;
+  const registry = fakeRegistry(
+    {
+      generate_clip: () => {
+        executed = true;
+        return ok(["clip_1"], 1);
+      },
+    },
+    { generate_clip: 1 }
+  );
+
+  const run = await runOrchestratorToCompletion(
+    "run1",
+    deps(store, model, registry, {
+      resolveOwnerUserId: async () => "user1",
+      getCreditBalance: async () => 199,
+      userHasAnyProviderKey: async () => false,
+    })
+  );
+
+  assert.equal(run.status, "failed");
+  assert.equal(executed, false, "the billable tool must not execute");
+  assert.equal((run.error as { kind?: string }).kind, "insufficient_credits");
+  assert.equal(store.actions.length, 1);
+  assert.equal(store.actions[0].status, "failed");
+  assert.equal((store.actions[0].error as { kind?: string }).kind, "insufficient_credits");
+});
+
+test("allows estimated generation with low credits when the user has a provider key", async () => {
+  const store = new FakeStore(runFixture());
+  const { model } = scriptedModel([
+    { type: "tool_call", toolName: "generate_clip" },
+    { type: "done" },
+  ]);
+  let executed = false;
+  const registry = fakeRegistry(
+    {
+      generate_clip: () => {
+        executed = true;
+        return ok(["clip_1"]);
+      },
+    },
+    { generate_clip: 1 }
+  );
+
+  const run = await runOrchestratorToCompletion(
+    "run1",
+    deps(store, model, registry, {
+      resolveOwnerUserId: async () => "user1",
+      getCreditBalance: async () => 1,
+      userHasAnyProviderKey: async () => true,
+    })
+  );
+
+  assert.equal(run.status, "succeeded");
+  assert.equal(executed, true);
+  assert.equal(store.actions[0].status, "applied");
 });
