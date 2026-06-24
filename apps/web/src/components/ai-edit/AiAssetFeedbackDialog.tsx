@@ -1,7 +1,14 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
+import type { ModelSettingPurpose } from "../../lib/api-client";
+import { modelPurposeConfig, providerConfig } from "../../lib/modelOptions";
 import { Button } from "../ui/Button";
 import { CloseButton } from "../ui/CloseButton";
 import styles from "./AiAssetFeedbackDialog.module.css";
+
+export interface AssetGenerationModelSelection {
+  provider: string;
+  model: string;
+}
 
 export interface AiAssetFeedbackDialogProps {
   open: boolean;
@@ -10,7 +17,12 @@ export interface AiAssetFeedbackDialogProps {
   asset: ReactNode;
   pending?: boolean;
   error?: string | null;
-  onSubmit: (message: string) => Promise<void> | void;
+  modelPurpose?: ModelSettingPurpose | null;
+  initialModelSelection?: AssetGenerationModelSelection | null;
+  onSubmit: (
+    message: string,
+    generationModel?: AssetGenerationModelSelection
+  ) => Promise<void> | void;
   onClose: () => void;
 }
 
@@ -21,16 +33,28 @@ export function AiAssetFeedbackDialog({
   asset,
   pending = false,
   error,
+  modelPurpose,
+  initialModelSelection,
   onSubmit,
   onClose,
 }: AiAssetFeedbackDialogProps) {
   const titleId = useId();
   const [message, setMessage] = useState("");
+  const purposeConfig = modelPurpose ? modelPurposeConfig(modelPurpose) : null;
+  const initialProvider =
+    initialModelSelection?.provider ?? purposeConfig?.providers[0]?.id ?? "";
+  const initialModel =
+    initialModelSelection?.model ??
+    (purposeConfig ? providerConfig(purposeConfig, initialProvider).models[0] : "");
+  const [provider, setProvider] = useState(initialProvider);
+  const [model, setModel] = useState(initialModel);
 
   useEffect(() => {
     if (!open) return;
     setMessage("");
-  }, [open]);
+    setProvider(initialProvider);
+    setModel(initialModel);
+  }, [initialModel, initialProvider, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -47,10 +71,17 @@ export function AiAssetFeedbackDialog({
 
   const trimmed = message.trim();
   const canSubmit = Boolean(trimmed) && !pending;
+  const selectedProviderConfig =
+    purposeConfig && provider ? providerConfig(purposeConfig, provider) : null;
 
   async function submit() {
     if (!canSubmit) return;
-    await onSubmit(trimmed);
+    await onSubmit(
+      trimmed,
+      purposeConfig && provider && model.trim()
+        ? { provider, model: model.trim() }
+        : undefined
+    );
     setMessage("");
   }
 
@@ -95,6 +126,39 @@ export function AiAssetFeedbackDialog({
               onChange={(event) => setMessage(event.target.value)}
             />
           </label>
+          {purposeConfig && selectedProviderConfig ? (
+            <fieldset className={styles.modelPane} disabled={pending}>
+              <legend>Generation model</legend>
+              <label>
+                <span>Provider</span>
+                <select
+                  value={provider}
+                  onChange={(event) => {
+                    const nextProvider = event.target.value;
+                    const nextConfig = providerConfig(purposeConfig, nextProvider);
+                    setProvider(nextProvider);
+                    setModel(nextConfig.models[0] ?? "");
+                  }}
+                >
+                  {purposeConfig.providers.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Model</span>
+                <select value={model} onChange={(event) => setModel(event.target.value)}>
+                  {selectedProviderConfig.models.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </fieldset>
+          ) : null}
         </div>
 
         {error ? (

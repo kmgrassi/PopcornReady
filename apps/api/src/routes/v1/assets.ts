@@ -50,12 +50,21 @@ assetsRouter.post(
   "/assets/:assetId/regenerate",
   mutation(async ({ auth, body, requestId }, params) => {
     const assetId = requiredParam(params, "assetId");
-    const rawPrompt = (body as { prompt?: unknown } | null)?.prompt;
+    const rawBody = body as {
+      prompt?: unknown;
+      provider?: unknown;
+      model?: unknown;
+    } | null;
+    const rawPrompt = rawBody?.prompt;
     const prompt = typeof rawPrompt === "string" ? rawPrompt : undefined;
+    const provider = typeof rawBody?.provider === "string" ? rawBody.provider : undefined;
+    const model = typeof rawBody?.model === "string" ? rawBody.model : undefined;
     const media = await regenerateImageAsset({
       workspaceId: auth.workspaceId,
       assetId,
       prompt,
+      provider,
+      model,
       requestId,
     });
     return {

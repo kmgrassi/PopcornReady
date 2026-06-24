@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ApiClientError, type AssetMediaResponse } from "../../lib/api-client";
 import { useRegenerateImageMutation } from "../../lib/regenerateImage";
+import { modelPurposeForAssetKind } from "../../lib/modelOptions";
 import { RegenerateAssetDialog } from "./RegenerateAssetDialog";
 import styles from "./RegenerateImageButton.module.css";
 
@@ -40,12 +41,20 @@ export function RegenerateImageButton({
   const mutation = useRegenerateImageMutation({ onRegenerated });
   const savedPrompt = prompt?.trim();
 
-  const run = async (nextPrompt: string) => {
+  const run = async (
+    nextPrompt: string,
+    generationModel?: { provider: string; model: string }
+  ) => {
     setError(null);
     setPromptOpen(false);
     onRegenerateStart?.();
     try {
-      await mutation.mutateAsync({ assetId, prompt: nextPrompt });
+      await mutation.mutateAsync({
+        assetId,
+        prompt: nextPrompt,
+        provider: generationModel?.provider,
+        model: generationModel?.model,
+      });
     } catch (err) {
       if (isPromptRequired(err)) {
         setPromptOpen(true);
@@ -104,7 +113,8 @@ export function RegenerateImageButton({
         }
         pending={mutation.isPending}
         error={error}
-        onSubmit={(prompt) => void run(prompt)}
+        modelPurpose={modelPurposeForAssetKind("image")}
+        onSubmit={(prompt, generationModel) => void run(prompt, generationModel)}
         onCancel={() => {
           setPromptOpen(false);
           setError(null);

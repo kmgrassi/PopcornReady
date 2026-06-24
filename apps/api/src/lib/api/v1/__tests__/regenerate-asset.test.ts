@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import type { GenerativeProviderName } from "@popcorn/shared/generative/types";
 import { regenerateImageAsset } from "../regenerate-asset";
 import { ApiError } from "../errors";
 import type { RegeneratedAssetMedia, V1Asset } from "../store";
@@ -51,8 +52,8 @@ function makeDeps(asset: V1Asset, effectiveVisibility: "public" | "private" = "p
           bytes: Buffer.from("png-bytes"),
           extension: "png",
           mimeType: "image/png",
-          provider: "openai" as const,
-          model: "gpt-image-1.5",
+          provider: input.provider as GenerativeProviderName,
+          model: input.model,
           prompt: input.prompt,
         };
       },
@@ -141,6 +142,24 @@ test("a caller-supplied prompt wins over the saved one and is persisted", async 
 
   assert.equal(calls.generateImage?.prompt, "a brand new prompt");
   assert.equal((calls.applyMedia?.update.provenance as { prompt: string }).prompt, "a brand new prompt");
+});
+
+test("caller-supplied provider and model override saved provenance", async () => {
+  const asset = imageAsset();
+  const { calls, deps } = makeDeps(asset);
+
+  await regenerateImageAsset({
+    workspaceId: "ws-1",
+    assetId: asset.id,
+    provider: "ideogram",
+    model: "ideogram-v4",
+    deps,
+  });
+
+  assert.equal(calls.generateImage?.provider, "ideogram");
+  assert.equal(calls.generateImage?.model, "ideogram-v4");
+  assert.equal(calls.applyMedia?.update.provenance.provider, "ideogram");
+  assert.equal(calls.applyMedia?.update.provenance.model, "ideogram-v4");
 });
 
 test("throws prompt_required when no prompt is saved or provided", async () => {

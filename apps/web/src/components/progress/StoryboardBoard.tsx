@@ -13,6 +13,7 @@ import { AiAssetFeedbackDialog } from "../ai-edit/AiAssetFeedbackDialog";
 import dialogStyles from "../ai-edit/AiAssetFeedbackDialog.module.css";
 import { RegenerateImageButton } from "../media/RegenerateImageButton";
 import { ImageWithSkeleton } from "../ui/ImageWithSkeleton";
+import { modelPurposeForAssetKind } from "../../lib/modelOptions";
 import styles from "./StoryboardBoard.module.css";
 
 interface StoryboardBoardProps {
@@ -21,7 +22,11 @@ interface StoryboardBoardProps {
   storyboard?: ProjectStoryboard | null;
   pendingTargetKey?: string | null;
   error?: string | null;
-  onFeedback: (input: { message: string; target: BoardRevisionTarget }) => Promise<void>;
+  onFeedback: (input: {
+    message: string;
+    target: BoardRevisionTarget;
+    generationModel?: { provider: string; model: string };
+  }) => Promise<void>;
 }
 
 interface Tile {
@@ -229,12 +234,15 @@ export function StoryboardBoard({
         subtitle={selectedSubtitle}
         pending={selectedPending}
         error={selectedTile ? error : null}
+        modelPurpose={
+          selectedTile?.item?.kind ? modelPurposeForAssetKind(selectedTile.item.kind) : null
+        }
         onClose={() => {
           if (!selectedPending) setSelectedTile(null);
         }}
-        onSubmit={async (message) => {
+        onSubmit={async (message, generationModel) => {
           if (!selectedTile) return;
-          await onFeedback({ message, target: selectedTile.target });
+          await onFeedback({ message, target: selectedTile.target, generationModel });
           setSelectedTile(null);
         }}
         asset={

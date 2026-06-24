@@ -631,8 +631,13 @@ export function AssetsPage() {
         onRegenerate={
           isPublic
             ? undefined
-            : async (item, prompt) => {
-                return regenerateMutation.mutateAsync({ assetId: item.id, prompt });
+            : async (item, input) => {
+                return regenerateMutation.mutateAsync({
+                  assetId: item.id,
+                  prompt: input?.prompt,
+                  provider: input?.provider,
+                  model: input?.model,
+                });
               }
         }
         actions={

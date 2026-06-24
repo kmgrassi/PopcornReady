@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import type { AssetKind } from "@popcorn/shared/v1/types";
 import { CloseButton } from "../ui/CloseButton";
 import { ImageWithSkeleton } from "../ui/ImageWithSkeleton";
+import { modelPurposeForAssetKind } from "../../lib/modelOptions";
 import { RegenerateAssetDialog } from "./RegenerateAssetDialog";
 import styles from "./MediaViewer.module.css";
 
@@ -35,7 +36,10 @@ export interface MediaViewerProps {
   // Re-run image generation for an asset with no deliverable URL. Resolve with
   // the now-live media. Reject with an error whose `.code === "prompt_required"`
   // to make the viewer pop a prompt-entry dialog instead of surfacing an error.
-  onRegenerate?: (item: MediaViewerItem, prompt?: string) => Promise<RefreshedMediaUrls>;
+  onRegenerate?: (
+    item: MediaViewerItem,
+    input?: { prompt?: string; provider?: string; model?: string }
+  ) => Promise<RefreshedMediaUrls>;
 }
 
 function isPromptRequired(error: unknown): boolean {
@@ -108,12 +112,12 @@ export function MediaViewer({
   }, [media, onRefresh, refreshing]);
 
   const regenerate = useCallback(
-    async (prompt?: string) => {
+    async (input?: { prompt?: string; provider?: string; model?: string }) => {
       if (!media || !onRegenerate || regenerating) return;
       setRegenerating(true);
       setRegenError(null);
       try {
-        const next = await onRegenerate(media, prompt);
+        const next = await onRegenerate(media, input);
         setMedia((current) =>
           current && current.id === media.id
             ? {
@@ -245,7 +249,14 @@ export function MediaViewer({
         message="This image doesn't have a saved prompt. Enter one to regenerate it."
         pending={regenerating}
         error={regenError}
-        onSubmit={(prompt) => void regenerate(prompt)}
+        modelPurpose={media.kind === "image" ? modelPurposeForAssetKind("image") : null}
+        onSubmit={(prompt, generationModel) =>
+          void regenerate({
+            prompt,
+            provider: generationModel?.provider,
+            model: generationModel?.model,
+          })
+        }
         onCancel={() => {
           setPromptOpen(false);
           setRegenError(null);
