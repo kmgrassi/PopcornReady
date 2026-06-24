@@ -3504,7 +3504,10 @@ export async function getProjectStoryboard(
       : [];
     const panelRows = (panelsData ?? []) as StoryboardPanelRow[];
 
-    if (spineSceneRows.length > 0 || beatRows.length > 0 || panelRows.length > 0) {
+    // Blueprint scenes can exist before the storyboard backfill has populated
+    // story_beats. In that intermediate state, keep serving the complete legacy
+    // storyboard so panels and keyframe references do not disappear.
+    if (beatRows.length > 0) {
       const panelMedia = await resolvePanelMediaByAssetId(
         db,
         workspaceId,

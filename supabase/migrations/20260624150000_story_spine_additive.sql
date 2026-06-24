@@ -136,12 +136,12 @@ alter table public.story_panels enable row level security;
 
 drop policy if exists story_beats_owner on public.story_beats;
 create policy story_beats_owner on public.story_beats
-  for all using (public.project_owned_by_current_user(project_id))
-  with check (public.project_owned_by_current_user(project_id));
+  for all using (public.owns_project(project_id))
+  with check (public.owns_project(project_id));
 drop policy if exists story_panels_owner on public.story_panels;
 create policy story_panels_owner on public.story_panels
-  for all using (public.project_owned_by_current_user(project_id))
-  with check (public.project_owned_by_current_user(project_id));
+  for all using (public.owns_project(project_id))
+  with check (public.owns_project(project_id));
 
 drop policy if exists story_beats_public_read on public.story_beats;
 create policy story_beats_public_read on public.story_beats
