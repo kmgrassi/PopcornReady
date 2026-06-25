@@ -55,7 +55,7 @@ export function deriveNextAction(
 ): NextAction {
   const activeRuns = pulse?.activeRuns ?? [];
   const recentOutputs = pulse?.recentOutputs ?? [];
-  const projectCount = pulse?.counts?.projects ?? 0;
+  const projectCount = pulse?.counts?.projects;
 
   const gatedRun = activeRuns.find(
     (run): run is GatedRun => Boolean((run as GatedRun).reviewGate),
