@@ -16,27 +16,10 @@
   padding: var(--space-5);
 }
 
-.index {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  align-self: flex-start;
-  min-width: 34px;
-  height: 30px;
-  padding: 0 var(--space-2);
-  border-radius: var(--radius-sm);
-  background: var(--accent-soft);
-  color: var(--accent);
-  border: 1px solid var(--accent-border);
-  font-weight: 800;
-  font-size: var(--text-md);
-  letter-spacing: 0.04em;
-}
-
 .name {
   font-size: var(--text-lg);
   font-weight: 700;
-  margin: var(--space-4) 0 var(--space-2);
+  margin: 0 0 var(--space-2);
 }
 
 .body {

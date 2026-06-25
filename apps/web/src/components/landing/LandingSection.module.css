@@ -4,6 +4,8 @@
 
   display: grid;
   gap: var(--landing-section-gap);
+  justify-self: center;
+  width: min(100%, calc(100vw - (var(--space-6) * 2)));
   padding-block-start: var(--landing-section-offset);
   scroll-margin-top: calc(var(--space-8) + var(--space-7));
 }
@@ -52,7 +54,7 @@
   color: var(--accent);
   font-size: var(--text-sm);
   font-weight: 800;
-  letter-spacing: 0.12em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
