@@ -1,22 +1,19 @@
-import { Link } from "react-router-dom";
 import type { DashboardCounts } from "@popcorn/shared/v1/dashboard";
 import styles from "./OverviewStats.module.css";
 
-const TILES: { key: keyof DashboardCounts; label: string; to: string }[] = [
-  { key: "projects", label: "Projects", to: "/library/projects" },
-  { key: "activeRuns", label: "Active runs", to: "/library/projects" },
-  { key: "outputs", label: "Outputs", to: "/library/projects" },
-];
-
 export function OverviewStats({ counts }: { counts: DashboardCounts }) {
   return (
-    <section className={styles.grid} aria-label="Workspace overview">
-      {TILES.map((tile) => (
-        <Link key={tile.key} className={styles.tile} to={tile.to}>
-          <span className={styles.value}>{counts[tile.key]}</span>
-          <span className={styles.label}>{tile.label}</span>
-        </Link>
-      ))}
+    <section className={styles.summary} aria-label="Workspace overview">
+      <span className={styles.label}>Workspace at a glance</span>
+      <p className={styles.counts}>
+        <span>{formatCount(counts.projects, "project")}</span>
+        <span>{formatCount(counts.activeRuns, "active run")}</span>
+        <span>{formatCount(counts.outputs, "output")}</span>
+      </p>
     </section>
   );
+}
+
+function formatCount(value: number, singular: string) {
+  return `${value} ${singular}${value === 1 ? "" : "s"}`;
 }
