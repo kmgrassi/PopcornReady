@@ -79,41 +79,53 @@ streams independent — each agent applies the relevant slice in its own files.
 
 # Part A — Landing (`HomePage.tsx`)
 
-`HomePage.tsx` renders the **logged-out marketing landing only**. Four
+`HomePage.tsx` renders the **logged-out marketing landing only**. Three
 file-disjoint workstreams.
 
-### WS-H1 — Landing system CSS (`globals.css` `.lp-*`)
-Owned file: `apps/web/src/styles/globals.css` (`.lp-*` block, ~L2535–3600) ·
-lens: `quieter` + `audit`
+> **Why landing CSS is one workstream, not two.** The landing's `.lp-*` styling is
+> deliberately split across two files: **base** structural rules in
+> `globals.css`, and **themed visual overrides** in `HomePage.module.css` wrapped
+> in `:global(.web-shell:has(.landing) .lp-*)` (see the comment at
+> `HomePage.module.css:321`). The actual rendered glass, gradient text, and the
+> gold "Most popular" badge/featured-border all live in the **module** overrides,
+> not the base. Because each visual concern (glass, gradient, gold, focus) spans
+> *both* files, a single agent must own both — splitting by file would either
+> ship a no-op or force one stream to edit another's file. (Codex review caught
+> this on the first draft.)
 
-- **[P1] One Gold Rule:** demote `.lp-price-cta.featured` /
-  `.lp-price-card.featured .lp-price-cta` (L3534–3535) and `.lp-badge` (L3446) off
-  solid `--accent` per Shared Decision 1.
+### WS-H1 — Landing CSS (`globals.css` `.lp-*` **and** `HomePage.module.css`)
+Owned files: `apps/web/src/styles/globals.css` (`.lp-*` block, ~L2535–3600),
+`apps/web/src/routes/HomePage.module.css` · lens: `quieter` + `audit`
+
+- **[P1] One Gold Rule** (per Shared Decision 1) — demote every non-hero gold:
+  - featured pricing CTA solid gold — `globals.css:3534-3535`;
+  - "Most popular" badge gold gradient — `HomePage.module.css:600,615` (base at
+    `globals.css:3446`) → `--accent-soft` chip;
+  - featured pricing-card gold border gradient — `HomePage.module.css:589-593`;
+  - CTA-card "View on GitHub" `.lp-price-cta.featured`.
+  - Keep the hero `.promptSubmit` gold (`HomePage.module.css:122`) as the **one**
+    gold fill — do not change its color.
 - **[P1] Focus rings:** add `:focus-visible { box-shadow: var(--ring) }` to
-  `.lp-price-cta` (L3517) and any focusable `.lp-*`.
-- **[P2] Glass:** remove `backdrop-filter: blur` from `.lp-card` (L3057),
-  `.lp-step` (L3016), `.lp-price-card` (L3431), `.lp-eyebrow` (L2535), etc.
-- **[P2] Gradient text:** if `.lp-accent` (L2556) carries a gradient/clip, solidify.
-- **[Minor] `.lp-code`:** swap `--accent-2` (cool blue) for `--text`/`--muted`;
+  `.lp-price-cta` (`globals.css:3517`) and `.promptSubmit` / `.modalPrimary` /
+  `.modalSecondary` (`HomePage.module.css`).
+- **[P2] Gradient text → solid:** remove `background-clip: text` from
+  `:global(... .lp-hero h1)` (`HomePage.module.css:530-534`) and
+  `:global(... .lp-accent)` (`HomePage.module.css:539-542`); use solid `--text` /
+  `--accent`. (`globals.css:2556` base may stay solid.)
+- **[P2] Glass → modal-only:** remove `backdrop-filter: blur` from the landing
+  card/composer/eyebrow/CTA surfaces — `.lp-eyebrow` (`HomePage.module.css:505`),
+  the `.lp-card/.lp-step/.lp-price-card/.lp-prompt/.lp-heatmap-wrap/.lp-cta` group
+  (`HomePage.module.css:567`), the composer (`:42`), the CTA card (`:247`). **Keep**
+  blur on the modal backdrop (`:154`) and the sticky nav header (`:380`, a
+  functional nav treatment consistent with the app shell).
+- **[Minor]** `.pricingNote` (`HomePage.module.css:227`) `--text-lg` → `--text-sm`;
+  `.lp-code` accent (`globals.css`) `--accent-2` (cool blue) → `--text`/`--muted`,
   verify ≥4.5:1 on `--bg`.
-- Acceptance: no solid-gold `.lp-*` fills; `--ring` on all `.lp-*` controls; no
-  `backdrop-filter` outside the modal; landing scan clean.
+- Acceptance: exactly one gold fill on the landing (hero submit); `--ring` on every
+  landing CTA/button; no `background-clip: text`; no `backdrop-filter` on landing
+  cards/composer (only the modal backdrop + nav header); landing scan clean.
 
-### WS-H2 — Hero/modal CSS (`HomePage.module.css`)
-Owned file: `apps/web/src/routes/HomePage.module.css` · lens: `quieter` + `audit`
-
-- **[P2] Gradient text:** replace `background-clip: text` (L533–534, 541–542) with
-  solid colors.
-- **[P2] Glass:** keep blur on the modal backdrop only; remove from composer (L42),
-  cards, eyebrow, CTA-card (L247, L567, …). Hero `.promptSubmit` stays the one gold
-  (`var(--cta)`, L122) — do not change its color.
-- **[P1] Focus rings:** add `:focus-visible { box-shadow: var(--ring) }` to
-  `.promptSubmit`, `.modalPrimary`, `.modalSecondary`.
-- **[Minor] Fine print:** `.pricingNote` (L227) `--text-lg` → `--text-sm`.
-- Acceptance: no `background-clip: text`; blur only on modal backdrop; hero submit
-  still the single gold; `--ring` on every hero/modal button.
-
-### WS-H3 — Landing structure + guest flow (`HomePage.tsx` + lib)
+### WS-H2 — Landing structure + guest flow (`HomePage.tsx` + lib)
 Owned files: `apps/web/src/routes/HomePage.tsx`,
 `apps/web/src/lib/guestGeneration.ts` · lens: `onboard` + `clarify`
 
@@ -128,14 +140,14 @@ Owned files: `apps/web/src/routes/HomePage.tsx`,
 - Acceptance: guest's first generation starts with no account interstitial; account
   ask only at save/export or guest limit; ≤1 kicker; modal keyboard-dismissable.
 
-### WS-H4 — Shared landing section components (`components/landing/*`)
+### WS-H3 — Shared landing section components (`components/landing/*`)
 Owned files: `apps/web/src/components/landing/LandingSection.{tsx,module.css}`,
 `WorkflowStages.{tsx,module.css}` · lens: `quieter` + `distill`
 
 - **[P2] Numbered markers:** remove the `01–05` `.lp-step-n`/stage-index chips
   (`WorkflowStages.tsx:46`, `WorkflowStages.module.css:19–34`); keep stage copy.
 - **[P2] Kicker:** confirm `LandingSection` renders nothing when no kicker prop is
-  passed (WS-H3 removes them); fix any spacing left behind; set `.kicker`
+  passed (WS-H2 removes them); fix any spacing left behind; set `.kicker`
   (`LandingSection.module.css:51`) tracking to `0` if kept.
 - Acceptance: no numbered scaffolding; headers read with zero/one kicker; no
   breakpoint regression.
@@ -223,46 +235,48 @@ lens: `harden` + `clarify`
 
 ## Combined file-ownership matrix (disjointness proof)
 
-| File | H1 | H2 | H3 | H4 | D1 | D2 | D3 | D4 | D5 |
-|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
-| `styles/globals.css` (`.lp-*`) | ● | | | | | | | | |
-| `routes/HomePage.module.css` | | ● | | | | | | | |
-| `routes/HomePage.tsx` | | | ● | | | | | | |
-| `lib/guestGeneration.ts` | | | ● | | | | | | |
-| `components/landing/*` | | | | ● | | | | | |
-| `components/home/OverviewStats.*` | | | | | ● | | | | |
-| `components/home/EmptyDashboard.*` | | | | | | ● | | | |
-| `components/auth/AnonymousUpgradeBanner.*` | | | | | | | ● | | |
-| `components/home/ActiveRunsPanel.*` | | | | | | | | ● | |
-| `routes/LaunchpadPage.*` | | | | | | | | | ● |
-| `lib/nextAction.ts` | | | | | | | | | ● |
-| `components/ui/Button.module.css` | | | | | | | | | ● |
+| File | H1 | H2 | H3 | D1 | D2 | D3 | D4 | D5 |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| `styles/globals.css` (`.lp-*`) | ● | | | | | | | |
+| `routes/HomePage.module.css` | ● | | | | | | | |
+| `routes/HomePage.tsx` | | ● | | | | | | |
+| `lib/guestGeneration.ts` | | ● | | | | | | |
+| `components/landing/*` | | | ● | | | | | |
+| `components/home/OverviewStats.*` | | | | ● | | | | |
+| `components/home/EmptyDashboard.*` | | | | | ● | | | |
+| `components/auth/AnonymousUpgradeBanner.*` | | | | | | ● | | |
+| `components/home/ActiveRunsPanel.*` | | | | | | | ● | |
+| `routes/LaunchpadPage.*` | | | | | | | | ● |
+| `lib/nextAction.ts` | | | | | | | | ● |
+| `components/ui/Button.module.css` | | | | | | | | ● |
 
-No file is owned by two workstreams. The only coupling is the **Shared
-Decisions** list, applied independently per owner. (`HeroCard` and
-`RecentOutputsStrip` need no mandatory edits this pass — see deferred/out-of-scope.)
+WS-H1 owns **both** landing CSS files (`globals.css` `.lp-*` + `HomePage.module.css`)
+because the landing's visual concerns are split across them via `:global()`
+overrides (see the WS-H1 note). No file is owned by two workstreams. The only
+coupling is the **Shared Decisions** list, applied independently per owner.
+(`HeroCard` and `RecentOutputsStrip` need no mandatory edits this pass — see
+deferred/out-of-scope.)
 
 ## Cross-stream contracts (the only coupling)
 
-- **Kicker removal:** WS-H3 stops passing `kicker` props; WS-H4 renders nothing
+- **Kicker removal:** WS-H2 stops passing `kicker` props; WS-H3 renders nothing
   when absent. Different files, consistent result.
-- **Gold:** WS-H1 demotes landing pricing gold while WS-H2 preserves the hero gold;
-  WS-D3 demotes the banner gold while WS-D2 preserves the `HeroCard` gold. Each
-  surface ends with exactly one gold.
+- **Gold:** WS-H1 owns both landing CSS files, so the "one gold per landing" result
+  is internal to it. WS-D3 demotes the banner gold while WS-D2 preserves the
+  `HeroCard` gold — the dashboard ends with exactly one gold.
 - **Reduced motion:** WS-D4 (ActiveRunsPanel) and WS-D5 (LaunchpadPage shimmer +
   Button spinner) split the guard by file owner; same `@media` pattern.
-- **Focus token:** WS-H1/H2 both use `box-shadow: var(--ring)`.
 
 ## PR / merge strategy
 
-- Up to **nine** independent PRs off `main` (four landing + five dashboard), one per
+- **Eight** independent PRs off `main` (three landing + five dashboard), one per
   workstream, titled `Landing: WS-H<n> …` / `Dashboard: WS-D<n> …`.
 - Merge order is irrelevant (files disjoint); rebase only if an unrelated `main`
   change touches the same file.
 - Tokens-only, no raw hex/px (PR #624 convention). Each PR notes its before/after
   against the acceptance criteria.
-- Run each in its own git worktree to build truly concurrently. A reasonable first
-  wave: H1, H2, H3, D1, D2, D3, D4, D5 (H4 is small and can ride with H3's review).
+- Run each in its own git worktree to build truly concurrently. All eight can go in
+  one wave: H1, H2, H3, D1, D2, D3, D4, D5.
 
 ## Deferred / needs a product decision (not parallel-mechanical)
 
