@@ -63,6 +63,11 @@
   box-shadow: var(--shadow-sm);
 }
 
+.run:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
 .run:focus-visible {
   outline: none;
   box-shadow: var(--ring);
@@ -86,6 +91,33 @@
 .stage {
   color: var(--muted);
   font-size: var(--text-sm);
+}
+
+.recovery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  color: var(--danger-text);
+  font-size: var(--text-sm);
+}
+
+.recovery span:first-child {
+  min-width: 0;
+}
+
+.recoveryAction {
+  flex: 0 0 auto;
+  color: var(--text-strong);
+  font-weight: 800;
+  text-decoration: underline;
+  text-decoration-color: var(--danger-border);
+  text-underline-offset: 0.18em;
 }
 
 .progress {
@@ -172,6 +204,13 @@
 .reviewBadge {
   color: var(--cta-contrast);
   background: var(--cta);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .run,
+  .fill {
+    transition: none;
+  }
 }
 
 @media (max-width: 560px) {

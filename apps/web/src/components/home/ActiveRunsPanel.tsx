@@ -35,6 +35,7 @@ export function ActiveRunsPanel({
             Math.min(100, Math.round(run.progressPercent ?? 0)),
           );
           const needsReview = Boolean(run.reviewGate);
+          const failed = run.status === "failed";
           return (
             <li key={run.runId}>
               <Link className={styles.run} to={runPath(run)}>
@@ -52,6 +53,15 @@ export function ActiveRunsPanel({
                 <span className={styles.stage}>
                   {formatStage(run.currentStageType)}
                 </span>
+
+                {failed ? (
+                  <div className={styles.recovery} aria-label="Failed run recovery">
+                    <span>
+                      Open the run to see what stopped and retry from the failed stage.
+                    </span>
+                    <span className={styles.recoveryAction}>See why and retry</span>
+                  </div>
+                ) : null}
 
                 <div className={styles.progress}>
                   <span className={styles.track} aria-hidden="true">
