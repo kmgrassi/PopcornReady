@@ -331,8 +331,8 @@ export function HomePage() {
         <section className="lp-hero">
           <span className="lp-eyebrow">New · AI-native video production</span>
           <h1>
-            Prompt-to-video is{" "}
-            <span className="lp-accent">only step one.</span>
+            Let AI do the hard part:{" "}
+            <span className="lp-accent">stitch the clips.</span>
           </h1>
           <p className="lp-lede">
             Popcorn Ready gives AI video the missing workflow: it plans the
