@@ -471,13 +471,26 @@ export async function publishCatalogEntry(input: {
     return mapCatalogEntry(inserted);
   }
 
-  const preview = await materializePreview({
-    db,
-    entryId: inserted.id,
-    workspaceId: input.authWorkspaceId,
-    sourceAssetId: input.body.sourceAssetId!,
-    store: deps?.store,
-  });
+  let preview: { storageKey: string; storageBucket: string; contentType: string };
+  try {
+    preview = await materializePreview({
+      db,
+      entryId: inserted.id,
+      workspaceId: input.authWorkspaceId,
+      sourceAssetId: input.body.sourceAssetId!,
+      store: deps?.store,
+    });
+  } catch (error) {
+    try {
+      await runQuery(
+        "catalog.publishCatalogEntry cleanup",
+        db.from("catalog_entries").delete().eq("id", inserted.id)
+      );
+    } catch {
+      // Preserve the publish failure; cleanup is best effort.
+    }
+    throw error;
+  }
   const updated = await runQuery(
     "catalog.publishCatalogEntry preview",
     db
@@ -742,31 +755,44 @@ async function cloneAssetEntry(
   );
   const insertedAsset = inserted as Record<string, unknown>;
   const assetId = String(insertedAsset.id);
-  const copied = await store.copyObject({
-    sourceKey: entry.preview_storage_key,
-    sourceVisibility: visibilityForBucket(config, entry.preview_storage_bucket),
-    destinationKey: assetStorageKey({
-      workspaceId: project.workspace_id,
-      projectId: project.id,
-      assetId,
-      filename,
-    }),
-    destinationVisibility,
-    contentType: entry.preview_content_type ?? contentTypeForFilename(filename),
-  });
-  const updated = await runQuery(
-    "catalog.cloneAssetEntry storage",
-    db
-      .from("assets")
-      .update({
-        status: "ready",
-        storage_key: copied.key,
-        storage_bucket: copied.bucket,
-      })
-      .eq("id", assetId)
-      .select("*")
-      .single()
-  );
+  let updated: unknown;
+  try {
+    const copied = await store.copyObject({
+      sourceKey: entry.preview_storage_key,
+      sourceVisibility: visibilityForBucket(config, entry.preview_storage_bucket),
+      destinationKey: assetStorageKey({
+        workspaceId: project.workspace_id,
+        projectId: project.id,
+        assetId,
+        filename,
+      }),
+      destinationVisibility,
+      contentType: entry.preview_content_type ?? contentTypeForFilename(filename),
+    });
+    updated = await runQuery(
+      "catalog.cloneAssetEntry storage",
+      db
+        .from("assets")
+        .update({
+          status: "ready",
+          storage_key: copied.key,
+          storage_bucket: copied.bucket,
+        })
+        .eq("id", assetId)
+        .select("*")
+        .single()
+    );
+  } catch (error) {
+    try {
+      await runQuery(
+        "catalog.cloneAssetEntry failed",
+        db.from("assets").update({ status: "failed" }).eq("id", assetId)
+      );
+    } catch {
+      // Preserve the clone failure; marking failed is best effort.
+    }
+    throw error;
+  }
   return { asset: updated as Record<string, unknown> };
 }
 
