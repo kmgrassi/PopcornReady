@@ -101,7 +101,7 @@ export function AnonymousUpgradeBanner({
               required
             />
           </div>
-          <Button variant="cta" type="submit" isLoading={pending} disabled={!email.trim()}>
+          <Button variant="secondary" type="submit" isLoading={pending} disabled={!email.trim()}>
             Send code
           </Button>
         </form>
@@ -146,7 +146,7 @@ export function AnonymousUpgradeBanner({
             />
           </div>
           <Button
-            variant="cta"
+            variant="secondary"
             type="submit"
             isLoading={pending}
             disabled={!email.trim() || !token.trim() || password.length < 6}
