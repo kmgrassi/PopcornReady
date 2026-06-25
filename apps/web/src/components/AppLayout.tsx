@@ -16,12 +16,18 @@ import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import { canAccessAdminSurface } from "./auth/AdminRoute";
 import { AuthNavButton } from "./auth/AuthNavButton";
 import { CreditsBadge } from "./credits/CreditsBadge";
+import { Breadcrumbs } from "./Breadcrumbs";
 import { LogoMark } from "./LogoMark";
 import { CommandPalette } from "./palette/Palette";
 import ThemeToggle from "./ThemeToggle";
 import { Button } from "./ui/Button";
 import { ToastProvider } from "./ui/Toast";
-import { queryClient, useMeQuery } from "../lib/queryClient";
+import { useCatalogEntryQuery } from "../lib/catalog";
+import {
+  getDashboardBreadcrumbParams,
+  getDashboardBreadcrumbs,
+} from "../lib/dashboardBreadcrumbs";
+import { queryClient, useMeQuery, useProjectQuery } from "../lib/queryClient";
 import styles from "./AppLayout.module.css";
 
 const STORAGE_KEY = "popcorn-ready-theme";
@@ -104,11 +110,25 @@ export function AuthenticatedAppLayout() {
   const auth = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const dashboardQueriesEnabled =
+    auth.status !== "loading" &&
+    (auth.status !== "unauthenticated" || DEV_AUTOPILOT);
+  const breadcrumbParams = getDashboardBreadcrumbParams(location);
+  const breadcrumbProjectQuery = useProjectQuery(
+    breadcrumbParams.projectId ?? "",
+    dashboardQueriesEnabled && Boolean(breadcrumbParams.projectId),
+  );
+  const breadcrumbAnchorQuery = useCatalogEntryQuery(
+    breadcrumbParams.anchorEntryId ?? "",
+    dashboardQueriesEnabled && Boolean(breadcrumbParams.anchorEntryId),
+  );
+  const breadcrumbItems = getDashboardBreadcrumbs(location, {
+    projectName: breadcrumbProjectQuery.data?.project.name,
+    anchorTitle: breadcrumbAnchorQuery.data?.entry.title,
+  });
   const authScope = auth.user?.id ?? (DEV_AUTOPILOT ? "dev-autopilot" : auth.status);
   const meQuery = useMeQuery(authScope, {
-    enabled:
-      auth.status !== "loading" &&
-      (auth.status !== "unauthenticated" || DEV_AUTOPILOT),
+    enabled: dashboardQueriesEnabled,
   });
   const me = meQuery.data ?? null;
   const accountLabel = useMemo(() => {
@@ -241,7 +261,12 @@ export function AuthenticatedAppLayout() {
 
       <div className={styles.content}>
         <header className={styles.topbar}>
-          <CommandPalette showAdminCommands={showAdmin} />
+          <div className={styles.breadcrumbSlot}>
+            <Breadcrumbs items={breadcrumbItems} />
+          </div>
+          <div className={styles.commandSlot}>
+            <CommandPalette showAdminCommands={showAdmin} />
+          </div>
           <div className={styles.account}>
             <CreditsBadge
               authScope={authScope}
