@@ -6,14 +6,6 @@ import type {
 import type { RunReviewGate } from "@popcorn/shared/v1/types";
 import { isRunActive } from "./v1/generation-runs/status";
 
-export interface DraftSummary {
-  draftId: string;
-  goalExcerpt: string;
-  step: number;
-  totalSteps: number;
-  updatedAt: string;
-}
-
 type GatedRun = DashboardActiveRunSummary & {
   reviewGate?: RunReviewGate | null;
 };
@@ -44,14 +36,6 @@ export type NextAction =
       to: string;
     }
   | {
-      type: "resume_draft";
-      draft: DraftSummary;
-      title: string;
-      body: string;
-      ctaLabel: string;
-      to: string;
-    }
-  | {
       type: "start";
       title: string;
       body: string;
@@ -67,10 +51,13 @@ export type NextAction =
     };
 
 export function deriveNextAction(
-  pulse: DashboardSummary | null | undefined,
-  drafts: readonly DraftSummary[] = [],
+  pulse: Readonly<Partial<DashboardSummary>> | null | undefined,
 ): NextAction {
-  const gatedRun = pulse?.activeRuns.find(
+  const activeRuns = pulse?.activeRuns ?? [];
+  const recentOutputs = pulse?.recentOutputs ?? [];
+  const projectCount = pulse?.counts?.projects ?? 0;
+
+  const gatedRun = activeRuns.find(
     (run): run is GatedRun => Boolean((run as GatedRun).reviewGate),
   );
   if (gatedRun) {
@@ -84,7 +71,7 @@ export function deriveNextAction(
     };
   }
 
-  const activeRun = pulse?.activeRuns.find((run) => isRunActive(run.status));
+  const activeRun = activeRuns.find((run) => isRunActive(run.status));
   if (activeRun) {
     return {
       type: "watch_run",
@@ -96,7 +83,7 @@ export function deriveNextAction(
     };
   }
 
-  const recentOutput = pulse?.recentOutputs[0];
+  const recentOutput = recentOutputs[0];
   if (recentOutput) {
     return {
       type: "review_cut",
@@ -108,19 +95,7 @@ export function deriveNextAction(
     };
   }
 
-  const draft = drafts[0];
-  if (draft) {
-    return {
-      type: "resume_draft",
-      draft,
-      title: `Draft unavailable - ${draft.goalExcerpt}`,
-      body: "Studio drafts are no longer available. Open the project library to continue from saved projects.",
-      ctaLabel: "View projects",
-      to: "/library/projects",
-    };
-  }
-
-  if (!pulse || pulse.counts.projects === 0) {
+  if (!pulse || projectCount === 0) {
     return {
       type: "start",
       title: "Create your first AI rough cut",

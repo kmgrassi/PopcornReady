@@ -31,6 +31,17 @@
   animation: shimmer 1200ms linear infinite;
 }
 
+.partialNotice {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
 .skeleton span:first-child {
   width: 140px;
 }
@@ -51,5 +62,11 @@
 
   to {
     background-position: -220% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton span {
+    animation: none;
   }
 }

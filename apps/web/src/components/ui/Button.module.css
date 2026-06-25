@@ -55,6 +55,12 @@
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+
 /* Sizes */
 .md {
   min-height: 38px;
