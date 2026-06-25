@@ -235,7 +235,7 @@ function requestedGateTools(body: unknown): string[] {
       case "audio_generation":
         return ["generate_audio"];
       case "timeline_assembly":
-        return ["assemble_timeline"];
+        return ["plan_transitions", "assemble_timeline"];
       case "quality_review":
         return ["critique_timeline", "request_approval"];
       case "export":

@@ -29,6 +29,7 @@ import {
   type PlanVisualAnchorsDeps,
 } from "./plan-visual-anchors";
 import { createPlanShotsTool, type PlanShotsDeps } from "./plan-shots";
+import { createPlanTransitionsTool, type PlanTransitionsDeps } from "./plan-transitions";
 import {
   createPublishToCatalogTool,
   type PublishToCatalogDeps,
@@ -52,6 +53,7 @@ export interface DefaultToolRegistryDeps {
   generateClip?: Partial<GenerateClipDeps>;
   generateStoryboard?: Partial<GenerateStoryboardDeps>;
   planVisualAnchors?: Partial<PlanVisualAnchorsDeps>;
+  planTransitions?: Partial<PlanTransitionsDeps>;
   requestApproval?: Partial<RequestApprovalDeps>;
   assembleTimeline?: Partial<AssembleTimelineDeps>;
   publishToCatalog?: Partial<PublishToCatalogDeps>;
@@ -74,6 +76,7 @@ export function createDefaultToolRegistry(
   registry.register(createCritiqueTimelineTool(deps.critiqueTimeline));
   registry.register(createExportVideoTool(deps.exportVideo));
   registry.register(createRequestApprovalTool(deps.requestApproval));
+  registry.register(createPlanTransitionsTool(deps.planTransitions));
   registry.register(createAssembleTimelineTool(deps.assembleTimeline));
   registry.register(createPublishToCatalogTool(deps.publishToCatalog));
   return registry;
