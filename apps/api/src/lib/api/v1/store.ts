@@ -3744,52 +3744,84 @@ export async function saveProjectStoryboard(
     projectId,
     input.id ?? project.current_story_blueprint_id ?? null
   );
-  const storyBlueprintId = storyBlueprint?.id ?? input.id ?? randomUUID();
-  await assertStoryboardRowsAreWritable({
-    db,
-    projectId,
-    storyBlueprintId,
-    storyboard: input,
-  });
+  let storyBlueprintId = storyBlueprint?.id ?? null;
+  let createdStoryBlueprintId: string | null = null;
   if (!storyBlueprint) {
+    const createRow: Record<string, unknown> = {
+      schema_version: "storyBlueprint.v1",
+      workspace_id: workspaceId,
+      project_id: projectId,
+      status: input.status === "approved" ? "approved" : "draft",
+      snapshot: markedContent("story_blueprint", {
+        schemaVersion: "storyBlueprint.v1",
+        title: project.name,
+        characters: [],
+        acts: [],
+        scenes: [],
+      }),
+      provenance: markedJson("story_blueprint_provenance.v1", {
+        source: "saveProjectStoryboard",
+      }),
+      created_by: markedJson("story_blueprint_creator.v1", {
+        tool: "save_project_storyboard",
+      }),
+      created_at: now,
+      updated_at: now,
+    };
     const data = await runQuery(
       "store.saveProjectStoryboard create story blueprint",
       db
         .from("story_blueprints")
-        .insert({
-          id: storyBlueprintId,
-          schema_version: "storyBlueprint.v1",
-          workspace_id: workspaceId,
-          project_id: projectId,
-          status: input.status === "approved" ? "approved" : "draft",
-          snapshot: markedContent("story_blueprint", {
-            schemaVersion: "storyBlueprint.v1",
-            title: project.name,
-            characters: [],
-            acts: [],
-            scenes: [],
-          }),
-          provenance: markedJson("story_blueprint_provenance.v1", {
-            source: "saveProjectStoryboard",
-          }),
-          created_by: markedJson("story_blueprint_creator.v1", {
-            tool: "save_project_storyboard",
-          }),
-          created_at: now,
-          updated_at: now,
-        })
+        .insert(createRow)
         .select("*")
         .single()
     );
     storyBlueprint = data as StoryBlueprintRow;
+    storyBlueprintId = storyBlueprint.id;
+    createdStoryBlueprintId = storyBlueprint.id;
     await runQuery(
       "store.saveProjectStoryboard current pointer",
       db
         .from("projects")
-        .update({ current_story_blueprint_id: storyBlueprintId })
+        .update({ current_story_blueprint_id: storyBlueprint.id })
         .eq("id", projectId)
         .eq("workspace_id", workspaceId)
     );
+  }
+  if (!storyBlueprintId) {
+    throw new Error("story blueprint insert did not return an id");
+  }
+  try {
+    await assertStoryboardRowsAreWritable({
+      db,
+      projectId,
+      storyBlueprintId,
+      storyboard: input,
+    });
+  } catch (error) {
+    if (createdStoryBlueprintId) {
+      try {
+        await runQuery(
+          "store.saveProjectStoryboard rollback current pointer",
+          db
+            .from("projects")
+            .update({ current_story_blueprint_id: project.current_story_blueprint_id })
+            .eq("id", projectId)
+            .eq("workspace_id", workspaceId)
+        );
+        await runQuery(
+          "store.saveProjectStoryboard rollback story blueprint",
+          db
+            .from("story_blueprints")
+            .delete()
+            .eq("id", createdStoryBlueprintId)
+            .eq("project_id", projectId)
+        );
+      } catch {
+        // Preserve the validation failure; rollback is best effort.
+      }
+    }
+    throw error;
   }
   const actRows = await runQuery(
     "store.saveProjectStoryboard act lookup",

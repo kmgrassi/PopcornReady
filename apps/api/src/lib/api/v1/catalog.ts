@@ -1,5 +1,4 @@
 import path from "node:path";
-import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getServiceSupabase } from "@/lib/supabase/clients";
 import { runQuery } from "@/lib/supabase/db-errors";
@@ -423,7 +422,6 @@ export async function publishCatalogEntry(input: {
   body: PublishCatalogEntryInput;
 }, deps?: CatalogDeps): Promise<CatalogEntry> {
   const db = dbFrom(deps);
-  const id = randomUUID();
   const publisherUserId = await publisherUserIdForWorkspace(
     db,
     input.publisherWorkspaceId ?? input.authWorkspaceId
@@ -432,17 +430,6 @@ export async function publishCatalogEntry(input: {
     input.body.kind === "story"
       ? await storySnapshot(db, input.authWorkspaceId, input.body.sourceStoryBlueprintId!)
       : await assetSnapshot(db, input.authWorkspaceId, input.body.sourceAssetId!, input.body.kind);
-  const preview =
-    input.body.kind === "story"
-      ? null
-      : await materializePreview({
-          db,
-          entryId: id,
-          workspaceId: input.authWorkspaceId,
-          sourceAssetId: input.body.sourceAssetId!,
-          store: deps?.store,
-        });
-
   const source = snapshot.source;
   const searchText = buildSearchText([
     input.body.title,
@@ -456,10 +443,9 @@ export async function publishCatalogEntry(input: {
     db
       .from("catalog_entries")
       .insert({
-        id,
         schema_version: CATALOG_SCHEMA_VERSION,
         kind: input.body.kind,
-        status: input.body.status,
+        status: input.body.kind === "story" ? input.body.status : "draft",
         publisher_user_id: publisherUserId,
         source_workspace_id: source.workspaceId,
         source_project_id: source.projectId,
@@ -468,9 +454,6 @@ export async function publishCatalogEntry(input: {
         title: input.body.title,
         summary: input.body.summary ?? null,
         tags: input.body.tags,
-        preview_storage_key: preview?.storageKey ?? null,
-        preview_storage_bucket: preview?.storageBucket ?? null,
-        preview_content_type: preview?.contentType ?? null,
         snapshot: {
           schema_version: "catalogEntrySnapshot.v1",
           ...snapshot.body,
@@ -483,7 +466,46 @@ export async function publishCatalogEntry(input: {
       .select(CATALOG_COLUMNS)
       .single()
   );
-  return mapCatalogEntry(row as CatalogEntryRow);
+  const inserted = row as CatalogEntryRow;
+  if (input.body.kind === "story") {
+    return mapCatalogEntry(inserted);
+  }
+
+  let preview: { storageKey: string; storageBucket: string; contentType: string };
+  try {
+    preview = await materializePreview({
+      db,
+      entryId: inserted.id,
+      workspaceId: input.authWorkspaceId,
+      sourceAssetId: input.body.sourceAssetId!,
+      store: deps?.store,
+    });
+  } catch (error) {
+    try {
+      await runQuery(
+        "catalog.publishCatalogEntry cleanup",
+        db.from("catalog_entries").delete().eq("id", inserted.id)
+      );
+    } catch {
+      // Preserve the publish failure; cleanup is best effort.
+    }
+    throw error;
+  }
+  const updated = await runQuery(
+    "catalog.publishCatalogEntry preview",
+    db
+      .from("catalog_entries")
+      .update({
+        status: input.body.status,
+        preview_storage_key: preview.storageKey,
+        preview_storage_bucket: preview.storageBucket,
+        preview_content_type: preview.contentType,
+      })
+      .eq("id", inserted.id)
+      .select(CATALOG_COLUMNS)
+      .single()
+  );
+  return mapCatalogEntry(updated as CatalogEntryRow);
 }
 
 export async function updateCatalogEntry(input: {
@@ -686,42 +708,26 @@ async function cloneAssetEntry(
   }
   const config = readStorageConfig();
   const store = deps?.store ?? createObjectStore(config);
-  const assetId = randomUUID();
   const filename = path.basename(
     stringValue(recordValue(entry.snapshot.asset).filename) ?? `${entry.kind}-anchor.png`
   );
   const assetVisibility = await defaultVisibilityForWorkspace(db, project.workspace_id);
   const destinationVisibility =
     assetVisibility === "private" || project.visibility === "private" ? "private" : "public";
-  const copied = await store.copyObject({
-    sourceKey: entry.preview_storage_key,
-    sourceVisibility: visibilityForBucket(config, entry.preview_storage_bucket),
-    destinationKey: assetStorageKey({
-      workspaceId: project.workspace_id,
-      projectId: project.id,
-      assetId,
-      filename,
-    }),
-    destinationVisibility,
-    contentType: entry.preview_content_type ?? contentTypeForFilename(filename),
-  });
   const now = new Date().toISOString();
   const inserted = await runQuery(
     "catalog.cloneAssetEntry",
     db
       .from("assets")
       .insert({
-        id: assetId,
         schema_version: "asset.v2",
         workspace_id: project.workspace_id,
         project_id: project.id,
         kind: "anchor",
         media: "image",
-        status: "ready",
+        status: "pending",
         role: entry.kind === "character" ? "character_anchor" : "scene_anchor",
         filename,
-        storage_key: copied.key,
-        storage_bucket: copied.bucket,
         source: buildCatalogAssetSource({
           catalogEntryId: entry.id,
           sourceAssetId: entry.source_asset_id,
@@ -747,7 +753,47 @@ async function cloneAssetEntry(
       .select("*")
       .single()
   );
-  return { asset: inserted as Record<string, unknown> };
+  const insertedAsset = inserted as Record<string, unknown>;
+  const assetId = String(insertedAsset.id);
+  let updated: unknown;
+  try {
+    const copied = await store.copyObject({
+      sourceKey: entry.preview_storage_key,
+      sourceVisibility: visibilityForBucket(config, entry.preview_storage_bucket),
+      destinationKey: assetStorageKey({
+        workspaceId: project.workspace_id,
+        projectId: project.id,
+        assetId,
+        filename,
+      }),
+      destinationVisibility,
+      contentType: entry.preview_content_type ?? contentTypeForFilename(filename),
+    });
+    updated = await runQuery(
+      "catalog.cloneAssetEntry storage",
+      db
+        .from("assets")
+        .update({
+          status: "ready",
+          storage_key: copied.key,
+          storage_bucket: copied.bucket,
+        })
+        .eq("id", assetId)
+        .select("*")
+        .single()
+    );
+  } catch (error) {
+    try {
+      await runQuery(
+        "catalog.cloneAssetEntry failed",
+        db.from("assets").update({ status: "failed" }).eq("id", assetId)
+      );
+    } catch {
+      // Preserve the clone failure; marking failed is best effort.
+    }
+    throw error;
+  }
+  return { asset: updated as Record<string, unknown> };
 }
 
 async function cloneStoryEntry(
