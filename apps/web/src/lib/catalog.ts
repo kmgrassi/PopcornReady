@@ -285,11 +285,11 @@ export function useCatalogEntriesQuery(filters: {
   });
 }
 
-export function useCatalogEntryQuery(entryId: string) {
+export function useCatalogEntryQuery(entryId: string, enabled = true) {
   return useQuery({
     queryKey: catalogQueryKeys.entry(entryId),
     queryFn: ({ signal }) => catalogApi.getEntry(entryId, signal),
-    enabled: Boolean(entryId),
+    enabled: enabled && Boolean(entryId),
   });
 }
 
