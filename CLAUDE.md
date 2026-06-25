@@ -22,6 +22,17 @@ isolation. Read it before building any dashboard/editor surface; default new
 object surfaces to read-only + a "Request Changes" entry point rather than form
 fields.
 
+## Design Context
+
+The frontend (`apps/web`) has an Impeccable design brief at
+[`apps/web/PRODUCT.md`](apps/web/PRODUCT.md): register `product`, primary users
+are creators (with operators secondary), personality is **warm, approachable,
+editorial**, on a committed **dark** surface (popcorn amber/coral accents, single
+popcorn-yellow CTA per screen). Anti-references: generic AI-SaaS templates,
+toy/gimmicky AI generation, overwhelming pro NLE density, sterile enterprise
+dashboards. Read it before designing any `apps/web` surface; the visual system is
+captured in `apps/web/DESIGN.md`.
+
 ## Direction (target architecture)
 
 The app is **moving off the Next.js monolith** into a monorepo split. Target stack:

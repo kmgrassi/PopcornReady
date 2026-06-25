@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-06-25T00:00:00Z",
+  "title": "Design System: Popcorn Ready",
+  "extensions": {
+    "colorMeta": {
+      "popcorn-gold": { "role": "primary", "displayName": "Popcorn Gold", "canonical": "#f5b62a", "tonalRamp": ["#2a1d04", "#4d3608", "#75520c", "#9c6e10", "#c48a18", "#e0a91f", "#f5b62a", "#f8cb63", "#fbe0a0"] },
+      "ember-coral": { "role": "secondary", "displayName": "Ember Coral", "canonical": "#ff7a4d", "tonalRamp": ["#34150a", "#5a2412", "#82351b", "#aa4724", "#d25a2e", "#ff7a4d", "#ff936e", "#ffb295", "#ffd1bf"] },
+      "reel-green": { "role": "tertiary", "displayName": "Reel Green", "canonical": "#5fd39a", "tonalRamp": ["#0c2a1d", "#13452f", "#1c6344", "#26845a", "#33a571", "#4ac08a", "#5fd39a", "#8fe2b9", "#bdf0d7"] },
+      "signal-red": { "role": "tertiary", "displayName": "Signal Red", "canonical": "#ff6b6b", "tonalRamp": ["#350f0f", "#5a1c1c", "#822929", "#aa3636", "#d24747", "#ff6b6b", "#ff8c8c", "#ffadad", "#ffcfcf"] },
+      "near-black-violet": { "role": "neutral", "displayName": "Near-Black Violet", "canonical": "#08070a", "tonalRamp": ["#08070a", "#14111c", "#1c1827", "#2a2440", "#3d3559", "#564b78", "#7a6fa0", "#a59bc0", "#d8d0ea"] },
+      "twilight-panel": { "role": "neutral", "displayName": "Twilight Panel", "canonical": "#14111c", "tonalRamp": ["#08070a", "#14111c", "#1c1827", "#2a2440", "#3d3559", "#564b78", "#7a6fa0", "#a59bc0", "#d8d0ea"] },
+      "raised-panel": { "role": "neutral", "displayName": "Raised Panel", "canonical": "#1c1827", "tonalRamp": ["#08070a", "#14111c", "#1c1827", "#2a2440", "#3d3559", "#564b78", "#7a6fa0", "#a59bc0", "#d8d0ea"] },
+      "violet-border": { "role": "neutral", "displayName": "Violet Border", "canonical": "#2a2440", "tonalRamp": ["#08070a", "#14111c", "#1c1827", "#2a2440", "#3d3559", "#564b78", "#7a6fa0", "#a59bc0", "#d8d0ea"] },
+      "moonlight-ink": { "role": "neutral", "displayName": "Moonlight Ink", "canonical": "#f6f2ff", "tonalRamp": ["#2a2440", "#3d3559", "#564b78", "#7a6fa0", "#a59bc0", "#c7bedb", "#e1daf0", "#f6f2ff", "#ffffff"] },
+      "lavender-muted": { "role": "neutral", "displayName": "Lavender Muted", "canonical": "#a59bc0", "tonalRamp": ["#2a2440", "#3d3559", "#564b78", "#7a6fa0", "#8d83ac", "#a59bc0", "#bdb5d4", "#d6cfe6", "#eee9f6"] },
+      "espresso-ink": { "role": "neutral", "displayName": "Espresso Ink", "canonical": "#1a1206", "tonalRamp": ["#0d0903", "#1a1206", "#2e2010", "#45301a", "#5e4225", "#785532", "#9a7048", "#bd8d63", "#dcae86"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Active step heading and empty-state headline in the guided studio — the one element that dominates the view." },
+      "headline": { "displayName": "Headline", "purpose": "Page titles and section headers." },
+      "title": { "displayName": "Title", "purpose": "Card and panel titles; eval/admin section heads (normal case)." },
+      "body": { "displayName": "Body", "purpose": "Default prose and UI text; cap prose at 65-75ch." },
+      "label": { "displayName": "Label", "purpose": "Eyebrows, metadata pills, workspace labels — weight 800, uppercase, no tracking." }
+    },
+    "shadows": [
+      { "name": "resting-sm", "value": "0 1px 2px rgba(0,0,0,0.3)", "purpose": "Buttons on hover and the CTA at rest — the first millimeter of lift." },
+      { "name": "elevated-md", "value": "0 10px 30px rgba(0,0,0,0.32)", "purpose": "Elevated cards, popovers, the CTA on hover. The default 'this floats' shadow." },
+      { "name": "overlay-lg", "value": "0 26px 64px rgba(0,0,0,0.45)", "purpose": "Modals, account menus — the highest layer." }
+    ],
+    "motion": [
+      { "name": "transition", "value": "160ms ease", "purpose": "Default state transition for background, border, color, transform, and shadow." }
+    ],
+    "breakpoints": [
+      { "name": "md", "value": "760px" },
+      { "name": "lg", "value": "980px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Gold-fill primary action; lifts on hover, settles on press.",
+      "html": "<button class=\"ds-btn-primary\">Generate storyboard</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 0 16px; background: #f5b62a; color: #1a1206; border: 1px solid transparent; border-radius: 8px; font: 800 14px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; cursor: pointer; transition: background 160ms ease, transform 160ms ease, box-shadow 160ms ease, filter 160ms ease; } .ds-btn-primary:hover { filter: brightness(1.07); transform: translateY(-1px); box-shadow: 0 1px 2px rgba(0,0,0,0.3); } .ds-btn-primary:active { filter: brightness(0.96); transform: translateY(0); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, #f5b62a 55%, transparent); }"
+    },
+    {
+      "name": "CTA Button",
+      "kind": "button",
+      "refersTo": "button-cta",
+      "description": "The single prominent popcorn-gold action per screen; carries a resting shadow.",
+      "html": "<button class=\"ds-btn-cta\">Start a new video</button>",
+      "css": ".ds-btn-cta { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 24px; background: #f5b62a; color: #1a1206; border: none; border-radius: 12px; font: 800 16px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.3); transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease; } .ds-btn-cta:hover { filter: brightness(1.06); transform: translateY(-1px); box-shadow: 0 10px 30px rgba(0,0,0,0.32); } .ds-btn-cta:active { filter: brightness(0.97); transform: translateY(0); } .ds-btn-cta:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, #f5b62a 55%, transparent); }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Raised-panel fill with a warm border; for non-primary actions.",
+      "html": "<button class=\"ds-btn-secondary\">Cancel</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 0 16px; background: #1c1827; color: #f6f2ff; border: 1px solid #2a2440; border-radius: 8px; font: 800 14px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; cursor: pointer; transition: border-color 160ms ease, transform 160ms ease; } .ds-btn-secondary:hover { border-color: rgba(245,182,42,0.32); transform: translateY(-1px); } .ds-btn-secondary:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, #f5b62a 55%, transparent); }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Transparent low-emphasis action; fills on hover.",
+      "html": "<button class=\"ds-btn-ghost\">Skip</button>",
+      "css": ".ds-btn-ghost { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 0 16px; background: transparent; color: #a59bc0; border: 1px solid transparent; border-radius: 8px; font: 800 14px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; cursor: pointer; transition: background 160ms ease, color 160ms ease; } .ds-btn-ghost:hover { background: #1c1827; color: #f6f2ff; } .ds-btn-ghost:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, #f5b62a 55%, transparent); }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Twilight-panel surface with a soft violet border; elevated variant adds the medium shadow.",
+      "html": "<div class=\"ds-card\"><h3 class=\"ds-card-title\">Beach montage</h3><p class=\"ds-card-body\">12 scenes · ready to render</p></div>",
+      "css": ".ds-card { background: #14111c; border: 1px solid #2a2440; border-radius: 16px; padding: 16px; color: #f6f2ff; box-shadow: 0 10px 30px rgba(0,0,0,0.32); } .ds-card-title { margin: 0 0 6px; font: 800 24px/1.2 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; } .ds-card-body { margin: 0; color: #a59bc0; font: 400 15px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Raised-panel field; border warms toward gold on focus.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Describe your video\" />",
+      "css": ".ds-input { width: 100%; background: #1c1827; color: #f6f2ff; border: 1px solid #2a2440; border-radius: 8px; padding: 8px 10px; font: 400 14px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; transition: border-color 160ms ease, box-shadow 160ms ease; } .ds-input::placeholder { color: #a59bc0; } .ds-input:focus { outline: none; border-color: rgba(245,182,42,0.5); box-shadow: 0 0 0 3px color-mix(in srgb, #f5b62a 55%, transparent); }"
+    },
+    {
+      "name": "Active Nav Link",
+      "kind": "nav",
+      "refersTo": "nav-link-active",
+      "description": "Sidebar link in default and current states; active uses gold-soft fill, coral text, inset gold ring.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-link\">Library</a><a class=\"ds-nav-link ds-active\">Studio</a></nav>",
+      "css": ".ds-nav { display: grid; gap: 4px; width: 220px; } .ds-nav-link { display: flex; align-items: center; min-height: 38px; padding: 8px 10px; border-radius: 8px; color: #a59bc0; font: 750 14px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; text-decoration: none; cursor: pointer; transition: background 160ms ease, color 160ms ease; } .ds-nav-link:hover { background: #1c1827; color: #f6f2ff; } .ds-nav-link.ds-active { background: rgba(245,182,42,0.14); color: #ff7a4d; box-shadow: inset 0 0 0 1px rgba(245,182,42,0.32); }"
+    },
+    {
+      "name": "Status Chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Pill tag; status variants tint toward the matching state color.",
+      "html": "<span class=\"ds-chip\">Draft</span> <span class=\"ds-chip ds-chip-ready\">Ready</span>",
+      "css": ".ds-chip { display: inline-flex; align-items: center; padding: 2px 8px; border: 1px solid #2a2440; border-radius: 999px; background: #1c1827; color: #a59bc0; font: 800 12px/1.35 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; } .ds-chip-ready { border-color: color-mix(in srgb, #5fd39a 42%, #2a2440); background: color-mix(in srgb, #5fd39a 14%, transparent); color: #5fd39a; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Warm Workshop",
+    "overview": "Popcorn Ready is the workshop of a trusted assistant — the one who quietly smooths out the hard parts, gets the work done, and brings the project to life because it knows how to implement. The room is dark and calm, lit by a warm popcorn-gold glow. You don't operate machinery here; you describe what you want, watch it take shape, and ask for changes. The interface is observe-first: it shows the work and its provenance, then steps back. Warmth comes from the accent, the type, and the imagery — never from decoration, and never from a cream background. The system is warm, approachable, and editorial on a committed dark surface. Density is earned, not front-loaded; there is exactly one loud move per screen — the popcorn-gold CTA — and everything else stays restrained so content and generated media lead.",
+    "keyCharacteristics": [
+      "Dark by default — near-black violet surfaces, warm gold/coral accents.",
+      "One CTA per screen; restraint everywhere else.",
+      "Layered, lifted depth — tonal panels that visibly sit above the background.",
+      "System sans only — no display pairing; the tool disappears into the task.",
+      "Warm and tactile components: a subtle lift on hover, confident gold fills.",
+      "Three first-class themes: popcorn (dark), popcorn-night (warm dark), popcorn-warm (warm cream light)."
+    ],
+    "rules": [
+      { "name": "The One Gold Rule", "body": "Popcorn Gold marks exactly one primary action per screen. If two things are gold, one of them is wrong. Selection and CTA borrow it; nothing decorative does.", "section": "colors" },
+      { "name": "The Warmth-Not-Cream Rule", "body": "Warmth is carried by accent, type, and imagery on a dark surface — never by a warm-tinted near-white background. The popcorn-warm light theme is a deliberate, fully-resolved peer, not a default fallback.", "section": "colors" },
+      { "name": "The Tinted-Neutral Rule", "body": "Muted text and borders are tinted toward the surface's violet hue, never flat gray. Gray-on-violet reads as washed out.", "section": "colors" },
+      { "name": "The One-Family Rule", "body": "No display/body pairing. Hierarchy is weight, size, and case within the system sans. A second typeface in product chrome is forbidden.", "section": "typography" },
+      { "name": "The Fixed-Scale Rule", "body": "Headings use fixed px steps, not fluid clamp(). The marketing landing is the one allowed exception.", "section": "typography" },
+      { "name": "The Lift-On-Touch Rule", "body": "Interactive elements gain shadow and a 1px upward translateY on hover, and settle back on :active. The lift is feedback — it must always reverse on press.", "section": "elevation" },
+      { "name": "The Dark-Shadow Rule", "body": "Shadows are tuned for dark surfaces (high alpha, soft spread). A thin, low-alpha shadow that works on white reads as nothing here.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep one popcorn-gold CTA per screen; use gold only for primary action, selection, and key state.",
+      "Do carry warmth through accent, type, and imagery on the dark surface — and treat popcorn-warm (cream light) as a fully-resolved peer theme.",
+      "Do use one system-sans family in multiple weights; hierarchy is weight/size/case, never a second typeface.",
+      "Do convey depth with tonal layers (bg → twilight → raised) plus dark-tuned shadows, and lift interactive elements on hover (reversing on :active).",
+      "Do make generation legible: stages, status, provenance, shimmer skeletons that match the real layout, and a path to re-trigger any stage.",
+      "Do keep the creator view quiet; reach operator density (evals/runs) only through progressive disclosure.",
+      "Do show the accent-derived focus ring on every interactive element, and pair every state color with an icon or label."
+    ],
+    "donts": [
+      "Don't ship the generic AI-SaaS template: no gradient-text heroes, no background-clip: text, no identical icon-card grids, no tiny tracked uppercase eyebrow over every section, no decorative glassmorphism, no hero-metric template.",
+      "Don't build a toy/gimmicky generator: no opaque slot-machine Generate button with random, unexplained results and no provenance.",
+      "Don't recreate the overwhelming pro NLE — no wall of panels or dozens of controls exposed at once; depth is progressive.",
+      "Don't drift into a sterile enterprise dashboard: no gray-on-gray, no charts-for-charts'-sake; operator surfaces keep the brand's warmth.",
+      "Don't use flat gray for muted text or borders — tint toward the violet surface hue.",
+      "Don't put a second loud color next to the gold CTA, and never use a colored border-left/border-right stripe as an accent.",
+      "Don't use fluid clamp() heading scales in product chrome; fixed px steps only (the marketing landing is the lone exception)."
+    ]
+  }
+}
