@@ -1,33 +1,26 @@
 import type { NavigateFunction } from "react-router-dom";
+import type { StartRunResult } from "./startRun";
+import { createAndStartRun } from "./startRun";
+import {
+  buildQuickStartBriefDraft,
+  quickStartSignupState,
+} from "./quickStartRun";
+import {
+  GUEST_RUN_LIMIT,
+  getGuestRunLimitState,
+} from "./guestRunLimit";
 
-export const GUEST_RUN_ALLOWANCE = 1;
+export const GUEST_RUN_ALLOWANCE = GUEST_RUN_LIMIT;
 
 const PENDING_PROMPT_STORAGE_KEY = "pr.pendingLandingPrompt";
-const GUEST_RUN_GUARD_STORAGE_KEY = "pr.guestRuns";
-
 export interface PendingLandingPrompt {
   goal: string;
   targetLengthSec: number;
   createdAt: string;
 }
 
-interface GuestRunGuardRecord {
-  count: number;
-  firstRunAt: string;
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
-}
-
-function readJson<T>(key: string): T | null {
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return null;
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
 }
 
 function writeSessionJson(key: string, value: unknown): void {
@@ -78,38 +71,42 @@ export function readPendingLandingPrompt(): PendingLandingPrompt | null {
 }
 
 export function guestRunGuardRemaining(): number {
-  if (typeof window === "undefined") return GUEST_RUN_ALLOWANCE;
-  const record = readJson<GuestRunGuardRecord>(GUEST_RUN_GUARD_STORAGE_KEY);
-  if (!record || typeof record.count !== "number") return GUEST_RUN_ALLOWANCE;
-  return Math.max(0, GUEST_RUN_ALLOWANCE - record.count);
+  return getGuestRunLimitState().remaining;
 }
 
 export function canStartGuestRun(): boolean {
   return guestRunGuardRemaining() > 0;
 }
 
-export function rememberGuestRunStarted(): void {
-  if (typeof window === "undefined") return;
-  const existing = readJson<GuestRunGuardRecord>(GUEST_RUN_GUARD_STORAGE_KEY);
-  const next: GuestRunGuardRecord = {
-    count: Math.max(0, existing?.count ?? 0) + 1,
-    firstRunAt: existing?.firstRunAt ?? new Date().toISOString(),
+function landingPromptQuickStartInput(prompt: PendingLandingPrompt) {
+  return {
+    goal: prompt.goal,
+    lengthSec: prompt.targetLengthSec,
   };
+}
 
-  try {
-    window.localStorage.setItem(GUEST_RUN_GUARD_STORAGE_KEY, JSON.stringify(next));
-  } catch {
-    // The server-side quota is the real enforcement boundary. This client guard
-    // is friction for normal browser sessions and should never be relied on.
-  }
+export function pendingLandingPromptNavigationState(prompt: PendingLandingPrompt) {
+  persistPendingLandingPrompt(prompt);
+  return {
+    pendingLandingPrompt: prompt,
+    ...quickStartSignupState(landingPromptQuickStartInput(prompt)),
+  };
+}
+
+export async function startPendingLandingPromptRun(
+  prompt: PendingLandingPrompt,
+  options: { enforceGuestRunLimit?: boolean } = {},
+): Promise<StartRunResult> {
+  persistPendingLandingPrompt(prompt);
+  const draft = buildQuickStartBriefDraft(landingPromptQuickStartInput(prompt));
+  return createAndStartRun(draft, options);
 }
 
 export function continuePendingLandingPrompt(
   navigate: NavigateFunction,
   prompt: PendingLandingPrompt,
 ): void {
-  persistPendingLandingPrompt(prompt);
   navigate("/dashboard", {
-    state: { pendingLandingPrompt: prompt },
+    state: pendingLandingPromptNavigationState(prompt),
   });
 }

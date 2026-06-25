@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AgentRunPreview } from "../components/AgentRunPreview";
 import { HeatLogoMark } from "../components/HeatLogoMark";
@@ -15,11 +15,12 @@ import { faqsForPlacement } from "../content/faqs";
 import {
   buildPendingLandingPrompt,
   canStartGuestRun,
-  continuePendingLandingPrompt,
   guestRunGuardRemaining,
-  persistPendingLandingPrompt,
+  pendingLandingPromptNavigationState,
+  startPendingLandingPromptRun,
   type PendingLandingPrompt,
 } from "../lib/guestGeneration";
+import { runProgressPath } from "../lib/quickStartRun";
 import styles from "./HomePage.module.css";
 
 const GITHUB_URL = "https://github.com/kmgrassi/popcornready";
@@ -223,6 +224,7 @@ export function HomePage() {
     status,
     error: authError,
     configured,
+    isAnonymous,
     signInAnonymous,
   } = useAuth();
   const [prompt, setPrompt] = useState("");
@@ -232,15 +234,46 @@ export function HomePage() {
   );
   const [modalMode, setModalMode] = useState<"choice" | "limit">("choice");
   const [modalError, setModalError] = useState<string | null>(null);
+  const [startError, setStartError] = useState<string | null>(null);
   const [isSkippingAccount, setIsSkippingAccount] = useState(false);
+  const [isStartingRun, setIsStartingRun] = useState(false);
   const normalizedPrompt = prompt.trim();
   const promptTooShort =
     normalizedPrompt.length > 0 && normalizedPrompt.length < PROMPT_MIN_LENGTH;
   const canSubmit =
-    normalizedPrompt.length >= PROMPT_MIN_LENGTH && status !== "loading";
+    normalizedPrompt.length >= PROMPT_MIN_LENGTH &&
+    status !== "loading" &&
+    !isStartingRun;
   const remainingGuestRuns = useMemo(() => guestRunGuardRemaining(), []);
   const guestRunLabel =
     remainingGuestRuns === 1 ? "1 video" : `${remainingGuestRuns} videos`;
+
+  async function startLandingRun(nextPendingPrompt: PendingLandingPrompt) {
+    setModalError(null);
+    setStartError(null);
+    setIsStartingRun(true);
+    try {
+      if (status !== "authenticated") {
+        await signInAnonymous();
+      }
+      const result = await startPendingLandingPromptRun(nextPendingPrompt, {
+        enforceGuestRunLimit: status !== "authenticated" || isAnonymous,
+      });
+      navigate(runProgressPath(result));
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Unable to start generation.";
+      if (canStartGuestRun()) {
+        setStartError(message);
+      } else {
+        setModalError(message);
+        setPendingPrompt(nextPendingPrompt);
+        setModalMode("limit");
+      }
+    } finally {
+      setIsStartingRun(false);
+    }
+  }
 
   function openAccountChoice() {
     if (!canSubmit) return;
@@ -249,32 +282,38 @@ export function HomePage() {
       normalizedPrompt,
       targetLengthSec,
     );
-    setPendingPrompt(nextPendingPrompt);
     setModalError(null);
+    setStartError(null);
 
-    if (status === "authenticated") {
-      continuePendingLandingPrompt(navigate, nextPendingPrompt);
+    if (status === "authenticated" || canStartGuestRun()) {
+      void startLandingRun(nextPendingPrompt);
       return;
     }
 
-    setModalMode(canStartGuestRun() ? "choice" : "limit");
+    setPendingPrompt(nextPendingPrompt);
+    setModalMode("limit");
   }
 
   function createAccount() {
     if (!pendingPrompt) return;
-    persistPendingLandingPrompt(pendingPrompt);
     navigate("/signup", {
-      state: { pendingLandingPrompt: pendingPrompt },
+      state: pendingLandingPromptNavigationState(pendingPrompt),
     });
   }
 
   async function skipAccount() {
-    if (!pendingPrompt || isSkippingAccount || modalMode === "limit") return;
+    if (
+      !pendingPrompt ||
+      isSkippingAccount ||
+      isStartingRun ||
+      modalMode === "limit"
+    ) {
+      return;
+    }
     setModalError(null);
     setIsSkippingAccount(true);
     try {
-      await signInAnonymous();
-      continuePendingLandingPrompt(navigate, pendingPrompt);
+      await startLandingRun(pendingPrompt);
     } catch (err) {
       setModalError(
         err instanceof Error ? err.message : "Anonymous sign-in failed.",
@@ -338,11 +377,15 @@ export function HomePage() {
                 type="submit"
                 disabled={!canSubmit}
               >
-                Create my {targetLengthSec}-second video
+                {isStartingRun
+                  ? "Starting..."
+                  : `Create my ${targetLengthSec}-second video`}
               </button>
             </div>
             <p className={styles.promptHint}>
-              {promptTooShort
+              {startError
+                ? startError
+                : promptTooShort
                 ? `Add a little more detail before starting.`
                 : `Guests can start ${guestRunLabel} before creating an account.`}
             </p>
@@ -352,7 +395,6 @@ export function HomePage() {
         <Reveal>
           <LandingSection
             spacing="tight"
-            kicker="Full run overview"
             title="One directed run, visible end to end."
             subtitle="Watch the agent work: it turns the brief into beats, generates a keyframe per beat, and assembles the timeline — every step inspectable in one workspace."
           >
@@ -365,7 +407,6 @@ export function HomePage() {
             <div className={styles.orchestratorCopy}>
               <LandingSectionHeader
                 align="start"
-                kicker="AI orchestrator"
                 title="The agent coordinates every stage."
                 subtitle="Briefs, planning, asset generation, review, and rendering stay connected as one inspectable system instead of scattered one-off tools."
               />
@@ -601,6 +642,15 @@ function AccountChoiceModal({
   targetLengthSec,
 }: AccountChoiceModalProps) {
   const guestLimitReached = mode === "limit";
+
+  useEffect(() => {
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
 
   return (
     <div
