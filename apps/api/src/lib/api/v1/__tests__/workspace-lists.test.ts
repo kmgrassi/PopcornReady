@@ -273,8 +273,13 @@ test("getWorkspaceDashboardSummary counts and caps dashboard state", async () =>
     }),
     makeRun("p2", {
       runId: "r7",
-      status: "succeeded",
+      status: "failed",
       createdAt: "2026-01-07T00:00:00.000Z",
+    }),
+    makeRun("p2", {
+      runId: "r8",
+      status: "succeeded",
+      createdAt: "2026-01-08T00:00:00.000Z",
     }),
   ];
   const artifacts = Array.from({ length: 7 }, (_, idx) =>
@@ -297,16 +302,16 @@ test("getWorkspaceDashboardSummary counts and caps dashboard state", async () =>
   assert.equal(summary.schemaVersion, "dashboard.v1");
   assert.deepEqual(summary.counts, {
     projects: 2,
-    activeRuns: 6,
+    activeRuns: 7,
     outputs: 7,
   });
   assert.deepEqual(
     summary.activeRuns.map((run) => run.runId),
-    ["r6", "r5", "r4", "r3", "r2"]
+    ["r7", "r6", "r5", "r4", "r3"]
   );
-  assert.equal(summary.activeRuns[4].projectName, "Alpha");
-  assert.equal(summary.activeRuns[4].status, "queued");
-  assert.equal(summary.activeRuns[0].currentStageType, undefined);
+  assert.equal(summary.activeRuns[0].projectName, "Beta");
+  assert.equal(summary.activeRuns[0].status, "failed");
+  assert.equal(summary.activeRuns[1].currentStageType, undefined);
   assert.deepEqual(
     summary.recentOutputs.map((output) => output.artifactId),
     ["a7", "a6", "a5", "a4", "a3", "a2"]

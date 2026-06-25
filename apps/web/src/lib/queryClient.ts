@@ -32,7 +32,7 @@ import {
 import { projectQueryKeys } from "./project-queries";
 import { showErrorToast, showSuccessToast } from "./toast";
 import { dashboardApi } from "./v1/dashboard/client";
-import type { GenerationRunDetail } from "./v1/generation-runs/status";
+import { isRunActive, type GenerationRunDetail } from "./v1/generation-runs/status";
 import { storyboardProgress } from "./v1/storyboard/progress";
 import type { ProjectStoryboardResponse } from "./api-client";
 
@@ -441,7 +441,7 @@ export function useDashboardSummaryQuery(authScope: string) {
     enabled: Boolean(meQuery.data),
     refetchInterval: (query) => {
       const data = query.state.data as DashboardSummaryResponse | undefined;
-      if (!data?.summary.activeRuns.length) return false;
+      if (!data?.summary.activeRuns.some((run) => isRunActive(run.status))) return false;
       return document.visibilityState === "hidden"
         ? DASHBOARD_HIDDEN_POLL_INTERVAL_MS
         : DASHBOARD_POLL_INTERVAL_MS;

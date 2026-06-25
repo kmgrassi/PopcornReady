@@ -6022,7 +6022,7 @@ export interface GetWorkspaceDashboardSummaryDeps {
   artifactStore: Pick<AgentApiStore, "listArtifactsForProject">;
 }
 
-const ACTIVE_RUN_STATUSES: GenerationRunStatus[] = ["queued", "running"];
+const DASHBOARD_RUN_STATUSES: GenerationRunStatus[] = ["queued", "running", "failed"];
 const DASHBOARD_ACTIVE_RUN_LIMIT = 5;
 const DASHBOARD_RECENT_OUTPUT_LIMIT = 6;
 
@@ -6055,7 +6055,7 @@ export async function getWorkspaceDashboardSummary(
   ]);
 
   const activeRuns = runsPage.items.filter((run) =>
-    ACTIVE_RUN_STATUSES.includes(run.status)
+    DASHBOARD_RUN_STATUSES.includes(run.status)
   );
 
   return {
