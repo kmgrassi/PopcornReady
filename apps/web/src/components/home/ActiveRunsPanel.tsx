@@ -38,7 +38,15 @@ export function ActiveRunsPanel({
           const failed = run.status === "failed";
           return (
             <li key={run.runId}>
-              <Link className={styles.run} to={runPath(run)}>
+              <Link
+                className={`${styles.run} ${failed ? styles.runFailed : ""}`}
+                to={runPath(run)}
+                aria-label={
+                  failed
+                    ? `Open failure details for ${run.projectName}`
+                    : `Open progress for ${run.projectName}`
+                }
+              >
                 <div className={styles.top}>
                   <span className={styles.name}>{run.projectName}</span>
                   {needsReview ? (

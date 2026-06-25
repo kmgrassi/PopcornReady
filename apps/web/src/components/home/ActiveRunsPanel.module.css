@@ -73,6 +73,10 @@
   box-shadow: var(--ring);
 }
 
+.runFailed {
+  border-color: var(--danger-border);
+}
+
 .top {
   display: flex;
   gap: var(--space-3);
@@ -105,6 +109,7 @@
   background: var(--danger-soft);
   color: var(--danger-text);
   font-size: var(--text-sm);
+  line-height: 1.4;
 }
 
 .recovery span:first-child {
