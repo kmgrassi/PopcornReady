@@ -482,33 +482,40 @@ export function posterPromptFor(inspiration: RandomStoryInspiration): string {
 }
 
 function projectBriefForInspiration(inspiration: RandomStoryInspiration): VideoBrief {
+  // The inspiration model moved from flat narrative fields to grouped `elements`
+  // (plot/setting/arc/antagonist/theme/stakes/structure), each a list of catalog
+  // elements. Build the brief from those, the same way posterPromptFor does.
+  const names = (els: InspirationElement[]) => els.map((el) => el.name).join(", ");
+  const { elements } = inspiration;
   return {
     goal: [
       inspiration.logline,
+      inspiration.premise ? `\n${inspiration.premise}` : "",
       "",
-      `Hero: ${inspiration.typeOfPerson}`,
-      `Setting: ${inspiration.setting}`,
-      `External goal: ${inspiration.externalGoal}`,
-      `Antagonistic force: ${inspiration.antagonisticForce}`,
-      `Inner flaw or lie: ${inspiration.innerFlawOrLie}`,
-      `Old self: ${inspiration.oldSelf}`,
-      `New truth: ${inspiration.newTruth}`,
-      `Ending: ${inspiration.endingType}`,
-    ].join("\n"),
+      `Plot: ${names(elements.plot)}`,
+      `Setting: ${names(elements.setting)}`,
+      `Character arc: ${names(elements.arc)}`,
+      `Antagonistic force: ${names(elements.antagonist)}`,
+      `Theme: ${names(elements.theme)}`,
+      `Stakes: ${names(elements.stakes)}`,
+      `Structure: ${names(elements.structure)}`,
+    ]
+      .filter(Boolean)
+      .join("\n"),
     targetLengthSec: 30,
     aspectRatio: "9:16",
     platform: "general",
     style: "cinematic movie trailer",
-    hookQuestion: inspiration.externalGoal,
-    strongestVisual: `${inspiration.typeOfPerson} in ${inspiration.setting}`,
-    oneBigIdea: inspiration.newTruth,
-    payoff: inspiration.endingType,
+    hookQuestion: names(elements.plot) || inspiration.logline,
+    strongestVisual: names(elements.setting),
+    oneBigIdea: names(elements.theme),
+    payoff: names(elements.structure),
     constraints: {
       requiredBeats: [
-        inspiration.externalGoal,
-        inspiration.antagonisticForce,
-        inspiration.newTruth,
-      ],
+        names(elements.plot),
+        names(elements.antagonist),
+        names(elements.theme),
+      ].filter(Boolean),
     },
   };
 }
