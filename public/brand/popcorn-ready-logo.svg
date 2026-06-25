@@ -2,23 +2,36 @@
   <title id="title">Popcorn Ready logo</title>
   <g fill="none" stroke-linecap="round" stroke-linejoin="round">
     <g fill="#15181d" opacity=".16" stroke="none">
-      <path d="M27 53 L38 102 L82 102 L93 53 L60 48 Z" />
-      <path fill="#ffc23d" d="M31 54 C22 50 22 39 31 35 C28 24 43 21 48 29 C52 18 67 18 71 28 C78 21 90 27 86 37 C93 42 90 53 83 54 Z" />
+      <circle fill="#ffc23d" cx="60" cy="54" r="7.35" />
+      <circle fill="#ffc23d" cx="52.65" cy="62.4" r="7.35" />
+      <circle fill="#ffc23d" cx="67.35" cy="62.4" r="7.35" />
+      <circle fill="#ffc23d" cx="60" cy="67.35" r="6.3" />
     </g>
     <path
-      d="M31 35 C28 24 43 21 48 29 C52 18 67 18 71 28 C78 21 90 27 86 37"
+      d="M52.5 57.5 C55 50.5 65 50.5 67.5 57.5"
       stroke="#ffffff"
       stroke-width="5"
       opacity=".4"
     />
+    <g stroke="#15181d" stroke-width="12" opacity=".24" transform="translate(3 4)">
+      <path d="M34 50 L34 34 L50 34" />
+      <path d="M86 50 L86 34 L70 34" />
+      <path d="M34 70 L34 86 L50 86" />
+      <path d="M86 70 L86 86 L70 86" />
+      <circle fill="#ffc23d" stroke="none" cx="60" cy="54" r="7.35" />
+      <circle fill="#ffc23d" stroke="none" cx="52.65" cy="62.4" r="7.35" />
+      <circle fill="#ffc23d" stroke="none" cx="67.35" cy="62.4" r="7.35" />
+      <circle fill="#ffc23d" stroke="none" cx="60" cy="67.35" r="6.3" />
+    </g>
     <g stroke="#15181d" stroke-width="8">
-      <path d="M27 53 L38 102 L82 102 L93 53" />
-      <path d="M27 53 L60 48 L93 53" />
-      <path d="M60 48 L60 102" />
-      <path
-        d="M31 54 C22 50 22 39 31 35 C28 24 43 21 48 29 C52 18 67 18 71 28 C78 21 90 27 86 37 C93 42 90 53 83 54"
-        stroke="#ffc23d"
-      />
+      <path d="M34 50 L34 34 L50 34" />
+      <path d="M86 50 L86 34 L70 34" />
+      <path d="M34 70 L34 86 L50 86" />
+      <path d="M86 70 L86 86 L70 86" />
+      <circle fill="#ffc23d" stroke="none" cx="60" cy="54" r="7.35" />
+      <circle fill="#ffc23d" stroke="none" cx="52.65" cy="62.4" r="7.35" />
+      <circle fill="#ffc23d" stroke="none" cx="67.35" cy="62.4" r="7.35" />
+      <circle fill="#ffc23d" stroke="none" cx="60" cy="67.35" r="6.3" />
     </g>
   </g>
 </svg>
