@@ -1,3 +1,4 @@
+import type { DashboardSummary } from "@popcorn/shared/v1/dashboard";
 import { ActiveRunsPanel } from "../components/home/ActiveRunsPanel";
 import { EmptyDashboard } from "../components/home/EmptyDashboard";
 import { HeroCard } from "../components/home/HeroCard";
@@ -11,8 +12,6 @@ import { deriveNextAction } from "../lib/nextAction";
 import { useDashboardSummaryQuery } from "../lib/queryClient";
 import styles from "./LaunchpadPage.module.css";
 
-const EMPTY_COUNTS = { projects: 0, activeRuns: 0, outputs: 0 } as const;
-
 const DEV_AUTOPILOT = import.meta.env.DEV;
 
 export function LaunchpadPage() {
@@ -21,7 +20,8 @@ export function LaunchpadPage() {
   const { data, error, loading, refresh } = useDashboardSummaryQuery(authScope);
 
   const pulse = data?.summary ?? null;
-  const action = deriveNextAction(pulse, []);
+  const summaryState = getSummaryState(pulse);
+  const action = deriveNextAction(summaryState.summary);
 
   return (
     <div className={styles.page}>
@@ -43,15 +43,50 @@ export function LaunchpadPage() {
           <EmptyDashboard action={action} />
         ) : (
           <>
+            {summaryState.isPartial ? (
+              <PartialSummaryNotice missing={summaryState.missing} />
+            ) : null}
             <HeroCard action={action} />
-            <OverviewStats counts={pulse?.counts ?? EMPTY_COUNTS} />
-            <ActiveRunsPanel runs={pulse?.activeRuns ?? []} />
-            <RecentOutputsStrip outputs={pulse?.recentOutputs ?? []} />
+            {summaryState.summary.counts ? (
+              <OverviewStats counts={summaryState.summary.counts} />
+            ) : null}
+            <ActiveRunsPanel runs={summaryState.summary.activeRuns ?? []} />
+            <RecentOutputsStrip outputs={summaryState.summary.recentOutputs ?? []} />
           </>
         )
       ) : null}
     </div>
   );
+}
+
+function getSummaryState(summary: DashboardSummary | null) {
+  const normalized: Partial<DashboardSummary> = summary ?? {};
+  const missing = [
+    normalized.counts ? null : "counts",
+    Array.isArray(normalized.activeRuns) ? null : "active runs",
+    Array.isArray(normalized.recentOutputs) ? null : "recent outputs",
+  ].filter((value): value is string => Boolean(value));
+
+  return {
+    summary: normalized,
+    missing,
+    isPartial: missing.length > 0,
+  };
+}
+
+function PartialSummaryNotice({ missing }: { missing: readonly string[] }) {
+  return (
+    <p className={styles.partialNotice} role="status">
+      Home loaded with a partial summary. Missing {formatMissing(missing)} will
+      appear after the workspace refreshes.
+    </p>
+  );
+}
+
+function formatMissing(missing: readonly string[]) {
+  if (missing.length === 0) return "workspace details";
+  if (missing.length === 1) return missing[0];
+  return `${missing.slice(0, -1).join(", ")} and ${missing[missing.length - 1]}`;
 }
 
 function LaunchpadSkeleton() {

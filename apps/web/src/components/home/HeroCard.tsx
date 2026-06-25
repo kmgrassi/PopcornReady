@@ -32,8 +32,6 @@ function eyebrowFor(action: NextAction) {
       return "Running now";
     case "review_cut":
       return "Ready to review";
-    case "resume_draft":
-      return "Draft in progress";
     case "start":
       return "First step";
     case "new":
