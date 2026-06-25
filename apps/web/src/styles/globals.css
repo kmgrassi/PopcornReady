@@ -3448,8 +3448,9 @@ button.eval-card-link[aria-pressed="true"] {
   top: -11px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--accent);
-  color: var(--button-text);
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-border);
   font-size: 12px;
   font-weight: 800;
   text-transform: uppercase;
@@ -3531,11 +3532,16 @@ button.eval-card-link[aria-pressed="true"] {
   border-color: var(--accent-2);
 }
 
+.lp-price-cta:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
 .lp-price-cta.featured,
 .lp-price-card.featured .lp-price-cta {
-  background: var(--accent);
-  color: var(--button-text) !important;
-  border-color: var(--accent);
+  background: var(--panel-2);
+  color: var(--text) !important;
+  border-color: var(--accent-border);
   font-weight: 700;
 }
 
@@ -3575,7 +3581,7 @@ button.eval-card-link[aria-pressed="true"] {
   margin: 0 auto 22px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 14px;
-  color: var(--accent-2);
+  color: var(--text);
   overflow-x: auto;
   max-width: 100%;
 }
