@@ -344,6 +344,7 @@
   --lp-violet: rgba(124, 92, 255, 0.16);
   /* "Human" accent — distinguishes the user's input from the agent's amber. */
   --lp-human: #7aa2ff;
+  --lp-accent-text: var(--accent);
   /* Hero headline gradient stops + hero dot-grid texture; flipped for light. */
   --lp-heading-1: #ffffff;
   --lp-heading-2: #cfc6e6;
@@ -364,6 +365,7 @@
   --lp-glow: 0 24px 70px rgba(0, 0, 0, 0.12);
   --lp-glow-accent: 0 18px 50px rgba(245, 120, 60, 0.14);
   --lp-overlay: rgba(255, 255, 255, 0.72);
+  --lp-accent-text: color-mix(in srgb, var(--text) 82%, var(--accent-2));
   --lp-heading-1: var(--text);
   --lp-heading-2: color-mix(in srgb, var(--text) 62%, var(--accent-2));
   --lp-dot: rgba(0, 0, 0, 0.05);
@@ -528,7 +530,7 @@
 }
 
 :global(.web-shell:has(.landing) .lp-accent) {
-  color: var(--accent);
+  color: var(--lp-accent-text);
 }
 
 :global(.web-shell:has(.landing) .lp-section-title) {
@@ -577,7 +579,7 @@
 
 :global(.web-shell:has(.landing) .lp-badge) {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--lp-accent-text);
   border: 1px solid var(--accent-border);
   box-shadow: none;
 }
