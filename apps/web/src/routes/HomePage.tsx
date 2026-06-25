@@ -247,23 +247,25 @@ export function HomePage() {
   const remainingGuestRuns = useMemo(() => guestRunGuardRemaining(), []);
   const guestRunLabel =
     remainingGuestRuns === 1 ? "1 video" : `${remainingGuestRuns} videos`;
+  const authDisabled = status === "disabled";
 
   async function startLandingRun(nextPendingPrompt: PendingLandingPrompt) {
     setModalError(null);
     setStartError(null);
     setIsStartingRun(true);
     try {
-      if (status !== "authenticated") {
+      const needsAnonymousSession = status !== "authenticated" && !authDisabled;
+      if (needsAnonymousSession) {
         await signInAnonymous();
       }
       const result = await startPendingLandingPromptRun(nextPendingPrompt, {
-        enforceGuestRunLimit: status !== "authenticated" || isAnonymous,
+        enforceGuestRunLimit: needsAnonymousSession || isAnonymous,
       });
       navigate(runProgressPath(result));
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Unable to start generation.";
-      if (canStartGuestRun()) {
+      if (authDisabled || canStartGuestRun()) {
         setStartError(message);
       } else {
         setModalError(message);
@@ -285,7 +287,7 @@ export function HomePage() {
     setModalError(null);
     setStartError(null);
 
-    if (status === "authenticated" || canStartGuestRun()) {
+    if (status === "authenticated" || authDisabled || canStartGuestRun()) {
       void startLandingRun(nextPendingPrompt);
       return;
     }
