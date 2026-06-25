@@ -7,27 +7,22 @@ import styles from "./WorkflowStages.module.css";
 // only the affected assets recompute (see docs/NORTH_STAR.md).
 const STAGES = [
   {
-    n: "01",
     name: "Plan",
     body: "The agent turns your idea into a structured plan — scenes, beats, shots, timing, and continuity rules — before anything is generated.",
   },
   {
-    n: "02",
     name: "Generate",
     body: "It generates the shot for each beat: Veo or Sora video, keyframes, voiceover, captions. Regenerate a single shot without starting over.",
   },
   {
-    n: "03",
     name: "Edit",
     body: "Edits happen on the structured timeline, by the agent — tighten pacing, swap a weak shot, fix continuity. You direct; it revises.",
   },
   {
-    n: "04",
     name: "Review",
     body: "An AI critic checks visual consistency, narrative clarity, pacing, and missing scenes, then proposes targeted fixes.",
   },
   {
-    n: "05",
     name: "Publish",
     body: "Deterministic export to vertical, square, or widescreen via Remotion. The agent only edits structured data; rendering never touches raw video.",
   },
@@ -42,8 +37,7 @@ export function WorkflowStages() {
     >
       <ol className={styles.stages}>
         {STAGES.map((stage) => (
-          <li className={styles.stage} key={stage.n}>
-            <span className={styles.index}>{stage.n}</span>
+          <li className={styles.stage} key={stage.name}>
             <h3 className={styles.name}>{stage.name}</h3>
             <p className={styles.body}>{stage.body}</p>
           </li>
