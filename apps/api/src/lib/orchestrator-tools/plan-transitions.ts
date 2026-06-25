@@ -1,8 +1,10 @@
 import {
+  getActiveProjectPlan as realGetActiveProjectPlan,
   getProjectStoryboard as realGetProjectStoryboard,
   insertProjectTransition as realInsertProjectTransition,
   listActiveProjectAssetSelections as realListActiveProjectAssetSelections,
 } from "@/lib/api/v1/store";
+import type { ShotPlan } from "@popcorn/shared/types";
 import type { TransitionContent } from "@popcorn/shared/transitions";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
@@ -24,6 +26,7 @@ interface Boundary {
 }
 
 export interface PlanTransitionsDeps {
+  getActiveProjectPlan: typeof realGetActiveProjectPlan;
   getProjectStoryboard: typeof realGetProjectStoryboard;
   listActiveProjectAssetSelections: typeof realListActiveProjectAssetSelections;
   insertProjectTransition: typeof realInsertProjectTransition;
@@ -49,6 +52,7 @@ function defaultDecideTransition(boundary: Boundary): TransitionContent | null {
 }
 
 const defaultDeps: PlanTransitionsDeps = {
+  getActiveProjectPlan: realGetActiveProjectPlan,
   getProjectStoryboard: realGetProjectStoryboard,
   listActiveProjectAssetSelections: realListActiveProjectAssetSelections,
   insertProjectTransition: realInsertProjectTransition,
@@ -115,6 +119,15 @@ export function parsePlanTransitionsInput(input: unknown): PlanTransitionsInput 
 
 const BEAT_CLIP_PREFIX = "beat_clip:";
 
+function orderedPlanBeats(plan: ShotPlan): Array<{ beatId: string; sceneId: string }> {
+  return plan.scenes.flatMap((scene, sceneIndex) =>
+    scene.beats.flatMap((beat) => {
+      if (!beat.id) return [];
+      return [{ beatId: beat.id, sceneId: scene.id || `scene_${sceneIndex + 1}` }];
+    })
+  );
+}
+
 function clipsRequired(): ToolCallResult<PlanTransitionsOutput> {
   return {
     status: "failed",
@@ -180,10 +193,12 @@ export function createPlanTransitionsTool(
         return { status: "succeeded", resourceIds: [], output: { transitionAssetIds: [], boundaryCount: 0 } };
       }
 
-      // Ordered beats with their scene, straight off the spine.
-      const orderedBeats = storyboard.scenes.flatMap((scene) =>
-        scene.beats.map((beat) => ({ beatId: beat.id, sceneId: scene.id }))
-      );
+      const activePlan = await resolved.getActiveProjectPlan(projectId);
+      if (!activePlan) return clipsRequired();
+
+      // Clip selections are keyed by shot-plan beat ids. Storyboard rows may have
+      // independent ids, so the plan remains the boundary id source.
+      const orderedBeats = orderedPlanBeats(activePlan.plan);
       if (orderedBeats.length < 2) {
         return { status: "succeeded", resourceIds: [], output: { transitionAssetIds: [], boundaryCount: 0 } };
       }
@@ -217,13 +232,14 @@ export function createPlanTransitionsTool(
         const content = resolved.decideTransition(boundary, input.feedback);
         if (!content) continue; // hard cut → empty slot, nothing to persist
         const fromClipAssetId = clipByBeatId.get(boundary.fromBeatId);
-        if (!fromClipAssetId) continue; // no clip to anchor the transition yet
+        const toClipAssetId = clipByBeatId.get(boundary.toBeatId);
+        if (!fromClipAssetId || !toClipAssetId) return clipsRequired();
         const { transitionAssetId } = await resolved.insertProjectTransition({
           workspaceId,
           projectId,
           fromBeatId: boundary.fromBeatId,
           fromClipAssetId,
-          toClipAssetId: clipByBeatId.get(boundary.toBeatId) ?? null,
+          toClipAssetId,
           content,
         });
         transitionAssetIds.push(transitionAssetId);
