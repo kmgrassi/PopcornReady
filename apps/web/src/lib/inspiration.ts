@@ -25,27 +25,29 @@ export interface InspirationElement {
   coreIdea: string | null;
 }
 
+export type InspirationIngredientGroup =
+  | "plot"
+  | "setting"
+  | "arc"
+  | "antagonist"
+  | "theme"
+  | "stakes"
+  | "structure";
+
+export interface InspirationIngredientSummary {
+  emoji: string;
+  summary: string;
+}
+
 export interface RandomStoryInspiration {
-  formula: string;
-  movieTitle?: string;
+  movieTitle: string;
   logline: string;
-  typeOfPerson: string;
-  setting: string;
-  externalGoal: string;
-  antagonisticForce: string;
-  innerFlawOrLie: string;
-  oldSelf: string;
-  newTruth: string;
-  endingType: string;
-  elements: {
-    plot: InspirationElement[];
-    setting: InspirationElement[];
-    arc: InspirationElement[];
-    antagonist: InspirationElement[];
-    theme: InspirationElement[];
-    stakes: InspirationElement[];
-    structure: InspirationElement[];
-  };
+  premise: string;
+  // Opaque server signature; echoed back to /poster so it only generates
+  // posters for concepts the server authored. Not rendered.
+  signature: string;
+  ingredients: Record<InspirationIngredientGroup, InspirationIngredientSummary>;
+  elements: Record<InspirationIngredientGroup, InspirationElement[]>;
   poster?: StoryConceptPoster;
 }
 
@@ -91,18 +93,29 @@ export function useStoryConceptPosterMutation() {
   });
 }
 
+const INGREDIENT_PROMPT_LABELS: Record<InspirationIngredientGroup, string> = {
+  plot: "Plot",
+  setting: "Setting",
+  arc: "Character arc",
+  antagonist: "Antagonist",
+  theme: "Theme",
+  stakes: "Stakes",
+  structure: "Structure",
+};
+
 export function inspirationPrompt(inspiration: RandomStoryInspiration): string {
+  const ingredientLines = (
+    Object.keys(INGREDIENT_PROMPT_LABELS) as InspirationIngredientGroup[]
+  ).map((group) => {
+    const names = inspiration.elements[group].map((element) => element.name).join(", ");
+    return `${INGREDIENT_PROMPT_LABELS[group]}: ${names}`;
+  });
   return [
     inspiration.logline,
     "",
-    `Hero: ${inspiration.typeOfPerson}`,
-    `Setting: ${inspiration.setting}`,
-    `External goal: ${inspiration.externalGoal}`,
-    `Antagonistic force: ${inspiration.antagonisticForce}`,
-    `Inner flaw or lie: ${inspiration.innerFlawOrLie}`,
-    `Old self: ${inspiration.oldSelf}`,
-    `New truth: ${inspiration.newTruth}`,
-    `Ending: ${inspiration.endingType}`,
+    inspiration.premise,
+    "",
+    ...ingredientLines,
   ].join("\n");
 }
 

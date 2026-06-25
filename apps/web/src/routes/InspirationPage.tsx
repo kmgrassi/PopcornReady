@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiRequest } from "../lib/api-client";
 import { Button } from "../components/ui/Button";
 import { Spinner } from "../components/ui/Spinner";
 import { ErrorState } from "../components/ui/StateCard";
 import {
   type InspirationElement,
+  type InspirationIngredientGroup,
   type RandomStoryInspiration,
   type StoryConceptPoster,
   useRandomStoryInspiration,
@@ -15,33 +15,20 @@ import {
 import { runProgressPath } from "../lib/quickStartRun";
 import styles from "./InspirationPage.module.css";
 
-type IngredientKey = keyof RandomStoryInspiration["elements"];
-
 interface IngredientConfig {
-  key: IngredientKey;
+  key: InspirationIngredientGroup;
   label: string;
-  summary: (inspiration: RandomStoryInspiration) => string;
 }
 
 const INGREDIENTS: IngredientConfig[] = [
-  { key: "setting", label: "Setting", summary: (story) => story.setting },
-  { key: "antagonist", label: "Antagonist", summary: (story) => story.antagonisticForce },
-  { key: "stakes", label: "Stakes", summary: (story) => story.endingType },
-  { key: "plot", label: "Plot", summary: (story) => story.externalGoal },
-  { key: "arc", label: "Inner Change", summary: (story) => story.innerFlawOrLie },
-  { key: "theme", label: "Theme", summary: (story) => story.newTruth },
-  { key: "structure", label: "Structure", summary: (story) => story.oldSelf },
+  { key: "setting", label: "Setting" },
+  { key: "antagonist", label: "Antagonist" },
+  { key: "stakes", label: "Stakes" },
+  { key: "plot", label: "Plot" },
+  { key: "arc", label: "Inner Change" },
+  { key: "theme", label: "Theme" },
+  { key: "structure", label: "Structure" },
 ];
-
-const ELEMENT_FIELD_PATCHES: Record<IngredientKey, (keyof RandomStoryInspiration)[]> = {
-  plot: ["externalGoal"],
-  setting: ["setting"],
-  arc: ["innerFlawOrLie", "oldSelf", "newTruth"],
-  antagonist: ["antagonisticForce"],
-  theme: ["newTruth"],
-  stakes: ["endingType"],
-  structure: ["oldSelf"],
-};
 
 const DISABLE_LOCAL_POSTER_GENERATION = import.meta.env.DEV;
 
@@ -50,7 +37,6 @@ export function InspirationPage() {
   const [nonce, setNonce] = useState(0);
   const [story, setStory] = useState<RandomStoryInspiration | null>(null);
   const [visualTheme, setVisualTheme] = useState<"classic" | "cinema">("classic");
-  const [regeneratingKey, setRegeneratingKey] = useState<IngredientKey | null>(null);
   const query = useRandomStoryInspiration(nonce);
   const posterMutation = useStoryConceptPosterMutation();
   const startRunMutation = useStartInspirationStoryboardRunMutation();
@@ -75,21 +61,6 @@ export function InspirationPage() {
 
   const poster = story?.poster ?? posterMutation.data?.poster ?? null;
 
-  async function regenerateIngredient(key: IngredientKey) {
-    setRegeneratingKey(key);
-    try {
-      const response = await apiRequest<{ inspiration: RandomStoryInspiration }>(
-        "/api/v1/inspiration/random",
-        { headers: { "Cache-Control": "no-store" } }
-      );
-      setStory((current) =>
-        current ? mergeIngredient(current, stripPoster(response.inspiration), key) : response.inspiration
-      );
-    } finally {
-      setRegeneratingKey(null);
-    }
-  }
-
   async function startFromPrompt(inspiration: RandomStoryInspiration) {
     if (startRunMutation.isPending) return;
     try {
@@ -109,7 +80,9 @@ export function InspirationPage() {
         <div>
           <p className={styles.eyebrow}>Inspiration</p>
           <h1>Story generator</h1>
-          <p className={styles.helper}>These are randomly generated story plots that you can use.</p>
+          <p className={styles.helper}>
+            AI-ranked story plots built from a random mix of story ingredients.
+          </p>
         </div>
         <div className={styles.headerActions}>
           <div className={styles.themeToggle} aria-label="Inspiration page theme">
@@ -159,8 +132,6 @@ export function InspirationPage() {
           posterError={posterMutation.error}
           posterGenerating={posterMutation.isPending}
           posterDisabled={DISABLE_LOCAL_POSTER_GENERATION}
-          regeneratingKey={regeneratingKey}
-          onRegenerateIngredient={(key) => void regenerateIngredient(key)}
           startingRun={startRunMutation.isPending}
           startRunError={
             startRunMutation.error instanceof Error
@@ -170,7 +141,6 @@ export function InspirationPage() {
                 : null
           }
           onStartFromPrompt={(inspiration) => void startFromPrompt(inspiration)}
-          visualTheme={visualTheme}
         />
       ) : null}
     </div>
@@ -183,25 +153,22 @@ function InspirationResult({
   posterError,
   posterGenerating,
   posterDisabled,
-  regeneratingKey,
-  onRegenerateIngredient,
   startingRun,
   startRunError,
   onStartFromPrompt,
-  visualTheme,
 }: {
   inspiration: RandomStoryInspiration;
   poster: StoryConceptPoster | null;
   posterError: Error | null;
   posterGenerating: boolean;
   posterDisabled: boolean;
-  regeneratingKey: IngredientKey | null;
-  onRegenerateIngredient: (key: IngredientKey) => void;
   startingRun: boolean;
   startRunError: string | null;
   onStartFromPrompt: (inspiration: RandomStoryInspiration) => void;
-  visualTheme: "classic" | "cinema";
 }) {
+  const emojiSet = INGREDIENTS.map((ingredient) => inspiration.ingredients[ingredient.key]?.emoji)
+    .filter(Boolean);
+
   return (
     <>
       <section className={styles.hero} aria-label="Generated story">
@@ -216,7 +183,17 @@ function InspirationResult({
           {inspiration.movieTitle ? (
             <h2 className={styles.movieTitle}>{inspiration.movieTitle}</h2>
           ) : null}
-          <HighlightedLogline inspiration={inspiration} visualTheme={visualTheme} />
+          {emojiSet.length ? (
+            <div className={styles.emojiRow} aria-hidden="true">
+              {emojiSet.map((emoji, index) => (
+                <span key={`${emoji}-${index}`}>{emoji}</span>
+              ))}
+            </div>
+          ) : null}
+          <Logline logline={inspiration.logline} />
+          {inspiration.premise ? (
+            <p className={styles.premise}>{inspiration.premise}</p>
+          ) : null}
           <div className={styles.promptActions}>
             <Button
               variant="cta"
@@ -243,10 +220,9 @@ function InspirationResult({
             <IngredientGroup
               key={ingredient.key}
               label={ingredient.label}
-              summary={ingredient.summary(inspiration)}
+              emoji={inspiration.ingredients[ingredient.key]?.emoji ?? ""}
+              summary={inspiration.ingredients[ingredient.key]?.summary ?? ""}
               elements={inspiration.elements[ingredient.key]}
-              regenerating={regeneratingKey === ingredient.key}
-              onRegenerate={() => onRegenerateIngredient(ingredient.key)}
             />
           ))}
         </div>
@@ -295,41 +271,13 @@ function PosterPanel({
   );
 }
 
-function HighlightedLogline({
-  inspiration,
-  visualTheme,
-}: {
-  inspiration: RandomStoryInspiration;
-  visualTheme: "classic" | "cinema";
-}) {
-  const parts = useMemo(
-    () =>
-      visualTheme === "cinema"
-        ? [
-            { value: inspiration.typeOfPerson, className: styles.person },
-            { value: inspiration.externalGoal, className: styles.goal },
-            { value: inspiration.antagonisticForce, className: styles.antagonist },
-            { value: inspiration.endingType, className: styles.ending },
-          ]
-        : [
-            { value: inspiration.typeOfPerson, className: styles.person },
-            { value: inspiration.setting, className: styles.setting },
-            { value: inspiration.externalGoal, className: styles.goal },
-            { value: inspiration.antagonisticForce, className: styles.antagonist },
-            { value: inspiration.innerFlawOrLie, className: styles.flaw },
-            { value: inspiration.oldSelf, className: styles.oldSelf },
-            { value: inspiration.newTruth, className: styles.truth },
-            { value: inspiration.endingType, className: styles.ending },
-          ],
-    [inspiration, visualTheme]
-  );
-  const sentences = useMemo(() => splitSentences(inspiration.logline), [inspiration.logline]);
-
+function Logline({ logline }: { logline: string }) {
+  const sentences = useMemo(() => splitSentences(logline), [logline]);
   return (
     <div className={styles.logline}>
       {sentences.map((sentence, index) => (
         <p className={styles.loglineSentence} key={`${sentence}-${index}`}>
-          {highlightText(sentence, parts)}
+          {sentence}
         </p>
       ))}
     </div>
@@ -344,65 +292,26 @@ function splitSentences(text: string): string[] {
   ];
 }
 
-function highlightText(
-  text: string,
-  highlights: { value: string; className: string }[]
-): ReactNode[] {
-  const nodes: ReactNode[] = [];
-  let remaining = text;
-  let key = 0;
-
-  while (remaining.length) {
-    const match = highlights
-      .map((highlight) => ({
-        ...highlight,
-        index: remaining.toLowerCase().indexOf(highlight.value.toLowerCase()),
-      }))
-      .filter((highlight) => highlight.value && highlight.index >= 0)
-      .sort((a, b) => a.index - b.index || b.value.length - a.value.length)[0];
-
-    if (!match) {
-      nodes.push(remaining);
-      break;
-    }
-
-    if (match.index > 0) nodes.push(remaining.slice(0, match.index));
-    const value = remaining.slice(match.index, match.index + match.value.length);
-    nodes.push(
-      <mark key={`${match.value}-${key}`} className={`${styles.highlight} ${match.className}`}>
-        {value}
-      </mark>
-    );
-    key += 1;
-    remaining = remaining.slice(match.index + match.value.length);
-  }
-
-  return nodes;
-}
-
 function IngredientGroup({
   label,
+  emoji,
   summary,
   elements,
-  regenerating,
-  onRegenerate,
 }: {
   label: string;
+  emoji: string;
   summary: string;
   elements: InspirationElement[];
-  regenerating: boolean;
-  onRegenerate: () => void;
 }) {
   return (
     <article className={styles.ingredient}>
       <div className={styles.ingredientHeader}>
         <div>
-          <h2>{label}</h2>
-          <p>{summary}</p>
+          <h2>
+            {emoji ? <span className={styles.ingredientEmoji}>{emoji}</span> : null} {label}
+          </h2>
+          {summary ? <p>{summary}</p> : null}
         </div>
-        <Button variant="secondary" onClick={onRegenerate} disabled={regenerating}>
-          {regenerating ? "Regenerating" : "Regenerate"}
-        </Button>
       </div>
       <div className={styles.chips}>
         {elements.map((element) => (
@@ -418,43 +327,6 @@ function IngredientGroup({
   );
 }
 
-function mergeIngredient(
-  current: RandomStoryInspiration,
-  next: RandomStoryInspiration,
-  key: IngredientKey
-): RandomStoryInspiration {
-  const merged = {
-    ...current,
-    movieTitle: undefined,
-    poster: undefined,
-    elements: {
-      ...current.elements,
-      [key]: next.elements[key],
-    },
-  };
-
-  for (const field of ELEMENT_FIELD_PATCHES[key]) {
-    const value = next[field];
-    if (typeof value === "string") {
-      (merged as Record<string, unknown>)[field] = value;
-    }
-  }
-
-  return {
-    ...merged,
-    logline: buildLogline(merged),
-  };
-}
-
-function buildLogline(story: RandomStoryInspiration): string {
-  return (
-    `A ${story.typeOfPerson} in ${story.setting} wants to ${story.externalGoal}, ` +
-    `but ${story.antagonisticForce} blocks them. To succeed, they must overcome ` +
-    `${story.innerFlawOrLie} and choose between ${story.oldSelf} and "${story.newTruth}", ` +
-    `leading to ${story.endingType}.`
-  );
-}
-
 function stripPoster(inspiration: RandomStoryInspiration): RandomStoryInspiration {
   return { ...inspiration, poster: undefined };
 }
@@ -466,17 +338,7 @@ function conceptSignature(inspiration: RandomStoryInspiration): string {
     )
     .sort()
     .join("|");
-  return [
-    elementSignature,
-    inspiration.typeOfPerson,
-    inspiration.setting,
-    inspiration.externalGoal,
-    inspiration.antagonisticForce,
-    inspiration.innerFlawOrLie,
-    inspiration.oldSelf,
-    inspiration.newTruth,
-    inspiration.endingType,
-  ].join("|");
+  return [elementSignature, inspiration.logline].join("|");
 }
 
 function InspirationSkeleton() {
