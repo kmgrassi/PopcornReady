@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { ApiError } from "@/core/errors";
 
 import type {
   OrchestratorRun,
@@ -8,7 +9,7 @@ import type {
 } from "@/lib/api/v1/orchestrator-store";
 import type { resumeOrchestratorRun } from "@/lib/orchestrator/engine";
 import { projectRunDetailFromParts } from "../orchestrator-run-projections.js";
-import { resumeRunInBackground } from "../orchestrator-runs";
+import { parseBoardRevisionTarget, resumeRunInBackground } from "../orchestrator-runs";
 
 type Resume = typeof resumeOrchestratorRun;
 
@@ -143,6 +144,51 @@ test("keeps board feedback actions out of generation progress projections", () =
   assert.deepEqual(
     payload.stageItems.map((item) => item.assetId),
     ["storyboard_asset"]
+  );
+});
+
+test("parseBoardRevisionTarget validates currentBrief with the shared brief schema", () => {
+  const target = parseBoardRevisionTarget(
+    {
+      target: {
+        scope: "brief",
+        currentBrief: {
+          goal: "Tighten the product launch hook.",
+          targetLengthSec: 30,
+          aspectRatio: "9:16",
+          platform: "tiktok",
+        },
+      },
+    },
+    "run_1"
+  );
+
+  assert.equal(target.currentBrief?.goal, "Tighten the product launch hook.");
+  assert.equal(target.currentBrief?.targetLengthSec, 30);
+  assert.equal(target.currentBrief?.aspectRatio, "9:16");
+  assert.equal(target.currentBrief?.platform, "tiktok");
+});
+
+test("parseBoardRevisionTarget rejects an invalid currentBrief payload", () => {
+  assert.throws(
+    () =>
+      parseBoardRevisionTarget(
+        {
+          target: {
+            scope: "brief",
+            currentBrief: {
+              goal: "Missing typed brief fields should fail.",
+            },
+          },
+        },
+        "run_1"
+      ),
+    (err: unknown) => {
+      assert.ok(err instanceof ApiError);
+      assert.equal(err.code, "validation_failed");
+      assert.match(err.message, /request body is invalid/i);
+      return true;
+    }
   );
 });
 

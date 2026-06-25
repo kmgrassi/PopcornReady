@@ -89,7 +89,7 @@ function optionalStringField(
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-function parseBoardRevisionTarget(body: unknown, runId: string): BoardRevisionTarget {
+export function parseBoardRevisionTarget(body: unknown, runId: string): BoardRevisionTarget {
   if (!isRecord(body)) {
     throw new ApiError("validation_failed", "Request body must be an object.");
   }
@@ -137,7 +137,7 @@ function parseBoardRevisionTarget(body: unknown, runId: string): BoardRevisionTa
     if (value) parsed[key] = value;
   }
   if (isRecord(target.currentBrief)) {
-    parsed.currentBrief = target.currentBrief as unknown as BoardRevisionTarget["currentBrief"];
+    parsed.currentBrief = parseBrief(target.currentBrief, "target.currentBrief");
   }
   return parsed;
 }
