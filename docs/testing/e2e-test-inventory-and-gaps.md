@@ -1,6 +1,6 @@
 # End-to-End Test Inventory And Gaps
 
-Date: 2026-06-22
+Date: 2026-06-26
 
 This inventory covers the active split app described in `CLAUDE.md`: the Vite
 React SPA in `apps/web` and the Express API in `apps/api`. New end-to-end work
@@ -67,25 +67,28 @@ Public routes:
 Authenticated routes:
 
 - `/dashboard`
-- `/library`, `/library/:tab`
+- `/inspiration`
+- `/library`, `/library/:tab` (`projects` and `assets` are the active tabs)
 - `/projects`, `/projects/new`, `/projects/:projectId`,
+  `/projects/:projectId/concept`, `/projects/:projectId/brief`,
+  `/projects/:projectId/script`,
   `/projects/:projectId/storyboard`, `/projects/:projectId/watch`,
   `/projects/:projectId/runs/:runId`
 - `/runs`, `/assets`, `/outputs`
 - `/anchors`, `/anchors/mine`, `/anchors/:entryId`
-- `/uploads`, `/templates`, `/brand`, `/settings`
+- `/uploads`, `/templates`, `/brand`, `/account`, `/settings`, `/faq`
 - `/evals`, `/admin`, `/admin/evals`
 - `/dev/design-system`, `/dev/generation-cards`
 
 Retired route note: `/studio` is not mounted in the current Vite route table.
-Creation currently enters through the landing prompt and quick-start generation
-path. Any future Studio restoration should add new E2E coverage when the route
-returns.
+Creation currently enters through the landing prompt, the dashboard/global
+`Create new video` action, or `/projects/new`. Any future Studio restoration
+should add new E2E coverage when the route returns.
 
-Dashboard creation note: the intended authenticated flow is for a signed-in
-local user to open `/dashboard`, click `Create new video`, complete a brief,
-and choose whether to stop at the brief/planning gates or continue
-autonomously. The route is `/projects/new`; `/studio` remains retired.
+Dashboard creation note: the current authenticated flow is for a signed-in local
+user to open `/dashboard`, click `Create new video`, complete the brief and
+footage setup, then auto-start production as the flow reaches the plan step. The
+route is `/projects/new`; `/studio` remains retired.
 
 ## Recommended Harness Shape
 
@@ -94,8 +97,12 @@ autonomously. The route is `/projects/new`; `/studio` remains retired.
   and local Supabase only where persistence/auth behavior matters.
 - Use the local-first DB command for integration smoke that should exercise real
   Supabase/Postgres setup.
-- Keep provider-backed generation/export tests separate from required CI,
-  behind explicit provider keys.
+- Keep provider-backed generation/export tests separate from required CI, behind
+  explicit provider keys. When those tests spend real calls, draw prompts from
+  the production fixture corpus in
+  [`seed/production-fixtures/manifest.json`](../../seed/production-fixtures/manifest.json)
+  and follow its harness contract in
+  [`seed/production-fixtures/README.md`](../../seed/production-fixtures/README.md).
 - Seed complex UI states through fixtures or test sandboxes; do not require live
   paid model calls just to test routing, controls, polling, or error states.
 
@@ -128,9 +135,8 @@ Critical flows:
 - Landing prompt validates minimum content.
 - Account-choice modal opens on submit.
 - Create-account path should preserve and resume the pending prompt through
-  `/signup`. Current implementation stores `pendingLandingPrompt`, while the
-  auth form resumes `pendingQuickStart`, so the automatic post-signup run start
-  remains a product/test gap.
+  `/signup`, claim the quick-start prompt after auth, start a run, and navigate
+  to `/projects/:projectId/runs/:runId`.
 - Guest path calls anonymous sign-in and respects guest run limits.
 - Successful quick-start creates a project/run and navigates to
   `/projects/:projectId/runs/:runId`.
@@ -143,9 +149,8 @@ Current coverage:
 
 Recommended next test:
 
-- Add a mock-backed quick-start test after the pending-prompt state keys are
-  unified: submit the landing prompt, sign up, assert pending prompt resume, stub
-  the run-start API, and land on progress.
+- Add a mock-backed quick-start test: submit the landing prompt, sign up, assert
+  pending prompt resume, stub the run-start API, and land on progress.
 
 ### 2a. Dashboard Project Creation
 
@@ -153,13 +158,14 @@ Critical flows:
 
 - A known local Supabase user can log in and reach `/dashboard`.
 - `Create new video` opens the authenticated project-creation flow.
+- The draft picker can create, resume, and delete drafts.
 - Brief entry persists before generation starts.
-- Stop-at-brief leaves the user on a saved brief/review state and does not
-  advance planning or production.
-- Stop-after-planning creates a review-gated run and waits for approval before
-  expensive provider-backed media generation.
-- Continuing with no stop points runs autonomously and lands on
+- Footage setup supports prompt-only and uploaded/source-footage paths.
+- Reaching the plan step starts production and redirects to
   `/projects/:projectId/runs/:runId`.
+- Review-gated runs wait for approval/rejection before continuing when seeded by
+  fixture or deep link; the normal setup UI does not currently expose a
+  checkpoint picker.
 
 Current coverage:
 
@@ -167,10 +173,9 @@ Current coverage:
 
 Recommended next test:
 
-- Add a local-db-backed Playwright spec once the dashboard creation route is
-  stable: sign in with a seeded local user, click `Create new video`, submit a
-  brief, assert the stop-at-brief state, continue to a mocked planning gate, and
-  verify approval resumes the run.
+- Add a local-db-backed Playwright spec: sign in with a seeded local user, click
+  `Create new video`, create a draft, submit brief and footage choices, stub or
+  mock run start, and verify navigation to the run progress route.
 
 ### 3. Run Progress, Review Gates, And Recovery
 
@@ -186,13 +191,14 @@ Remaining gaps:
 
 - Supabase-backed seeded run fixtures are not used yet.
 - Live orchestrator/provider progress is intentionally not part of the required
-  browser suite.
+  browser suite. Optional provider-backed smoke should generate projects/assets
+  from the production fixture corpus rather than freeform prompts.
 
 ### 4. Library Collections
 
 Covered:
 
-- Projects/runs/assets/outputs route viability with seeded fixtures.
+- Projects/assets route viability with seeded fixtures.
 - Pagination and filters.
 - Media viewer behavior.
 - Visibility mutation flow.
@@ -201,10 +207,13 @@ Covered:
 Remaining gaps:
 
 - Real Supabase fixture seeding and teardown.
+- Project-scoped compatibility redirects are not covered yet:
+  `/runs?projectId=:projectId`, `/outputs?projectId=:projectId`, and the
+  resulting project detail `#runs` / `#outputs` anchors.
 - More asset media edge cases: expired signed URLs, missing private objects,
   public/private discovery leakage.
 
-### 5. Storyboard Editor And Project Pages
+### 5. Storyboard, Project Pages, And Watch
 
 Covered:
 
@@ -214,10 +223,11 @@ Covered:
 Remaining gaps:
 
 - Project detail route coverage is thin.
-- Seeded storyboard loading, scene/beat edits, save, and reload persistence are
-  not covered by the current browser spec.
-- Adding/removing/moving beats, reorder permutations, and relational storyboard
-  API surfaces are not fully exercised.
+- Seeded storyboard loading, project-detail storyboard generation, panel request
+  changes, image-regeneration edge cases, and reload recovery are not covered by
+  the current browser spec.
+- Direct scene/beat editing is not the current storyboard UX; changes should be
+  exercised through object-scoped Request Changes flows.
 - Watch page video playback/fallback behavior has limited coverage.
 
 ### 6. Evals And Admin
@@ -237,6 +247,7 @@ Remaining gaps:
 Critical flows:
 
 - Settings theme/account/sign-out.
+- Account credits/billing.
 - Uploads local staging and media viewer.
 - Templates route and template action redirects.
 - Brand Kit local preview state.
@@ -251,8 +262,8 @@ Current coverage:
 Recommended next test:
 
 - Add `secondary-surfaces.spec.ts` for Settings theme persistence, Uploads file
-  staging, Templates route actions, Brand Kit local state, and Anchors empty/data
-  states.
+  staging, Account credits states, Templates route actions, Brand Kit local
+  state, and Anchors empty/data states.
 
 ### 8. Storage And Asset Sharing
 
@@ -272,7 +283,7 @@ Critical flows:
 
 - Timeline export request starts.
 - Export polling reaches terminal success/failure.
-- Output appears in Library outputs.
+- Output appears in dashboard recent outputs and project watch/detail surfaces.
 - Watch page plays the exported video or falls back to storyboard/error state.
 
 Current coverage:
@@ -292,7 +303,7 @@ P0:
 - Add a local Supabase signup/onboarding E2E that creates a fresh user and
   verifies `/api/v1/me` returns `authMode: "supabase"` and `isLocal: false`.
 - Add automated coverage for the dashboard `Create new video` flow with
-  explicit manual stop points for brief and planning.
+  draft creation, brief, footage setup, and run-start redirect.
 - Add landing quick-start create-account flow with mocked run creation.
 - Keep `pnpm test:e2e:local-db` healthy and run it before changes touching auth,
   Supabase env, route protection, or store setup.
@@ -301,7 +312,8 @@ P1:
 
 - Add secondary-surfaces smoke coverage.
 - Add project detail/watch page coverage.
-- Move more mocked Library/Run fixtures toward Supabase test-sandbox fixtures.
+- Move more mocked Library/project/run fixtures toward Supabase test-sandbox
+  fixtures.
 - Add hosted admin/non-admin permission coverage behind secrets.
 
 P2:
@@ -310,7 +322,9 @@ P2:
   Progress, and media viewer surfaces.
 - Add accessibility checks for focus order, keyboard controls, and reduced
   motion where relevant.
-- Add optional provider-backed generation/export smoke jobs.
+- Add optional provider-backed generation/export smoke jobs that consume the
+  production fixture corpus and create one fixture/internal-test project per
+  manifest asset.
 
 ## Acceptance Criteria For Closing This Inventory
 
@@ -321,6 +335,7 @@ P2:
   the API resolves the domain user identity.
 - Landing quick-start has one mocked run-creation E2E path.
 - Every persisted user-owned surface has a write-then-reload browser test:
-  account/session, project/storyboard, asset visibility, run action, eval
-  judgment, and eventually export.
-- Provider-backed tests are optional and separate from the required smoke suite.
+  account/session, studio draft, project/storyboard generation or revision,
+  asset visibility, run action, eval judgment, and eventually export.
+- Provider-backed tests are optional, separate from the required smoke suite, and
+  should use the production fixture corpus when real API calls are enabled.
