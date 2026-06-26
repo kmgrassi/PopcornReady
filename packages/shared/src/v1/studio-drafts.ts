@@ -1,3 +1,6 @@
+import type { StoryContext } from "../types";
+import type { AspectRatio, GateableGenerationStageType } from "./types";
+
 export const STUDIO_DRAFT_SCHEMA_VERSION = "studioDraft.v1" as const;
 export const STUDIO_DRAFT_PAYLOAD_VERSION = 1 as const;
 
@@ -9,9 +12,39 @@ export type StudioDraftStep =
   | "review"
   | "export";
 
+export type StudioDraftPlatform = NonNullable<StoryContext["platform"]>;
+export type StudioDraftFormat = NonNullable<StoryContext["format"]>;
+export type StudioDraftFootageChoice = "prompt_only" | "upload";
+export type StudioDraftFootageMode = "asset_driven" | "hybrid";
+export type StudioDraftSeedKind = "image" | "video";
+
+export interface StudioDraftBrief {
+  goal?: string;
+  targetLengthSec?: number;
+  aspectRatio?: AspectRatio;
+  projectName?: string;
+  footageChoice?: StudioDraftFootageChoice;
+  footageMode?: StudioDraftFootageMode;
+  audience?: string;
+  platform?: StudioDraftPlatform;
+  format?: StudioDraftFormat;
+  hook?: string;
+  bestVisual?: string;
+  bigIdea?: string;
+  payoff?: string;
+  accuracyNote?: string;
+  style?: string;
+  callToAction?: string;
+  provider?: string;
+  seedKind?: StudioDraftSeedKind;
+  seedSize?: string;
+  showCaptions?: boolean;
+  reviewGates?: GateableGenerationStageType[];
+}
+
 export interface StudioDraftPayload {
   v: typeof STUDIO_DRAFT_PAYLOAD_VERSION;
-  draft: Record<string, unknown>;
+  draft: StudioDraftBrief;
   step: StudioDraftStep;
   projectId?: string;
   runId?: string;

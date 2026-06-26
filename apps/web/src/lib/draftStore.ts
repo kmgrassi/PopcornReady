@@ -3,12 +3,19 @@ import type { BriefDraft, StudioStep } from "../components/studio/useStudioFlow"
 import { normalizeStudioStep } from "../components/studio/studioSteps";
 import type {
   CreateStudioDraftRequest,
+  StudioDraftBrief,
+  StudioDraftFootageChoice,
+  StudioDraftFootageMode,
+  StudioDraftFormat,
+  StudioDraftPlatform,
   StudioDraftListResponse,
   StudioDraftPayload as WireStudioDraftPayload,
   StudioDraftResponse,
+  StudioDraftSeedKind,
   StudioDraftStep,
   UpdateStudioDraftRequest,
 } from "@popcorn/shared/v1/studio-drafts";
+import type { AspectRatio, GateableGenerationStageType } from "@popcorn/shared/v1/types";
 
 export const STUDIO_DRAFT_PAYLOAD_VERSION = 1;
 
@@ -70,6 +77,72 @@ function normalizeStep(value: unknown): StudioStep {
   return normalizeStudioStep(typeof value === "string" ? value : null);
 }
 
+function stringOrUndefined(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function numberOrUndefined(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function booleanOrUndefined(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function aspectRatioOrUndefined(value: unknown): AspectRatio | undefined {
+  return value === "9:16" || value === "16:9" || value === "1:1" ? value : undefined;
+}
+
+function footageChoiceOrUndefined(value: unknown): StudioDraftFootageChoice | undefined {
+  return value === "prompt_only" || value === "upload" ? value : undefined;
+}
+
+function footageModeOrUndefined(value: unknown): StudioDraftFootageMode | undefined {
+  return value === "asset_driven" || value === "hybrid" ? value : undefined;
+}
+
+function platformOrUndefined(value: unknown): StudioDraftPlatform | undefined {
+  return value === "youtube" ||
+    value === "tiktok" ||
+    value === "reels" ||
+    value === "facebook" ||
+    value === "vimeo" ||
+    value === "general"
+    ? value
+    : undefined;
+}
+
+function formatOrUndefined(value: unknown): StudioDraftFormat | undefined {
+  return value === "mystery_to_model" ||
+    value === "visual_reveal" ||
+    value === "challenge" ||
+    value === "misconception" ||
+    value === "animated_explainer" ||
+    value === "classroom_demo" ||
+    value === "aesthetic_montage"
+    ? value
+    : undefined;
+}
+
+function seedKindOrUndefined(value: unknown): StudioDraftSeedKind | undefined {
+  return value === "image" || value === "video" ? value : undefined;
+}
+
+function reviewGatesOrUndefined(value: unknown): GateableGenerationStageType[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.filter(
+    (gate): gate is GateableGenerationStageType =>
+      gate === "brief_intake" ||
+      gate === "creative_plan" ||
+      gate === "storyboard" ||
+      gate === "asset_generation" ||
+      gate === "audio_generation" ||
+      gate === "timeline_assembly" ||
+      gate === "quality_review" ||
+      gate === "export"
+  );
+}
+
 function sanitizeDraftForJson(draft: BriefDraft): BriefDraft {
   return {
     ...draft,
@@ -104,7 +177,7 @@ function buildWirePayload(
   return {
     ...payload,
     step: wireStepFromStudioStep(payload.step),
-    draft: payload.draft as unknown as Record<string, unknown>,
+    draft: payload.draft,
   };
 }
 
@@ -112,13 +185,41 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+function persistedDraftFromUnknown(value: unknown): StudioDraftBrief | null {
+  if (!isRecord(value)) return null;
+  return {
+    goal: stringOrUndefined(value.goal),
+    targetLengthSec: numberOrUndefined(value.targetLengthSec),
+    aspectRatio: aspectRatioOrUndefined(value.aspectRatio),
+    projectName: stringOrUndefined(value.projectName),
+    footageChoice: footageChoiceOrUndefined(value.footageChoice),
+    footageMode: footageModeOrUndefined(value.footageMode),
+    audience: stringOrUndefined(value.audience),
+    platform: platformOrUndefined(value.platform),
+    format: formatOrUndefined(value.format),
+    hook: stringOrUndefined(value.hook),
+    bestVisual: stringOrUndefined(value.bestVisual),
+    bigIdea: stringOrUndefined(value.bigIdea),
+    payoff: stringOrUndefined(value.payoff),
+    accuracyNote: stringOrUndefined(value.accuracyNote),
+    style: stringOrUndefined(value.style),
+    callToAction: stringOrUndefined(value.callToAction),
+    provider: stringOrUndefined(value.provider),
+    seedKind: seedKindOrUndefined(value.seedKind),
+    seedSize: stringOrUndefined(value.seedSize),
+    showCaptions: booleanOrUndefined(value.showCaptions),
+    reviewGates: reviewGatesOrUndefined(value.reviewGates),
+  };
+}
+
 function payloadFromUnknown(value: unknown): StudioDraftPayload | null {
   if (!isRecord(value) || value.v !== STUDIO_DRAFT_PAYLOAD_VERSION) return null;
-  if (!isRecord(value.draft)) return null;
+  const parsedDraft = persistedDraftFromUnknown(value.draft);
+  if (!parsedDraft) return null;
 
   const draft = {
     ...DEFAULT_BRIEF_DRAFT,
-    ...(value.draft as Partial<BriefDraft>),
+    ...parsedDraft,
     selectedFootage: [],
   };
   if (draft.footageChoice === "upload") {
