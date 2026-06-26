@@ -91,6 +91,23 @@ Quick automated smoke for the same local DB stack:
 pnpm test:e2e:local-db
 ```
 
+### Local QA Account
+
+Use this local-only account for repeatable browser passes against the reset
+Supabase stack:
+
+- Email: `manual-tester@example.test`
+- Password: `ManualTest123!`
+
+After `pnpm db:local:reset`, create the account once through `/signup`. The
+local Supabase config allows email signup, and this account receives the normal
+starter credit grant. For the rest of the same local DB session, sign in through
+`/login` with the same credentials and verify the shell shows
+`manual-tester@example.test`.
+
+Do not use these credentials for hosted/staging/production auth. Hosted manual
+passes should use a separate managed QA account.
+
 ## Route Map
 
 Public routes:
