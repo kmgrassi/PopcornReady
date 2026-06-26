@@ -35,12 +35,15 @@ const DISABLE_LOCAL_POSTER_GENERATION = import.meta.env.DEV;
 export function InspirationPage() {
   const navigate = useNavigate();
   const [nonce, setNonce] = useState(0);
+  const [refreshingNonce, setRefreshingNonce] = useState<number | null>(null);
   const [story, setStory] = useState<RandomStoryInspiration | null>(null);
   const [visualTheme, setVisualTheme] = useState<"classic" | "cinema">("classic");
   const query = useRandomStoryInspiration(nonce);
   const posterMutation = useStoryConceptPosterMutation();
   const startRunMutation = useStartInspirationStoryboardRunMutation();
   const storySignature = story ? conceptSignature(story) : null;
+  const refreshInProgress = refreshingNonce === nonce && query.isFetching;
+  const storyGenerating = query.isLoading || refreshInProgress;
 
   useEffect(() => {
     if (query.data?.inspiration) {
@@ -49,17 +52,35 @@ export function InspirationPage() {
   }, [query.data?.inspiration]);
 
   useEffect(() => {
+    if (refreshingNonce === nonce && !query.isFetching) {
+      setRefreshingNonce(null);
+    }
+  }, [nonce, query.isFetching, refreshingNonce]);
+
+  useEffect(() => {
     if (!story) return;
+    const expectedSignature = storySignature;
     posterMutation.reset();
     if (DISABLE_LOCAL_POSTER_GENERATION) return;
     posterMutation.mutate(story, {
       onSuccess: ({ movieTitle, poster }) => {
-        setStory((current) => (current ? { ...current, movieTitle, poster } : current));
+        setStory((current) =>
+          current && conceptSignature(current) === expectedSignature
+            ? { ...current, movieTitle, poster }
+            : current
+        );
       },
     });
   }, [storySignature]);
 
-  const poster = story?.poster ?? posterMutation.data?.poster ?? null;
+  const poster = story?.poster ?? null;
+
+  function refreshStory() {
+    if (refreshInProgress) return;
+    const nextNonce = nonce + 1;
+    setRefreshingNonce(nextNonce);
+    setNonce(nextNonce);
+  }
 
   async function startFromPrompt(inspiration: RandomStoryInspiration) {
     if (startRunMutation.isPending) return;
@@ -105,11 +126,11 @@ export function InspirationPage() {
           </div>
           <Button
             variant="primary"
-            onClick={() => setNonce((current) => current + 1)}
-            disabled={query.isFetching}
+            onClick={refreshStory}
+            disabled={storyGenerating}
             className={styles.primaryAction}
           >
-            {query.isFetching ? "Generating" : "Regenerate"}
+            {storyGenerating ? "Generating" : "Regenerate"}
           </Button>
         </div>
       </header>
