@@ -10,6 +10,36 @@ Use the focused smoke docs when a flow needs deeper operational coverage:
 - [Asset sharing](asset-sharing.md)
 - [Orchestrator tool-call smoke tests](orchestrator-tool-calls.md)
 
+## Production Fixture Corpus
+
+When a manual pass is allowed to spend real provider/API calls, use the
+production fixture corpus instead of ad hoc prompts:
+
+- [`seed/production-fixtures/README.md`](../../seed/production-fixtures/README.md)
+- [`seed/production-fixtures/manifest.json`](../../seed/production-fixtures/manifest.json)
+
+The manifest is the source of truth for production-style assets we want to
+generate anyway: 80 assets total, currently 45 images, 30 videos, and 5 audio
+tracks across movie posters, character references, product stills, short clips,
+trailer teasers, demos, explainers, promos, loops, and background music.
+
+Use these assets for provider-backed manual tests that need real media:
+
+- Run them in a fixture or internal-test workspace, not a customer workspace.
+- Use one real project per manifest asset; include the manifest asset `id` in
+  the project name so generated assets can be traced back to the corpus.
+- Call the same app/API flow a user would use for that asset kind. Do not write
+  directly to tables just to seed a manual test.
+- Assert mechanics only: the job/action succeeds or fails clearly, the asset row
+  has the requested kind/media/role, storage and delivery metadata exist for
+  media, and failures produce structured errors.
+- Keep successful fixture assets when they are useful examples; clean up only
+  throwaway `internal_test` runs.
+
+If a tester needs a new prompt, first update `manifest.json` and follow the
+duplicate-check rules in the corpus README. Do not maintain separate prompt
+lists in manual-test notes.
+
 ## Recommended Local Setup
 
 For most manual browser testing, use a local-first Supabase database:
@@ -77,13 +107,17 @@ Public routes:
 Authenticated routes:
 
 - `/dashboard`.
-- `/library`, `/library/projects`, `/library/runs`, `/library/assets`,
-  `/library/outputs`, `/library/evals`.
-- Compatibility redirects: `/projects`, `/runs`, `/assets`, `/outputs`.
+- `/inspiration`.
+- `/library`, `/library/projects`, `/library/assets`.
+- Compatibility redirects: `/projects`, `/runs`, `/assets`, `/outputs`;
+  project-scoped runs/outputs redirect to project detail anchors.
 - `/projects/:projectId`, `/projects/:projectId/storyboard`,
   `/projects/:projectId/watch`, `/projects/:projectId/runs/:runId`.
+- `/projects/:projectId/concept`, `/projects/:projectId/brief`,
+  `/projects/:projectId/script`.
 - `/anchors`, `/anchors/mine`, `/anchors/:entryId`.
-- `/uploads`, `/templates`, `/brand`, `/settings`.
+- `/uploads`, `/templates`, `/brand`, `/account`, `/settings`, `/faq`.
+- `/evals`, which redirects to `/admin/evals`.
 - `/admin`, `/admin/evals` for admin-capable sessions.
 - Dev-only visual routes: `/dev/design-system`, `/dev/generation-cards`.
 
@@ -140,19 +174,27 @@ recovery.
 
 ### 3. Authenticated Shell And Settings
 
-- In the authenticated shell, verify sidebar/header navigation to Dashboard,
-  Library, Settings, Uploads, Templates, Brand Kit, Anchors, and Evals where
-  links are present.
+- In the authenticated shell, verify the sidebar primary navigation includes
+  Library and Inspiration, the global `Create new video` action, and account
+  footer links for Credits & billing, Settings, and FAQs.
+- For admin-capable sessions, verify the Admin footer exposes Workbench and
+  Admin evals.
 - Open the command palette with the visible trigger and Cmd/Ctrl+K.
-- Search for common destinations such as Dashboard, Library, Settings, Uploads,
-  Templates, Brand Kit, and Evals.
+- Search for common destinations such as Library, Inspiration, Settings,
+  Account, Admin evals, Uploads, Templates, Brand Kit, and Anchors when those
+  commands are available to the current session.
 - Verify Escape closes the palette, arrow keys move selection, and Enter
   activates the selected command.
 - Open `/settings`.
 - Verify account label, workspace id/name, auth mode, and any load errors.
 - Toggle each available theme and refresh after each; the selected theme should
   persist and keep focus rings/status chips legible.
-- Use secondary Settings links and confirm they land on the intended route.
+- Verify workspace model settings, provider API keys, and the access token panel
+  load or show readable errors.
+- For admin-capable sessions, use the secondary Settings links and confirm they
+  land on Uploads, Templates, Anchors, Brand kit, and Admin evals.
+- Open `/account` and verify credits balance, credit packs, and transaction
+  history load or show readable local/hosted-mode states.
 
 ### 4. Dashboard
 
@@ -162,14 +204,14 @@ recovery.
   - Target behavior: a primary `Create new video` action should start the
     stepwise project-creation flow.
   - Library remains available as a separate sidebar menu item.
-- If the workspace has active runs or outputs, verify counts and cards match
-  the corresponding Library tabs.
+- If the workspace has active runs or recent outputs, verify counts and cards
+  match the project/run/output links they open.
 - Click active run rows and recent output links when present; they should open
-  the correct run or collection route.
+  the correct run progress route, project detail route, or watch route.
 - Refresh `/dashboard`; shell, account label, and content should recover.
 - Simulate or force an API failure if practical and verify retry/error state.
 
-### 5. Project Creation And Manual Stop Points
+### 5. Project Creation And Review Checkpoints
 
 Use this pass for the dashboard-driven creation flow.
 
@@ -187,44 +229,58 @@ Creation entry:
 - From `/dashboard`, click `Create new video`.
 - Verify the user lands on the project-creation flow without leaving the
   authenticated shell.
-- Refresh the first creation screen; the shell and any draft state should
-  recover without creating a duplicate project.
+- If saved drafts exist, verify the start screen shows `Continue a draft`, lets
+  the tester resume a draft, and lets the tester delete one without deleting a
+  project.
+- Click `Create your first video` or the global `Create new video` action.
+- Refresh the first creation screen; the shell and any draft state should recover
+  without creating a duplicate project.
 
 Brief step:
 
-- Enter a complete brief with goal, audience, desired format, and length.
-- For the stop-at-brief pass, select the `Stop at brief` or equivalent manual
-  pause control before submitting the brief.
-- If no explicit stop-at-brief control is present, record that as a product gap
-  and verify the interim behavior instead: leave the draft on the brief step,
-  refresh, and confirm no planning or production work starts until the tester
-  clicks Continue.
-- Expected stop-at-brief behavior: the app persists the brief, shows a clear
-  saved/review state, and does not start later generation stages.
-- Leave the flow and return from `/dashboard`; the saved brief should be
-  resumable rather than lost.
-- Edit the brief, save again, refresh, and verify the latest content is shown.
+- Enter a complete brief with goal and length. Open Advanced Direction and fill
+  audience, platform, format, hook, visual, idea, payoff, accuracy, style, and
+  call to action when the change touches creative inputs.
+- Confirm the Continue button is disabled until the goal is present.
+- Select a prompt chip and verify it replaces the goal and target length.
+- Select a length over 30 seconds and confirm the cost warning appears.
+- Leave and return to `/projects/new`; the saved draft should be resumable.
+- Edit the brief, wait for autosave, refresh, and verify the latest content is
+  shown.
 
-Planning step:
+Footage step:
 
-- For the continue-to-planning pass, leave stop-at-brief unselected and continue
-  from the brief into planning.
-- Verify the plan/story outline is generated or loaded, and that errors are
-  readable if provider keys are not configured.
-- Select a manual stop after planning, then continue.
-- Expected behavior: the run waits at the planning review gate before image,
-  video, or timeline generation begins.
-- Approve the gate and verify the run resumes. Reject or request changes and
-  verify notes are captured and the run does not continue silently.
+- Choose `No` and confirm the flow can continue with prompt-only visuals.
+- Go back, choose `Yes`, and verify the flow requires at least one video or
+  image before continuing.
+- Select image, video, and audio files. Verify file names, size, and duration
+  metadata where available. Audio-only uploads should not satisfy the visual
+  footage requirement.
+
+Production start and review checkpoints:
+
+- Continue from footage. The current flow starts production when it reaches the
+  plan step; there is no separate plan-edit screen in the normal setup path.
+- If provider keys or credits are missing, verify the start-production error is
+  readable and offers Retry, Edit idea, and Edit assets.
+- To test review checkpoints manually, deep-link with `reviewGates`, for
+  example `/projects/new?goal=...&length=30&reviewGates=creative_plan`, or use
+  a fixture run with a review gate.
+- Expected checkpoint behavior: the run waits in the generating view with
+  `Approve & continue` and `Reject / regenerate`; approving resumes polling and
+  rejecting keeps the run from continuing silently.
 
 Production step:
 
 - Continue with no stop points selected and verify the run advances through the
   remaining stages autonomously.
 - While the run is active, verify `/projects/:projectId/runs/:runId` shows the
-  same stage/progress state from the dashboard and Library links.
+  same stage/progress state from dashboard and project links.
 - Use the visible stop/cancel affordance where available and confirm the run
   reaches the expected paused or terminal state.
+- When a run succeeds and returns to the Studio review state, verify the rough
+  cut loads, feedback can target the whole cut or a beat/segment, and Continue
+  to export is disabled until a timeline exists.
 
 Route notes:
 
@@ -236,11 +292,16 @@ Route notes:
 ### 6. Library Collections
 
 - Open `/library`; it should redirect to `/library/projects`.
-- Open compatibility routes `/projects`, `/runs`, `/assets`, `/outputs`, and
-  `/evals`; query params should be preserved where the redirect supports them.
+- Open compatibility routes:
+  - `/projects` redirects to `/library/projects`.
+  - `/assets` redirects to `/library/assets`.
+  - `/runs` and `/outputs` without `projectId` redirect to `/library/projects`.
+  - `/runs?projectId=:projectId` redirects to `/projects/:projectId#runs`.
+  - `/outputs?projectId=:projectId` redirects to `/projects/:projectId#outputs`.
+  - `/evals` redirects to `/admin/evals`.
 - Open `/library/unknown`; it should redirect to projects.
-- Switch between Projects, Runs, Assets, Outputs, and Evals tabs and verify the
-  URL updates without losing shell state.
+- Switch between Projects and Assets tabs and verify the URL updates without
+  losing shell state.
 
 Projects:
 
@@ -248,15 +309,18 @@ Projects:
   fallback, status, storyboard readiness, timestamps, and actions.
 - Open a project detail route from a card.
 - Open Storyboard from a card when available.
-- Use Runs to open `/library/runs?projectId=:projectId`.
+- Use project actions to open the latest run, storyboard, outputs/watch, and
+  project detail when data exists.
 - Load more when more than one page exists.
 
 Runs:
 
-- Filter by all, queued, running, succeeded, failed, and canceled.
-- Open a run row and verify `/projects/:projectId/runs/:runId` loads.
-- Verify progress bars clamp to 0-100 and status chips match state.
-- Confirm empty, loading, pagination, and API error states.
+- Runs are not a Library tab anymore. Verify recent project runs through the
+  project detail `Run pipeline` panel and direct
+  `/projects/:projectId/runs/:runId` routes.
+- Verify progress bars clamp to 0-100 and status chips match state on project
+  detail and run progress.
+- Confirm empty, loading, and API error states for project-scoped runs.
 
 Assets:
 
@@ -271,10 +335,10 @@ Assets:
 
 Outputs:
 
-- Verify output cards show project name, export date, format, duration, and
-  source metadata when available.
-- Open an output in the media viewer.
-- Use Project and Watch actions.
+- Outputs are not a Library tab anymore. Verify recent outputs through the
+  dashboard strip, project detail `Outputs`/`Watch` actions, and
+  `/projects/:projectId/watch`.
+- For a playable output, verify filename, duration, poster, and video controls.
 - Verify missing playback URLs fall back to thumbnails or placeholders.
 
 ### 7. Landing Quick-Start Generation
@@ -287,10 +351,8 @@ This is the current creation entry point while `/studio` is retired.
 - Choose Create account:
   - Pending prompt should survive the `/signup` redirect in router state/session
     storage.
-  - Current gap to record: the landing page stores `pendingLandingPrompt` /
-    `pr.pendingLandingPrompt`, while the auth form only resumes
-    `pendingQuickStart` / `pr.pendingQuickStart`. After signup, expect the user
-    to land on `/dashboard` without an automatic run until that wiring is fixed.
+  - After signup, the app should claim the pending quick-start prompt, start a
+    run, and navigate to `/projects/:projectId/runs/:runId`.
 - Choose Skip this step:
   - Anonymous sign-in should create a Supabase anonymous session.
   - The app should start the run as a guest if the guest-run limit allows it.
@@ -315,16 +377,26 @@ This is the current creation entry point while `/studio` is retired.
 ### 9. Storyboard And Project Pages
 
 - Open `/projects/:projectId` for a valid project.
+- Verify the concept, brief, and script cards link to
+  `/projects/:projectId/concept`, `/brief`, and `/script`.
+- In the storyboard preview, generate a storyboard when none exists. Verify the
+  button enters a generating/progress state, reload recovery works, and failures
+  are readable.
 - Open `/projects/:projectId/storyboard`.
 - Verify loading, missing-project, no-storyboard, and API error states.
-- For a project with a storyboard, edit scene and beat fields, add/remove
-  scenes and beats, move beats where supported, save, and refresh.
-- Verify dirty, saving, saved, and save-error states.
+- For a project with a storyboard, verify scenes, beats, selected panels,
+  thumbnails, metadata, and missing-panel placeholders.
+- Click a panel with an image and verify the Request Changes modal opens.
+- Submit panel feedback and verify the panel shows an agent-revising state,
+  polls the revision run, then refreshes the storyboard when the run settles.
+- Verify failed or URL-less image assets expose the image-regeneration affordance
+  only when an existing image asset id is present.
+- Record missing initial storyboard images as an initial-generation gap, not an
+  image-regeneration failure.
 - Open `/storyboard`; it should redirect to `/library/projects`.
 - Open `/projects/:projectId/watch`:
   - Project with playable output should show video controls and metadata.
-  - Project without playable output but with storyboard fallback should route or
-    message according to the current implementation.
+  - Project without playable output redirects to `/projects/:projectId#runs`.
 
 ### 10. Uploads, Templates, Brand Kit, Anchors
 
@@ -341,9 +413,11 @@ Templates:
 
 - Open `/templates`.
 - Verify category pills and template cards render.
-- Use Blank project and Use template actions; current behavior should route to
-  `/library/projects` through the `/projects/new` compatibility redirect unless
-  a newer creation flow consumes template params.
+- Use Blank project and Use template actions. Both should route to
+  `/projects/new`; template actions include `?template=...`.
+- Verify whether the project creation flow consumes the `template` query
+  parameter. Today the route accepts it but the Studio shell does not prefill
+  from it, so record that as a product gap if it remains true.
 
 Brand Kit:
 
@@ -360,7 +434,8 @@ Anchors:
 
 ### 11. Admin And Evals
 
-- Open `/library/evals` or `/evals` and verify redirect behavior.
+- Open `/evals` and verify it redirects to `/admin/evals`.
+- Open `/library/evals` and verify it redirects to `/admin/evals`.
 - As a non-admin user, open `/admin/evals`; access should be denied or routed
   according to the admin guard.
 - As an admin-capable user, verify `/admin` and `/admin/evals` are reachable.

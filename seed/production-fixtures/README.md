@@ -31,6 +31,35 @@ creative choices. Running it against real providers checks production mechanics:
 API request handling, provider calls, job state, graph writes, storage, delivery
 metadata, errors, and optional catalog publishing.
 
+## Maintaining The Corpus
+
+`manifest.json` is the source of truth for the assets we want to generate during
+real provider-backed manual tests. Manual testers should update that manifest
+instead of keeping separate prompt lists in notes, tickets, or ad hoc docs.
+
+Before adding a new asset:
+
+1. Search `manifest.json` for the intended subject, role, visual style, and
+   output kind. Check both `id` and `prompt`; similar wording often means the
+   asset already exists.
+2. Prefer reusing an existing manifest asset when it covers the same test need,
+   even if the title or prompt is not exact.
+3. Add a new entry only when it exercises a meaningfully different product
+   surface, provider path, media type, aspect ratio, role, or storage/delivery
+   behavior.
+4. Pick a stable kebab-case `id` that describes the asset, not the tester or
+   date. Do not reuse ids.
+5. Keep `role`, `kind`, `media`, and `aspectRatio` consistent with nearby
+   entries so the harness can group and filter the corpus predictably.
+6. Keep prompts production-style and reusable as examples; avoid temporary
+   debugging language such as "test", "please generate", ticket numbers, or PR
+   references inside the prompt.
+
+When a manual pass discovers a useful generated asset that is not represented in
+the corpus, add or adjust a manifest entry in the same PR as the manual-test doc
+update. If the generated asset is only a one-off debugging artifact, do not add
+it to the corpus.
+
 ## Harness Contract
 
 For each asset:

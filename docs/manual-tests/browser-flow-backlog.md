@@ -7,8 +7,17 @@ end-to-end manual QA guide for the active Vite SPA, Express API, and
 Supabase-backed data/auth stack.
 
 Use the local database setup from the full guide unless a flow explicitly needs
-hosted auth, production storage, or provider-backed generation. Admin Evals are
-not included here because that surface is not fully hooked up yet.
+hosted auth, production storage, or provider-backed generation. Admin evals are
+included only for admin-capable sessions; `/evals` redirects to
+`/admin/evals`.
+
+For provider-backed manual runs that need real generated media, use the
+[production fixture corpus](../../seed/production-fixtures/README.md) and its
+[manifest](../../seed/production-fixtures/manifest.json). The corpus lists the
+assets Popcorn Ready wants to generate anyway, so a manual pass should spend real
+provider calls on those prompts instead of one-off tester prompts. Use one real
+fixture/internal-test project per manifest asset and keep the manifest asset
+`id` in the project name.
 
 ## Priority Order
 
@@ -17,8 +26,9 @@ Run these flows first when doing a high-confidence browser pass:
 1. Dashboard project creation.
 2. Landing quick-start generation.
 3. Run progress and review actions.
-4. Project detail, storyboard, and watch pages.
-5. Library collections, media viewer, visibility, and regeneration.
+4. Project detail, storyboard generation/revision, and watch pages.
+5. Library projects/assets, project-scoped runs/outputs, media viewer,
+   visibility, and regeneration.
 6. Settings writes.
 7. Uploads, templates, brand kit, and anchors.
 8. Public project and asset sharing.
@@ -33,20 +43,25 @@ stepwise project flow.
 - Click the primary `Create new video` action.
 - Verify the app routes to `/projects/new` without losing the authenticated
   shell.
-- Complete the brief step with goal, audience, format, and target length.
+- If saved drafts exist, resume and delete one before starting a fresh draft.
+- Complete the brief step with goal, target length, and any relevant Advanced
+  Direction fields.
 - Refresh the page and confirm draft state recovers without creating a duplicate
   project.
-- Choose generated footage and then uploaded/source-footage mode where
-  available.
-- Continue through plan, story, generate, review, and export surfaces.
-- Verify each manual stop or review-gate option leaves the run waiting for user
-  action instead of silently continuing.
+- Choose prompt-only footage, then go back and test uploaded/source-footage mode.
+- Continue from footage. The current flow auto-starts production as it reaches
+  the plan step and then redirects to the run progress route.
+- Test checkpoint behavior with a `reviewGates` deep link or fixture run; the
+  normal setup UI does not currently expose a checkpoint picker.
+- Verify each review-gated run waits for user action instead of silently
+  continuing.
 - If provider keys are missing, verify generation surfaces a readable
   configuration error.
 
 Record as product gaps:
 
-- Missing explicit stop-at-brief or stop-after-planning controls.
+- Missing visible review-checkpoint picker in the normal `/projects/new` setup
+  flow, if that remains the intended product behavior.
 - Drafts that cannot be resumed from dashboard after leaving the flow.
 - Double-click or Enter-repeat behavior that creates duplicate drafts, projects,
   or runs.
@@ -62,20 +77,24 @@ Purpose: verify the public prompt entry path and its account handoff behavior.
 - Choose `Create account`.
 - Verify the pending prompt survives the `/signup` redirect through router state
   or session storage.
-- Complete signup and confirm the app either starts the pending run or clearly
-  returns the user to a resumable creation surface.
+- Complete signup and confirm the app claims the pending quick-start prompt,
+  starts the run, and navigates to `/projects/:projectId/runs/:runId`.
 - Repeat with the guest or anonymous path when anonymous sign-in is enabled.
 - Verify guest limits route the user toward account creation instead of starting
   an extra run.
 - Confirm a successful run start navigates to
   `/projects/:projectId/runs/:runId`.
 - Without provider keys, verify the error is readable and recoverable.
+- With provider keys, choose one image, one video, and one audio prompt from the
+  production fixture corpus and verify the resulting projects/assets can be
+  found from dashboard, project detail, Library assets, and watch/output surfaces
+  where applicable.
 
-Known gap to recheck:
+Regression to watch:
 
-- Landing stores pending prompt data separately from the quick-start resume path.
-  If signup lands on `/dashboard` without resuming the run, record this as a
-  flow wiring bug.
+- If signup lands on `/dashboard` without starting the pending run, record this
+  as a quick-start resume regression. The landing handoff should now write both
+  landing and quick-start pending prompt state.
 
 ## Run Progress And Review Actions
 
@@ -96,34 +115,44 @@ Purpose: verify long-running generation states and user-controlled gates.
 
 ## Project Detail, Storyboard, And Watch
 
-Purpose: verify project-owned read, edit, and playback surfaces.
+Purpose: verify project-owned read, agent-revision, generation, and playback
+surfaces.
 
 - Open `/projects/:projectId` for a valid project.
 - Verify project metadata, status, poster/fallback, and linked actions.
+- Generate a storyboard from the project detail preview when none exists; verify
+  progress, reload recovery, and failed-job messaging.
 - Open `/projects/:projectId/storyboard`.
 - Verify loading, missing-project, no-storyboard, and API-error states.
-- For a project with a storyboard, edit scene and beat fields.
-- Add, remove, and reorder scenes or beats where controls are exposed.
-- Save, refresh, and confirm the latest storyboard state persists.
-- Verify dirty, saving, saved, and save-error states.
+- For a project with a storyboard, verify scene/beat/panel rendering and
+  selected panel images.
+- Click an image panel and submit Request Changes feedback; verify the revising
+  skeleton, run polling, and refreshed image state.
+- Verify failed or URL-less image assets expose regeneration only when an
+  existing `imageAssetId` is present. Missing initial panels should be treated
+  as a storyboard-generation gap.
 - Open `/storyboard` and confirm it redirects to `/library/projects`.
 - Open `/projects/:projectId/watch`.
 - For a project with playable output, verify video controls and metadata.
-- For a project without playable output, verify storyboard fallback or the
-  current empty/error state is clear.
+- For a project without playable output, verify it redirects to
+  `/projects/:projectId#runs`.
 
 ## Library, Media Viewer, And Regeneration
 
 Purpose: verify the main persisted workspace collections and media actions.
 
 - Open `/library` and confirm it redirects to `/library/projects`.
-- Switch between projects, runs, assets, outputs, and evals tabs where present.
-- Open compatibility routes `/projects`, `/runs`, `/assets`, and `/outputs`.
+- Switch between the current Projects and Assets tabs.
+- Open compatibility routes `/projects`, `/runs`, `/assets`, and `/outputs`;
+  project-scoped runs/outputs should redirect to project detail anchors.
 - Verify filter, pagination, empty, loading, and API-error states.
 - From project cards, open detail, storyboard, runs, and watch links.
-- From run rows, open `/projects/:projectId/runs/:runId`.
-- From asset and output cards, open the media viewer.
+- From project detail run rows, open `/projects/:projectId/runs/:runId`.
+- From asset cards, open the media viewer. Verify outputs through dashboard
+  recent outputs and `/projects/:projectId/watch`.
 - Test image, video, and audio media when fixture data exists.
+- Prefer image, video, and audio assets generated from the production fixture
+  corpus when testing real media behavior.
 - Use next, previous, Escape close, and backdrop close.
 - Verify missing playback URLs fall back to thumbnails or placeholders.
 - Toggle public/private asset visibility and confirm optimistic UI either
@@ -146,6 +175,8 @@ settings.
   legible in every theme.
 - Save and delete provider API keys.
 - Save workspace model settings and refresh to confirm persistence.
+- Open `/account` and verify credits balance, buy-credit actions, and
+  transaction history in local and hosted modes.
 - Verify local developer mode handles unavailable provider-key data without a
   server error.
 - Sign out and confirm the app returns to `/`.
@@ -175,7 +206,8 @@ Purpose: verify reusable starting point navigation.
 - Click `Use template` on each template type and confirm it routes to
   `/projects/new?template=...`.
 - Verify whether the project creation flow consumes the `template` query
-  parameter. If not, record this as a product gap.
+  parameter. Today the route accepts it but does not prefill the Studio shell, so
+  record this as a product gap if it remains true.
 
 ## Brand Kit
 
@@ -217,6 +249,9 @@ Purpose: verify unauthenticated read surfaces and storage privacy.
 - Verify public assets are accessible without auth.
 - Verify private assets are inaccessible without auth.
 - Check signed URL expiry and fallback behavior where practical.
+- When testing with real generated assets, choose public/private candidates from
+  production fixture corpus projects so the same assets also validate storage,
+  discovery, and sharing behavior.
 
 ## Cross-Cutting Checks
 
