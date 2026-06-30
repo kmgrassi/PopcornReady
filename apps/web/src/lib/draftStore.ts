@@ -4,7 +4,7 @@ import { normalizeStudioStep } from "../components/studio/studioSteps";
 import type {
   CreateStudioDraftRequest,
   StudioDraftListResponse,
-  StudioDraftPayload as WireStudioDraftPayload,
+  StudioDraftPayload as SharedStudioDraftPayload,
   StudioDraftResponse,
   StudioDraftStep,
   UpdateStudioDraftRequest,
@@ -19,6 +19,9 @@ export interface StudioDraftPayload {
   projectId?: string;
   runId?: string;
 }
+
+type SerializedBriefDraft = Omit<BriefDraft, "selectedFootage"> & { selectedFootage: [] };
+type PersistedStudioDraftPayload = SharedStudioDraftPayload<SerializedBriefDraft>;
 
 export interface StudioDraftSummary {
   draftId: string;
@@ -95,16 +98,35 @@ function wireStepFromStudioStep(step: StudioStep): StudioDraftStep {
   return step === "plan" ? "story" : step;
 }
 
+function serializeDraft(draft: BriefDraft): SerializedBriefDraft {
+  return {
+    ...draft,
+    selectedFootage: [],
+  };
+}
+
+function hydrateDraft(draft: SerializedBriefDraft): BriefDraft {
+  const nextDraft: BriefDraft = {
+    ...DEFAULT_BRIEF_DRAFT,
+    ...draft,
+    selectedFootage: [],
+  };
+  if (nextDraft.footageChoice === "upload") {
+    nextDraft.footageMode = "hybrid";
+  }
+  return nextDraft;
+}
+
 function buildWirePayload(
   draft: BriefDraft,
   step: StudioStep,
   ids: { projectId?: string; runId?: string } = {},
-): WireStudioDraftPayload {
+): PersistedStudioDraftPayload {
   const payload = buildPayload(draft, step, ids);
   return {
     ...payload,
     step: wireStepFromStudioStep(payload.step),
-    draft: payload.draft as unknown as Record<string, unknown>,
+    draft: serializeDraft(payload.draft),
   };
 }
 
@@ -115,15 +137,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function payloadFromUnknown(value: unknown): StudioDraftPayload | null {
   if (!isRecord(value) || value.v !== STUDIO_DRAFT_PAYLOAD_VERSION) return null;
   if (!isRecord(value.draft)) return null;
-
-  const draft = {
-    ...DEFAULT_BRIEF_DRAFT,
-    ...(value.draft as Partial<BriefDraft>),
-    selectedFootage: [],
-  };
-  if (draft.footageChoice === "upload") {
-    draft.footageMode = "hybrid";
-  }
+  const draft = hydrateDraft(value.draft as SerializedBriefDraft);
 
   return {
     v: STUDIO_DRAFT_PAYLOAD_VERSION,

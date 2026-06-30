@@ -1,41 +1,77 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { getServiceSupabase } from "@/lib/supabase/clients";
 import { runQuery } from "@/lib/supabase/db-errors";
-import { notFound } from "./errors";
+import { assetEmbeddingConfig } from "./asset-embeddings/config";
+import { defaultAssetEmbeddingProvider } from "./asset-embeddings/provider";
+import { ApiError, notFound } from "./errors";
+import { cloneAssetEntry, cloneStoryEntry, materializePreview } from "./catalog-clone";
+import { mapCatalogEntry, pageResult } from "./catalog-mappers";
+import { assetSnapshot, storySnapshot } from "./catalog-snapshots";
+import {
+  CATALOG_COLUMNS,
+  CATALOG_SCHEMA_VERSION,
+  LOCAL_CATALOG_EMAIL,
+  type CatalogDeps,
+  type CatalogEntry,
+  type CatalogEntryRow,
+  type CatalogPage,
+  type TargetProjectRow,
+  type WorkspaceOwnerRow,
+} from "./catalog-types";
+import { buildSearchText } from "./catalog-utils";
 import type {
   CatalogEntryKind,
   PublishCatalogEntryInput,
   UpdateCatalogEntryInput,
   UseCatalogEntryInput,
 } from "./schemas";
-import {
-  CATALOG_COLUMNS,
-  CATALOG_SCHEMA_VERSION,
-  type CatalogDeps,
-  type CatalogEntry,
-  type CatalogEntryRow,
-  type CatalogPage,
-  assetSnapshot,
-  buildCatalogAssetSource,
-  buildSearchText,
-  cloneAssetEntry,
-  cloneStoryEntry,
-  cursorOffset,
-  dbFrom,
-  embedCatalogSearchText,
-  incrementUseCount,
-  mapCatalogEntry,
-  materializePreview,
-  ownedCatalogEntryRow,
-  pageResult,
-  publishedCatalogEntryRow,
-  storySnapshot,
-  targetProjectRow,
-} from "./catalog-support";
 
-const LOCAL_CATALOG_EMAIL = "local-catalog@popcornready.local";
+export type { CatalogDeps, CatalogEntry, CatalogPage } from "./catalog-types";
 
-interface WorkspaceOwnerRow {
-  owner_id: string | null;
+function dbFrom(deps?: CatalogDeps): SupabaseClient {
+  return deps?.db ?? getServiceSupabase();
+}
+
+interface CatalogSearchEmbedding {
+  literal: string;
+  model: string;
+  dims: number;
+}
+
+function vectorLiteral(values: number[]): string {
+  return `[${values.map((value) => String(value)).join(",")}]`;
+}
+
+// Builds the catalog-owned search vector from an entry's CURATED PUBLIC text
+// (title/summary/tags + snapshot.searchText) — never the source asset's own
+// embedding, which encodes private internal text. Degrades to null (full-text
+// only) when no OPENAI_API_KEY is set or the embed call fails, so publish/search
+// never hard-fail on the embedding path.
+async function embedCatalogSearchText(
+  text: string,
+  deps?: CatalogDeps
+): Promise<CatalogSearchEmbedding | null> {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  if (!process.env.OPENAI_API_KEY?.trim()) return null;
+  try {
+    const config = assetEmbeddingConfig();
+    const provider = deps?.embeddingProvider ?? defaultAssetEmbeddingProvider;
+    const vector = await provider.embed({ text: trimmed, config });
+    return { literal: vectorLiteral(vector), model: config.model, dims: config.dimensions };
+  } catch {
+    // Non-fatal: the full-text index still serves search without the vector.
+    return null;
+  }
+}
+
+function cursorOffset(cursor: string | null): number {
+  if (!cursor) return 0;
+  const parsed = Number(cursor);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new ApiError("validation_failed", "cursor must be a non-negative integer.");
+  }
+  return parsed;
 }
 
 export async function listCatalogEntries(input: {
@@ -389,5 +425,78 @@ export async function publisherUserIdForWorkspace(
   return (inserted as { id: string }).id;
 }
 
-export { buildCatalogAssetSource, buildSearchText };
-export type { CatalogDeps, CatalogEntry, CatalogPage };
+async function ownedCatalogEntryRow(
+  db: SupabaseClient,
+  entryId: string,
+  publisherUserId: string
+): Promise<CatalogEntryRow> {
+  const row = await runQuery(
+    "catalog.ownedCatalogEntryRow",
+    db
+      .from("catalog_entries")
+      .select(CATALOG_COLUMNS)
+      .eq("id", entryId)
+      .eq("publisher_user_id", publisherUserId)
+      .maybeSingle()
+  );
+  if (!row) throw notFound(`Catalog entry not found: ${entryId}`);
+  return row as CatalogEntryRow;
+}
+
+async function publishedCatalogEntryRow(
+  db: SupabaseClient,
+  entryId: string
+): Promise<CatalogEntryRow> {
+  const row = await runQuery(
+    "catalog.publishedCatalogEntryRow",
+    db
+      .from("catalog_entries")
+      .select(CATALOG_COLUMNS)
+      .eq("id", entryId)
+      .eq("status", "published")
+      .maybeSingle()
+  );
+  if (!row) throw notFound(`Catalog entry not found: ${entryId}`);
+  return row as CatalogEntryRow;
+}
+
+async function targetProjectRow(
+  db: SupabaseClient,
+  workspaceId: string,
+  projectId: string
+): Promise<TargetProjectRow> {
+  const row = await runQuery(
+    "catalog.targetProjectRow",
+    db
+      .from("projects")
+      .select("id,workspace_id,visibility")
+      .eq("id", projectId)
+      .eq("workspace_id", workspaceId)
+      .neq("status", "deleted")
+      .maybeSingle()
+  );
+  if (!row) throw notFound(`Project not found: ${projectId}`);
+  return row as TargetProjectRow;
+}
+
+async function incrementUseCount(
+  db: SupabaseClient,
+  entryId: string
+): Promise<CatalogEntryRow> {
+  const current = await runQuery(
+    "catalog.incrementUseCount read",
+    db.from("catalog_entries").select("use_count").eq("id", entryId).single()
+  );
+  const next = ((current as { use_count: number }).use_count ?? 0) + 1;
+  return (await runQuery(
+    "catalog.incrementUseCount update",
+    db
+      .from("catalog_entries")
+      .update({ use_count: next })
+      .eq("id", entryId)
+      .select(CATALOG_COLUMNS)
+      .single()
+  )) as CatalogEntryRow;
+}
+
+export { buildCatalogAssetSource, buildSearchText } from "./catalog-utils";
