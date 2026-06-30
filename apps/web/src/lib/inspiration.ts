@@ -116,6 +116,7 @@ export function inspirationPrompt(inspiration: RandomStoryInspiration): string {
     "",
     inspiration.premise,
     "",
+    "Background ingredients to use only where they strengthen the concept:",
     ...ingredientLines,
   ].join("\n");
 }
