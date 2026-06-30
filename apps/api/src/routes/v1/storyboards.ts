@@ -26,6 +26,7 @@ import {
   updateScene,
   updateStoryboard,
 } from "@/lib/api/v1/storyboards";
+import { generateSceneWireframe } from "@/lib/api/v1/scene-wireframe";
 import { parsePagination } from "@/lib/api/v1/schemas";
 import {
   getActiveProjectPlan,
@@ -371,5 +372,26 @@ storyboardsRouter.delete(
       panelId: requiredParam(params, "panelId"),
     });
     return { status: 200, body: { ok: true } };
+  })
+);
+
+// Generate (or regenerate) a scene's disposable CARTOON wireframe — the
+// high-level review panel — and point scene_asset_id at it.
+storyboardsRouter.post(
+  "/projects/:projectId/storyboards/:storyboardId/scenes/:sceneId/wireframe",
+  mutation(async ({ auth, body }, params) => {
+    const prompt =
+      body && typeof body === "object" && !Array.isArray(body) &&
+      typeof (body as { prompt?: unknown }).prompt === "string"
+        ? ((body as { prompt: string }).prompt)
+        : undefined;
+    const result = await generateSceneWireframe({
+      auth,
+      projectId: requiredParam(params, "projectId"),
+      storyboardId: requiredParam(params, "storyboardId"),
+      sceneId: requiredParam(params, "sceneId"),
+      prompt,
+    });
+    return { status: 201, body: result };
   })
 );

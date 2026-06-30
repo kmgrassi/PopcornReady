@@ -321,6 +321,20 @@ export const v1Api = {
         },
       }
     ),
+  // Generate (or regenerate) a scene's disposable cartoon wireframe. Synchronous
+  // on the server; resolves once scene_asset_id points at the new sketch.
+  generateSceneWireframe: (
+    projectId: string,
+    storyboardId: string,
+    sceneId: string,
+    input?: { prompt?: string }
+  ) =>
+    apiRequest<{ sceneId: string; assetId: string }>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/storyboards/${encodeURIComponent(
+        storyboardId
+      )}/scenes/${encodeURIComponent(sceneId)}/wireframe`,
+      { method: "POST", body: input ?? {} }
+    ),
   // Latest storyboard generation job for the project (or null). Reload-safe —
   // does not depend on a client-held job id.
   getProjectStoryboardJob: (projectId: string, signal?: AbortSignal) =>

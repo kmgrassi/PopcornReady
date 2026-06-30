@@ -3532,11 +3532,30 @@ export async function getProjectStoryboard(
       beatsByScene.set(beat.sceneId, [...(beatsByScene.get(beat.sceneId) ?? []), beat]);
     }
 
+    // Resolve the scene-level wireframe media (story_blueprint_scenes.scene_asset_id)
+    // with the same lineage-head resolver used for panel tiles.
+    const sceneMedia = await resolvePanelMediaByAssetId(
+      db,
+      workspaceId,
+      projectId,
+      spineSceneRows
+        .map((scene) => scene.scene_asset_id)
+        .filter((id): id is string => Boolean(id))
+    );
+
     return mapSpineStoryboard(
       project,
       storyBlueprintId,
       planAssetId,
-      spineSceneRows.map((scene) => mapSpineScene(scene, beatsByScene.get(scene.id) ?? []))
+      spineSceneRows.map((scene) => {
+        const mapped = mapSpineScene(scene, beatsByScene.get(scene.id) ?? []);
+        const media = scene.scene_asset_id ? sceneMedia.get(scene.scene_asset_id) : undefined;
+        if (media?.url) {
+          mapped.url = media.url;
+          if (media.thumbnailUrl) mapped.thumbnailUrl = media.thumbnailUrl;
+        }
+        return mapped;
+      })
     );
   }
 
