@@ -167,7 +167,9 @@ const REVISION_SYSTEM = `You are a ruthless development editor doing an
 anti-cliche pass on generated movie concepts.
 
 For each concept:
-- Identify the most formulaic or generic part of the title, logline, or premise.
+- Privately identify the most formulaic or generic part of the title, logline,
+  or premise. Do not include critique labels, analysis notes, or phrases like
+  "most formulaic element" in the returned title, logline, or premise.
 - Rewrite the title, logline, and premise to become more specific, stranger,
   more human, or more culturally grounded while preserving the same ingredient
   provenance and basic story intent.

@@ -112,8 +112,6 @@ export function inspirationPrompt(inspiration: RandomStoryInspiration): string {
     return `${INGREDIENT_PROMPT_LABELS[group]}: ${names}`;
   });
   return [
-    "Develop this authored movie concept into a 30-second storyboard. Keep the logline and premise as the source of truth; the ingredient list is background inspiration, not a checklist of required literal beats.",
-    "",
     inspiration.logline,
     "",
     inspiration.premise,

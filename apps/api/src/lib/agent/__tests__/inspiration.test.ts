@@ -77,6 +77,7 @@ test("rankStoryConcepts revises generated concepts through an anti-cliche pass",
   assert.match(calls[0].cachedSystem, /Privately try at least four angles/);
   assert.match(calls[0].cachedSystem, /Avoid these phrases/);
   assert.match(calls[1].cachedSystem, /anti-cliche pass/);
+  assert.match(calls[1].cachedSystem, /Do not include critique labels/);
   assert.match(calls[1].user, /The Chosen Current/);
   assert.equal(ranked[0].movieTitle, "Lantern Debt");
   assert.equal(ranked[0].scores.originality, 91);
