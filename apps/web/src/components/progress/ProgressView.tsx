@@ -23,7 +23,7 @@ import {
 import { useProjectQuery } from "../../lib/queryClient";
 import { v1Api } from "../../lib/api-client";
 import { modelPurposeForAssetKind } from "../../lib/modelOptions";
-import { StageRail } from "./StageRail";
+import { PIPELINE_GROUPS, StageRail } from "./StageRail";
 import {
   StoryboardBoard as FeedbackStoryboardBoard,
   storyboardFeedbackTargetKey,
@@ -169,6 +169,35 @@ function nextStageType(
   return ORDERED_STAGE_TYPES.find(
     (type) => GENERATION_STAGE_ORDER[type] > currentOrder,
   );
+}
+
+function lastCompletedPipelineStage(stages: GenerationStage[]): string | null {
+  const stagesByTool = new Map(
+    stages
+      .filter((stage) => stage.toolName)
+      .map((stage) => [stage.toolName as string, stage]),
+  );
+
+  const completedGroup = [...PIPELINE_GROUPS]
+    .reverse()
+    .find((group) => {
+      const hasAnyToolStage = group.tools.some((toolName) =>
+        stagesByTool.has(toolName),
+      );
+
+      if (hasAnyToolStage) {
+        return group.tools.every(
+          (toolName) => stagesByTool.get(toolName)?.status === "succeeded",
+        );
+      }
+
+      const fallbackStages = stages.filter((stage) =>
+        (group.fallbackTypes ?? [group.type]).includes(stage.type),
+      );
+      return fallbackStages.some((stage) => stage.status === "succeeded");
+    });
+
+  return completedGroup?.label ?? null;
 }
 
 function formatDateTime(value?: string) {
@@ -503,6 +532,7 @@ export function ProgressView({
   const progress = progressSummary(detail.run, detail.stages);
   const nextType = nextStageType(detail.run, detail.stages);
   const nextStageLabel = nextType ? reviewStageLabel(nextType) : null;
+  const lastCompletedStageLabel = lastCompletedPipelineStage(detail.stages);
   const activeStage = currentRunStage(detail.run, detail.stages);
   const currentStageLabel = detail.run.reviewGate
     ? reviewStageLabel(detail.run.reviewGate.stageType)
@@ -638,13 +668,20 @@ export function ProgressView({
         <div className={styles.headerActions}>
           <div className={styles.headerStatusPanel} aria-label="Current run status">
             <div>
-              <span className={styles.statusLabel}>Current stage</span>
-              <strong>{currentStageDisplay}</strong>
-            </div>
-            <div>
               <span className={styles.statusLabel}>Status</span>
               <strong>{headerStatus(detail.run)}</strong>
             </div>
+            {lastCompletedStageLabel ? (
+              <div>
+                <span className={styles.statusLabel}>Last completed</span>
+                <strong>{lastCompletedStageLabel}</strong>
+              </div>
+            ) : (
+              <div>
+                <span className={styles.statusLabel}>Current step</span>
+                <strong>{currentStageDisplay}</strong>
+              </div>
+            )}
             {nextStageLabel ? (
               <div>
                 <span className={styles.statusLabel}>Next step</span>

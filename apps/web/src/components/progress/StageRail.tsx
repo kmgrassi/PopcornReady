@@ -30,7 +30,7 @@ interface StageRailProps {
   showUpcomingStages?: boolean;
 }
 
-const PIPELINE_GROUPS: Array<{
+export const PIPELINE_GROUPS: Array<{
   id: string;
   type: GenerationStageType;
   activeTypes?: GenerationStageType[];
