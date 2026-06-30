@@ -181,12 +181,14 @@ function lastCompletedPipelineStage(stages: GenerationStage[]): string | null {
   const completedGroup = [...PIPELINE_GROUPS]
     .reverse()
     .find((group) => {
-      const toolStages = group.tools
-        .map((toolName) => stagesByTool.get(toolName))
-        .filter((stage): stage is GenerationStage => Boolean(stage));
+      const hasAnyToolStage = group.tools.some((toolName) =>
+        stagesByTool.has(toolName),
+      );
 
-      if (toolStages.length > 0) {
-        return toolStages.every((stage) => stage.status === "succeeded");
+      if (hasAnyToolStage) {
+        return group.tools.every(
+          (toolName) => stagesByTool.get(toolName)?.status === "succeeded",
+        );
       }
 
       const fallbackStages = stages.filter((stage) =>
