@@ -9,9 +9,9 @@ export type StudioDraftStep =
   | "review"
   | "export";
 
-export interface StudioDraftPayload {
+export interface StudioDraftPayload<TDraft extends Record<string, unknown> = Record<string, unknown>> {
   v: typeof STUDIO_DRAFT_PAYLOAD_VERSION;
-  draft: Record<string, unknown>;
+  draft: TDraft;
   step: StudioDraftStep;
   projectId?: string;
   runId?: string;
