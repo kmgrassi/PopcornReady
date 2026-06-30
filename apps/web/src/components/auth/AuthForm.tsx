@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { LogoMark } from "../LogoMark";
+import { Button } from "../ui/Button";
 import { clearAllSupabaseAuthStorage, getSupabaseClient } from "../../lib/supabase/browser";
 import { usePendingQuickStartRun } from "../../lib/quickStartRun";
 import { useAuth } from "./AuthProvider";
@@ -198,10 +199,14 @@ export function AuthForm({ mode }: AuthFormProps) {
           <p className={styles.status}>Starting your video...</p>
         )}
 
-        <button
+        <Button
           className={styles.submit}
+          variant="cta"
+          size="lg"
+          fullWidth
           type="button"
           onClick={() => void submit()}
+          isLoading={loading || quickStartResume.starting}
           disabled={
             !ready ||
             loading ||
@@ -220,7 +225,7 @@ export function AuthForm({ mode }: AuthFormProps) {
               : isSignup
                 ? "Create account"
                 : "Sign in"}
-        </button>
+        </Button>
 
         <p className={styles.switch}>
           {isSignup ? "Already have an account?" : "Don't have an account?"}{" "}
