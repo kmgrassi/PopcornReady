@@ -249,12 +249,12 @@ function SceneSection({
           {scene.durationSec ? <span>{Math.round(scene.durationSec)}s</span> : null}
         </div>
       </div>
-      {/* The disposable cartoon wireframe: one review panel per scene. */}
+      {/* The disposable storyboard image: one review panel per scene. */}
       <div className={styles.sceneWireframe}>
         {wireframeGenerating ? (
           <div className={`${styles.panelImage} ${styles.panelEmpty}`} aria-busy="true">
             <span className={styles.spinner} aria-hidden />
-            <span>Sketching scene…</span>
+            <span>Drawing storyboard image…</span>
           </div>
         ) : (
           <AssetImage
@@ -262,7 +262,7 @@ function SceneSection({
             url={sceneImage}
             assetId={scene.sceneAssetId}
             prompt={scene.summary}
-            alt={`${sceneTitle} storyboard wireframe`}
+            alt={`${sceneTitle} storyboard image`}
             // Re-rolls go through the dedicated generate mutation, not the
             // per-asset regenerate endpoint.
             allowRegenerate={false}
@@ -272,7 +272,7 @@ function SceneSection({
             placeholder={
               <>
                 <span className={styles.beatNumber}>Scene {order}</span>
-                <span>No storyboard wireframe yet</span>
+                <span>No storyboard image yet</span>
                 <Button
                   variant="cta"
                   size="sm"
@@ -280,7 +280,7 @@ function SceneSection({
                   className={styles.generateButton}
                   onClick={() => onGenerateWireframe()}
                 >
-                  Generate wireframe
+                  Generate storyboard image
                 </Button>
               </>
             }
@@ -296,7 +296,7 @@ function SceneSection({
                         label: sceneTitle,
                       },
                       url: scene.url ?? scene.thumbnailUrl,
-                      title: `${sceneTitle} wireframe`,
+                      title: `${sceneTitle} storyboard image`,
                       subtitle: `Scene ${order}`,
                     }),
                 }
