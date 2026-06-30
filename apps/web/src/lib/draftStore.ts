@@ -3,12 +3,19 @@ import type { BriefDraft, StudioStep } from "../components/studio/useStudioFlow"
 import { normalizeStudioStep } from "../components/studio/studioSteps";
 import type {
   CreateStudioDraftRequest,
+  StudioDraftBrief,
+  StudioDraftFootageChoice,
+  StudioDraftFootageMode,
+  StudioDraftFormat,
   StudioDraftListResponse,
   StudioDraftPayload as SharedStudioDraftPayload,
+  StudioDraftPlatform,
   StudioDraftResponse,
+  StudioDraftSeedKind,
   StudioDraftStep,
   UpdateStudioDraftRequest,
 } from "@popcorn/shared/v1/studio-drafts";
+import type { AspectRatio, GateableGenerationStageType } from "@popcorn/shared/v1/types";
 
 export const STUDIO_DRAFT_PAYLOAD_VERSION = 1;
 
@@ -20,8 +27,7 @@ export interface StudioDraftPayload {
   runId?: string;
 }
 
-type SerializedBriefDraft = Omit<BriefDraft, "selectedFootage"> & { selectedFootage: [] };
-type PersistedStudioDraftPayload = SharedStudioDraftPayload<SerializedBriefDraft>;
+type PersistedStudioDraftPayload = SharedStudioDraftPayload<StudioDraftBrief>;
 
 export interface StudioDraftSummary {
   draftId: string;
@@ -73,6 +79,72 @@ function normalizeStep(value: unknown): StudioStep {
   return normalizeStudioStep(typeof value === "string" ? value : null);
 }
 
+function stringOrUndefined(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function numberOrUndefined(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function booleanOrUndefined(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function aspectRatioOrUndefined(value: unknown): AspectRatio | undefined {
+  return value === "9:16" || value === "16:9" || value === "1:1" ? value : undefined;
+}
+
+function footageChoiceOrUndefined(value: unknown): StudioDraftFootageChoice | undefined {
+  return value === "prompt_only" || value === "upload" ? value : undefined;
+}
+
+function footageModeOrUndefined(value: unknown): StudioDraftFootageMode | undefined {
+  return value === "asset_driven" || value === "hybrid" ? value : undefined;
+}
+
+function platformOrUndefined(value: unknown): StudioDraftPlatform | undefined {
+  return value === "youtube" ||
+    value === "tiktok" ||
+    value === "reels" ||
+    value === "facebook" ||
+    value === "vimeo" ||
+    value === "general"
+    ? value
+    : undefined;
+}
+
+function formatOrUndefined(value: unknown): StudioDraftFormat | undefined {
+  return value === "mystery_to_model" ||
+    value === "visual_reveal" ||
+    value === "challenge" ||
+    value === "misconception" ||
+    value === "animated_explainer" ||
+    value === "classroom_demo" ||
+    value === "aesthetic_montage"
+    ? value
+    : undefined;
+}
+
+function seedKindOrUndefined(value: unknown): StudioDraftSeedKind | undefined {
+  return value === "image" || value === "video" ? value : undefined;
+}
+
+function reviewGatesOrUndefined(value: unknown): GateableGenerationStageType[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.filter(
+    (gate): gate is GateableGenerationStageType =>
+      gate === "brief_intake" ||
+      gate === "creative_plan" ||
+      gate === "storyboard" ||
+      gate === "asset_generation" ||
+      gate === "audio_generation" ||
+      gate === "timeline_assembly" ||
+      gate === "quality_review" ||
+      gate === "export"
+  );
+}
+
 function sanitizeDraftForJson(draft: BriefDraft): BriefDraft {
   return {
     ...draft,
@@ -98,14 +170,33 @@ function wireStepFromStudioStep(step: StudioStep): StudioDraftStep {
   return step === "plan" ? "story" : step;
 }
 
-function serializeDraft(draft: BriefDraft): SerializedBriefDraft {
+function serializeDraft(draft: BriefDraft): StudioDraftBrief {
   return {
-    ...draft,
-    selectedFootage: [],
+    goal: draft.goal,
+    targetLengthSec: draft.targetLengthSec,
+    aspectRatio: draft.aspectRatio,
+    projectName: draft.projectName,
+    footageChoice: draft.footageChoice,
+    footageMode: draft.footageMode,
+    audience: draft.audience,
+    platform: draft.platform,
+    format: draft.format,
+    hook: draft.hook,
+    bestVisual: draft.bestVisual,
+    bigIdea: draft.bigIdea,
+    payoff: draft.payoff,
+    accuracyNote: draft.accuracyNote,
+    style: draft.style,
+    callToAction: draft.callToAction,
+    provider: draft.provider,
+    seedKind: draft.seedKind,
+    seedSize: draft.seedSize,
+    showCaptions: draft.showCaptions,
+    reviewGates: draft.reviewGates,
   };
 }
 
-function hydrateDraft(draft: SerializedBriefDraft): BriefDraft {
+function hydrateDraft(draft: StudioDraftBrief): BriefDraft {
   const nextDraft: BriefDraft = {
     ...DEFAULT_BRIEF_DRAFT,
     ...draft,
@@ -134,14 +225,65 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+function persistedDraftFromUnknown(value: unknown): StudioDraftBrief | null {
+  if (!isRecord(value)) return null;
+
+  const draft: StudioDraftBrief = {};
+  const goal = stringOrUndefined(value.goal);
+  const targetLengthSec = numberOrUndefined(value.targetLengthSec);
+  const aspectRatio = aspectRatioOrUndefined(value.aspectRatio);
+  const projectName = stringOrUndefined(value.projectName);
+  const footageChoice = footageChoiceOrUndefined(value.footageChoice);
+  const footageMode = footageModeOrUndefined(value.footageMode);
+  const audience = stringOrUndefined(value.audience);
+  const platform = platformOrUndefined(value.platform);
+  const format = formatOrUndefined(value.format);
+  const hook = stringOrUndefined(value.hook);
+  const bestVisual = stringOrUndefined(value.bestVisual);
+  const bigIdea = stringOrUndefined(value.bigIdea);
+  const payoff = stringOrUndefined(value.payoff);
+  const accuracyNote = stringOrUndefined(value.accuracyNote);
+  const style = stringOrUndefined(value.style);
+  const callToAction = stringOrUndefined(value.callToAction);
+  const provider = stringOrUndefined(value.provider);
+  const seedKind = seedKindOrUndefined(value.seedKind);
+  const seedSize = stringOrUndefined(value.seedSize);
+  const showCaptions = booleanOrUndefined(value.showCaptions);
+  const reviewGates = reviewGatesOrUndefined(value.reviewGates);
+
+  if (goal !== undefined) draft.goal = goal;
+  if (targetLengthSec !== undefined) draft.targetLengthSec = targetLengthSec;
+  if (aspectRatio !== undefined) draft.aspectRatio = aspectRatio;
+  if (projectName !== undefined) draft.projectName = projectName;
+  if (footageChoice !== undefined) draft.footageChoice = footageChoice;
+  if (footageMode !== undefined) draft.footageMode = footageMode;
+  if (audience !== undefined) draft.audience = audience;
+  if (platform !== undefined) draft.platform = platform;
+  if (format !== undefined) draft.format = format;
+  if (hook !== undefined) draft.hook = hook;
+  if (bestVisual !== undefined) draft.bestVisual = bestVisual;
+  if (bigIdea !== undefined) draft.bigIdea = bigIdea;
+  if (payoff !== undefined) draft.payoff = payoff;
+  if (accuracyNote !== undefined) draft.accuracyNote = accuracyNote;
+  if (style !== undefined) draft.style = style;
+  if (callToAction !== undefined) draft.callToAction = callToAction;
+  if (provider !== undefined) draft.provider = provider;
+  if (seedKind !== undefined) draft.seedKind = seedKind;
+  if (seedSize !== undefined) draft.seedSize = seedSize;
+  if (showCaptions !== undefined) draft.showCaptions = showCaptions;
+  if (reviewGates !== undefined) draft.reviewGates = reviewGates;
+
+  return draft;
+}
+
 function payloadFromUnknown(value: unknown): StudioDraftPayload | null {
   if (!isRecord(value) || value.v !== STUDIO_DRAFT_PAYLOAD_VERSION) return null;
-  if (!isRecord(value.draft)) return null;
-  const draft = hydrateDraft(value.draft as SerializedBriefDraft);
+  const parsedDraft = persistedDraftFromUnknown(value.draft);
+  if (!parsedDraft) return null;
 
   return {
     v: STUDIO_DRAFT_PAYLOAD_VERSION,
-    draft,
+    draft: hydrateDraft(parsedDraft),
     step: normalizeStep(value.step),
     projectId: typeof value.projectId === "string" ? value.projectId : undefined,
     runId: typeof value.runId === "string" ? value.runId : undefined,
