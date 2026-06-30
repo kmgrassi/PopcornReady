@@ -7,9 +7,9 @@ import type {
   StudioDraftFootageChoice,
   StudioDraftFootageMode,
   StudioDraftFormat,
-  StudioDraftPlatform,
   StudioDraftListResponse,
-  StudioDraftPayload as WireStudioDraftPayload,
+  StudioDraftPayload as SharedStudioDraftPayload,
+  StudioDraftPlatform,
   StudioDraftResponse,
   StudioDraftSeedKind,
   StudioDraftStep,
@@ -26,6 +26,8 @@ export interface StudioDraftPayload {
   projectId?: string;
   runId?: string;
 }
+
+type PersistedStudioDraftPayload = SharedStudioDraftPayload<StudioDraftBrief>;
 
 export interface StudioDraftSummary {
   draftId: string;
@@ -168,16 +170,54 @@ function wireStepFromStudioStep(step: StudioStep): StudioDraftStep {
   return step === "plan" ? "story" : step;
 }
 
+function serializeDraft(draft: BriefDraft): StudioDraftBrief {
+  return {
+    goal: draft.goal,
+    targetLengthSec: draft.targetLengthSec,
+    aspectRatio: draft.aspectRatio,
+    projectName: draft.projectName,
+    footageChoice: draft.footageChoice,
+    footageMode: draft.footageMode,
+    audience: draft.audience,
+    platform: draft.platform,
+    format: draft.format,
+    hook: draft.hook,
+    bestVisual: draft.bestVisual,
+    bigIdea: draft.bigIdea,
+    payoff: draft.payoff,
+    accuracyNote: draft.accuracyNote,
+    style: draft.style,
+    callToAction: draft.callToAction,
+    provider: draft.provider,
+    seedKind: draft.seedKind,
+    seedSize: draft.seedSize,
+    showCaptions: draft.showCaptions,
+    reviewGates: draft.reviewGates,
+  };
+}
+
+function hydrateDraft(draft: StudioDraftBrief): BriefDraft {
+  const nextDraft: BriefDraft = {
+    ...DEFAULT_BRIEF_DRAFT,
+    ...draft,
+    selectedFootage: [],
+  };
+  if (nextDraft.footageChoice === "upload") {
+    nextDraft.footageMode = "hybrid";
+  }
+  return nextDraft;
+}
+
 function buildWirePayload(
   draft: BriefDraft,
   step: StudioStep,
   ids: { projectId?: string; runId?: string } = {},
-): WireStudioDraftPayload {
+): PersistedStudioDraftPayload {
   const payload = buildPayload(draft, step, ids);
   return {
     ...payload,
     step: wireStepFromStudioStep(payload.step),
-    draft: payload.draft,
+    draft: serializeDraft(payload.draft),
   };
 }
 
@@ -187,29 +227,53 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function persistedDraftFromUnknown(value: unknown): StudioDraftBrief | null {
   if (!isRecord(value)) return null;
-  return {
-    goal: stringOrUndefined(value.goal),
-    targetLengthSec: numberOrUndefined(value.targetLengthSec),
-    aspectRatio: aspectRatioOrUndefined(value.aspectRatio),
-    projectName: stringOrUndefined(value.projectName),
-    footageChoice: footageChoiceOrUndefined(value.footageChoice),
-    footageMode: footageModeOrUndefined(value.footageMode),
-    audience: stringOrUndefined(value.audience),
-    platform: platformOrUndefined(value.platform),
-    format: formatOrUndefined(value.format),
-    hook: stringOrUndefined(value.hook),
-    bestVisual: stringOrUndefined(value.bestVisual),
-    bigIdea: stringOrUndefined(value.bigIdea),
-    payoff: stringOrUndefined(value.payoff),
-    accuracyNote: stringOrUndefined(value.accuracyNote),
-    style: stringOrUndefined(value.style),
-    callToAction: stringOrUndefined(value.callToAction),
-    provider: stringOrUndefined(value.provider),
-    seedKind: seedKindOrUndefined(value.seedKind),
-    seedSize: stringOrUndefined(value.seedSize),
-    showCaptions: booleanOrUndefined(value.showCaptions),
-    reviewGates: reviewGatesOrUndefined(value.reviewGates),
-  };
+
+  const draft: StudioDraftBrief = {};
+  const goal = stringOrUndefined(value.goal);
+  const targetLengthSec = numberOrUndefined(value.targetLengthSec);
+  const aspectRatio = aspectRatioOrUndefined(value.aspectRatio);
+  const projectName = stringOrUndefined(value.projectName);
+  const footageChoice = footageChoiceOrUndefined(value.footageChoice);
+  const footageMode = footageModeOrUndefined(value.footageMode);
+  const audience = stringOrUndefined(value.audience);
+  const platform = platformOrUndefined(value.platform);
+  const format = formatOrUndefined(value.format);
+  const hook = stringOrUndefined(value.hook);
+  const bestVisual = stringOrUndefined(value.bestVisual);
+  const bigIdea = stringOrUndefined(value.bigIdea);
+  const payoff = stringOrUndefined(value.payoff);
+  const accuracyNote = stringOrUndefined(value.accuracyNote);
+  const style = stringOrUndefined(value.style);
+  const callToAction = stringOrUndefined(value.callToAction);
+  const provider = stringOrUndefined(value.provider);
+  const seedKind = seedKindOrUndefined(value.seedKind);
+  const seedSize = stringOrUndefined(value.seedSize);
+  const showCaptions = booleanOrUndefined(value.showCaptions);
+  const reviewGates = reviewGatesOrUndefined(value.reviewGates);
+
+  if (goal !== undefined) draft.goal = goal;
+  if (targetLengthSec !== undefined) draft.targetLengthSec = targetLengthSec;
+  if (aspectRatio !== undefined) draft.aspectRatio = aspectRatio;
+  if (projectName !== undefined) draft.projectName = projectName;
+  if (footageChoice !== undefined) draft.footageChoice = footageChoice;
+  if (footageMode !== undefined) draft.footageMode = footageMode;
+  if (audience !== undefined) draft.audience = audience;
+  if (platform !== undefined) draft.platform = platform;
+  if (format !== undefined) draft.format = format;
+  if (hook !== undefined) draft.hook = hook;
+  if (bestVisual !== undefined) draft.bestVisual = bestVisual;
+  if (bigIdea !== undefined) draft.bigIdea = bigIdea;
+  if (payoff !== undefined) draft.payoff = payoff;
+  if (accuracyNote !== undefined) draft.accuracyNote = accuracyNote;
+  if (style !== undefined) draft.style = style;
+  if (callToAction !== undefined) draft.callToAction = callToAction;
+  if (provider !== undefined) draft.provider = provider;
+  if (seedKind !== undefined) draft.seedKind = seedKind;
+  if (seedSize !== undefined) draft.seedSize = seedSize;
+  if (showCaptions !== undefined) draft.showCaptions = showCaptions;
+  if (reviewGates !== undefined) draft.reviewGates = reviewGates;
+
+  return draft;
 }
 
 function payloadFromUnknown(value: unknown): StudioDraftPayload | null {
@@ -217,18 +281,9 @@ function payloadFromUnknown(value: unknown): StudioDraftPayload | null {
   const parsedDraft = persistedDraftFromUnknown(value.draft);
   if (!parsedDraft) return null;
 
-  const draft = {
-    ...DEFAULT_BRIEF_DRAFT,
-    ...parsedDraft,
-    selectedFootage: [],
-  };
-  if (draft.footageChoice === "upload") {
-    draft.footageMode = "hybrid";
-  }
-
   return {
     v: STUDIO_DRAFT_PAYLOAD_VERSION,
-    draft,
+    draft: hydrateDraft(parsedDraft),
     step: normalizeStep(value.step),
     projectId: typeof value.projectId === "string" ? value.projectId : undefined,
     runId: typeof value.runId === "string" ? value.runId : undefined,

@@ -42,9 +42,9 @@ export interface StudioDraftBrief {
   reviewGates?: GateableGenerationStageType[];
 }
 
-export interface StudioDraftPayload {
+export interface StudioDraftPayload<TDraft extends StudioDraftBrief = StudioDraftBrief> {
   v: typeof STUDIO_DRAFT_PAYLOAD_VERSION;
-  draft: StudioDraftBrief;
+  draft: TDraft;
   step: StudioDraftStep;
   projectId?: string;
   runId?: string;
