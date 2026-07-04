@@ -1,6 +1,9 @@
 import { apiRequest, v1Api } from "./api-client";
 import type { BriefDraft, StudioStep } from "../components/studio/useStudioFlow";
 import { normalizeStudioStep } from "../components/studio/studioSteps";
+import {
+  STUDIO_DRAFT_PAYLOAD_VERSION as SHARED_STUDIO_DRAFT_PAYLOAD_VERSION,
+} from "@popcorn/shared/v1/studio-drafts";
 import type {
   CreateStudioDraftRequest,
   StudioDraftListResponse,
@@ -9,8 +12,9 @@ import type {
   StudioDraftStep,
   UpdateStudioDraftRequest,
 } from "@popcorn/shared/v1/studio-drafts";
+import { GATEABLE_GENERATION_STAGE_TYPES } from "@popcorn/shared/v1/types";
 
-export const STUDIO_DRAFT_PAYLOAD_VERSION = 1;
+export const STUDIO_DRAFT_PAYLOAD_VERSION = SHARED_STUDIO_DRAFT_PAYLOAD_VERSION;
 
 export interface StudioDraftPayload {
   v: typeof STUDIO_DRAFT_PAYLOAD_VERSION;
@@ -22,6 +26,21 @@ export interface StudioDraftPayload {
 
 type SerializedBriefDraft = Omit<BriefDraft, "selectedFootage"> & { selectedFootage: [] };
 type PersistedStudioDraftPayload = SharedStudioDraftPayload<SerializedBriefDraft>;
+
+const ASPECT_RATIOS = ["9:16", "16:9", "1:1"] as const;
+const FOOTAGE_CHOICES = ["prompt_only", "upload"] as const;
+const FOOTAGE_MODES = ["asset_driven", "hybrid"] as const;
+const PLATFORMS = ["youtube", "tiktok", "reels", "facebook", "vimeo", "general"] as const;
+const STORY_FORMATS = [
+  "mystery_to_model",
+  "visual_reveal",
+  "challenge",
+  "misconception",
+  "animated_explainer",
+  "classroom_demo",
+  "aesthetic_montage",
+] as const;
+const SEED_KINDS = ["image", "video"] as const;
 
 export interface StudioDraftSummary {
   draftId: string;
@@ -69,8 +88,11 @@ async function currentWorkspaceId(): Promise<string> {
   return (await v1Api.me()).workspaceId;
 }
 
-function normalizeStep(value: unknown): StudioStep {
-  return normalizeStudioStep(typeof value === "string" ? value : null);
+function normalizeStep(
+  value: unknown,
+  options: { hasRun?: boolean } = {},
+): StudioStep {
+  return normalizeStudioStep(typeof value === "string" ? value : null, options);
 }
 
 function sanitizeDraftForJson(draft: BriefDraft): BriefDraft {
@@ -134,21 +156,88 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function payloadFromUnknown(value: unknown): StudioDraftPayload | null {
+function stringOrDefault(value: unknown, fallback: string): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function booleanOrDefault(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function numberOrDefault(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function readEnum<TValue extends string>(
+  value: unknown,
+  allowed: readonly TValue[],
+  fallback: TValue,
+): TValue {
+  return typeof value === "string" && allowed.includes(value as TValue)
+    ? (value as TValue)
+    : fallback;
+}
+
+function parseReviewGates(value: unknown): BriefDraft["reviewGates"] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (candidate): candidate is BriefDraft["reviewGates"][number] =>
+      typeof candidate === "string" &&
+      (GATEABLE_GENERATION_STAGE_TYPES as readonly string[]).includes(candidate),
+  );
+}
+
+function parseSerializedBriefDraft(value: unknown): SerializedBriefDraft | null {
+  if (!isRecord(value)) return null;
+
+  return {
+    goal: stringOrDefault(value.goal, DEFAULT_BRIEF_DRAFT.goal),
+    targetLengthSec: numberOrDefault(value.targetLengthSec, DEFAULT_BRIEF_DRAFT.targetLengthSec),
+    aspectRatio: readEnum(value.aspectRatio, ASPECT_RATIOS, DEFAULT_BRIEF_DRAFT.aspectRatio),
+    projectName: stringOrDefault(value.projectName, DEFAULT_BRIEF_DRAFT.projectName),
+    footageChoice: readEnum(
+      value.footageChoice,
+      FOOTAGE_CHOICES,
+      DEFAULT_BRIEF_DRAFT.footageChoice,
+    ),
+    footageMode: readEnum(value.footageMode, FOOTAGE_MODES, DEFAULT_BRIEF_DRAFT.footageMode),
+    selectedFootage: [],
+    audience: stringOrDefault(value.audience, DEFAULT_BRIEF_DRAFT.audience),
+    platform: readEnum(value.platform, PLATFORMS, DEFAULT_BRIEF_DRAFT.platform),
+    format: readEnum(value.format, STORY_FORMATS, DEFAULT_BRIEF_DRAFT.format),
+    hook: stringOrDefault(value.hook, DEFAULT_BRIEF_DRAFT.hook),
+    bestVisual: stringOrDefault(value.bestVisual, DEFAULT_BRIEF_DRAFT.bestVisual),
+    bigIdea: stringOrDefault(value.bigIdea, DEFAULT_BRIEF_DRAFT.bigIdea),
+    payoff: stringOrDefault(value.payoff, DEFAULT_BRIEF_DRAFT.payoff),
+    accuracyNote: stringOrDefault(value.accuracyNote, DEFAULT_BRIEF_DRAFT.accuracyNote),
+    style: stringOrDefault(value.style, DEFAULT_BRIEF_DRAFT.style),
+    callToAction: stringOrDefault(value.callToAction, DEFAULT_BRIEF_DRAFT.callToAction),
+    provider: stringOrDefault(value.provider, DEFAULT_BRIEF_DRAFT.provider),
+    seedKind: readEnum(value.seedKind, SEED_KINDS, DEFAULT_BRIEF_DRAFT.seedKind),
+    seedSize: stringOrDefault(value.seedSize, DEFAULT_BRIEF_DRAFT.seedSize),
+    showCaptions: booleanOrDefault(value.showCaptions, DEFAULT_BRIEF_DRAFT.showCaptions),
+    reviewGates: parseReviewGates(value.reviewGates),
+  };
+}
+
+export function payloadFromUnknown(value: unknown): StudioDraftPayload | null {
   if (!isRecord(value) || value.v !== STUDIO_DRAFT_PAYLOAD_VERSION) return null;
-  if (!isRecord(value.draft)) return null;
-  const draft = hydrateDraft(value.draft as SerializedBriefDraft);
+  const serializedDraft = parseSerializedBriefDraft(value.draft);
+  if (!serializedDraft) return null;
+  const draft = hydrateDraft(serializedDraft);
+  const projectId = typeof value.projectId === "string" ? value.projectId : undefined;
+  const runId = typeof value.runId === "string" ? value.runId : undefined;
 
   return {
     v: STUDIO_DRAFT_PAYLOAD_VERSION,
     draft,
-    step: normalizeStep(value.step),
-    projectId: typeof value.projectId === "string" ? value.projectId : undefined,
-    runId: typeof value.runId === "string" ? value.runId : undefined,
+    step: normalizeStep(value.step, { hasRun: Boolean(projectId && runId) }),
+    projectId,
+    runId,
   };
 }
 
-function recordFromUnknown(value: unknown): StudioDraftRecord | null {
+export function recordFromUnknown(value: unknown): StudioDraftRecord | null {
   if (!isRecord(value)) return null;
   const draftId =
     typeof value.draftId === "string"
@@ -159,7 +248,12 @@ function recordFromUnknown(value: unknown): StudioDraftRecord | null {
   if (!draftId) return null;
 
   const payload = payloadFromUnknown(value.payload);
-  const step = normalizeStep(value.step ?? payload?.step);
+  const projectId =
+    typeof value.projectId === "string" ? value.projectId : payload?.projectId;
+  const runId = typeof value.runId === "string" ? value.runId : payload?.runId;
+  const step = normalizeStep(value.step ?? payload?.step, {
+    hasRun: Boolean(projectId && runId),
+  });
   const goal = payload?.draft.goal.trim();
   const excerpt =
     typeof value.excerpt === "string" && value.excerpt.trim()
@@ -173,14 +267,13 @@ function recordFromUnknown(value: unknown): StudioDraftRecord | null {
     step,
     updatedAt:
       typeof value.updatedAt === "string" ? value.updatedAt : new Date().toISOString(),
-    projectId:
-      typeof value.projectId === "string" ? value.projectId : payload?.projectId,
-    runId: typeof value.runId === "string" ? value.runId : payload?.runId,
+    projectId,
+    runId,
     payload:
       payload ??
       buildPayload(DEFAULT_BRIEF_DRAFT, step, {
-        projectId: typeof value.projectId === "string" ? value.projectId : undefined,
-        runId: typeof value.runId === "string" ? value.runId : undefined,
+        projectId,
+        runId,
       }),
   };
 }
