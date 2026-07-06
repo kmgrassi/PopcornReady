@@ -2699,6 +2699,72 @@ export async function addProjectTimelineCritique(input: {
   return { critiqueAssetId: asset.id };
 }
 
+export async function addAudioFitCritique(input: {
+  workspaceId: string;
+  projectId: string;
+  audioAssetId: string;
+  audioContentHash?: string;
+  planAssetId?: string;
+  planContentHash?: string;
+  beatId: string;
+  critique: unknown;
+  orchestratorRunId?: string;
+}): Promise<{ critiqueAssetId: string }> {
+  const db = getServiceSupabase();
+  const graphInputs: GraphAssetInput[] = [
+    {
+      assetId: input.audioAssetId,
+      relation: "input",
+      role: "audio_track",
+      position: 0,
+      ...(input.audioContentHash ? { contentHash: input.audioContentHash } : {}),
+    },
+    ...(input.planAssetId
+      ? [
+          {
+            assetId: input.planAssetId,
+            relation: "input" as const,
+            role: "plan",
+            position: 1,
+            ...(input.planContentHash ? { contentHash: input.planContentHash } : {}),
+          },
+        ]
+      : []),
+  ];
+  const action = await createAction({
+    projectId: input.projectId,
+    orchestratorRunId: input.orchestratorRunId,
+    tool: "fit_audio_to_picture",
+    status: "running",
+    params: { beatId: input.beatId, audioAssetId: input.audioAssetId },
+    inputAssetIds: graphInputs.map((graphInput) => graphInput.assetId),
+    rationale: "Persist an audio-to-picture sync report for a voiceover segment.",
+  });
+  const asset = await insertDataAsset({
+    db,
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    kind: "critique",
+    contentSchemaKind: "critique",
+    role: "audio_fit",
+    content: input.critique,
+    inputs: graphInputs,
+    createdByActionId: action.id,
+  });
+  await setActiveProjectScopedAssetSelection(
+    db,
+    input.projectId,
+    `audio_fit:${input.beatId}`,
+    asset.id,
+    action.id
+  );
+  await updateAction(action.id, {
+    status: "applied",
+    outputAssetIds: [asset.id],
+  });
+  return { critiqueAssetId: asset.id };
+}
+
 export interface ActiveProjectPlan {
   plan: ShotPlan;
   /** The plan asset id — recorded as the input of anything derived from it. */

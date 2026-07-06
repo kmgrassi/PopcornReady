@@ -28,6 +28,7 @@ const actions: RunActionSummary[] = [
   action("a-key", "generate_keyframe"), // 3
   action("a-clip", "generate_clip"), // 3
   action("a-audio", "generate_audio"), // 4
+  action("a-fit", "fit_audio_to_picture"), // 4
   action("a-timeline", "assemble_timeline"), // 5
   action("a-export", "export_video"), // 7
 ];
@@ -39,6 +40,7 @@ test("downstreamActionIds selects the target stage and everything after it", () 
     "a-key",
     "a-clip",
     "a-audio",
+    "a-fit",
     "a-timeline",
     "a-export",
   ]);
@@ -46,7 +48,7 @@ test("downstreamActionIds selects the target stage and everything after it", () 
 
 test("downstreamActionIds from asset_generation excludes brief/plan/storyboard", () => {
   const fromAssets = downstreamActionIds(actions, GENERATION_STAGE_ORDER.asset_generation);
-  assert.deepEqual(fromAssets, ["a-key", "a-clip", "a-audio", "a-timeline", "a-export"]);
+  assert.deepEqual(fromAssets, ["a-key", "a-clip", "a-audio", "a-fit", "a-timeline", "a-export"]);
 });
 
 test("downstreamActionIds from export only supersedes the export action", () => {
@@ -74,6 +76,7 @@ test("restartSelectionScope from asset_generation clears beat + downstream selec
   assert.ok(scope.exactRoles.includes("visual_anchors"));
   // downstream audio + timeline selections too.
   assert.ok(scope.rolePrefixes.includes("voiceover:"));
+  assert.ok(scope.rolePrefixes.includes("audio_fit:"));
   assert.ok(scope.exactRoles.includes("cut"));
   // upstream brief/plan selections are left intact.
   assert.ok(!scope.exactRoles.includes("brief"));

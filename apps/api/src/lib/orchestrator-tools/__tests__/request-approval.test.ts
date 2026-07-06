@@ -41,6 +41,16 @@ test("request_approval parses the review step and preview artifacts", () => {
   );
 });
 
+test("request_approval accepts audio fit as a reviewable step", () => {
+  assert.equal(
+    parseRequestApprovalInput({
+      step: "fit_audio_to_picture",
+      previewArtifactIds: ["critique_1"],
+    }).step,
+    "fit_audio_to_picture"
+  );
+});
+
 test("request_approval rejects malformed preview artifact ids", () => {
   assert.throws(
     () => parseRequestApprovalInput({ step: "export_video", previewArtifactIds: 42 }),
