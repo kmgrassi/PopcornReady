@@ -36,6 +36,16 @@ function requiredParam(params: Record<string, string | undefined>, name: string)
   return value;
 }
 
+export function assertCatalogWriteAllowed(auth: {
+  actor: { isAnonymous?: boolean };
+}): void {
+  if (!auth.actor.isAnonymous) return;
+  throw new ApiError(
+    "forbidden",
+    "Anonymous guest sessions cannot publish, modify, or like catalog entries."
+  );
+}
+
 function publicRoute(
   fn: (req: Parameters<RequestHandler>[0]) => Promise<{ status: number; body: unknown }>
 ): RequestHandler {
@@ -146,6 +156,7 @@ catalogProtectedRouter.get(
 catalogProtectedRouter.post(
   "/catalog/entries",
   mutation(async ({ auth, body }) => {
+    assertCatalogWriteAllowed(auth);
     const input = parsePublishCatalogEntry(body);
     const entry = await publishCatalogEntry({
       authWorkspaceId: auth.workspaceId,
@@ -158,6 +169,7 @@ catalogProtectedRouter.post(
 catalogProtectedRouter.patch(
   "/catalog/entries/:id",
   mutation(async ({ auth, body }, params) => {
+    assertCatalogWriteAllowed(auth);
     const publisherUserId = await publisherUserIdForWorkspace(
       getServiceSupabase(),
       auth.workspaceId
@@ -174,6 +186,7 @@ catalogProtectedRouter.patch(
 catalogProtectedRouter.delete(
   "/catalog/entries/:id",
   mutation(async ({ auth }, params) => {
+    assertCatalogWriteAllowed(auth);
     const publisherUserId = await publisherUserIdForWorkspace(
       getServiceSupabase(),
       auth.workspaceId
@@ -201,6 +214,7 @@ catalogProtectedRouter.post(
 catalogProtectedRouter.post(
   "/catalog/entries/:id/like",
   mutation(async ({ auth }, params) => {
+    assertCatalogWriteAllowed(auth);
     const userId = await publisherUserIdForWorkspace(getServiceSupabase(), auth.workspaceId);
     const entry = await likeCatalogEntry({
       entryId: requiredParam(params, "id"),
@@ -213,6 +227,7 @@ catalogProtectedRouter.post(
 catalogProtectedRouter.delete(
   "/catalog/entries/:id/like",
   mutation(async ({ auth }, params) => {
+    assertCatalogWriteAllowed(auth);
     const userId = await publisherUserIdForWorkspace(getServiceSupabase(), auth.workspaceId);
     const entry = await unlikeCatalogEntry({
       entryId: requiredParam(params, "id"),

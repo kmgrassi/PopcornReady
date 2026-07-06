@@ -17,12 +17,25 @@
   background: var(--bg);
 }
 
+.sidebarHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+/* Drawer close affordance - only rendered visually on mobile. */
+.sidebarClose {
+  display: none;
+  flex: 0 0 auto;
+}
+
 .brand {
   display: inline-flex;
   align-items: center;
   gap: var(--space-3);
   min-width: 0;
-  margin-bottom: var(--space-6);
   color: var(--text-strong);
   font-size: var(--text-lg);
   font-weight: 800;
@@ -203,11 +216,75 @@
   text-transform: uppercase;
 }
 
+/* Account summary pinned to the drawer footer - mobile only. */
+.drawerAccount {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+  padding: var(--space-3) var(--space-3) 0;
+  border-top: 1px solid var(--border);
+}
+
+.drawerAccountLabel {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Content column */
 .content {
   display: flex;
   flex-direction: column;
   min-width: 0;
+}
+
+/* Drawer toggle — hidden on desktop where the sidebar is always visible. */
+.menuButton {
+  display: none;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-strong);
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.menuButton:hover {
+  background: var(--surface-2);
+}
+
+.menuButton:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.scrim {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  padding: 0;
+  border: 0;
+  background: color-mix(in srgb, black 52%, transparent);
+  backdrop-filter: blur(2px);
+  cursor: pointer;
+}
+
+.scrim:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .topbar {
@@ -279,15 +356,55 @@
     overflow-x: clip;
   }
 
+  /* Sidebar becomes an off-canvas drawer toggled from the topbar. */
   .sidebar {
-    position: static;
-    height: auto;
-    width: 100%;
-    max-width: 100vw;
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-3);
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 40;
+    width: min(304px, 86vw);
+    height: 100dvh;
+    padding: var(--space-5) var(--space-4)
+      calc(var(--space-5) + env(safe-area-inset-bottom));
+    overflow-y: auto;
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition:
+      transform 220ms ease,
+      visibility 220ms;
+    outline: none;
+  }
+
+  .sidebarOpen {
+    transform: none;
+    visibility: visible;
+    box-shadow: 24px 0 64px rgba(0, 0, 0, 0.45);
+  }
+
+  .sidebarClose {
+    display: inline-flex;
+  }
+
+  .scrim {
+    display: block;
+  }
+
+  .menuButton {
+    display: inline-flex;
+  }
+
+  .drawerAccount {
+    display: flex;
+  }
+
+  .desktopOnly {
+    display: none;
+  }
+
+  /* Comfortable touch targets inside the drawer. */
+  .navLink {
+    min-height: 44px;
   }
 
   .content,
@@ -297,69 +414,40 @@
     overflow-x: clip;
   }
 
-  .newVideo {
-    width: auto;
-    margin-bottom: 0;
+  .topbar {
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    row-gap: var(--space-2);
+    width: 100%;
+    max-width: 100vw;
+    padding: calc(var(--space-2) + env(safe-area-inset-top)) var(--space-4)
+      var(--space-2);
   }
 
-  .nav {
-    flex: 1 1 100%;
-    grid-auto-flow: column;
-    grid-auto-columns: max-content;
-    overflow-x: auto;
-  }
-
-  .navLink.active::before {
+  /* The command palette is keyboard-driven; hide its trigger on touch. */
+  .commandSlot {
     display: none;
   }
 
-  .sidebarFooter {
-    margin-top: 0;
-    padding-top: 0;
-    border-top: 0;
-    flex-direction: row;
-    align-items: center;
-    flex: 1 1 100%;
-    justify-content: space-between;
-  }
-
-  .footerNav {
-    grid-auto-flow: column;
-    grid-auto-columns: max-content;
-  }
-
-  .topbar {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    justify-content: stretch;
-    width: 100%;
-    max-width: 100vw;
-    padding: var(--space-3) var(--space-4);
-  }
-
+  /* Breadcrumbs drop to their own row and collapse when a page has none. */
   .breadcrumbSlot {
-    grid-column: 1 / -1;
-    grid-row: 2;
+    order: 2;
+    flex: 1 1 100%;
     min-width: 0;
   }
 
-  .commandSlot {
-    grid-column: 1;
-    grid-row: 1;
-    min-width: 0;
-    justify-self: start;
+  .breadcrumbSlot:empty {
+    display: none;
   }
 
   .account {
-    grid-column: 2;
-    grid-row: 1;
     min-width: 0;
     margin-left: auto;
   }
+}
 
-  .accountLink {
-    max-width: min(150px, 42vw);
+@media (prefers-reduced-motion: reduce) {
+  .sidebar {
+    transition: none;
   }
-
 }
