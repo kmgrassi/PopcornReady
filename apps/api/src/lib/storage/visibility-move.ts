@@ -6,7 +6,13 @@ export interface ReconcileStorageAsset {
   id: string;
   storageKey?: string | null;
   storageBucket?: string | null;
+  sidecars?: ReconcileStorageSidecar[];
   visibility: AssetVisibility;
+}
+
+export interface ReconcileStorageSidecar {
+  key: string;
+  storageBucket?: string | null;
 }
 
 export interface VisibilityBucketConfig {
@@ -30,7 +36,10 @@ export interface ReconcileAssetStorageInput {
   previousEffectiveVisibility?: AssetVisibility;
   buckets?: VisibilityBucketConfig;
   store?: VisibilityObjectStore;
-  persistStorageBucket: (storageBucket: string | null) => Promise<void>;
+  persistStorageBucket: (
+    storageBucket: string | null,
+    sidecars: ReconcileStorageSidecar[]
+  ) => Promise<void>;
 }
 
 export interface ReconcileAssetStorageResult {
@@ -39,6 +48,7 @@ export interface ReconcileAssetStorageResult {
   targetBucket: string | null;
   moved: boolean;
   invalidated: boolean;
+  sidecarsMoved: number;
 }
 
 export function effectiveAssetVisibility(input: {
@@ -63,6 +73,7 @@ export async function reconcileAssetStorage(
   const buckets = input.buckets ?? storageBucketsFromEnv();
   const store = input.store ?? visibilityObjectStoreFromEnv();
   const storageKey = input.asset.storageKey ?? null;
+  const sidecars = input.asset.sidecars ?? [];
   const effectiveVisibility = effectiveAssetVisibility({
     assetVisibility: input.asset.visibility,
     projectVisibility: input.projectVisibility,
@@ -76,43 +87,104 @@ export async function reconcileAssetStorage(
       ? storageBucketForVisibility(input.previousEffectiveVisibility, buckets)
       : null);
 
-  if (!storageKey) {
-    await input.persistStorageBucket(null);
+  if (!storageKey && sidecars.length === 0) {
+    await input.persistStorageBucket(null, []);
     return {
       effectiveVisibility,
       sourceBucket,
       targetBucket,
       moved: false,
       invalidated: false,
+      sidecarsMoved: 0,
     };
   }
 
-  if (!sourceBucket || !targetBucket) {
+  if (storageKey && (!sourceBucket || !targetBucket)) {
     throw new Error(
       `Cannot reconcile asset ${input.asset.id}: storage bucket is missing and no previous effective visibility was provided.`
     );
   }
 
+  const targetSidecars = sidecars.map((sidecar) => ({
+    key: sidecar.key,
+    storageBucket: storageBucketForVisibility(effectiveVisibility, buckets),
+  }));
+  const sidecarMoves = sidecars
+    .map((sidecar, index) => {
+      const sidecarSourceBucket =
+        sidecar.storageBucket ??
+        sourceBucket ??
+        (input.previousEffectiveVisibility
+          ? storageBucketForVisibility(input.previousEffectiveVisibility, buckets)
+          : null);
+      const sidecarTargetBucket = targetSidecars[index]?.storageBucket ?? null;
+      if (!sidecarSourceBucket || !sidecarTargetBucket) {
+        throw new Error(
+          `Cannot reconcile asset ${input.asset.id} sidecar ${sidecar.key}: storage bucket is missing and no previous effective visibility was provided.`
+        );
+      }
+      return {
+        key: sidecar.key,
+        sourceBucket: sidecarSourceBucket,
+        targetBucket: sidecarTargetBucket,
+      };
+    })
+    .filter((move) => move.sourceBucket !== move.targetBucket);
+
   if (sourceBucket === targetBucket) {
-    await input.persistStorageBucket(targetBucket ?? sourceBucket);
+    for (const move of sidecarMoves) {
+      await store.copyObject({
+        sourceBucket: move.sourceBucket,
+        targetBucket: move.targetBucket,
+        key: move.key,
+      });
+    }
+    await input.persistStorageBucket(targetBucket ?? sourceBucket, targetSidecars);
+    const invalidatedSidecars = effectiveVisibility === "private";
+    if (invalidatedSidecars) {
+      for (const move of sidecarMoves) {
+        await store.invalidatePublicObject({ key: move.key });
+      }
+    }
+    for (const move of sidecarMoves) {
+      await store.deleteObject({ bucket: move.sourceBucket, key: move.key });
+    }
     return {
       effectiveVisibility,
       sourceBucket,
       targetBucket,
-      moved: false,
-      invalidated: false,
+      moved: sidecarMoves.length > 0,
+      invalidated: invalidatedSidecars && sidecarMoves.length > 0,
+      sidecarsMoved: sidecarMoves.length,
     };
   }
 
-  await store.copyObject({ sourceBucket, targetBucket, key: storageKey });
-  await input.persistStorageBucket(targetBucket);
+  if (storageKey && sourceBucket && targetBucket) {
+    await store.copyObject({ sourceBucket, targetBucket, key: storageKey });
+  }
+  for (const move of sidecarMoves) {
+    await store.copyObject({
+      sourceBucket: move.sourceBucket,
+      targetBucket: move.targetBucket,
+      key: move.key,
+    });
+  }
+  await input.persistStorageBucket(targetBucket, targetSidecars);
 
   const invalidated = targetBucket === buckets.privateBucket;
   if (invalidated) {
-    await store.invalidatePublicObject({ key: storageKey });
+    if (storageKey) await store.invalidatePublicObject({ key: storageKey });
+    for (const move of sidecarMoves) {
+      await store.invalidatePublicObject({ key: move.key });
+    }
   }
 
-  await store.deleteObject({ bucket: sourceBucket, key: storageKey });
+  if (storageKey && sourceBucket) {
+    await store.deleteObject({ bucket: sourceBucket, key: storageKey });
+  }
+  for (const move of sidecarMoves) {
+    await store.deleteObject({ bucket: move.sourceBucket, key: move.key });
+  }
 
   return {
     effectiveVisibility,
@@ -120,6 +192,7 @@ export async function reconcileAssetStorage(
     targetBucket,
     moved: true,
     invalidated,
+    sidecarsMoved: sidecarMoves.length,
   };
 }
 

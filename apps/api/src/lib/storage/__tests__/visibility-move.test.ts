@@ -74,6 +74,60 @@ test("reconcile copies, persists target bucket, invalidates, then deletes on pri
   assert.equal(result.invalidated, true);
 });
 
+test("reconcile moves sidecar objects and persists their target bucket", async () => {
+  const { store, calls } = recordingStore();
+  const persisted: Array<{
+    storageBucket: string | null;
+    sidecars: Array<{ key: string; storageBucket?: string | null }>;
+  }> = [];
+
+  const result = await reconcileAssetStorage({
+    asset: {
+      id: "asset_1",
+      visibility: "public",
+      storageKey: "ws/proj/asset/file.mp4",
+      storageBucket: "assets-public",
+      sidecars: [
+        {
+          key: "ws/proj/asset/renditions/thumbnail.webp",
+          storageBucket: "assets-public",
+        },
+      ],
+    },
+    projectVisibility: "private",
+    buckets,
+    store,
+    persistStorageBucket: async (storageBucket, sidecars) => {
+      calls.push(`persist:${storageBucket}:${sidecars[0]?.storageBucket}`);
+      persisted.push({ storageBucket, sidecars });
+    },
+  });
+
+  assert.deepEqual(calls, [
+    "copy:assets-public->assets-private:ws/proj/asset/file.mp4",
+    "copy:assets-public->assets-private:ws/proj/asset/renditions/thumbnail.webp",
+    "persist:assets-private:assets-private",
+    "invalidate:ws/proj/asset/file.mp4",
+    "invalidate:ws/proj/asset/renditions/thumbnail.webp",
+    "delete:assets-public:ws/proj/asset/file.mp4",
+    "delete:assets-public:ws/proj/asset/renditions/thumbnail.webp",
+  ]);
+  assert.deepEqual(persisted, [
+    {
+      storageBucket: "assets-private",
+      sidecars: [
+        {
+          key: "ws/proj/asset/renditions/thumbnail.webp",
+          storageBucket: "assets-private",
+        },
+      ],
+    },
+  ]);
+  assert.equal(result.moved, true);
+  assert.equal(result.invalidated, true);
+  assert.equal(result.sidecarsMoved, 1);
+});
+
 test("reconcile leaves copied target object when source delete fails", async () => {
   const { store, calls } = recordingStore(true);
 

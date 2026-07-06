@@ -113,6 +113,7 @@ import {
 } from "./schemas";
 import {
   reconcileAssetStorage,
+  type ReconcileStorageSidecar,
   type VisibilityObjectStore,
 } from "../../storage/visibility-move";
 import { normalizeSlug, projectDisplayName } from "./naming";
@@ -1825,6 +1826,38 @@ function assetContextEnvelope(asset: V1Asset): AssetContextEnvelope | null {
   }
   if (asset.analysis !== undefined) envelope.analysis = asset.analysis;
   return Object.keys(envelope).length > 0 ? envelope : null;
+}
+
+function assetStorageSidecars(row: AssetRow): ReconcileStorageSidecar[] {
+  const thumbnail = row.context?.context?.renditions?.thumbnail;
+  return thumbnail
+    ? [{ key: thumbnail.storageKey, storageBucket: thumbnail.storageBucket }]
+    : [];
+}
+
+function withReconciledSidecarBuckets(
+  context: AssetContextEnvelope | null,
+  sidecars: ReconcileStorageSidecar[]
+): AssetContextEnvelope | null {
+  const thumbnail = context?.context?.renditions?.thumbnail;
+  const thumbnailBucket = thumbnail
+    ? sidecars.find((sidecar) => sidecar.key === thumbnail.storageKey)?.storageBucket
+    : undefined;
+  if (!thumbnail || !thumbnailBucket) return context;
+
+  return {
+    ...(context ?? {}),
+    context: {
+      ...(context?.context ?? {}),
+      renditions: {
+        ...(context?.context?.renditions ?? {}),
+        thumbnail: {
+          ...thumbnail,
+          storageBucket: thumbnailBucket,
+        },
+      },
+    },
+  };
 }
 
 function assetToRow(asset: V1Asset): AssetRow {
@@ -5560,6 +5593,7 @@ export async function setAssetVisibility(
         id: assetId,
         storageKey: current.storage_key,
         storageBucket: current.storage_bucket,
+        sidecars: assetStorageSidecars(current),
         visibility,
       },
       projectVisibility: project.visibility ?? "public",
@@ -5569,7 +5603,7 @@ export async function setAssetVisibility(
           ? "public"
           : "private",
       store: options.store,
-      persistStorageBucket: async (storageBucket) => {
+      persistStorageBucket: async (storageBucket, sidecars) => {
         const data = await runQuery(
           "store.setAssetVisibility update",
           db
@@ -5577,6 +5611,7 @@ export async function setAssetVisibility(
             .update({
               visibility,
               storage_bucket: storageBucket,
+              context: withReconciledSidecarBuckets(current.context, sidecars),
               updated_at: new Date().toISOString(),
             })
             .eq("id", assetId)
@@ -5660,6 +5695,7 @@ export async function setProjectVisibility(
           id: asset.id,
           storageKey: asset.storage_key,
           storageBucket: asset.storage_bucket,
+          sidecars: assetStorageSidecars(asset),
           visibility: asset.visibility ?? "public",
         },
         projectVisibility: visibility,
@@ -5669,13 +5705,14 @@ export async function setProjectVisibility(
             ? "public"
             : "private",
         store: options.store,
-        persistStorageBucket: async (storageBucket) => {
+        persistStorageBucket: async (storageBucket, sidecars) => {
           await runQuery(
             "store.setProjectVisibility asset bucket",
             db
               .from("assets")
               .update({
                 storage_bucket: storageBucket,
+                context: withReconciledSidecarBuckets(asset.context, sidecars),
                 updated_at: new Date().toISOString(),
               })
               .eq("id", asset.id)
