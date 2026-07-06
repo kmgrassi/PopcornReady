@@ -145,6 +145,10 @@
   line-height: var(--line-body);
 }
 
+.retentionBanner {
+  margin-top: var(--space-4);
+}
+
 .modalBackdrop {
   position: fixed;
   z-index: 1000;
