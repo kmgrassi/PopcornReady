@@ -15,7 +15,7 @@ test.describe("local auth and routing smoke", () => {
     await mockLocalApi(page);
   });
 
-  test("renders public auth routes", async ({ page }) => {
+  test("renders public auth routes @mobile", async ({ page }) => {
     await page.goto("/");
     await expect(
       page.getByRole("textbox", { name: "What should the video be about?" }),

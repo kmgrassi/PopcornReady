@@ -41,6 +41,10 @@
       "dependsOn": ["^build"],
       "cache": false
     },
+    "test:e2e:mobile": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
     "lint": {}
   }
 }
