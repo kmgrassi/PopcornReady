@@ -1,6 +1,7 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useId, useMemo, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import type {
+  ProjectVisibility,
   ProjectStoryboard,
   V1Project,
 } from "@popcorn/shared/v1/types";
@@ -15,6 +16,7 @@ import {
   useGenerateProjectStoryboardMutation,
   useDeleteProjectMutation,
   useProjectQuery,
+  useSetProjectVisibilityMutation,
   useProjectStoryboardJobQuery,
   useProjectStoryboardQuery,
 } from "../lib/queryClient";
@@ -363,6 +365,15 @@ function ProjectConcept({
 }) {
   const brief = project.brief;
   const title = brief?.oneBigIdea ?? brief?.goal ?? project.name;
+  const visibility = project.visibility ?? "public";
+  const nextVisibility: ProjectVisibility =
+    visibility === "public" ? "private" : "public";
+  const visibilityMutation = useSetProjectVisibilityMutation(projectId);
+  const [confirmVisibility, setConfirmVisibility] = useState<ProjectVisibility | null>(null);
+  const helperText =
+    visibility === "public"
+      ? "Visible in public discovery. Public assets can be shared."
+      : "Only your workspace can view it. Media uses private links.";
   const shareUrl = publicProjectUrl(project.id);
   return (
     <section className={styles.hero} id="concept">
@@ -370,8 +381,22 @@ function ProjectConcept({
       <div className={styles.heroBody}>
         <div className={styles.metaRow}>
           <StatusChip status={project.status} />
-          {project.visibility ? <VisibilityBadge visibility={project.visibility} /> : null}
+          <VisibilityBadge visibility={visibility} />
           <span>Created {formatDate(project.createdAt)}</span>
+          {!readOnly ? (
+            <div className={styles.visibilityControl}>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={visibilityMutation.isPending}
+                isLoading={visibilityMutation.isPending}
+                onClick={() => setConfirmVisibility(nextVisibility)}
+              >
+                {nextVisibility === "private" ? "Make private" : "Make public"}
+              </Button>
+              <span>{helperText}</span>
+            </div>
+          ) : null}
           {!readOnly ? (
             <ButtonLink
               variant="ghost"
@@ -384,7 +409,7 @@ function ProjectConcept({
         </div>
         {!readOnly ? (
           <ProjectShareAffordance
-            visibility={project.visibility}
+            visibility={visibility}
             shareUrl={shareUrl}
           />
         ) : null}
@@ -425,7 +450,73 @@ function ProjectConcept({
           </div>
         </dl>
       </div>
+      <ProjectVisibilityConfirmDialog
+        visibility={confirmVisibility}
+        pending={visibilityMutation.isPending}
+        onCancel={() => setConfirmVisibility(null)}
+        onConfirm={(visibility) => {
+          visibilityMutation.mutate(visibility, {
+            onSuccess: () => setConfirmVisibility(null),
+          });
+        }}
+      />
     </section>
+  );
+}
+
+function ProjectVisibilityConfirmDialog({
+  visibility,
+  pending,
+  onCancel,
+  onConfirm,
+}: {
+  visibility: ProjectVisibility | null;
+  pending: boolean;
+  onCancel: () => void;
+  onConfirm: (visibility: ProjectVisibility) => void;
+}) {
+  const titleId = useId();
+  if (!visibility) return null;
+
+  const isPublic = visibility === "public";
+  const title = isPublic ? "Make this project public?" : "Make this project private?";
+  const body = isPublic
+    ? "People may be able to discover the project and view its public media. Private assets stay private."
+    : "The project will leave public discovery and media delivery will be reconciled to private links.";
+
+  return (
+    <div
+      className={styles.dialogBackdrop}
+      role="presentation"
+      onMouseDown={pending ? undefined : onCancel}
+    >
+      <div
+        className={styles.confirmDialog}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div>
+          <span className={styles.eyebrow}>Visibility</span>
+          <h2 id={titleId}>{title}</h2>
+        </div>
+        <p>{body}</p>
+        <div className={styles.dialogActions}>
+          <Button variant="ghost" onClick={onCancel} disabled={pending}>
+            Cancel
+          </Button>
+          <Button
+            variant="cta"
+            onClick={() => onConfirm(visibility)}
+            disabled={pending}
+            isLoading={pending}
+          >
+            {isPublic ? "Make public" : "Make private"}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
