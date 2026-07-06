@@ -68,7 +68,12 @@ import {
   type StudioDraftStep,
   type StudioDraftSummary,
 } from "@popcorn/shared/v1/studio-drafts";
-import type { ShotPlan, ScriptDraft, Timeline } from "@popcorn/shared/types";
+import {
+  ensureBeatIds,
+  type ShotPlan,
+  type ScriptDraft,
+  type Timeline,
+} from "@popcorn/shared/types";
 import type { Asset } from "@popcorn/shared/assets/types";
 import type { GeneratedStoryboardTile } from "@/lib/generative/storyboard-tile";
 import {
@@ -825,6 +830,56 @@ async function selectedDataAsset(
   const asset = await dataAssetById(db, activeAssetId);
   if (asset && asset.kind === kind && (!assetRole || asset.role === assetRole)) return asset;
   return latestDataAsset(db, projectId, kind, assetRole);
+}
+
+export function coerceShotPlanContent(content: unknown): ShotPlan | null {
+  const candidate = unmarkedContent<ShotPlan & { beats?: { id?: string; name: string }[] }>(
+    content
+  );
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return null;
+
+  const schemaVersion = (content as Record<string, unknown> | null)?.[CONTENT_SCHEMA_KEY];
+  if (
+    schemaVersion !== undefined &&
+    schemaVersion !== "plan.v1" &&
+    schemaVersion !== "shot_plan.v1"
+  ) {
+    return null;
+  }
+
+  ensureBeatIds(candidate);
+  if (
+    typeof candidate.targetLengthSec !== "number" ||
+    typeof candidate.style !== "string" ||
+    typeof candidate.aspectRatio !== "string" ||
+    !Array.isArray(candidate.scenes)
+  ) {
+    return null;
+  }
+  return candidate as ShotPlan;
+}
+
+async function latestShotPlanDataAsset(
+  db: SupabaseClient,
+  projectId: string
+): Promise<DataAssetRow | null> {
+  const data = await runQuery(
+    "store.latestShotPlanDataAsset",
+    db
+      .from("assets")
+      .select("*")
+      .eq("project_id", projectId)
+      .eq("kind", "plan")
+      .eq("media", "data")
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(20)
+  );
+  for (const asset of ((data as DataAssetRow[]) ?? [])) {
+    if (asset.role === "visual_anchor_plan" || asset.role === "composition_plan") continue;
+    if (coerceShotPlanContent(asset.content)) return asset;
+  }
+  return null;
 }
 
 // --- poster ----------------------------------------------------------------
@@ -2634,10 +2689,18 @@ export async function getActiveProjectPlan(
   projectId: string
 ): Promise<ActiveProjectPlan | null> {
   const db = getServiceSupabase();
-  const planAsset = await selectedDataAsset(db, projectId, "plan", "plan", "current_plan");
+  const selectedPlanAsset = await selectedDataAsset(db, projectId, "plan", "plan");
+  const selectedPlan = selectedPlanAsset ? coerceShotPlanContent(selectedPlanAsset.content) : null;
+  const planAsset =
+    selectedPlanAsset && selectedPlan
+      ? selectedPlanAsset
+      : await latestShotPlanDataAsset(db, projectId);
   if (!planAsset) return null;
+  const plan =
+    selectedPlanAsset?.id === planAsset.id ? selectedPlan : coerceShotPlanContent(planAsset.content);
+  if (!plan) return null;
   return {
-    plan: unmarkedContent<ShotPlan>(planAsset.content),
+    plan,
     assetId: planAsset.id,
     contentHash: planAsset.content_hash ?? "",
   };
