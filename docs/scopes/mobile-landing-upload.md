@@ -179,6 +179,31 @@ files directly in PR 3's upload flow. Requires the PWA install prompt path
 and a service worker to receive the POST; scope it in detail when PRs 1–4 are
 proven.
 
+### PR 6 — Guest retention: banner + purge job
+
+**Scope:** the 30-day guest retention policy (see Open questions — decided).
+Two halves: (a) the guest-session banner ("saved for 30 days — create a free
+account to keep it forever") on landing/run/watch surfaces while the session
+is anonymous; (b) a service-role purge RPC scoped to anonymous-owned projects
+with `last_activity < now() - 30 days`, removing storage prefixes + rows
+(sanctioned bypass of `assets_guard_delete`, mirroring the admin-delete
+pattern), driven by a daily scheduled job from the API, emitting
+purged-project/reclaimed-bytes metrics.
+
+**Isolated testing:**
+- Unit: eligibility query — anonymous-owned + inactive matches; claimed
+  (upgraded) accounts and recently active guests never match; activity-reset
+  events cover visit/run/edit.
+- Integration (local Supabase): seed an anon project past TTL + one claimed +
+  one fresh; run the job; assert exactly the expired anon project's rows and
+  storage objects are gone.
+- Unit (web): banner renders only for anonymous sessions and disappears after
+  upgrade.
+
+**Done when:** an expired guest project disappears from storage and DB via the
+scheduled job, a claimed project with identical age survives, and guests see
+the retention banner until they sign up.
+
 ## Out of scope
 
 - Auth/anonymous-session work (owned by
@@ -193,13 +218,28 @@ proven.
 - Initial caps: max clips per guest session, max clip duration/size? (Guest
   abuse surface — suggest 10 clips / 2 min / 200 MB each to start, tightened
   by analytics.)
-- Guest-asset retention: uploads live server-side under the anonymous identity
-  (deliberately **not** browser cache — mobile browsers evict large
-  IndexedDB/Cache entries unpredictably, and pre-auth upload means bytes move
-  while the user decides). Anonymous users who never sign up leave orphaned
-  assets; define a TTL (e.g. purge anon-owned projects untouched for 30 days)
-  and where the cleanup job runs. Signup upgrades the anon identity in place,
-  so claimed assets are exempt by construction.
+- ~~Guest-asset retention?~~ **Decided 2026-07-06.** Uploads live server-side
+  under the anonymous identity (deliberately **not** browser cache — mobile
+  browsers evict large IndexedDB/Cache entries unpredictably, and pre-auth
+  upload means bytes move while the user decides). Retention policy:
+  - **One rule: anonymous-owned projects purge 30 days after last activity**
+    (any visit/run/edit resets the clock). No tiering in v1.
+  - **The TTL is the signup nudge, not a silent policy.** Anonymous users
+    can't be emailed, so the only warning surface is in-product: guest
+    sessions show a persistent banner — "Your project is saved for 30 days —
+    create a free account to keep it forever." Retention comms and conversion
+    incentive are the same UI element.
+  - **Purge needs a sanctioned path.** `assets_guard_delete` forbids asset
+    deletion — that principle protects creative work in living projects, not
+    orphaned guest data. Add a service-role purge RPC scoped strictly to
+    anonymous-owned projects past the TTL (mirroring the admin-delete
+    pattern), removing storage prefixes + rows, with a reclaimed-bytes
+    metric. Runs as a daily scheduled job from the API.
+  - **Claimed work is exempt by construction** — signup upgrades the anon
+    identity in place, so the project stops being anonymous-owned and the TTL
+    no longer matches it.
+  - Privacy note: guest uploads are strangers' personal footage; bounded
+    retention is the defensible default independent of storage cost.
 - HEVC handling: transcode on ingest (ffmpeg, predictable but adds a job) vs
   probe-and-pass-through until a downstream consumer complains? Decide in
   PR 4 with provider input-format data.
