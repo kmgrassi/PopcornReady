@@ -7,6 +7,7 @@ import type { VideoBrief } from "@/lib/api/v1/schemas";
 import {
   createDevelopStoryBlueprintTool,
   deriveStoryBlueprint,
+  developStoryBlueprintForProject,
   parseDevelopStoryBlueprintInput,
   type DevelopStoryBlueprintOutput,
 } from "../develop-story-blueprint";
@@ -153,4 +154,48 @@ test("develop_story_blueprint persists the blueprint with brief provenance", asy
     assert.equal(result.output?.storyBlueprintId, "story_1");
     assert.equal(result.output?.storyBlueprintAssetId, "story_asset_1");
   }
+});
+
+test("developStoryBlueprintForProject returns null without an active brief", async () => {
+  const output = await developStoryBlueprintForProject(
+    { workspaceId: "ws_1", projectId: "proj_1" },
+    {
+      getActiveProjectBrief: async () => null,
+      addProjectStoryBlueprint: async () => {
+        throw new Error("must not persist without a brief");
+      },
+    }
+  );
+  assert.equal(output, null);
+});
+
+test("developStoryBlueprintForProject persists a feedback-steered blueprint", async () => {
+  let persisted:
+    | {
+        workspaceId: string;
+        projectId: string;
+        blueprint: StoryBlueprint;
+        briefAssetId: string;
+      }
+    | undefined;
+  const output = await developStoryBlueprintForProject(
+    { workspaceId: "ws_1", projectId: "proj_1", feedback: "Lean into the regulars." },
+    {
+      getActiveProjectBrief: async () => activeBrief,
+      addProjectStoryBlueprint: async (input) => {
+        persisted = input;
+        return {
+          storyBlueprintId: "story_2",
+          storyBlueprintAssetId: "story_asset_2",
+        };
+      },
+    }
+  );
+
+  assert.equal(persisted?.workspaceId, "ws_1");
+  assert.equal(persisted?.projectId, "proj_1");
+  assert.equal(persisted?.briefAssetId, "brief_asset_1");
+  assert.match(persisted?.blueprint.logline ?? "", /Lean into the regulars/);
+  assert.equal(output?.storyBlueprintId, "story_2");
+  assert.equal(output?.storyBlueprintAssetId, "story_asset_2");
 });
