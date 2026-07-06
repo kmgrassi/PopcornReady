@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   assetDisplayTitle,
+  assetSourceLabel,
   formatDuration,
   galleryRenderState,
   projectMediaQueryKey,
@@ -28,6 +29,10 @@ test("project media polling is active only while assets are processing", () => {
   );
   assert.equal(
     shouldPollProjectMediaAssets([{ status: "ready" }, { status: "processing" }]),
+    true,
+  );
+  assert.equal(
+    shouldPollProjectMediaAssets([{ status: "ready" }, { status: "pending" }]),
     true,
   );
 });
@@ -74,4 +79,11 @@ test("gallery formatting helpers keep tile labels compact", () => {
   assert.equal(formatDuration(undefined), null);
   assert.equal(statusLabel("pending"), "Processing");
   assert.equal(statusLabel("failed"), "Failed");
+});
+
+test("assetSourceLabel normalizes raw API source objects", () => {
+  assert.equal(assetSourceLabel("upload"), "upload");
+  assert.equal(assetSourceLabel({ type: "multipart_upload" }), "upload");
+  assert.equal(assetSourceLabel({ type: "remote_url" }), "remote url");
+  assert.equal(assetSourceLabel(null), "asset");
 });

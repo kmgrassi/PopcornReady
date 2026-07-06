@@ -10,6 +10,7 @@ import { MediaViewer, type MediaViewerItem } from "../components/media/MediaView
 import {
   assetDisplayTitle,
   assetPreviewUrl,
+  assetSourceLabel,
   formatDuration,
   galleryRenderState,
   kindLabel,
@@ -224,7 +225,7 @@ export function ProjectMediaGalleryPage() {
                 <span className={styles.tileBody}>
                   <span className={styles.tileTitle}>{assetDisplayTitle(asset)}</span>
                   <span className={styles.tileMeta}>
-                    {kindLabel(asset.kind)} / {asset.source}
+                    {kindLabel(asset.kind)} / {assetSourceLabel(asset.source)}
                   </span>
                   {asset.status === "failed" ? (
                     <span className={styles.failedActions}>

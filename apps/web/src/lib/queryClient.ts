@@ -228,7 +228,9 @@ function shouldPollStoryboardJob(
 }
 
 function shouldPollProjectAssets(assets: V1Asset[] | undefined): boolean {
-  return Boolean(assets?.some((asset) => asset.status === "processing"));
+  return Boolean(
+    assets?.some((asset) => asset.status === "pending" || asset.status === "processing"),
+  );
 }
 
 function studioProjectTimelineKey(

@@ -1,6 +1,7 @@
 import type { AssetKind, AssetStatus, V1Asset } from "@popcorn/shared/v1/types";
 
-export type ProjectMediaAsset = V1Asset & {
+export type ProjectMediaAsset = Omit<V1Asset, "source"> & {
+  source: V1Asset["source"] | { type?: string | null } | string | null;
   thumbnailUrl?: string | null;
   remoteUrl?: string | null;
 };
@@ -16,7 +17,9 @@ export function projectMediaQueryKey(projectId: string) {
 }
 
 export function shouldPollProjectMediaAssets(assets: Pick<V1Asset, "status">[]): boolean {
-  return assets.some((asset) => asset.status === "processing");
+  return assets.some(
+    (asset) => asset.status === "pending" || asset.status === "processing",
+  );
 }
 
 export function galleryRenderState(input: {
@@ -36,6 +39,13 @@ export function assetDisplayTitle(asset: Pick<V1Asset, "filename" | "id"> & { na
 
 export function assetPreviewUrl(asset: ProjectMediaAsset): string | undefined {
   return asset.thumbnailUrl ?? asset.remoteUrl ?? asset.url ?? undefined;
+}
+
+export function assetSourceLabel(source: ProjectMediaAsset["source"]): string {
+  const raw = typeof source === "object" ? source?.type : source;
+  if (!raw) return "asset";
+  if (raw === "multipart_upload") return "upload";
+  return raw.replaceAll("_", " ");
 }
 
 export function formatDuration(seconds?: number | null): string | null {
