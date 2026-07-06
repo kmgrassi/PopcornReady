@@ -552,6 +552,7 @@ export function useSetProjectVisibilityMutation(projectId: string) {
     },
     onSuccess: (data) => {
       client.setQueryData(queryKeys.project(projectId), data);
+      client.removeQueries({ queryKey: projectQueryKeys.publicProject(projectId) });
       void client.invalidateQueries({ queryKey: ["projects"] });
       void client.invalidateQueries({ queryKey: queryKeys.project(projectId) });
       void client.invalidateQueries({ queryKey: ["dashboard"] });
