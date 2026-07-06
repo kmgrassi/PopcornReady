@@ -104,3 +104,13 @@ drop trigger if exists audio_mix_layers_validate_assets on public.audio_mix_laye
 create trigger audio_mix_layers_validate_assets
   before insert or update on public.audio_mix_layers
   for each row execute function public.audio_mix_layers_validate_assets();
+
+alter table public.audio_mix_layers enable row level security;
+
+create policy audio_mix_layers_owner on public.audio_mix_layers
+  for all using (public.owns_project(project_id))
+  with check (public.owns_project(project_id));
+
+create policy audio_mix_layers_public_read on public.audio_mix_layers
+  for select to anon, authenticated
+  using (public.project_is_public(project_id));

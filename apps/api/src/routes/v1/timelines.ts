@@ -206,7 +206,12 @@ async function requireV1Project(
 
 async function requireV1TimelineProject(
   store: V1Store,
-  input: { workspaceId: string; projectId: string; timelineId: string }
+  input: {
+    workspaceId: string;
+    projectId: string;
+    timelineId: string;
+    audioAssetIds?: string[];
+  }
 ): Promise<{ project: Project; timeline: VersionedTimeline }> {
   const v1Project = await requireV1Project(store, input.workspaceId, input.projectId);
   const timeline = await store.getTimeline(input.timelineId);
@@ -217,6 +222,9 @@ async function requireV1TimelineProject(
   }
 
   const referencedClipIds = new Set(timeline.segments.map((segment) => segment.clipId));
+  for (const id of input.audioAssetIds ?? []) {
+    referencedClipIds.add(id);
+  }
   const clips = (await store.listAssets(input.projectId))
     .filter((asset) => referencedClipIds.has(asset.id))
     .map(assetToClip);
@@ -308,6 +316,10 @@ async function createExport(
       workspaceId: auth.workspaceId,
       projectId,
       timelineId,
+      audioAssetIds: [
+        ...(options.audioAssetIds ?? []),
+        ...((options.audioMixLayers ?? []).map((layer) => layer.audioAssetId)),
+      ],
     });
 
     const { job, created } = await agentApiStore.createOrGetJob({

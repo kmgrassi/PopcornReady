@@ -136,7 +136,7 @@ audioMixRouter.post(
     const { job, created } = await agentApiStore.createOrGetJob({
       type: "audio_alignment",
       projectId,
-      idempotencyKey: getIdempotencyKey(req),
+      idempotencyKey: scopedIdempotencyKey(req, projectId),
     });
     if (!created) return { status: 202, body: { job } };
 
@@ -158,3 +158,8 @@ audioMixRouter.post(
     return { status: 202, body: { job: finished } };
   })
 );
+
+function scopedIdempotencyKey(req: Parameters<typeof getIdempotencyKey>[0], projectId: string) {
+  const key = getIdempotencyKey(req);
+  return key ? `${projectId}:${key}` : null;
+}

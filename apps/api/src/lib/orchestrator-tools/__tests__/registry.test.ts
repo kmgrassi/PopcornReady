@@ -85,6 +85,7 @@ function planShotsDeps(over: Partial<Parameters<typeof createPlanShotsTool>[0]> 
     planEdit: async () => samplePlan,
     getActiveProjectBrief: async () => activeBrief,
     addProjectPlan: async () => ({ planAssetId: "plan_asset_1" }),
+    buildFootageGroundingContext: async () => ({ excerpts: [], promptText: null }),
     ...over,
   };
 }
@@ -189,7 +190,11 @@ test("plan_shots returns precondition_unmet (suggesting the brief) when none exi
     }),
   });
 
-  const result = await registry.execute("plan_shots", {}, { auth, projectId: "proj_1" });
+  const result = (await registry.execute(
+    "plan_shots",
+    {},
+    { auth, projectId: "proj_1" }
+  )) as ToolCallResult<PlanShotsOutput>;
 
   assert.equal(result.status, "failed");
   if (result.status === "failed") {
@@ -222,7 +227,12 @@ test("plan_shots derives the plan from the brief and persists it with brief prov
       }
     | undefined;
   let planInput:
-    | { plan: ShotPlan; briefAssetId?: string; briefContentHash?: string }
+    | {
+        plan: ShotPlan;
+        briefAssetId?: string;
+        briefContentHash?: string;
+        groundingInputs?: { assetId: string; role?: string; contentHash?: string }[];
+      }
     | undefined;
   const registry = createDefaultToolRegistry({
     planShots: planShotsDeps({
@@ -267,12 +277,88 @@ test("plan_shots derives the plan from the brief and persists it with brief prov
   // the active brief is recorded as the plan's input (provenance / stale graph)
   assert.equal(planInput?.briefAssetId, "brief_asset_1");
   assert.equal(planInput?.briefContentHash, "brief_hash_1");
+  assert.deepEqual(planInput?.groundingInputs, []);
 
   assert.equal(result.status, "succeeded");
   if (result.status === "succeeded") {
     assert.deepEqual(result.resourceIds, ["plan_asset_1"]);
     assert.equal(result.output?.planAssetId, "plan_asset_1");
     assert.equal(result.output?.plan.aspectRatio, "16:9");
+  }
+});
+
+test("plan_shots forwards transcript and moment grounding into the planner prompt", async () => {
+  let footageGrounding: string | null | undefined;
+  let groundingInputs: unknown;
+  const registry = createDefaultToolRegistry({
+    planShots: planShotsDeps({
+      planEdit: async (input) => {
+        footageGrounding = input.footageGrounding;
+        return {
+          ...samplePlan,
+          scenes: [
+            {
+              ...samplePlan.scenes[0],
+              beats: [
+                {
+                  ...samplePlan.scenes[0].beats[0],
+                  sourceWindow: {
+                    assetId: "clip_asset_1",
+                    startSec: 1,
+                    endSec: 4,
+                    label: "birthday candle",
+                  },
+                },
+              ],
+            },
+          ],
+        };
+      },
+      addProjectPlan: async (input) => {
+        groundingInputs = input.groundingInputs;
+        return { planAssetId: "plan_asset_1" };
+      },
+      buildFootageGroundingContext: async () => ({
+        excerpts: [
+          {
+            assetId: "clip_asset_1",
+            contentHash: "clip_hash_1",
+            label: "birthday.mov",
+            transcript: "Maya says happy birthday",
+            moments: [{ startSec: 1, endSec: 4, label: "birthday candle" }],
+          },
+        ],
+        promptText:
+          "Footage grounding from uploaded assets:\n- birthday.mov transcript: Maya says happy birthday\nmoment 1.00-4.00s: birthday candle",
+      }),
+    }),
+  });
+
+  const result = (await registry.execute(
+    "plan_shots",
+    {},
+    { auth, projectId: "proj_1" }
+  )) as ToolCallResult<PlanShotsOutput>;
+
+  assert.match(footageGrounding ?? "", /Maya says happy birthday/);
+  assert.match(footageGrounding ?? "", /1\.00-4\.00s/);
+  assert.deepEqual(groundingInputs, [
+    {
+      assetId: "clip_asset_1",
+      relation: "input",
+      role: "footage_grounding",
+      position: 1,
+      contentHash: "clip_hash_1",
+    },
+  ]);
+  assert.equal(result.status, "succeeded");
+  if (result.status === "succeeded") {
+    assert.deepEqual(result.output?.plan.scenes[0].beats[0].sourceWindow, {
+      assetId: "clip_asset_1",
+      startSec: 1,
+      endSec: 4,
+      label: "birthday candle",
+    });
   }
 });
 

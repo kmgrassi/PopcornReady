@@ -1,5 +1,5 @@
 // Mount point: aggregates every per-tool battery into one lookup. Add a new
-// tool's spec import here. A startup check asserts all 14 vocabulary tools have
+// tool's spec import here. A startup check asserts every vocabulary tool has
 // a battery so a newly-declared tool can't silently lack test coverage.
 
 import { TOOL_NAMES, type ToolName } from "@/lib/orchestrator";
@@ -11,6 +11,7 @@ import { critiqueTimelineBattery } from "./specs/critique-timeline";
 import { developStoryBlueprintBattery } from "./specs/develop-story-blueprint";
 import { draftScriptBattery } from "./specs/draft-script";
 import { exportVideoBattery } from "./specs/export-video";
+import { fitAudioToPictureBattery } from "./specs/fit-audio-to-picture";
 import { generateAnchorBattery } from "./specs/generate-anchor";
 import { generateAudioBattery } from "./specs/generate-audio";
 import { generateClipBattery } from "./specs/generate-clip";
@@ -32,6 +33,7 @@ const ALL_BATTERIES: ToolBattery[] = [
   generateKeyframeBattery,
   generateClipBattery,
   generateAudioBattery,
+  fitAudioToPictureBattery,
   assembleTimelineBattery,
   critiqueTimelineBattery,
   requestApprovalBattery,

@@ -1,5 +1,6 @@
 import type { Router } from "express";
 import { accountRouter } from "./account.js";
+import { audioFitRouter } from "./audio-fit.js";
 import { audioMixRouter } from "./audio-mix.js";
 import { assetGraphRouter } from "./asset-graph.js";
 import { assetsRouter } from "./assets.js";
@@ -26,6 +27,7 @@ export function mountProtectedV1Routes(v1: Router) {
   v1.use(meRouter);
   v1.use(projectsRouter);
   v1.use(workspacesRouter);
+  v1.use(audioFitRouter);
   v1.use(audioMixRouter);
   v1.use(assetGraphRouter);
   v1.use(assetsRouter);

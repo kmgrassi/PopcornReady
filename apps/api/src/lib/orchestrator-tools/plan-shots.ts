@@ -6,6 +6,7 @@ import {
 } from "@/lib/api/v1/store";
 import { briefToStoryContext } from "@/lib/v1/generation/prepare";
 import type { ShotPlan } from "@popcorn/shared/types";
+import { buildFootageGroundingContext, groundingGraphInputs } from "./footage-grounding";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 
@@ -26,12 +27,14 @@ export interface PlanShotsDeps {
   planEdit: typeof realPlanEdit;
   getActiveProjectBrief: typeof realGetActiveProjectBrief;
   addProjectPlan: typeof realAddProjectPlan;
+  buildFootageGroundingContext: typeof buildFootageGroundingContext;
 }
 
 const defaultDeps: PlanShotsDeps = {
   planEdit: realPlanEdit,
   getActiveProjectBrief: realGetActiveProjectBrief,
   addProjectPlan: realAddProjectPlan,
+  buildFootageGroundingContext,
 };
 
 const DEFAULT_STYLE = "fast-paced social ad";
@@ -47,6 +50,17 @@ const persistedBeatSchema = {
     name: str,
     durationSec: num,
     intent: str,
+    sourceWindow: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        assetId: str,
+        startSec: num,
+        endSec: num,
+        label: str,
+      },
+      required: ["startSec", "endSec"],
+    },
   },
   required: ["id", "name", "durationSec", "intent"],
 };
@@ -187,6 +201,10 @@ export function createPlanShotsTool(
         return briefRequired();
       }
       const { brief } = active;
+      const footageGrounding = await resolved.buildFootageGroundingContext({
+        workspaceId: context.auth.workspaceId,
+        projectId: context.projectId,
+      });
 
       const plan = await resolved.planEdit({
         goal: brief.goal,
@@ -195,6 +213,7 @@ export function createPlanShotsTool(
         aspectRatio: brief.aspectRatio,
         storyContext: briefToStoryContext(brief),
         feedback: input.feedback ?? null,
+        footageGrounding: footageGrounding.promptText,
       });
 
       // Record the brief as the plan's input so a brief replacement marks the
@@ -205,6 +224,7 @@ export function createPlanShotsTool(
         plan,
         briefAssetId: active.assetId,
         briefContentHash: active.contentHash,
+        groundingInputs: groundingGraphInputs(footageGrounding, 1),
       });
 
       return {

@@ -82,6 +82,8 @@ function toolDescription(name: ToolName): string {
       return "Generate a motion clip for a beat.";
     case "generate_audio":
       return "Generate narration, dialogue, music, or sound assets.";
+    case "fit_audio_to_picture":
+      return "Fit generated audio to a beat window and persist a sync critique.";
     case "assemble_timeline":
       return "Assemble available assets into a deterministic timeline.";
     case "critique_timeline":

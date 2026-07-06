@@ -9,6 +9,7 @@ export const TOOL_NAMES = [
   "generate_keyframe",
   "generate_clip",
   "generate_audio",
+  "fit_audio_to_picture",
   "assemble_timeline",
   "critique_timeline",
   "request_approval",

@@ -4,6 +4,18 @@
 const num = { type: "number" } as const;
 const str = { type: "string" } as const;
 
+const sourceWindowSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    assetId: str,
+    startSec: num,
+    endSec: num,
+    label: str,
+  },
+  required: ["startSec", "endSec"],
+};
+
 const beatSchema = {
   type: "object",
   additionalProperties: false,
@@ -11,6 +23,7 @@ const beatSchema = {
     name: str,
     durationSec: num,
     intent: str,
+    sourceWindow: sourceWindowSchema,
   },
   required: ["name", "durationSec", "intent"],
 };

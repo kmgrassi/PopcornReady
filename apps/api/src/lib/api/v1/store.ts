@@ -2001,25 +2001,29 @@ export async function addProjectPlan(input: {
   plan: ShotPlan;
   briefAssetId?: string;
   briefContentHash?: string;
+  groundingInputs?: GraphAssetInput[];
 }): Promise<{ planAssetId: string }> {
   const db = getServiceSupabase();
-  const planInputs: GraphAssetInput[] = input.briefAssetId
-    ? [
-        {
-          assetId: input.briefAssetId,
-          relation: "input",
-          role: "brief",
-          position: 0,
-          ...(input.briefContentHash ? { contentHash: input.briefContentHash } : {}),
-        },
-      ]
-    : [];
+  const planInputs: GraphAssetInput[] = [
+    ...(input.briefAssetId
+      ? [
+          {
+            assetId: input.briefAssetId,
+            relation: "input" as const,
+            role: "brief",
+            position: 0,
+            ...(input.briefContentHash ? { contentHash: input.briefContentHash } : {}),
+          },
+        ]
+      : []),
+    ...(input.groundingInputs ?? []),
+  ];
   const action = await createAction({
     projectId: input.projectId,
     tool: "plan_shots",
     status: "running",
     params: { source: "plan_shots" },
-    inputAssetIds: input.briefAssetId ? [input.briefAssetId] : [],
+    inputAssetIds: planInputs.map((assetInput) => assetInput.assetId),
     rationale: "Persist the shot plan as the project's active plan asset.",
   });
   const planAsset = await insertDataAsset({
@@ -2122,6 +2126,18 @@ export async function addProjectStoryBlueprint(input: {
     inputs: graphInputs,
     createdByActionId: action.id,
   });
+  // Record which blueprint this one replaces (lineage for the version chain).
+  const projectRow = await runQuery(
+    "store.addProjectStoryBlueprint current lookup",
+    db
+      .from("projects")
+      .select("current_story_blueprint_id")
+      .eq("id", input.projectId)
+      .maybeSingle()
+  );
+  const supersedesId =
+    (projectRow as { current_story_blueprint_id?: string | null } | null)
+      ?.current_story_blueprint_id ?? null;
   const storyBlueprint = await runQuery(
     "store.addProjectStoryBlueprint insert",
     db
@@ -2132,6 +2148,7 @@ export async function addProjectStoryBlueprint(input: {
         project_id: input.projectId,
         brief_asset_id: input.briefAssetId,
         asset_id: asset.id,
+        supersedes_id: supersedesId,
         status: "draft",
         snapshot: markedContent("story_blueprint", input.blueprint),
         provenance: markedJson("story_blueprint_provenance.v1", {
@@ -2219,6 +2236,17 @@ export async function addProjectStoryBlueprint(input: {
     "story_blueprint",
     asset.id,
     action.id
+  );
+  // The new blueprint is now current; every other non-superseded blueprint for
+  // the project is by definition replaced.
+  await runQuery(
+    "store.addProjectStoryBlueprint supersede previous",
+    db
+      .from("story_blueprints")
+      .update({ status: "superseded" })
+      .eq("project_id", input.projectId)
+      .neq("id", storyBlueprintId)
+      .neq("status", "superseded")
   );
   await runQuery(
     "store.addProjectStoryBlueprint current pointer",
@@ -2470,6 +2498,7 @@ export async function addProjectScriptDraft(input: {
   storyBlueprintId: string;
   storyBlueprintAssetId: string;
   storyBlueprintContentHash?: string;
+  groundingInputs?: GraphAssetInput[];
   supersedesId?: string;
 }): Promise<{ scriptDraftId: string; scriptDraftAssetId: string }> {
   const db = getServiceSupabase();
@@ -2490,13 +2519,14 @@ export async function addProjectScriptDraft(input: {
         ? { contentHash: input.storyBlueprintContentHash }
         : {}),
     },
+    ...(input.groundingInputs ?? []),
   ];
   const action = await createAction({
     projectId: input.projectId,
     tool: "draft_script",
     status: "running",
     params: { source: "draft_script" },
-    inputAssetIds: [input.briefAssetId, input.storyBlueprintAssetId],
+    inputAssetIds: graphInputs.map((assetInput) => assetInput.assetId),
     rationale: "Persist the scene-level script draft for later voice and shot planning.",
   });
   const now = new Date().toISOString();
@@ -2673,6 +2703,72 @@ export async function addProjectTimelineCritique(input: {
     createdByActionId: action.id,
   });
   await setActiveProjectScopedAssetSelection(db, input.projectId, "critique", asset.id, action.id);
+  await updateAction(action.id, {
+    status: "applied",
+    outputAssetIds: [asset.id],
+  });
+  return { critiqueAssetId: asset.id };
+}
+
+export async function addAudioFitCritique(input: {
+  workspaceId: string;
+  projectId: string;
+  audioAssetId: string;
+  audioContentHash?: string;
+  planAssetId?: string;
+  planContentHash?: string;
+  beatId: string;
+  critique: unknown;
+  orchestratorRunId?: string;
+}): Promise<{ critiqueAssetId: string }> {
+  const db = getServiceSupabase();
+  const graphInputs: GraphAssetInput[] = [
+    {
+      assetId: input.audioAssetId,
+      relation: "input",
+      role: "audio_track",
+      position: 0,
+      ...(input.audioContentHash ? { contentHash: input.audioContentHash } : {}),
+    },
+    ...(input.planAssetId
+      ? [
+          {
+            assetId: input.planAssetId,
+            relation: "input" as const,
+            role: "plan",
+            position: 1,
+            ...(input.planContentHash ? { contentHash: input.planContentHash } : {}),
+          },
+        ]
+      : []),
+  ];
+  const action = await createAction({
+    projectId: input.projectId,
+    orchestratorRunId: input.orchestratorRunId,
+    tool: "fit_audio_to_picture",
+    status: "running",
+    params: { beatId: input.beatId, audioAssetId: input.audioAssetId },
+    inputAssetIds: graphInputs.map((graphInput) => graphInput.assetId),
+    rationale: "Persist an audio-to-picture sync report for a voiceover segment.",
+  });
+  const asset = await insertDataAsset({
+    db,
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    kind: "critique",
+    contentSchemaKind: "critique",
+    role: "audio_fit",
+    content: input.critique,
+    inputs: graphInputs,
+    createdByActionId: action.id,
+  });
+  await setActiveProjectScopedAssetSelection(
+    db,
+    input.projectId,
+    `audio_fit:${input.beatId}`,
+    asset.id,
+    action.id
+  );
   await updateAction(action.id, {
     status: "applied",
     outputAssetIds: [asset.id],

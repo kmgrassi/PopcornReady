@@ -6,7 +6,11 @@
 // this client is a thin wrapper that returns a typed error envelope when the
 // route is missing instead of throwing an opaque fetch error.
 
-import { GenerationErrorSummary, GenerationRun } from "@popcorn/shared/v1/types";
+import {
+  type GateableGenerationStageType,
+  GenerationErrorSummary,
+  GenerationRun,
+} from "@popcorn/shared/v1/types";
 import { authenticatedFetch } from "../../supabase/fetch";
 import { GenerationRunDetail } from "./status";
 
@@ -30,8 +34,57 @@ export interface RetryGenerationRunOptions {
 }
 
 export interface RejectGenerationRunOptions {
-  stageType?: string;
+  stageType?: GateableGenerationStageType;
   note?: string;
+}
+
+type JsonRecord = Record<string, unknown>;
+
+interface ApiErrorPayload {
+  error?: {
+    code?: string;
+    message?: string;
+    details?: GenerationErrorSummary;
+  };
+}
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isGenerationRun(value: unknown): value is GenerationRun {
+  return (
+    isRecord(value) &&
+    typeof value.runId === "string" &&
+    typeof value.projectId === "string" &&
+    typeof value.status === "string"
+  );
+}
+
+function isListGenerationRunsResponse(value: unknown): value is ListGenerationRunsResponse {
+  return isRecord(value) && Array.isArray(value.runs) && value.runs.every(isGenerationRun);
+}
+
+function isGenerationRunDetail(value: unknown): value is GenerationRunDetail {
+  return (
+    isRecord(value) &&
+    isGenerationRun(value.run) &&
+    Array.isArray(value.stages) &&
+    Array.isArray(value.stageItems) &&
+    (value.resultArtifacts === undefined || Array.isArray(value.resultArtifacts))
+  );
+}
+
+async function readJson<T>(
+  response: Response,
+  guard: (value: unknown) => value is T,
+  invalidMessage: string,
+): Promise<T> {
+  const payload = (await response.json()) as unknown;
+  if (!guard(payload)) {
+    throw new GenerationRunRequestError(502, "invalid_response_shape", invalidMessage);
+  }
+  return payload;
 }
 
 export class GenerationRunRequestError extends Error {
@@ -64,7 +117,11 @@ export class GenerationRunClient {
       undefined,
       signal,
     );
-    const body = (await response.json()) as ListGenerationRunsResponse;
+    const body = await readJson(
+      response,
+      isListGenerationRunsResponse,
+      "Generation-run list response was missing a runs array.",
+    );
     return body.runs ?? [];
   }
 
@@ -79,7 +136,11 @@ export class GenerationRunClient {
       undefined,
       signal,
     );
-    return (await response.json()) as GenerationRunDetail;
+    return readJson(
+      response,
+      isGenerationRunDetail,
+      "Generation-run detail response was malformed.",
+    );
   }
 
   async cancelRun(
@@ -93,7 +154,11 @@ export class GenerationRunClient {
       {},
       signal,
     );
-    return (await response.json()) as GenerationRunDetail;
+    return readJson(
+      response,
+      isGenerationRunDetail,
+      "Generation-run cancel response was malformed.",
+    );
   }
 
   async retryRun(
@@ -102,7 +167,7 @@ export class GenerationRunClient {
     options: RetryGenerationRunOptions = {},
     signal?: AbortSignal,
   ): Promise<GenerationRunDetail> {
-    const body: Record<string, string> = {};
+    const body: Partial<Record<"stageId" | "itemId", string>> = {};
     if (options.stageId) body.stageId = options.stageId;
     if (options.itemId) body.itemId = options.itemId;
     const response = await this.request(
@@ -111,7 +176,11 @@ export class GenerationRunClient {
       body,
       signal,
     );
-    return (await response.json()) as GenerationRunDetail;
+    return readJson(
+      response,
+      isGenerationRunDetail,
+      "Generation-run retry response was malformed.",
+    );
   }
 
   async approveRun(
@@ -125,7 +194,11 @@ export class GenerationRunClient {
       {},
       signal,
     );
-    return (await response.json()) as GenerationRunDetail;
+    return readJson(
+      response,
+      isGenerationRunDetail,
+      "Generation-run approve response was malformed.",
+    );
   }
 
   async rejectRun(
@@ -134,7 +207,7 @@ export class GenerationRunClient {
     options: RejectGenerationRunOptions = {},
     signal?: AbortSignal,
   ): Promise<GenerationRunDetail> {
-    const body: Record<string, string> = {};
+    const body: Partial<Record<"stageType" | "note", string>> = {};
     if (options.stageType) body.stageType = options.stageType;
     if (options.note) body.note = options.note;
     const response = await this.request(
@@ -143,7 +216,11 @@ export class GenerationRunClient {
       body,
       signal,
     );
-    return (await response.json()) as GenerationRunDetail;
+    return readJson(
+      response,
+      isGenerationRunDetail,
+      "Generation-run reject response was malformed.",
+    );
   }
 
   private async request(
@@ -185,12 +262,14 @@ async function toRequestError(response: Response): Promise<GenerationRunRequestE
   let summary: GenerationErrorSummary | undefined;
 
   try {
-    const payload = (await response.clone().json()) as {
-      error?: { code?: string; message?: string; details?: GenerationErrorSummary };
-    };
-    if (payload?.error?.code) code = payload.error.code;
-    if (payload?.error?.message) message = payload.error.message;
-    if (payload?.error?.details) summary = payload.error.details;
+    const payload = (await response.clone().json()) as unknown;
+    if (!isRecord(payload)) {
+      return new GenerationRunRequestError(response.status, code, message, summary);
+    }
+    const errorPayload = payload as ApiErrorPayload;
+    if (errorPayload.error?.code) code = errorPayload.error.code;
+    if (errorPayload.error?.message) message = errorPayload.error.message;
+    if (errorPayload.error?.details) summary = errorPayload.error.details;
   } catch {
     // Body wasn't JSON. Fall back to status-derived code/message.
   }

@@ -157,6 +157,69 @@
   font-weight: 700;
 }
 
+.visibilityControl {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.visibilityControl > span {
+  max-width: 260px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.shareNotice {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  background: var(--panel-2);
+}
+
+.shareNotice[data-state="public"] {
+  border-color: color-mix(in srgb, var(--good) 42%, var(--border));
+  background:
+    linear-gradient(
+      color-mix(in srgb, var(--good) 14%, transparent),
+      color-mix(in srgb, var(--good) 14%, transparent)
+    ),
+    var(--panel-2);
+}
+
+.shareNotice p {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: var(--text-sm);
+  font-weight: 900;
+}
+
+.shareNotice span {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.shareNotice .shareStatus {
+  grid-column: 1 / -1;
+  min-height: 1em;
+  margin-top: 0;
+  color: var(--danger);
+}
+
+.shareNotice .shareStatus[data-state="copied"] {
+  color: var(--good);
+}
+
 .chip {
   display: inline-flex;
   align-items: center;
@@ -637,6 +700,49 @@
   color: var(--danger-text);
 }
 
+.dialogBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+}
+
+.confirmDialog {
+  display: grid;
+  gap: var(--space-4);
+  width: min(440px, 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-lg);
+}
+
+.confirmDialog h2 {
+  margin: var(--space-1) 0 0;
+  color: var(--text-strong);
+  font-size: var(--text-lg);
+  line-height: 1.2;
+}
+
+.confirmDialog p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
 .generating {
   display: grid;
   gap: var(--space-3);
@@ -737,6 +843,11 @@
   .projectTopLayout,
   .projectContextGrid {
     grid-template-columns: 1fr;
+  }
+
+  .shareNotice {
+    grid-template-columns: 1fr;
+    align-items: stretch;
   }
 }
 
