@@ -6,6 +6,7 @@ import { afterEach, beforeEach, test } from "node:test";
 import { VideoBrief } from "../schemas";
 import {
   addAsset,
+  coerceShotPlanContent,
   createBriefVersion,
   createProject,
   deleteProject,
@@ -65,6 +66,49 @@ function asset(id: string, projectId: string, workspaceId: string): V1Asset {
     updatedAt: now,
   };
 }
+
+test("coerceShotPlanContent accepts marked and legacy shot plans", () => {
+  const marked = coerceShotPlanContent({
+    schema_version: "plan.v1",
+    targetLengthSec: 15,
+    style: "playful",
+    aspectRatio: "9:16",
+    scenes: [
+      {
+        id: "scene_1",
+        name: "Opening",
+        beats: [{ id: "beat_1", name: "Hook", durationSec: 5, intent: "Open strong" }],
+      },
+    ],
+  });
+  assert.equal(marked?.scenes[0]?.beats[0]?.id, "beat_1");
+
+  const legacyFlat = coerceShotPlanContent({
+    targetLengthSec: 15,
+    style: "playful",
+    aspectRatio: "9:16",
+    beats: [{ name: "Hook", durationSec: 5, intent: "Open strong" }],
+  });
+  assert.equal(legacyFlat?.scenes[0]?.id, "scene_1");
+  assert.equal(legacyFlat?.scenes[0]?.beats[0]?.id, "beat_1_Hook");
+});
+
+test("coerceShotPlanContent rejects other plan-kind payloads", () => {
+  assert.equal(
+    coerceShotPlanContent({
+      schema_version: "visual_anchor_plan.v1",
+      anchors: [],
+    }),
+    null
+  );
+  assert.equal(
+    coerceShotPlanContent({
+      schema_version: "composition.v1",
+      timeline: [],
+    }),
+    null
+  );
+});
 
 dbTest("createProject without brief persists and is readable", async () => {
   const ws = await ensureLocalWorkspace("A");
