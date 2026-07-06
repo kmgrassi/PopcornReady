@@ -126,7 +126,7 @@ export type AgentAssetSource =
       mimeType?: string;
       requiresTranscode?: boolean;
     }
-  | { type: "storage_upload"; path: string }
+  | { type: "storage_upload"; path: string; requiresTranscode?: boolean }
   | { type: "generated"; generatedAssetId: string }
   | {
       type: "catalog";

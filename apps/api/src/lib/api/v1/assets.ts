@@ -600,6 +600,29 @@ export async function registerAsset(
       });
     }
     const probe = probeUploadedMedia({ bytes: object.body, kind, filename });
+    const validation = validateMobileUploadCandidate({
+      filename,
+      mimeType: object.contentType || metadata.contentType,
+      sizeBytes: object.body.length,
+      durationSec: probe.durationSec ?? input.durationSec,
+      kind,
+      transport: "direct_upload",
+    });
+    if (!validation.ok) {
+      throw new ApiError(
+        validation.issue?.code === "file_too_large" ? "object_too_large" : "asset_invalid",
+        validation.issue?.message ?? "Uploaded media is not supported.",
+        {
+          reason: validation.issue?.code ?? "media_unreadable",
+          ...(validation.issue?.limit !== undefined
+            ? { limit: validation.issue.limit }
+            : {}),
+          ...(validation.issue?.actual !== undefined
+            ? { actual: validation.issue.actual }
+            : {}),
+        },
+      );
+    }
 
     const asset: V1Asset = {
       id: "",
@@ -609,7 +632,11 @@ export async function registerAsset(
       kind,
       filename,
       status: "pending",
-      source: { type: "storage_upload", path: uploadPath },
+      source: {
+        type: "storage_upload",
+        path: uploadPath,
+        ...(validation.requiresTranscode ? { requiresTranscode: true } : {}),
+      },
       durationSec: probe.durationSec ?? input.durationSec,
       context: input.context,
       userContext: input.userContext,
