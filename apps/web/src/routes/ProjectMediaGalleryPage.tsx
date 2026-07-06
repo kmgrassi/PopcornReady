@@ -1,13 +1,16 @@
 import { useMemo, useReducer, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { FOOTAGE_ACCEPT, readSelectedFootage } from "../lib/upload";
 import {
   useProjectAssetsQuery,
   useRefreshAssetMediaMutation,
-  useRegisterProjectUploadMutation,
   useStartUploadedFootageGenerationRunMutation,
 } from "../lib/queryClient";
 import { v1Api } from "../lib/api-client";
+import {
+  PROJECT_UPLOAD_ACCEPT,
+  projectUploadStatusMessage,
+  useProjectUploadManager,
+} from "../lib/projectUpload";
 import { MediaViewer, type MediaViewerItem } from "../components/media/MediaViewer";
 import {
   assetDisplayTitle,
@@ -29,15 +32,6 @@ import {
   selectionReducer,
 } from "./project-media-intent";
 import styles from "./ProjectMediaGalleryPage.module.css";
-
-async function fileToBase64(file: File): Promise<string> {
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  let binary = "";
-  for (let index = 0; index < bytes.length; index += 1) {
-    binary += String.fromCharCode(bytes[index]);
-  }
-  return btoa(binary);
-}
 
 function viewerItem(asset: ProjectMediaAsset): MediaViewerItem {
   return {
@@ -61,8 +55,6 @@ export function ProjectMediaGalleryPage() {
   const projectId = useParams().projectId ?? "";
   const navigate = useNavigate();
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [uploadingCount, setUploadingCount] = useState(0);
   const [selectedIds, dispatchSelection] = useReducer(selectionReducer, []);
   const [selectedPresetId, setSelectedPresetId] = useState("");
   const [intentText, setIntentText] = useState("");
@@ -70,7 +62,7 @@ export function ProjectMediaGalleryPage() {
   const [createPending, setCreatePending] = useState(false);
   const createInFlightRef = useRef(false);
   const assetsQuery = useProjectAssetsQuery(projectId, projectMediaQueryParams());
-  const registerUpload = useRegisterProjectUploadMutation(projectId);
+  const upload = useProjectUploadManager(projectId, "project_media_gallery");
   const refreshMedia = useRefreshAssetMediaMutation();
   const startRun = useStartUploadedFootageGenerationRunMutation(projectId);
 
@@ -109,51 +101,17 @@ export function ProjectMediaGalleryPage() {
     : -1;
   const selectedAsset = selectedIndex >= 0 ? assets[selectedIndex] : null;
   const statusMessage = useMemo(() => {
-    if (uploadingCount > 0) {
-      return `Uploading ${uploadingCount} ${uploadingCount === 1 ? "file" : "files"}...`;
-    }
-    if (assetsQuery.isFetching && !assetsQuery.isLoading) {
-      return "Refreshing media status...";
-    }
-    if (processingCount > 0) {
-      return `${processingCount} ${processingCount === 1 ? "asset is" : "assets are"} processing.`;
-    }
-    return "";
-  }, [assetsQuery.isFetching, assetsQuery.isLoading, processingCount, uploadingCount]);
-
-  async function handleFiles(files: FileList | null) {
-    if (!files || files.length === 0 || !projectId) return;
-    setUploadError(null);
-    try {
-      const selected = await readSelectedFootage(files);
-      setUploadingCount(selected.length);
-      for (const item of selected) {
-        const dataBase64 = await fileToBase64(item.file);
-        await registerUpload.mutateAsync({
-          source: {
-            type: "multipart_upload",
-            dataBase64,
-            mimeType: item.file.type || undefined,
-          },
-          kind: item.kind,
-          filename: item.name,
-          durationSec: item.durationSec,
-          userContext: {
-            description: `Added from the project media gallery: ${item.name}`,
-            intendedUse:
-              item.kind === "audio"
-                ? ["music", "voiceover", "dialogue"]
-                : ["primary_footage"],
-          },
-        });
-        setUploadingCount((current) => Math.max(0, current - 1));
-      }
-    } catch (error) {
-      setUploadError(error instanceof Error ? error.message : "Could not add media.");
-    } finally {
-      setUploadingCount(0);
-    }
-  }
+    return projectUploadStatusMessage({
+      uploadingCount: upload.uploadingCount,
+      refreshing: assetsQuery.isFetching && !assetsQuery.isLoading,
+      processingCount,
+    });
+  }, [
+    assetsQuery.isFetching,
+    assetsQuery.isLoading,
+    processingCount,
+    upload.uploadingCount,
+  ]);
 
   async function createRun() {
     if (!projectId || !canCreate || createInFlightRef.current) return;
@@ -240,9 +198,9 @@ export function ProjectMediaGalleryPage() {
 
       <div
         className={styles.statusLine}
-        role={uploadError || assetsQuery.error ? "alert" : "status"}
+        role={upload.error || assetsQuery.error ? "alert" : "status"}
       >
-        {uploadError ?? (assetsQuery.error ? "Could not load project media." : statusMessage)}
+        {upload.error ?? (assetsQuery.error ? "Could not load project media." : statusMessage)}
       </div>
 
       {state === "loading" ? (
@@ -270,11 +228,11 @@ export function ProjectMediaGalleryPage() {
         <section className={styles.grid} aria-label="Project media gallery">
           <label className={styles.addTile}>
             <input
-              accept={FOOTAGE_ACCEPT}
+              accept={PROJECT_UPLOAD_ACCEPT}
               multiple
               type="file"
               onChange={(event) => {
-                void handleFiles(event.currentTarget.files);
+                void upload.handleFiles(event.currentTarget.files);
                 event.currentTarget.value = "";
               }}
             />
@@ -283,7 +241,7 @@ export function ProjectMediaGalleryPage() {
                 +
               </span>
               <span className={styles.addTitle}>Add media</span>
-              <span className={styles.addHint}>Upload videos, images, or audio to this project.</span>
+              <span className={styles.addHint}>Upload videos or images to this project.</span>
             </span>
           </label>
 
