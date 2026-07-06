@@ -10,11 +10,15 @@ import { promises as fs } from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
 import { writeAssetObject } from "@/lib/storage/asset-write";
+import { readStorageConfig, resolveBucket } from "@/lib/storage/config";
+import { createObjectStore } from "@/lib/storage/object-store";
 import { AuthContext } from "./auth";
+import { assertProjectUploadPath, createAssetUploadUrl } from "./asset-upload";
 import { sha256Hex } from "./asset-graph";
 import { buildSemanticAnalysis } from "../../assets/semantic-analysis";
 import { enqueueAssetEmbeddingRefresh } from "./asset-embeddings/jobs";
 import { ApiError } from "./errors";
+import { probeUploadedMedia } from "./media-probe";
 import {
   AgentAssetContext,
   AssetInventoryInput,
@@ -43,6 +47,7 @@ import {
 } from "./store";
 
 const ASSET_KNOWLEDGE_ANALYSIS_VERSION = "assetKnowledge.v1";
+const DEFAULT_MAX_STORAGE_UPLOAD_BYTES = 200 * 1024 * 1024;
 
 function basename(input: string): string {
   try {
@@ -326,6 +331,27 @@ async function recordStorageWriteAction(input: {
   });
 }
 
+export async function createStorageUploadUrl(
+  auth: AuthContext,
+  projectId: string,
+  input: { filename?: string; contentType?: string }
+): Promise<{ path: string; signedUrl: string; expiresAt: string }> {
+  await getProject(auth.workspaceId, projectId);
+  const filename = input.filename?.trim() || `${randomUUID()}.bin`;
+  const visibility = await effectiveAssetStorageVisibility({
+    workspaceId: auth.workspaceId,
+    projectId,
+    assetVisibility: "public",
+  });
+  return createAssetUploadUrl({
+    workspaceId: auth.workspaceId,
+    projectId,
+    filename,
+    visibility,
+    contentType: input.contentType,
+  });
+}
+
 async function writeBytesForAsset(input: {
   auth: AuthContext;
   projectId: string;
@@ -508,10 +534,91 @@ export async function registerAsset(
     });
   }
 
+  if (input.source.type === "storage_upload") {
+    const uploadPath = input.source.path;
+    assertProjectUploadPath({
+      workspaceId: auth.workspaceId,
+      projectId,
+      path: uploadPath,
+    });
+    const filename = input.filename || basename(uploadPath);
+    const kind = resolveKind(input.kind, filename);
+    const visibility = await effectiveAssetStorageVisibility({
+      workspaceId: auth.workspaceId,
+      projectId,
+      assetVisibility: "public",
+    });
+    const store = createObjectStore();
+    let metadata;
+    try {
+      metadata = await store.getObjectMetadata(uploadPath, visibility);
+    } catch {
+      throw new ApiError("object_not_found", "Uploaded object was not found in storage.");
+    }
+    const maxBytes = maxStorageUploadBytes();
+    if (metadata.contentLength !== undefined && metadata.contentLength > maxBytes) {
+      throw new ApiError("object_too_large", "Uploaded object exceeds the maximum size.", {
+        maxBytes,
+        sizeBytes: metadata.contentLength,
+      });
+    }
+
+    let object;
+    try {
+      object = await store.getObject(uploadPath, visibility);
+    } catch {
+      throw new ApiError("object_not_found", "Uploaded object was not found in storage.");
+    }
+    if (object.body.length > maxBytes) {
+      throw new ApiError("object_too_large", "Uploaded object exceeds the maximum size.", {
+        maxBytes,
+        sizeBytes: object.body.length,
+      });
+    }
+    const probe = probeUploadedMedia({ bytes: object.body, kind, filename });
+    const bucket = resolveBucket(readStorageConfig(), visibility);
+
+    const asset: V1Asset = {
+      id: "",
+      schemaVersion: SCHEMA_VERSIONS.asset,
+      workspaceId: auth.workspaceId,
+      projectId,
+      kind,
+      filename,
+      status: "ready",
+      source: { type: "storage_upload", path: uploadPath },
+      durationSec: probe.durationSec,
+      context: input.context,
+      userContext: input.userContext,
+      agentContext: input.agentContext,
+      storageKey: uploadPath,
+      storageBucket: bucket,
+      contentHash: sha256Hex(probe.contentHashBytes ?? object.body),
+      createdAt: now,
+      updatedAt: now,
+    };
+    const created = await addAssetWithDerivedKnowledge(auth, projectId, asset, now);
+    await recordStorageWriteAction({
+      projectId,
+      assetId: created.id,
+      sourceType: "storage_upload",
+      storageKey: uploadPath,
+      storageBucket: bucket,
+      contentType: object.contentType || metadata.contentType || "application/octet-stream",
+    });
+    void enqueueAssetEmbeddingRefresh(created, { reason: "asset_ready" }).catch(() => undefined);
+    return created;
+  }
+
   throw new ApiError(
     "validation_failed",
-    `Asset source "${input.source.type}" is not supported yet. Use remote_url, local_path, or multipart_upload.`
+    `Asset source "${input.source.type}" is not supported yet. Use remote_url, local_path, multipart_upload, or storage_upload.`
   );
+}
+
+function maxStorageUploadBytes(): number {
+  const raw = Number(process.env.MAX_STORAGE_UPLOAD_BYTES);
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_MAX_STORAGE_UPLOAD_BYTES;
 }
 
 export async function updateAssetContext(

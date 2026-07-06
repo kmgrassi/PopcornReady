@@ -121,6 +121,7 @@ export type AgentAssetSource =
   | { type: "remote_url"; url: string }
   | { type: "local_path"; path: string }
   | { type: "multipart_upload"; dataBase64?: string; mimeType?: string }
+  | { type: "storage_upload"; path: string }
   | { type: "generated"; generatedAssetId: string }
   | {
       type: "catalog";
@@ -409,6 +410,11 @@ function parseAssetSource(input: unknown, fields: FieldError[]): AgentAssetSourc
       const mimeType = optionalString(input.mimeType, "source.mimeType", fields);
       return { type: "multipart_upload", dataBase64, ...(mimeType ? { mimeType } : {}) };
     }
+    case "storage_upload": {
+      const uploadPath = requireString(input.path, "source.path", fields);
+      if (!uploadPath) return undefined;
+      return { type: "storage_upload", path: uploadPath };
+    }
     case "generated": {
       const generatedAssetId = requireString(
         input.generatedAssetId,
@@ -422,7 +428,7 @@ function parseAssetSource(input: unknown, fields: FieldError[]): AgentAssetSourc
       fields.push({
         path: "source.type",
         message:
-          "Must be one of: remote_url, local_path, multipart_upload, generated.",
+          "Must be one of: remote_url, local_path, multipart_upload, storage_upload, generated.",
       });
       return undefined;
   }

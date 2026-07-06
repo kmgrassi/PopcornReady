@@ -3,6 +3,7 @@ import {
   CreateBucketCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   HeadBucketCommand,
   NoSuchBucket,
   NotFound,
@@ -43,9 +44,15 @@ export interface StoredObject {
   contentType?: string;
 }
 
+export interface StoredObjectMetadata {
+  contentLength?: number;
+  contentType?: string;
+}
+
 export interface ObjectStore {
   putObject(input: PutObjectInput): Promise<{ bucket: string; key: string }>;
   getObject(key: string, visibility: AssetVisibility): Promise<StoredObject>;
+  getObjectMetadata(key: string, visibility: AssetVisibility): Promise<StoredObjectMetadata>;
   copyObject(input: CopyObjectInput): Promise<{ bucket: string; key: string }>;
   deleteObject(key: string, visibility: AssetVisibility): Promise<void>;
   objectUrl(key: string, visibility: AssetVisibility): string;
@@ -99,6 +106,20 @@ export function createS3ObjectStore(
         : Buffer.alloc(0);
       return {
         body,
+        contentType: response.ContentType,
+      };
+    },
+
+    async getObjectMetadata(key, visibility) {
+      const bucket = resolveBucket(config, visibility);
+      const response = await client.send(
+        new HeadObjectCommand({
+          Bucket: bucket,
+          Key: key,
+        })
+      );
+      return {
+        contentLength: response.ContentLength,
         contentType: response.ContentType,
       };
     },

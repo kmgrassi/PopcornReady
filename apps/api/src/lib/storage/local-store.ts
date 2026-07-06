@@ -5,7 +5,13 @@ import {
   type AssetVisibility,
   type StorageConfig,
 } from "./config";
-import type { CopyObjectInput, ObjectStore, PutObjectInput, StoredObject } from "./object-store";
+import type {
+  CopyObjectInput,
+  ObjectStore,
+  PutObjectInput,
+  StoredObject,
+  StoredObjectMetadata,
+} from "./object-store";
 
 export function createLocalObjectStore(config: StorageConfig): ObjectStore {
   return {
@@ -28,6 +34,16 @@ export function createLocalObjectStore(config: StorageConfig): ObjectStore {
         readMetadata(target),
       ]);
       return { body, contentType: metadata.contentType };
+    },
+
+    async getObjectMetadata(
+      key: string,
+      visibility: AssetVisibility
+    ): Promise<StoredObjectMetadata> {
+      const bucket = resolveBucket(config, visibility);
+      const target = objectPath(config, bucket, key);
+      const [stat, metadata] = await Promise.all([fs.stat(target), readMetadata(target)]);
+      return { contentLength: stat.size, contentType: metadata.contentType };
     },
 
     async copyObject(input: CopyObjectInput) {

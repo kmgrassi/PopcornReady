@@ -174,6 +174,9 @@ function mockObjectStore(): ObjectStore & { puts: ObjectStorePut[] } {
     async getObject() {
       return { body: Buffer.alloc(0) };
     },
+    async getObjectMetadata() {
+      return { contentLength: 0 };
+    },
     async copyObject(input) {
       return {
         bucket: input.destinationVisibility === "public" ? "assets-public" : "assets-private",
