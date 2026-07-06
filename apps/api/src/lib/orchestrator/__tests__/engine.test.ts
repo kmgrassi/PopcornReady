@@ -453,6 +453,28 @@ test("parks before a gated stage and resumes once the gate is approved", async (
   assert.equal(store.actions.length, 1);
 });
 
+test("uses latest gate state after the model turn before parking", async () => {
+  const store = new FakeStore(runFixture(), [
+    gateFixture("create_or_load_brief", "reached"),
+  ]);
+  const model: OrchestratorModel = async ({ priorResults }) => {
+    const hasBrief = (priorResults as Array<{ tool: string }>).some(
+      (r) => r.tool === "create_or_load_brief"
+    );
+    if (hasBrief) return { type: "done", summary: "done", model: "mock" };
+    store.gates[0].status = "approved";
+    return { type: "tool_call", toolName: "create_or_load_brief", input: {}, model: "mock" };
+  };
+  const registry = fakeRegistry({ create_or_load_brief: () => ok(["asset_brief"]) });
+
+  const run = await runOrchestratorToCompletion("run1", deps(store, model, registry));
+
+  assert.equal(run.status, "succeeded");
+  assert.equal(store.actions.length, 1);
+  assert.equal(store.actions[0].tool, "create_or_load_brief");
+  assert.equal(store.actions[0].status, "applied");
+});
+
 test("a rejected gate regenerates the gated stage and parks for review again", async () => {
   const store = new FakeStore(runFixture(), [gateFixture("create_or_load_brief", "rejected")]);
   const seenRegistryKeys: string[][] = [];

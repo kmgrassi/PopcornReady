@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  type OpenAiCompletionLike,
+  type OpenAiFunctionTool,
   createOpenAiLlmClient,
   interpretOpenAiToolResponse,
   sanitizeForOpenAI,
@@ -13,10 +15,6 @@ type OpenAiRequest = Parameters<NonNullable<Parameters<typeof createOpenAiLlmCli
 type OpenAiResponse = Awaited<
   ReturnType<NonNullable<Parameters<typeof createOpenAiLlmClient>[0]["create"]>>
 >;
-type OpenAiFunctionTool = {
-  type: string;
-  function: { name: string; description?: string; parameters?: unknown };
-};
 
 const planShots: ToolSpec = {
   name: "plan_shots",
@@ -29,7 +27,7 @@ const planShots: ToolSpec = {
 };
 
 test("toOpenAITool wraps the spec as an OpenAI function tool", () => {
-  const tool = toOpenAITool(planShots) as OpenAiFunctionTool;
+  const tool: OpenAiFunctionTool = toOpenAITool(planShots);
   assert.equal(tool.type, "function");
   assert.equal(tool.function.name, "plan_shots");
   assert.equal(tool.function.description, "Plan scenes and beats.");
@@ -73,7 +71,7 @@ test("interpretOpenAiToolResponse maps one tool_call with JSON-parsed arguments"
           },
         },
       ],
-    },
+    } satisfies OpenAiCompletionLike,
     "fallback"
   );
   assert.equal(decision.type, "tool_call");
@@ -97,7 +95,7 @@ test("interpretOpenAiToolResponse takes the first of parallel tool_calls", () =>
           },
         },
       ],
-    },
+    } satisfies OpenAiCompletionLike,
     "m"
   );
   assert.equal(decision.type, "tool_call");
@@ -106,7 +104,7 @@ test("interpretOpenAiToolResponse takes the first of parallel tool_calls", () =>
 
 test("interpretOpenAiToolResponse returns done with text when no tool is called", () => {
   const decision = interpretOpenAiToolResponse(
-    { choices: [{ message: { content: "All complete." } }] },
+    { choices: [{ message: { content: "All complete." } }] } satisfies OpenAiCompletionLike,
     "m"
   );
   assert.equal(decision.type, "done");
