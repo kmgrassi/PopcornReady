@@ -104,6 +104,7 @@ test("a transient store read is retried instead of failing the run", async () =>
     model: scriptedModel([{ type: "tool_call", toolName: "plan_shots" as ToolName }, { type: "done" }]),
     registry: fakeRegistry(),
     retry: { attempts: 3, sleep: async () => {} }, // no real backoff wait in tests
+    resolveOwnerUserId: async () => null, // keep the fake-store run DB-free
   });
 
   assert.equal(run.status, "succeeded", "the run should survive a transient read blip");
