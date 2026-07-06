@@ -1,3 +1,4 @@
+import { lazy, Suspense, type LazyExoticComponent } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import {
   AppLayout,
@@ -7,8 +8,6 @@ import {
 import { AdminRoute } from "./components/auth/AdminRoute";
 import { RunProgressPage } from "./routes/RunProgressPage";
 import { StoryboardPage } from "./routes/StoryboardPage";
-import { GenerationCardsPage } from "./routes/dev/GenerationCardsPage";
-import { DesignSystemPage } from "./routes/dev/DesignSystemPage";
 import { AdminPage } from "./routes/AdminPage";
 import { AdminEvalsPage } from "./routes/AdminEvalsPage";
 import { AnchorDetailPage } from "./routes/anchors/AnchorDetailPage";
@@ -34,6 +33,37 @@ import { SettingsPage } from "./routes/SettingsPage";
 import { TemplatesPage } from "./routes/TemplatesPage";
 import { UploadsPage } from "./routes/UploadsPage";
 
+const isDevHarnessEnabled = import.meta.env.DEV;
+const devHarnessRoutes = {
+  designSystem: "/dev/design-system",
+  generationCards: "/dev/generation-cards",
+  landingUpload: "/dev/landing-upload",
+  mediaGallery: "/dev/media-gallery",
+} as const;
+
+function lazyDevPage(path: string, exportName: string) {
+  return lazy(async () => {
+    const module = (await import(/* @vite-ignore */ path)) as Record<
+      string,
+      () => JSX.Element
+    >;
+    return { default: module[exportName] };
+  });
+}
+
+const DevDesignSystemPage = isDevHarnessEnabled
+  ? lazyDevPage("/src/routes/dev/DesignSystemPage.tsx", "DesignSystemPage")
+  : null;
+const DevGenerationCardsPage = isDevHarnessEnabled
+  ? lazyDevPage("/src/routes/dev/GenerationCardsPage.tsx", "GenerationCardsPage")
+  : null;
+const DevLandingUploadPage = isDevHarnessEnabled
+  ? lazyDevPage("/src/routes/dev/MobileHarnessPage.tsx", "DevLandingUploadPage")
+  : null;
+const DevMediaGalleryPage = isDevHarnessEnabled
+  ? lazyDevPage("/src/routes/dev/MobileHarnessPage.tsx", "DevMediaGalleryPage")
+  : null;
+
 // Route table for the SPA. Each page PR ports one former Next app route into
 // apps/web/src/routes/* and adds exactly one child <Route> here.
 export function App() {
@@ -47,6 +77,26 @@ export function App() {
           <Route path="/sprite" element={<SpritePage />} />
           {/* Public, no-login read-only share view of a public project. */}
           <Route path="/p/:projectId" element={<PublicProjectPage />} />
+          {isDevHarnessEnabled ? (
+            <>
+              <Route
+                path={devHarnessRoutes.designSystem}
+                element={<DevPage element={DevDesignSystemPage} />}
+              />
+              <Route
+                path={devHarnessRoutes.generationCards}
+                element={<DevPage element={DevGenerationCardsPage} />}
+              />
+              <Route
+                path={devHarnessRoutes.landingUpload}
+                element={<DevPage element={DevLandingUploadPage} />}
+              />
+              <Route
+                path={devHarnessRoutes.mediaGallery}
+                element={<DevPage element={DevMediaGalleryPage} />}
+              />
+            </>
+          ) : null}
         </Route>
 
         <Route element={<AuthenticatedAppLayout />}>
@@ -101,8 +151,6 @@ export function App() {
           <Route path="/account" element={<AccountPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/faq" element={<FaqPage />} />
-          <Route path="/dev/design-system" element={<DesignSystemPage />} />
-          <Route path="/dev/generation-cards" element={<GenerationCardsPage />} />
           <Route path="/evals" element={<Navigate to="/admin/evals" replace />} />
           <Route path="/admin" element={<AdminPage />} />
           <Route
@@ -124,6 +172,19 @@ export function App() {
         </Route>
       </Route>
     </Routes>
+  );
+}
+
+function DevPage({
+  element: Page,
+}: {
+  element: LazyExoticComponent<() => JSX.Element> | null;
+}) {
+  if (!Page) return null;
+  return (
+    <Suspense fallback={<Placeholder name="Loading dev harness" />}>
+      <Page />
+    </Suspense>
   );
 }
 
