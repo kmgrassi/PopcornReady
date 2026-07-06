@@ -29,7 +29,7 @@ import {
   storyboardFeedbackTargetKey,
 } from "./StoryboardBoard";
 import { TerminalState } from "./TerminalState";
-import { StoryboardBoard as ReadonlyStoryboardBoard } from "../studio/StoryboardBoard";
+import { ReviewGatePanel } from "./ReviewGatePanel";
 import styles from "./ProgressView.module.css";
 
 interface ProgressViewProps {
@@ -234,21 +234,6 @@ function planMetaItems(brief: VideoBriefInput): string[] {
   ].filter((item): item is string => Boolean(item));
 }
 
-function briefMetaItems(brief: VideoBriefInput): string[] {
-  return [
-    brief.targetLengthSec ? `${brief.targetLengthSec} seconds` : null,
-    brief.aspectRatio,
-    brief.platform,
-    brief.format,
-  ].filter((item): item is string => Boolean(item));
-}
-
-function reviewHeading(stageType: GenerationStageType): string {
-  if (stageType === "brief_intake") return "Concept ready for review";
-  if (stageType === "storyboard") return "Plan ready for review";
-  return `${reviewStageLabel(stageType)} ready for review`;
-}
-
 function headerStatus(run: GenerationRun): string {
   if (run.reviewGate) return "Ready for your approval";
   if (run.status === "queued") return "Waiting to start";
@@ -313,57 +298,6 @@ function splitStoryboardItems(
 
 function isVisibleGeneratedItem(item: GenerationStageItem): boolean {
   return item.kind !== "caption";
-}
-
-function BriefReviewOutput({
-  brief,
-  loading,
-}: {
-  brief: VideoBriefInput | null;
-  loading: boolean;
-}) {
-  if (loading) {
-    return (
-      <div className={styles.briefReviewCard}>
-        <span className={styles.briefReviewLoading}>Loading concept...</span>
-      </div>
-    );
-  }
-
-  if (!brief) return null;
-
-  const fields = [
-    ["Audience", brief.audience],
-    ["Style", brief.style],
-    ["Hook", brief.hookQuestion],
-    ["Big idea", brief.oneBigIdea],
-    ["Payoff", brief.payoff],
-    ["Caveat", brief.caveat],
-  ].filter((entry): entry is [string, string] => Boolean(entry[1]));
-
-  return (
-    <article className={styles.briefReviewCard}>
-      <div className={styles.briefReviewMetaRow} aria-label={formatBriefMeta(brief)}>
-        {briefMetaItems(brief).map((item) => (
-          <span key={item}>{item}</span>
-        ))}
-      </div>
-      <h3 className={styles.briefReviewGoal}>{brief.goal}</h3>
-      {brief.strongestVisual ? (
-        <p className={styles.briefReviewVisual}>{brief.strongestVisual}</p>
-      ) : null}
-      {fields.length > 0 ? (
-        <dl className={styles.briefReviewFields}>
-          {fields.map(([label, value]) => (
-            <div className={styles.briefReviewField} key={label}>
-              <dt>{label}</dt>
-              <dd>{value}</dd>
-            </div>
-          ))}
-        </dl>
-      ) : null}
-    </article>
-  );
 }
 
 function PlanRecap({
@@ -464,7 +398,6 @@ export function ProgressView({
   const [boardFeedbackError, setBoardFeedbackError] = useState<string | null>(null);
   const [selectedAssetItemId, setSelectedAssetItemId] = useState<string | null>(null);
   const reviewGateKey = detail.run.reviewGate?.stageId ?? null;
-  const isBriefReviewGate = detail.run.reviewGate?.stageType === "brief_intake";
   const projectQuery = useProjectQuery(detail.run.projectId);
   const project = projectQuery.data?.project ?? null;
   const projectLoading = projectQuery.isLoading;
@@ -746,104 +679,19 @@ export function ProgressView({
           <PlanRecap project={project} loading={projectLoading} />
 
           {detail.run.reviewGate ? (
-            <section
-              className={styles.reviewPanel}
-              aria-labelledby="review-gate-heading"
-            >
-              <div className={styles.reviewIntro}>
-                <span className={styles.reviewBadge}>Needs review</span>
-                <h2 id="review-gate-heading" className={styles.reviewTitle}>
-                  {reviewHeading(detail.run.reviewGate.stageType)}
-                </h2>
-                <p className={styles.reviewDescription}>
-                  {detail.run.reviewGate.stageType === "brief_intake"
-                    ? "Review the concept brief before the run continues to script generation."
-                    : detail.run.reviewGate.stageType === "storyboard"
-                      ? "Review the plan before the agent starts storyboard, keyframe, or clip generation. Stop here if you do not want the agent to keep producing from this boundary."
-                      : "Review this stage before the run continues to the next generation step. Stop here if you do not want the agent to keep producing from this boundary."}
-                </p>
-              </div>
-              {isBriefReviewGate && (projectBrief || projectLoading) ? (
-                <BriefReviewOutput brief={projectBrief} loading={projectLoading} />
-              ) : reviewItems.length > 0 ? (
-                <div className={styles.reviewOutputs}>
-                  <ReadonlyStoryboardBoard
-                    items={reviewOutputGroups.boardItems}
-                    title="Review the storyboard"
-                    description="Visual outputs from this checkpoint are grouped as beat tiles before the run continues."
-                  />
-                  {reviewOutputGroups.genericItems.length > 0 ? (
-                    <div className={`${styles.itemGrid} ${styles.reviewOutputGrid}`}>
-                      {reviewOutputGroups.genericItems.map((item) => (
-                        <StageItemCard
-                          key={item.itemId}
-                          item={item}
-                          allowInlineRegenerate={false}
-                        />
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <div className={styles.reviewOutputEmpty}>
-                  <span>
-                    No separate assets were produced for this checkpoint. Use the summary above to approve or request changes.
-                  </span>
-                </div>
-              )}
-              <div className={styles.feedbackField}>
-                <label className={styles.feedbackLabel} htmlFor="review-feedback-note">
-                  Feedback
-                </label>
-                <textarea
-                  id="review-feedback-note"
-                  className={styles.feedbackTextarea}
-                  value={feedbackNote}
-                  onChange={(event) => setFeedbackNote(event.target.value)}
-                  placeholder="Optional feedback before continuing..."
-                  disabled={!!pending}
-                  rows={4}
-                />
-                <p className={styles.feedbackHint}>
-                  Use this when you want the generator to revise this stage before continuing.
-                </p>
-              </div>
-              {actionError ? (
-                <p className={styles.error} role="alert">
-                  {actionError}
-                </p>
-              ) : null}
-              <div className={styles.reviewActionRow}>
-                {reviewActions ? (
-                  <>
-                    <button
-                      type="button"
-                      className={styles.reviewCancelButton}
-                      onClick={reviewActions.onCancel}
-                      disabled={!!pending}
-                    >
-                      {pending === "cancel" ? "Stopping..." : "Stop here"}
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.secondaryButton}
-                      onClick={() => reviewActions.onReject(feedbackNote)}
-                      disabled={!!pending}
-                    >
-                      {pending === "reject" ? "Requesting..." : "Request changes"}
-                    </button>
-                  </>
-                ) : null}
-                <button
-                  type="button"
-                  className={styles.primaryButton}
-                  onClick={onApprove}
-                  disabled={!!pending}
-                >
-                  {pending === "approve" ? "Approving..." : "Approve and continue"}
-                </button>
-              </div>
-            </section>
+            <ReviewGatePanel
+              stageType={detail.run.reviewGate.stageType}
+              projectBrief={projectBrief}
+              projectLoading={projectLoading}
+              reviewItems={reviewItems}
+              reviewOutputGroups={reviewOutputGroups}
+              feedbackNote={feedbackNote}
+              pending={pending}
+              actionError={actionError}
+              reviewActions={reviewActions}
+              onFeedbackNoteChange={setFeedbackNote}
+              onApprove={onApprove}
+            />
           ) : null}
 
           {generatedItems.length > 0 ? (
