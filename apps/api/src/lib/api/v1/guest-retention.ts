@@ -33,7 +33,33 @@ interface PurgedGuestProjectRow {
   deleted_asset_count: number;
 }
 
-export interface GuestRetentionPurgeResult {
+export interface PurgeableAnonymousUser {
+  userId: string;
+  authId: string;
+  email: string | null;
+  isAnonymous: boolean;
+}
+
+export interface CurrentAuthUserState {
+  email?: string | null;
+  isAnonymous?: boolean | null;
+}
+
+interface PurgeableAnonymousUserRow {
+  user_id: string;
+  auth_id: string | null;
+  email: string | null;
+  is_anonymous: boolean | null;
+}
+
+export interface AnonymousUserPurgeStats {
+  candidateUserCount: number;
+  deletedUserCount: number;
+  failedUserDeleteCount: number;
+  deletedUserRowCount: number;
+}
+
+export interface GuestRetentionPurgeResult extends AnonymousUserPurgeStats {
   cutoffIso: string;
   claimedProjectCount: number;
   purgedProjectCount: number;
@@ -81,6 +107,115 @@ export function mapClaimedGuestProjectObject(
     storageKey: row.storage_key,
     estimatedBytes: Number(row.estimated_bytes ?? 0) || 0,
     deletedAssetCount: Number(row.deleted_asset_count ?? 0) || 0,
+  };
+}
+
+export function mapPurgeableAnonymousUser(
+  row: PurgeableAnonymousUserRow
+): PurgeableAnonymousUser {
+  return {
+    userId: row.user_id,
+    authId: row.auth_id ?? "",
+    email: row.email,
+    isAnonymous: row.is_anonymous === true,
+  };
+}
+
+/**
+ * Defense-in-depth over the SQL claim: only auth users that are verifiably
+ * anonymous (is_anonymous, no email) may be deleted. Claimed accounts that slip
+ * through the RPC for any reason are dropped here.
+ */
+export function filterDeletableAnonymousUsers(
+  users: PurgeableAnonymousUser[]
+): PurgeableAnonymousUser[] {
+  return users.filter(
+    (user) =>
+      user.isAnonymous === true &&
+      (user.email ?? "").trim() === "" &&
+      user.authId !== "" &&
+      user.userId !== ""
+  );
+}
+
+export function isCurrentAuthUserStillAnonymous(
+  user: CurrentAuthUserState | null
+): boolean {
+  return user?.isAnonymous === true && (user.email ?? "").trim() === "";
+}
+
+export async function deleteOrphanedAnonymousUsers(
+  candidates: PurgeableAnonymousUser[],
+  deps: {
+    getAuthUser: (authId: string) => Promise<CurrentAuthUserState | null>;
+    deleteAuthUser: (authId: string) => Promise<void>;
+    purgeUserRows: (userIds: string[]) => Promise<string[]>;
+    logger?: Logger;
+  }
+): Promise<AnonymousUserPurgeStats> {
+  const logger = deps.logger ?? rootLogger;
+  const deletable = filterDeletableAnonymousUsers(candidates);
+  for (const skipped of candidates.filter((user) => !deletable.includes(user))) {
+    logger.warn("guest_retention.user_delete_skipped_not_anonymous", {
+      userId: skipped.userId,
+      isAnonymous: skipped.isAnonymous,
+      hasEmail: (skipped.email ?? "").trim() !== "",
+    });
+  }
+
+  let deletedUserCount = 0;
+  let failedUserDeleteCount = 0;
+  const deletedUserIds: string[] = [];
+
+  for (const user of deletable) {
+    try {
+      const currentAuthUser = await deps.getAuthUser(user.authId);
+      if (!isCurrentAuthUserStillAnonymous(currentAuthUser)) {
+        logger.warn("guest_retention.user_delete_skipped_current_not_anonymous", {
+          userId: user.userId,
+          authId: user.authId,
+          currentIsAnonymous: currentAuthUser?.isAnonymous ?? null,
+          currentHasEmail: (currentAuthUser?.email ?? "").trim() !== "",
+        });
+        continue;
+      }
+
+      await deps.deleteAuthUser(user.authId);
+      deletedUserCount += 1;
+      deletedUserIds.push(user.userId);
+    } catch (error) {
+      failedUserDeleteCount += 1;
+      logger.warn("guest_retention.auth_user_delete_failed", {
+        userId: user.userId,
+        error: {
+          message:
+            error instanceof Error ? error.message : "Auth user delete failed.",
+        },
+      });
+    }
+  }
+
+  let deletedRowUserIds: string[] = [];
+  if (deletedUserIds.length > 0) {
+    try {
+      deletedRowUserIds = await deps.purgeUserRows(deletedUserIds);
+    } catch (error) {
+      // The auth users are already gone; a stranded public.users row is inert
+      // (no MAU) and this run's metrics are still worth reporting.
+      logger.warn("guest_retention.user_row_purge_failed", {
+        userIds: deletedUserIds,
+        error: {
+          message:
+            error instanceof Error ? error.message : "User row purge failed.",
+        },
+      });
+    }
+  }
+  return {
+    candidateUserCount: deletable.length,
+    deletedUserCount,
+    failedUserDeleteCount,
+    deletedUserRowCount: deletedRowUserIds.length,
   };
 }
 
@@ -163,6 +298,19 @@ export async function runGuestRetentionPurge(
   );
   const purgedRows =
     purgeProjectIds.length > 0 ? await purgeExpiredGuestProjects(purgeProjectIds) : [];
+
+  const purgedWorkspaceIds = [...new Set(purgedRows.map((row) => row.workspace_id))];
+  const userCandidates =
+    purgedWorkspaceIds.length > 0
+      ? await claimPurgeableAnonymousUsers(purgedWorkspaceIds)
+      : [];
+  const userPurge = await deleteOrphanedAnonymousUsers(userCandidates, {
+    getAuthUser: getAnonymousAuthUser,
+    deleteAuthUser: deleteAnonymousAuthUser,
+    purgeUserRows: purgeAnonymousUserRows,
+    logger,
+  });
+
   const result: GuestRetentionPurgeResult = {
     cutoffIso: cutoff.toISOString(),
     claimedProjectCount: claimedProjectIds.size,
@@ -175,6 +323,7 @@ export async function runGuestRetentionPurge(
     reclaimedBytes,
     failedObjectCount,
     retainedForRetryProjectCount: failedProjectIds.size,
+    ...userPurge,
   };
 
   logger.info("guest_retention.purged_projects", {
@@ -187,7 +336,52 @@ export async function runGuestRetentionPurge(
     failedObjectCount: result.failedObjectCount,
     retainedForRetryProjectCount: result.retainedForRetryProjectCount,
   });
+  logger.info("guest_retention.purged_anonymous_users", {
+    candidateUserCount: result.candidateUserCount,
+    deletedUserCount: result.deletedUserCount,
+    failedUserDeleteCount: result.failedUserDeleteCount,
+    deletedUserRowCount: result.deletedUserRowCount,
+  });
   return result;
+}
+
+export async function claimPurgeableAnonymousUsers(
+  workspaceIds: string[]
+): Promise<PurgeableAnonymousUser[]> {
+  const db = getServiceSupabase();
+  const rows = await runQuery(
+    "guestRetention.claimPurgeableAnonymousUsers",
+    db.rpc("claim_purgeable_anonymous_users", {
+      p_workspace_ids: workspaceIds,
+    })
+  );
+  return ((rows ?? []) as PurgeableAnonymousUserRow[]).map(
+    mapPurgeableAnonymousUser
+  );
+}
+
+async function getAnonymousAuthUser(authId: string): Promise<CurrentAuthUserState | null> {
+  const { data, error } = await getServiceSupabase().auth.admin.getUserById(authId);
+  if (error) throw error;
+  if (!data.user) return null;
+  return {
+    email: data.user.email,
+    isAnonymous: data.user.is_anonymous === true,
+  };
+}
+
+async function deleteAnonymousAuthUser(authId: string): Promise<void> {
+  const { error } = await getServiceSupabase().auth.admin.deleteUser(authId);
+  if (error) throw error;
+}
+
+async function purgeAnonymousUserRows(userIds: string[]): Promise<string[]> {
+  const db = getServiceSupabase();
+  const { data, error } = await db.rpc("purge_anonymous_user_rows", {
+    p_user_ids: userIds,
+  });
+  if (error) throw databaseError("guestRetention.purgeAnonymousUserRows", error);
+  return ((data ?? []) as { user_id: string }[]).map((row) => row.user_id);
 }
 
 async function purgeExpiredGuestProjects(
