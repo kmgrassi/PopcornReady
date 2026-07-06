@@ -60,6 +60,12 @@ export interface AccountMutationResponse {
   ok: true;
 }
 
+export interface AnonymousDeviceRecoveryResponse {
+  ok: true;
+  recovered: boolean;
+  workspaceId: string | null;
+}
+
 export type ModelProvider =
   | "openai"
   | "anthropic"

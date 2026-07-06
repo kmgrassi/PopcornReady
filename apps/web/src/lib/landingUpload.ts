@@ -1,5 +1,5 @@
 import type { AssetKind, V1Asset } from "@popcorn/shared/v1/types";
-import { v1Api } from "./api-client";
+import { v1Api, type RegisterProjectUploadInput } from "./api-client";
 import type { SelectedFootage } from "./upload";
 
 export const LANDING_FOOTAGE_ACCEPT = "video/*,image/*";
@@ -129,8 +129,25 @@ export async function registerLandingUpload(
   item: LandingUploadItem,
   onProgress: (progress: number) => void,
 ): Promise<V1Asset> {
-  const kind = landingAssetKindForFile(item.file);
-  if (kind !== "video" && kind !== "image") {
+  return registerProjectUploadFile(projectId, item, onProgress, {
+    description: `Selected from the landing page: ${item.name}`,
+    intendedUse: ["primary_footage"],
+  });
+}
+
+export async function registerProjectUploadFile(
+  projectId: string,
+  item: {
+    file: File;
+    name: string;
+    durationSec: number;
+    kind?: AssetKind | "audio";
+  },
+  onProgress: (progress: number) => void,
+  userContext: NonNullable<RegisterProjectUploadInput["userContext"]>,
+): Promise<V1Asset> {
+  const kind = item.kind ?? landingAssetKindForFile(item.file);
+  if (kind !== "video" && kind !== "image" && kind !== "audio") {
     throw new Error(`${item.name} is not a supported video or image file.`);
   }
 
@@ -145,10 +162,7 @@ export async function registerLandingUpload(
     kind,
     filename: item.name,
     durationSec: item.durationSec,
-    userContext: {
-      description: `Selected from the landing page: ${item.name}`,
-      intendedUse: ["primary_footage"],
-    },
+    userContext,
   });
   onProgress(100);
   return asset;

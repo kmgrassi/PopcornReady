@@ -4,7 +4,12 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
 import { AuthContext } from "../auth";
-import { inventoryAssets, registerAsset, updateAssetContext } from "../assets";
+import {
+  buildFirstFrameAsset,
+  inventoryAssets,
+  registerAsset,
+  updateAssetContext,
+} from "../assets";
 import { createProject, localDir, V1Project } from "../store";
 
 // These exercise the v1 store, which now persists to Supabase Postgres (needs a
@@ -39,6 +44,47 @@ afterEach(async () => {
   delete process.env.POPCORN_READY_LOCAL_DIR;
   await fs.rm(tmpDir, { recursive: true, force: true });
   await fs.rm(sourceDir, { recursive: true, force: true });
+});
+
+test("buildFirstFrameAsset records first_frame_of provenance input", () => {
+  const video = {
+    id: "video_1",
+    schemaVersion: "asset.v1",
+    workspaceId: localAuth.workspaceId,
+    projectId: "project_1",
+    kind: "video",
+    filename: "launch.mov",
+    status: "ready",
+    source: { type: "multipart_upload" },
+    contentHash: "video_hash",
+    createdAt: "2026-07-06T00:00:00.000Z",
+    updatedAt: "2026-07-06T00:00:00.000Z",
+  } as const;
+
+  const frame = buildFirstFrameAsset({
+    auth: localAuth,
+    projectId: video.projectId,
+    video,
+    frameBytes: Buffer.from("frame-bytes"),
+    now: "2026-07-06T01:00:00.000Z",
+  });
+
+  assert.equal(frame.kind, "image");
+  assert.equal(frame.role, "first_frame");
+  assert.equal(frame.filename, "launch-first-frame.webp");
+  assert.deepEqual(frame.source, {
+    type: "derived",
+    sourceAssetId: video.id,
+    relation: "first_frame_of",
+  });
+  assert.deepEqual(frame.graphInputs, [
+    {
+      assetId: video.id,
+      relation: "input",
+      role: "first_frame_of",
+      contentHash: "video_hash",
+    },
+  ]);
 });
 
 dbTest("registerAsset records a remote_url asset as pending", async () => {

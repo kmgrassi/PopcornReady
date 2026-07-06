@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   assetThumbnailStorageKey,
   createThumbnailRendition,
+  extractFirstFrameImage,
 } from "../asset-renditions";
 
 test("assetThumbnailStorageKey stores the thumbnail sidecar under the asset prefix", () => {
@@ -31,6 +32,21 @@ test("createThumbnailRendition degrades to no thumbnail when ffmpeg is unavailab
       visibility: "public",
     });
     assert.equal(rendition, null);
+  } finally {
+    if (previous === undefined) delete process.env.FFMPEG_PATH;
+    else process.env.FFMPEG_PATH = previous;
+  }
+});
+
+test("extractFirstFrameImage degrades to no image when ffmpeg is unavailable", async () => {
+  const previous = process.env.FFMPEG_PATH;
+  process.env.FFMPEG_PATH = "/definitely/missing/ffmpeg";
+  try {
+    const frame = await extractFirstFrameImage({
+      filename: "clip.mp4",
+      bytes: Buffer.from("not-real-video-bytes"),
+    });
+    assert.equal(frame, null);
   } finally {
     if (previous === undefined) delete process.env.FFMPEG_PATH;
     else process.env.FFMPEG_PATH = previous;

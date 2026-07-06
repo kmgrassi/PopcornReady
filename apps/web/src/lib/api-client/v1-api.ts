@@ -13,6 +13,7 @@ import type { GenerationRunDetail } from "../v1/generation-runs/status";
 import { apiRequest } from "./transport";
 import type {
   AccountMutationResponse,
+  AnonymousDeviceRecoveryResponse,
   AssetMediaResponse,
   BoardRevisionResponse,
   CreateBriefVersionResponse,
@@ -190,6 +191,19 @@ export const v1Api = {
       method: "POST",
       body: { email },
     }),
+  registerAnonymousDeviceToken: (token: string) =>
+    apiRequest<AccountMutationResponse>("/api/v1/account/anonymous-device-token", {
+      method: "POST",
+      body: { token },
+    }),
+  recoverAnonymousDeviceWorkspace: (token: string) =>
+    apiRequest<AnonymousDeviceRecoveryResponse>(
+      "/api/v1/account/anonymous-device-recovery",
+      {
+        method: "POST",
+        body: { token },
+      }
+    ),
   listProviderApiKeys: () =>
     apiRequest<ProviderApiKeysResponse>("/api/v1/provider-api-keys"),
   saveProviderApiKey: (provider: ModelProvider, apiKey: string) =>

@@ -1,16 +1,14 @@
 import { useMemo, useReducer, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { FOOTAGE_ACCEPT, readSelectedFootage } from "../lib/upload";
 import {
   useProjectAssetsQuery,
   useRefreshAssetMediaMutation,
   useStartUploadedFootageGenerationRunMutation,
 } from "../lib/queryClient";
 import { v1Api } from "../lib/api-client";
-import {
-  PROJECT_GALLERY_UPLOAD_ACCEPT,
-  projectUploadStatusMessage,
-  useProjectUploadManager,
-} from "../lib/projectUpload";
+import { formatUploadSize } from "../lib/landingUpload";
+import { useUploadQueue } from "../lib/uploadQueue";
 import { MediaViewer, type MediaViewerItem } from "../components/media/MediaViewer";
 import {
   assetDisplayTitle,
@@ -51,10 +49,18 @@ function statusClassName(asset: ProjectMediaAsset) {
   return `${styles.badge} ${styles.statusProcessing}`;
 }
 
+function uploadStatusLabel(status: string) {
+  if (status === "queued") return "Queued";
+  if (status === "uploading") return "Uploading";
+  return statusLabel(status as ProjectMediaAsset["status"]);
+}
+
 export function ProjectMediaGalleryPage() {
   const projectId = useParams().projectId ?? "";
   const navigate = useNavigate();
+  const uploadQueue = useUploadQueue();
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [selectedIds, dispatchSelection] = useReducer(selectionReducer, []);
   const [selectedPresetId, setSelectedPresetId] = useState("");
   const [intentText, setIntentText] = useState("");
@@ -62,14 +68,23 @@ export function ProjectMediaGalleryPage() {
   const [createPending, setCreatePending] = useState(false);
   const createInFlightRef = useRef(false);
   const assetsQuery = useProjectAssetsQuery(projectId, projectMediaQueryParams());
-  const upload = useProjectUploadManager(projectId, "project_media_gallery");
   const refreshMedia = useRefreshAssetMediaMutation();
   const startRun = useStartUploadedFootageGenerationRunMutation(projectId);
+  const queuedUploads = uploadQueue.projectItems(projectId);
+  const activeQueuedUploads = queuedUploads.filter((item) =>
+    item.status === "queued" ||
+    item.status === "uploading" ||
+    item.status === "processing"
+  );
 
   const assets = (assetsQuery.data?.assets ?? []) as ProjectMediaAsset[];
+  const assetIds = useMemo(() => new Set(assets.map((asset) => asset.id)), [assets]);
   const assetById = useMemo(
     () => new Map(assets.map((asset) => [asset.id, asset])),
     [assets],
+  );
+  const visibleQueuedUploads = queuedUploads.filter(
+    (item) => !item.assetId || !assetIds.has(item.assetId),
   );
   const selectedAssets = selectedIds
     .map((id) => assetById.get(id))
@@ -101,17 +116,30 @@ export function ProjectMediaGalleryPage() {
     : -1;
   const selectedAsset = selectedIndex >= 0 ? assets[selectedIndex] : null;
   const statusMessage = useMemo(() => {
-    return projectUploadStatusMessage({
-      uploadingCount: upload.uploadingCount,
-      refreshing: assetsQuery.isFetching && !assetsQuery.isLoading,
-      processingCount,
-    });
-  }, [
-    assetsQuery.isFetching,
-    assetsQuery.isLoading,
-    processingCount,
-    upload.uploadingCount,
-  ]);
+    if (activeQueuedUploads.length > 0) {
+      return `Uploading ${activeQueuedUploads.length} ${
+        activeQueuedUploads.length === 1 ? "file" : "files"
+      }...`;
+    }
+    if (assetsQuery.isFetching && !assetsQuery.isLoading) {
+      return "Refreshing media status...";
+    }
+    if (processingCount > 0) {
+      return `${processingCount} ${processingCount === 1 ? "asset is" : "assets are"} processing.`;
+    }
+    return "";
+  }, [activeQueuedUploads.length, assetsQuery.isFetching, assetsQuery.isLoading, processingCount]);
+
+  async function handleFiles(files: FileList | null) {
+    if (!files || files.length === 0 || !projectId) return;
+    setUploadError(null);
+    try {
+      const selected = await readSelectedFootage(files);
+      uploadQueue.enqueueUploads(projectId, selected, { source: "project" });
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Could not add media.");
+    }
+  }
 
   async function createRun() {
     if (!projectId || !canCreate || createInFlightRef.current) return;
@@ -198,9 +226,9 @@ export function ProjectMediaGalleryPage() {
 
       <div
         className={styles.statusLine}
-        role={upload.error || assetsQuery.error ? "alert" : "status"}
+        role={uploadError || assetsQuery.error ? "alert" : "status"}
       >
-        {upload.error ?? (assetsQuery.error ? "Could not load project media." : statusMessage)}
+        {uploadError ?? (assetsQuery.error ? "Could not load project media." : statusMessage)}
       </div>
 
       {state === "loading" ? (
@@ -228,11 +256,11 @@ export function ProjectMediaGalleryPage() {
         <section className={styles.grid} aria-label="Project media gallery">
           <label className={styles.addTile}>
             <input
-              accept={PROJECT_GALLERY_UPLOAD_ACCEPT}
+              accept={FOOTAGE_ACCEPT}
               multiple
               type="file"
               onChange={(event) => {
-                void upload.handleFiles(event.currentTarget.files);
+                void handleFiles(event.currentTarget.files);
                 event.currentTarget.value = "";
               }}
             />
@@ -244,6 +272,40 @@ export function ProjectMediaGalleryPage() {
               <span className={styles.addHint}>Upload videos, images, or audio to this project.</span>
             </span>
           </label>
+
+          {visibleQueuedUploads.map((item) => (
+            <article className={styles.tile} key={item.id}>
+              <span className={statusClassName({ status: item.status } as ProjectMediaAsset)}>
+                {uploadStatusLabel(item.status)}
+              </span>
+              <span className={styles.previewButton}>
+                <span className={styles.placeholder}>{kindLabel(item.kind)}</span>
+              </span>
+              <span className={styles.tileBody}>
+                <span className={styles.tileTitle}>{item.name}</span>
+                <span className={styles.tileMeta}>
+                  {formatUploadSize(item.sizeBytes)} / upload
+                </span>
+                <span
+                  className={styles.statusLine}
+                  aria-label={`${item.name} ${Math.round(item.progress)} percent ${item.status}`}
+                >
+                  {item.status === "failed"
+                    ? item.error ?? "Upload failed."
+                    : `${Math.round(item.progress)}%`}
+                </span>
+                {item.status === "failed" ? (
+                  <button
+                    className={styles.selectButton}
+                    onClick={() => uploadQueue.retryUpload(item)}
+                    type="button"
+                  >
+                    Retry upload
+                  </button>
+                ) : null}
+              </span>
+            </article>
+          ))}
 
           {assets.map((asset) => {
             const duration = formatDuration(asset.durationSec);

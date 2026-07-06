@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import type { VideoBriefInput } from "@popcorn/shared/v1/types";
 import { AgentRunPreview } from "../components/AgentRunPreview";
 import { HeatLogoMark } from "../components/HeatLogoMark";
 import { Reveal } from "../components/Reveal";
@@ -27,19 +26,16 @@ import {
   LANDING_FOOTAGE_ACCEPT,
   LANDING_MAX_FILES,
   LANDING_MAX_FILE_SIZE_BYTES,
-  newLandingUploadId,
   preflightLandingFootage,
-  registerLandingUpload,
-  type LandingUploadItem,
 } from "../lib/landingUpload";
 import { v1Api } from "../lib/api-client";
-import { recordGuestRunStarted } from "../lib/guestRunLimit";
 import { runProgressPath } from "../lib/quickStartRun";
 import {
   drainShareTargetFiles,
   sharedFootageNames,
 } from "../lib/shareTargetFiles";
 import { readSelectedFootage, type SelectedFootage } from "../lib/upload";
+import { useUploadQueue } from "../lib/uploadQueue";
 import styles from "./HomePage.module.css";
 
 const GITHUB_URL = "https://github.com/kmgrassi/popcornready";
@@ -248,24 +244,6 @@ function HeatLogoScale({ score }: { score: number }) {
   );
 }
 
-function buildLandingUploadBrief(
-  goal: string,
-  targetLengthSec: number,
-  assetIds: string[],
-): VideoBriefInput {
-  return {
-    goal: goal.trim(),
-    targetLengthSec,
-    aspectRatio: "9:16",
-    platform: "tiktok",
-    format: "visual_reveal",
-    style: "fast-paced social montage from uploaded phone clips",
-    constraints: {
-      mustUseAssetIds: assetIds,
-    },
-  };
-}
-
 export function HomePage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -276,13 +254,12 @@ export function HomePage() {
     isAnonymous,
     signInAnonymous,
   } = useAuth();
+  const uploadQueue = useUploadQueue();
   const [prompt, setPrompt] = useState("");
   const [targetLengthSec, setTargetLengthSec] = useState(30);
   const [pendingPrompt, setPendingPrompt] = useState<PendingLandingPrompt | null>(
     null,
   );
-  const [pendingUploadPrompt, setPendingUploadPrompt] =
-    useState<PendingLandingPrompt | null>(null);
   const [modalMode, setModalMode] = useState<"choice" | "limit">("choice");
   const [modalError, setModalError] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
@@ -297,10 +274,12 @@ export function HomePage() {
   const [uploadDraftProjectId, setUploadDraftProjectId] = useState<string | null>(
     null,
   );
-  const [uploadItems, setUploadItems] = useState<LandingUploadItem[]>([]);
   const [uploadSourceMode, setUploadSourceMode] = useState<"upload" | "record">(
     "upload",
   );
+  const uploadItems = uploadDraftProjectId
+    ? uploadQueue.projectItems(uploadDraftProjectId)
+    : [];
   const normalizedPrompt = prompt.trim();
   const promptTooShort =
     normalizedPrompt.length > 0 && normalizedPrompt.length < PROMPT_MIN_LENGTH;
@@ -321,24 +300,7 @@ export function HomePage() {
       item.status === "uploading" ||
       item.status === "processing"
     );
-  const readyUploadAssetIds = uploadItems
-    .filter((item) => item.status === "ready" && item.assetId)
-    .map((item) => item.assetId as string);
-  const uploadCanSubmit =
-    readyUploadAssetIds.length > 0 &&
-    normalizedPrompt.length >= PROMPT_MIN_LENGTH &&
-    !uploadIsBusy &&
-    !isStartingRun;
   const hasSharedFootage = shareTargetFootage.length > 0;
-
-  function updateUploadItem(
-    id: string,
-    patch: Partial<LandingUploadItem>,
-  ): void {
-    setUploadItems((items) =>
-      items.map((item) => (item.id === id ? { ...item, ...patch } : item)),
-    );
-  }
 
   async function ensureUploadDraftProject(): Promise<string> {
     if (uploadDraftProjectId) return uploadDraftProjectId;
@@ -361,42 +323,6 @@ export function HomePage() {
     }
   }
 
-  async function uploadLandingItems(
-    projectId: string,
-    itemsToUpload: LandingUploadItem[],
-  ): Promise<void> {
-    let cursor = 0;
-    const workerCount = Math.min(2, itemsToUpload.length);
-    await Promise.all(
-      Array.from({ length: workerCount }, async () => {
-        while (cursor < itemsToUpload.length) {
-          const item = itemsToUpload[cursor];
-          cursor += 1;
-          updateUploadItem(item.id, {
-            status: "uploading",
-            progress: Math.max(1, item.progress),
-            error: undefined,
-          });
-          try {
-            const asset = await registerLandingUpload(projectId, item, (progress) =>
-              updateUploadItem(item.id, { progress }),
-            );
-            updateUploadItem(item.id, {
-              status: "ready",
-              progress: 100,
-              assetId: asset.id,
-            });
-          } catch (err) {
-            updateUploadItem(item.id, {
-              status: "failed",
-              error: err instanceof Error ? err.message : "Upload failed.",
-            });
-          }
-        }
-      }),
-    );
-  }
-
   async function handleLandingUploadFiles(files: FileList | null) {
     setUploadError(null);
     try {
@@ -411,18 +337,9 @@ export function HomePage() {
       if (errors.length > 0) setUploadError(errors.join(" "));
       if (accepted.length === 0) return;
 
-      const nextItems = accepted.map<LandingUploadItem>((footage) => ({
-        id: newLandingUploadId(),
-        file: footage.file,
-        name: footage.name,
-        sizeBytes: footage.sizeBytes,
-        durationSec: footage.durationSec,
-        status: "queued",
-        progress: 0,
-      }));
-      setUploadItems((items) => [...items, ...nextItems]);
       const projectId = await ensureUploadDraftProject();
-      await uploadLandingItems(projectId, nextItems);
+      uploadQueue.enqueueUploads(projectId, accepted, { source: "landing" });
+      navigate(`/projects/${encodeURIComponent(projectId)}/media`);
     } catch (err) {
       setUploadError(
         err instanceof Error ? err.message : "Could not prepare those files.",
@@ -501,66 +418,6 @@ export function HomePage() {
     }
   }
 
-  async function retryLandingUpload(item: LandingUploadItem) {
-    setUploadError(null);
-    const projectId = await ensureUploadDraftProject();
-    await uploadLandingItems(projectId, [{ ...item, progress: 0, status: "queued" }]);
-  }
-
-  async function startLandingUploadRun(nextPendingPrompt: PendingLandingPrompt) {
-    setModalError(null);
-    setStartError(null);
-    setUploadError(null);
-    setIsStartingRun(true);
-    try {
-      if (!uploadDraftProjectId) {
-        throw new Error("Pick at least one clip before starting.");
-      }
-      if (readyUploadAssetIds.length === 0) {
-        throw new Error("Wait for at least one clip to finish uploading.");
-      }
-      const needsAnonymousQuota =
-        !authDisabled && (status !== "authenticated" || isAnonymous);
-      if (needsAnonymousQuota && !canStartGuestRun()) {
-        throw new Error("Create an account to make more guest videos.");
-      }
-
-      const brief = buildLandingUploadBrief(
-        nextPendingPrompt.goal,
-        nextPendingPrompt.targetLengthSec,
-        readyUploadAssetIds,
-      );
-      const { briefVersion } = await v1Api.createBriefVersion(
-        uploadDraftProjectId,
-        brief,
-      );
-      const { runId } = await v1Api.startUploadedFootageGenerationRun(
-        uploadDraftProjectId,
-        {
-          briefVersionId: briefVersion.id,
-          assetIds: readyUploadAssetIds,
-          mode: "hybrid",
-          allowGeneratedGapFill: true,
-          showCaptions: true,
-        },
-      );
-
-      if (!runId) {
-        throw new Error("Generation started without a run ID.");
-      }
-      if (needsAnonymousQuota) recordGuestRunStarted();
-      navigate(runProgressPath({ projectId: uploadDraftProjectId, runId }));
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Unable to start generation.";
-      if (modalMode === "choice") setModalError(message);
-      else setStartError(message);
-      setUploadError(message);
-    } finally {
-      setIsStartingRun(false);
-    }
-  }
-
   function openAccountChoice() {
     if (!canSubmit) return;
 
@@ -580,37 +437,7 @@ export function HomePage() {
     setModalMode("limit");
   }
 
-  function openUploadAccountChoice() {
-    if (!uploadCanSubmit) return;
-
-    const nextPendingPrompt = buildPendingLandingPrompt(
-      normalizedPrompt,
-      targetLengthSec,
-    );
-    setModalError(null);
-    setStartError(null);
-    setUploadError(null);
-
-    if (authDisabled || (status === "authenticated" && !isAnonymous)) {
-      void startLandingUploadRun(nextPendingPrompt);
-      return;
-    }
-
-    if (canStartGuestRun()) {
-      setPendingUploadPrompt(nextPendingPrompt);
-      setModalMode("choice");
-      return;
-    }
-
-    setPendingUploadPrompt(nextPendingPrompt);
-    setModalMode("limit");
-  }
-
   function createAccount() {
-    if (pendingUploadPrompt) {
-      setModalError("Use the account form here so the uploaded clips stay attached.");
-      return;
-    }
     if (pendingPrompt) {
       navigate("/signup", {
         state: pendingLandingPromptNavigationState(pendingPrompt),
@@ -640,28 +467,6 @@ export function HomePage() {
     }
   }
 
-  async function skipUploadAccount() {
-    if (
-      !pendingUploadPrompt ||
-      isSkippingAccount ||
-      isStartingRun ||
-      modalMode === "limit"
-    ) {
-      return;
-    }
-    setModalError(null);
-    setIsSkippingAccount(true);
-    try {
-      await startLandingUploadRun(pendingUploadPrompt);
-    } catch (err) {
-      setModalError(
-        err instanceof Error ? err.message : "Unable to start uploaded-footage run.",
-      );
-    } finally {
-      setIsSkippingAccount(false);
-    }
-  }
-
   return (
     <div className="landing">
       <main>
@@ -681,11 +486,7 @@ export function HomePage() {
             className={styles.promptComposer}
             onSubmit={(event) => {
               event.preventDefault();
-              if (readyUploadAssetIds.length > 0) {
-                openUploadAccountChoice();
-              } else {
-                openAccountChoice();
-              }
+              openAccountChoice();
             }}
           >
             <label className={styles.promptLabel} htmlFor="landing-video-prompt">
@@ -746,7 +547,7 @@ export function HomePage() {
                     disabled={
                       authIsResolving ||
                       uploadItems.length >= LANDING_MAX_FILES ||
-                      uploadIsBusy
+                      isPreparingUploadDraft
                     }
                   />
                   {authIsResolving
@@ -782,7 +583,7 @@ export function HomePage() {
                             <span>{item.error}</span>
                             <button
                               type="button"
-                              onClick={() => void retryLandingUpload(item)}
+                              onClick={() => uploadQueue.retryUpload(item)}
                               disabled={uploadIsBusy}
                             >
                               Retry
@@ -841,14 +642,10 @@ export function HomePage() {
               <button
                 className={styles.promptSubmit}
                 type="submit"
-                disabled={readyUploadAssetIds.length > 0 ? !uploadCanSubmit : !canSubmit}
+                disabled={!canSubmit}
               >
                 {isStartingRun
                   ? "Starting..."
-                  : readyUploadAssetIds.length > 0
-                  ? `Create from ${readyUploadAssetIds.length} clip${
-                      readyUploadAssetIds.length === 1 ? "" : "s"
-                    }`
                   : `Create my ${targetLengthSec}-second video`}
               </button>
             </div>
@@ -863,8 +660,6 @@ export function HomePage() {
                 ? `Shared from your phone: ${sharedFootageNames(shareTargetFootage)}.`
                 : promptTooShort
                 ? `Add a little more detail before starting.`
-                : readyUploadAssetIds.length > 0
-                ? "Uploaded clips are ready. Add a brief, then create the run."
                 : `Guests can start ${guestRunLabel} before creating an account.`}
             </p>
           </form>
@@ -1081,7 +876,7 @@ export function HomePage() {
           </LandingSection>
         </Reveal>
       </main>
-      {(pendingPrompt || pendingUploadPrompt) && (
+      {pendingPrompt && (
         <AccountChoiceModal
           authConfigured={configured}
           error={modalError ?? authError}
@@ -1089,18 +884,13 @@ export function HomePage() {
           onClose={() => {
             if (!isSkippingAccount) {
               setPendingPrompt(null);
-              setPendingUploadPrompt(null);
             }
           }}
           onCreateAccount={createAccount}
-          onSkipAccount={() =>
-            pendingUploadPrompt ? void skipUploadAccount() : void skipAccount()
-          }
+          onSkipAccount={() => void skipAccount()}
           skippingAccount={isSkippingAccount}
-          targetLengthSec={
-            (pendingUploadPrompt ?? pendingPrompt)?.targetLengthSec ?? targetLengthSec
-          }
-          variant={pendingUploadPrompt ? "upload" : "prompt"}
+          targetLengthSec={pendingPrompt.targetLengthSec}
+          variant="prompt"
         />
       )}
     </div>
