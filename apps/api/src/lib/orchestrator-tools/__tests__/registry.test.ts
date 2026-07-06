@@ -85,6 +85,7 @@ function planShotsDeps(over: Partial<Parameters<typeof createPlanShotsTool>[0]> 
     planEdit: async () => samplePlan,
     getActiveProjectBrief: async () => activeBrief,
     addProjectPlan: async () => ({ planAssetId: "plan_asset_1" }),
+    buildFootageGroundingContext: async () => ({ excerpts: [], promptText: null }),
     ...over,
   };
 }
@@ -189,7 +190,11 @@ test("plan_shots returns precondition_unmet (suggesting the brief) when none exi
     }),
   });
 
-  const result = await registry.execute("plan_shots", {}, { auth, projectId: "proj_1" });
+  const result = (await registry.execute(
+    "plan_shots",
+    {},
+    { auth, projectId: "proj_1" }
+  )) as ToolCallResult<PlanShotsOutput>;
 
   assert.equal(result.status, "failed");
   if (result.status === "failed") {
@@ -273,6 +278,66 @@ test("plan_shots derives the plan from the brief and persists it with brief prov
     assert.deepEqual(result.resourceIds, ["plan_asset_1"]);
     assert.equal(result.output?.planAssetId, "plan_asset_1");
     assert.equal(result.output?.plan.aspectRatio, "16:9");
+  }
+});
+
+test("plan_shots forwards transcript and moment grounding into the planner prompt", async () => {
+  let footageGrounding: string | null | undefined;
+  const registry = createDefaultToolRegistry({
+    planShots: planShotsDeps({
+      planEdit: async (input) => {
+        footageGrounding = input.footageGrounding;
+        return {
+          ...samplePlan,
+          scenes: [
+            {
+              ...samplePlan.scenes[0],
+              beats: [
+                {
+                  ...samplePlan.scenes[0].beats[0],
+                  sourceWindow: {
+                    assetId: "clip_asset_1",
+                    startSec: 1,
+                    endSec: 4,
+                    label: "birthday candle",
+                  },
+                },
+              ],
+            },
+          ],
+        };
+      },
+      buildFootageGroundingContext: async () => ({
+        excerpts: [
+          {
+            assetId: "clip_asset_1",
+            label: "birthday.mov",
+            transcript: "Maya says happy birthday",
+            moments: [{ startSec: 1, endSec: 4, label: "birthday candle" }],
+          },
+        ],
+        promptText:
+          "Footage grounding from uploaded assets:\n- birthday.mov transcript: Maya says happy birthday\nmoment 1.00-4.00s: birthday candle",
+      }),
+    }),
+  });
+
+  const result = (await registry.execute(
+    "plan_shots",
+    {},
+    { auth, projectId: "proj_1" }
+  )) as ToolCallResult<PlanShotsOutput>;
+
+  assert.match(footageGrounding ?? "", /Maya says happy birthday/);
+  assert.match(footageGrounding ?? "", /1\.00-4\.00s/);
+  assert.equal(result.status, "succeeded");
+  if (result.status === "succeeded") {
+    assert.deepEqual(result.output?.plan.scenes[0].beats[0].sourceWindow, {
+      assetId: "clip_asset_1",
+      startSec: 1,
+      endSec: 4,
+      label: "birthday candle",
+    });
   }
 });
 
