@@ -101,10 +101,22 @@ chip on videos, tap-and-hold or detail affordance opens the existing
 `MediaViewer` for full preview. A persistent **"+ Add"** tile opens the same
 picker/upload manager as the landing flow (uploads land in this project).
 
-**Selection.** Tap toggles selection (check overlay); a header shows the
-count ("4 selected") with select-all/clear. Selection is **ephemeral local
+**Selection — ordered (decided 2026-07-06).** Tap toggles selection, and
+**the order of selection is the order of the cut**: tiles show a numbered
+badge (①②③…) instead of a plain check, and the agent assembles the timeline
+in exactly that sequence. Deselecting renumbers the remainder; re-tapping
+re-appends at the end (v1 reordering = deselect/reselect; drag-to-reorder is
+a later nicety). A header shows the count ("4 selected") with
+select-all (numbered in grid order) / clear. Selection is **ephemeral local
 React state** (per repo conventions — it is unsaved UI state, not server
 state; server data comes via TanStack Query on the assets list).
+
+The division of authority: **the user owns the sequence; the agent owns
+everything inside it** — which seconds of each clip to use, trims,
+transitions, pacing, and audio. The agent never reorders the selected assets;
+if the brief text contradicts the tapped order ("put the sunset last"), the
+coverage critique should flag it at the gate rather than silently
+reshuffling.
 
 **Intent bar.** When ≥1 asset is selected, a sticky bottom bar (thumb reach on
 mobile) presents **one free-text input + one preset dropdown + one Create
@@ -152,12 +164,17 @@ Promote to data later if operators need to edit them.
 Small surface — this scope is mostly UI + one contract clarification:
 
 - **Selection → run contract.** The entrypoint body carries
-  `selectedAssetIds: string[]` (verify/extend the existing route). Semantics:
-  the selected set **is** the source pool for the run — selected assets are
-  `must_use`-flavored, unselected project assets are ignored for sourcing
-  (the agent may still *generate* gap-fill if the brief allows). The run's
-  brief/plan assets record the selected ids in their `inputs`, so provenance
-  ("this montage was made from these 6 clips") falls out of the graph.
+  `selectedAssetIds: string[]` — an **ordered** array (verify/extend the
+  existing route). Semantics: the selected set **is** the source pool for the
+  run (selected assets are `must_use`-flavored, unselected project assets are
+  ignored for sourcing; the agent may still *generate* gap-fill if the brief
+  allows), and **array order is timeline order** — the agent sequences the
+  cut in exactly this order and only decides trims/transitions/pacing within
+  it. The run's brief/plan assets record the selected ids in their `inputs`
+  with their `position`, so both membership *and* order are provenance
+  ("this montage was made from these 6 clips, in this sequence") straight
+  from the graph — `inputs` entries already carry an ordered `position`
+  field, so this costs nothing new.
 - **Thumbnails.** `thumbnailUrl` on the asset response, backed by a derived
   storage object written at ingest (sidecar under the asset's storage prefix;
   no new asset kind — it's a rendition, not creative content the agent
@@ -209,7 +226,9 @@ redirect. Includes the entrypoint body verification/extension and its
 API-side validation (ids must be `ready`, project-owned, media kinds
 allowed).
 
-**Tests:** unit — selection reducer; preset-prefill behavior (picking a
+**Tests:** unit — selection reducer **including ordering** (tap order
+preserved; deselect renumbers; re-tap appends at end; select-all numbers in
+grid order); preset-prefill behavior (picking a
 preset writes the template; subsequent edits win; re-picking overwrites);
 constraint hints (narration with images only; montage needs ≥2); Create
 gating (empty text disables); payload composition (brief text + ids — the
@@ -225,19 +244,25 @@ agent, and nothing runs without the explicit Create.
 
 **Scope:** run-side scoping — the orchestrator's source-asset resolution for
 uploaded-footage runs consumes `selectedAssetIds` (not "all project
-uploads"); the understanding stage (sampled-frame vision; transcription when
-the intent implies speech) runs **only over selected assets**; coverage
-critique reports against the selection ("2 clips can't fill a 60-second
-montage — shorten, add clips, or allow generated fill?") through the existing
-gate mechanism.
+uploads") **and preserves its order as timeline order** (the agent decides
+trims/transitions/pacing within the sequence, never the sequence itself; a
+brief that contradicts the tapped order is flagged by the coverage critique,
+not silently resolved); the understanding stage (sampled-frame vision;
+transcription when the intent implies speech) runs **only over selected
+assets**; coverage critique reports against the selection ("2 clips can't
+fill a 60-second montage — shorten, add clips, or allow generated fill?")
+through the existing gate mechanism.
 
 **Tests:** tool tests (`test:tools`) — fixture project with 6 uploads, 3
-selected: plan/assembly reference only the 3; selection ids recorded in the
-run's brief/plan asset `inputs` (provenance). Unit — scoping filter;
-coverage-critique output shape.
+selected in a deliberate non-grid order: plan/assembly reference only the 3
+**and the timeline plays them in the selected order**; selection ids +
+positions recorded in the run's brief/plan asset `inputs` (provenance).
+Unit — scoping filter; order preservation through assembly; coverage-critique
+output shape.
 
-**Done when:** an unselected asset never appears in the cut, and the
-montage's provenance names exactly the selected clips.
+**Done when:** an unselected asset never appears in the cut, the cut plays in
+the tapped order, and the montage's provenance names exactly the selected
+clips in sequence.
 
 ## Out of scope
 
