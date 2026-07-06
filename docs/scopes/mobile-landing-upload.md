@@ -3,9 +3,10 @@
 ## Objective
 
 Let a person on a **phone browser** land on the public landing page, tap
-"upload a clip," pick or shoot a video, and end up watching an agent run on
-their footage — no account required up front. This is the entry gesture for
-the mobile "aha" wedge
+"upload a clip," pick or shoot a video, and end up in a project dashboard
+showing their footage — no account required up front. From there, the normal
+project-surface intent bar starts generation when the user asks for it. This
+is the entry gesture for the mobile "aha" wedge
 ([mobile-aha-features.md](mobile-aha-features.md), ideas #1/#2/#10): the
 phone's camera roll is the user's asset library, and upload is the front door.
 
@@ -15,12 +16,17 @@ phone's camera roll is the user's asset library, and upload is the front door.
 2. Tap **"Make a movie from your clips"** in the hero → native picker opens
    (camera roll or record now).
 3. Pick 1–N clips → per-file progress bars while they upload.
-4. Choose account or skip (guest) — same funnel as the landing prompt box.
-5. Type a one-line brief ("make a beach-day montage") and explicitly tap
-   create — **nothing runs automatically on upload** (decided; see Design
-   decisions).
-6. Land on the existing run-progress page; the uploaded-footage generation
-   entrypoint takes it from there.
+4. When the picked batch settles and at least one file is ready, land on the
+   draft project's dashboard/media gallery with the uploaded footage visible.
+5. ~~Type a one-line brief on the landing page and tap create.~~
+   **Superseded 2026-07-06** by
+   [landing-upload-dashboard-handoff.md](landing-upload-dashboard-handoff.md):
+   when the upload batch settles, the user navigates to the **project
+   dashboard** (the media gallery + intent bar), and the brief/create step
+   happens there. **Nothing runs automatically on upload** — that decision is
+   unchanged; navigation is not a run.
+6. From the project view, the account-or-skip modal can appear at Create time;
+   brief + explicit Create starts the run → run-progress page.
 
 ## Current state (verified facts that drive the plan)
 
@@ -38,7 +44,8 @@ phone's camera roll is the user's asset library, and upload is the front door.
 - **The generation entrypoint exists.** `POST
   /api/v1/projects/:id/generation-entrypoints/uploaded-footage` and
   `startUploadedFootageGenerationRun` (`apps/web/src/lib/startRun.ts`) are
-  live; the landing flow only has to deliver asset ids to them.
+  live; the landing flow only has to deliver users to a project whose asset
+  ids are ready for that project-surface entrypoint.
 - **Guest identity is already scoped — do not re-scope it here.**
   [landing-guest-generation-prs.md](landing-guest-generation-prs.md) PRs 1–2
   establish anonymous Supabase sessions (an anon session is a normal
@@ -63,8 +70,8 @@ phone's camera roll is the user's asset library, and upload is the front door.
   rejects unreadable media with typed errors.
 - **Upload before auth choice, not after.** Start uploading immediately on
   pick (upload time dominates on mobile uplinks) under the anonymous session;
-  the account-or-skip choice happens while bytes move. Guest → signup
-  auto-claim makes this safe.
+  the account-or-skip choice happens later at project-surface run creation.
+  Guest → signup auto-claim makes this safe.
 - **A draft project is created eagerly on first file pick.** The upload-url
   endpoint (and every asset) is project-scoped, and today a `projectId` only
   exists after `createProject` (`createAndStartRun`,
@@ -84,12 +91,13 @@ phone's camera roll is the user's asset library, and upload is the front door.
   retry-from-zero per file; acceptable for clips ≤ ~2 min. Do not build TUS
   plumbing until size limits are raised.
 - **No auto-run — upload never starts generation by itself (decided
-  2026-07-06).** Uploading only produces `ready` assets; a run starts only
-  when the user provides a brief and explicitly taps create. Uploading bytes
-  is free for us; generation costs money and should never fire on
-  misunderstood intent. This also keeps the landing flow consistent with the
-  guest prompt path (intent first, run second) and with autonomous-by-default
-  applying to the *run*, not to run *creation*.
+  2026-07-06).** Uploading only produces `ready` assets and then hands the
+  user to the draft project's dashboard/media gallery; a run starts only when
+  the user provides a brief on the project surface and explicitly taps Create.
+  Uploading bytes is free for us; generation costs money and should never
+  fire on misunderstood intent. This also keeps the landing flow consistent
+  with the guest prompt path (intent first, run second) and with
+  autonomous-by-default applying to the *run*, not to run *creation*.
 
 ## PR plan
 
@@ -142,28 +150,32 @@ the guest prompt box: `<input type="file" accept="video/*,image/*" multiple
 capture>` (native picker; `capture` offers record-now on phones), preflight
 checks (type/size caps, max clip count/duration), eager anonymous sign-in +
 draft-project creation on first pick (see Design decisions — uploads need a
-`projectId` before any upload-url request), per-file progress list,
-then the account-or-skip choice (reusing the guest-generation components), a
-one-line brief input, and an explicit create action calling
-`startUploadedFootageGenerationRun` → run-progress page (no auto-run — see
-Design decisions). Anonymous session is
-created on first upload so bytes move during the auth choice. Mobile-first
-layout per `apps/web/PRODUCT.md` (single popcorn-yellow CTA; this joins the
-hero rather than adding a second screen).
+`projectId` before any upload-url request), and a per-file progress list.
+When the picked batch reaches terminal states with at least one ready asset,
+navigate to the draft project's dashboard/media gallery with those assets
+visible. Retire the landing-page brief input, landing-page account choice, and
+direct run-progress navigation for the upload path; the account-or-skip modal
+and explicit Create action live on the project surface per
+[landing-upload-dashboard-handoff.md](landing-upload-dashboard-handoff.md).
+Mobile-first layout per `apps/web/PRODUCT.md` (single popcorn-yellow CTA; this
+joins the hero rather than adding a second screen).
 
 **Depends on:** PR 1–2 here; landing-guest-generation PRs 1–2 (anon session).
 
 **Isolated testing:**
 - Unit: preflight validation (reject oversize/wrong-type before any network);
-  draft wiring from selected files → entrypoint payload; first-pick
-  sequencing (anon session → one `createProject` → upload-urls all against
-  that id; a second pick reuses the draft project, never creates another).
+  first-pick sequencing (anon session → one `createProject` → upload-urls all
+  against that id; a second pick reuses the draft project, never creates
+  another); navigation trigger (all-terminal + ≥1 ready; all-failed stays on
+  landing with retry affordances).
 - Preview verification at mobile viewport (375×812): picker opens, progress
   renders, failed file shows retry and doesn't block others, happy path lands
-  on run progress.
+  on the draft project dashboard/media gallery with uploaded tiles visible and
+  no run created.
 
 **Done when:** on a phone-sized viewport, a guest can go from landing page →
-pick clips → watch the run, with no desktop detour.
+pick clips → see the draft project dashboard with the uploaded assets visible,
+with no desktop detour and no generation started by upload alone.
 
 ### PR 4 — Mobile media hardening
 
