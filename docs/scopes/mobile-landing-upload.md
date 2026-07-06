@@ -16,7 +16,10 @@ phone's camera roll is the user's asset library, and upload is the front door.
    (camera roll or record now).
 3. Pick 1–N clips → per-file progress bars while they upload.
 4. Choose account or skip (guest) — same funnel as the landing prompt box.
-5. Land on the existing run-progress page; the uploaded-footage generation
+5. Type a one-line brief ("make a beach-day montage") and explicitly tap
+   create — **nothing runs automatically on upload** (decided; see Design
+   decisions).
+6. Land on the existing run-progress page; the uploaded-footage generation
    entrypoint takes it from there.
 
 ## Current state (verified facts that drive the plan)
@@ -68,6 +71,13 @@ phone's camera roll is the user's asset library, and upload is the front door.
 - **Resumable (TUS) is a later enhancement.** V1 = single signed PUT +
   retry-from-zero per file; acceptable for clips ≤ ~2 min. Do not build TUS
   plumbing until size limits are raised.
+- **No auto-run — upload never starts generation by itself (decided
+  2026-07-06).** Uploading only produces `ready` assets; a run starts only
+  when the user provides a brief and explicitly taps create. Uploading bytes
+  is free for us; generation costs money and should never fire on
+  misunderstood intent. This also keeps the landing flow consistent with the
+  guest prompt path (intent first, run second) and with autonomous-by-default
+  applying to the *run*, not to run *creation*.
 
 ## PR plan
 
@@ -119,8 +129,10 @@ progress, cancel, and retry — no base64.
 the guest prompt box: `<input type="file" accept="video/*,image/*" multiple
 capture>` (native picker; `capture` offers record-now on phones), preflight
 checks (type/size caps, max clip count/duration), per-file progress list,
-then the account-or-skip choice (reusing the guest-generation components) and
-`startUploadedFootageGenerationRun` → run-progress page. Anonymous session is
+then the account-or-skip choice (reusing the guest-generation components), a
+one-line brief input, and an explicit create action calling
+`startUploadedFootageGenerationRun` → run-progress page (no auto-run — see
+Design decisions). Anonymous session is
 created on first upload so bytes move during the auth choice. Mobile-first
 layout per `apps/web/PRODUCT.md` (single popcorn-yellow CTA; this joins the
 hero rather than adding a second screen).
@@ -184,6 +196,6 @@ proven.
 - HEVC handling: transcode on ingest (ffmpeg, predictable but adds a job) vs
   probe-and-pass-through until a downstream consumer complains? Decide in
   PR 4 with provider input-format data.
-- Should the landing upload auto-start a default run ("make something great
-  from these") or always require a one-line brief first? Default-run is the
-  faster aha; brief-first wastes less generation on misunderstood intent.
+- ~~Should the landing upload auto-start a default run?~~ **Decided
+  2026-07-06: no.** Upload never triggers generation; the user always supplies
+  a brief and explicitly starts the run (see Design decisions).
