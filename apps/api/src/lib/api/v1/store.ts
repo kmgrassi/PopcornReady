@@ -1304,20 +1304,43 @@ export async function fillProjectPosterFromFirstFrame(input: {
   const action = await createAction({
     projectId: input.projectId,
     tool: "select_first_frame_poster",
-    status: "applied",
+    status: "running",
     params: { assetId: input.assetId },
     inputAssetIds: [input.assetId],
-    outputAssetIds: [input.assetId],
     rationale: "Auto-select the first uploaded video frame as the project poster.",
   });
-  const selected = await runQuery(
-    "store.fillProjectPosterFromFirstFrame select",
-    db.rpc("select_empty_project_poster_from_first_frame", {
-      p_project_id: input.projectId,
-      p_asset_id: input.assetId,
-      p_set_by_action_id: action.id,
-    })
-  );
+  let selected: unknown;
+  try {
+    selected = await runQuery(
+      "store.fillProjectPosterFromFirstFrame select",
+      db.rpc("select_empty_project_poster_from_first_frame", {
+        p_project_id: input.projectId,
+        p_asset_id: input.assetId,
+        p_set_by_action_id: action.id,
+      })
+    );
+  } catch (err) {
+    await updateAction(action.id, {
+      status: "failed",
+      outputAssetIds: [],
+      error: {
+        message: err instanceof Error ? err.message : "First-frame poster selection failed.",
+      },
+    });
+    throw err;
+  }
+  if (selected) {
+    await updateAction(action.id, {
+      status: "applied",
+      outputAssetIds: [input.assetId],
+    });
+  } else {
+    await updateAction(action.id, {
+      status: "failed",
+      outputAssetIds: [],
+      error: { reason: "poster_slot_already_filled" },
+    });
+  }
 
   return {
     selected: Boolean(selected),
