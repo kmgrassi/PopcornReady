@@ -6,7 +6,6 @@ import {
 } from "@/lib/api/v1/store";
 import { briefToStoryContext } from "@/lib/v1/generation/prepare";
 import type { ShotPlan } from "@popcorn/shared/types";
-import type { VideoBriefInput } from "@popcorn/shared/v1/types";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 
@@ -194,7 +193,7 @@ export function createPlanShotsTool(
         targetLengthSec: brief.targetLengthSec,
         style: brief.style ?? DEFAULT_STYLE,
         aspectRatio: brief.aspectRatio,
-        storyContext: briefToStoryContext(brief as unknown as VideoBriefInput),
+        storyContext: briefToStoryContext(brief),
         feedback: input.feedback ?? null,
       });
 

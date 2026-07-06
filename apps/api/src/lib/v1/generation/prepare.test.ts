@@ -5,9 +5,6 @@ import { briefToStoryContext } from "./prepare";
 
 test("briefToStoryContext maps advanced brief direction into story context", () => {
   const context = briefToStoryContext({
-    goal: "Make a launch teaser.",
-    targetLengthSec: 60,
-    aspectRatio: "16:9",
     audience: "founders",
     platform: "youtube",
     format: "visual_reveal",
