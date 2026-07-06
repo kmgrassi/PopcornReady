@@ -181,6 +181,7 @@ export interface V1Asset {
   source: AgentAssetSource;
   visibility?: "public" | "private";
   remoteUrl?: string;
+  thumbnailUrl?: string;
   storageKey?: string;
   storageBucket?: string;
   durationSec?: number;
@@ -1958,9 +1959,11 @@ function mapAssetRow(row: AssetRow): V1Asset {
 
 async function mapAsset(row: AssetRow): Promise<V1Asset> {
   const asset = mapAssetRow(row);
-  const resolvedUrl = await resolveAssetUrl(row);
-  if (resolvedUrl) asset.remoteUrl = resolvedUrl;
+  const media = await assetMediaUrlsForRow(row);
+  if (media.url) asset.remoteUrl = media.url;
   else delete asset.remoteUrl;
+  if (media.thumbnailUrl) asset.thumbnailUrl = media.thumbnailUrl;
+  else delete asset.thumbnailUrl;
   return asset;
 }
 
@@ -5874,6 +5877,7 @@ export interface AssetMediaUrlRow {
   storage_key: string | null;
   storage_bucket?: string | null;
   visibility?: "public" | "private" | null;
+  context?: AssetContextEnvelope | null;
 }
 
 interface WorkspaceAssetJoinRow extends AssetRow {
@@ -5898,12 +5902,40 @@ export async function assetMediaUrlsForRow(
       url = remoteAssetUrlForDelivery(row.remote_url) ?? null;
     }
   }
+  const thumbnail = row.context?.context?.renditions?.thumbnail;
+  const thumbnailUrl = thumbnail
+    ? await resolveRenditionUrl(row, thumbnail.storageKey, thumbnail.storageBucket)
+    : assetMediaToKind(row.media, row.kind) === "image"
+      ? url
+      : null;
 
   return {
     url,
-    thumbnailUrl: assetMediaToKind(row.media, row.kind) === "image" ? url : null,
+    thumbnailUrl,
     expiresAt: mediaUrlExpiresAt(opts.now),
   };
+}
+
+async function resolveRenditionUrl(
+  row: AssetMediaUrlRow,
+  storageKey: string,
+  storageBucket?: string | null
+): Promise<string | null> {
+  try {
+    return (
+      (await resolveAssetUrl(
+        {
+          remote_url: null,
+          storage_key: storageKey,
+          storage_bucket: storageBucket ?? row.storage_bucket,
+          visibility: row.visibility,
+        },
+        { privateTtlSec: MEDIA_URL_EXPIRES_IN_SEC }
+      )) ?? null
+    );
+  } catch {
+    return null;
+  }
 }
 
 export async function getAssetMediaUrls(

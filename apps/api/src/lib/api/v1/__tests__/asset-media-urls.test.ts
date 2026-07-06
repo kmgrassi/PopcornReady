@@ -63,6 +63,49 @@ test("assetMediaUrlsForRow keeps remote URLs ahead of non-local storage keys", a
   assert.equal(media.expiresAt, "2026-06-11T13:00:00.000Z");
 });
 
+test("assetMediaUrlsForRow resolves stored thumbnail renditions for videos", async () => {
+  const previousBase = process.env.STORAGE_LOCAL_URL_BASE;
+  process.env.STORAGE_LOCAL_URL_BASE = "http://localhost:4200";
+  try {
+    const media = await assetMediaUrlsForRow(
+      {
+        media: "video",
+        kind: "source_footage",
+        status: "ready",
+        remote_url: null,
+        storage_key: "ws1/p1/asset_1/clip.mp4",
+        storage_bucket: "assets-public",
+        visibility: "public",
+        context: {
+          context: {
+            renditions: {
+              thumbnail: {
+                schemaVersion: "assetRendition.v1",
+                kind: "thumbnail",
+                storageKey: "ws1/p1/asset_1/renditions/thumbnail.webp",
+                storageBucket: "assets-public",
+                contentType: "image/webp",
+                generatedAt: "2026-06-11T12:00:00.000Z",
+              },
+            },
+          },
+        },
+      },
+      { now: fixedNow }
+    );
+
+    assert.equal(media.url, "http://localhost:4200/ws1/p1/asset_1/clip.mp4");
+    assert.equal(
+      media.thumbnailUrl,
+      "http://localhost:4200/ws1/p1/asset_1/renditions/thumbnail.webp"
+    );
+    assert.equal(media.expiresAt, "2026-06-11T13:00:00.000Z");
+  } finally {
+    if (previousBase === undefined) delete process.env.STORAGE_LOCAL_URL_BASE;
+    else process.env.STORAGE_LOCAL_URL_BASE = previousBase;
+  }
+});
+
 test("assetMediaUrlsForRow withholds URLs for pending and data assets", async () => {
   const pending = await assetMediaUrlsForRow(
     {

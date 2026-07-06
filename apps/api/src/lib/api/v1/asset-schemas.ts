@@ -140,6 +140,18 @@ export interface AssetContext {
   recommendedRoles?: string[];
   transcriptText?: string;
   moments?: { startSec: number; endSec: number; label?: string }[];
+  renditions?: {
+    thumbnail?: AssetRendition;
+  };
+}
+
+export interface AssetRendition {
+  schemaVersion: "assetRendition.v1";
+  kind: "thumbnail";
+  storageKey: string;
+  storageBucket: string;
+  contentType: string;
+  generatedAt: string;
 }
 
 export interface UserAssetContext {
