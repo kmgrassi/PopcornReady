@@ -6,7 +6,7 @@ type Visibility = "public" | "private";
 interface SmokeConfig {
   apiBaseUrl: string;
   authToken?: string;
-  sourceMode: "multipart" | "local_path";
+  sourceMode: "multipart" | "local_path" | "signed_upload";
   localPath?: string;
   filename: string;
   contentType: string;
@@ -33,9 +33,13 @@ function env(name: string): string | undefined {
 
 function readConfig(): SmokeConfig {
   const sourceMode = env("STORAGE_SMOKE_SOURCE_MODE") ?? "multipart";
-  if (sourceMode !== "multipart" && sourceMode !== "local_path") {
+  if (
+    sourceMode !== "multipart" &&
+    sourceMode !== "local_path" &&
+    sourceMode !== "signed_upload"
+  ) {
     throw new Error(
-      'STORAGE_SMOKE_SOURCE_MODE must be "multipart" or "local_path".'
+      'STORAGE_SMOKE_SOURCE_MODE must be "multipart", "local_path", or "signed_upload".'
     );
   }
 
@@ -139,7 +143,39 @@ function assertStorageFields(asset: JsonRecord, phase: string): void {
   }
 }
 
-function assetSource(config: SmokeConfig): JsonRecord {
+function absoluteUrl(config: SmokeConfig, value: string): string {
+  if (/^https?:\/\//i.test(value)) return value;
+  const apiUrl = new URL(config.apiBaseUrl);
+  return `${apiUrl.origin}${value.startsWith("/") ? value : `/${value}`}`;
+}
+
+async function signedUploadSource(ctx: SmokeContext): Promise<JsonRecord> {
+  if (!ctx.projectId) throw new Error("Project was not created.");
+  const response = await requestJson<JsonRecord>(
+    ctx.config,
+    "POST",
+    `/projects/${ctx.projectId}/assets/upload-url`,
+    {
+      filename: ctx.config.filename,
+      contentType: ctx.config.contentType,
+    }
+  );
+  const uploadPath = stringField(response, "path");
+  const signedUrl = stringField(response, "signedUrl");
+  const put = await fetch(absoluteUrl(ctx.config, signedUrl), {
+    method: "PUT",
+    headers: { "content-type": ctx.config.contentType },
+    body: sampleBytes,
+  });
+  if (!put.ok) {
+    throw new Error(`signed upload PUT failed (${put.status}): ${await put.text()}`);
+  }
+  console.log(`uploaded object ${uploadPath}`);
+  return { type: "storage_upload", path: uploadPath };
+}
+
+async function assetSource(ctx: SmokeContext): Promise<JsonRecord> {
+  const { config } = ctx;
   if (config.sourceMode === "multipart") {
     return {
       type: "multipart_upload",
@@ -153,6 +189,7 @@ function assetSource(config: SmokeConfig): JsonRecord {
     }
     return { type: "local_path", path: config.localPath };
   }
+  return signedUploadSource(ctx);
 }
 
 async function createProject(ctx: SmokeContext): Promise<void> {
@@ -169,9 +206,9 @@ async function createAsset(ctx: SmokeContext): Promise<void> {
   const response = await requestJson<JsonRecord>(
     ctx.config,
     "POST",
-    `/projects/${ctx.projectId}/assets`,
+      `/projects/${ctx.projectId}/assets`,
     {
-      source: assetSource(ctx.config),
+      source: await assetSource(ctx),
       kind: "image",
       filename: ctx.config.filename,
       userContext: {

@@ -240,11 +240,16 @@ test("parseRegisterAsset rejects a non-http remote url", () => {
   );
 });
 
-test("parseRegisterAsset accepts local_path and a generated source", () => {
+test("parseRegisterAsset accepts local_path, storage_upload, and a generated source", () => {
   const local = parseRegisterAsset({
     source: { type: "local_path", path: "/tmp/clip.mp4" },
   });
   assert.equal(local.source.type, "local_path");
+
+  const storageUpload = parseRegisterAsset({
+    source: { type: "storage_upload", path: "ws_1/proj_1/uploads/upload_1/clip.mp4" },
+  });
+  assert.equal(storageUpload.source.type, "storage_upload");
 
   const generated = parseRegisterAsset({
     source: { type: "generated", generatedAssetId: "gen_1" },

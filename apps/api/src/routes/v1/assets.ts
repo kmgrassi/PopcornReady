@@ -1,11 +1,13 @@
-import { Router } from "express";
+import express, { Router } from "express";
 import { mutation, route } from "@/core/adapter";
 import { ApiError } from "@/core/errors";
 import {
+  createStorageUploadUrl,
   inventoryAssets,
   registerAsset,
   updateAssetContext,
 } from "@/lib/api/v1/assets";
+import { writeLocalSignedUpload } from "@/lib/api/v1/asset-upload";
 import {
   parseAssetInventory,
   parseAssetSemanticSearch,
@@ -134,6 +136,34 @@ assetsRouter.post(
 );
 
 assetsRouter.post(
+  "/projects/:projectId/assets/upload-url",
+  mutation(async ({ auth, body }, params) => {
+    const projectId = requiredParam(params, "projectId");
+    const input = parseUploadUrlRequest(body);
+    const upload = await createStorageUploadUrl(auth, projectId, input);
+    return { status: 201, body: upload };
+  })
+);
+
+assetsRouter.put(
+  "/projects/:projectId/assets/upload-url/local",
+  express.raw({ type: "*/*", limit: process.env.MAX_STORAGE_UPLOAD_BYTES || "250mb" }),
+  async (req, res, next) => {
+    try {
+      const token = typeof req.query.token === "string" ? req.query.token : "";
+      if (!token) throw new ApiError("validation_failed", "token is required.");
+      await writeLocalSignedUpload({
+        token,
+        body: Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0),
+      });
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+assetsRouter.post(
   "/projects/:projectId/assets/:assetId/transcribe",
   mutation(async ({ auth, body, req }, params) => {
     const projectId = requiredParam(params, "projectId");
@@ -213,6 +243,28 @@ assetsRouter.patch(
     return { status: 200, body: { asset } };
   })
 );
+
+function parseUploadUrlRequest(body: unknown): { filename?: string; contentType?: string } {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new ApiError("validation_failed", "The request body is invalid.");
+  }
+  const record = body as Record<string, unknown>;
+  const filename = optionalBodyString(record.filename, "filename");
+  const contentType = optionalBodyString(record.contentType, "contentType");
+  return {
+    ...(filename ? { filename } : {}),
+    ...(contentType ? { contentType } : {}),
+  };
+}
+
+function optionalBodyString(value: unknown, field: string): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string") {
+    throw new ApiError("validation_failed", `${field} must be a string.`);
+  }
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
 
 assetsRouter.patch(
   "/projects/:projectId/assets/:assetId/visibility",
