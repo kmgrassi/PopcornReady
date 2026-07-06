@@ -61,6 +61,12 @@
   line-height: var(--line-tight);
 }
 
+.selectionActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
 .statusLine {
   min-height: 22px;
   color: var(--muted);
@@ -102,6 +108,11 @@
 .tile:hover {
   border-color: var(--accent);
   transform: translateY(-1px);
+}
+
+.tileSelected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 .previewButton:focus-visible,
@@ -158,6 +169,21 @@
   left: var(--space-2);
 }
 
+.selectionBadge {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: 2;
+  min-width: 30px;
+  border-radius: var(--radius-pill);
+  padding: var(--space-1) var(--space-2);
+  background: var(--cta);
+  color: var(--cta-contrast);
+  font-size: var(--text-xs);
+  font-weight: 900;
+  text-align: center;
+}
+
 .duration {
   right: var(--space-2);
   bottom: 78px;
@@ -195,6 +221,29 @@
   margin: 0;
   color: var(--muted);
   font-size: var(--text-xs);
+}
+
+.selectButton {
+  width: fit-content;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.selectButton:hover {
+  border-color: var(--accent);
+}
+
+.selectButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
 }
 
 .addTile {
@@ -292,9 +341,83 @@
   border-color: var(--accent);
 }
 
+.intentBar {
+  position: sticky;
+  bottom: var(--space-4);
+  z-index: 5;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 240px) auto;
+  gap: var(--space-3);
+  align-items: end;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow: 0 18px 52px rgba(0, 0, 0, 0.32);
+}
+
+.intentField,
+.presetField {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.intentField label,
+.presetField label {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.intentField input,
+.presetField select {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-3);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+}
+
+.createButton {
+  min-height: 44px;
+  border: 1px solid var(--cta);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-5);
+  background: var(--cta);
+  color: var(--cta-contrast);
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.createButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.intentHint,
+.intentError {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.intentHint {
+  color: var(--muted);
+}
+
+.intentError {
+  color: var(--danger-text);
+}
+
 @media (max-width: 720px) {
   .shell {
-    padding: var(--space-5) var(--space-4) var(--space-7);
+    padding: var(--space-5) var(--space-4) calc(var(--space-7) + 120px);
   }
 
   .header {
@@ -323,5 +446,9 @@
 
   .title {
     font-size: var(--title-md);
+  }
+
+  .intentBar {
+    grid-template-columns: 1fr;
   }
 }
