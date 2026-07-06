@@ -129,6 +129,8 @@ test("generateStoryboardTile uses Ideogram v3 for 1024px sketch tiles", async ()
     assert.equal(asset.provenance?.model, "ideogram-v3");
     assert.equal(requests[0].url, "https://api.ideogram.ai/v1/ideogram-v3/generate");
     assert.ok(requests[0].body instanceof FormData);
+    // 1024x1024 is on the v3 allowed list (the v4 list starts at 2048x2048), so
+    // the cheap/small sketch-tile size must pass through unchanged.
     assert.equal(requests[0].body.get("resolution"), "1024x1024");
     assert.equal(requests[0].body.get("prompt"), asset.provenance?.prompt);
   } finally {

@@ -109,16 +109,39 @@ function resolveIdeogramModel(
   return normalizeIdeogramModel(input.model);
 }
 
-// Ideogram only accepts resolutions from this fixed list (others 400). Requests
-// elsewhere use free-form sizes like "1024x1536" (the poster's 2:3), so map any
-// non-listed size to the closest allowed resolution by aspect ratio.
-const IDEOGRAM_RESOLUTIONS = [
+// Ideogram only accepts resolutions from a fixed per-model list (others 400).
+// Requests elsewhere use free-form sizes like "1024x1536" (the poster's 2:3), so
+// map any non-listed size to the closest allowed resolution by aspect ratio.
+// The lists differ by model: v4 starts at 2048x2048, while v3 tops out around
+// 1536px and includes 1024x1024 (which storyboard sketch tiles rely on to stay
+// cheap and small).
+const IDEOGRAM_V4_RESOLUTIONS = [
   "2048x2048", "1440x2880", "2880x1440", "1664x2496", "2496x1664",
   "1792x2240", "2240x1792", "1440x2560", "2560x1440", "1600x2560",
   "2560x1600", "1728x2304", "2304x1728", "1296x3168", "3168x1296",
   "1152x2944", "2944x1152", "1248x3328", "3328x1248", "1280x3072",
   "3072x1280", "1024x3072", "3072x1024",
 ] as const;
+
+// The ResolutionV3 enum from the Ideogram 3.0 generate endpoint docs.
+const IDEOGRAM_V3_RESOLUTIONS = [
+  "512x1536", "576x1408", "576x1472", "576x1536", "640x1344", "640x1408",
+  "640x1472", "640x1536", "704x1152", "704x1216", "704x1280", "704x1344",
+  "704x1408", "704x1472", "736x1312", "768x1088", "768x1216", "768x1280",
+  "768x1344", "800x1280", "832x960", "832x1024", "832x1088", "832x1152",
+  "832x1216", "832x1248", "864x1152", "896x960", "896x1024", "896x1088",
+  "896x1120", "896x1152", "960x832", "960x896", "960x1024", "960x1088",
+  "1024x832", "1024x896", "1024x960", "1024x1024", "1088x768", "1088x832",
+  "1088x896", "1088x960", "1120x896", "1152x704", "1152x832", "1152x864",
+  "1152x896", "1216x704", "1216x768", "1216x832", "1248x832", "1280x704",
+  "1280x768", "1280x800", "1312x736", "1344x640", "1344x704", "1344x768",
+  "1408x576", "1408x640", "1408x704", "1472x576", "1472x640", "1472x704",
+  "1536x512", "1536x576", "1536x640",
+] as const;
+
+function resolutionsForModel(model: IdeogramImageModel): readonly string[] {
+  return model === "ideogram-v3" ? IDEOGRAM_V3_RESOLUTIONS : IDEOGRAM_V4_RESOLUTIONS;
+}
 
 function parseSize(value: string): { w: number; h: number } | null {
   const match = /^(\d+)\s*[x×]\s*(\d+)$/.exec(value.trim().toLowerCase());
@@ -128,10 +151,14 @@ function parseSize(value: string): { w: number; h: number } | null {
   return w > 0 && h > 0 ? { w, h } : null;
 }
 
-export function normalizeIdeogramResolution(value?: string): string | undefined {
+export function normalizeIdeogramResolution(
+  value: string | undefined,
+  model: IdeogramImageModel
+): string | undefined {
   if (!value) return undefined;
+  const allowed = resolutionsForModel(model);
   const normalized = value.trim().toLowerCase();
-  if ((IDEOGRAM_RESOLUTIONS as readonly string[]).includes(normalized)) {
+  if (allowed.includes(normalized)) {
     return normalized;
   }
   const requested = parseSize(normalized);
@@ -139,7 +166,7 @@ export function normalizeIdeogramResolution(value?: string): string | undefined 
   const targetRatio = requested.w / requested.h;
   let best: string | undefined;
   let bestDelta = Infinity;
-  for (const candidate of IDEOGRAM_RESOLUTIONS) {
+  for (const candidate of allowed) {
     const size = parseSize(candidate)!;
     const delta = Math.abs(size.w / size.h - targetRatio);
     if (delta < bestDelta) {
@@ -153,10 +180,11 @@ export function normalizeIdeogramResolution(value?: string): string | undefined 
 export function buildIdeogramImageOptions(
   input: Extract<GenerateAssetRequest, { provider: "ideogram"; kind: "image" }>
 ): IdeogramImageOptions {
+  const model = resolveIdeogramModel(input);
   return {
-    model: resolveIdeogramModel(input),
+    model,
     prompt: requirePrompt(input.prompt),
-    resolution: normalizeIdeogramResolution(input.resolution || input.size),
+    resolution: normalizeIdeogramResolution(input.resolution || input.size, model),
     aspectRatio: input.aspectRatio,
     renderingSpeed: normalizeSpeed(input.renderingSpeed),
     magicPrompt: normalizeMagicPrompt(input.magicPrompt),
