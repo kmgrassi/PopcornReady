@@ -11,7 +11,6 @@ import {
   LandingSection,
   LandingSectionHeader,
 } from "../components/landing/LandingSection";
-import { HeroProductMockup } from "../components/landing/HeroProductMockup";
 import { WorkflowStages } from "../components/landing/WorkflowStages";
 import { CloseButton } from "../components/ui/CloseButton";
 import { faqsForPlacement } from "../content/faqs";
@@ -675,7 +674,6 @@ export function HomePage() {
             and refines the final cut — one AI-native production, not a pile of
             clips.
           </p>
-          <HeroProductMockup />
           <form
             className={styles.promptComposer}
             onSubmit={(event) => {
