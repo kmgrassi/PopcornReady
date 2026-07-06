@@ -28,6 +28,9 @@ jobs:
       - name: Run web e2e smoke
         run: pnpm --filter @popcorn/web test:e2e
 
+      - name: Run PWA regression e2e
+        run: pnpm --filter @popcorn/web test:e2e:pwa
+
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v4
