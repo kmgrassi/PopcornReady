@@ -11,6 +11,7 @@
     "cli": "tsx scripts/cli.ts",
     "storage:smoke": "tsx scripts/storage-smoke.ts",
     "regenerate:smoke": "tsx scripts/regenerate-smoke.ts",
+    "transcribe:smoke": "tsx scripts/transcribe-smoke.ts",
     "smoke:tool-calls": "tsx scripts/orchestrator-tool-call-smoke.ts",
     "test:tools": "tsx scripts/tool-tests.ts",
     "orchestrator:run": "tsx scripts/orchestrator-run.ts",
