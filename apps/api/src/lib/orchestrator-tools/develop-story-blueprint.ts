@@ -257,6 +257,33 @@ export function deriveStoryBlueprint(
   };
 }
 
+// Shared by the orchestrator tool and the direct HTTP regenerate endpoint so
+// both paths derive and persist the blueprint identically. Returns null when
+// the project has no active brief (the caller decides how to surface that).
+export async function developStoryBlueprintForProject(
+  input: { workspaceId: string; projectId: string; feedback?: string },
+  deps: Partial<DevelopStoryBlueprintDeps> = {}
+): Promise<DevelopStoryBlueprintOutput | null> {
+  const resolved = { ...defaultDeps, ...deps };
+  const active = await resolved.getActiveProjectBrief(input.projectId);
+  if (!active) return null;
+
+  const storyBlueprint = deriveStoryBlueprint(active.brief, input.feedback);
+  const persisted = await resolved.addProjectStoryBlueprint({
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    blueprint: storyBlueprint,
+    briefAssetId: active.assetId,
+    briefContentHash: active.contentHash,
+  });
+
+  return {
+    storyBlueprint,
+    storyBlueprintId: persisted.storyBlueprintId,
+    storyBlueprintAssetId: persisted.storyBlueprintAssetId,
+  };
+}
+
 function briefRequired(): ToolCallResult<DevelopStoryBlueprintOutput> {
   return {
     status: "failed",
@@ -279,8 +306,6 @@ function briefRequired(): ToolCallResult<DevelopStoryBlueprintOutput> {
 export function createDevelopStoryBlueprintTool(
   deps: Partial<DevelopStoryBlueprintDeps> = {}
 ): ToolDefinition<DevelopStoryBlueprintInput, DevelopStoryBlueprintOutput> {
-  const resolved = { ...defaultDeps, ...deps };
-
   return {
     name: "develop_story_blueprint",
     description:
@@ -316,26 +341,20 @@ export function createDevelopStoryBlueprintTool(
         };
       }
 
-      const active = await resolved.getActiveProjectBrief(context.projectId);
-      if (!active) return briefRequired();
-
-      const storyBlueprint = deriveStoryBlueprint(active.brief, input.feedback);
-      const persisted = await resolved.addProjectStoryBlueprint({
-        workspaceId: context.auth.workspaceId,
-        projectId: context.projectId,
-        blueprint: storyBlueprint,
-        briefAssetId: active.assetId,
-        briefContentHash: active.contentHash,
-      });
+      const output = await developStoryBlueprintForProject(
+        {
+          workspaceId: context.auth.workspaceId,
+          projectId: context.projectId,
+          feedback: input.feedback,
+        },
+        deps
+      );
+      if (!output) return briefRequired();
 
       return {
         status: "succeeded",
-        resourceIds: [persisted.storyBlueprintId, persisted.storyBlueprintAssetId],
-        output: {
-          storyBlueprint,
-          storyBlueprintId: persisted.storyBlueprintId,
-          storyBlueprintAssetId: persisted.storyBlueprintAssetId,
-        },
+        resourceIds: [output.storyBlueprintId, output.storyBlueprintAssetId],
+        output,
       };
     },
   };

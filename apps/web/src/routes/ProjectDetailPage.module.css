@@ -172,6 +172,54 @@
   line-height: 1.35;
 }
 
+.shareNotice {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  background: var(--panel-2);
+}
+
+.shareNotice[data-state="public"] {
+  border-color: color-mix(in srgb, var(--good) 42%, var(--border));
+  background:
+    linear-gradient(
+      color-mix(in srgb, var(--good) 14%, transparent),
+      color-mix(in srgb, var(--good) 14%, transparent)
+    ),
+    var(--panel-2);
+}
+
+.shareNotice p {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: var(--text-sm);
+  font-weight: 900;
+}
+
+.shareNotice span {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.shareNotice .shareStatus {
+  grid-column: 1 / -1;
+  min-height: 1em;
+  margin-top: 0;
+  color: var(--danger);
+}
+
+.shareNotice .shareStatus[data-state="copied"] {
+  color: var(--good);
+}
+
 .chip {
   display: inline-flex;
   align-items: center;
@@ -795,6 +843,11 @@
   .projectTopLayout,
   .projectContextGrid {
     grid-template-columns: 1fr;
+  }
+
+  .shareNotice {
+    grid-template-columns: 1fr;
+    align-items: stretch;
   }
 }
 

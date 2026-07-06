@@ -374,7 +374,7 @@ function ProjectConcept({
     visibility === "public"
       ? "Visible in public discovery. Public assets can be shared."
       : "Only your workspace can view it. Media uses private links.";
-
+  const shareUrl = publicProjectUrl(project.id);
   return (
     <section className={styles.hero} id="concept">
       <ProjectPoster name={project.name} posterUrl={project.posterUrl} />
@@ -407,6 +407,12 @@ function ProjectConcept({
             </ButtonLink>
           ) : null}
         </div>
+        {!readOnly ? (
+          <ProjectShareAffordance
+            visibility={visibility}
+            shareUrl={shareUrl}
+          />
+        ) : null}
         <div>
           <span className={styles.eyebrow}>Concept</span>
           <h2 className={styles.conceptTitle}>
@@ -512,6 +518,81 @@ function ProjectVisibilityConfirmDialog({
       </div>
     </div>
   );
+}
+
+function ProjectShareAffordance({
+  visibility,
+  shareUrl,
+}: {
+  visibility?: "public" | "private" | null;
+  shareUrl: string;
+}) {
+  const isPublic = visibility === "public";
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
+
+  async function copyPublicLink() {
+    setCopyState("idle");
+    try {
+      await copyTextToClipboard(shareUrl);
+      setCopyState("copied");
+    } catch {
+      setCopyState("error");
+    }
+  }
+
+  if (!isPublic) {
+    return (
+      <div className={styles.shareNotice} data-state="private">
+        <p>Private projects do not have a public link.</p>
+        <span>Make this project public before sharing it outside your workspace.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.shareNotice} data-state="public">
+      <div>
+        <p>Public project</p>
+        <span>Appears in discovery and can be shared with this link.</span>
+      </div>
+      <Button variant="secondary" size="sm" onClick={() => void copyPublicLink()}>
+        {copyState === "copied" ? "Copied" : "Copy public link"}
+      </Button>
+      <span
+        className={styles.shareStatus}
+        data-state={copyState}
+        role="status"
+        aria-live="polite"
+      >
+        {copyState === "copied" ? "Public link copied." : ""}
+        {copyState === "error" ? "Could not copy automatically." : ""}
+      </span>
+    </div>
+  );
+}
+
+function publicProjectUrl(projectId: string) {
+  const path = `/p/${encodeURIComponent(projectId)}`;
+  if (typeof window === "undefined") return path;
+  return new URL(path, window.location.origin).toString();
+}
+
+async function copyTextToClipboard(value: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  const textArea = document.createElement("textarea");
+  textArea.value = value;
+  textArea.setAttribute("readonly", "");
+  textArea.style.position = "fixed";
+  textArea.style.opacity = "0";
+  document.body.appendChild(textArea);
+  textArea.select();
+  const copied = document.execCommand("copy");
+  document.body.removeChild(textArea);
+  if (!copied) throw new Error("Clipboard copy failed.");
 }
 
 function ProjectBrief({
