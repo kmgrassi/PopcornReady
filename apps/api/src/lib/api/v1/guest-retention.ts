@@ -7,22 +7,24 @@ import { createObjectStore, type ObjectStore } from "@/lib/storage/object-store"
 export const GUEST_RETENTION_DAYS = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export interface ExpiredGuestProjectObject {
+export interface ClaimedGuestProjectObject {
   projectId: string;
   workspaceId: string;
   lastActivityAt: string;
   storageBucket: string | null;
   storageKey: string | null;
   estimatedBytes: number;
+  deletedAssetCount: number;
 }
 
-interface ExpiredGuestProjectObjectRow {
+interface ClaimedGuestProjectObjectRow {
   project_id: string;
   workspace_id: string;
   last_activity_at: string;
   storage_bucket: string | null;
   storage_key: string | null;
   estimated_bytes: number | string | null;
+  deleted_asset_count: number | string | null;
 }
 
 interface PurgedGuestProjectRow {
@@ -33,11 +35,13 @@ interface PurgedGuestProjectRow {
 
 export interface GuestRetentionPurgeResult {
   cutoffIso: string;
+  claimedProjectCount: number;
   purgedProjectCount: number;
   deletedAssetCount: number;
   deletedObjectCount: number;
   reclaimedBytes: number;
   failedObjectCount: number;
+  retainedForRetryProjectCount: number;
 }
 
 export function guestRetentionCutoff(now = new Date()): Date {
@@ -66,9 +70,9 @@ export function isGuestRetentionJobAuthorized(
   return actual === `Bearer ${expected}` || actual === expected;
 }
 
-export function mapExpiredGuestProjectObject(
-  row: ExpiredGuestProjectObjectRow
-): ExpiredGuestProjectObject {
+export function mapClaimedGuestProjectObject(
+  row: ClaimedGuestProjectObjectRow
+): ClaimedGuestProjectObject {
   return {
     projectId: row.project_id,
     workspaceId: row.workspace_id,
@@ -76,19 +80,32 @@ export function mapExpiredGuestProjectObject(
     storageBucket: row.storage_bucket,
     storageKey: row.storage_key,
     estimatedBytes: Number(row.estimated_bytes ?? 0) || 0,
+    deletedAssetCount: Number(row.deleted_asset_count ?? 0) || 0,
   };
 }
 
-export async function listExpiredGuestProjectObjects(
-  cutoff: Date
-): Promise<ExpiredGuestProjectObject[]> {
+export function projectIdsReadyForHardPurge(
+  claimedProjectIds: Iterable<string>,
+  failedProjectIds: Iterable<string>
+): string[] {
+  const failed = new Set(failedProjectIds);
+  return [...new Set(claimedProjectIds)].filter((projectId) => !failed.has(projectId));
+}
+
+export async function claimExpiredGuestProjectObjects(
+  cutoff: Date,
+  limit = 100
+): Promise<ClaimedGuestProjectObject[]> {
   const db = getServiceSupabase();
   const rows = await runQuery(
-    "guestRetention.listExpiredGuestProjectObjects",
-    db.rpc("list_expired_anonymous_projects", { p_before: cutoff.toISOString() })
+    "guestRetention.claimExpiredGuestProjectObjects",
+    db.rpc("claim_expired_anonymous_projects", {
+      p_before: cutoff.toISOString(),
+      p_limit: limit,
+    })
   );
-  return ((rows ?? []) as ExpiredGuestProjectObjectRow[]).map(
-    mapExpiredGuestProjectObject
+  return ((rows ?? []) as ClaimedGuestProjectObjectRow[]).map(
+    mapClaimedGuestProjectObject
   );
 }
 
@@ -103,12 +120,14 @@ export async function runGuestRetentionPurge(
   const logger = options.logger ?? rootLogger;
   const config = readStorageConfig();
   const store = options.store ?? createObjectStore(config);
-  const objects = await listExpiredGuestProjectObjects(cutoff);
+  const objects = await claimExpiredGuestProjectObjects(cutoff);
 
   let deletedObjectCount = 0;
   let failedObjectCount = 0;
   let reclaimedBytes = 0;
   const seenObjects = new Set<string>();
+  const claimedProjectIds = new Set(objects.map((object) => object.projectId));
+  const failedProjectIds = new Set<string>();
 
   for (const object of objects) {
     if (!object.storageBucket || !object.storageKey) continue;
@@ -126,6 +145,7 @@ export async function runGuestRetentionPurge(
       reclaimedBytes += object.estimatedBytes;
     } catch (error) {
       failedObjectCount += 1;
+      failedProjectIds.add(object.projectId);
       logger.warn("guest_retention.object_delete_failed", {
         projectId: object.projectId,
         storageBucket: object.storageBucket,
@@ -137,9 +157,15 @@ export async function runGuestRetentionPurge(
     }
   }
 
-  const purgedRows = await purgeExpiredGuestProjects(cutoff);
+  const purgeProjectIds = projectIdsReadyForHardPurge(
+    claimedProjectIds,
+    failedProjectIds
+  );
+  const purgedRows =
+    purgeProjectIds.length > 0 ? await purgeExpiredGuestProjects(purgeProjectIds) : [];
   const result: GuestRetentionPurgeResult = {
     cutoffIso: cutoff.toISOString(),
+    claimedProjectCount: claimedProjectIds.size,
     purgedProjectCount: purgedRows.length,
     deletedAssetCount: purgedRows.reduce(
       (total, row) => total + Number(row.deleted_asset_count ?? 0),
@@ -148,25 +174,28 @@ export async function runGuestRetentionPurge(
     deletedObjectCount,
     reclaimedBytes,
     failedObjectCount,
+    retainedForRetryProjectCount: failedProjectIds.size,
   };
 
   logger.info("guest_retention.purged_projects", {
     cutoffIso: result.cutoffIso,
+    claimedProjectCount: result.claimedProjectCount,
     purgedProjectCount: result.purgedProjectCount,
     deletedAssetCount: result.deletedAssetCount,
     deletedObjectCount: result.deletedObjectCount,
     reclaimedBytes: result.reclaimedBytes,
     failedObjectCount: result.failedObjectCount,
+    retainedForRetryProjectCount: result.retainedForRetryProjectCount,
   });
   return result;
 }
 
 async function purgeExpiredGuestProjects(
-  cutoff: Date
+  projectIds: string[]
 ): Promise<PurgedGuestProjectRow[]> {
   const db = getServiceSupabase();
   const { data, error } = await db.rpc("purge_expired_anonymous_projects", {
-    p_before: cutoff.toISOString(),
+    p_project_ids: projectIds,
   });
   if (error) throw databaseError("guestRetention.purgeExpiredGuestProjects", error);
   return (data ?? []) as PurgedGuestProjectRow[];

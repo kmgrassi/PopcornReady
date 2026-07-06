@@ -3,6 +3,9 @@
 alter table public.projects
   add column if not exists last_activity_at timestamptz not null default now();
 
+alter table public.projects
+  add column if not exists guest_retention_purge_claimed_at timestamptz;
+
 comment on column public.projects.last_activity_at is
   'Retention heartbeat for guest cleanup. Visits/runs/edits update this timestamp; upgraded accounts are exempt.';
 
@@ -14,6 +17,10 @@ create index if not exists projects_last_activity_idx
   on public.projects (last_activity_at)
   where status <> 'deleted';
 
+create index if not exists projects_guest_retention_claim_idx
+  on public.projects (guest_retention_purge_claimed_at)
+  where guest_retention_purge_claimed_at is not null;
+
 create or replace function public.touch_project_row_activity()
 returns trigger
 language plpgsql
@@ -22,6 +29,8 @@ begin
   if tg_op = 'INSERT' then
     new.updated_at := now();
     new.last_activity_at := now();
+  elsif new.guest_retention_purge_claimed_at is distinct from old.guest_retention_purge_claimed_at then
+    return new;
   elsif new.last_activity_at is not distinct from old.last_activity_at then
     new.updated_at := now();
     new.last_activity_at := now();
@@ -69,9 +78,9 @@ create trigger actions_touch_project_activity
   after insert or update on public.actions
   for each row execute function public.touch_project_activity();
 
-drop trigger if exists generation_runs_touch_project_activity on public.generation_runs;
-create trigger generation_runs_touch_project_activity
-  after insert or update on public.generation_runs
+drop trigger if exists orchestrator_runs_touch_project_activity on public.orchestrator_runs;
+create trigger orchestrator_runs_touch_project_activity
+  after insert or update on public.orchestrator_runs
   for each row execute function public.touch_project_activity();
 
 drop trigger if exists selections_touch_project_activity on public.selections;
@@ -79,8 +88,9 @@ create trigger selections_touch_project_activity
   after insert or update on public.selections
   for each row execute function public.touch_project_activity();
 
-create or replace function public.list_expired_anonymous_projects(
-  p_before timestamptz default now() - interval '30 days'
+create or replace function public.claim_expired_anonymous_projects(
+  p_before timestamptz default now() - interval '30 days',
+  p_limit integer default 100
 )
 returns table (
   project_id uuid,
@@ -88,17 +98,66 @@ returns table (
   last_activity_at timestamptz,
   storage_bucket text,
   storage_key text,
-  estimated_bytes bigint
+  estimated_bytes bigint,
+  deleted_asset_count integer
 )
-language sql
-stable
+language plpgsql
 security definer
 set search_path = public, auth
 as $$
+begin
+  if coalesce(auth.role(), '') <> 'service_role'
+     and current_user not in ('postgres', 'service_role', 'supabase_admin') then
+    raise exception 'claim_expired_anonymous_projects requires service_role'
+      using errcode = '42501';
+  end if;
+
+  return query
+  with candidates as (
+    select p.id
+    from public.projects p
+    join public.workspaces w on w.id = p.workspace_id
+    join public.users u on u.id = w.owner_id
+    join auth.users au on au.id = u.auth_id
+    where p.status <> 'deleted'
+      and p.guest_retention_purge_claimed_at is null
+      and p.last_activity_at < p_before
+      and au.is_anonymous is true
+    order by p.last_activity_at asc
+    limit greatest(coalesce(p_limit, 100), 1)
+    for update of p skip locked
+  ),
+  newly_claimed as (
+    update public.projects p
+    set
+      status = 'deleted',
+      guest_retention_purge_claimed_at = now()
+    from candidates c
+    where p.id = c.id
+    returning p.id
+  ),
+  claimed as (
+    select p.id, p.workspace_id, p.last_activity_at
+    from public.projects p
+    where p.guest_retention_purge_claimed_at is not null
+      and p.status = 'deleted'
+      and (
+        p.id in (select newly_claimed.id from newly_claimed)
+        or p.last_activity_at < p_before
+      )
+    order by p.guest_retention_purge_claimed_at asc
+    limit greatest(coalesce(p_limit, 100), 1)
+  ),
+  asset_counts as (
+    select c.id as project_id, count(a.id)::integer as deleted_asset_count
+    from claimed c
+    left join public.assets a on a.project_id = c.id
+    group by c.id
+  )
   select
-    p.id as project_id,
-    p.workspace_id,
-    p.last_activity_at,
+    c.id as project_id,
+    c.workspace_id,
+    c.last_activity_at,
     a.storage_bucket,
     a.storage_key,
     case
@@ -109,22 +168,19 @@ as $$
       when a.context ? 'sizeBytes' and (a.context ->> 'sizeBytes') ~ '^[0-9]+$'
         then (a.context ->> 'sizeBytes')::bigint
       else 0
-    end as estimated_bytes
-  from public.projects p
-  join public.workspaces w on w.id = p.workspace_id
-  join public.users u on u.id = w.owner_id
-  join auth.users au on au.id = u.auth_id
-  left join public.assets a on a.project_id = p.id
-  where p.status <> 'deleted'
-    and p.last_activity_at < p_before
-    and au.is_anonymous is true;
+    end as estimated_bytes,
+    coalesce(ac.deleted_asset_count, 0) as deleted_asset_count
+  from claimed c
+  left join public.assets a on a.project_id = c.id
+  left join asset_counts ac on ac.project_id = c.id;
+end;
 $$;
 
-revoke all on function public.list_expired_anonymous_projects(timestamptz) from public;
-grant execute on function public.list_expired_anonymous_projects(timestamptz) to service_role;
+revoke all on function public.claim_expired_anonymous_projects(timestamptz, integer) from public;
+grant execute on function public.claim_expired_anonymous_projects(timestamptz, integer) to service_role;
 
 create or replace function public.purge_expired_anonymous_projects(
-  p_before timestamptz default now() - interval '30 days'
+  p_project_ids uuid[]
 )
 returns table (
   project_id uuid,
@@ -143,26 +199,23 @@ begin
   end if;
 
   return query
-  with eligible as (
+  with claimed as (
     select p.id, p.workspace_id
     from public.projects p
-    join public.workspaces w on w.id = p.workspace_id
-    join public.users u on u.id = w.owner_id
-    join auth.users au on au.id = u.auth_id
-    where p.status <> 'deleted'
-      and p.last_activity_at < p_before
-      and au.is_anonymous is true
+    where p.id = any(p_project_ids)
+      and p.status = 'deleted'
+      and p.guest_retention_purge_claimed_at is not null
   ),
   asset_counts as (
-    select e.id as project_id, count(a.id)::integer as deleted_asset_count
-    from eligible e
-    left join public.assets a on a.project_id = e.id
-    group by e.id
+    select c.id as project_id, count(a.id)::integer as deleted_asset_count
+    from claimed c
+    left join public.assets a on a.project_id = c.id
+    group by c.id
   ),
   deleted_projects as (
     delete from public.projects p
-    using eligible e
-    where p.id = e.id
+    using claimed c
+    where p.id = c.id
     returning p.id, p.workspace_id
   )
   select
@@ -174,5 +227,5 @@ begin
 end;
 $$;
 
-revoke all on function public.purge_expired_anonymous_projects(timestamptz) from public;
-grant execute on function public.purge_expired_anonymous_projects(timestamptz) to service_role;
+revoke all on function public.purge_expired_anonymous_projects(uuid[]) from public;
+grant execute on function public.purge_expired_anonymous_projects(uuid[]) to service_role;

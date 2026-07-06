@@ -9,7 +9,8 @@ import {
   isGuestRetentionJobAuthorized,
   isGuestRetentionRunOnStartEnabled,
   isGuestRetentionSchedulerEnabled,
-  mapExpiredGuestProjectObject,
+  mapClaimedGuestProjectObject,
+  projectIdsReadyForHardPurge,
 } from "../guest-retention";
 
 test("guestRetentionCutoff uses the 30-day inactivity policy", () => {
@@ -21,14 +22,15 @@ test("guestRetentionCutoff uses the 30-day inactivity policy", () => {
   );
 });
 
-test("mapExpiredGuestProjectObject normalizes nullable storage rows", () => {
-  const mapped = mapExpiredGuestProjectObject({
+test("mapClaimedGuestProjectObject normalizes nullable storage rows", () => {
+  const mapped = mapClaimedGuestProjectObject({
     project_id: "project_1",
     workspace_id: "workspace_1",
     last_activity_at: "2026-06-01T00:00:00Z",
     storage_bucket: null,
     storage_key: null,
     estimated_bytes: "42",
+    deleted_asset_count: "3",
   });
 
   assert.deepEqual(mapped, {
@@ -38,7 +40,18 @@ test("mapExpiredGuestProjectObject normalizes nullable storage rows", () => {
     storageBucket: null,
     storageKey: null,
     estimatedBytes: 42,
+    deletedAssetCount: 3,
   });
+});
+
+test("projectIdsReadyForHardPurge keeps failed projects for retry", () => {
+  assert.deepEqual(
+    projectIdsReadyForHardPurge(
+      ["project_ok", "project_failed", "project_ok"],
+      ["project_failed"]
+    ),
+    ["project_ok"]
+  );
 });
 
 test("guest retention scheduler is opt-in", () => {
@@ -74,6 +87,9 @@ test("guest retention migration only purges expired anonymous-owned projects", (
 
   assert.match(migration, /au\.is_anonymous is true/);
   assert.match(migration, /p\.last_activity_at < p_before/);
-  assert.match(migration, /purge_expired_anonymous_projects requires service_role/);
+  assert.match(migration, /claim_expired_anonymous_projects requires service_role/);
+  assert.match(migration, /public\.orchestrator_runs/);
+  assert.match(migration, /guest_retention_purge_claimed_at/);
+  assert.doesNotMatch(migration, /public\.generation_runs/);
   assert.doesNotMatch(migration, /auth\.uid\(\)/);
 });
