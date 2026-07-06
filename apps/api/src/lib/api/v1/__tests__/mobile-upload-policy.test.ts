@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   MOBILE_UPLOAD_MAX_DURATION_SEC,
+  MOBILE_UPLOAD_MAX_BASE64_BYTES,
   MOBILE_UPLOAD_MAX_FILES,
   MOBILE_UPLOAD_MAX_VIDEO_BYTES,
   inferMobileUploadKind,
@@ -28,6 +29,9 @@ test("mobile upload policy accepts current iPhone media types", () => {
   assert.equal(heic.ok, true);
   assert.equal(heic.kind, "image");
   assert.equal(heic.requiresTranscode, true);
+
+  assert.equal(inferMobileUploadKind("IMG_2044.HEIF", ""), "image");
+  assert.equal(inferMobileUploadKind("IMG_2045.heif", "video/heif"), "video");
 });
 
 test("mobile upload policy rejects unsupported, oversize, and too-long media", () => {
@@ -59,6 +63,40 @@ test("mobile upload policy rejects unsupported, oversize, and too-long media", (
   });
   assert.equal(tooLong.ok, false);
   assert.equal(tooLong.issue?.code, "clip_too_long");
+});
+
+test("mobile upload policy applies the lower base64 JSON transport cap", () => {
+  const directUpload = validateMobileUploadCandidate({
+    filename: "phone.mov",
+    mimeType: "video/quicktime",
+    sizeBytes: 90 * 1024 * 1024,
+    durationSec: 30,
+    transport: "direct_upload",
+  });
+  assert.equal(directUpload.ok, true);
+
+  const base64Upload = validateMobileUploadCandidate({
+    filename: "phone.mov",
+    mimeType: "video/quicktime",
+    sizeBytes: MOBILE_UPLOAD_MAX_BASE64_BYTES + 1,
+    durationSec: 30,
+    transport: "base64_json",
+  });
+  assert.equal(base64Upload.ok, false);
+  assert.equal(base64Upload.issue?.code, "file_too_large");
+  assert.equal(base64Upload.issue?.limit, MOBILE_UPLOAD_MAX_BASE64_BYTES);
+});
+
+test("mobile upload policy preserves explicit kind for legacy multipart callers", () => {
+  const explicitKind = validateMobileUploadCandidate({
+    filename: "upload.bin",
+    mimeType: "application/octet-stream",
+    sizeBytes: 1024,
+    kind: "video",
+    transport: "base64_json",
+  });
+  assert.equal(explicitKind.ok, true);
+  assert.equal(explicitKind.kind, "video");
 });
 
 test("mobile upload policy caps files per mobile selection", () => {

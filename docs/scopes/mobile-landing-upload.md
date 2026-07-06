@@ -177,7 +177,9 @@ ffmpeg pass happened.
 **Initial caps:** 10 files per selection, 200 MB / 120 seconds per video, 25 MB
 per image, 50 MB per audio file. These are intentionally conservative for
 mobile browser memory and uplink reliability, and should be tuned from upload
-analytics once the landing flow is live.
+analytics once the landing flow is live. Until PRs 1–2 move the active path to
+signed direct upload, the legacy base64 JSON path is capped at 18 MB per file so
+accepted uploads stay below the API's request-body limit after base64 overhead.
 
 **Scope:** accept what phones actually produce — `.mov`/HEVC (iOS default),
 HEIC stills, portrait rotation metadata — validating server-side during PR 1's

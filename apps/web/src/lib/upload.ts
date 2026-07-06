@@ -130,6 +130,7 @@ export async function readSelectedFootage(
         mimeType: file.type || undefined,
         sizeBytes: file.size,
         durationSec,
+        transport: "base64_json",
         ...(kind ? { kind } : {}),
       });
       if (!validation.ok || !validation.kind) {

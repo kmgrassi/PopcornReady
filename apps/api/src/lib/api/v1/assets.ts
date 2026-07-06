@@ -507,6 +507,8 @@ export async function registerAsset(
       mimeType: input.source.mimeType,
       sizeBytes: bytes.length,
       durationSec: input.durationSec,
+      kind,
+      transport: "base64_json",
     });
     if (!validation.ok) {
       throw new ApiError(

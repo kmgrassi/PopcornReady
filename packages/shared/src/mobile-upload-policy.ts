@@ -13,6 +13,7 @@ export interface MobileUploadCandidate {
   sizeBytes: number;
   durationSec?: number;
   kind?: MobileUploadKind;
+  transport?: "base64_json" | "direct_upload";
 }
 
 export interface MobileUploadIssue {
@@ -34,6 +35,7 @@ export const MOBILE_UPLOAD_MAX_DURATION_SEC = 120;
 export const MOBILE_UPLOAD_MAX_VIDEO_BYTES = 200 * 1024 * 1024;
 export const MOBILE_UPLOAD_MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 export const MOBILE_UPLOAD_MAX_AUDIO_BYTES = 50 * 1024 * 1024;
+export const MOBILE_UPLOAD_MAX_BASE64_BYTES = 18 * 1024 * 1024;
 
 const VIDEO_MIME_TYPES = new Set([
   "video/mp4",
@@ -65,7 +67,7 @@ const AUDIO_MIME_TYPES = new Set([
   "audio/webm",
 ]);
 
-const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "m4v", "webm", "hevc", "heif"]);
+const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "m4v", "webm", "hevc"]);
 const IMAGE_EXTENSIONS = new Set([
   "jpg",
   "jpeg",
@@ -120,7 +122,11 @@ export function mobileUploadRequiresTranscode(
   return TRANSCODE_EXTENSIONS.has(ext) || TRANSCODE_MIME_TYPES.has(mime);
 }
 
-function maxBytesForKind(kind: MobileUploadKind): number {
+function maxBytesForKind(
+  kind: MobileUploadKind,
+  transport: MobileUploadCandidate["transport"],
+): number {
+  if (transport === "base64_json") return MOBILE_UPLOAD_MAX_BASE64_BYTES;
   if (kind === "video") return MOBILE_UPLOAD_MAX_VIDEO_BYTES;
   if (kind === "image") return MOBILE_UPLOAD_MAX_IMAGE_BYTES;
   return MOBILE_UPLOAD_MAX_AUDIO_BYTES;
@@ -147,7 +153,7 @@ export function validateMobileUploadCandidate(
     };
   }
 
-  const sizeLimit = maxBytesForKind(kind);
+  const sizeLimit = maxBytesForKind(kind, candidate.transport);
   if (candidate.sizeBytes > sizeLimit) {
     return {
       ok: false,
