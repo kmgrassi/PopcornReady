@@ -163,18 +163,29 @@ Promote to data later if operators need to edit them.
 
 Small surface — this scope is mostly UI + one contract clarification:
 
-- **Selection → run contract.** The entrypoint body carries
-  `selectedAssetIds: string[]` — an **ordered** array (verify/extend the
-  existing route). Semantics: the selected set **is** the source pool for the
-  run (selected assets are `must_use`-flavored, unselected project assets are
-  ignored for sourcing; the agent may still *generate* gap-fill if the brief
-  allows), and **array order is timeline order** — the agent sequences the
-  cut in exactly this order and only decides trims/transitions/pacing within
-  it. The run's brief/plan assets record the selected ids in their `inputs`
-  with their `position`, so both membership *and* order are provenance
-  ("this montage was made from these 6 clips, in this sequence") straight
-  from the graph — `inputs` entries already carry an ordered `position`
-  field, so this costs nothing new.
+- **Selection → run contract (matches the existing API — two calls, no
+  endpoint changes).** The uploaded-footage entrypoint
+  (`apps/api/src/routes/v1/orchestrator-runs.ts:533`) **requires**
+  `briefVersionId` and a non-empty `assetIds` array; it does not accept a raw
+  brief string. So Create is a two-step mutation:
+  1. `POST /projects/:projectId/brief-versions` with the intent text →
+     `briefVersion.id` (this endpoint already exists for existing projects —
+     the gallery's draft project was created at upload time);
+  2. `POST /projects/:projectId/generation-entrypoints/uploaded-footage` with
+     `{ briefVersionId, assetIds }`, where `assetIds` is the **ordered**
+     selection (the existing field is an array and parsing preserves order —
+     reuse it; do not introduce a parallel `selectedAssetIds` field).
+
+  Semantics: the selected set **is** the source pool for the run (selected
+  assets are `must_use`-flavored, unselected project assets are ignored for
+  sourcing; the agent may still *generate* gap-fill if the brief allows), and
+  **`assetIds` order is timeline order** — the agent sequences the cut in
+  exactly this order and only decides trims/transitions/pacing within it
+  (run-side enforcement is PR 4). The run's brief/plan assets record the
+  selected ids in their `inputs` with their `position`, so both membership
+  *and* order are provenance ("this montage was made from these 6 clips, in
+  this sequence") straight from the graph — `inputs` entries already carry an
+  ordered `position` field, so this costs nothing new.
 - **Thumbnails.** `thumbnailUrl` on the asset response, backed by a derived
   storage object written at ingest (sidecar under the asset's storage prefix;
   no new asset kind — it's a rendition, not creative content the agent
@@ -221,19 +232,21 @@ of placeholder tiles.
 count), sticky intent bar (free-text input + preset dropdown + Create, per
 the UI spec), preset list with per-preset constraints (`minSelection`,
 `mediaKinds`) surfaced as inline hints, dropdown-prefills-input behavior,
-Create → uploaded-footage entrypoint with `selectedAssetIds` → run-progress
-redirect. Includes the entrypoint body verification/extension and its
-API-side validation (ids must be `ready`, project-owned, media kinds
-allowed).
+Create as the two-call sequence from the run contract (brief-versions POST →
+entrypoint with `{ briefVersionId, assetIds }`) → run-progress redirect. No
+entrypoint signature changes; add API-side validation that `assetIds` are
+`ready`, project-owned, and of allowed media kinds if not already enforced.
 
 **Tests:** unit — selection reducer **including ordering** (tap order
 preserved; deselect renumbers; re-tap appends at end; select-all numbers in
 grid order); preset-prefill behavior (picking a
 preset writes the template; subsequent edits win; re-picking overwrites);
 constraint hints (narration with images only; montage needs ≥2); Create
-gating (empty text disables); payload composition (brief text + ids — the
-payload derives from the text box, never from dropdown state). API unit —
-entrypoint rejects foreign/not-ready ids with typed errors. Preview e2e at
+gating (empty text disables); create-sequence composition (brief text →
+brief-versions POST; its returned id + ordered `assetIds` → entrypoint; the
+text derives from the text box, never from dropdown state; a failed
+brief-versions call surfaces an error and never fires the entrypoint). API
+unit — entrypoint rejects foreign/not-ready ids with typed errors. Preview e2e at
 mobile viewport: select 3 tiles → pick preset → edit brief text → Create →
 run-progress.
 
@@ -243,7 +256,7 @@ agent, and nothing runs without the explicit Create.
 ### PR 4 — Agent honors the selection
 
 **Scope:** run-side scoping — the orchestrator's source-asset resolution for
-uploaded-footage runs consumes `selectedAssetIds` (not "all project
+uploaded-footage runs consumes the entrypoint's ordered `assetIds` (not "all project
 uploads") **and preserves its order as timeline order** (the agent decides
 trims/transitions/pacing within the sequence, never the sequence itself; a
 brief that contradicts the tapped order is flagged by the coverage critique,
