@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildFootageGroundingContext, buildFootageGroundingPrompt } from "../footage-grounding";
+import {
+  buildFootageGroundingContext,
+  buildFootageGroundingPrompt,
+  groundingGraphInputs,
+} from "../footage-grounding";
 import type { V1Asset } from "@/lib/api/v1/store";
 
 const baseAsset: V1Asset = {
@@ -42,6 +46,7 @@ test("buildFootageGroundingContext omits assets without transcripts or moments",
         {
           ...baseAsset,
           id: "asset_2",
+          contentHash: "asset_2_hash",
           context: {
             transcriptText: "testing one two three",
             moments: [{ startSec: 0, endSec: 2, label: "spoken intro" }],
@@ -54,5 +59,34 @@ test("buildFootageGroundingContext omits assets without transcripts or moments",
 
   assert.equal(result.excerpts.length, 1);
   assert.equal(result.excerpts[0].assetId, "asset_2");
+  assert.equal(result.excerpts[0].contentHash, "asset_2_hash");
   assert.match(result.promptText ?? "", /testing one two three/);
+});
+
+test("groundingGraphInputs preserves excerpt asset hashes for stale detection", () => {
+  const inputs = groundingGraphInputs(
+    {
+      excerpts: [
+        {
+          assetId: "asset_2",
+          contentHash: "asset_2_hash",
+          label: "birthday.mov",
+          transcript: "testing one two three",
+          moments: [],
+        },
+      ],
+      promptText: "Footage grounding from uploaded assets",
+    },
+    2
+  );
+
+  assert.deepEqual(inputs, [
+    {
+      assetId: "asset_2",
+      relation: "input",
+      role: "footage_grounding",
+      position: 2,
+      contentHash: "asset_2_hash",
+    },
+  ]);
 });

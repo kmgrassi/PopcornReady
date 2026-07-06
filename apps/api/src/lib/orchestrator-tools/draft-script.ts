@@ -15,7 +15,11 @@ import type {
   StoryDurationClass,
   StoryDurationPlan,
 } from "@popcorn/shared/types";
-import { buildFootageGroundingContext, type FootageGroundingContext } from "./footage-grounding";
+import {
+  buildFootageGroundingContext,
+  groundingGraphInputs,
+  type FootageGroundingContext,
+} from "./footage-grounding";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 
@@ -434,6 +438,7 @@ export function createDraftScriptTool(
         storyBlueprintId: blueprint.storyBlueprintId,
         storyBlueprintAssetId: blueprint.assetId,
         storyBlueprintContentHash: blueprint.contentHash,
+        groundingInputs: groundingGraphInputs(footageGrounding, 2),
       });
 
       const output: ScriptDraft = {

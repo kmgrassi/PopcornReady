@@ -1,8 +1,10 @@
 import { listAssets as realListAssets, type V1Asset } from "@/lib/api/v1/store";
+import type { GraphAssetInput } from "@/lib/api/v1/asset-graph";
 import type { UsableMoment } from "@popcorn/shared/v1/types";
 
 export interface FootageGroundingExcerpt {
   assetId: string;
+  contentHash?: string;
   label: string;
   transcript?: string;
   moments: {
@@ -89,6 +91,7 @@ export async function buildFootageGroundingContext(input: {
     .filter((asset) => asset.kind === "video" || asset.kind === "audio")
     .map((asset) => ({
       assetId: asset.id,
+      contentHash: asset.contentHash,
       label: assetLabel(asset),
       transcript: transcriptFor(asset),
       moments: momentsFor(asset),
@@ -99,4 +102,24 @@ export async function buildFootageGroundingContext(input: {
     excerpts,
     promptText: buildFootageGroundingPrompt(excerpts),
   };
+}
+
+export function groundingGraphInputs(
+  grounding: FootageGroundingContext,
+  startPosition: number
+): GraphAssetInput[] {
+  const seen = new Set<string>();
+  const inputs: GraphAssetInput[] = [];
+  for (const excerpt of grounding.excerpts) {
+    if (!excerpt.assetId || seen.has(excerpt.assetId)) continue;
+    seen.add(excerpt.assetId);
+    inputs.push({
+      assetId: excerpt.assetId,
+      relation: "input",
+      role: "footage_grounding",
+      position: startPosition + inputs.length,
+      ...(excerpt.contentHash ? { contentHash: excerpt.contentHash } : {}),
+    });
+  }
+  return inputs;
 }

@@ -1996,25 +1996,29 @@ export async function addProjectPlan(input: {
   plan: ShotPlan;
   briefAssetId?: string;
   briefContentHash?: string;
+  groundingInputs?: GraphAssetInput[];
 }): Promise<{ planAssetId: string }> {
   const db = getServiceSupabase();
-  const planInputs: GraphAssetInput[] = input.briefAssetId
-    ? [
-        {
-          assetId: input.briefAssetId,
-          relation: "input",
-          role: "brief",
-          position: 0,
-          ...(input.briefContentHash ? { contentHash: input.briefContentHash } : {}),
-        },
-      ]
-    : [];
+  const planInputs: GraphAssetInput[] = [
+    ...(input.briefAssetId
+      ? [
+          {
+            assetId: input.briefAssetId,
+            relation: "input" as const,
+            role: "brief",
+            position: 0,
+            ...(input.briefContentHash ? { contentHash: input.briefContentHash } : {}),
+          },
+        ]
+      : []),
+    ...(input.groundingInputs ?? []),
+  ];
   const action = await createAction({
     projectId: input.projectId,
     tool: "plan_shots",
     status: "running",
     params: { source: "plan_shots" },
-    inputAssetIds: input.briefAssetId ? [input.briefAssetId] : [],
+    inputAssetIds: planInputs.map((assetInput) => assetInput.assetId),
     rationale: "Persist the shot plan as the project's active plan asset.",
   });
   const planAsset = await insertDataAsset({
@@ -2465,6 +2469,7 @@ export async function addProjectScriptDraft(input: {
   storyBlueprintId: string;
   storyBlueprintAssetId: string;
   storyBlueprintContentHash?: string;
+  groundingInputs?: GraphAssetInput[];
   supersedesId?: string;
 }): Promise<{ scriptDraftId: string; scriptDraftAssetId: string }> {
   const db = getServiceSupabase();
@@ -2485,13 +2490,14 @@ export async function addProjectScriptDraft(input: {
         ? { contentHash: input.storyBlueprintContentHash }
         : {}),
     },
+    ...(input.groundingInputs ?? []),
   ];
   const action = await createAction({
     projectId: input.projectId,
     tool: "draft_script",
     status: "running",
     params: { source: "draft_script" },
-    inputAssetIds: [input.briefAssetId, input.storyBlueprintAssetId],
+    inputAssetIds: graphInputs.map((assetInput) => assetInput.assetId),
     rationale: "Persist the scene-level script draft for later voice and shot planning.",
   });
   const now = new Date().toISOString();

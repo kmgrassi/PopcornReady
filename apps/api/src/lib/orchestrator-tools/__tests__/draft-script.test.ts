@@ -121,6 +121,7 @@ test("draft_script persists a script draft with brief and blueprint provenance",
         storyBlueprintId: string;
         storyBlueprintAssetId: string;
         sceneCount: number;
+        groundingInputs?: { assetId: string; role?: string; contentHash?: string }[];
       }
     | undefined;
   const tool = createDraftScriptTool({
@@ -133,6 +134,7 @@ test("draft_script persists a script draft with brief and blueprint provenance",
         storyBlueprintId: input.storyBlueprintId,
         storyBlueprintAssetId: input.storyBlueprintAssetId,
         sceneCount: input.scriptDraft.scenes.length,
+        groundingInputs: input.groundingInputs,
       };
       return {
         scriptDraftId: "script_1",
@@ -150,6 +152,7 @@ test("draft_script persists a script draft with brief and blueprint provenance",
     storyBlueprintId: "blueprint_1",
     storyBlueprintAssetId: "blueprint_asset_1",
     sceneCount: 2,
+    groundingInputs: [],
   });
   if (result.status === "succeeded") {
     assert.deepEqual(result.resourceIds, ["script_1", "script_asset_1"]);
@@ -170,6 +173,7 @@ test("draft_script includes transcript excerpts and moment windows when present"
       excerpts: [
         {
           assetId: "clip_asset_1",
+          contentHash: "clip_hash_1",
           label: "birthday.mov",
           transcript: "Maya says this is the best cake ever",
           moments: [
@@ -191,6 +195,15 @@ test("draft_script includes transcript excerpts and moment windows when present"
         input.scriptDraft.scenes[0].dialogue[0].text,
         "Maya says this is the best cake ever"
       );
+      assert.deepEqual(input.groundingInputs, [
+        {
+          assetId: "clip_asset_1",
+          relation: "input",
+          role: "footage_grounding",
+          position: 2,
+          contentHash: "clip_hash_1",
+        },
+      ]);
       return {
         scriptDraftId: "script_1",
         scriptDraftAssetId: "script_asset_1",

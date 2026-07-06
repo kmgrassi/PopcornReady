@@ -227,7 +227,12 @@ test("plan_shots derives the plan from the brief and persists it with brief prov
       }
     | undefined;
   let planInput:
-    | { plan: ShotPlan; briefAssetId?: string; briefContentHash?: string }
+    | {
+        plan: ShotPlan;
+        briefAssetId?: string;
+        briefContentHash?: string;
+        groundingInputs?: { assetId: string; role?: string; contentHash?: string }[];
+      }
     | undefined;
   const registry = createDefaultToolRegistry({
     planShots: planShotsDeps({
@@ -272,6 +277,7 @@ test("plan_shots derives the plan from the brief and persists it with brief prov
   // the active brief is recorded as the plan's input (provenance / stale graph)
   assert.equal(planInput?.briefAssetId, "brief_asset_1");
   assert.equal(planInput?.briefContentHash, "brief_hash_1");
+  assert.deepEqual(planInput?.groundingInputs, []);
 
   assert.equal(result.status, "succeeded");
   if (result.status === "succeeded") {
@@ -283,6 +289,7 @@ test("plan_shots derives the plan from the brief and persists it with brief prov
 
 test("plan_shots forwards transcript and moment grounding into the planner prompt", async () => {
   let footageGrounding: string | null | undefined;
+  let groundingInputs: unknown;
   const registry = createDefaultToolRegistry({
     planShots: planShotsDeps({
       planEdit: async (input) => {
@@ -307,10 +314,15 @@ test("plan_shots forwards transcript and moment grounding into the planner promp
           ],
         };
       },
+      addProjectPlan: async (input) => {
+        groundingInputs = input.groundingInputs;
+        return { planAssetId: "plan_asset_1" };
+      },
       buildFootageGroundingContext: async () => ({
         excerpts: [
           {
             assetId: "clip_asset_1",
+            contentHash: "clip_hash_1",
             label: "birthday.mov",
             transcript: "Maya says happy birthday",
             moments: [{ startSec: 1, endSec: 4, label: "birthday candle" }],
@@ -330,6 +342,15 @@ test("plan_shots forwards transcript and moment grounding into the planner promp
 
   assert.match(footageGrounding ?? "", /Maya says happy birthday/);
   assert.match(footageGrounding ?? "", /1\.00-4\.00s/);
+  assert.deepEqual(groundingInputs, [
+    {
+      assetId: "clip_asset_1",
+      relation: "input",
+      role: "footage_grounding",
+      position: 1,
+      contentHash: "clip_hash_1",
+    },
+  ]);
   assert.equal(result.status, "succeeded");
   if (result.status === "succeeded") {
     assert.deepEqual(result.output?.plan.scenes[0].beats[0].sourceWindow, {

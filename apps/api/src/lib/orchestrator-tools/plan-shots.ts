@@ -6,7 +6,7 @@ import {
 } from "@/lib/api/v1/store";
 import { briefToStoryContext } from "@/lib/v1/generation/prepare";
 import type { ShotPlan } from "@popcorn/shared/types";
-import { buildFootageGroundingContext } from "./footage-grounding";
+import { buildFootageGroundingContext, groundingGraphInputs } from "./footage-grounding";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 
@@ -224,6 +224,7 @@ export function createPlanShotsTool(
         plan,
         briefAssetId: active.assetId,
         briefContentHash: active.contentHash,
+        groundingInputs: groundingGraphInputs(footageGrounding, 1),
       });
 
       return {
