@@ -73,3 +73,12 @@ create index transcript_segments_project_asset_idx
 create trigger transcript_segments_set_updated_at
   before update on public.transcript_segments
   for each row execute function public.set_updated_at();
+
+alter table public.transcript_segments enable row level security;
+
+create policy transcript_segments_owner on public.transcript_segments
+  for all using (public.owns_workspace(workspace_id) and public.owns_project(project_id))
+  with check (public.owns_workspace(workspace_id) and public.owns_project(project_id));
+
+create policy transcript_segments_public_read on public.transcript_segments
+  for select using (public.project_is_public(project_id));

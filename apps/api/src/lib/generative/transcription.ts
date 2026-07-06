@@ -76,8 +76,8 @@ async function openAITranscription(
   const form = new FormData();
   form.set("model", model);
   form.set("response_format", "verbose_json");
-  form.set("timestamp_granularities[]", "word");
-  form.set("timestamp_granularities[]", "segment");
+  form.append("timestamp_granularities[]", "word");
+  form.append("timestamp_granularities[]", "segment");
   if (input.language) form.set("language", input.language);
   form.set(
     "file",
