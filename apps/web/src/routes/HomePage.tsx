@@ -324,6 +324,7 @@ export function HomePage() {
       }
       const result = await startPendingLandingPromptRun(nextPendingPrompt, {
         enforceGuestRunLimit: needsAnonymousSession || isAnonymous,
+        selectedFootage: shareTargetFootage,
       });
       navigate(runProgressPath(result));
     } catch (err) {
@@ -433,8 +434,7 @@ export function HomePage() {
                       : `${shareTargetFootage.length} shared clips are ready`}
                   </strong>
                   <p>
-                    Add a brief while these files stay staged for the
-                    direct-to-storage upload flow.
+                    Add a brief, then create a run with these clips.
                   </p>
                 </div>
                 <ul>
