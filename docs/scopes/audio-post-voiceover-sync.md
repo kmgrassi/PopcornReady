@@ -169,30 +169,176 @@ returns `missing_transcript`, and the agent self-heals by calling
   talk over the singing at 0:42") — the agent recomputes only affected
   segments via the graph. No waveform-dragging editor.
 
-## Phasing
+## Testing strategy (applies to every PR)
 
-- **PR 1 — Transcription foundation.** `transcript` asset kind + migration;
-  `transcribe_audio` tool (Whisper-class API) servicing the existing
-  `transcribe_audio` knowledge gap on upload; transcript visible read-only in
-  the dashboard.
-- **PR 2 — Script-from-footage.** Feed transcript + usable moments into
-  `draft_script` / `plan_shots` so narration is grounded in the actual footage
-  (names, quotes, events at known timestamps).
-- **PR 3 — Fit + sync report.** `fit_audio_to_picture`: duration fit per
-  segment window, bounded retime, `critique`-based sync report, approval gate
-  wiring for `needs_review` segments.
-- **PR 4 — Mix + render.** `audio_mix` asset + ducking/muting of original
-  audio in export; before/after audition UI.
-- **Later phases (explicitly deferred):**
-  - **Same-language dialogue replacement** (speaker on camera): forced
-    alignment to word/phone level, per-line replacement, lip-sync *scoring*
-    (SyncNet-class) as a critique — data model already leaves room
-    (words → phones is additive on `transcript`).
-  - **Voice cloning ("sound like grandpa")**: requires the research's consent
-    model — a voice asset must carry legal basis (who consented, scope, term,
-    revocation). Do not ship any cloning path before that metadata exists.
-  - **Pro interchange (AAF/BWF/OTIO)**: not our market; revisit only if we
-    target pro post handoff.
+Each new capability ships in three layers so it can be tested in isolation
+before it is ever wired into an orchestrator run:
+
+1. **Pure core function** — the deterministic logic (fit math, transcript
+   normalization, mix-plan resolution) lives in a plain module with no I/O and
+   gets `node:test` unit tests (the repo runner: `npm test` →
+   `tsx --test "src/**/*.test.ts"`; existing examples
+   `apps/api/src/lib/__tests__/audio-alignment.test.ts`,
+   `render-plan.test.ts`).
+2. **Provider adapter with a `mock` implementation** — same pattern as
+   `generate_audio`'s existing `provider: "elevenlabs" | "mock"`. The mock ASR
+   returns canned word timestamps for fixture audio; the mock TTS returns a
+   fixture MP3 of known duration. This makes every flow runnable in CI with no
+   API keys and deterministic outputs.
+3. **A standalone API endpoint** (thin route over the core) added *before* the
+   orchestrator tool wrapper, so each stage is curl-testable against a single
+   asset without running a full generation. This mirrors the existing
+   per-asset pattern (`POST /assets/:id/regenerate`). The orchestrator tool is
+   then a thin wrapper over the same lib function the route calls.
+
+Cross-PR fixtures: check in a tiny fixture set under a test-fixtures dir — a
+~5s WAV with known speech ("testing one two three" with known word times), a
+~5s silent/noisy WAV, and a short MP4 with audio — so transcription, fit, and
+mix tests all run against the same known-answer media. Smoke scripts follow the
+existing `apps/api/scripts/*-smoke.ts` convention (`storage:smoke`,
+`smoke:tool-calls`) for the paths that need real providers or ffmpeg.
+
+## PR plan
+
+### PR 1 — Transcript asset kind + `transcribe_audio` (foundation)
+
+**Scope:** additive migration adding `transcript` to `graph_asset_kind`
+(unique timestamp — see migration-collision convention); transcript content
+schema in `packages/shared`; ASR provider abstraction
+(`apps/api/src/lib/generative/transcription.ts`) with `openai-whisper` (or
+equivalent) + `mock` providers; asset-ingest wiring so the existing
+`transcribe_audio` knowledge gap is serviceable.
+
+**Isolated endpoint:**
+
+```
+POST /api/v1/projects/:projectId/assets/:assetId/transcribe
+  body: { provider?: "openai" | "mock", language?: string }
+  → 202 { job } (async, follows generate_audio job pattern)
+GET  /api/v1/projects/:projectId/assets/:assetId/transcript
+  → 200 { transcript asset } | 404
+```
+
+Precondition failures are typed (Principle 7): asset not audio/video →
+`asset_not_transcribable`; video with no audio stream → `no_audio_stream`.
+
+**Tests:**
+- Unit: ASR-response → transcript-content normalization (word merge, segment
+  splitting, confidence carry-through); content schema validation; provenance
+  `inputs` carry `transcribed_from` relation to the source asset.
+- Unit (mock provider): endpoint → job → transcript asset end-to-end against
+  the fixture WAV; idempotency (re-transcribe mints a new version, same
+  lineage).
+- Smoke script `transcribe-smoke.ts` (real provider, gated on API key): run
+  against the fixture WAV, assert word timestamps within ±0.3s of known times.
+
+**Done when:** you can upload an audio/video asset, hit the endpoint with
+`provider: "mock"` in CI (and the real provider locally), and read back a
+word-timestamped transcript asset with correct provenance edges.
+
+### PR 2 — Footage-grounded scripting
+
+**Scope:** feed transcript + usable moments (from the uploaded-footage
+analysis pass) into `draft_script` / `plan_shots` inputs so narration
+references real names, quotes, and event timestamps; beats gain optional
+`sourceWindow` (which stretch of source footage they cover).
+
+**Isolated testing:** no new endpoint — this is a prompt/contract change on
+existing tools. Test via:
+- Unit: prompt-assembly includes transcript excerpts + moment windows when
+  present, omits cleanly when absent; structured-output parsing tolerates
+  missing `sourceWindow`.
+- Existing tool-test harness (`npm run test:tools` /
+  `smoke:tool-calls`): add a case with a fixture transcript asset in the
+  project and assert the drafted script quotes it.
+- Optional eval: add a graded case to `evals:orchestrator` ("script mentions
+  the birthday girl by name from the transcript").
+
+**Done when:** a project containing footage + transcript produces a script
+that demonstrably uses transcript content, and prompt-only projects are
+unchanged.
+
+### PR 3 — `fit_audio_to_picture` + sync report
+
+**Scope:** the fit core as a pure function — inputs: generated audio measured
+duration + (optionally) its own transcript word times, target beat/moment
+window; outputs: placement (`startSec`), bounded retime factor (default cap
+±10%), and a fit verdict `ok | needs_review | fail` with reasons. Sync report
+persisted as a `critique` asset over the (`audio_track`, beat) pair. Staged
+retreat encoded in the verdict reasons (retime → tighten script → regenerate),
+per the research. Approval-gate wiring: `needs_review` segments require the
+gate; `ok` auto-applies.
+
+**Isolated endpoint:**
+
+```
+POST /api/v1/projects/:projectId/audio-fit
+  body: { audioAssetId, beatId, options?: { maxRetime?: number } }
+  → 200 { placement, retime, verdict, critiqueAssetId }
+```
+
+Sync (no job needed — it's arithmetic + one optional ffmpeg atempo render for
+the retimed variant, which is minted as a new asset version).
+
+**Tests:**
+- Unit (the bulk of this PR's value): fit math is fully deterministic — audio
+  shorter/longer than window, retime within/exceeding cap, word-timestamp
+  overlap with a moment window, degenerate windows. Table-driven known-answer
+  tests, no mocks needed.
+- Unit: critique asset content shape; retimed audio minted as new version with
+  provenance to the original + the fit action.
+- Smoke: fixture MP3 vs fixture beat windows through the endpoint; assert the
+  retimed file's measured duration (via the existing
+  `audio-duration.ts` parser) matches the window within tolerance.
+
+**Done when:** given any audio asset + beat, the endpoint returns a
+deterministic, unit-tested fit decision and an inspectable critique asset, and
+the orchestrator tool wrapper surfaces `needs_review` through the existing
+gate flow.
+
+### PR 4 — `audio_mix` asset + mix-aware render
+
+**Scope:** additive `audio_mix` asset kind; mix-plan resolution (layers →
+per-segment gain/duck envelope) as a pure function extending the existing
+`RenderPlan` (`audioAssetIds` generalizes to layered entries); export consumes
+the mix (duck/mute original audio under voiceover); before/after audition UI
+in the approval gate.
+
+**Isolated endpoint:**
+
+```
+POST /api/v1/projects/:projectId/audio-mix/preview
+  body: { mixAssetId | layers, segmentId? }
+  → 202 { job } → rendered preview audio (or short AV snippet) for one segment
+```
+
+This is what powers the before/after audition and is independently testable
+long before a full export.
+
+**Tests:**
+- Unit: mix-plan resolution (overlapping layers, duck windows, gain clamps)
+  extending `render-plan.test.ts` patterns.
+- Integration (ffmpeg required, skipped when absent — matching the
+  degrade-cleanly convention): render a 5s preview from fixtures; assert
+  output duration and that RMS level in the ducked window drops by the
+  expected amount (a cheap, robust "did ducking actually happen" check).
+- Web: audition UI against the preview endpoint with mock data.
+
+**Done when:** a project with original footage + fitted voiceover + soundtrack
+exports with the original audio ducked per the mix asset, and the user can
+audition any single segment before/after in the gate.
+
+### Later phases (explicitly deferred)
+
+- **Same-language dialogue replacement** (speaker on camera): forced
+  alignment to word/phone level, per-line replacement, lip-sync *scoring*
+  (SyncNet-class) as a critique — data model already leaves room
+  (words → phones is additive on `transcript`).
+- **Voice cloning ("sound like grandpa")**: requires the research's consent
+  model — a voice asset must carry legal basis (who consented, scope, term,
+  revocation). Do not ship any cloning path before that metadata exists.
+- **Pro interchange (AAF/BWF/OTIO)**: not our market; revisit only if we
+  target pro post handoff.
 
 ## Open questions
 
