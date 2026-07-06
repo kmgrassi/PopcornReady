@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdirSync, existsSync } from "node:fs";
+import { mkdirSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { networkInterfaces } from "node:os";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
@@ -9,7 +9,9 @@ const repoRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const certDir = path.join(repoRoot, ".local", "device-certs");
 const certPath = path.join(certDir, "popcorn-device-cert.pem");
 const keyPath = path.join(certDir, "popcorn-device-key.pem");
+const certMetaPath = path.join(certDir, "popcorn-device-cert.json");
 const port = process.env.POPCORN_DEVICE_PORT || process.env.PORT || "3000";
+const staticCertHosts = ["localhost", "127.0.0.1", "::1"];
 
 function findLanAddress() {
   const interfaces = networkInterfaces();
@@ -45,6 +47,52 @@ function run(command, args) {
   }
 }
 
+function readCertMetadata() {
+  if (!existsSync(certMetaPath)) return undefined;
+  try {
+    return JSON.parse(readFileSync(certMetaPath, "utf8"));
+  } catch {
+    return undefined;
+  }
+}
+
+function certMatchesLanAddress(lanAddress) {
+  const metadata = readCertMetadata();
+  return (
+    existsSync(certPath) &&
+    existsSync(keyPath) &&
+    metadata?.lanAddress === lanAddress &&
+    Array.isArray(metadata?.hosts) &&
+    staticCertHosts.every((host) => metadata.hosts.includes(host)) &&
+    metadata.hosts.includes(lanAddress)
+  );
+}
+
+function createDeviceCertificate(lanAddress) {
+  console.log("Creating trusted local HTTPS certificate with mkcert...");
+  run("mkcert", ["-install"]);
+  run("mkcert", [
+    "-cert-file",
+    certPath,
+    "-key-file",
+    keyPath,
+    ...staticCertHosts,
+    lanAddress,
+  ]);
+  writeFileSync(
+    certMetaPath,
+    `${JSON.stringify(
+      {
+        lanAddress,
+        hosts: [...staticCertHosts, lanAddress],
+        updatedAt: new Date().toISOString(),
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
+
 const lanAddress = findLanAddress();
 if (!lanAddress) {
   console.error("Could not find a LAN IPv4 address. Connect to Wi-Fi and try again.");
@@ -54,19 +102,8 @@ if (!lanAddress) {
 requireCommand("mkcert", "Install it with: brew install mkcert nss");
 
 mkdirSync(certDir, { recursive: true });
-if (!existsSync(certPath) || !existsSync(keyPath)) {
-  console.log("Creating trusted local HTTPS certificate with mkcert...");
-  run("mkcert", ["-install"]);
-  run("mkcert", [
-    "-cert-file",
-    certPath,
-    "-key-file",
-    keyPath,
-    "localhost",
-    "127.0.0.1",
-    "::1",
-    lanAddress,
-  ]);
+if (!certMatchesLanAddress(lanAddress)) {
+  createDeviceCertificate(lanAddress);
 }
 
 const caRoot = spawnSync("mkcert", ["-CAROOT"], {
