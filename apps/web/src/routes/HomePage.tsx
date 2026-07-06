@@ -4,6 +4,7 @@ import type { VideoBriefInput } from "@popcorn/shared/v1/types";
 import { AgentRunPreview } from "../components/AgentRunPreview";
 import { HeatLogoMark } from "../components/HeatLogoMark";
 import { Reveal } from "../components/Reveal";
+import { AnonymousUpgradeBanner } from "../components/auth/AnonymousUpgradeBanner";
 import { useAuth } from "../components/auth/AuthProvider";
 import { FaqSection } from "../components/faq/FaqSection";
 import {
@@ -25,6 +26,7 @@ import {
   formatUploadSize,
   LANDING_FOOTAGE_ACCEPT,
   LANDING_MAX_FILES,
+  LANDING_MAX_FILE_SIZE_BYTES,
   newLandingUploadId,
   preflightLandingFootage,
   registerLandingUpload,
@@ -287,7 +289,9 @@ export function HomePage() {
   const guestRunLabel =
     remainingGuestRuns === 1 ? "1 video" : `${remainingGuestRuns} videos`;
   const authDisabled = status === "disabled";
+  const authIsResolving = status === "loading";
   const uploadIsBusy =
+    authIsResolving ||
     isPreparingUploadDraft ||
     uploadItems.some((item) =>
       item.status === "queued" ||
@@ -314,6 +318,9 @@ export function HomePage() {
 
   async function ensureUploadDraftProject(): Promise<string> {
     if (uploadDraftProjectId) return uploadDraftProjectId;
+    if (authIsResolving) {
+      throw new Error("Wait a moment while your session finishes loading.");
+    }
     setIsPreparingUploadDraft(true);
     setUploadError(null);
     try {
@@ -369,6 +376,9 @@ export function HomePage() {
   async function handleLandingUploadFiles(files: FileList | null) {
     setUploadError(null);
     try {
+      if (authIsResolving) {
+        throw new Error("Wait a moment while your session finishes loading.");
+      }
       const selected = await readSelectedFootage(files);
       const { accepted, errors } = preflightLandingFootage(
         selected,
@@ -442,8 +452,9 @@ export function HomePage() {
       if (readyUploadAssetIds.length === 0) {
         throw new Error("Wait for at least one clip to finish uploading.");
       }
-      const needsAnonymousQuota = status !== "authenticated" || isAnonymous;
-      if (needsAnonymousQuota && !authDisabled && !canStartGuestRun()) {
+      const needsAnonymousQuota =
+        !authDisabled && (status !== "authenticated" || isAnonymous);
+      if (needsAnonymousQuota && !canStartGuestRun()) {
         throw new Error("Create an account to make more guest videos.");
       }
 
@@ -513,12 +524,12 @@ export function HomePage() {
     setStartError(null);
     setUploadError(null);
 
-    if (status === "authenticated" && !isAnonymous) {
+    if (authDisabled || (status === "authenticated" && !isAnonymous)) {
       void startLandingUploadRun(nextPendingPrompt);
       return;
     }
 
-    if (authDisabled || canStartGuestRun()) {
+    if (canStartGuestRun()) {
       setPendingUploadPrompt(nextPendingPrompt);
       setModalMode("choice");
       return;
@@ -530,7 +541,7 @@ export function HomePage() {
 
   function createAccount() {
     if (pendingUploadPrompt) {
-      navigate("/settings");
+      setModalError("Use the account form here so the uploaded clips stay attached.");
       return;
     }
     if (pendingPrompt) {
@@ -624,7 +635,8 @@ export function HomePage() {
               <div>
                 <strong>Or start from your clips</strong>
                 <span>
-                  Pick up to {LANDING_MAX_FILES} phone videos or stills. Nothing
+                  Pick up to {LANDING_MAX_FILES} short videos or stills,{" "}
+                  {formatUploadSize(LANDING_MAX_FILE_SIZE_BYTES)} each for now. Nothing
                   generates until you tap create.
                 </span>
               </div>
@@ -638,9 +650,17 @@ export function HomePage() {
                     void handleLandingUploadFiles(event.target.files);
                     event.currentTarget.value = "";
                   }}
-                  disabled={uploadItems.length >= LANDING_MAX_FILES || uploadIsBusy}
+                  disabled={
+                    authIsResolving ||
+                    uploadItems.length >= LANDING_MAX_FILES ||
+                    uploadIsBusy
+                  }
                 />
-                {isPreparingUploadDraft ? "Preparing..." : "Upload clips"}
+                {authIsResolving
+                  ? "Loading session..."
+                  : isPreparingUploadDraft
+                  ? "Preparing..."
+                  : "Upload clips"}
               </label>
             </div>
             {(uploadItems.length > 0 || uploadError) && (
@@ -1017,23 +1037,32 @@ function AccountChoiceModal({
           {guestLimitReached
             ? "Create an account to make more videos and keep every project tied to your workspace."
             : isUpload
-            ? `Your clips are uploaded. Create an account first, or skip this step and start one ${targetLengthSec}-second guest run now.`
+            ? `Your clips are uploaded. Create an account in this guest workspace, or start one ${targetLengthSec}-second run now.`
             : `Create an account before starting, or skip this step and generate one ${targetLengthSec}-second video as a guest.`}
         </p>
+        {isUpload && <AnonymousUpgradeBanner className={styles.inlineUpgrade} />}
         {!authConfigured && (
           <p className={styles.modalError}>
             Supabase auth is not configured in this environment.
           </p>
         )}
         {error && <p className={styles.modalError}>{error}</p>}
-        <div className={styles.modalActions}>
-          <button
-            className={styles.modalPrimary}
-            type="button"
-            onClick={onCreateAccount}
-          >
-            Create account
-          </button>
+        <div
+          className={
+            isUpload
+              ? `${styles.modalActions} ${styles.modalActionsSingle}`
+              : styles.modalActions
+          }
+        >
+          {!isUpload && (
+            <button
+              className={styles.modalPrimary}
+              type="button"
+              onClick={onCreateAccount}
+            >
+              Create account
+            </button>
+          )}
           <button
             className={styles.modalSecondary}
             type="button"
@@ -1043,7 +1072,7 @@ function AccountChoiceModal({
             {skippingAccount
               ? "Starting guest session..."
               : isUpload
-              ? "Skip and create"
+              ? "Create uploaded run"
               : "Skip this step"}
           </button>
         </div>

@@ -398,10 +398,24 @@
   gap: var(--space-3);
 }
 
+.modalActionsSingle {
+  grid-template-columns: 1fr;
+}
+
 .modalSecondary {
   border-color: var(--border);
   background: var(--panel-2);
   color: var(--text);
+}
+
+.inlineUpgrade {
+  padding: var(--space-4);
+  background: var(--panel-2);
+  box-shadow: none;
+}
+
+.inlineUpgrade form {
+  grid-template-columns: 1fr;
 }
 
 .pricingNote {

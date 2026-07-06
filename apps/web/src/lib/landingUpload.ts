@@ -4,7 +4,10 @@ import type { SelectedFootage } from "./upload";
 
 export const LANDING_FOOTAGE_ACCEPT = "video/*,image/*";
 export const LANDING_MAX_FILES = 10;
-export const LANDING_MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024;
+// Current landing transport posts base64 JSON through Express' 25 MB body cap.
+// Keep raw files below the expanded payload limit until signed-storage upload
+// endpoints are available on this branch.
+export const LANDING_MAX_FILE_SIZE_BYTES = 16 * 1024 * 1024;
 export const LANDING_MAX_DURATION_SEC = 120;
 
 export type LandingUploadStatus =
