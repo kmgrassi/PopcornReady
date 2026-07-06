@@ -11,12 +11,14 @@ import {
   createProject,
   deleteProject,
   ensureLocalWorkspace,
+  fillProjectPosterFromFirstFrame,
   findIdempotencyRecord,
   getProject,
   listAssets,
   listProjects,
   saveIdempotencyRecord,
   setBrief,
+  setProjectPoster,
   V1Asset,
 } from "../store";
 import {
@@ -62,6 +64,32 @@ function asset(id: string, projectId: string, workspaceId: string): V1Asset {
     status: "pending",
     source: { type: "remote_url", url: "https://example.com/x.mp4" },
     remoteUrl: "https://example.com/x.mp4",
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function readyRemoteAsset(input: {
+  projectId: string;
+  workspaceId: string;
+  kind: "image" | "video";
+  filename: string;
+  role?: string;
+  graphInputs?: V1Asset["graphInputs"];
+}): V1Asset {
+  const now = new Date().toISOString();
+  return {
+    id: "",
+    schemaVersion: "asset.v1",
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    kind: input.kind,
+    filename: input.filename,
+    status: "ready",
+    role: input.role,
+    source: { type: "remote_url", url: `https://example.com/${input.filename}` },
+    remoteUrl: `https://example.com/${input.filename}`,
+    graphInputs: input.graphInputs,
     createdAt: now,
     updatedAt: now,
   };
@@ -224,6 +252,145 @@ dbTest("listProjects paginates with a cursor", async () => {
 
   const seen = [...page1.items, ...page2.items].map((p) => p.id).sort();
   assert.deepEqual(seen, [...ids].sort());
+});
+
+dbTest("fillProjectPosterFromFirstFrame selects an empty poster slot", async () => {
+  const { project } = await createProject({ workspaceId: "ws_a", name: "upload-first" });
+  const video = await addAsset(
+    readyRemoteAsset({
+      projectId: project.id,
+      workspaceId: "ws_a",
+      kind: "video",
+      filename: "source.mp4",
+    })
+  );
+  const firstFrame = await addAsset(
+    readyRemoteAsset({
+      projectId: project.id,
+      workspaceId: "ws_a",
+      kind: "image",
+      filename: "source-first-frame.png",
+      role: "first_frame",
+      graphInputs: [
+        { assetId: video.id, relation: "input", role: "first_frame_of" },
+      ],
+    })
+  );
+
+  const result = await fillProjectPosterFromFirstFrame({
+    workspaceId: "ws_a",
+    projectId: project.id,
+    assetId: firstFrame.id,
+  });
+
+  assert.equal(result.selected, true);
+  assert.equal(result.project.posterAssetId, firstFrame.id);
+});
+
+dbTest("fillProjectPosterFromFirstFrame leaves a non-empty poster slot untouched", async () => {
+  const { project } = await createProject({ workspaceId: "ws_a", name: "has-poster" });
+  const existingPoster = await addAsset(
+    readyRemoteAsset({
+      projectId: project.id,
+      workspaceId: "ws_a",
+      kind: "image",
+      filename: "ai-poster.png",
+      role: "poster",
+    })
+  );
+  await setProjectPoster("ws_a", project.id, existingPoster.id);
+
+  const video = await addAsset(
+    readyRemoteAsset({
+      projectId: project.id,
+      workspaceId: "ws_a",
+      kind: "video",
+      filename: "later-source.mp4",
+    })
+  );
+  const firstFrame = await addAsset(
+    readyRemoteAsset({
+      projectId: project.id,
+      workspaceId: "ws_a",
+      kind: "image",
+      filename: "later-source-first-frame.png",
+      role: "first_frame",
+      graphInputs: [
+        { assetId: video.id, relation: "input", role: "first_frame_of" },
+      ],
+    })
+  );
+
+  const result = await fillProjectPosterFromFirstFrame({
+    workspaceId: "ws_a",
+    projectId: project.id,
+    assetId: firstFrame.id,
+  });
+
+  assert.equal(result.selected, false);
+  assert.equal(result.project.posterAssetId, existingPoster.id);
+});
+
+dbTest("fillProjectPosterFromFirstFrame lets exactly one concurrent finisher win", async () => {
+  const { project } = await createProject({ workspaceId: "ws_a", name: "race" });
+  const videoA = await addAsset(
+    readyRemoteAsset({
+      projectId: project.id,
+      workspaceId: "ws_a",
+      kind: "video",
+      filename: "a.mp4",
+    })
+  );
+  const videoB = await addAsset(
+    readyRemoteAsset({
+      projectId: project.id,
+      workspaceId: "ws_a",
+      kind: "video",
+      filename: "b.mp4",
+    })
+  );
+  const frameA = await addAsset(
+    readyRemoteAsset({
+      projectId: project.id,
+      workspaceId: "ws_a",
+      kind: "image",
+      filename: "a-first-frame.png",
+      role: "first_frame",
+      graphInputs: [
+        { assetId: videoA.id, relation: "input", role: "first_frame_of" },
+      ],
+    })
+  );
+  const frameB = await addAsset(
+    readyRemoteAsset({
+      projectId: project.id,
+      workspaceId: "ws_a",
+      kind: "image",
+      filename: "b-first-frame.png",
+      role: "first_frame",
+      graphInputs: [
+        { assetId: videoB.id, relation: "input", role: "first_frame_of" },
+      ],
+    })
+  );
+
+  const results = await Promise.all([
+    fillProjectPosterFromFirstFrame({
+      workspaceId: "ws_a",
+      projectId: project.id,
+      assetId: frameA.id,
+    }),
+    fillProjectPosterFromFirstFrame({
+      workspaceId: "ws_a",
+      projectId: project.id,
+      assetId: frameB.id,
+    }),
+  ]);
+  const selected = results.filter((result) => result.selected);
+  const after = await getProject("ws_a", project.id);
+
+  assert.equal(selected.length, 1);
+  assert.ok([frameA.id, frameB.id].includes(after.posterAssetId ?? ""));
 });
 
 dbTest("assets are listed only within their project", async () => {
