@@ -128,6 +128,9 @@ function parseSaveStoryboard(input: unknown): SaveStoryboardInput {
           dialogueSummary: optionalString(beatValue.dialogueSummary),
           narration: optionalString(beatValue.narration),
           durationSec: optionalNumber(beatValue.durationSec, `${beatPath}.durationSec`, fields),
+          shotType: optionalString(beatValue.shotType),
+          camera: optionalString(beatValue.camera),
+          framing: optionalString(beatValue.framing),
           status: parseStatus(
             beatValue.status,
             "draft",
