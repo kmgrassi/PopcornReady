@@ -14,6 +14,7 @@ import type {
   GenerationRun,
   GenerationStageType,
   ProjectVisibility,
+  V1Asset,
 } from "@popcorn/shared/v1/types";
 import {
   ApiClientError,
@@ -144,6 +145,10 @@ export const queryKeys = {
     ["projects", projectId, "storyboard"] as const,
   projectStoryboardJob: (projectId: string) =>
     ["projects", projectId, "storyboards", "generate", "latest"] as const,
+  projectAssets: (
+    projectId: string,
+    params: { limit?: number; cursor?: string | null } = {},
+  ) => ["projects", projectId, "assets", params] as const,
   dashboardSummary: (workspaceId: string) =>
     ["dashboard", "summary", workspaceId] as const,
   workspaceGenerationRuns: (
@@ -220,6 +225,10 @@ function shouldPollStoryboardJob(
   response: ProjectStoryboardJobResponse | undefined,
 ): boolean {
   return Boolean(response?.job && !isTerminal(response.job.status));
+}
+
+function shouldPollProjectAssets(assets: V1Asset[] | undefined): boolean {
+  return Boolean(assets?.some((asset) => asset.status === "processing"));
 }
 
 function studioProjectTimelineKey(
@@ -675,6 +684,27 @@ export function useProjectStoryboardJobQuery(projectId: string, enabled = true) 
   });
 }
 
+export function useProjectAssetsQuery(
+  projectId: string,
+  params: { limit?: number; cursor?: string | null } = { limit: 100 },
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: queryKeys.projectAssets(projectId, params),
+    queryFn: ({ signal }: { signal: QuerySignal }) =>
+      v1Api.listProjectAssets(projectId, params, signal),
+    enabled: enabled && Boolean(projectId),
+    refetchInterval: (query) => {
+      const data = query.state.data as Awaited<
+        ReturnType<typeof v1Api.listProjectAssets>
+      > | undefined;
+      if (!shouldPollProjectAssets(data?.assets)) return false;
+      if (document.visibilityState === "hidden") return false;
+      return POLL_INTERVAL_MS;
+    },
+  });
+}
+
 export function useSaveProjectStoryboardMutation(projectId: string) {
   const client = useQueryClient();
 
@@ -788,6 +818,7 @@ export function useRegisterProjectUploadMutation(projectId: string) {
       v1Api.registerProjectUpload(projectId, input),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ["workspaces"] });
+      void client.invalidateQueries({ queryKey: ["projects", projectId, "assets"] });
       void client.invalidateQueries({ queryKey: queryKeys.project(projectId) });
     },
   });

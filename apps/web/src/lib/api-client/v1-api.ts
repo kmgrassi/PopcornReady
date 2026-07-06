@@ -55,6 +55,7 @@ import type {
   WorkspaceModelSettingsResponse,
   WorkspaceOutputsResponse,
   ProjectsResponse,
+  ProjectAssetsResponse,
 } from "./types";
 
 function studioProjectFromV1(project: V1Project): Project {
@@ -290,6 +291,18 @@ export const v1Api = {
       {
         method: "POST",
         body: input,
+      }
+    ),
+  listProjectAssets: (
+    projectId: string,
+    params?: { limit?: number; cursor?: string | null },
+    signal?: AbortSignal
+  ) =>
+    apiRequest<ProjectAssetsResponse>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/assets`,
+      {
+        signal,
+        searchParams: params,
       }
     ),
   getProject: (projectId: string) =>

@@ -8,6 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "start": "vite preview",
     "preview": "vite preview",
+    "test": "tsx --test \"src/**/*.test.ts\"",
     "test:e2e": "playwright test",
     "test:e2e:local-db": "node ../../scripts/with-local-supabase-env.mjs pnpm --filter @popcorn/web test:e2e",
     "test:e2e:hosted": "POPCORN_E2E_AUTH_MODE=supabase playwright test e2e/auth-hosted.spec.ts",
@@ -34,6 +35,7 @@
     "@types/react-dom": "^18",
     "@vitejs/plugin-react": "^4.3.4",
     "typescript": "^5.6.3",
+    "tsx": "^4.22.3",
     "vite": "^5.4.11"
   }
 }

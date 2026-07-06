@@ -23,6 +23,7 @@ import { LibraryPage } from "./routes/LibraryPage";
 import { LoginPage } from "./routes/LoginPage";
 import { ProjectCreationPage } from "./routes/ProjectCreationPage";
 import { ProjectDetailPage } from "./routes/ProjectDetailPage";
+import { ProjectMediaGalleryPage } from "./routes/ProjectMediaGalleryPage";
 import { ProjectStepPage } from "./routes/ProjectStepPage";
 import { ProjectWatchPage } from "./routes/ProjectWatchPage";
 import { PublicProjectPage } from "./routes/PublicProjectPage";
@@ -84,6 +85,10 @@ export function App() {
           <Route
             path="/projects/:projectId/storyboard"
             element={<StoryboardPage />}
+          />
+          <Route
+            path="/projects/:projectId/media"
+            element={<ProjectMediaGalleryPage />}
           />
           <Route
             path="/projects/:projectId/watch"
