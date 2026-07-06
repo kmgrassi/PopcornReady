@@ -307,6 +307,10 @@ test("projects stage item purpose metadata from orchestrator tools", () => {
         id: "audio_action",
         outputAssetIds: ["audio_asset_1"],
       }),
+      actionFixture("fit_audio_to_picture", {
+        id: "audio_fit_action",
+        outputAssetIds: ["audio_fit_critique_1"],
+      }),
       actionFixture("assemble_timeline", {
         id: "timeline_action",
         outputAssetIds: ["timeline_asset_1"],
@@ -325,9 +329,29 @@ test("projects stage item purpose metadata from orchestrator tools", () => {
       { kind: "image", purpose: "keyframe", assetId: "keyframe_asset_1" },
       { kind: "video", purpose: "shot", assetId: "clip_asset_1" },
       { kind: "audio", purpose: "audio", assetId: "audio_asset_1" },
+      { kind: "audio", purpose: "audio", assetId: "audio_fit_critique_1" },
       { kind: "timeline", purpose: "timeline", assetId: "timeline_asset_1" },
     ]
   );
+});
+
+test("projects audio fit actions into the audio generation stage", () => {
+  const payload = projectRunDetailFromParts(
+    runFixture({ status: "running" }),
+    [],
+    [
+      actionFixture("fit_audio_to_picture", {
+        id: "audio_fit_action",
+        outputAssetIds: ["audio_fit_critique_1"],
+      }),
+    ]
+  );
+
+  const audioStage = payload.stages.find(
+    (candidate) => candidate.toolName === "fit_audio_to_picture"
+  );
+  assert.equal(audioStage?.type, "audio_generation");
+  assert.deepEqual(audioStage?.artifactIds, ["audio_fit_critique_1"]);
 });
 
 test("projects data-only tool outputs as non-visual stage items", () => {

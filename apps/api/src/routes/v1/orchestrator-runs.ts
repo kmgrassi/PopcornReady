@@ -233,7 +233,7 @@ function requestedGateTools(body: unknown): string[] {
       case "asset_generation":
         return ["generate_anchor", "generate_keyframe", "generate_clip"];
       case "audio_generation":
-        return ["generate_audio"];
+        return ["generate_audio", "fit_audio_to_picture"];
       case "timeline_assembly":
         return ["assemble_timeline"];
       case "quality_review":
@@ -257,7 +257,7 @@ function stopAfterTools(body: unknown): string[] {
     case "asset_generation":
       return ["generate_keyframe"];
     case "audio_generation":
-      return ["generate_audio"];
+      return ["fit_audio_to_picture"];
     case "timeline_assembly":
       return ["assemble_timeline"];
     case "quality_review":
@@ -787,7 +787,11 @@ const SELECTION_SLOTS: { order: number; exact: string[]; prefixes: string[] }[] 
     exact: ["visual_anchors"],
     prefixes: ["anchor:", "beat_keyframe:", "beat_clip:"],
   },
-  { order: GENERATION_STAGE_ORDER.audio_generation, exact: [], prefixes: ["soundtrack:", "voiceover:"] },
+  {
+    order: GENERATION_STAGE_ORDER.audio_generation,
+    exact: [],
+    prefixes: ["soundtrack:", "voiceover:", "audio_fit:"],
+  },
   { order: GENERATION_STAGE_ORDER.timeline_assembly, exact: ["cut"], prefixes: [] },
 ];
 
