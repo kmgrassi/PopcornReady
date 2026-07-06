@@ -65,3 +65,18 @@
     padding: 7px 12px;
   }
 }
+
+@media (max-width: 360px) {
+  .authActions {
+    gap: 4px;
+  }
+
+  :global(.web-shell-nav) a.secondary {
+    min-height: 32px;
+    padding: 5px 8px;
+  }
+
+  :global(.web-shell-nav) a.cta {
+    padding: 6px 10px;
+  }
+}
