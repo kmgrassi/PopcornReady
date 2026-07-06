@@ -167,6 +167,20 @@ pick clips → watch the run, with no desktop detour.
 
 ### PR 4 — Mobile media hardening
 
+**HEVC/HEIC decision:** V1 accepts common phone outputs at intake (`.mov`
+/ `video/quicktime`, HEVC-flavored video, HEIC/HEIF stills) and marks sources
+that need normalization with `requiresTranscode`. Actual transcode-on-ingest is
+left to the signed-upload processing job from PRs 1–2; the legacy base64 upload
+path only validates and records the need so it does not pretend a synchronous
+ffmpeg pass happened.
+
+**Initial caps:** 10 files per selection, 200 MB / 120 seconds per video, 25 MB
+per image, 50 MB per audio file. These are intentionally conservative for
+mobile browser memory and uplink reliability, and should be tuned from upload
+analytics once the landing flow is live. Until PRs 1–2 move the active path to
+signed direct upload, the legacy base64 JSON path is capped at 18 MB per file so
+accepted uploads stay below the API's request-body limit after base64 overhead.
+
 **Scope:** accept what phones actually produce — `.mov`/HEVC (iOS default),
 HEIC stills, portrait rotation metadata — validating server-side during PR 1's
 probe (transcode-on-ingest decision documented here if a provider can't take

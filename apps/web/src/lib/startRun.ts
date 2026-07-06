@@ -9,6 +9,7 @@ import type {
   VideoBriefInput,
 } from "@popcorn/shared/v1/types";
 import type { CompositionMode } from "@popcorn/shared/v1/types";
+import { inferMobileUploadKind } from "@popcorn/shared/mobile-upload-policy";
 import { v1Api } from "./api-client";
 import { assertGuestRunAllowed, recordGuestRunStarted } from "./guestRunLimit";
 import type { BriefDraft } from "../components/studio/useStudioFlow";
@@ -64,16 +65,7 @@ function compositionModeFromDraft(draft: BriefDraft): CompositionMode {
 }
 
 function assetKindForFile(file: File): AssetKind | null {
-  if (file.type.startsWith("video/")) return "video";
-  if (file.type.startsWith("image/")) return "image";
-  if (file.type.startsWith("audio/")) return "audio";
-
-  const ext = file.name.split(".").pop()?.toLowerCase();
-  if (!ext) return null;
-  if (["mp4", "mov", "m4v", "webm"].includes(ext)) return "video";
-  if (["png", "jpg", "jpeg", "webp", "gif"].includes(ext)) return "image";
-  if (["mp3", "wav", "m4a", "aac", "ogg"].includes(ext)) return "audio";
-  return null;
+  return inferMobileUploadKind(file.name, file.type);
 }
 
 async function fileToBase64(file: File): Promise<string> {

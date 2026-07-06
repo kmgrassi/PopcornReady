@@ -9,6 +9,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
+import { validateMobileUploadCandidate } from "@popcorn/shared/mobile-upload-policy";
 import { assetStorageKey, writeAssetObject } from "@/lib/storage/asset-write";
 import { createObjectStore } from "@/lib/storage/object-store";
 import { AuthContext } from "./auth";
@@ -501,6 +502,29 @@ export async function registerAsset(
     if (bytes.length === 0) {
       throw new ApiError("asset_invalid", "Uploaded asset bytes are empty.");
     }
+    const validation = validateMobileUploadCandidate({
+      filename,
+      mimeType: input.source.mimeType,
+      sizeBytes: bytes.length,
+      durationSec: input.durationSec,
+      kind,
+      transport: "base64_json",
+    });
+    if (!validation.ok) {
+      throw new ApiError(
+        "asset_invalid",
+        validation.issue?.message ?? "Uploaded media is not supported.",
+        {
+          reason: validation.issue?.code ?? "media_unreadable",
+          ...(validation.issue?.limit !== undefined
+            ? { limit: validation.issue.limit }
+            : {}),
+          ...(validation.issue?.actual !== undefined
+            ? { actual: validation.issue.actual }
+            : {}),
+        },
+      );
+    }
 
     const asset: V1Asset = {
       id: "",
@@ -513,6 +537,7 @@ export async function registerAsset(
       source: {
         type: "multipart_upload",
         ...(input.source.mimeType ? { mimeType: input.source.mimeType } : {}),
+        ...(validation.requiresTranscode ? { requiresTranscode: true } : {}),
       },
       durationSec: input.durationSec,
       context: input.context,
@@ -575,6 +600,29 @@ export async function registerAsset(
       });
     }
     const probe = probeUploadedMedia({ bytes: object.body, kind, filename });
+    const validation = validateMobileUploadCandidate({
+      filename,
+      mimeType: object.contentType || metadata.contentType,
+      sizeBytes: object.body.length,
+      durationSec: probe.durationSec ?? input.durationSec,
+      kind,
+      transport: "direct_upload",
+    });
+    if (!validation.ok) {
+      throw new ApiError(
+        validation.issue?.code === "file_too_large" ? "object_too_large" : "asset_invalid",
+        validation.issue?.message ?? "Uploaded media is not supported.",
+        {
+          reason: validation.issue?.code ?? "media_unreadable",
+          ...(validation.issue?.limit !== undefined
+            ? { limit: validation.issue.limit }
+            : {}),
+          ...(validation.issue?.actual !== undefined
+            ? { actual: validation.issue.actual }
+            : {}),
+        },
+      );
+    }
 
     const asset: V1Asset = {
       id: "",
@@ -584,7 +632,11 @@ export async function registerAsset(
       kind,
       filename,
       status: "pending",
-      source: { type: "storage_upload", path: uploadPath },
+      source: {
+        type: "storage_upload",
+        path: uploadPath,
+        ...(validation.requiresTranscode ? { requiresTranscode: true } : {}),
+      },
       durationSec: probe.durationSec ?? input.durationSec,
       context: input.context,
       userContext: input.userContext,

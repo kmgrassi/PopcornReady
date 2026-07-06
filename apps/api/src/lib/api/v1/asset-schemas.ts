@@ -120,8 +120,13 @@ const ASSET_RELATIONSHIP_TYPES: AssetRelationshipType[] = [
 export type AgentAssetSource =
   | { type: "remote_url"; url: string }
   | { type: "local_path"; path: string }
-  | { type: "multipart_upload"; dataBase64?: string; mimeType?: string }
-  | { type: "storage_upload"; path: string }
+  | {
+      type: "multipart_upload";
+      dataBase64?: string;
+      mimeType?: string;
+      requiresTranscode?: boolean;
+    }
+  | { type: "storage_upload"; path: string; requiresTranscode?: boolean }
   | { type: "generated"; generatedAssetId: string }
   | {
       type: "catalog";
