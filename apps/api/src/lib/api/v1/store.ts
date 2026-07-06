@@ -1107,6 +1107,16 @@ async function currentPosterSelection(
   return (selected as CurrentSelectionRow | null) ?? null;
 }
 
+function isFirstFrameImageAsset(row: AssetRow): boolean {
+  return (
+    row.media === "image" &&
+    row.status === "ready" &&
+    row.inputs.some(
+      (input) => input.relation === "input" && input.role === "first_frame_of"
+    )
+  );
+}
+
 async function posterSelectionIsManual(
   db: SupabaseClient,
   selection: CurrentSelectionRow | null
@@ -1252,6 +1262,67 @@ export async function selectGeneratedProjectPoster(input: {
     action.id
   );
   return mapProjectWithProjection(db, projectRow);
+}
+
+export async function fillProjectPosterFromFirstFrame(input: {
+  workspaceId: string;
+  projectId: string;
+  assetId: string;
+}): Promise<{ selected: boolean; project: V1Project }> {
+  const db = getServiceSupabase();
+  const projectData = await runQuery(
+    "store.fillProjectPosterFromFirstFrame project",
+    db
+      .from("projects")
+      .select("*")
+      .eq("id", input.projectId)
+      .eq("workspace_id", input.workspaceId)
+      .neq("status", "deleted")
+      .maybeSingle()
+  );
+  if (!projectData) throw notFound(`Project not found: ${input.projectId}`);
+  const projectRow = projectData as ProjectRow;
+
+  const row = await getAssetRow(
+    db,
+    input.workspaceId,
+    input.projectId,
+    input.assetId,
+    "fillProjectPosterFromFirstFrame asset"
+  );
+  if (!isFirstFrameImageAsset(row)) {
+    throw new ApiError(
+      "validation_failed",
+      `Asset ${input.assetId} is not a ready first-frame image in project ${input.projectId}.`
+    );
+  }
+
+  if (await currentPosterSelection(db, input.projectId)) {
+    return { selected: false, project: await mapProjectWithProjection(db, projectRow) };
+  }
+
+  const action = await createAction({
+    projectId: input.projectId,
+    tool: "select_first_frame_poster",
+    status: "applied",
+    params: { assetId: input.assetId },
+    inputAssetIds: [input.assetId],
+    outputAssetIds: [input.assetId],
+    rationale: "Auto-select the first uploaded video frame as the project poster.",
+  });
+  const selected = await runQuery(
+    "store.fillProjectPosterFromFirstFrame select",
+    db.rpc("select_empty_project_poster_from_first_frame", {
+      p_project_id: input.projectId,
+      p_asset_id: input.assetId,
+      p_set_by_action_id: action.id,
+    })
+  );
+
+  return {
+    selected: Boolean(selected),
+    project: await mapProjectWithProjection(db, projectRow),
+  };
 }
 
 // Browser-usable URL for a poster asset. Uses the same storage resolver as the
