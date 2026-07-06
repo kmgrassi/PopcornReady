@@ -86,6 +86,12 @@
   letter-spacing: 0;
 }
 
+@media (max-width: 360px) {
+  .wordmarkRounded {
+    display: none;
+  }
+}
+
 .footerWordmark {
   font-family:
     ui-rounded,

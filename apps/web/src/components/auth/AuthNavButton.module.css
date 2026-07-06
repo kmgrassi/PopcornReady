@@ -12,6 +12,12 @@
   color: var(--accent-2);
 }
 
+:global(.web-shell-nav) a.secondary:focus-visible,
+:global(.web-shell-nav) a.cta:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
 /* Primary auth call-to-action in the public header. Scoped under the global
    .web-shell-nav so it overrides the plain nav-link color in globals.css. */
 :global(.web-shell-nav) a.cta {
@@ -28,11 +34,49 @@
   filter: brightness(1.06);
 }
 
-/* On mobile keep this CTA reachable and drop only the secondary marketing
-   anchors, so the header stays a single tidy row with a clear entry point. */
+/* On mobile keep auth choices reachable and drop only the marketing anchors,
+   so the header stays a tidy row with a clear primary action. */
 @media (max-width: 760px) {
-  :global(.web-shell-nav > a),
-  .secondary {
+  :global(.web-shell-nav > a) {
     display: none;
+  }
+
+  .authActions {
+    gap: 6px;
+  }
+
+  :global(.web-shell-nav) a.secondary {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    color: var(--text);
+    line-height: 1;
+  }
+
+  :global(.web-shell-nav) a.secondary:hover {
+    border-color: var(--accent-border);
+    color: var(--text);
+  }
+
+  :global(.web-shell-nav) a.cta {
+    padding: 7px 12px;
+  }
+}
+
+@media (max-width: 360px) {
+  .authActions {
+    gap: 4px;
+  }
+
+  :global(.web-shell-nav) a.secondary {
+    min-height: 32px;
+    padding: 5px 8px;
+  }
+
+  :global(.web-shell-nav) a.cta {
+    padding: 6px 10px;
   }
 }
