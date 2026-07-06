@@ -396,7 +396,9 @@ export function ProjectsPage() {
                 <Link
                   className={styles.cardLink}
                   to={isPublic ? publicProjectPath(project.id) : projectDetailPath(project.id)}
-                  aria-label={`Open ${project.name}. Status: ${titleCase(project.status)}`}
+                  aria-label={`Open ${project.name}. Status: ${titleCase(
+                    project.status,
+                  )}. Visibility: ${titleCase(project.visibility ?? "public")}`}
                 >
                   <span
                     className={`${styles.statusDot} ${statusDotClass(project.status)}`}
@@ -415,6 +417,9 @@ export function ProjectsPage() {
                     <span className={styles.rowSub}>Updated {formatDate(project.updatedAt)}</span>
                   </div>
                   <div className={styles.cardMeta}>
+                    <span className={styles.visibilityMeta}>
+                      <VisibilityBadge visibility={project.visibility} />
+                    </span>
                     <span>{project.hasStoryboard ? "Storyboard ready" : "No storyboard yet"}</span>
                     <span>Created {formatDate(project.createdAt)}</span>
                   </div>

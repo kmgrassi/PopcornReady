@@ -431,6 +431,10 @@
   background: var(--surface-2);
 }
 
+.cardMeta > .visibilityMeta {
+  background: color-mix(in srgb, var(--surface-2) 76%, transparent);
+}
+
 /* Load more */
 .loadMore {
   display: flex;
