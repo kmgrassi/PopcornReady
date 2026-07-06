@@ -96,6 +96,7 @@ export async function planEdit(input: {
   aspectRatio: string;
   storyContext?: StoryContext | null;
   feedback?: string | null;
+  footageGrounding?: string | null;
 }): Promise<ShotPlan> {
   const sys = `${PREAMBLE}
 
@@ -121,6 +122,7 @@ Style: ${input.style}
 Aspect ratio: ${input.aspectRatio}
 Story context:
 ${storyContextForPrompt(input.storyContext)}
+${input.footageGrounding?.trim() ? `\n${input.footageGrounding.trim()}\n` : ""}
 ${feedback}
 
 Produce the edit plan.`;

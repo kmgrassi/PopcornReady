@@ -175,6 +175,12 @@ export interface Beat {
   name: string; // e.g. "hook", "problem", "solution", "proof", "cta"
   durationSec: number;
   intent: string;
+  sourceWindow?: {
+    assetId?: string;
+    startSec: number;
+    endSec: number;
+    label?: string;
+  };
 }
 
 // A Scene is the continuity tier above beats: a shared setting, cast, and look

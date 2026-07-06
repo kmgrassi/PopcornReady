@@ -90,6 +90,7 @@ test("draft_script validates input before reading graph state", () => {
       briefReads += 1;
       return activeBrief;
     },
+    buildFootageGroundingContext: async () => ({ excerpts: [], promptText: null }),
   });
 
   assert.throws(() => tool.parseInput({ unsupported: true }), ToolInputError);
@@ -102,6 +103,7 @@ test("draft_script requires a brief before the blueprint", async () => {
     getActiveProjectStoryBlueprint: async () => {
       throw new Error("must not read blueprint when brief is missing");
     },
+    buildFootageGroundingContext: async () => ({ excerpts: [], promptText: null }),
   });
 
   const result = (await tool.execute({}, { auth, projectId: "proj_1" })) as ToolCallResult;
@@ -119,17 +121,20 @@ test("draft_script persists a script draft with brief and blueprint provenance",
         storyBlueprintId: string;
         storyBlueprintAssetId: string;
         sceneCount: number;
+        groundingInputs?: { assetId: string; role?: string; contentHash?: string }[];
       }
     | undefined;
   const tool = createDraftScriptTool({
     getActiveProjectBrief: async () => activeBrief,
     getActiveProjectStoryBlueprint: async () => activeBlueprint,
+    buildFootageGroundingContext: async () => ({ excerpts: [], promptText: null }),
     addProjectScriptDraft: async (input) => {
       persisted = {
         briefAssetId: input.briefAssetId,
         storyBlueprintId: input.storyBlueprintId,
         storyBlueprintAssetId: input.storyBlueprintAssetId,
         sceneCount: input.scriptDraft.scenes.length,
+        groundingInputs: input.groundingInputs,
       };
       return {
         scriptDraftId: "script_1",
@@ -147,6 +152,7 @@ test("draft_script persists a script draft with brief and blueprint provenance",
     storyBlueprintId: "blueprint_1",
     storyBlueprintAssetId: "blueprint_asset_1",
     sceneCount: 2,
+    groundingInputs: [],
   });
   if (result.status === "succeeded") {
     assert.deepEqual(result.resourceIds, ["script_1", "script_asset_1"]);
@@ -157,4 +163,55 @@ test("draft_script persists a script draft with brief and blueprint provenance",
       true
     );
   }
+});
+
+test("draft_script includes transcript excerpts and moment windows when present", async () => {
+  const tool = createDraftScriptTool({
+    getActiveProjectBrief: async () => activeBrief,
+    getActiveProjectStoryBlueprint: async () => activeBlueprint,
+    buildFootageGroundingContext: async () => ({
+      excerpts: [
+        {
+          assetId: "clip_asset_1",
+          contentHash: "clip_hash_1",
+          label: "birthday.mov",
+          transcript: "Maya says this is the best cake ever",
+          moments: [
+            {
+              startSec: 2,
+              endSec: 5,
+              label: "cake reveal",
+              description: "Maya points at the candles",
+            },
+          ],
+        },
+      ],
+      promptText: "unused by deterministic script draft",
+    }),
+    addProjectScriptDraft: async (input) => {
+      assert.match(input.scriptDraft.narration ?? "", /Maya says this is the best cake ever/);
+      assert.match(input.scriptDraft.narration ?? "", /2\.0-5\.0s/);
+      assert.equal(
+        input.scriptDraft.scenes[0].dialogue[0].text,
+        "Maya says this is the best cake ever"
+      );
+      assert.deepEqual(input.groundingInputs, [
+        {
+          assetId: "clip_asset_1",
+          relation: "input",
+          role: "footage_grounding",
+          position: 2,
+          contentHash: "clip_hash_1",
+        },
+      ]);
+      return {
+        scriptDraftId: "script_1",
+        scriptDraftAssetId: "script_asset_1",
+      };
+    },
+  });
+
+  const result = await tool.execute({}, { auth, projectId: "proj_1" });
+
+  assert.equal(result.status, "succeeded");
 });
