@@ -55,7 +55,7 @@ function isRecord(value: unknown): value is JsonRecord {
 function isGenerationRun(value: unknown): value is GenerationRun {
   return (
     isRecord(value) &&
-    typeof value.id === "string" &&
+    typeof value.runId === "string" &&
     typeof value.projectId === "string" &&
     typeof value.status === "string"
   );
