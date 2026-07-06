@@ -79,12 +79,34 @@ async function registerAnonymousDeviceTokenBestEffort() {
   }
 }
 
-async function recoverAnonymousWorkspaceBestEffort(token: string) {
+type AnonymousRecoveryStatus = "recovered" | "missing" | "failed";
+
+async function recoverAnonymousWorkspace(token: string): Promise<AnonymousRecoveryStatus> {
   try {
-    await v1Api.recoverAnonymousDeviceWorkspace(token);
+    const result = await v1Api.recoverAnonymousDeviceWorkspace(token);
+    return result.recovered ? "recovered" : "missing";
   } catch (err) {
     console.warn("Could not recover anonymous workspace from device token.", err);
+    return "failed";
   }
+}
+
+async function recoverOrRegisterAnonymousDevice() {
+  const recoveryToken = getAnonymousDeviceRecoveryToken();
+  if (!recoveryToken) {
+    await registerAnonymousDeviceTokenBestEffort();
+    return;
+  }
+
+  const recoveryStatus = await recoverAnonymousWorkspace(recoveryToken);
+  if (recoveryStatus === "failed") {
+    return;
+  }
+
+  if (recoveryStatus === "missing") {
+    clearAnonymousDeviceRecoveryToken();
+  }
+  await registerAnonymousDeviceTokenBestEffort();
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -196,20 +218,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(existingData.session.user);
         setStatus("authenticated");
         if (isAnonymousUser(existingData.session.user)) {
-          await registerAnonymousDeviceTokenBestEffort();
+          await recoverOrRegisterAnonymousDevice();
         }
         return;
       }
 
-      const recoveryToken = getAnonymousDeviceRecoveryToken();
       const { data, error: signInError } = await supabase.auth.signInAnonymously();
       if (signInError || !data.session?.user) {
         throw signInError || new Error("No Supabase anonymous session returned.");
       }
-      if (recoveryToken) {
-        await recoverAnonymousWorkspaceBestEffort(recoveryToken);
-      }
-      await registerAnonymousDeviceTokenBestEffort();
+      await recoverOrRegisterAnonymousDevice();
       setUser(data.session.user);
       setStatus("authenticated");
     } catch (err) {

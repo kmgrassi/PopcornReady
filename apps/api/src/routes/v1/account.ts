@@ -112,10 +112,8 @@ accountRouter.post("/account/anonymous-device-token", async (req, res) => {
             user_id: publicUserId,
             revoked_at: null,
           },
-          { onConflict: "token_hash" }
+          { onConflict: "token_hash", ignoreDuplicates: true }
         )
-        .select("id")
-        .single()
     );
 
     res.status(200).json({ ok: true });

@@ -107,9 +107,9 @@ begin
   set owner_id = p_current_user_id
   where id = v_source_workspace_id;
 
-  delete from public.workspace_members
-  where workspace_id = v_source_workspace_id
-    and user_id in (v_source_user_id, p_current_user_id);
+  delete from public.workspace_members wm
+  where wm.workspace_id = v_source_workspace_id
+    and wm.user_id in (v_source_user_id, p_current_user_id);
 
   insert into public.workspace_members (workspace_id, user_id, role)
   values (v_source_workspace_id, p_current_user_id, 'owner')

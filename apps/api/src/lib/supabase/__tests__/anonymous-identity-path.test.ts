@@ -95,6 +95,11 @@ test("anonymous device recovery stores only hashed tokens and moves domain works
     /update public\.workspaces[\s\S]*?set owner_id = p_current_user_id/,
     "recovery should transfer the workspace to the current domain user"
   );
+  assert.match(
+    deviceRecoveryMigration,
+    /delete from public\.workspace_members wm[\s\S]*?wm\.workspace_id = v_source_workspace_id/,
+    "workspace member cleanup must qualify workspace_id inside the RETURNS TABLE function"
+  );
 });
 
 test("anonymous device recovery API is anonymous-only and hashes the browser secret", () => {
@@ -112,6 +117,11 @@ test("anonymous device recovery API is anonymous-only and hashes the browser sec
     accountRoutes,
     /\.from\("anonymous_device_recovery_tokens"\)/,
     "registration should write the dedicated recovery-token table"
+  );
+  assert.match(
+    accountRoutes,
+    /ignoreDuplicates: true/,
+    "registration must not rebind an existing recovery token to a new anonymous user"
   );
   assert.match(
     accountRoutes,
