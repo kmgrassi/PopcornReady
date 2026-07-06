@@ -11,6 +11,7 @@ import { Button, ButtonLink } from "../components/ui/Button";
 import { ImageWithSkeleton } from "../components/ui/ImageWithSkeleton";
 import { ErrorState } from "../components/ui/StateCard";
 import { VisibilityBadge } from "../components/ui/VisibilityBadge";
+import { ProjectUploadButton } from "../components/project-upload/ProjectUploadButton";
 import { storyboardProgress, type StoryboardProgress } from "../lib/v1/storyboard/progress";
 import {
   useGenerateProjectStoryboardMutation,
@@ -148,6 +149,11 @@ export function ProjectDetailPage() {
       readOnly={false}
       headerActions={
         <>
+          <ProjectUploadButton
+            projectId={projectId}
+            source="project_view"
+            label="Upload more"
+          />
           <ButtonLink
             variant="secondary"
             to={
