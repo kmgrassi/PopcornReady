@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { AgentRunPreview } from "../components/AgentRunPreview";
 import { HeatLogoMark } from "../components/HeatLogoMark";
 import { Reveal } from "../components/Reveal";
@@ -22,11 +22,27 @@ import {
   type PendingLandingPrompt,
 } from "../lib/guestGeneration";
 import { runProgressPath } from "../lib/quickStartRun";
+import {
+  drainShareTargetFiles,
+  sharedFootageNames,
+} from "../lib/shareTargetFiles";
+import { readSelectedFootage, type SelectedFootage } from "../lib/upload";
 import styles from "./HomePage.module.css";
 
 const GITHUB_URL = "https://github.com/kmgrassi/popcornready";
 const PROMPT_MIN_LENGTH = 12;
 const LENGTH_OPTIONS = [15, 30, 45, 60];
+
+function formatBytes(bytes: number) {
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const exponent = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+    units.length - 1,
+  );
+  const value = bytes / 1024 ** exponent;
+  return `${value.toFixed(value >= 10 || exponent === 0 ? 0 : 1)} ${units[exponent]}`;
+}
 
 const FEATURES = [
   {
@@ -221,6 +237,7 @@ function HeatLogoScale({ score }: { score: number }) {
 
 export function HomePage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const {
     status,
     error: authError,
@@ -236,6 +253,10 @@ export function HomePage() {
   const [modalMode, setModalMode] = useState<"choice" | "limit">("choice");
   const [modalError, setModalError] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
+  const [shareTargetFootage, setShareTargetFootage] = useState<SelectedFootage[]>(
+    [],
+  );
+  const [shareTargetError, setShareTargetError] = useState<string | null>(null);
   const [isSkippingAccount, setIsSkippingAccount] = useState(false);
   const [isStartingRun, setIsStartingRun] = useState(false);
   const normalizedPrompt = prompt.trim();
@@ -249,6 +270,49 @@ export function HomePage() {
   const guestRunLabel =
     remainingGuestRuns === 1 ? "1 video" : `${remainingGuestRuns} videos`;
   const authDisabled = status === "disabled";
+  const hasSharedFootage = shareTargetFootage.length > 0;
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const shareTargetStatus = params.get("share-target");
+    if (!shareTargetStatus) return;
+
+    let cancelled = false;
+    async function loadSharedFiles() {
+      if (shareTargetStatus === "empty") {
+        setShareTargetError("No video or image files were shared.");
+        return;
+      }
+      if (shareTargetStatus === "failed") {
+        setShareTargetError("Popcorn Ready could not read the shared files.");
+        return;
+      }
+
+      try {
+        const files = await drainShareTargetFiles();
+        if (cancelled) return;
+        if (files.length === 0) {
+          setShareTargetError("No shared files were available.");
+          return;
+        }
+        setShareTargetFootage(await readSelectedFootage(files));
+        setShareTargetError(null);
+      } catch (err) {
+        if (!cancelled) {
+          setShareTargetError(
+            err instanceof Error
+              ? err.message
+              : "Popcorn Ready could not read the shared files.",
+          );
+        }
+      }
+    }
+
+    void loadSharedFiles();
+    return () => {
+      cancelled = true;
+    };
+  }, [location.search]);
 
   async function startLandingRun(nextPendingPrompt: PendingLandingPrompt) {
     setModalError(null);
@@ -261,6 +325,7 @@ export function HomePage() {
       }
       const result = await startPendingLandingPromptRun(nextPendingPrompt, {
         enforceGuestRunLimit: needsAnonymousSession || isAnonymous,
+        selectedFootage: shareTargetFootage,
       });
       navigate(runProgressPath(result));
     } catch (err) {
@@ -359,6 +424,31 @@ export function HomePage() {
               placeholder="A 30-second launch video for a neighborhood bakery's new midnight cookie menu..."
               rows={4}
             />
+            {hasSharedFootage && (
+              <section
+                className={styles.sharedFootage}
+                aria-label="Shared footage ready for upload"
+              >
+                <div>
+                  <strong>
+                    {shareTargetFootage.length === 1
+                      ? "1 shared clip is ready"
+                      : `${shareTargetFootage.length} shared clips are ready`}
+                  </strong>
+                  <p>
+                    Add a brief, then create a run with these clips.
+                  </p>
+                </div>
+                <ul>
+                  {shareTargetFootage.map((item) => (
+                    <li key={`${item.name}-${item.sizeBytes}`}>
+                      <span>{item.name}</span>
+                      <em>{formatBytes(item.sizeBytes)}</em>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
             <div className={styles.promptControls}>
               <label className={styles.lengthControl} htmlFor="landing-video-length">
                 <span>Length</span>
@@ -389,6 +479,10 @@ export function HomePage() {
             <p className={styles.promptHint}>
               {startError
                 ? startError
+                : shareTargetError
+                ? shareTargetError
+                : hasSharedFootage
+                ? `Shared from your phone: ${sharedFootageNames(shareTargetFootage)}.`
                 : promptTooShort
                 ? `Add a little more detail before starting.`
                 : `Guests can start ${guestRunLabel} before creating an account.`}
