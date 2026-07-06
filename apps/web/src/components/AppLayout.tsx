@@ -28,6 +28,7 @@ import {
   getDashboardBreadcrumbs,
 } from "../lib/dashboardBreadcrumbs";
 import { queryClient, useMeQuery, useProjectQuery } from "../lib/queryClient";
+import { UploadQueueProvider } from "../lib/uploadQueue";
 import styles from "./AppLayout.module.css";
 
 const STORAGE_KEY = "popcorn-ready-theme";
@@ -298,7 +299,9 @@ export function RootProviders({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <UploadQueueProvider>{children}</UploadQueueProvider>
+        </AuthProvider>
       </ToastProvider>
     </QueryClientProvider>
   );
