@@ -107,19 +107,36 @@ React state** (per repo conventions — it is unsaved UI state, not server
 state; server data comes via TanStack Query on the assets list).
 
 **Intent bar.** When ≥1 asset is selected, a sticky bottom bar (thumb reach on
-mobile) presents **intent chips** and the CTA:
+mobile) presents **one free-text input + one preset dropdown + one Create
+button** (decided 2026-07-06; replaces an earlier chip-row design):
 
-- `Make a montage` — "Cut these into a montage with a fitting soundtrack."
-- `Make a trailer` — "Cut a dramatic 30-second trailer from these clips."
-- `Narrate these` — "Add warm narration grounded in what happens, keep the
-  best original audio." (enabled by the voiceover-sync stack)
-- `Something else…` — free-text brief.
+- **The text input is primary and always present** — "What should we make
+  with these?" It accepts anything; it is the same intent channel as the
+  landing prompt box, so the UI never implies the agent can only do a fixed
+  menu of things.
+- **The preset dropdown is the discovery mechanism** — a select ("Choose an
+  idea…") listing what the system does well:
+  - `Make a montage` — "Cut these into a montage with a fitting soundtrack."
+  - `Make a trailer` — "Cut a dramatic 30-second trailer from these clips."
+  - `Narrate these` — "Add warm narration grounded in what happens, keep the
+    best original audio." (voiceover-sync stack)
+  - (list grows from the ideas catalog as capabilities ship)
 
-Tapping a chip opens a **one-line brief field prefilled from the template**
-(editable — "make it about Maya's first swim") above the single yellow
-**Create** button. Create = the explicit run trigger (no auto-run), calling
-the uploaded-footage entrypoint with the brief + selected asset ids →
-existing run-progress page.
+  Picking a preset **prefills the text input with its editable template** —
+  preset and free text are one input with scaffolding, not two modes. The
+  user can pick "Make a montage" then append "…set at sunset, end on the
+  dog." Editing the text after picking simply keeps the edited text; the
+  dropdown is a writer, not a state the payload depends on.
+- **Create** is the single popcorn-yellow CTA on the screen and the explicit
+  run trigger (no auto-run), calling the uploaded-footage entrypoint with the
+  brief text + selected asset ids → existing run-progress page. Disabled
+  until the text input is non-empty and the selection satisfies the
+  preset-independent minimums (≥1 ready asset).
+
+Preset constraints (`minSelection`, `mediaKinds`) surface as inline hints
+rather than disabled menu items where possible ("Narration needs at least one
+video — add one or pick a different idea"), since a dropdown hides its
+options' disabled states until opened.
 
 **After the run.** The gallery persists — assets are reusable. The watch page
 links back ("make another from your clips"), landing on the gallery with
@@ -184,16 +201,21 @@ of placeholder tiles.
 ### PR 3 — Selection + intent bar + create
 
 **Scope:** selection state (local reducer; select/clear/select-all,
-count), sticky intent bar, template list with per-template constraints
-(`minSelection`, `mediaKinds`), prefilled editable brief, Create →
-uploaded-footage entrypoint with `selectedAssetIds` → run-progress redirect.
-Includes the entrypoint body verification/extension and its API-side
-validation (ids must be `ready`, project-owned, media kinds allowed).
+count), sticky intent bar (free-text input + preset dropdown + Create, per
+the UI spec), preset list with per-preset constraints (`minSelection`,
+`mediaKinds`) surfaced as inline hints, dropdown-prefills-input behavior,
+Create → uploaded-footage entrypoint with `selectedAssetIds` → run-progress
+redirect. Includes the entrypoint body verification/extension and its
+API-side validation (ids must be `ready`, project-owned, media kinds
+allowed).
 
-**Tests:** unit — selection reducer; template constraint gating (Narrate
-disabled with images only; montage needs ≥2); payload composition (brief +
-ids). API unit — entrypoint rejects foreign/not-ready ids with typed errors.
-Preview e2e at mobile viewport: select 3 tiles → chip → edit brief → Create →
+**Tests:** unit — selection reducer; preset-prefill behavior (picking a
+preset writes the template; subsequent edits win; re-picking overwrites);
+constraint hints (narration with images only; montage needs ≥2); Create
+gating (empty text disables); payload composition (brief text + ids — the
+payload derives from the text box, never from dropdown state). API unit —
+entrypoint rejects foreign/not-ready ids with typed errors. Preview e2e at
+mobile viewport: select 3 tiles → pick preset → edit brief text → Create →
 run-progress.
 
 **Done when:** "Make a montage from these" goes from three taps to a running
@@ -233,8 +255,10 @@ montage's provenance names exactly the selected clips.
   intent). Default: not in v1; free signals only until the button.
 - **Selection persistence:** survive a refresh (e.g. sessionStorage) or
   acceptable to lose? Default: lose it — reselecting is cheap on a gallery.
-- **Intent chip set:** start with montage/trailer/narrate/custom, or fewer?
-  Which is the default-highlighted chip (PRODUCT.md wants one obvious next
-  step)?
+- ~~Intent chip set / default-highlighted chip?~~ **Decided 2026-07-06:**
+  free-text input (primary, always present) + preset dropdown that prefills
+  it; Create is the screen's single yellow CTA. Remaining sub-question:
+  initial preset list order and the dropdown's placeholder copy.
+- **Preset ordering:** montage first (strongest multi-select aha)?
 - **Audio uploads in the gallery:** voice memos (ideas #6) would extend
   `mediaKinds` — defer until the audio-first path is scoped.
