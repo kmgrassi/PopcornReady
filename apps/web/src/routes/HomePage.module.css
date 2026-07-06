@@ -258,6 +258,63 @@
   line-height: var(--line-body);
 }
 
+.sharedFootage {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+}
+
+.sharedFootage strong {
+  display: block;
+  color: var(--text);
+  font-size: var(--text-sm);
+  line-height: var(--line-tight);
+}
+
+.sharedFootage p,
+.sharedFootage ul {
+  margin: 0;
+}
+
+.sharedFootage p {
+  margin-top: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--line-body);
+}
+
+.sharedFootage ul {
+  display: grid;
+  gap: var(--space-2);
+  padding: 0;
+  list-style: none;
+}
+
+.sharedFootage li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
+.sharedFootage li span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sharedFootage li em {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-style: normal;
+}
+
 .promptControls {
   display: grid;
   grid-template-columns: minmax(140px, 190px) minmax(0, 1fr);

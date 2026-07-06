@@ -9,7 +9,12 @@ import {
   type UseQueryOptions,
 } from "@tanstack/react-query";
 import type { DashboardSummaryResponse } from "@popcorn/shared/v1/dashboard";
-import type { AssetKind, GenerationRun, GenerationStageType } from "@popcorn/shared/v1/types";
+import type {
+  AssetKind,
+  GenerationRun,
+  GenerationStageType,
+  ProjectVisibility,
+} from "@popcorn/shared/v1/types";
 import {
   ApiClientError,
   v1Api,
@@ -505,6 +510,51 @@ export function useDeleteProjectMutation(projectId: string) {
     onSuccess: () => {
       client.removeQueries({ queryKey: queryKeys.project(projectId) });
       void client.invalidateQueries({ queryKey: ["projects"] });
+      void client.invalidateQueries({ queryKey: ["dashboard"] });
+      void client.invalidateQueries({ queryKey: ["workspaces"] });
+      void client.invalidateQueries({ queryKey: ["studio", "project"] });
+    },
+  });
+}
+
+export function useSetProjectVisibilityMutation(projectId: string) {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: (visibility: ProjectVisibility) =>
+      v1Api.setProjectVisibility(projectId, visibility),
+    meta: {
+      successMessage: "Project visibility updated",
+      errorMessage: "Could not update project visibility",
+    },
+    onMutate: async (visibility) => {
+      await client.cancelQueries({ queryKey: queryKeys.project(projectId) });
+      const previousProject = client.getQueryData<Awaited<ReturnType<typeof v1Api.getProject>>>(
+        queryKeys.project(projectId),
+      );
+
+      if (previousProject?.project) {
+        client.setQueryData(queryKeys.project(projectId), {
+          ...previousProject,
+          project: {
+            ...previousProject.project,
+            visibility,
+          },
+        });
+      }
+
+      return { previousProject };
+    },
+    onError: (_error, _visibility, context) => {
+      if (context?.previousProject) {
+        client.setQueryData(queryKeys.project(projectId), context.previousProject);
+      }
+    },
+    onSuccess: (data) => {
+      client.setQueryData(queryKeys.project(projectId), data);
+      client.removeQueries({ queryKey: projectQueryKeys.publicProject(projectId) });
+      void client.invalidateQueries({ queryKey: ["projects"] });
+      void client.invalidateQueries({ queryKey: queryKeys.project(projectId) });
       void client.invalidateQueries({ queryKey: ["dashboard"] });
       void client.invalidateQueries({ queryKey: ["workspaces"] });
       void client.invalidateQueries({ queryKey: ["studio", "project"] });

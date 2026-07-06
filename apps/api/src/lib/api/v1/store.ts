@@ -74,6 +74,11 @@ import {
   type ScriptDraft,
   type Timeline,
 } from "@popcorn/shared/types";
+import type {
+  TranscriptAssetContent,
+  TranscriptSegment,
+  TranscriptWord,
+} from "@popcorn/shared/transcript";
 import type { Asset } from "@popcorn/shared/assets/types";
 import type { GeneratedStoryboardTile } from "@/lib/generative/storyboard-tile";
 import {
@@ -616,6 +621,39 @@ interface DataAssetRow {
   updated_at: string;
 }
 
+interface TranscriptSegmentRow {
+  id: string;
+  schema_version: string;
+  workspace_id: string;
+  project_id: string;
+  transcript_asset_id: string;
+  position: number;
+  start_sec: number;
+  end_sec: number;
+  text: string;
+  speaker: string | null;
+  words: TranscriptWord[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectTranscript {
+  asset: {
+    id: string;
+    workspaceId: string;
+    projectId: string;
+    lineageId: string;
+    version: number;
+    role: string | null;
+    contentHash: string | null;
+    inputsFingerprint: string | null;
+    createdAt: string;
+    updatedAt: string;
+    content: TranscriptAssetContent;
+  };
+  segments: TranscriptSegment[];
+}
+
 // Typed-JSONB guardrail (assets_content_schema_check / assets_params_schema_check):
 // jsonb document payloads must carry a schema marker. Stamp it on write, strip
 // it when projecting the payload back out as a domain object.
@@ -631,7 +669,9 @@ function markedContent(
     | "script_draft"
     | "timeline"
     | "narration_script"
-    | "critique",
+    | "audio_mix"
+    | "critique"
+    | "transcript",
   content: unknown
 ): Record<string, unknown> {
   const schema =
@@ -1402,7 +1442,9 @@ async function insertDataAsset(input: {
     | "plan"
     | "story_blueprint"
     | "narration_script"
+    | "transcript"
     | "composite"
+    | "audio_mix"
     | "critique";
   contentSchemaKind?:
     | "brief"
@@ -1413,6 +1455,8 @@ async function insertDataAsset(input: {
     | "script_draft"
     | "timeline"
     | "narration_script"
+    | "audio_mix"
+    | "transcript"
     | "critique";
   role: string;
   content: unknown;
@@ -1454,6 +1498,167 @@ async function insertDataAsset(input: {
     input.db.from("assets").insert(row).select("*").single()
   );
   return data as DataAssetRow;
+}
+
+function transcriptSegmentFromRow(row: TranscriptSegmentRow): TranscriptSegment {
+  return {
+    id: row.id,
+    schemaVersion: "transcriptSegment.v1",
+    position: row.position,
+    startSec: row.start_sec,
+    endSec: row.end_sec,
+    text: row.text,
+    ...(row.speaker ? { speaker: row.speaker } : {}),
+    words: row.words ?? [],
+  };
+}
+
+function projectTranscriptFromRows(
+  asset: DataAssetRow,
+  segments: TranscriptSegmentRow[]
+): ProjectTranscript {
+  return {
+    asset: {
+      id: asset.id,
+      workspaceId: asset.workspace_id,
+      projectId: asset.project_id,
+      lineageId: asset.lineage_id,
+      version: asset.version,
+      role: asset.role,
+      contentHash: asset.content_hash,
+      inputsFingerprint: asset.inputs_fingerprint,
+      createdAt: iso(asset.created_at),
+      updatedAt: iso(asset.updated_at),
+      content: unmarkedContent<TranscriptAssetContent>(asset.content),
+    },
+    segments: segments.map(transcriptSegmentFromRow),
+  };
+}
+
+export async function addProjectTranscript(input: {
+  workspaceId: string;
+  projectId: string;
+  sourceAssetId: string;
+  sourceContentHash?: string;
+  transcript: TranscriptAssetContent;
+  provider: string;
+  language?: string;
+  jobId?: string;
+}): Promise<ProjectTranscript> {
+  const db = getServiceSupabase();
+  const source = await getAssetRow(
+    db,
+    input.workspaceId,
+    input.projectId,
+    input.sourceAssetId,
+    "addProjectTranscript source"
+  );
+  const latest = (await runQuery(
+    "store.addProjectTranscript latest",
+    db
+      .from("assets")
+      .select("lineage_id, version")
+      .eq("project_id", input.projectId)
+      .eq("kind", "transcript")
+      .eq("media", "data")
+      .contains("inputs", [{ assetId: source.id, relation: "input", role: "transcribed_from" }])
+      .order("version", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+  )) as { lineage_id: string; version: number } | null;
+  const action = await createAction({
+    projectId: input.projectId,
+    tool: "transcribe_audio",
+    status: "running",
+    params: {
+      provider: input.provider,
+      ...(input.language ? { language: input.language } : {}),
+    },
+    inputAssetIds: [source.id],
+    ...(input.jobId ? { jobIds: [input.jobId] } : {}),
+    rationale: "Persist a word-timestamped transcript for uploaded audio or video.",
+  });
+  const graphInputs: GraphAssetInput[] = [
+    {
+      assetId: source.id,
+      relation: "input",
+      role: "transcribed_from",
+      position: 0,
+      ...(input.sourceContentHash ?? source.content_hash
+        ? { contentHash: input.sourceContentHash ?? source.content_hash ?? undefined }
+        : {}),
+    },
+  ];
+  const asset = await insertDataAsset({
+    db,
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    kind: "transcript",
+    contentSchemaKind: "transcript",
+    role: "transcript",
+    content: input.transcript,
+    inputs: graphInputs,
+    ...(latest ? { lineageId: latest.lineage_id, version: latest.version + 1 } : {}),
+    createdByActionId: action.id,
+  });
+  const segmentRows = input.transcript.segments.map((segment) => ({
+    workspace_id: input.workspaceId,
+    project_id: input.projectId,
+    transcript_asset_id: asset.id,
+    position: segment.position,
+    start_sec: segment.startSec,
+    end_sec: segment.endSec,
+    text: segment.text,
+    speaker: segment.speaker ?? null,
+    words: segment.words,
+  }));
+  const insertedSegments = segmentRows.length
+    ? ((await runQuery(
+        "store.addProjectTranscript segments",
+        db.from("transcript_segments").insert(segmentRows).select("*")
+      )) as TranscriptSegmentRow[])
+    : [];
+  await updateAction(action.id, { status: "applied", outputAssetIds: [asset.id] });
+  return projectTranscriptFromRows(asset, insertedSegments);
+}
+
+export async function getLatestProjectTranscript(input: {
+  workspaceId: string;
+  projectId: string;
+  sourceAssetId: string;
+}): Promise<ProjectTranscript | null> {
+  const db = getServiceSupabase();
+  const source = await getAssetRow(
+    db,
+    input.workspaceId,
+    input.projectId,
+    input.sourceAssetId,
+    "getLatestProjectTranscript source"
+  );
+  const asset = (await runQuery(
+    "store.getLatestProjectTranscript asset",
+    db
+      .from("assets")
+      .select("*")
+      .eq("workspace_id", input.workspaceId)
+      .eq("project_id", input.projectId)
+      .eq("kind", "transcript")
+      .eq("media", "data")
+      .contains("inputs", [{ assetId: source.id, relation: "input", role: "transcribed_from" }])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+  )) as DataAssetRow | null;
+  if (!asset) return null;
+  const segments = (await runQuery(
+    "store.getLatestProjectTranscript segments",
+    db
+      .from("transcript_segments")
+      .select("*")
+      .eq("transcript_asset_id", asset.id)
+      .order("position", { ascending: true })
+  )) as TranscriptSegmentRow[];
+  return projectTranscriptFromRows(asset, segments ?? []);
 }
 
 export interface ActiveAssetSelection {
@@ -1545,10 +1750,13 @@ type GraphAssetKind =
   | "clip"
   | "audio_track"
   | "narration_script"
+  | "transcript"
   | "critique"
   | "plan"
   | "story_blueprint"
   | "composite"
+  | "transition"
+  | "audio_mix"
   | "render"
   | "poster";
 
@@ -1996,25 +2204,29 @@ export async function addProjectPlan(input: {
   plan: ShotPlan;
   briefAssetId?: string;
   briefContentHash?: string;
+  groundingInputs?: GraphAssetInput[];
 }): Promise<{ planAssetId: string }> {
   const db = getServiceSupabase();
-  const planInputs: GraphAssetInput[] = input.briefAssetId
-    ? [
-        {
-          assetId: input.briefAssetId,
-          relation: "input",
-          role: "brief",
-          position: 0,
-          ...(input.briefContentHash ? { contentHash: input.briefContentHash } : {}),
-        },
-      ]
-    : [];
+  const planInputs: GraphAssetInput[] = [
+    ...(input.briefAssetId
+      ? [
+          {
+            assetId: input.briefAssetId,
+            relation: "input" as const,
+            role: "brief",
+            position: 0,
+            ...(input.briefContentHash ? { contentHash: input.briefContentHash } : {}),
+          },
+        ]
+      : []),
+    ...(input.groundingInputs ?? []),
+  ];
   const action = await createAction({
     projectId: input.projectId,
     tool: "plan_shots",
     status: "running",
     params: { source: "plan_shots" },
-    inputAssetIds: input.briefAssetId ? [input.briefAssetId] : [],
+    inputAssetIds: planInputs.map((assetInput) => assetInput.assetId),
     rationale: "Persist the shot plan as the project's active plan asset.",
   });
   const planAsset = await insertDataAsset({
@@ -2489,6 +2701,7 @@ export async function addProjectScriptDraft(input: {
   storyBlueprintId: string;
   storyBlueprintAssetId: string;
   storyBlueprintContentHash?: string;
+  groundingInputs?: GraphAssetInput[];
   supersedesId?: string;
 }): Promise<{ scriptDraftId: string; scriptDraftAssetId: string }> {
   const db = getServiceSupabase();
@@ -2509,13 +2722,14 @@ export async function addProjectScriptDraft(input: {
         ? { contentHash: input.storyBlueprintContentHash }
         : {}),
     },
+    ...(input.groundingInputs ?? []),
   ];
   const action = await createAction({
     projectId: input.projectId,
     tool: "draft_script",
     status: "running",
     params: { source: "draft_script" },
-    inputAssetIds: [input.briefAssetId, input.storyBlueprintAssetId],
+    inputAssetIds: graphInputs.map((assetInput) => assetInput.assetId),
     rationale: "Persist the scene-level script draft for later voice and shot planning.",
   });
   const now = new Date().toISOString();

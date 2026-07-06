@@ -15,6 +15,11 @@ import type {
   StoryDurationClass,
   StoryDurationPlan,
 } from "@popcorn/shared/types";
+import {
+  buildFootageGroundingContext,
+  groundingGraphInputs,
+  type FootageGroundingContext,
+} from "./footage-grounding";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 
@@ -32,12 +37,14 @@ export interface DraftScriptDeps {
   getActiveProjectBrief: typeof realGetActiveProjectBrief;
   getActiveProjectStoryBlueprint: typeof realGetActiveProjectStoryBlueprint;
   addProjectScriptDraft: typeof realAddProjectScriptDraft;
+  buildFootageGroundingContext: typeof buildFootageGroundingContext;
 }
 
 const defaultDeps: DraftScriptDeps = {
   getActiveProjectBrief: realGetActiveProjectBrief,
   getActiveProjectStoryBlueprint: realGetActiveProjectStoryBlueprint,
   addProjectScriptDraft: realAddProjectScriptDraft,
+  buildFootageGroundingContext,
 };
 
 const str = { type: "string" } as const;
@@ -278,10 +285,39 @@ function fallbackAct(blueprint: StoryBlueprint): StoryBlueprintAct {
   };
 }
 
+function groundingNarrationParts(
+  grounding?: FootageGroundingContext | null
+): { narration: string[]; dialogue: ScriptDialogueLine[] } {
+  if (!grounding || grounding.excerpts.length === 0) return { narration: [], dialogue: [] };
+  const narration = grounding.excerpts.flatMap((excerpt) => {
+    const parts: string[] = [];
+    if (excerpt.transcript) parts.push(`From the original audio: "${excerpt.transcript}"`);
+    for (const moment of excerpt.moments.slice(0, 2)) {
+      parts.push(
+        `At ${moment.startSec.toFixed(1)}-${moment.endSec.toFixed(1)}s, ${moment.label}${moment.description ? `: ${moment.description}` : ""}.`
+      );
+    }
+    return parts;
+  });
+  const firstTranscript = grounding.excerpts.find((excerpt) => excerpt.transcript)?.transcript;
+  return {
+    narration,
+    dialogue: firstTranscript
+      ? [
+          {
+            text: firstTranscript,
+            delivery: "quote from uploaded footage transcript",
+          },
+        ]
+      : [],
+  };
+}
+
 export function draftScriptFromState(input: {
   brief: ActiveProjectBrief;
   blueprint: ActiveProjectStoryBlueprint;
   feedback?: string;
+  footageGrounding?: FootageGroundingContext | null;
 }): Omit<
   ScriptDraft,
   "id" | "projectId" | "briefAssetId" | "storyBlueprintId" | "createdAt" | "updatedAt"
@@ -291,11 +327,13 @@ export function draftScriptFromState(input: {
   const acts = story.acts.length > 0 ? story.acts : [fallbackAct(story)];
   const characters = story.characters.slice(0, 2);
   const perSceneDuration = sceneDuration(story.targetLengthSec, acts.length);
+  const grounding = groundingNarrationParts(input.footageGrounding);
 
   const scenes: ScriptScene[] = acts.map((act, index) => {
     const narrationParts = [
       act.summary,
       act.purpose,
+      index === 0 ? grounding.narration.join(" ") : undefined,
       index === acts.length - 1 ? story.ending : undefined,
       input.feedback ? `Revision note: ${input.feedback}` : undefined,
     ].filter(Boolean);
@@ -304,9 +342,12 @@ export function draftScriptFromState(input: {
       title: act.title,
       summary: act.summary,
       narration: narrationParts.join(" "),
-      dialogue: characters.map((character, characterIndex) =>
-        characterLine(character, act, characterIndex)
-      ),
+      dialogue:
+        index === 0 && grounding.dialogue.length > 0
+          ? grounding.dialogue
+          : characters.map((character, characterIndex) =>
+              characterLine(character, act, characterIndex)
+            ),
       visualIntent: `${story.tone ?? input.brief.brief.style ?? "cinematic"} scene for ${act.title}.`,
       durationSec: perSceneDuration,
     };
@@ -377,8 +418,17 @@ export function createDraftScriptTool(
 
       const blueprint = await resolved.getActiveProjectStoryBlueprint(context.projectId);
       if (!blueprint) return blueprintRequired();
+      const footageGrounding = await resolved.buildFootageGroundingContext({
+        workspaceId: context.auth.workspaceId,
+        projectId: context.projectId,
+      });
 
-      const scriptDraft = draftScriptFromState({ brief, blueprint, feedback: input.feedback });
+      const scriptDraft = draftScriptFromState({
+        brief,
+        blueprint,
+        feedback: input.feedback,
+        footageGrounding,
+      });
       const persisted = await resolved.addProjectScriptDraft({
         workspaceId: context.auth.workspaceId,
         projectId: context.projectId,
@@ -388,6 +438,7 @@ export function createDraftScriptTool(
         storyBlueprintId: blueprint.storyBlueprintId,
         storyBlueprintAssetId: blueprint.assetId,
         storyBlueprintContentHash: blueprint.contentHash,
+        groundingInputs: groundingGraphInputs(footageGrounding, 2),
       });
 
       const output: ScriptDraft = {

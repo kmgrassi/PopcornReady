@@ -7,6 +7,7 @@ import {
 } from "@popcorn/shared/audio-alignment";
 import {
   Clip,
+  RenderAudioLayer,
   RenderDurationPolicy,
   RenderPlan,
   Timeline,
@@ -18,6 +19,8 @@ export interface CreateRenderPlanInput {
   timeline: Timeline;
   timelineId?: string;
   audioClips?: Clip[];
+  audioMixAssetId?: string;
+  audioMixLayers?: RenderAudioLayer[];
   durationPolicy?: DurationPolicy;
   maxDeltaSec?: number;
   quality?: string;
@@ -47,15 +50,21 @@ export function createRenderPlanFromTimeline(
   const { width, height } = dims(input.timeline.aspectRatio);
   const timelineSec = timelineDurationSec(input.timeline);
   const audioClips = input.audioClips ?? [];
+  const audioMixLayers = input.audioMixLayers ?? [];
   const audioDurationSec = audioClips.reduce(
     (max, clip) => Math.max(max, audioClipDurationSec(clip)),
     0
   );
+  const layeredAudioDurationSec = audioMixLayers.reduce(
+    (max, layer) => Math.max(max, layer.outSec),
+    0
+  );
+  const effectiveAudioDurationSec = Math.max(audioDurationSec, layeredAudioDurationSec);
   const durationPolicy = input.durationPolicy ?? DEFAULT_DURATION_POLICY;
   const alignment = evaluateExportPolicy({
     policy: durationPolicy,
     timelineDurationSec: timelineSec,
-    audioDurationSec,
+    audioDurationSec: effectiveAudioDurationSec,
     maxDeltaSec: input.maxDeltaSec,
   });
 
@@ -68,8 +77,13 @@ export function createRenderPlanFromTimeline(
       durationPolicy,
       durationSec: alignment.exportDurationSec,
       timelineDurationSec: timelineSec,
-      audioDurationSec,
-      audioAssetIds: audioClips.map((clip) => clip.id),
+      audioDurationSec: effectiveAudioDurationSec,
+      ...(input.audioMixAssetId ? { audioMixAssetId: input.audioMixAssetId } : {}),
+      audioAssetIds:
+        audioMixLayers.length > 0
+          ? [...new Set(audioMixLayers.map((layer) => layer.audioAssetId))]
+          : audioClips.map((clip) => clip.id),
+      ...(audioMixLayers.length > 0 ? { audioMixLayers } : {}),
       output: {
         format: "mp4",
         codec: "h264",

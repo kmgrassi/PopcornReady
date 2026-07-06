@@ -9,6 +9,11 @@ export type ApiErrorCode =
   | "idempotency_conflict"
   | "asset_not_ready"
   | "asset_invalid"
+  | "asset_not_transcribable"
+  | "no_audio_stream"
+  | "object_not_found"
+  | "object_too_large"
+  | "media_unreadable"
   | "account_collision"
   | "prompt_required"
   | "brief_missing"
@@ -31,6 +36,11 @@ const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
   idempotency_conflict: 409,
   asset_not_ready: 409,
   asset_invalid: 400,
+  asset_not_transcribable: 422,
+  no_audio_stream: 422,
+  object_not_found: 404,
+  object_too_large: 413,
+  media_unreadable: 422,
   account_collision: 409,
   // The caller must supply a prompt because the asset has none stored to reuse.
   prompt_required: 422,

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import type { VideoBriefInput } from "@popcorn/shared/v1/types";
 import { AgentRunPreview } from "../components/AgentRunPreview";
 import { HeatLogoMark } from "../components/HeatLogoMark";
@@ -11,6 +11,7 @@ import {
   LandingSection,
   LandingSectionHeader,
 } from "../components/landing/LandingSection";
+import { HeroProductMockup } from "../components/landing/HeroProductMockup";
 import { WorkflowStages } from "../components/landing/WorkflowStages";
 import { CloseButton } from "../components/ui/CloseButton";
 import { faqsForPlacement } from "../content/faqs";
@@ -35,12 +36,27 @@ import {
 import { v1Api } from "../lib/api-client";
 import { recordGuestRunStarted } from "../lib/guestRunLimit";
 import { runProgressPath } from "../lib/quickStartRun";
-import { readSelectedFootage } from "../lib/upload";
+import {
+  drainShareTargetFiles,
+  sharedFootageNames,
+} from "../lib/shareTargetFiles";
+import { readSelectedFootage, type SelectedFootage } from "../lib/upload";
 import styles from "./HomePage.module.css";
 
 const GITHUB_URL = "https://github.com/kmgrassi/popcornready";
 const PROMPT_MIN_LENGTH = 12;
 const LENGTH_OPTIONS = [15, 30, 45, 60];
+
+function formatBytes(bytes: number) {
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const exponent = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+    units.length - 1,
+  );
+  const value = bytes / 1024 ** exponent;
+  return `${value.toFixed(value >= 10 || exponent === 0 ? 0 : 1)} ${units[exponent]}`;
+}
 
 const FEATURES = [
   {
@@ -253,6 +269,7 @@ function buildLandingUploadBrief(
 
 export function HomePage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const {
     status,
     error: authError,
@@ -271,6 +288,10 @@ export function HomePage() {
   const [modalError, setModalError] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [shareTargetFootage, setShareTargetFootage] = useState<SelectedFootage[]>(
+    [],
+  );
+  const [shareTargetError, setShareTargetError] = useState<string | null>(null);
   const [isSkippingAccount, setIsSkippingAccount] = useState(false);
   const [isStartingRun, setIsStartingRun] = useState(false);
   const [isPreparingUploadDraft, setIsPreparingUploadDraft] = useState(false);
@@ -306,6 +327,7 @@ export function HomePage() {
     normalizedPrompt.length >= PROMPT_MIN_LENGTH &&
     !uploadIsBusy &&
     !isStartingRun;
+  const hasSharedFootage = shareTargetFootage.length > 0;
 
   function updateUploadItem(
     id: string,
@@ -406,6 +428,48 @@ export function HomePage() {
     }
   }
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const shareTargetStatus = params.get("share-target");
+    if (!shareTargetStatus) return;
+
+    let cancelled = false;
+    async function loadSharedFiles() {
+      if (shareTargetStatus === "empty") {
+        setShareTargetError("No video or image files were shared.");
+        return;
+      }
+      if (shareTargetStatus === "failed") {
+        setShareTargetError("Popcorn Ready could not read the shared files.");
+        return;
+      }
+
+      try {
+        const files = await drainShareTargetFiles();
+        if (cancelled) return;
+        if (files.length === 0) {
+          setShareTargetError("No shared files were available.");
+          return;
+        }
+        setShareTargetFootage(await readSelectedFootage(files));
+        setShareTargetError(null);
+      } catch (err) {
+        if (!cancelled) {
+          setShareTargetError(
+            err instanceof Error
+              ? err.message
+              : "Popcorn Ready could not read the shared files.",
+          );
+        }
+      }
+    }
+
+    void loadSharedFiles();
+    return () => {
+      cancelled = true;
+    };
+  }, [location.search]);
+
   async function startLandingRun(nextPendingPrompt: PendingLandingPrompt) {
     setModalError(null);
     setStartError(null);
@@ -417,6 +481,7 @@ export function HomePage() {
       }
       const result = await startPendingLandingPromptRun(nextPendingPrompt, {
         enforceGuestRunLimit: needsAnonymousSession || isAnonymous,
+        selectedFootage: shareTargetFootage,
       });
       navigate(runProgressPath(result));
     } catch (err) {
@@ -610,6 +675,7 @@ export function HomePage() {
             and refines the final cut — one AI-native production, not a pile of
             clips.
           </p>
+          <HeroProductMockup />
           <form
             className={styles.promptComposer}
             onSubmit={(event) => {
@@ -700,6 +766,31 @@ export function HomePage() {
                 {uploadError && <p className={styles.uploadError}>{uploadError}</p>}
               </div>
             )}
+            {hasSharedFootage && (
+              <section
+                className={styles.sharedFootage}
+                aria-label="Shared footage ready for upload"
+              >
+                <div>
+                  <strong>
+                    {shareTargetFootage.length === 1
+                      ? "1 shared clip is ready"
+                      : `${shareTargetFootage.length} shared clips are ready`}
+                  </strong>
+                  <p>
+                    Add a brief, then create a run with these clips.
+                  </p>
+                </div>
+                <ul>
+                  {shareTargetFootage.map((item) => (
+                    <li key={`${item.name}-${item.sizeBytes}`}>
+                      <span>{item.name}</span>
+                      <em>{formatBytes(item.sizeBytes)}</em>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
             <div className={styles.promptControls}>
               <label className={styles.lengthControl} htmlFor="landing-video-length">
                 <span>Length</span>
@@ -736,6 +827,10 @@ export function HomePage() {
                 ? startError
                 : uploadIsBusy
                 ? "Uploading clips now. You can write the brief while they move."
+                : shareTargetError
+                ? shareTargetError
+                : hasSharedFootage
+                ? `Shared from your phone: ${sharedFootageNames(shareTargetFootage)}.`
                 : promptTooShort
                 ? `Add a little more detail before starting.`
                 : readyUploadAssetIds.length > 0

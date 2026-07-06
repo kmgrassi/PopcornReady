@@ -101,8 +101,7 @@
 }
 
 .copyButton,
-.secondaryButton,
-.dangerButton {
+.secondaryButton {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-2);
@@ -135,29 +134,7 @@
   text-decoration: none;
 }
 
-.primaryButton {
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: var(--cta);
-  color: var(--cta-contrast);
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--text-md);
-  font-weight: 850;
-  min-height: 42px;
-  padding: 0 var(--space-5);
-  box-shadow: 0 12px 28px color-mix(in srgb, var(--cta) 18%, transparent);
-}
-
-.dangerButton {
-  border-color: var(--danger-border);
-  background: transparent;
-  color: var(--danger-text);
-}
-
-.primaryButton:disabled,
 .secondaryButton:disabled,
-.dangerButton:disabled,
 .copyButton:disabled {
   cursor: wait;
   opacity: 0.66;
@@ -272,8 +249,7 @@
 }
 
 .card,
-.sidePanel,
-.reviewPanel {
+.sidePanel {
   border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--surface) 88%, var(--bg));
@@ -394,200 +370,6 @@
   line-height: var(--line-heading);
 }
 
-.reviewActionRow {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-}
-
-.reviewPanel {
-  display: grid;
-  gap: var(--space-5);
-  padding: var(--space-7);
-}
-
-.reviewIntro {
-  max-width: 720px;
-}
-
-.reviewBadge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 26px;
-  border: 1px solid color-mix(in srgb, var(--cta) 32%, var(--border));
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--cta) 12%, transparent);
-  color: var(--cta);
-  font-size: var(--text-xs);
-  font-weight: 850;
-  letter-spacing: 0.08em;
-  padding: 0 var(--space-3);
-  text-transform: uppercase;
-}
-
-.reviewTitle {
-  margin: var(--space-4) 0 0;
-  color: var(--text-strong);
-  font-size: var(--title-lg);
-  line-height: var(--line-heading);
-}
-
-.reviewDescription {
-  margin: var(--space-3) 0 0;
-  color: var(--muted);
-  font-size: var(--text-lg);
-  line-height: var(--line-body);
-}
-
-.briefReviewCard {
-  display: grid;
-  gap: var(--space-4);
-  border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--surface-2) 72%, var(--bg));
-  padding: var(--space-5);
-}
-
-.briefReviewLoading {
-  color: var(--muted);
-}
-
-.briefReviewMetaRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-.briefReviewMetaRow span {
-  display: inline-flex;
-  align-items: center;
-  min-height: 28px;
-  border: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--surface) 84%, transparent);
-  color: var(--muted);
-  font-size: var(--text-sm);
-  font-weight: 750;
-  padding: 0 var(--space-3);
-}
-
-.briefReviewGoal {
-  color: var(--text-strong);
-  font-size: var(--title-md);
-  line-height: var(--line-heading);
-  margin: 0;
-}
-
-.briefReviewVisual {
-  max-width: 760px;
-  color: var(--text);
-  font-size: var(--text-lg);
-  line-height: var(--line-body);
-  margin: 0;
-}
-
-.briefReviewFields {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-4);
-  margin: var(--space-1) 0 0;
-}
-
-.briefReviewField {
-  min-width: 0;
-}
-
-.briefReviewField dt {
-  color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.briefReviewField dd {
-  color: var(--text);
-  font-size: var(--text-md);
-  line-height: var(--line-body);
-  margin: var(--space-1) 0 0;
-}
-
-.feedbackField {
-  display: grid;
-  gap: var(--space-2);
-}
-
-.feedbackLabel {
-  color: var(--text-strong);
-  font-size: var(--text-sm);
-  font-weight: 800;
-}
-
-.feedbackTextarea {
-  min-height: 112px;
-  resize: vertical;
-  width: 100%;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--surface-2) 78%, var(--bg));
-  color: var(--text);
-  font: inherit;
-  line-height: var(--line-body);
-  padding: var(--space-4);
-}
-
-.feedbackTextarea::placeholder {
-  color: var(--muted);
-}
-
-.feedbackTextarea:focus {
-  border-color: var(--cta);
-  box-shadow: var(--ring);
-  outline: none;
-}
-
-.feedbackTextarea:disabled {
-  cursor: wait;
-  opacity: 0.72;
-}
-
-.feedbackHint {
-  color: var(--muted);
-  font-size: var(--text-sm);
-  line-height: var(--line-caption);
-  margin: 0;
-}
-
-.reviewActionRow {
-  justify-content: flex-end;
-  padding-top: var(--space-2);
-}
-
-.reviewCancelButton {
-  display: inline-flex;
-  align-items: center;
-  border: 0;
-  background: transparent;
-  color: var(--danger-text);
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--text-md);
-  font-weight: 750;
-  margin-right: auto;
-  min-height: 38px;
-  padding: 0;
-}
-
-.reviewCancelButton:hover {
-  color: var(--danger);
-}
-
-.reviewCancelButton:disabled {
-  cursor: wait;
-  opacity: 0.66;
-}
-
 .error {
   margin: 0;
   padding: var(--space-3) var(--space-4);
@@ -641,24 +423,10 @@
   padding: var(--space-3);
 }
 
-.reviewOutputs,
 .generatedOutputs {
   display: grid;
   gap: var(--space-4);
   margin-top: var(--space-4);
-}
-
-.reviewOutputEmpty {
-  border: 1px dashed color-mix(in srgb, var(--border) 80%, transparent);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--surface-2) 70%, var(--bg));
-  color: var(--muted);
-  line-height: var(--line-body);
-  padding: var(--space-5);
-}
-
-.reviewOutputEmpty span {
-  font-size: var(--text-md);
 }
 
 .sidePanel {
@@ -1069,28 +837,7 @@
     grid-template-columns: 1fr;
   }
 
-  .briefReviewFields {
-    grid-template-columns: 1fr;
-  }
-
-  .reviewPanel {
-    padding: var(--space-5);
-  }
-
-  .reviewActionRow {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .primaryButton,
-  .secondaryButton,
-  .dangerButton,
-  .reviewCancelButton {
+  .secondaryButton {
     width: 100%;
-  }
-
-  .reviewCancelButton {
-    justify-content: center;
-    margin-right: 0;
   }
 }

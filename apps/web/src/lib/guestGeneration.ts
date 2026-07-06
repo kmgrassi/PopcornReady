@@ -1,4 +1,5 @@
 import type { NavigateFunction } from "react-router-dom";
+import type { SelectedFootage } from "./upload";
 import type { StartRunResult } from "./startRun";
 import { createAndStartRun } from "./startRun";
 import {
@@ -95,10 +96,18 @@ export function pendingLandingPromptNavigationState(prompt: PendingLandingPrompt
 
 export async function startPendingLandingPromptRun(
   prompt: PendingLandingPrompt,
-  options: { enforceGuestRunLimit?: boolean } = {},
+  options: {
+    enforceGuestRunLimit?: boolean;
+    selectedFootage?: SelectedFootage[];
+  } = {},
 ): Promise<StartRunResult> {
   persistPendingLandingPrompt(prompt);
   const draft = buildQuickStartBriefDraft(landingPromptQuickStartInput(prompt));
+  if (options.selectedFootage && options.selectedFootage.length > 0) {
+    draft.footageChoice = "upload";
+    draft.footageMode = "hybrid";
+    draft.selectedFootage = options.selectedFootage;
+  }
   return createAndStartRun(draft, options);
 }
 
