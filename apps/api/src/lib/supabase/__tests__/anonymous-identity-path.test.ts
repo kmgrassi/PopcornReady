@@ -13,6 +13,17 @@ const authMiddleware = readFileSync(
   resolve(testDir, "../../../middleware/auth.ts"),
   "utf8"
 );
+const accountRoutes = readFileSync(
+  resolve(testDir, "../../../routes/v1/account.ts"),
+  "utf8"
+);
+const deviceRecoveryMigration = readFileSync(
+  resolve(
+    testDir,
+    "../../../../../../supabase/migrations/20260706133000_anonymous_device_recovery.sql"
+  ),
+  "utf8"
+);
 
 test("anonymous auth users mirror into public.users without email collisions", () => {
   assert.match(initSchema, /create table public\.users \([\s\S]*?email\s+text,/);
@@ -59,5 +70,52 @@ test("request auth resolves anonymous sessions through current_app_user_id", () 
     authMiddleware,
     /req\.publicUserId = data\.user\.id/,
     "auth.users.id must not be exposed as the request public user id"
+  );
+});
+
+test("anonymous device recovery stores only hashed tokens and moves domain workspace", () => {
+  assert.match(
+    deviceRecoveryMigration,
+    /create table if not exists public\.anonymous_device_recovery_tokens/
+  );
+  assert.match(deviceRecoveryMigration, /token_hash\s+text not null unique/);
+  assert.doesNotMatch(deviceRecoveryMigration, /token\s+text not null/);
+  assert.match(
+    deviceRecoveryMigration,
+    /join auth\.users au on au\.id = u\.auth_id[\s\S]*?au\.is_anonymous is true/,
+    "recovery should only accept tokens attached to anonymous auth users"
+  );
+  assert.match(
+    deviceRecoveryMigration,
+    /recover_anonymous_workspace requires service_role/,
+    "workspace recovery must be service-role only"
+  );
+  assert.match(
+    deviceRecoveryMigration,
+    /update public\.workspaces[\s\S]*?set owner_id = p_current_user_id/,
+    "recovery should transfer the workspace to the current domain user"
+  );
+});
+
+test("anonymous device recovery API is anonymous-only and hashes the browser secret", () => {
+  assert.match(
+    accountRoutes,
+    /ctx\.isAnonymous/,
+    "routes must reject non-anonymous sessions"
+  );
+  assert.match(
+    accountRoutes,
+    /createHmac\("sha256", pepper\)|createHash\("sha256"\)/,
+    "API should hash the browser-held recovery token"
+  );
+  assert.match(
+    accountRoutes,
+    /\.from\("anonymous_device_recovery_tokens"\)/,
+    "registration should write the dedicated recovery-token table"
+  );
+  assert.match(
+    accountRoutes,
+    /\.rpc\("recover_anonymous_workspace"/,
+    "recovery should use the service-role SQL function"
   );
 });
