@@ -157,6 +157,21 @@
   font-weight: 700;
 }
 
+.visibilityControl {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.visibilityControl > span {
+  max-width: 260px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 750;
+  line-height: 1.35;
+}
+
 .chip {
   display: inline-flex;
   align-items: center;
@@ -635,6 +650,49 @@
 .dangerButton:hover:not(:disabled) {
   border-color: var(--danger);
   color: var(--danger-text);
+}
+
+.dialogBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+}
+
+.confirmDialog {
+  display: grid;
+  gap: var(--space-4);
+  width: min(440px, 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-lg);
+}
+
+.confirmDialog h2 {
+  margin: var(--space-1) 0 0;
+  color: var(--text-strong);
+  font-size: var(--text-lg);
+  line-height: 1.2;
+}
+
+.confirmDialog p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
 }
 
 .generating {

@@ -13,6 +13,7 @@ import {
   parsePublishCatalogEntry,
   parseRegisterAsset,
   parseSetAssetVisibility,
+  parseSetProjectVisibility,
   parseUseCatalogEntry,
   parseUpdateAssetContext,
 } from "../schemas";
@@ -26,6 +27,12 @@ test("parseSetAssetVisibility rejects missing or invalid values", () => {
   expectApiError(() => parseSetAssetVisibility({}), "validation_failed");
   expectApiError(() => parseSetAssetVisibility({ visibility: "hidden" }), "validation_failed");
   expectApiError(() => parseSetAssetVisibility(null), "validation_failed");
+});
+
+test("parseSetProjectVisibility reuses visibility validation", () => {
+  assert.equal(parseSetProjectVisibility({ visibility: "public" }).visibility, "public");
+  assert.equal(parseSetProjectVisibility({ visibility: "private" }).visibility, "private");
+  expectApiError(() => parseSetProjectVisibility({ visibility: "workspace" }), "validation_failed");
 });
 
 test("parseDiscoverSearchQuery parses the semantic flag", () => {

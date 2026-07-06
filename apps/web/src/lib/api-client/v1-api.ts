@@ -4,6 +4,7 @@ import type {
   BoardRevisionRequest,
   GenerationRunStatus,
   GenerationStageType,
+  ProjectVisibility,
   ProjectStoryboard,
   V1Project,
 } from "@popcorn/shared/v1/types";
@@ -285,6 +286,14 @@ export const v1Api = {
   getProject: (projectId: string) =>
     apiRequest<ProjectResponse>(
       `/api/v1/projects/${encodeURIComponent(projectId)}`
+    ),
+  setProjectVisibility: (projectId: string, visibility: ProjectVisibility) =>
+    apiRequest<ProjectResponse>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}`,
+      {
+        method: "PATCH",
+        body: { visibility },
+      }
     ),
   deleteProject: (projectId: string) =>
     apiRequest<AccountMutationResponse>(
