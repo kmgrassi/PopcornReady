@@ -22,6 +22,11 @@ import {
   setAssetVisibility,
 } from "@/lib/api/v1/store";
 import { regenerateImageAsset } from "@/lib/api/v1/regenerate-asset";
+import {
+  readLatestTranscript,
+  transcribeAsset,
+} from "@/lib/api/v1/transcription";
+import type { TranscriptionProvider } from "@/lib/generative/transcription";
 
 export const assetsRouter = Router();
 
@@ -31,6 +36,31 @@ function requiredParam(params: Record<string, string | undefined>, name: string)
     throw new ApiError("validation_failed", `${name} is required.`);
   }
   return value;
+}
+
+function parseTranscribeBody(body: unknown): {
+  provider?: TranscriptionProvider;
+  language?: string;
+} {
+  if (body === undefined || body === null) return {};
+  if (typeof body !== "object" || Array.isArray(body)) {
+    throw new ApiError("validation_failed", "Request body must be an object.");
+  }
+  const raw = body as Record<string, unknown>;
+  const provider = raw.provider;
+  if (provider !== undefined && provider !== "openai" && provider !== "mock") {
+    throw new ApiError("validation_failed", "provider must be openai or mock.");
+  }
+  const language = raw.language;
+  if (language !== undefined && typeof language !== "string") {
+    throw new ApiError("validation_failed", "language must be a string.");
+  }
+  return {
+    ...(provider ? { provider } : {}),
+    ...(typeof language === "string" && language.trim()
+      ? { language: language.trim() }
+      : {}),
+  };
 }
 
 assetsRouter.get(
@@ -100,6 +130,46 @@ assetsRouter.post(
     const input = parseAssetSemanticSearch(body);
     const result = await searchProjectAssetsSemantic(auth.workspaceId, projectId, input);
     return { status: 200, body: result };
+  })
+);
+
+assetsRouter.post(
+  "/projects/:projectId/assets/:assetId/transcribe",
+  mutation(async ({ auth, body, req }, params) => {
+    const projectId = requiredParam(params, "projectId");
+    const assetId = requiredParam(params, "assetId");
+    const input = parseTranscribeBody(body);
+    const job = await transcribeAsset({
+      workspaceId: auth.workspaceId,
+      projectId,
+      assetId,
+      provider: input.provider,
+      language: input.language,
+      idempotencyKey: req.header("Idempotency-Key"),
+    });
+    return {
+      status: 202,
+      body: { job },
+      headers: { "Cache-Control": "no-store" },
+    };
+  })
+);
+
+assetsRouter.get(
+  "/projects/:projectId/assets/:assetId/transcript",
+  route(async ({ auth }, params) => {
+    const projectId = requiredParam(params, "projectId");
+    const assetId = requiredParam(params, "assetId");
+    const transcript = await readLatestTranscript({
+      workspaceId: auth.workspaceId,
+      projectId,
+      assetId,
+    });
+    return {
+      status: 200,
+      body: { transcript },
+      headers: { "Cache-Control": "no-store" },
+    };
   })
 );
 
