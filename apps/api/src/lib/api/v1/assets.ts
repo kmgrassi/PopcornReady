@@ -9,8 +9,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
-import { writeAssetObject } from "@/lib/storage/asset-write";
-import { readStorageConfig, resolveBucket } from "@/lib/storage/config";
+import { assetStorageKey, writeAssetObject } from "@/lib/storage/asset-write";
 import { createObjectStore } from "@/lib/storage/object-store";
 import { AuthContext } from "./auth";
 import { assertProjectUploadPath, createAssetUploadUrl } from "./asset-upload";
@@ -576,7 +575,6 @@ export async function registerAsset(
       });
     }
     const probe = probeUploadedMedia({ bytes: object.body, kind, filename });
-    const bucket = resolveBucket(readStorageConfig(), visibility);
 
     const asset: V1Asset = {
       id: "",
@@ -585,29 +583,55 @@ export async function registerAsset(
       projectId,
       kind,
       filename,
-      status: "ready",
+      status: "pending",
       source: { type: "storage_upload", path: uploadPath },
-      durationSec: probe.durationSec,
+      durationSec: probe.durationSec ?? input.durationSec,
       context: input.context,
       userContext: input.userContext,
       agentContext: input.agentContext,
-      storageKey: uploadPath,
-      storageBucket: bucket,
       contentHash: sha256Hex(probe.contentHashBytes ?? object.body),
       createdAt: now,
       updatedAt: now,
     };
     const created = await addAssetWithDerivedKnowledge(auth, projectId, asset, now);
-    await recordStorageWriteAction({
+    const finalStorageKey = assetStorageKey({
+      workspaceId: auth.workspaceId,
       projectId,
       assetId: created.id,
+      filename,
+    });
+    const copied = await store.copyObject({
+      sourceKey: uploadPath,
+      sourceVisibility: visibility,
+      destinationKey: finalStorageKey,
+      destinationVisibility: visibility,
+      contentType: object.contentType || metadata.contentType,
+    });
+    const ready = await updateStoredAsset(
+      auth.workspaceId,
+      projectId,
+      created.id,
+      (stored) => {
+        stored.status = "ready";
+        stored.storageKey = copied.key;
+        stored.storageBucket = copied.bucket;
+        const derived = withDerivedAssetKnowledge(stored);
+        stored.assetKnowledge = derived.assetKnowledge;
+        stored.clipUnderstanding = derived.clipUnderstanding;
+        stored.semanticAnalysis = derived.semanticAnalysis;
+      }
+    );
+    void store.deleteObject(uploadPath, visibility).catch(() => undefined);
+    await recordStorageWriteAction({
+      projectId,
+      assetId: ready.id,
       sourceType: "storage_upload",
-      storageKey: uploadPath,
-      storageBucket: bucket,
+      storageKey: copied.key,
+      storageBucket: copied.bucket,
       contentType: object.contentType || metadata.contentType || "application/octet-stream",
     });
-    void enqueueAssetEmbeddingRefresh(created, { reason: "asset_ready" }).catch(() => undefined);
-    return created;
+    void enqueueAssetEmbeddingRefresh(ready, { reason: "asset_ready" }).catch(() => undefined);
+    return ready;
   }
 
   throw new ApiError(
