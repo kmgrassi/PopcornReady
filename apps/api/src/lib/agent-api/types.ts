@@ -28,6 +28,7 @@ export const JOB_STEPS = [
   "validating_request",
   "creating_brief_version",
   "planning_assets",
+  "transcribing_audio",
   "preflight_review",
   "generating_assets",
   "waiting_for_assets",
