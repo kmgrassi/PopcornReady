@@ -88,6 +88,9 @@ export interface StoryboardBeat {
   dialogueSummary: string | null;
   narration: string | null;
   durationSec: number | null;
+  shotType: string | null;
+  camera: string | null;
+  framing: string | null;
   status: StoryboardItemStatus;
   beatAssetId: string | null;
   panels: StoryboardPanel[];
@@ -106,6 +109,10 @@ export interface StoryboardScene {
   mood: string | null;
   durationSec: number | null;
   sceneAssetId: string | null;
+  // Resolved media for the scene's disposable cartoon wireframe (scene_asset_id).
+  // Absent until one is generated — the UI then offers a Generate action.
+  url?: string;
+  thumbnailUrl?: string;
   status: StoryboardItemStatus;
   beats: StoryboardBeat[];
   createdAt: string;

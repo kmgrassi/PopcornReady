@@ -463,7 +463,8 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
     // fall through. Rejected gates also fall through once: that is the
     // "regenerate this stage" path, and after the tool succeeds the gate is
     // marked reached again for another review stop.
-    const gate = gates.find(
+    const latestGates = await r.store.listRunGates(run.id);
+    const gate = latestGates.find(
       (g) => g.stage === decision.toolName && !g.stage.startsWith(AFTER_GATE_PREFIX)
     );
     const regeneratingRejectedGate = gate?.status === "rejected";

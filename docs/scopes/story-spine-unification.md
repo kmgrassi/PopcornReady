@@ -241,7 +241,9 @@ docs in this branch. "Request Changes" is now the canonical name of the interact
 
 1. ~~Scene reconciliation strategy.~~ **Decided: A + C** (best-effort, regenerate on failure).
 2. Shot fields on `story_beats` as columns vs a `beat_shots` child table.
-3. Act-level mockup asset: reuse `poster` role or add an `act_mockup` role.
+3. ~~Act-level mockup asset: reuse `poster` role or add an `act_mockup` role.~~
+   **Decided: dedicated `act_mockup` role** (poster stays the project thumbnail);
+   generated via `POST …/storyboards/:storyboardId/acts/:actId/mockup`.
 4. `storyboards.status` — derive from child statuses or keep an explicit head status.
 5. ~~"Request Changes" rename scope.~~ **Decided: full conceptual rename, applied.**
 

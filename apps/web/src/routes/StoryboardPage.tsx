@@ -9,14 +9,17 @@ import type {
 } from "@popcorn/shared/v1/types";
 import { AssetEditModal } from "../components/media/AssetEditModal";
 import { AssetImage } from "../components/media/AssetImage";
-import { ButtonLink } from "../components/ui/Button";
+import { Button, ButtonLink } from "../components/ui/Button";
 import { EmptyState, ErrorState } from "../components/ui/StateCard";
 import {
   useGenerationRunQuery,
   useProjectQuery,
   useProjectStoryboardQuery,
 } from "../lib/queryClient";
+import { useGenerateSceneWireframeMutation } from "../lib/sceneWireframe";
 import styles from "./StoryboardPage.module.css";
+
+type SceneWireframeMutation = ReturnType<typeof useGenerateSceneWireframeMutation>;
 
 const TERMINAL_RUN_STATUSES = new Set(["succeeded", "failed", "canceled"]);
 
@@ -25,6 +28,9 @@ interface EditTarget {
   url?: string | null;
   title: string;
   subtitle?: string | null;
+  // Seeds the Request Changes box. Set when opening the modal to GENERATE a
+  // missing wireframe so the item's intended prompt is pre-filled.
+  initialPrompt?: string;
 }
 
 export function StoryboardPage() {
@@ -36,6 +42,7 @@ export function StoryboardPage() {
   // Beats whose panel the agent is currently revising (skeleton + live update).
   const [revisingBeats, setRevisingBeats] = useState<Set<string>>(() => new Set());
   const [revisionRunId, setRevisionRunId] = useState<string | null>(null);
+  const sceneWireframe = useGenerateSceneWireframeMutation(projectId ?? "");
 
   // Poll the revision run; useGenerationRunQuery auto-polls while it's active.
   const revisionRunQuery = useGenerationRunQuery(
@@ -120,6 +127,7 @@ export function StoryboardPage() {
         <StoryboardBody
           storyboard={storyboard}
           revisingBeats={revisingBeats}
+          sceneWireframe={sceneWireframe}
           onEdit={setEditTarget}
           onRegenerateStart={(beatId) => {
             setRevisingBeats((current) => new Set(current).add(beatId));
@@ -143,6 +151,7 @@ export function StoryboardPage() {
         imageUrl={editTarget?.url}
         title={editTarget?.title}
         subtitle={editTarget?.subtitle}
+        initialPrompt={editTarget?.initialPrompt}
         onClose={() => setEditTarget(null)}
         onSubmitted={(runId) => {
           // Mark the edited beat's panel as out of sync (skeleton) and poll the
@@ -161,12 +170,14 @@ export function StoryboardPage() {
 function StoryboardBody({
   storyboard,
   revisingBeats,
+  sceneWireframe,
   onEdit,
   onRegenerateStart,
   onRegenerateSettled,
 }: {
   storyboard: ProjectStoryboard;
   revisingBeats: Set<string>;
+  sceneWireframe: SceneWireframeMutation;
   onEdit: (target: EditTarget) => void;
   onRegenerateStart: (beatId: string) => void;
   onRegenerateSettled: (beatId: string) => void;
@@ -175,6 +186,8 @@ function StoryboardBody({
   if (scenes.length === 0) {
     return <p className={styles.muted}>This storyboard has no scenes yet.</p>;
   }
+  const generatingSceneId =
+    sceneWireframe.isPending ? sceneWireframe.variables?.sceneId ?? null : null;
   return (
     <div className={styles.scenes}>
       {scenes.map((scene, index) => (
@@ -184,6 +197,10 @@ function StoryboardBody({
           storyboardId={storyboard.id}
           revisingBeats={revisingBeats}
           order={index + 1}
+          wireframeGenerating={generatingSceneId === scene.id}
+          onGenerateWireframe={(prompt) =>
+            sceneWireframe.mutate({ storyboardId: storyboard.id, sceneId: scene.id, prompt })
+          }
           onEdit={onEdit}
           onRegenerateStart={onRegenerateStart}
           onRegenerateSettled={onRegenerateSettled}
@@ -198,6 +215,8 @@ function SceneSection({
   storyboardId,
   revisingBeats,
   order,
+  wireframeGenerating,
+  onGenerateWireframe,
   onEdit,
   onRegenerateStart,
   onRegenerateSettled,
@@ -206,16 +225,23 @@ function SceneSection({
   storyboardId: string;
   revisingBeats: Set<string>;
   order: number;
+  wireframeGenerating: boolean;
+  onGenerateWireframe: (prompt?: string) => void;
   onEdit: (target: EditTarget) => void;
   onRegenerateStart: (beatId: string) => void;
   onRegenerateSettled: (beatId: string) => void;
 }) {
   const beats = [...scene.beats].sort((a, b) => a.beatIndex - b.beatIndex);
+  const sceneTitle = scene.title ?? `Scene ${order}`;
+  const sceneImage = scene.thumbnailUrl ?? scene.url ?? null;
+  // Seeds the agent's "Generate beats" action when a scene has no beats yet.
+  const scenePrompt =
+    [scene.summary, scene.setting, scene.mood].filter(Boolean).join(" · ") || null;
   return (
     <section className={styles.scene}>
       <div className={styles.sceneHead}>
         <span className={styles.sceneTag}>Scene {order}</span>
-        <h2>{scene.title ?? `Scene ${order}`}</h2>
+        <h2>{sceneTitle}</h2>
         {scene.summary ? <p className={styles.sceneSummary}>{scene.summary}</p> : null}
         <div className={styles.sceneMeta}>
           {scene.setting ? <span>{scene.setting}</span> : null}
@@ -223,22 +249,105 @@ function SceneSection({
           {scene.durationSec ? <span>{Math.round(scene.durationSec)}s</span> : null}
         </div>
       </div>
-      <div className={styles.beats}>
-        {beats.map((beat, index) => (
-          <BeatCard
-            key={beat.id}
-            beat={beat}
-            storyboardId={storyboardId}
-            sceneId={scene.id}
-            revising={revisingBeats.has(beat.id)}
-            order={index + 1}
-            sceneOrder={order}
-            onEdit={onEdit}
-            onRegenerateStart={onRegenerateStart}
-            onRegenerateSettled={onRegenerateSettled}
+      {/* The disposable storyboard image: one review panel per scene. */}
+      <div className={styles.sceneWireframe}>
+        {wireframeGenerating ? (
+          <div className={`${styles.panelImage} ${styles.panelEmpty}`} aria-busy="true">
+            <span className={styles.spinner} aria-hidden />
+            <span>Drawing storyboard image…</span>
+          </div>
+        ) : (
+          <AssetImage
+            kind="image"
+            url={sceneImage}
+            assetId={scene.sceneAssetId}
+            prompt={scene.summary}
+            alt={`${sceneTitle} storyboard image`}
+            // Re-rolls go through the dedicated generate mutation, not the
+            // per-asset regenerate endpoint.
+            allowRegenerate={false}
+            mediaClassName={styles.panelImage}
+            placeholderClassName={`${styles.panelImage} ${styles.panelEmpty}`}
+            activateClassName={styles.panelButton}
+            placeholder={
+              <>
+                <span className={styles.beatNumber}>Scene {order}</span>
+                <span>No storyboard image yet</span>
+                <Button
+                  variant="cta"
+                  size="sm"
+                  type="button"
+                  className={styles.generateButton}
+                  onClick={() => onGenerateWireframe()}
+                >
+                  Generate storyboard image
+                </Button>
+              </>
+            }
+            {...(scene.sceneAssetId && sceneImage
+              ? {
+                  onActivate: () =>
+                    onEdit({
+                      target: {
+                        scope: "tile",
+                        storyboardId,
+                        sceneId: scene.id,
+                        assetId: scene.sceneAssetId!,
+                        label: sceneTitle,
+                      },
+                      url: scene.url ?? scene.thumbnailUrl,
+                      title: `${sceneTitle} storyboard image`,
+                      subtitle: `Scene ${order}`,
+                    }),
+                }
+              : {})}
           />
-        ))}
+        )}
       </div>
+      {beats.length === 0 ? (
+        // A scene with no beats yet (e.g. its storyboard stage never ran): offer
+        // to generate the beats — the actionable unit — rather than a scene image.
+        <div className={styles.sceneEmpty}>
+          <span>No beats yet</span>
+          <Button
+            variant="cta"
+            size="sm"
+            type="button"
+            onClick={() =>
+              onEdit({
+                target: {
+                  scope: "tile",
+                  storyboardId,
+                  sceneId: scene.id,
+                  label: sceneTitle,
+                },
+                title: `Generate ${sceneTitle}`,
+                subtitle: `Scene ${order}`,
+                initialPrompt: scenePrompt ?? "",
+              })
+            }
+          >
+            Generate beats
+          </Button>
+        </div>
+      ) : (
+        <div className={styles.beats}>
+          {beats.map((beat, index) => (
+            <BeatCard
+              key={beat.id}
+              beat={beat}
+              storyboardId={storyboardId}
+              sceneId={scene.id}
+              revising={revisingBeats.has(beat.id)}
+              order={index + 1}
+              sceneOrder={order}
+              onEdit={onEdit}
+              onRegenerateStart={onRegenerateStart}
+              onRegenerateSettled={onRegenerateSettled}
+            />
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -310,6 +419,32 @@ function BeatCard({
             <>
               <span className={styles.beatNumber}>Beat {order}</span>
               <span>No panel image yet</span>
+              {/* No asset to recover — offer generation (an existing-but-blank
+                  asset shows the inline regenerate control instead). */}
+              {!panel?.imageAssetId ? (
+                <Button
+                  variant="cta"
+                  size="sm"
+                  type="button"
+                  className={styles.generateButton}
+                  onClick={() =>
+                    onEdit({
+                      target: {
+                        scope: "tile",
+                        storyboardId,
+                        sceneId,
+                        beatId: beat.id,
+                        label,
+                      },
+                      title: `Generate ${label}`,
+                      subtitle: `Scene ${sceneOrder} · Beat ${order}`,
+                      initialPrompt: prompt ?? "",
+                    })
+                  }
+                >
+                  Generate
+                </Button>
+              ) : null}
             </>
           }
           activateClassName={styles.panelButton}

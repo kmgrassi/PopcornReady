@@ -44,16 +44,11 @@ import {
   inputsFingerprint,
   type GraphAssetInput,
 } from "./asset-graph";
-import {
-  DASHBOARD_SCHEMA_VERSION,
-  type DashboardSummary,
-} from "@popcorn/shared/v1/dashboard";
 import { ApiError, notFound } from "./errors";
 import { GeneratedAssetProvenance } from "./provenance";
 import type { AssetSemanticAnalysis } from "../../assets/semantic-analysis";
 import {
   type CompositionPlan as ContractCompositionPlan,
-  type GenerationRun,
   type GenerationRunStatus,
   type Job,
   type JobStatus,
@@ -73,17 +68,21 @@ import {
   type StudioDraftStep,
   type StudioDraftSummary,
 } from "@popcorn/shared/v1/studio-drafts";
-import type { ShotPlan, ScriptDraft, Timeline } from "@popcorn/shared/types";
+import {
+  ensureBeatIds,
+  type ShotPlan,
+  type ScriptDraft,
+  type Timeline,
+} from "@popcorn/shared/types";
 import type { Asset } from "@popcorn/shared/assets/types";
 import type { GeneratedStoryboardTile } from "@/lib/generative/storyboard-tile";
 import {
   getOrchestratorRun,
   listOrchestratorRunsForProject,
   updateOrchestratorRun,
-  type OrchestratorRun,
 } from "./orchestrator-store";
 import { getRequestSupabase } from "../../supabase/clients";
-import { agentApiStore, type AgentApiStore } from "../../agent-api/jobs";
+import { agentApiStore } from "../../agent-api/jobs";
 import type { Artifact } from "../../agent-api/types";
 import { remoteAssetUrlForDelivery, resolveAssetUrl } from "../../storage/asset-urls";
 import { assetStorageKey, contentTypeForFilename } from "../../storage/asset-write";
@@ -112,6 +111,17 @@ import {
   type VisibilityObjectStore,
 } from "../../storage/visibility-move";
 import { normalizeSlug, projectDisplayName } from "./naming";
+import {
+  getWorkspaceDashboardSummaryWithDeps,
+  listWorkspaceGenerationRunsWithDeps,
+  listWorkspaceOutputsWithDeps,
+  type GetWorkspaceDashboardSummaryDeps,
+  type ListWorkspaceGenerationRunsDeps,
+  type ListWorkspaceOutputsDeps,
+  type WorkspaceGenerationRunSummary,
+  type WorkspaceOutputSummary,
+  type WorkspaceProjectRef,
+} from "./workspace-dashboard";
 
 export interface V1Workspace {
   id: string;
@@ -385,6 +395,13 @@ export {
   withLocalDir,
 };
 export type { PageResult };
+export type {
+  GetWorkspaceDashboardSummaryDeps,
+  ListWorkspaceGenerationRunsDeps,
+  ListWorkspaceOutputsDeps,
+  WorkspaceGenerationRunSummary,
+  WorkspaceOutputSummary,
+};
 
 // ---------------------------------------------------------------------------
 // Service-role Supabase client
@@ -813,6 +830,56 @@ async function selectedDataAsset(
   const asset = await dataAssetById(db, activeAssetId);
   if (asset && asset.kind === kind && (!assetRole || asset.role === assetRole)) return asset;
   return latestDataAsset(db, projectId, kind, assetRole);
+}
+
+export function coerceShotPlanContent(content: unknown): ShotPlan | null {
+  const candidate = unmarkedContent<ShotPlan & { beats?: { id?: string; name: string }[] }>(
+    content
+  );
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return null;
+
+  const schemaVersion = (content as Record<string, unknown> | null)?.[CONTENT_SCHEMA_KEY];
+  if (
+    schemaVersion !== undefined &&
+    schemaVersion !== "plan.v1" &&
+    schemaVersion !== "shot_plan.v1"
+  ) {
+    return null;
+  }
+
+  ensureBeatIds(candidate);
+  if (
+    typeof candidate.targetLengthSec !== "number" ||
+    typeof candidate.style !== "string" ||
+    typeof candidate.aspectRatio !== "string" ||
+    !Array.isArray(candidate.scenes)
+  ) {
+    return null;
+  }
+  return candidate as ShotPlan;
+}
+
+async function latestShotPlanDataAsset(
+  db: SupabaseClient,
+  projectId: string
+): Promise<DataAssetRow | null> {
+  const data = await runQuery(
+    "store.latestShotPlanDataAsset",
+    db
+      .from("assets")
+      .select("*")
+      .eq("project_id", projectId)
+      .eq("kind", "plan")
+      .eq("media", "data")
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(20)
+  );
+  for (const asset of ((data as DataAssetRow[]) ?? [])) {
+    if (asset.role === "visual_anchor_plan" || asset.role === "composition_plan") continue;
+    if (coerceShotPlanContent(asset.content)) return asset;
+  }
+  return null;
 }
 
 // --- poster ----------------------------------------------------------------
@@ -2050,6 +2117,18 @@ export async function addProjectStoryBlueprint(input: {
     inputs: graphInputs,
     createdByActionId: action.id,
   });
+  // Record which blueprint this one replaces (lineage for the version chain).
+  const projectRow = await runQuery(
+    "store.addProjectStoryBlueprint current lookup",
+    db
+      .from("projects")
+      .select("current_story_blueprint_id")
+      .eq("id", input.projectId)
+      .maybeSingle()
+  );
+  const supersedesId =
+    (projectRow as { current_story_blueprint_id?: string | null } | null)
+      ?.current_story_blueprint_id ?? null;
   const storyBlueprint = await runQuery(
     "store.addProjectStoryBlueprint insert",
     db
@@ -2060,6 +2139,7 @@ export async function addProjectStoryBlueprint(input: {
         project_id: input.projectId,
         brief_asset_id: input.briefAssetId,
         asset_id: asset.id,
+        supersedes_id: supersedesId,
         status: "draft",
         snapshot: markedContent("story_blueprint", input.blueprint),
         provenance: markedJson("story_blueprint_provenance.v1", {
@@ -2147,6 +2227,17 @@ export async function addProjectStoryBlueprint(input: {
     "story_blueprint",
     asset.id,
     action.id
+  );
+  // The new blueprint is now current; every other non-superseded blueprint for
+  // the project is by definition replaced.
+  await runQuery(
+    "store.addProjectStoryBlueprint supersede previous",
+    db
+      .from("story_blueprints")
+      .update({ status: "superseded" })
+      .eq("project_id", input.projectId)
+      .neq("id", storyBlueprintId)
+      .neq("status", "superseded")
   );
   await runQuery(
     "store.addProjectStoryBlueprint current pointer",
@@ -2622,10 +2713,18 @@ export async function getActiveProjectPlan(
   projectId: string
 ): Promise<ActiveProjectPlan | null> {
   const db = getServiceSupabase();
-  const planAsset = await selectedDataAsset(db, projectId, "plan", "plan", "current_plan");
+  const selectedPlanAsset = await selectedDataAsset(db, projectId, "plan", "plan");
+  const selectedPlan = selectedPlanAsset ? coerceShotPlanContent(selectedPlanAsset.content) : null;
+  const planAsset =
+    selectedPlanAsset && selectedPlan
+      ? selectedPlanAsset
+      : await latestShotPlanDataAsset(db, projectId);
   if (!planAsset) return null;
+  const plan =
+    selectedPlanAsset?.id === planAsset.id ? selectedPlan : coerceShotPlanContent(planAsset.content);
+  if (!plan) return null;
   return {
-    plan: unmarkedContent<ShotPlan>(planAsset.content),
+    plan,
     assetId: planAsset.id,
     contentHash: planAsset.content_hash ?? "",
   };
@@ -3211,6 +3310,9 @@ interface StoryboardBeatRow {
   dialogue_summary: string | null;
   narration: string | null;
   duration_sec: number | null;
+  shot_type: string | null;
+  camera: string | null;
+  framing: string | null;
   status: StoryboardItemStatus;
   beat_asset_id: string | null;
   created_at: string;
@@ -3249,6 +3351,9 @@ export interface SaveStoryboardBeatInput {
   dialogueSummary?: string | null;
   narration?: string | null;
   durationSec?: number | null;
+  shotType?: string | null;
+  camera?: string | null;
+  framing?: string | null;
   status?: StoryboardItemStatus;
 }
 
@@ -3293,6 +3398,9 @@ function mapStoryboardBeat(
     dialogueSummary: row.dialogue_summary,
     narration: row.narration,
     durationSec: row.duration_sec,
+    shotType: row.shot_type,
+    camera: row.camera,
+    framing: row.framing,
     status: row.status,
     beatAssetId: row.beat_asset_id,
     panels,
@@ -3532,17 +3640,38 @@ export async function getProjectStoryboard(
       beatsByScene.set(beat.sceneId, [...(beatsByScene.get(beat.sceneId) ?? []), beat]);
     }
 
+    // Resolve the scene-level wireframe media (story_blueprint_scenes.scene_asset_id)
+    // with the same lineage-head resolver used for panel tiles.
+    const sceneMedia = await resolvePanelMediaByAssetId(
+      db,
+      workspaceId,
+      projectId,
+      spineSceneRows
+        .map((scene) => scene.scene_asset_id)
+        .filter((id): id is string => Boolean(id))
+    );
+
     return mapSpineStoryboard(
       project,
       storyBlueprintId,
       planAssetId,
-      spineSceneRows.map((scene) => mapSpineScene(scene, beatsByScene.get(scene.id) ?? []))
+      spineSceneRows.map((scene) => {
+        const mapped = mapSpineScene(scene, beatsByScene.get(scene.id) ?? []);
+        const media = scene.scene_asset_id ? sceneMedia.get(scene.scene_asset_id) : undefined;
+        if (media?.url) {
+          mapped.url = media.url;
+          if (media.thumbnailUrl) mapped.thumbnailUrl = media.thumbnailUrl;
+        }
+        return mapped;
+      })
     );
   }
 
   return null;
 }
 
+// Field list must match the story_beats_require_snapshot trigger: a semantic
+// change the trigger sees but this misses would hit check_violation on update.
 function semanticBeatChanged(
   before: StoryboardBeatRow,
   after: SaveStoryboardBeatInput
@@ -3552,7 +3681,10 @@ function semanticBeatChanged(
     before.visual_description !== (after.visualDescription ?? null) ||
     before.dialogue_summary !== (after.dialogueSummary ?? null) ||
     before.narration !== (after.narration ?? null) ||
-    before.duration_sec !== (after.durationSec ?? null)
+    before.duration_sec !== (after.durationSec ?? null) ||
+    before.shot_type !== (after.shotType ?? null) ||
+    before.camera !== (after.camera ?? null) ||
+    before.framing !== (after.framing ?? null)
   );
 }
 
@@ -3579,6 +3711,9 @@ async function nextBeatSnapshotAssetId(input: {
       dialogue_summary: input.beat.dialogueSummary ?? null,
       narration: input.beat.narration ?? null,
       duration_sec: input.beat.durationSec ?? null,
+      shot_type: input.beat.shotType ?? null,
+      camera: input.beat.camera ?? null,
+      framing: input.beat.framing ?? null,
     },
     lineageId: previous?.lineage_id,
     version: previous ? previous.version + 1 : undefined,
@@ -3877,6 +4012,9 @@ export async function saveProjectStoryboard(
         dialogue_summary: beat.dialogueSummary,
         narration: beat.narration,
         duration_sec: beat.durationSec,
+        shot_type: beat.shotType,
+        camera: beat.camera,
+        framing: beat.framing,
         status: beat.status,
         beat_asset_id: beat.beatAssetId,
         created_at: beat.createdAt,
@@ -3916,6 +4054,9 @@ export async function saveProjectStoryboard(
         dialogue_summary: beat.dialogueSummary ?? null,
         narration: beat.narration ?? null,
         duration_sec: beat.durationSec ?? null,
+        shot_type: beat.shotType ?? null,
+        camera: beat.camera ?? null,
+        framing: beat.framing ?? null,
         status: beat.status ?? "draft",
         beat_asset_id: await nextBeatSnapshotAssetId({
           db,
@@ -5665,14 +5806,6 @@ export async function listWorkspaceAssets(
 // aggregation can be unit-tested without Supabase (the route always uses the
 // real, RLS-scoped listProjects).
 
-interface WorkspaceProjectRef {
-  id: string;
-  name: string;
-}
-
-// Enumerate the workspace's active projects as {id, name} refs. Pulls the full
-// set (the per-project run/output reads dominate the cost, and pagination is
-// applied to the flattened result, not the project list).
 async function listWorkspaceProjectRefs(
   workspaceId: string
 ): Promise<WorkspaceProjectRef[]> {
@@ -5691,48 +5824,6 @@ async function listWorkspaceProjectRefs(
   }));
 }
 
-// A generation run plus its owning project's name, for the cross-project
-// Projects/Runs view. The wire shape is `GenerationRun & { projectName }`,
-// matching the web client's WorkspaceGenerationRun.
-export interface WorkspaceGenerationRunSummary extends GenerationRun {
-  projectName: string;
-}
-
-export interface ListWorkspaceGenerationRunsDeps {
-  listProjects: (workspaceId: string) => Promise<WorkspaceProjectRef[]>;
-  listRunsForProject: (projectId: string) => Promise<OrchestratorRun[]>;
-}
-
-function mapOrchestratorSummary(run: OrchestratorRun): GenerationRun {
-  const status = run.status === "waiting" ? "running" : run.status;
-  return {
-    runId: run.id,
-    projectId: run.projectId,
-    status,
-    progressPercent: status === "succeeded" ? 100 : status === "queued" ? 0 : 50,
-    message:
-      run.status === "waiting"
-        ? "Generation is waiting for a job or approval gate."
-        : run.status === "running"
-          ? "The orchestrator is running."
-          : undefined,
-    createdAt: run.createdAt,
-    updatedAt: run.updatedAt,
-    startedAt: run.startedAt,
-    completedAt: run.completedAt,
-    error: run.error
-      ? {
-          code: typeof run.error.kind === "string" ? run.error.kind : "orchestrator_error",
-          message:
-            typeof run.error.message === "string"
-              ? run.error.message
-              : "The orchestrator run failed.",
-          retryable: run.error.recoverable === true,
-        }
-      : undefined,
-  };
-}
-
 export async function listWorkspaceGenerationRuns(
   workspaceId: string,
   opts: { status?: GenerationRunStatus; projectId?: string },
@@ -5743,53 +5834,26 @@ export async function listWorkspaceGenerationRuns(
     listRunsForProject: listOrchestratorRunsForProject,
   }
 ): Promise<PageResult<WorkspaceGenerationRunSummary>> {
-  const projects = await deps.listProjects(workspaceId);
-  const scoped = opts.projectId
-    ? projects.filter((p) => p.id === opts.projectId)
-    : projects;
-
-  const perProject = await Promise.all(
-    scoped.map(async (project) => {
-      const runs = await deps.listRunsForProject(project.id);
-      return runs.map((run) => ({
-        ...mapOrchestratorSummary(run),
-        projectName: project.name,
-      }));
-    })
-  );
-
-  let all = perProject.flat();
-  if (opts.status) {
-    all = all.filter((run) => run.status === opts.status);
-  }
-  // paginate() keys on { id, createdAt }; runs expose runId, so adapt the cursor
-  // shape to the run's id without leaking an extra field into the wire output.
-  const paged = paginate(
-    all.map((run) => ({ ...run, id: run.runId })),
+  return listWorkspaceGenerationRunsWithDeps(
+    workspaceId,
+    opts,
     limit,
-    cursor
+    cursor,
+    deps
   );
-  return {
-    items: paged.items.map(({ id: _id, ...run }) => {
-      void _id;
-      return run;
-    }),
-    nextCursor: paged.nextCursor,
-  };
 }
 
-// A rendered/export artifact plus its owning project's name, for the Outputs
-// view (where Created Videos relocate). Maps the agent-api export Artifact onto
-// the web client's WorkspaceOutput shape.
-export interface WorkspaceOutputSummary {
-  artifactId: string;
-  projectId: string;
-  projectName: string;
-  timelineId?: string;
-  url?: string;
-  durationSec?: number;
-  format?: string;
-  createdAt: string;
+export async function listWorkspaceOutputs(
+  workspaceId: string,
+  opts: { projectId?: string },
+  limit: number,
+  cursor: string | null,
+  deps: ListWorkspaceOutputsDeps = {
+    listProjects: listWorkspaceProjectRefs,
+    artifactStore: agentApiStore,
+  }
+): Promise<PageResult<WorkspaceOutputSummary>> {
+  return listWorkspaceOutputsWithDeps(workspaceId, opts, limit, cursor, deps);
 }
 
 export interface ProjectWatchMedia {
@@ -5804,62 +5868,6 @@ export interface ProjectWatchMedia {
   expiresAt?: string;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface ListWorkspaceOutputsDeps {
-  listProjects: (workspaceId: string) => Promise<WorkspaceProjectRef[]>;
-  artifactStore: Pick<AgentApiStore, "listArtifactsForProject">;
-}
-
-export async function listWorkspaceOutputs(
-  workspaceId: string,
-  opts: { projectId?: string },
-  limit: number,
-  cursor: string | null,
-  deps: ListWorkspaceOutputsDeps = {
-    listProjects: listWorkspaceProjectRefs,
-    artifactStore: agentApiStore,
-  }
-): Promise<PageResult<WorkspaceOutputSummary>> {
-  const projects = await deps.listProjects(workspaceId);
-  const scoped = opts.projectId
-    ? projects.filter((p) => p.id === opts.projectId)
-    : projects;
-
-  const perProject = await Promise.all(
-    scoped.map(async (project) => {
-      const artifacts = await deps.artifactStore.listArtifactsForProject(
-        project.id
-      );
-      return artifacts
-        .filter((artifact) => artifact.status === "ready")
-        .map<WorkspaceOutputSummary>((artifact) => ({
-          artifactId: artifact.id,
-          projectId: project.id,
-          projectName: project.name,
-          timelineId: artifact.timelineId,
-          url: artifact.url ?? undefined,
-          durationSec: artifact.durationSec,
-          format: artifact.renderPlan?.format,
-          createdAt: artifact.createdAt,
-        }));
-    })
-  );
-
-  const all = perProject.flat();
-  // paginate() keys on { id, createdAt }; outputs expose artifactId.
-  const paged = paginate(
-    all.map((output) => ({ ...output, id: output.artifactId })),
-    limit,
-    cursor
-  );
-  return {
-    items: paged.items.map(({ id: _id, ...output }) => {
-      void _id;
-      return output;
-    }),
-    nextCursor: paged.nextCursor,
-  };
 }
 
 async function projectedAssetUrl(
@@ -6016,16 +6024,6 @@ export async function getProjectWatchMedia(
   };
 }
 
-export interface GetWorkspaceDashboardSummaryDeps {
-  listProjects: (workspaceId: string) => Promise<WorkspaceProjectRef[]>;
-  listRunsForProject: (projectId: string) => Promise<OrchestratorRun[]>;
-  artifactStore: Pick<AgentApiStore, "listArtifactsForProject">;
-}
-
-const DASHBOARD_RUN_STATUSES: GenerationRunStatus[] = ["queued", "running", "failed"];
-const DASHBOARD_ACTIVE_RUN_LIMIT = 5;
-const DASHBOARD_RECENT_OUTPUT_LIMIT = 6;
-
 export async function getWorkspaceDashboardSummary(
   workspaceId: string,
   deps: GetWorkspaceDashboardSummaryDeps = {
@@ -6033,61 +6031,8 @@ export async function getWorkspaceDashboardSummary(
     listRunsForProject: listOrchestratorRunsForProject,
     artifactStore: agentApiStore,
   }
-): Promise<DashboardSummary> {
-  const projects = await deps.listProjects(workspaceId);
-  const listProjectsOnce = async () => projects;
-
-  const [runsPage, outputsPage] = await Promise.all([
-    listWorkspaceGenerationRuns(
-      workspaceId,
-      {},
-      Number.MAX_SAFE_INTEGER,
-      null,
-      { listProjects: listProjectsOnce, listRunsForProject: deps.listRunsForProject }
-    ),
-    listWorkspaceOutputs(
-      workspaceId,
-      {},
-      Number.MAX_SAFE_INTEGER,
-      null,
-      { listProjects: listProjectsOnce, artifactStore: deps.artifactStore }
-    ),
-  ]);
-
-  const activeRuns = runsPage.items.filter((run) =>
-    DASHBOARD_RUN_STATUSES.includes(run.status)
-  );
-
-  return {
-    schemaVersion: DASHBOARD_SCHEMA_VERSION,
-    counts: {
-      projects: projects.length,
-      activeRuns: activeRuns.length,
-      outputs: outputsPage.items.length,
-    },
-    activeRuns: activeRuns.slice(0, DASHBOARD_ACTIVE_RUN_LIMIT).map((run) => ({
-      runId: run.runId,
-      projectId: run.projectId,
-      projectName: run.projectName,
-      status: run.status,
-      reviewGate: run.reviewGate ?? null,
-      currentStageType: run.currentStageType,
-      progressPercent: run.progressPercent,
-      updatedAt: run.updatedAt,
-    })),
-    recentOutputs: outputsPage.items
-      .slice(0, DASHBOARD_RECENT_OUTPUT_LIMIT)
-      .map((output) => ({
-        artifactId: output.artifactId,
-        projectId: output.projectId,
-        projectName: output.projectName,
-        timelineId: output.timelineId,
-        url: output.url,
-        durationSec: output.durationSec,
-        format: output.format,
-        createdAt: output.createdAt,
-      })),
-  };
+): ReturnType<typeof getWorkspaceDashboardSummaryWithDeps> {
+  return getWorkspaceDashboardSummaryWithDeps(workspaceId, deps);
 }
 export async function listPublicAssets(
   limit: number,

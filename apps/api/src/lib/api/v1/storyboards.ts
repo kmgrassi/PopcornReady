@@ -432,6 +432,9 @@ export async function createBeat(input: {
         dialogue_summary: input.data.dialogueSummary ?? null,
         narration: input.data.narration ?? null,
         duration_sec: input.data.durationSec ?? null,
+        shot_type: input.data.shotType ?? null,
+        camera: input.data.camera ?? null,
+        framing: input.data.framing ?? null,
         status: input.data.status ?? "draft",
         beat_asset_id: input.data.beatAssetId ?? null,
       })
@@ -467,6 +470,9 @@ export async function updateBeat(input: {
     narration: input.data.narration !== undefined ? input.data.narration : existing.narration,
     duration_sec:
       input.data.durationSec !== undefined ? input.data.durationSec : existing.duration_sec,
+    shot_type: input.data.shotType !== undefined ? input.data.shotType : existing.shot_type,
+    camera: input.data.camera !== undefined ? input.data.camera : existing.camera,
+    framing: input.data.framing !== undefined ? input.data.framing : existing.framing,
   };
 
   const updates: Record<string, unknown> = {};
@@ -476,6 +482,9 @@ export async function updateBeat(input: {
   if (input.data.dialogueSummary !== undefined) updates.dialogue_summary = input.data.dialogueSummary;
   if (input.data.narration !== undefined) updates.narration = input.data.narration;
   if (input.data.durationSec !== undefined) updates.duration_sec = input.data.durationSec;
+  if (input.data.shotType !== undefined) updates.shot_type = input.data.shotType;
+  if (input.data.camera !== undefined) updates.camera = input.data.camera;
+  if (input.data.framing !== undefined) updates.framing = input.data.framing;
   if (input.data.status !== undefined) updates.status = input.data.status;
   if (input.data.beatAssetId !== undefined && existing.beat_asset_id === null) {
     updates.beat_asset_id = input.data.beatAssetId;
@@ -748,6 +757,9 @@ export async function buildStoryboardForPlan(input: {
           beatIndex: b,
           intent: beat.intent ?? "",
           durationSec: beat.durationSec ?? null,
+          shotType: beat.shotType ?? null,
+          camera: beat.camera ?? null,
+          framing: beat.framing ?? null,
           status: "ready",
         },
       });

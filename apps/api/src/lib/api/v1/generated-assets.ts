@@ -30,11 +30,6 @@ import { sha256Hex } from "./asset-graph";
 import { randomUUID } from "crypto";
 import { AuthContext } from "./auth";
 import { ApiError, ApiErrorCode, validationError } from "./errors";
-import {
-  ParsedRequest,
-  PROVIDER_KIND_SUPPORT,
-  parseGeneratedAssetRequest,
-} from "./generated-asset-request";
 import { createJob, getJob, updateJob, V1Job } from "./jobs";
 import { resolveAssetMetadata } from "./naming";
 import {
@@ -63,6 +58,11 @@ import {
 } from "../../supabase/storage";
 import { readStorageConfig } from "@/lib/storage/config";
 import { createLogger } from "@/lib/v1/logger";
+import {
+  parseGeneratedAssetRequest,
+  PROVIDER_KIND_SUPPORT,
+  type ParsedRequest,
+} from "./generated-asset-request";
 
 export interface ApiResult {
   status: number;

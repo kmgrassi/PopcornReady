@@ -4,6 +4,10 @@
 
 import type {
   CreateStudioDraftRequest,
+  StudioDraftBrief,
+  StudioDraftFootageChoice,
+  StudioDraftFootageMode,
+  StudioDraftSeedKind,
   StudioDraftPayload,
   StudioDraftStep,
   UpdateStudioDraftRequest,
@@ -13,6 +17,9 @@ import { validationError } from "./errors";
 import { parsePagination } from "./schema-pagination";
 import {
   isPlainObject,
+  optionalBoolean,
+  optionalEnumArray,
+  optionalInteger,
   optionalString,
   optionalStringArray,
   parseEnum,
@@ -85,6 +92,19 @@ const STUDIO_DRAFT_STEPS: StudioDraftStep[] = [
   "review",
   "export",
 ];
+const STUDIO_DRAFT_FOOTAGE_CHOICES: StudioDraftFootageChoice[] = ["prompt_only", "upload"];
+const STUDIO_DRAFT_FOOTAGE_MODES: StudioDraftFootageMode[] = ["asset_driven", "hybrid"];
+const STUDIO_DRAFT_SEED_KINDS: StudioDraftSeedKind[] = ["image", "video"];
+const STUDIO_DRAFT_REVIEW_GATES = [
+  "brief_intake",
+  "creative_plan",
+  "storyboard",
+  "asset_generation",
+  "audio_generation",
+  "timeline_assembly",
+  "quality_review",
+  "export",
+] as const;
 
 export interface NarrationInput {
   mode: NarrationMode;
@@ -333,12 +353,94 @@ function parseStudioDraftPayload(input: unknown, path: string): StudioDraftPaylo
 
   const payload: StudioDraftPayload = {
     v: 1,
-    draft: input.draft as Record<string, unknown>,
+    draft: parseStudioDraftBrief(input.draft as Record<string, unknown>, `${path}.draft`),
     step: step as StudioDraftStep,
   };
   if (projectId !== undefined) payload.projectId = projectId;
   if (runId !== undefined) payload.runId = runId;
   return payload;
+}
+
+function parseStudioDraftBrief(input: Record<string, unknown>, path: string): StudioDraftBrief {
+  const fields: FieldError[] = [];
+  const targetLengthSec = optionalInteger(
+    input.targetLengthSec,
+    `${path}.targetLengthSec`,
+    fields,
+    30,
+    0,
+    Number.MAX_SAFE_INTEGER
+  );
+
+  const draft: StudioDraftBrief = {};
+  const goal = optionalString(input.goal, `${path}.goal`, fields);
+  const aspectRatio = parseEnum(input.aspectRatio, ASPECT_RATIOS, `${path}.aspectRatio`, fields);
+  const projectName = optionalString(input.projectName, `${path}.projectName`, fields);
+  const footageChoice = parseEnum(
+    input.footageChoice,
+    STUDIO_DRAFT_FOOTAGE_CHOICES,
+    `${path}.footageChoice`,
+    fields
+  );
+  const footageMode = parseEnum(
+    input.footageMode,
+    STUDIO_DRAFT_FOOTAGE_MODES,
+    `${path}.footageMode`,
+    fields
+  );
+  const audience = optionalString(input.audience, `${path}.audience`, fields);
+  const platform = parseEnum(input.platform, PLATFORMS, `${path}.platform`, fields);
+  const format = parseEnum(input.format, VIDEO_FORMATS, `${path}.format`, fields);
+  const hook = optionalString(input.hook, `${path}.hook`, fields);
+  const bestVisual = optionalString(input.bestVisual, `${path}.bestVisual`, fields);
+  const bigIdea = optionalString(input.bigIdea, `${path}.bigIdea`, fields);
+  const payoff = optionalString(input.payoff, `${path}.payoff`, fields);
+  const accuracyNote = optionalString(input.accuracyNote, `${path}.accuracyNote`, fields);
+  const style = optionalString(input.style, `${path}.style`, fields);
+  const callToAction = optionalString(input.callToAction, `${path}.callToAction`, fields);
+  const provider = optionalString(input.provider, `${path}.provider`, fields);
+  const seedKind = parseEnum(
+    input.seedKind,
+    STUDIO_DRAFT_SEED_KINDS,
+    `${path}.seedKind`,
+    fields
+  );
+  const seedSize = optionalString(input.seedSize, `${path}.seedSize`, fields);
+  const showCaptions = optionalBoolean(input.showCaptions, `${path}.showCaptions`, fields);
+  const reviewGates = optionalEnumArray(
+    input.reviewGates,
+    [...STUDIO_DRAFT_REVIEW_GATES],
+    `${path}.reviewGates`,
+    fields
+  );
+
+  throwIfInvalid(fields);
+
+  if (goal !== undefined) draft.goal = goal;
+  if (input.targetLengthSec !== undefined && input.targetLengthSec !== null) {
+    draft.targetLengthSec = targetLengthSec;
+  }
+  if (aspectRatio !== undefined) draft.aspectRatio = aspectRatio;
+  if (projectName !== undefined) draft.projectName = projectName;
+  if (footageChoice !== undefined) draft.footageChoice = footageChoice;
+  if (footageMode !== undefined) draft.footageMode = footageMode;
+  if (audience !== undefined) draft.audience = audience;
+  if (platform !== undefined) draft.platform = platform;
+  if (format !== undefined) draft.format = format;
+  if (hook !== undefined) draft.hook = hook;
+  if (bestVisual !== undefined) draft.bestVisual = bestVisual;
+  if (bigIdea !== undefined) draft.bigIdea = bigIdea;
+  if (payoff !== undefined) draft.payoff = payoff;
+  if (accuracyNote !== undefined) draft.accuracyNote = accuracyNote;
+  if (style !== undefined) draft.style = style;
+  if (callToAction !== undefined) draft.callToAction = callToAction;
+  if (provider !== undefined) draft.provider = provider;
+  if (seedKind !== undefined) draft.seedKind = seedKind;
+  if (seedSize !== undefined) draft.seedSize = seedSize;
+  if (showCaptions !== undefined) draft.showCaptions = showCaptions;
+  if (reviewGates !== undefined) draft.reviewGates = reviewGates;
+
+  return draft;
 }
 
 export function parseCreateStudioDraft(input: unknown): CreateStudioDraftRequest {

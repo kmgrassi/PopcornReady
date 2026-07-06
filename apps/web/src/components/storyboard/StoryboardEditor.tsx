@@ -16,6 +16,9 @@ type EditableBeat = Pick<
   | "dialogueSummary"
   | "narration"
   | "durationSec"
+  | "shotType"
+  | "camera"
+  | "framing"
   | "status"
 >;
 
@@ -57,6 +60,9 @@ function emptyBeat(): EditableBeat {
     dialogueSummary: null,
     narration: null,
     durationSec: 3,
+    shotType: null,
+    camera: null,
+    framing: null,
     status: "draft",
   };
 }
@@ -93,6 +99,9 @@ function toEditableScenes(storyboard: ProjectStoryboard | null): EditableScene[]
             dialogueSummary: beat.dialogueSummary,
             narration: beat.narration,
             durationSec: beat.durationSec,
+            shotType: beat.shotType,
+            camera: beat.camera,
+            framing: beat.framing,
             status: beat.status,
           }))
         : [emptyBeat()],

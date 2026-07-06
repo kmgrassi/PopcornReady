@@ -13,7 +13,21 @@ import {
 
 // --- Mapping helpers -------------------------------------------------------
 
-export function briefToStoryContext(brief: VideoBriefInput): StoryContext {
+type BriefStoryContextSource = Pick<
+  VideoBriefInput,
+  | "audience"
+  | "platform"
+  | "format"
+  | "hookQuestion"
+  | "strongestVisual"
+  | "oneBigIdea"
+  | "caveat"
+  | "payoff"
+> & {
+  constraints?: Pick<NonNullable<VideoBriefInput["constraints"]>, "callToAction">;
+};
+
+export function briefToStoryContext(brief: BriefStoryContextSource): StoryContext {
   const partial: StoryContext = {};
   if (brief.audience) partial.audience = brief.audience;
   if (brief.platform) partial.platform = brief.platform;

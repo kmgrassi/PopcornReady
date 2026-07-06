@@ -166,6 +166,9 @@ export interface SaveStoryboardBeatInput {
   dialogueSummary?: string | null;
   narration?: string | null;
   durationSec?: number | null;
+  shotType?: string | null;
+  camera?: string | null;
+  framing?: string | null;
   status?: ProjectStoryboard["scenes"][number]["beats"][number]["status"];
 }
 

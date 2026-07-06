@@ -53,6 +53,9 @@ export interface StoryboardBeatRow {
   dialogue_summary: string | null;
   narration: string | null;
   duration_sec: number | null;
+  shot_type: string | null;
+  camera: string | null;
+  framing: string | null;
   status: StoryboardItemStatus;
   beat_asset_id: string | null;
   created_at: string;
@@ -130,6 +133,9 @@ export interface StoryboardBeat {
   dialogueSummary: string | null;
   narration: string | null;
   durationSec: number | null;
+  shotType: string | null;
+  camera: string | null;
+  framing: string | null;
   status: StoryboardItemStatus;
   beatAssetId: string | null;
   createdAt: string;
@@ -188,6 +194,9 @@ export interface BeatInput {
   dialogueSummary?: string | null;
   narration?: string | null;
   durationSec?: number | null;
+  shotType?: string | null;
+  camera?: string | null;
+  framing?: string | null;
   status?: StoryboardItemStatus;
   beatAssetId?: string | null;
 }

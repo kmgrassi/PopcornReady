@@ -39,6 +39,22 @@ test("parseCreateStudioDraft rejects stale payload versions", () => {
   );
 });
 
+test("parseCreateStudioDraft rejects invalid persisted draft fields", () => {
+  assert.throws(
+    () =>
+      parseCreateStudioDraft({
+        payload: {
+          ...payload,
+          draft: {
+            ...payload.draft,
+            showCaptions: "yes",
+          },
+        },
+      }),
+    /The request body is invalid/
+  );
+});
+
 test("displayExcerptForStudioDraft derives a compact goal snippet", () => {
   assert.equal(
     displayExcerptForStudioDraft({

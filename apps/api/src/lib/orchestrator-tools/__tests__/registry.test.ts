@@ -43,6 +43,17 @@ const sampleBrief: VideoBrief = {
   targetLengthSec: 30,
   aspectRatio: "9:16",
   style: "deadpan",
+  audience: "Late-night scrollers",
+  platform: "tiktok",
+  format: "challenge",
+  hookQuestion: "What happens when the diner is in orbit?",
+  strongestVisual: "A floating burger tray crossing a neon booth.",
+  oneBigIdea: "Fast food service can feel cinematic in zero gravity.",
+  caveat: "Keep the humor dry, not slapstick.",
+  payoff: "The punchline lands when the order docks perfectly.",
+  constraints: {
+    callToAction: "Try the midnight special.",
+  },
 };
 
 const activeBrief = {
@@ -193,7 +204,23 @@ test("plan_shots returns precondition_unmet (suggesting the brief) when none exi
 });
 
 test("plan_shots derives the plan from the brief and persists it with brief provenance", async () => {
-  let planEditInput: { goal: string; aspectRatio: string } | undefined;
+  let planEditInput:
+    | {
+        goal: string;
+        aspectRatio: string;
+        storyContext?: {
+          audience?: string;
+          platform?: string;
+          format?: string;
+          hookQuestion?: string;
+          strongestVisual?: string;
+          oneBigIdea?: string;
+          caveat?: string;
+          payoff?: string;
+          callToAction?: string;
+        } | null;
+      }
+    | undefined;
   let planInput:
     | { plan: ShotPlan; briefAssetId?: string; briefContentHash?: string }
     | undefined;
@@ -220,6 +247,21 @@ test("plan_shots derives the plan from the brief and persists it with brief prov
   // inputs are derived from the brief, not supplied by the model
   assert.equal(planEditInput?.goal, sampleBrief.goal);
   assert.equal(planEditInput?.aspectRatio, sampleBrief.aspectRatio);
+  assert.equal(planEditInput?.storyContext?.audience, sampleBrief.audience);
+  assert.equal(planEditInput?.storyContext?.platform, sampleBrief.platform);
+  assert.equal(planEditInput?.storyContext?.format, sampleBrief.format);
+  assert.equal(planEditInput?.storyContext?.hookQuestion, sampleBrief.hookQuestion);
+  assert.equal(
+    planEditInput?.storyContext?.strongestVisual,
+    sampleBrief.strongestVisual
+  );
+  assert.equal(planEditInput?.storyContext?.oneBigIdea, sampleBrief.oneBigIdea);
+  assert.equal(planEditInput?.storyContext?.caveat, sampleBrief.caveat);
+  assert.equal(planEditInput?.storyContext?.payoff, sampleBrief.payoff);
+  assert.equal(
+    planEditInput?.storyContext?.callToAction,
+    sampleBrief.constraints?.callToAction
+  );
   // the generated ShotPlan is what gets persisted
   assert.equal(planInput?.plan, samplePlan);
   // the active brief is recorded as the plan's input (provenance / stale graph)

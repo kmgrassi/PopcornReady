@@ -14,6 +14,12 @@ export interface AssetEditModalProps {
   imageUrl?: string | null;
   title?: string;
   subtitle?: string | null;
+  /**
+   * Seeds the message box when the modal opens. Used by the "Generate" action on
+   * an empty slot to pre-fill the item's intended prompt (e.g. a beat's visual
+   * description or a scene's summary) so the user can edit it or run as-is.
+   */
+  initialPrompt?: string;
   onClose: () => void;
   /** Called with the run id after the edit is sent so the caller can poll it. */
   onSubmitted?: (runId: string) => void;
@@ -30,6 +36,7 @@ export function AssetEditModal({
   imageUrl,
   title = "Edit this asset",
   subtitle,
+  initialPrompt,
   onClose,
   onSubmitted,
 }: AssetEditModalProps) {
@@ -46,7 +53,7 @@ export function AssetEditModal({
   // Reset whenever the modal (re)opens for a (possibly different) target.
   useEffect(() => {
     if (open) {
-      setPrompt("");
+      setPrompt(initialPrompt ?? "");
       setError(null);
       setPending(false);
       setSent(false);
@@ -54,7 +61,7 @@ export function AssetEditModal({
       setModel(providerConfig(purposeConfig, purposeConfig.providers[0].id).models[0]);
       setModelTouched(false);
     }
-  }, [open, purposeConfig, target]);
+  }, [open, purposeConfig, target, initialPrompt]);
 
   useEffect(() => {
     if (!open) return;
