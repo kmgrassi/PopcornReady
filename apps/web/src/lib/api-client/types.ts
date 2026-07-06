@@ -244,6 +244,11 @@ export interface WorkspaceAssetsResponse {
   pagination: ListPagination;
 }
 
+export interface ProjectAssetsResponse {
+  assets: V1Asset[];
+  pagination: ListPagination;
+}
+
 export interface WorkspaceOutputsResponse {
   outputs: WorkspaceOutput[];
   pagination: ListPagination;
