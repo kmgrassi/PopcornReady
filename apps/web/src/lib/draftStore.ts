@@ -1,6 +1,9 @@
 import { apiRequest, v1Api } from "./api-client";
 import type { BriefDraft, StudioStep } from "../components/studio/useStudioFlow";
 import { normalizeStudioStep } from "../components/studio/studioSteps";
+import {
+  STUDIO_DRAFT_PAYLOAD_VERSION as SHARED_STUDIO_DRAFT_PAYLOAD_VERSION,
+} from "@popcorn/shared/v1/studio-drafts";
 import type {
   CreateStudioDraftRequest,
   StudioDraftBrief,
@@ -17,7 +20,7 @@ import type {
 } from "@popcorn/shared/v1/studio-drafts";
 import type { AspectRatio, GateableGenerationStageType } from "@popcorn/shared/v1/types";
 
-export const STUDIO_DRAFT_PAYLOAD_VERSION = 1;
+export const STUDIO_DRAFT_PAYLOAD_VERSION = SHARED_STUDIO_DRAFT_PAYLOAD_VERSION;
 
 export interface StudioDraftPayload {
   v: typeof STUDIO_DRAFT_PAYLOAD_VERSION;
@@ -75,8 +78,11 @@ async function currentWorkspaceId(): Promise<string> {
   return (await v1Api.me()).workspaceId;
 }
 
-function normalizeStep(value: unknown): StudioStep {
-  return normalizeStudioStep(typeof value === "string" ? value : null);
+function normalizeStep(
+  value: unknown,
+  options: { hasRun?: boolean } = {},
+): StudioStep {
+  return normalizeStudioStep(typeof value === "string" ? value : null, options);
 }
 
 function stringOrUndefined(value: unknown): string | undefined {
@@ -276,21 +282,23 @@ function persistedDraftFromUnknown(value: unknown): StudioDraftBrief | null {
   return draft;
 }
 
-function payloadFromUnknown(value: unknown): StudioDraftPayload | null {
+export function payloadFromUnknown(value: unknown): StudioDraftPayload | null {
   if (!isRecord(value) || value.v !== STUDIO_DRAFT_PAYLOAD_VERSION) return null;
   const parsedDraft = persistedDraftFromUnknown(value.draft);
   if (!parsedDraft) return null;
+  const projectId = typeof value.projectId === "string" ? value.projectId : undefined;
+  const runId = typeof value.runId === "string" ? value.runId : undefined;
 
   return {
     v: STUDIO_DRAFT_PAYLOAD_VERSION,
     draft: hydrateDraft(parsedDraft),
-    step: normalizeStep(value.step),
-    projectId: typeof value.projectId === "string" ? value.projectId : undefined,
-    runId: typeof value.runId === "string" ? value.runId : undefined,
+    step: normalizeStep(value.step, { hasRun: Boolean(projectId && runId) }),
+    projectId,
+    runId,
   };
 }
 
-function recordFromUnknown(value: unknown): StudioDraftRecord | null {
+export function recordFromUnknown(value: unknown): StudioDraftRecord | null {
   if (!isRecord(value)) return null;
   const draftId =
     typeof value.draftId === "string"
@@ -301,7 +309,12 @@ function recordFromUnknown(value: unknown): StudioDraftRecord | null {
   if (!draftId) return null;
 
   const payload = payloadFromUnknown(value.payload);
-  const step = normalizeStep(value.step ?? payload?.step);
+  const projectId =
+    typeof value.projectId === "string" ? value.projectId : payload?.projectId;
+  const runId = typeof value.runId === "string" ? value.runId : payload?.runId;
+  const step = normalizeStep(value.step ?? payload?.step, {
+    hasRun: Boolean(projectId && runId),
+  });
   const goal = payload?.draft.goal.trim();
   const excerpt =
     typeof value.excerpt === "string" && value.excerpt.trim()
@@ -315,14 +328,13 @@ function recordFromUnknown(value: unknown): StudioDraftRecord | null {
     step,
     updatedAt:
       typeof value.updatedAt === "string" ? value.updatedAt : new Date().toISOString(),
-    projectId:
-      typeof value.projectId === "string" ? value.projectId : payload?.projectId,
-    runId: typeof value.runId === "string" ? value.runId : payload?.runId,
+    projectId,
+    runId,
     payload:
       payload ??
       buildPayload(DEFAULT_BRIEF_DRAFT, step, {
-        projectId: typeof value.projectId === "string" ? value.projectId : undefined,
-        runId: typeof value.runId === "string" ? value.runId : undefined,
+        projectId,
+        runId,
       }),
   };
 }
