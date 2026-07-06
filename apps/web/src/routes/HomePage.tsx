@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { AgentRunPreview } from "../components/AgentRunPreview";
 import { HeatLogoMark } from "../components/HeatLogoMark";
 import { Reveal } from "../components/Reveal";
+import { AnonymousUpgradeBanner } from "../components/auth/AnonymousUpgradeBanner";
 import { useAuth } from "../components/auth/AuthProvider";
 import { FaqSection } from "../components/faq/FaqSection";
 import {
@@ -488,6 +489,7 @@ export function HomePage() {
                 : `Guests can start ${guestRunLabel} before creating an account.`}
             </p>
           </form>
+          <AnonymousUpgradeBanner className={styles.retentionBanner} />
         </section>
 
         <Reveal>

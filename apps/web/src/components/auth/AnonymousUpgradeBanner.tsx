@@ -76,11 +76,11 @@ export function AnonymousUpgradeBanner({
       <div className={styles.copy}>
         <p className={styles.eyebrow}>Guest workspace</p>
         <h2 id="anonymous-upgrade-heading" className={styles.title}>
-          Save your video - create an account
+          Saved for 30 days
         </h2>
         <p className={styles.body}>
           {step === "email"
-            ? "Add an email to verify this guest workspace before setting your password."
+            ? "Create a free account to keep this project forever. Guest projects are removed after 30 days of inactivity."
             : "Enter the verification code from your email, then choose a password for this account."}
         </p>
       </div>
@@ -168,7 +168,7 @@ export function AnonymousUpgradeBanner({
       {error ? <p className={styles.error} role="alert">{error}</p> : null}
       {complete ? (
         <p className={styles.success}>
-          Account created. This video is saved to your workspace.
+          Account created. This project is saved to your workspace.
         </p>
       ) : null}
     </section>

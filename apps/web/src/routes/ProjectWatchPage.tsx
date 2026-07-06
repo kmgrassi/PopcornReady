@@ -1,4 +1,5 @@
 import { Link, Navigate, useParams } from "react-router-dom";
+import { AnonymousUpgradeBanner } from "../components/auth/AnonymousUpgradeBanner";
 import { ButtonLink } from "../components/ui/Button";
 import { useProjectWatchQuery } from "../lib/project-queries";
 import styles from "./ProjectWatchPage.module.css";
@@ -45,6 +46,8 @@ export function ProjectWatchPage() {
           Open workspace
         </ButtonLink>
       </header>
+
+      <AnonymousUpgradeBanner />
 
       {watchQuery.isLoading ? (
         <section className={styles.panel} aria-busy="true">

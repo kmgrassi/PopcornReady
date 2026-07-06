@@ -8,6 +8,7 @@ import {
 import { devToolTestsRouter, isToolTestHarnessEnabled } from "./dev-tool-tests.js";
 import { devWebE2ERouter, isWebE2EHarnessEnabled } from "./dev-web-e2e.js";
 import { discoverRouter } from "./discover.js";
+import { guestRetentionRouter } from "./guest-retention.js";
 import { healthRouter } from "./health.js";
 import { inspirationRouter } from "./inspiration.js";
 
@@ -16,6 +17,7 @@ export function mountPublicV1Routes(v1: Router) {
   v1.use(discoverRouter);
   v1.use(catalogPublicRouter);
   v1.use(creditsWebhookRouter);
+  v1.use(guestRetentionRouter);
   // Public, unauthenticated: the inspiration generator is linked from the
   // landing page. Poster generation is bounded by a signed-concept check.
   v1.use(inspirationRouter);

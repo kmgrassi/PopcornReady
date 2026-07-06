@@ -26,6 +26,7 @@ import {
   createBriefVersion,
   getActiveProjectBrief,
   getProject,
+  recordProjectActivity,
 } from "@/lib/api/v1/store";
 import { startPosterGenerationInBackground } from "@/lib/api/v1/poster-background";
 import { parseBrief } from "@/lib/api/v1/schemas";
@@ -584,6 +585,7 @@ orchestratorRunsRouter.get(
   route(async ({ auth }, params) => {
     const projectId = requireParam(params, "projectId");
     await requireProjectAccess(auth.workspaceId, projectId);
+    await recordProjectActivity(auth.workspaceId, projectId);
     const runs = await listOrchestratorRunsForProject(projectId);
     const bodies = await Promise.all(
       runs.map(async (run) =>
@@ -600,6 +602,7 @@ orchestratorRunsRouter.get(
     const projectId = requireParam(params, "projectId");
     const runId = requireParam(params, "runId");
     await requireProjectAccess(auth.workspaceId, projectId);
+    await recordProjectActivity(auth.workspaceId, projectId);
     return { status: 200, body: await assembleRunDetail(runId, projectId), headers: NO_STORE_HEADERS };
   })
 );

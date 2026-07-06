@@ -3468,6 +3468,25 @@ export async function getProject(
   return mapProjectWithProjection(db, data as ProjectRow);
 }
 
+export async function recordProjectActivity(
+  workspaceId: string,
+  projectId: string
+): Promise<void> {
+  const db = getServiceSupabase();
+  const data = await runQuery(
+    "store.recordProjectActivity",
+    db
+      .from("projects")
+      .update({ last_activity_at: new Date().toISOString() })
+      .eq("id", projectId)
+      .eq("workspace_id", workspaceId)
+      .neq("status", "deleted")
+      .select("id")
+      .maybeSingle()
+  );
+  if (!data) throw notFound(`Project not found: ${projectId}`);
+}
+
 export async function deleteProject(
   workspaceId: string,
   projectId: string

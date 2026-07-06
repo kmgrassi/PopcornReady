@@ -21,6 +21,7 @@ import {
   getProject,
   getProjectWatchMedia,
   listProjects,
+  recordProjectActivity,
   setProjectPoster,
   setProjectVisibility,
 } from "@/lib/api/v1/store";
@@ -108,6 +109,7 @@ projectsRouter.get(
     if (!params.projectId) {
       throw new ApiError("validation_failed", "projectId is required.");
     }
+    await recordProjectActivity(auth.workspaceId, params.projectId);
     const project = await getProject(auth.workspaceId, params.projectId);
     return { status: 200, body: { project } };
   })
@@ -218,6 +220,7 @@ projectsRouter.get(
     if (!params.projectId) {
       throw new ApiError("validation_failed", "projectId is required.");
     }
+    await recordProjectActivity(auth.workspaceId, params.projectId);
     const media = await getProjectWatchMedia(auth.workspaceId, params.projectId);
     return {
       status: 200,
