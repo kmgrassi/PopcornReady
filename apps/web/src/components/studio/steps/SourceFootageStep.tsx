@@ -26,9 +26,6 @@ function formatDuration(seconds: number): string {
 export function SourceFootageStep({ draft, update, next, back }: StepProps) {
   const [isReading, setIsReading] = useState(false);
   const [readError, setReadError] = useState<string | null>(null);
-  const [footageInputMode, setFootageInputMode] = useState<"upload" | "record">(
-    "upload",
-  );
   const selectionRequestId = useRef(0);
   const isUploadMode = draft.footageChoice === "upload";
   const hasVisualFootage = draft.selectedFootage.some(
@@ -109,44 +106,18 @@ export function SourceFootageStep({ draft, update, next, back }: StepProps) {
             <div>
               <p className={styles.uploadTitle}>Source files</p>
               <p className={styles.uploadHelp}>
-                Upload existing media, or record a new video from this device.
+                Select existing media, or record a new video or photo from this device.
               </p>
             </div>
             <div className={styles.uploadControls}>
-              <div
-                className={styles.modeToggle}
-                role="radiogroup"
-                aria-label="Source file input mode"
-              >
-                <button
-                  type="button"
-                  className={footageInputMode === "upload" ? styles.activeMode : undefined}
-                  role="radio"
-                  aria-checked={footageInputMode === "upload"}
-                  onClick={() => setFootageInputMode("upload")}
-                >
-                  Upload
-                </button>
-                <button
-                  type="button"
-                  className={footageInputMode === "record" ? styles.activeMode : undefined}
-                  role="radio"
-                  aria-checked={footageInputMode === "record"}
-                  onClick={() => setFootageInputMode("record")}
-                >
-                  Record
-                </button>
-              </div>
               <label className={styles.filePicker}>
                 <input
-                  key={footageInputMode}
                   type="file"
-                  accept={footageInputMode === "record" ? "video/*" : FOOTAGE_ACCEPT}
-                  multiple={footageInputMode === "upload"}
-                  capture={footageInputMode === "record" ? "environment" : undefined}
+                  accept={FOOTAGE_ACCEPT}
+                  multiple
                   onChange={(event) => void onFilesSelected(event.currentTarget.files)}
                 />
-                {footageInputMode === "record" ? "Record new" : "Choose existing"}
+                Select or record video or photo
               </label>
             </div>
           </div>
