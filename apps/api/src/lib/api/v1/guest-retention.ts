@@ -40,6 +40,11 @@ export interface PurgeableAnonymousUser {
   isAnonymous: boolean;
 }
 
+export interface CurrentAuthUserState {
+  email?: string | null;
+  isAnonymous?: boolean | null;
+}
+
 interface PurgeableAnonymousUserRow {
   user_id: string;
   auth_id: string | null;
@@ -133,9 +138,16 @@ export function filterDeletableAnonymousUsers(
   );
 }
 
+export function isCurrentAuthUserStillAnonymous(
+  user: CurrentAuthUserState | null
+): boolean {
+  return user?.isAnonymous === true && (user.email ?? "").trim() === "";
+}
+
 export async function deleteOrphanedAnonymousUsers(
   candidates: PurgeableAnonymousUser[],
   deps: {
+    getAuthUser: (authId: string) => Promise<CurrentAuthUserState | null>;
     deleteAuthUser: (authId: string) => Promise<void>;
     purgeUserRows: (userIds: string[]) => Promise<string[]>;
     logger?: Logger;
@@ -157,6 +169,17 @@ export async function deleteOrphanedAnonymousUsers(
 
   for (const user of deletable) {
     try {
+      const currentAuthUser = await deps.getAuthUser(user.authId);
+      if (!isCurrentAuthUserStillAnonymous(currentAuthUser)) {
+        logger.warn("guest_retention.user_delete_skipped_current_not_anonymous", {
+          userId: user.userId,
+          authId: user.authId,
+          currentIsAnonymous: currentAuthUser?.isAnonymous ?? null,
+          currentHasEmail: (currentAuthUser?.email ?? "").trim() !== "",
+        });
+        continue;
+      }
+
       await deps.deleteAuthUser(user.authId);
       deletedUserCount += 1;
       deletedUserIds.push(user.userId);
@@ -282,6 +305,7 @@ export async function runGuestRetentionPurge(
       ? await claimPurgeableAnonymousUsers(purgedWorkspaceIds)
       : [];
   const userPurge = await deleteOrphanedAnonymousUsers(userCandidates, {
+    getAuthUser: getAnonymousAuthUser,
     deleteAuthUser: deleteAnonymousAuthUser,
     purgeUserRows: purgeAnonymousUserRows,
     logger,
@@ -334,6 +358,16 @@ export async function claimPurgeableAnonymousUsers(
   return ((rows ?? []) as PurgeableAnonymousUserRow[]).map(
     mapPurgeableAnonymousUser
   );
+}
+
+async function getAnonymousAuthUser(authId: string): Promise<CurrentAuthUserState | null> {
+  const { data, error } = await getServiceSupabase().auth.admin.getUserById(authId);
+  if (error) throw error;
+  if (!data.user) return null;
+  return {
+    email: data.user.email,
+    isAnonymous: data.user.is_anonymous === true,
+  };
 }
 
 async function deleteAnonymousAuthUser(authId: string): Promise<void> {

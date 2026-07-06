@@ -8,6 +8,7 @@ import {
   deleteOrphanedAnonymousUsers,
   filterDeletableAnonymousUsers,
   guestRetentionCutoff,
+  isCurrentAuthUserStillAnonymous,
   isGuestRetentionJobAuthorized,
   isGuestRetentionRunOnStartEnabled,
   isGuestRetentionSchedulerEnabled,
@@ -25,6 +26,11 @@ const silentLogger: Logger = {
   error: () => {},
   child: () => silentLogger,
 };
+
+const currentAnonymousAuthUser = async () => ({
+  email: null,
+  isAnonymous: true,
+});
 
 test("guestRetentionCutoff uses the 30-day inactivity policy", () => {
   const now = new Date("2026-07-06T12:00:00.000Z");
@@ -163,6 +169,57 @@ test("claimed (non-anonymous) users are never deletable", () => {
   );
 });
 
+test("current auth user guard requires anonymous email-less state", () => {
+  assert.equal(isCurrentAuthUserStillAnonymous({ email: null, isAnonymous: true }), true);
+  assert.equal(isCurrentAuthUserStillAnonymous({ email: "", isAnonymous: true }), true);
+  assert.equal(
+    isCurrentAuthUserStillAnonymous({ email: "creator@example.com", isAnonymous: true }),
+    false
+  );
+  assert.equal(isCurrentAuthUserStillAnonymous({ email: null, isAnonymous: false }), false);
+  assert.equal(isCurrentAuthUserStillAnonymous(null), false);
+});
+
+test("deleteOrphanedAnonymousUsers re-checks current auth state before deleting", async () => {
+  const deletedAuthIds: string[] = [];
+  const purgedRowUserIds: string[][] = [];
+
+  const stats = await deleteOrphanedAnonymousUsers(
+    [
+      { userId: "user_anon", authId: "auth_anon", email: null, isAnonymous: true },
+      {
+        userId: "user_claimed_during_purge",
+        authId: "auth_claimed_during_purge",
+        email: null,
+        isAnonymous: true,
+      },
+    ],
+    {
+      getAuthUser: async (authId) =>
+        authId === "auth_claimed_during_purge"
+          ? { email: "creator@example.com", isAnonymous: false }
+          : { email: null, isAnonymous: true },
+      deleteAuthUser: async (authId) => {
+        deletedAuthIds.push(authId);
+      },
+      purgeUserRows: async (userIds) => {
+        purgedRowUserIds.push(userIds);
+        return userIds;
+      },
+      logger: silentLogger,
+    }
+  );
+
+  assert.deepEqual(deletedAuthIds, ["auth_anon"]);
+  assert.deepEqual(purgedRowUserIds, [["user_anon"]]);
+  assert.deepEqual(stats, {
+    candidateUserCount: 2,
+    deletedUserCount: 1,
+    failedUserDeleteCount: 0,
+    deletedUserRowCount: 1,
+  });
+});
+
 test("deleteOrphanedAnonymousUsers deletes only anonymous users and reports metrics", async () => {
   const deletedAuthIds: string[] = [];
   const purgedRowUserIds: string[][] = [];
@@ -179,6 +236,7 @@ test("deleteOrphanedAnonymousUsers deletes only anonymous users and reports metr
       },
     ],
     {
+      getAuthUser: currentAnonymousAuthUser,
       deleteAuthUser: async (authId) => {
         deletedAuthIds.push(authId);
       },
@@ -209,6 +267,7 @@ test("deleteOrphanedAnonymousUsers keeps rows for failed auth deletes", async ()
       { userId: "user_fail", authId: "auth_fail", email: null, isAnonymous: true },
     ],
     {
+      getAuthUser: currentAnonymousAuthUser,
       deleteAuthUser: async (authId) => {
         if (authId === "auth_fail") throw new Error("gotrue unavailable");
       },
@@ -233,6 +292,7 @@ test("deleteOrphanedAnonymousUsers skips row purge when nothing was deleted", as
   let purgeUserRowsCalls = 0;
 
   const stats = await deleteOrphanedAnonymousUsers([], {
+    getAuthUser: currentAnonymousAuthUser,
     deleteAuthUser: async () => {
       throw new Error("must not be called");
     },
@@ -256,6 +316,7 @@ test("deleteOrphanedAnonymousUsers survives a failed user-row purge", async () =
   const stats = await deleteOrphanedAnonymousUsers(
     [{ userId: "user_1", authId: "auth_1", email: null, isAnonymous: true }],
     {
+      getAuthUser: currentAnonymousAuthUser,
       deleteAuthUser: async () => {},
       purgeUserRows: async () => {
         throw new Error("rpc down");
