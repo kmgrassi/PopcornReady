@@ -12,6 +12,8 @@ const execFileAsync = promisify(execFile);
 const THUMBNAIL_CONTENT_TYPE = "image/webp";
 const THUMBNAIL_FILENAME = "thumbnail.webp";
 const THUMBNAIL_MAX_WIDTH = 480;
+const FIRST_FRAME_FILENAME = "first-frame.webp";
+export const FIRST_FRAME_CONTENT_TYPE = "image/webp";
 
 export function assetThumbnailStorageKey(input: {
   workspaceId: string;
@@ -74,6 +76,36 @@ export async function createThumbnailRendition(input: {
       storageBucket: stored.bucket,
       contentType: THUMBNAIL_CONTENT_TYPE,
       generatedAt: (input.now ?? (() => new Date()))().toISOString(),
+    };
+  } catch {
+    return null;
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
+export async function extractFirstFrameImage(input: {
+  filename: string;
+  bytes: Buffer;
+}): Promise<{ filename: string; bytes: Buffer; contentType: string } | null> {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "popcornready-first-frame-"));
+  const inputPath = path.join(tempDir, path.basename(input.filename) || "asset.bin");
+  const outputPath = path.join(tempDir, FIRST_FRAME_FILENAME);
+
+  try {
+    await fs.writeFile(inputPath, input.bytes);
+    await runFfmpeg([
+      "-y",
+      "-i",
+      inputPath,
+      "-frames:v",
+      "1",
+      outputPath,
+    ]);
+    return {
+      filename: FIRST_FRAME_FILENAME,
+      bytes: await fs.readFile(outputPath),
+      contentType: FIRST_FRAME_CONTENT_TYPE,
     };
   } catch {
     return null;

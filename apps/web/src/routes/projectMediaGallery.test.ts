@@ -85,5 +85,9 @@ test("assetSourceLabel normalizes raw API source objects", () => {
   assert.equal(assetSourceLabel("upload"), "upload");
   assert.equal(assetSourceLabel({ type: "multipart_upload" }), "upload");
   assert.equal(assetSourceLabel({ type: "remote_url" }), "remote url");
+  assert.equal(
+    assetSourceLabel({ type: "derived", relation: "first_frame_of" } as { type: string }),
+    "first frame",
+  );
   assert.equal(assetSourceLabel(null), "asset");
 });

@@ -391,7 +391,7 @@ export interface V1Asset {
   agentContext?: AgentAssetContext | AgentClipContext;
   assetKnowledge?: AssetKnowledge;
   clipUnderstanding?: ClipUnderstanding;
-  source: "upload" | "remote_url" | "local_path" | "generated";
+  source: "upload" | "remote_url" | "local_path" | "generated" | "derived";
   // Set when this asset was produced by a PR2 generated-asset job.
   generatedAssetJobId?: string;
   createdAt: string;
