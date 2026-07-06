@@ -13,6 +13,7 @@ import { validateMobileUploadCandidate } from "@popcorn/shared/mobile-upload-pol
 import { assetStorageKey, writeAssetObject } from "@/lib/storage/asset-write";
 import { createObjectStore } from "@/lib/storage/object-store";
 import { AuthContext } from "./auth";
+import { createThumbnailRendition } from "./asset-renditions";
 import { assertProjectUploadPath, createAssetUploadUrl } from "./asset-upload";
 import { sha256Hex } from "./asset-graph";
 import { buildSemanticAnalysis } from "../../assets/semantic-analysis";
@@ -374,6 +375,15 @@ async function writeBytesForAsset(input: {
     visibility,
     contentType: input.contentType,
   });
+  const thumbnail = await createThumbnailRendition({
+    workspaceId: input.auth.workspaceId,
+    projectId: input.projectId,
+    assetId: input.asset.id,
+    kind: input.asset.kind,
+    filename: input.asset.filename,
+    bytes: input.bytes,
+    visibility,
+  });
   const updated = await updateStoredAsset(
     input.auth.workspaceId,
     input.projectId,
@@ -383,6 +393,15 @@ async function writeBytesForAsset(input: {
       asset.storageKey = stored.storageKey;
       asset.storageBucket = stored.storageBucket;
       asset.contentHash = sha256Hex(input.bytes);
+      if (thumbnail) {
+        asset.context = {
+          ...(asset.context ?? {}),
+          renditions: {
+            ...(asset.context?.renditions ?? {}),
+            thumbnail,
+          },
+        };
+      }
       const derived = withDerivedAssetKnowledge(asset);
       asset.assetKnowledge = derived.assetKnowledge;
       asset.clipUnderstanding = derived.clipUnderstanding;
@@ -659,6 +678,16 @@ export async function registerAsset(
       destinationVisibility: visibility,
       contentType: object.contentType || metadata.contentType,
     });
+    const thumbnail = await createThumbnailRendition({
+      workspaceId: auth.workspaceId,
+      projectId,
+      assetId: created.id,
+      kind,
+      filename,
+      bytes: object.body,
+      visibility,
+      store,
+    });
     const ready = await updateStoredAsset(
       auth.workspaceId,
       projectId,
@@ -667,6 +696,15 @@ export async function registerAsset(
         stored.status = "ready";
         stored.storageKey = copied.key;
         stored.storageBucket = copied.bucket;
+        if (thumbnail) {
+          stored.context = {
+            ...(stored.context ?? {}),
+            renditions: {
+              ...(stored.context?.renditions ?? {}),
+              thumbnail,
+            },
+          };
+        }
         const derived = withDerivedAssetKnowledge(stored);
         stored.assetKnowledge = derived.assetKnowledge;
         stored.clipUnderstanding = derived.clipUnderstanding;

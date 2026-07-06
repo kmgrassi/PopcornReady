@@ -113,6 +113,7 @@ import {
 } from "./schemas";
 import {
   reconcileAssetStorage,
+  type ReconcileStorageSidecar,
   type VisibilityObjectStore,
 } from "../../storage/visibility-move";
 import { normalizeSlug, projectDisplayName } from "./naming";
@@ -181,6 +182,7 @@ export interface V1Asset {
   source: AgentAssetSource;
   visibility?: "public" | "private";
   remoteUrl?: string;
+  thumbnailUrl?: string;
   storageKey?: string;
   storageBucket?: string;
   durationSec?: number;
@@ -1826,6 +1828,38 @@ function assetContextEnvelope(asset: V1Asset): AssetContextEnvelope | null {
   return Object.keys(envelope).length > 0 ? envelope : null;
 }
 
+function assetStorageSidecars(row: AssetRow): ReconcileStorageSidecar[] {
+  const thumbnail = row.context?.context?.renditions?.thumbnail;
+  return thumbnail
+    ? [{ key: thumbnail.storageKey, storageBucket: thumbnail.storageBucket }]
+    : [];
+}
+
+function withReconciledSidecarBuckets(
+  context: AssetContextEnvelope | null,
+  sidecars: ReconcileStorageSidecar[]
+): AssetContextEnvelope | null {
+  const thumbnail = context?.context?.renditions?.thumbnail;
+  const thumbnailBucket = thumbnail
+    ? sidecars.find((sidecar) => sidecar.key === thumbnail.storageKey)?.storageBucket
+    : undefined;
+  if (!thumbnail || !thumbnailBucket) return context;
+
+  return {
+    ...(context ?? {}),
+    context: {
+      ...(context?.context ?? {}),
+      renditions: {
+        ...(context?.context?.renditions ?? {}),
+        thumbnail: {
+          ...thumbnail,
+          storageBucket: thumbnailBucket,
+        },
+      },
+    },
+  };
+}
+
 function assetToRow(asset: V1Asset): AssetRow {
   const params = asset.provenance
     ? { schema_version: "asset_params.v1", provenance: asset.provenance }
@@ -1958,9 +1992,11 @@ function mapAssetRow(row: AssetRow): V1Asset {
 
 async function mapAsset(row: AssetRow): Promise<V1Asset> {
   const asset = mapAssetRow(row);
-  const resolvedUrl = await resolveAssetUrl(row);
-  if (resolvedUrl) asset.remoteUrl = resolvedUrl;
+  const media = await assetMediaUrlsForRow(row);
+  if (media.url) asset.remoteUrl = media.url;
   else delete asset.remoteUrl;
+  if (media.thumbnailUrl) asset.thumbnailUrl = media.thumbnailUrl;
+  else delete asset.thumbnailUrl;
   return asset;
 }
 
@@ -5557,6 +5593,7 @@ export async function setAssetVisibility(
         id: assetId,
         storageKey: current.storage_key,
         storageBucket: current.storage_bucket,
+        sidecars: assetStorageSidecars(current),
         visibility,
       },
       projectVisibility: project.visibility ?? "public",
@@ -5566,7 +5603,7 @@ export async function setAssetVisibility(
           ? "public"
           : "private",
       store: options.store,
-      persistStorageBucket: async (storageBucket) => {
+      persistStorageBucket: async (storageBucket, sidecars) => {
         const data = await runQuery(
           "store.setAssetVisibility update",
           db
@@ -5574,6 +5611,7 @@ export async function setAssetVisibility(
             .update({
               visibility,
               storage_bucket: storageBucket,
+              context: withReconciledSidecarBuckets(current.context, sidecars),
               updated_at: new Date().toISOString(),
             })
             .eq("id", assetId)
@@ -5657,6 +5695,7 @@ export async function setProjectVisibility(
           id: asset.id,
           storageKey: asset.storage_key,
           storageBucket: asset.storage_bucket,
+          sidecars: assetStorageSidecars(asset),
           visibility: asset.visibility ?? "public",
         },
         projectVisibility: visibility,
@@ -5666,13 +5705,14 @@ export async function setProjectVisibility(
             ? "public"
             : "private",
         store: options.store,
-        persistStorageBucket: async (storageBucket) => {
+        persistStorageBucket: async (storageBucket, sidecars) => {
           await runQuery(
             "store.setProjectVisibility asset bucket",
             db
               .from("assets")
               .update({
                 storage_bucket: storageBucket,
+                context: withReconciledSidecarBuckets(asset.context, sidecars),
                 updated_at: new Date().toISOString(),
               })
               .eq("id", asset.id)
@@ -5874,6 +5914,7 @@ export interface AssetMediaUrlRow {
   storage_key: string | null;
   storage_bucket?: string | null;
   visibility?: "public" | "private" | null;
+  context?: AssetContextEnvelope | null;
 }
 
 interface WorkspaceAssetJoinRow extends AssetRow {
@@ -5898,12 +5939,40 @@ export async function assetMediaUrlsForRow(
       url = remoteAssetUrlForDelivery(row.remote_url) ?? null;
     }
   }
+  const thumbnail = row.context?.context?.renditions?.thumbnail;
+  const thumbnailUrl = thumbnail
+    ? await resolveRenditionUrl(row, thumbnail.storageKey, thumbnail.storageBucket)
+    : assetMediaToKind(row.media, row.kind) === "image"
+      ? url
+      : null;
 
   return {
     url,
-    thumbnailUrl: assetMediaToKind(row.media, row.kind) === "image" ? url : null,
+    thumbnailUrl,
     expiresAt: mediaUrlExpiresAt(opts.now),
   };
+}
+
+async function resolveRenditionUrl(
+  row: AssetMediaUrlRow,
+  storageKey: string,
+  storageBucket?: string | null
+): Promise<string | null> {
+  try {
+    return (
+      (await resolveAssetUrl(
+        {
+          remote_url: null,
+          storage_key: storageKey,
+          storage_bucket: storageBucket ?? row.storage_bucket,
+          visibility: row.visibility,
+        },
+        { privateTtlSec: MEDIA_URL_EXPIRES_IN_SEC }
+      )) ?? null
+    );
+  } catch {
+    return null;
+  }
 }
 
 export async function getAssetMediaUrls(

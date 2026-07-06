@@ -379,6 +379,7 @@ export interface V1Asset {
   status: AssetStatus;
   filename: string;
   url: string; // served/managed path the renderer can read
+  thumbnailUrl?: string;
   durationSec: number;
   // Human display name written by the generating agent (falls back to a derived name).
   name?: string;
