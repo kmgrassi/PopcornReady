@@ -706,28 +706,47 @@ export function HomePage() {
                   generates until you tap create.
                 </span>
               </div>
-              <label className={styles.uploadPick}>
-                <input
-                  type="file"
-                  accept={LANDING_FOOTAGE_ACCEPT}
-                  multiple
-                  capture="environment"
-                  onChange={(event) => {
-                    void handleLandingUploadFiles(event.target.files);
-                    event.currentTarget.value = "";
-                  }}
-                  disabled={
-                    authIsResolving ||
-                    uploadItems.length >= LANDING_MAX_FILES ||
-                    uploadIsBusy
-                  }
-                />
-                {authIsResolving
-                  ? "Loading session..."
-                  : isPreparingUploadDraft
-                  ? "Preparing..."
-                  : "Upload clips"}
-              </label>
+              <div className={styles.uploadActions}>
+                <label className={styles.uploadPick}>
+                  <input
+                    type="file"
+                    accept={LANDING_FOOTAGE_ACCEPT}
+                    multiple
+                    onChange={(event) => {
+                      void handleLandingUploadFiles(event.target.files);
+                      event.currentTarget.value = "";
+                    }}
+                    disabled={
+                      authIsResolving ||
+                      uploadItems.length >= LANDING_MAX_FILES ||
+                      uploadIsBusy
+                    }
+                  />
+                  {authIsResolving
+                    ? "Loading session..."
+                    : isPreparingUploadDraft
+                    ? "Preparing..."
+                    : "Choose existing"}
+                </label>
+                <label className={styles.uploadPick}>
+                  <input
+                    type="file"
+                    accept={LANDING_FOOTAGE_ACCEPT}
+                    multiple
+                    capture="environment"
+                    onChange={(event) => {
+                      void handleLandingUploadFiles(event.target.files);
+                      event.currentTarget.value = "";
+                    }}
+                    disabled={
+                      authIsResolving ||
+                      uploadItems.length >= LANDING_MAX_FILES ||
+                      uploadIsBusy
+                    }
+                  />
+                  Record new
+                </label>
+              </div>
             </div>
             {(uploadItems.length > 0 || uploadError) && (
               <div className={styles.uploadPanel} aria-live="polite">
