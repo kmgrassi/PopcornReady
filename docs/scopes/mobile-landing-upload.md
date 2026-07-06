@@ -16,11 +16,15 @@ phone's camera roll is the user's asset library, and upload is the front door.
    (camera roll or record now).
 3. Pick 1–N clips → per-file progress bars while they upload.
 4. Choose account or skip (guest) — same funnel as the landing prompt box.
-5. Type a one-line brief ("make a beach-day montage") and explicitly tap
-   create — **nothing runs automatically on upload** (decided; see Design
-   decisions).
-6. Land on the existing run-progress page; the uploaded-footage generation
-   entrypoint takes it from there.
+5. ~~Type a one-line brief on the landing page and tap create.~~
+   **Superseded 2026-07-06** by
+   [landing-upload-dashboard-handoff.md](landing-upload-dashboard-handoff.md):
+   when the upload batch settles, the user navigates to the **project
+   dashboard** (the media gallery + intent bar), and the brief/create step
+   happens there. **Nothing runs automatically on upload** — that decision is
+   unchanged; navigation is not a run.
+6. From the project view, brief + explicit create starts the run →
+   run-progress page.
 
 ## Current state (verified facts that drive the plan)
 
