@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "test": "tsx --test \"src/**/*.test.ts\"",
     "test:e2e": "playwright test",
+    "test:e2e:mobile": "playwright test --project mobile-safari --project mobile-chrome",
     "test:e2e:local-db": "node ../../scripts/with-local-supabase-env.mjs pnpm --filter @popcorn/web test:e2e",
     "test:e2e:hosted": "POPCORN_E2E_AUTH_MODE=supabase playwright test e2e/auth-hosted.spec.ts",
     "typecheck": "tsc --noEmit",

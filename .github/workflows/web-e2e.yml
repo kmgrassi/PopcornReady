@@ -22,8 +22,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install Playwright browser
-        run: pnpm --filter @popcorn/web exec playwright install --with-deps chromium
+      - name: Install Playwright browsers
+        run: pnpm --filter @popcorn/web exec playwright install --with-deps chromium webkit
 
       - name: Run web e2e smoke
         run: pnpm --filter @popcorn/web test:e2e

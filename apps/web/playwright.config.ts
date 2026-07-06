@@ -84,6 +84,7 @@ const webServerEnv = hostedAuthMode
 const webCommand = hostedAuthMode
   ? `pnpm --filter @popcorn/web exec vite build && pnpm --filter @popcorn/web exec vite preview --host 127.0.0.1 --port ${webPort} --strictPort`
   : `pnpm --filter @popcorn/web exec vite --host 127.0.0.1 --port ${webPort} --strictPort`;
+const mobileCriticalGrep = /@mobile/;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -118,6 +119,16 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      name: "mobile-safari",
+      grep: mobileCriticalGrep,
+      use: { ...devices["iPhone 13"] },
+    },
+    {
+      name: "mobile-chrome",
+      grep: mobileCriticalGrep,
+      use: { ...devices["Pixel 7"] },
     },
   ],
 });

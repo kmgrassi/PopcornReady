@@ -42,7 +42,7 @@ test.beforeEach(async ({ page }) => {
   await mockProject(page);
 });
 
-test("polls an active run, cancels it, and clears the recovery hint", async ({ page }) => {
+test("polls an active run, cancels it, and clears the recovery hint @mobile", async ({ page }) => {
   let getCount = 0;
   let canceled = false;
   let cancelRequestBody: unknown = null;
@@ -108,7 +108,7 @@ test("polls an active run, cancels it, and clears the recovery hint", async ({ p
     .toBeNull();
 });
 
-test("shows in-progress rail state when active stage rows have not caught up", async ({ page }) => {
+test("shows in-progress rail state when active stage rows have not caught up @mobile", async ({ page }) => {
   const detail = runDetail({
     status: "running",
     stageType: "asset_generation",
@@ -141,7 +141,7 @@ test("shows in-progress rail state when active stage rows have not caught up", a
   await expect(rail.getByText("Shots")).toBeVisible();
 });
 
-test("opens generated asset feedback in a modal and posts the targeted revision", async ({ page }) => {
+test("opens generated asset feedback in a modal and posts the targeted revision @mobile", async ({ page }) => {
   let revisionRequestBody: unknown = null;
   let getCount = 0;
   let detail = runDetail({
@@ -230,7 +230,7 @@ test("opens generated asset feedback in a modal and posts the targeted revision"
   });
 });
 
-test("submits review-gate approve and reject actions with notes", async ({ page }) => {
+test("submits review-gate approve and reject actions with notes @mobile", async ({ page }) => {
   const requests: Array<{ action: string; body: unknown }> = [];
   let detail = runDetail({
     status: "running",
@@ -315,7 +315,7 @@ test("submits review-gate approve and reject actions with notes", async ({ page 
   });
 });
 
-test("shows a stored recovery hint while loading and then renders failure details", async ({
+test("shows a stored recovery hint while loading and then renders failure details @mobile", async ({
   page,
 }) => {
   await page.addInitScript(
