@@ -131,15 +131,43 @@ calibration guidance.
 
 New **asset kinds** (additive enum migration):
 
-- `transcript` — data asset; content = `{ language, segments: [{ startSec,
-  endSec, text, words: [{ w, startSec, endSec, confidence }], speaker? }] }`.
-  Derived from a `source_footage` or `audio_track` asset via `inputs`
-  (relation `transcribed_from`). Word-level only in v1; phoneme/viseme fields
-  are additive later.
-- `audio_mix` — data asset describing the mix: ordered layers
-  `[{ audioAssetId, gainDb, duckUnder?, inSec, outSec }]` over a composite.
-  The render consumes it; it is the provenance of "why the final sounds like
-  this."
+- `transcript` — data asset anchoring the transcription's identity, version,
+  and provenance. Derived from a `source_footage` or `audio_track` asset via
+  `inputs` with the standard relation vocabulary: `relation: "input",
+  role: "transcribed_from"` (edge relations are fixed to
+  `input | anchor | child` — `edge_relation` /
+  `AssetInputRelation` — semantic meaning lives in `role`; do **not** add new
+  enum variants for this).
+- `audio_mix` — data asset anchoring the mix's identity/version/provenance
+  over a composite. Its `inputs` reference every layered audio asset
+  (`relation: "input", role: "mix_layer"`). The render consumes it; it is the
+  provenance of "why the final sounds like this."
+
+Relational rows over the graph (per the CLAUDE.md JSONB rule: the UI renders
+these time-linked and the agent targets them individually, so they get tables,
+not loose JSONB — same pattern as `storyboard_*` rows linking to asset
+snapshots):
+
+- `transcript_segments` — one row per utterance: `transcript_asset_id`,
+  `position`, `start_sec`, `end_sec`, `text`, `speaker?`, plus a typed
+  `words` JSONB payload (`[{ w, startSec, endSec, confidence }]`). Segments
+  are the unit the UI renders and the agent/approvals target; word timings are
+  provider-shaped detail inside a segment (typed, versioned payload — the
+  allowed JSONB case). Phoneme/viseme fields are additive on that payload
+  later.
+- `audio_mix_layers` — one row per layer: `mix_asset_id`, `position`,
+  `audio_asset_id`, `gain_db`, `duck_under?`, `in_sec`, `out_sec`. Layers are
+  individually approved/edited ("keep the singing at full volume"), so they
+  are rows the agent can target by id.
+
+**Original audio must become an asset before it can be mixed.** For uploaded
+phone video the original sound lives inside the `source_footage` container and
+is not addressable by `audio_mix_layers.audio_asset_id`. An extraction step
+(ffmpeg) mints an `audio_track` asset (role `original_audio`) with
+`relation: "input", role: "extracted_from"` provenance back to the footage;
+ducking/muting then references that asset like any other layer. (Transcription
+does *not* depend on this — ASR providers accept video containers directly —
+so extraction lands with the mix work in PR 4, not PR 1.)
 
 Reused as-is:
 
@@ -148,16 +176,15 @@ Reused as-is:
   existing critique pattern instead of a new score table.
 - **Approval/versioning** — existing gates + immutable versions + selections.
   A re-recorded segment is `regenerate_asset_version`, exactly like images.
-- **JSONB discipline (CLAUDE.md):** transcript/mix payloads are typed, versioned
-  asset content (allowed); if the UI later edits mix layers directly, promote
-  layers to relational rows at that point.
 
-New **orchestrator tools**: `transcribe_audio`, `fit_audio_to_picture`, and a
-mix-aware `export_video` (or a discrete `mix_audio` if export stays pure). Each
+New **orchestrator tools**: `transcribe_audio`, `fit_audio_to_picture`,
+`extract_source_audio` (thin ffmpeg step, PR 4), and a mix-aware
+`export_video` (or a discrete `mix_audio` if export stays pure). Each
 validates preconditions and returns typed failures (Principle 7): e.g.
 `fit_audio_to_picture` without a transcript for a dialogue-replacement request
 returns `missing_transcript`, and the agent self-heals by calling
-`transcribe_audio` first.
+`transcribe_audio` first; a mix layer targeting a video asset returns
+`layer_not_audio` and the agent calls `extract_source_audio`.
 
 ## UI (observe-first, per docs/ui-interaction-model.md)
 
@@ -202,12 +229,13 @@ existing `apps/api/scripts/*-smoke.ts` convention (`storage:smoke`,
 
 ### PR 1 — Transcript asset kind + `transcribe_audio` (foundation)
 
-**Scope:** additive migration adding `transcript` to `graph_asset_kind`
-(unique timestamp — see migration-collision convention); transcript content
-schema in `packages/shared`; ASR provider abstraction
-(`apps/api/src/lib/generative/transcription.ts`) with `openai-whisper` (or
-equivalent) + `mock` providers; asset-ingest wiring so the existing
-`transcribe_audio` knowledge gap is serviceable.
+**Scope:** additive migration adding `transcript` to `graph_asset_kind` plus
+the `transcript_segments` table (unique timestamp — see migration-collision
+convention); segment/word schema in `packages/shared`; ASR provider
+abstraction (`apps/api/src/lib/generative/transcription.ts`) with
+`openai-whisper` (or equivalent) + `mock` providers; asset-ingest wiring so
+the existing `transcribe_audio` knowledge gap is serviceable. Provenance uses
+the standard vocabulary (`relation: "input", role: "transcribed_from"`).
 
 **Isolated endpoint:**
 
@@ -223,9 +251,10 @@ Precondition failures are typed (Principle 7): asset not audio/video →
 `asset_not_transcribable`; video with no audio stream → `no_audio_stream`.
 
 **Tests:**
-- Unit: ASR-response → transcript-content normalization (word merge, segment
-  splitting, confidence carry-through); content schema validation; provenance
-  `inputs` carry `transcribed_from` relation to the source asset.
+- Unit: ASR-response → transcript-segment normalization (word merge, segment
+  splitting, confidence carry-through); segment/word schema validation;
+  provenance `inputs` carry `relation: "input", role: "transcribed_from"` to
+  the source asset; segment rows round-trip through the store.
 - Unit (mock provider): endpoint → job → transcript asset end-to-end against
   the fixture WAV; idempotency (re-transcribe mints a new version, same
   lineage).
@@ -298,11 +327,15 @@ gate flow.
 
 ### PR 4 — `audio_mix` asset + mix-aware render
 
-**Scope:** additive `audio_mix` asset kind; mix-plan resolution (layers →
-per-segment gain/duck envelope) as a pure function extending the existing
-`RenderPlan` (`audioAssetIds` generalizes to layered entries); export consumes
-the mix (duck/mute original audio under voiceover); before/after audition UI
-in the approval gate.
+**Scope:** additive `audio_mix` asset kind + `audio_mix_layers` table;
+`extract_source_audio` tool (ffmpeg audio-stream extraction minting an
+`audio_track` asset, role `original_audio`, provenance `relation: "input",
+role: "extracted_from"` back to the `source_footage` — required before the
+original phone-video sound can be referenced as a mix layer); mix-plan
+resolution (layers → per-segment gain/duck envelope) as a pure function
+extending the existing `RenderPlan` (`audioAssetIds` generalizes to layered
+entries); export consumes the mix (duck/mute original audio under voiceover);
+before/after audition UI in the approval gate.
 
 **Isolated endpoint:**
 
@@ -317,7 +350,11 @@ long before a full export.
 
 **Tests:**
 - Unit: mix-plan resolution (overlapping layers, duck windows, gain clamps)
-  extending `render-plan.test.ts` patterns.
+  extending `render-plan.test.ts` patterns; layer rows round-trip and reject
+  non-audio `audio_asset_id` targets (`layer_not_audio`).
+- Unit/integration: `extract_source_audio` mints an `audio_track` with correct
+  provenance from the fixture MP4; measured duration matches the container's
+  audio stream (ffmpeg required, skipped when absent).
 - Integration (ffmpeg required, skipped when absent — matching the
   degrade-cleanly convention): render a 5s preview from fixtures; assert
   output duration and that RMS level in the ducked window drops by the
