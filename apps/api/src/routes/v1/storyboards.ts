@@ -27,6 +27,8 @@ import {
   updateStoryboard,
 } from "@/lib/api/v1/storyboards";
 import { generateSceneWireframe } from "@/lib/api/v1/scene-wireframe";
+import { regenerateStoryBlueprint } from "@/lib/api/v1/blueprint-regenerate";
+import { generateActMockup, listActs } from "@/lib/api/v1/storyboard-acts";
 import { parsePagination } from "@/lib/api/v1/schemas";
 import {
   getActiveProjectPlan,
@@ -204,6 +206,73 @@ storyboardsRouter.delete(
       storyboardId: requiredParam(params, "storyboardId"),
     });
     return { status: 200, body: { ok: true } };
+  })
+);
+
+// Regenerate the story blueprint behind this storyboard: derive a fresh
+// blueprint from the active brief (optionally steered by `feedback`) as a NEW
+// versioned storyboard that becomes the project's current one. Downstream
+// scenes/beats/panels of the old storyboard are untouched — nothing cascades.
+storyboardsRouter.post(
+  "/projects/:projectId/storyboards/:storyboardId/regenerate",
+  mutation(async ({ auth, body }, params) => {
+    const feedback =
+      body && typeof body === "object" && !Array.isArray(body) &&
+      typeof (body as { feedback?: unknown }).feedback === "string"
+        ? ((body as { feedback: string }).feedback)
+        : undefined;
+    const result = await regenerateStoryBlueprint({
+      auth,
+      projectId: requiredParam(params, "projectId"),
+      storyboardId: requiredParam(params, "storyboardId"),
+      feedback,
+    });
+    const storyboard = await getStoryboard({
+      auth,
+      projectId: requiredParam(params, "projectId"),
+      storyboardId: result.storyboardId,
+    });
+    return {
+      status: 201,
+      body: {
+        storyboard,
+        assetId: result.assetId,
+        supersededStoryboardId: result.supersededStoryboardId,
+      },
+    };
+  })
+);
+
+storyboardsRouter.get(
+  "/projects/:projectId/storyboards/:storyboardId/acts",
+  route(async ({ auth }, params) => {
+    const acts = await listActs({
+      auth,
+      projectId: requiredParam(params, "projectId"),
+      storyboardId: requiredParam(params, "storyboardId"),
+    });
+    return { status: 200, body: { acts } };
+  })
+);
+
+// Generate (or regenerate) an act's disposable CARTOON mockup — the act-level
+// review tile — and point mockup_asset_id at it.
+storyboardsRouter.post(
+  "/projects/:projectId/storyboards/:storyboardId/acts/:actId/mockup",
+  mutation(async ({ auth, body }, params) => {
+    const prompt =
+      body && typeof body === "object" && !Array.isArray(body) &&
+      typeof (body as { prompt?: unknown }).prompt === "string"
+        ? ((body as { prompt: string }).prompt)
+        : undefined;
+    const result = await generateActMockup({
+      auth,
+      projectId: requiredParam(params, "projectId"),
+      storyboardId: requiredParam(params, "storyboardId"),
+      actId: requiredParam(params, "actId"),
+      prompt,
+    });
+    return { status: 201, body: result };
   })
 );
 

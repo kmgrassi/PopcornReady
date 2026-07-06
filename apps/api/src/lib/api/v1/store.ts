@@ -2117,6 +2117,18 @@ export async function addProjectStoryBlueprint(input: {
     inputs: graphInputs,
     createdByActionId: action.id,
   });
+  // Record which blueprint this one replaces (lineage for the version chain).
+  const projectRow = await runQuery(
+    "store.addProjectStoryBlueprint current lookup",
+    db
+      .from("projects")
+      .select("current_story_blueprint_id")
+      .eq("id", input.projectId)
+      .maybeSingle()
+  );
+  const supersedesId =
+    (projectRow as { current_story_blueprint_id?: string | null } | null)
+      ?.current_story_blueprint_id ?? null;
   const storyBlueprint = await runQuery(
     "store.addProjectStoryBlueprint insert",
     db
@@ -2127,6 +2139,7 @@ export async function addProjectStoryBlueprint(input: {
         project_id: input.projectId,
         brief_asset_id: input.briefAssetId,
         asset_id: asset.id,
+        supersedes_id: supersedesId,
         status: "draft",
         snapshot: markedContent("story_blueprint", input.blueprint),
         provenance: markedJson("story_blueprint_provenance.v1", {
@@ -2214,6 +2227,17 @@ export async function addProjectStoryBlueprint(input: {
     "story_blueprint",
     asset.id,
     action.id
+  );
+  // The new blueprint is now current; every other non-superseded blueprint for
+  // the project is by definition replaced.
+  await runQuery(
+    "store.addProjectStoryBlueprint supersede previous",
+    db
+      .from("story_blueprints")
+      .update({ status: "superseded" })
+      .eq("project_id", input.projectId)
+      .neq("id", storyBlueprintId)
+      .neq("status", "superseded")
   );
   await runQuery(
     "store.addProjectStoryBlueprint current pointer",
