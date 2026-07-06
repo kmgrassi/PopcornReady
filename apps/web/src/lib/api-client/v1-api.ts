@@ -14,6 +14,7 @@ import type {
   AccountMutationResponse,
   AssetMediaResponse,
   BoardRevisionResponse,
+  CreateBriefVersionResponse,
   CreateProjectInput,
   CreateProjectResponse,
   CreateTimelineRevisionInput,
@@ -274,6 +275,14 @@ export const v1Api = {
       method: "POST",
       body: input,
     }),
+  createBriefVersion: (projectId: string, input: CreateProjectInput["brief"]) =>
+    apiRequest<CreateBriefVersionResponse>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/brief-versions`,
+      {
+        method: "POST",
+        body: input,
+      }
+    ),
   registerProjectUpload: (projectId: string, input: RegisterProjectUploadInput) =>
     apiRequest<RegisterProjectUploadResponse>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/uploads`,

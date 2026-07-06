@@ -306,6 +306,10 @@ export interface CreateProjectResponse extends ProjectResponse {
   briefVersion?: BriefVersion;
 }
 
+export interface CreateBriefVersionResponse {
+  briefVersion: BriefVersion;
+}
+
 export interface RegisterProjectUploadInput {
   source: {
     type: "multipart_upload";
