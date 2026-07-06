@@ -75,6 +75,189 @@
   color: var(--muted);
 }
 
+.uploadDrop {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-4);
+  align-items: center;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--panel-2);
+}
+
+.uploadDrop div {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.uploadDrop strong {
+  color: var(--text);
+  font-size: var(--text-sm);
+  line-height: var(--line-tight);
+}
+
+.uploadDrop span {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--line-body);
+}
+
+.uploadPick {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  min-height: 42px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-4);
+  background: var(--panel);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.uploadPick:hover {
+  border-color: var(--accent-border);
+  transform: translateY(-1px);
+}
+
+.uploadPick:has(input:focus-visible) {
+  box-shadow: var(--ring);
+}
+
+.uploadPick:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.58;
+  transform: none;
+}
+
+.uploadPick input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.uploadPanel {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.uploadList {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.uploadItem {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--panel-2) 76%, transparent);
+}
+
+.uploadItemHeader {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.uploadItemHeader span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 750;
+  line-height: var(--line-tight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.uploadItemHeader em {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-style: normal;
+  font-weight: 700;
+  line-height: var(--line-tight);
+  text-transform: capitalize;
+}
+
+.uploadMeter {
+  height: 7px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--panel);
+}
+
+.uploadMeter span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width 180ms ease;
+}
+
+.uploadFailure {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  color: var(--danger);
+  font-size: var(--text-sm);
+  line-height: var(--line-body);
+}
+
+.uploadFailure button {
+  min-height: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-3);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.uploadFailure button:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.uploadFailure button:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+.uploadError {
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--danger) 52%, var(--border));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--text);
+  font-size: var(--text-sm);
+  line-height: var(--line-body);
+}
+
 .sharedFootage {
   display: grid;
   gap: var(--space-3);
@@ -276,10 +459,24 @@
   gap: var(--space-3);
 }
 
+.modalActionsSingle {
+  grid-template-columns: 1fr;
+}
+
 .modalSecondary {
   border-color: var(--border);
   background: var(--panel-2);
   color: var(--text);
+}
+
+.inlineUpgrade {
+  padding: var(--space-4);
+  background: var(--panel-2);
+  box-shadow: none;
+}
+
+.inlineUpgrade form {
+  grid-template-columns: 1fr;
 }
 
 .pricingNote {
@@ -339,6 +536,26 @@
   .promptComposer {
     padding: var(--space-4);
     border-radius: var(--radius-md);
+  }
+
+  .uploadDrop {
+    grid-template-columns: 1fr;
+    gap: var(--space-3);
+  }
+
+  .uploadPick {
+    width: 100%;
+  }
+
+  .uploadItemHeader,
+  .uploadFailure {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .uploadItemHeader em {
+    flex: initial;
   }
 
   .promptControls,
