@@ -15,6 +15,11 @@ import {
   getSupabaseClient,
   resolveBrowserSupabaseConfig,
 } from "../../lib/supabase/browser";
+import {
+  clearAnonymousDeviceRecoveryToken,
+  ensureAnonymousDeviceRecoveryToken,
+  getAnonymousDeviceRecoveryToken,
+} from "../../lib/supabase/anonymous-device-recovery";
 
 export type AuthStatus = "loading" | "disabled" | "unauthenticated" | "authenticated";
 
@@ -64,6 +69,44 @@ function describeAuthError(err: unknown): string {
 
 function isAnonymousUser(user: User | null): boolean {
   return Boolean(user?.is_anonymous);
+}
+
+async function registerAnonymousDeviceTokenBestEffort() {
+  try {
+    await v1Api.registerAnonymousDeviceToken(ensureAnonymousDeviceRecoveryToken());
+  } catch (err) {
+    console.warn("Could not register anonymous device recovery token.", err);
+  }
+}
+
+type AnonymousRecoveryStatus = "recovered" | "missing" | "failed";
+
+async function recoverAnonymousWorkspace(token: string): Promise<AnonymousRecoveryStatus> {
+  try {
+    const result = await v1Api.recoverAnonymousDeviceWorkspace(token);
+    return result.recovered ? "recovered" : "missing";
+  } catch (err) {
+    console.warn("Could not recover anonymous workspace from device token.", err);
+    return "failed";
+  }
+}
+
+async function recoverOrRegisterAnonymousDevice() {
+  const recoveryToken = getAnonymousDeviceRecoveryToken();
+  if (!recoveryToken) {
+    await registerAnonymousDeviceTokenBestEffort();
+    return;
+  }
+
+  const recoveryStatus = await recoverAnonymousWorkspace(recoveryToken);
+  if (recoveryStatus === "failed") {
+    return;
+  }
+
+  if (recoveryStatus === "missing") {
+    clearAnonymousDeviceRecoveryToken();
+  }
+  await registerAnonymousDeviceTokenBestEffort();
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -120,6 +163,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setStatus("loading");
     try {
       clearAllSupabaseAuthStorage();
+      clearAnonymousDeviceRecoveryToken();
       const { data, error: signInError } =
         await getSupabaseClient().auth.signInWithPassword({ email, password });
       if (signInError || !data.session?.user) {
@@ -139,6 +183,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setStatus("loading");
     try {
       clearAllSupabaseAuthStorage();
+      clearAnonymousDeviceRecoveryToken();
       const { data, error: signUpError } = await getSupabaseClient().auth.signUp({
         email,
         password,
@@ -165,12 +210,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setError(null);
     setStatus("loading");
     try {
-      clearAllSupabaseAuthStorage();
-      const { data, error: signInError } =
-        await getSupabaseClient().auth.signInAnonymously();
+      const supabase = getSupabaseClient();
+      const { data: existingData, error: existingError } = await supabase.auth.getSession();
+      if (existingError) {
+        clearAllSupabaseAuthStorage();
+      } else if (existingData.session?.user) {
+        setUser(existingData.session.user);
+        setStatus("authenticated");
+        if (isAnonymousUser(existingData.session.user)) {
+          await recoverOrRegisterAnonymousDevice();
+        }
+        return;
+      }
+
+      const { data, error: signInError } = await supabase.auth.signInAnonymously();
       if (signInError || !data.session?.user) {
         throw signInError || new Error("No Supabase anonymous session returned.");
       }
+      await recoverOrRegisterAnonymousDevice();
       setUser(data.session.user);
       setStatus("authenticated");
     } catch (err) {
@@ -230,6 +287,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       await supabase.auth.refreshSession();
       await v1Api.completeAnonymousAccountUpgrade(normalizedEmail);
+      clearAnonymousDeviceRecoveryToken();
       setUser(passwordData.user);
       setStatus("authenticated");
     } catch (err) {
