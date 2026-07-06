@@ -5,10 +5,11 @@ import {
   LANDING_FOOTAGE_ACCEPT,
   landingAssetKindForFile,
 } from "./landingUpload";
-import { readSelectedFootage, type SelectedFootage } from "./upload";
+import { FOOTAGE_ACCEPT, readSelectedFootage, type SelectedFootage } from "./upload";
 import { useRegisterProjectUploadMutation } from "./queryClient";
 
 export const PROJECT_UPLOAD_ACCEPT = LANDING_FOOTAGE_ACCEPT;
+export const PROJECT_GALLERY_UPLOAD_ACCEPT = FOOTAGE_ACCEPT;
 
 export type ProjectUploadSource = "project_view" | "project_media_gallery";
 
@@ -52,8 +53,12 @@ export function buildProjectUploadInput(
   source: ProjectUploadSource,
 ): RegisterProjectUploadInput {
   const kind = landingAssetKindForFile(item.file);
-  if (kind !== "video" && kind !== "image") {
+  if (source === "project_view" && kind !== "video" && kind !== "image") {
     throw new Error(`${item.name} is not a supported video or image file.`);
+  }
+  const uploadKind = source === "project_media_gallery" ? item.kind : kind;
+  if (uploadKind !== "video" && uploadKind !== "image" && uploadKind !== "audio") {
+    throw new Error(`${item.name} is not a supported media file.`);
   }
 
   return {
@@ -62,14 +67,27 @@ export function buildProjectUploadInput(
       dataBase64,
       mimeType: item.file.type || undefined,
     },
-    kind,
+    kind: uploadKind,
     filename: item.name,
     durationSec: item.durationSec,
     userContext: {
       description: projectUploadDescription(source, item.name),
-      intendedUse: ["primary_footage"],
+      intendedUse:
+        uploadKind === "audio"
+          ? ["music", "voiceover", "dialogue"]
+          : ["primary_footage"],
     },
   };
+}
+
+function acceptedProjectUploadItems(
+  source: ProjectUploadSource,
+  selected: SelectedFootage[],
+): { accepted: SelectedFootage[]; errors: string[] } {
+  if (source === "project_view") {
+    return preflightLandingFootage(selected, 0);
+  }
+  return { accepted: selected, errors: [] };
 }
 
 export function projectUploadStatusMessage(input: {
@@ -104,7 +122,7 @@ export function useProjectUploadManager(
     setError(null);
     try {
       const selected = await readSelectedFootage(files);
-      const { accepted, errors } = preflightLandingFootage(selected, 0);
+      const { accepted, errors } = acceptedProjectUploadItems(source, selected);
       if (errors.length > 0) setError(errors.join(" "));
       if (accepted.length === 0) return;
 

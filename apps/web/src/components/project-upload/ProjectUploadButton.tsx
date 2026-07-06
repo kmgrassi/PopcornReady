@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { Button, type ButtonVariant } from "../ui/Button";
 import {
   PROJECT_UPLOAD_ACCEPT,
+  PROJECT_GALLERY_UPLOAD_ACCEPT,
   useProjectUploadManager,
   type ProjectUploadSource,
 } from "../../lib/projectUpload";
@@ -24,13 +25,17 @@ export function ProjectUploadButton({
 }: ProjectUploadButtonProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const upload = useProjectUploadManager(projectId, source);
+  const accept =
+    source === "project_media_gallery"
+      ? PROJECT_GALLERY_UPLOAD_ACCEPT
+      : PROJECT_UPLOAD_ACCEPT;
 
   return (
     <span className={styles.picker}>
       <input
         ref={inputRef}
         className={styles.input}
-        accept={PROJECT_UPLOAD_ACCEPT}
+        accept={accept}
         multiple
         type="file"
         onChange={(event) => {

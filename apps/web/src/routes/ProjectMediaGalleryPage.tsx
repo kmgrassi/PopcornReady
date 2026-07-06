@@ -7,7 +7,7 @@ import {
 } from "../lib/queryClient";
 import { v1Api } from "../lib/api-client";
 import {
-  PROJECT_UPLOAD_ACCEPT,
+  PROJECT_GALLERY_UPLOAD_ACCEPT,
   projectUploadStatusMessage,
   useProjectUploadManager,
 } from "../lib/projectUpload";
@@ -228,7 +228,7 @@ export function ProjectMediaGalleryPage() {
         <section className={styles.grid} aria-label="Project media gallery">
           <label className={styles.addTile}>
             <input
-              accept={PROJECT_UPLOAD_ACCEPT}
+              accept={PROJECT_GALLERY_UPLOAD_ACCEPT}
               multiple
               type="file"
               onChange={(event) => {
@@ -241,7 +241,7 @@ export function ProjectMediaGalleryPage() {
                 +
               </span>
               <span className={styles.addTitle}>Add media</span>
-              <span className={styles.addHint}>Upload videos or images to this project.</span>
+              <span className={styles.addHint}>Upload videos, images, or audio to this project.</span>
             </span>
           </label>
 

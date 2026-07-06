@@ -44,15 +44,34 @@ test("project upload input registers media against the current project path", ()
   );
 });
 
-test("project upload helper rejects audio so add-more matches landing validation", () => {
+test("project dashboard upload helper rejects audio so add-more matches landing validation", () => {
   assert.throws(
     () =>
       buildProjectUploadInput(
         selectedFootage("voiceover.mp3", "audio/mpeg", "audio"),
         "bWVkaWE=",
-        "project_media_gallery",
+        "project_view",
       ),
     /not a supported video or image file/,
+  );
+});
+
+test("project gallery upload helper preserves audio uploads", () => {
+  const input = buildProjectUploadInput(
+    selectedFootage("voiceover.mp3", "audio/mpeg", "audio"),
+    "bWVkaWE=",
+    "project_media_gallery",
+  );
+
+  assert.equal(input.kind, "audio");
+  assert.deepEqual(input.userContext?.intendedUse, [
+    "music",
+    "voiceover",
+    "dialogue",
+  ]);
+  assert.equal(
+    input.userContext?.description,
+    "Added from the project media gallery: voiceover.mp3",
   );
 });
 
