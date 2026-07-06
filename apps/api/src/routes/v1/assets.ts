@@ -32,6 +32,14 @@ import type { TranscriptionProvider } from "@/lib/generative/transcription";
 
 export const assetsRouter = Router();
 
+type ObjectBody = Record<string, unknown>;
+
+interface AssetRegenerateRequestBody {
+  prompt?: string;
+  provider?: string;
+  model?: string;
+}
+
 function requiredParam(params: Record<string, string | undefined>, name: string): string {
   const value = params[name];
   if (!value) {
@@ -40,28 +48,49 @@ function requiredParam(params: Record<string, string | undefined>, name: string)
   return value;
 }
 
+function readBodyObject(body: unknown, message = "Request body must be an object."): ObjectBody {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new ApiError("validation_failed", message);
+  }
+  return body as ObjectBody;
+}
+
+function optionalBodyString(value: unknown, field: string): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string") {
+    throw new ApiError("validation_failed", `${field} must be a string.`);
+  }
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
 function parseTranscribeBody(body: unknown): {
   provider?: TranscriptionProvider;
   language?: string;
 } {
   if (body === undefined || body === null) return {};
-  if (typeof body !== "object" || Array.isArray(body)) {
-    throw new ApiError("validation_failed", "Request body must be an object.");
-  }
-  const raw = body as Record<string, unknown>;
+  const raw = readBodyObject(body);
   const provider = raw.provider;
   if (provider !== undefined && provider !== "openai" && provider !== "mock") {
     throw new ApiError("validation_failed", "provider must be openai or mock.");
   }
-  const language = raw.language;
-  if (language !== undefined && typeof language !== "string") {
-    throw new ApiError("validation_failed", "language must be a string.");
-  }
+  const language = optionalBodyString(raw.language, "language");
   return {
     ...(provider ? { provider } : {}),
-    ...(typeof language === "string" && language.trim()
-      ? { language: language.trim() }
-      : {}),
+    ...(language ? { language } : {}),
+  };
+}
+
+function parseRegenerateBody(body: unknown): AssetRegenerateRequestBody {
+  if (body === undefined || body === null) return {};
+  const raw = readBodyObject(body);
+  const prompt = optionalBodyString(raw.prompt, "prompt");
+  const provider = optionalBodyString(raw.provider, "provider");
+  const model = optionalBodyString(raw.model, "model");
+  return {
+    ...(prompt ? { prompt } : {}),
+    ...(provider ? { provider } : {}),
+    ...(model ? { model } : {}),
   };
 }
 
@@ -82,15 +111,7 @@ assetsRouter.post(
   "/assets/:assetId/regenerate",
   mutation(async ({ auth, body, requestId }, params) => {
     const assetId = requiredParam(params, "assetId");
-    const rawBody = body as {
-      prompt?: unknown;
-      provider?: unknown;
-      model?: unknown;
-    } | null;
-    const rawPrompt = rawBody?.prompt;
-    const prompt = typeof rawPrompt === "string" ? rawPrompt : undefined;
-    const provider = typeof rawBody?.provider === "string" ? rawBody.provider : undefined;
-    const model = typeof rawBody?.model === "string" ? rawBody.model : undefined;
+    const { prompt, provider, model } = parseRegenerateBody(body);
     const media = await regenerateImageAsset({
       workspaceId: auth.workspaceId,
       assetId,
@@ -245,25 +266,13 @@ assetsRouter.patch(
 );
 
 function parseUploadUrlRequest(body: unknown): { filename?: string; contentType?: string } {
-  if (!body || typeof body !== "object" || Array.isArray(body)) {
-    throw new ApiError("validation_failed", "The request body is invalid.");
-  }
-  const record = body as Record<string, unknown>;
+  const record = readBodyObject(body, "The request body is invalid.");
   const filename = optionalBodyString(record.filename, "filename");
   const contentType = optionalBodyString(record.contentType, "contentType");
   return {
     ...(filename ? { filename } : {}),
     ...(contentType ? { contentType } : {}),
   };
-}
-
-function optionalBodyString(value: unknown, field: string): string | undefined {
-  if (value === undefined || value === null) return undefined;
-  if (typeof value !== "string") {
-    throw new ApiError("validation_failed", `${field} must be a string.`);
-  }
-  const trimmed = value.trim();
-  return trimmed || undefined;
 }
 
 assetsRouter.patch(
