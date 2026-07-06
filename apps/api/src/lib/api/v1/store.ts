@@ -669,6 +669,7 @@ function markedContent(
     | "script_draft"
     | "timeline"
     | "narration_script"
+    | "audio_mix"
     | "critique"
     | "transcript",
   content: unknown
@@ -1443,6 +1444,7 @@ async function insertDataAsset(input: {
     | "narration_script"
     | "transcript"
     | "composite"
+    | "audio_mix"
     | "critique";
   contentSchemaKind?:
     | "brief"
@@ -1453,6 +1455,7 @@ async function insertDataAsset(input: {
     | "script_draft"
     | "timeline"
     | "narration_script"
+    | "audio_mix"
     | "transcript"
     | "critique";
   role: string;
@@ -1752,6 +1755,8 @@ type GraphAssetKind =
   | "plan"
   | "story_blueprint"
   | "composite"
+  | "transition"
+  | "audio_mix"
   | "render"
   | "poster";
 

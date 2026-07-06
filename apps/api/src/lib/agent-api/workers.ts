@@ -4,7 +4,12 @@
 // pending_render artifact. Real rendering is deferred (see below).
 
 import { createRenderPlanFromTimeline } from "@popcorn/timeline/render-plan";
-import { Clip, Project, timelineDurationSec } from "@popcorn/shared/types";
+import {
+  Clip,
+  Project,
+  RenderAudioLayer,
+  timelineDurationSec,
+} from "@popcorn/shared/types";
 import { ApiError, newId } from "./runtime";
 import {
   Artifact,
@@ -21,6 +26,8 @@ export interface ExportOptions {
   format?: string;
   quality?: string;
   audioAssetIds?: string[];
+  audioMixAssetId?: string;
+  audioMixLayers?: RenderAudioLayer[];
   showCaptions?: boolean;
   // Defaults to match_longest_media: until audio alignment (PR5) exists this is
   // safer than silently truncating narration. TODO(PR5): default generated
@@ -80,8 +87,14 @@ export function runExportJob(input: {
   }
 
   const audioAssetIds = options.audioAssetIds ?? [];
+  const audioMixLayers = options.audioMixLayers ?? [];
   const audioClips: Clip[] = [];
-  for (const id of audioAssetIds) {
+  for (const id of [
+    ...new Set([
+      ...audioAssetIds,
+      ...audioMixLayers.map((layer) => layer.audioAssetId),
+    ]),
+  ]) {
     const clip = input.project.clips.find((c) => c.id === id);
     if (!clip) {
       throw new ApiError("asset_not_found", 404, "Audio asset not found.", {
@@ -119,9 +132,13 @@ export function runExportJob(input: {
   // TODO(PR5): use measured actual audio duration from the audio_alignment
   // step instead of the registered clip duration.
   const aDuration = audioClips.reduce((max, c) => Math.max(max, c.durationSec), 0);
+  const layeredAudioDurationSec = audioMixLayers.reduce(
+    (max, layer) => Math.max(max, layer.outSec),
+    0
+  );
   const resolved = resolveExportDuration({
     timelineDurationSec: tDuration,
-    audioDurationSec: aDuration,
+    audioDurationSec: Math.max(aDuration, layeredAudioDurationSec),
     policy,
     maxDeltaSec: options.maxDeltaSec,
   });
@@ -133,7 +150,7 @@ export function runExportJob(input: {
       "Audio and timeline durations differ beyond the allowed threshold.",
       {
         timelineDurationSec: tDuration,
-        audioDurationSec: aDuration,
+        audioDurationSec: Math.max(aDuration, layeredAudioDurationSec),
         deltaSec: resolved.deltaSec,
         maxDeltaSec: options.maxDeltaSec ?? 1.0,
       }
@@ -144,6 +161,8 @@ export function runExportJob(input: {
     timeline,
     timelineId: input.timelineId,
     audioClips,
+    audioMixAssetId: options.audioMixAssetId,
+    audioMixLayers,
     durationPolicy: policy,
     maxDeltaSec: options.maxDeltaSec,
     quality: options.quality,
