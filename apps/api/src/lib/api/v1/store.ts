@@ -2689,7 +2689,7 @@ export async function getActiveProjectPlan(
   projectId: string
 ): Promise<ActiveProjectPlan | null> {
   const db = getServiceSupabase();
-  const selectedPlanAsset = await selectedDataAsset(db, projectId, "plan", "plan", "current_plan");
+  const selectedPlanAsset = await selectedDataAsset(db, projectId, "plan", "plan");
   const selectedPlan = selectedPlanAsset ? coerceShotPlanContent(selectedPlanAsset.content) : null;
   const planAsset =
     selectedPlanAsset && selectedPlan
