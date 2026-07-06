@@ -35,12 +35,14 @@
 }
 
 .uploadControls {
-  display: grid;
+  display: flex;
   gap: var(--space-2);
-  justify-items: end;
+  justify-content: flex-end;
+  align-items: center;
 }
 
-.filePicker {
+.filePicker,
+.capturePicker {
   position: relative;
   display: inline-grid;
   place-items: center;
@@ -59,16 +61,39 @@
     transform 160ms ease;
 }
 
-.filePicker:hover {
+.filePicker {
+  flex: 1 1 auto;
+  text-align: center;
+}
+
+.filePicker:hover,
+.capturePicker:hover {
   border-color: var(--accent-border);
   transform: translateY(-1px);
 }
 
-.filePicker:has(input:focus-visible) {
+.filePicker:has(input:focus-visible),
+.capturePicker:has(input:focus-visible) {
   box-shadow: var(--ring);
 }
 
-.filePicker input {
+.capturePicker {
+  flex: none;
+  width: 42px;
+  padding: 0;
+}
+
+.capturePicker svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.hiddenFileInput {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -132,7 +157,11 @@
   }
 
   .uploadControls {
-    justify-items: stretch;
+    justify-content: stretch;
+  }
+
+  .capturePicker {
+    flex: none;
   }
 
   .fileMeta {

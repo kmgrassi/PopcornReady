@@ -112,12 +112,30 @@ export function SourceFootageStep({ draft, update, next, back }: StepProps) {
             <div className={styles.uploadControls}>
               <label className={styles.filePicker}>
                 <input
+                  className={styles.hiddenFileInput}
                   type="file"
                   accept={FOOTAGE_ACCEPT}
                   multiple
                   onChange={(event) => void onFilesSelected(event.currentTarget.files)}
                 />
-                Select or record video or photo
+                Select or Record Video or Photo
+              </label>
+              <label
+                className={styles.capturePicker}
+                aria-label="Record a new video or photo"
+                title="Record a new video or photo"
+              >
+                <input
+                  className={styles.hiddenFileInput}
+                  type="file"
+                  accept="video/*,image/*"
+                  capture="environment"
+                  onChange={(event) => void onFilesSelected(event.currentTarget.files)}
+                />
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M8.8 6.5 10.2 5h3.6l1.4 1.5H18a3 3 0 0 1 3 3V16a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V9.5a3 3 0 0 1 3-3h2.8Z" />
+                  <circle cx="12" cy="12.5" r="3.2" />
+                </svg>
               </label>
             </div>
           </div>
