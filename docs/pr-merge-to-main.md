@@ -6,27 +6,35 @@ through AI review.
 
 ## Signals
 
-- **Thumbs-up on the PR description**: a `+1` reaction on the original PR
-  description means the automated review found the PR acceptable to merge,
-  assuming checks pass and no unresolved comments remain.
+- **Reviewer thumbs-up on the PR description**: a `+1` reaction on the original
+  PR description counts as merge approval only when it comes from the configured
+  AI reviewer account, such as `chatgpt-codex-connector[bot]`. A self-reaction,
+  collaborator reaction, or unrelated thumbs-up is not enough.
 - **Comments on the PR**: any review thread, inline comment, or top-level
   actionable comment must be addressed before merge.
-- **Checks**: required CI, deploy previews, smoke tests, and relevant local
-  validation must pass or have a documented reason they could not run.
+- **Checks**: required CI, deploy previews, and smoke tests are hard merge
+  gates. Optional local validation should also run when relevant, or have a
+  documented reason it could not run.
 
 ## Merge Eligibility
 
 A PR can be merged into `main` when all of the following are true:
 
-1. The original PR description has a thumbs-up reaction.
+1. The original PR description has a thumbs-up reaction from the configured AI
+   reviewer account.
 2. All actionable PR comments have been addressed.
 3. The branch is mergeable with `main`.
-4. Required checks have passed, or any unavailable checks are explicitly noted.
+4. Required checks have passed. Pending, failed, skipped, or unavailable
+   required checks block normal merge eligibility.
 5. The final diff still matches the PR intent after conflict resolution or
    follow-up changes.
 
-Do not merge a PR just because it has passing checks. The thumbs-up reaction on
-the original PR description is the merge approval signal.
+Do not merge a PR just because it has passing checks. The configured AI
+reviewer's thumbs-up reaction on the original PR description is the merge
+approval signal.
+
+If an urgent production fix needs to bypass a required check, that bypass must
+be approved and documented separately from this normal merge process.
 
 ## Handling PR Comments
 
@@ -71,8 +79,8 @@ merging an empty or stale branch.
    - mergeability.
 2. For each PR with comments, address comments first.
 3. Re-run or confirm relevant validation after any branch update.
-4. For each PR with a thumbs-up on the original description and no unresolved
-   actionable comments, merge it into `main`.
+4. For each PR with a configured reviewer thumbs-up on the original description
+   and no unresolved actionable comments, merge it into `main`.
 5. If multiple PRs are ready, merge one at a time and refresh mergeability before
    merging the next PR.
 6. If a new PR appears during the pass, inspect it before finishing.
