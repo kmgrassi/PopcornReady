@@ -1,11 +1,13 @@
-import { useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useMemo, useReducer, useRef, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { FOOTAGE_ACCEPT, readSelectedFootage } from "../lib/upload";
 import {
   useProjectAssetsQuery,
   useRefreshAssetMediaMutation,
   useRegisterProjectUploadMutation,
+  useStartUploadedFootageGenerationRunMutation,
 } from "../lib/queryClient";
+import { v1Api } from "../lib/api-client";
 import { MediaViewer, type MediaViewerItem } from "../components/media/MediaViewer";
 import {
   assetDisplayTitle,
@@ -18,6 +20,14 @@ import {
   statusLabel,
   type ProjectMediaAsset,
 } from "./projectMediaGallery";
+import {
+  MEDIA_INTENT_PRESETS,
+  buildMediaIntentBrief,
+  canCreateMediaIntentRun,
+  presetConstraintHint,
+  selectedPosition,
+  selectionReducer,
+} from "./project-media-intent";
 import styles from "./ProjectMediaGalleryPage.module.css";
 
 async function fileToBase64(file: File): Promise<string> {
@@ -49,14 +59,42 @@ function statusClassName(asset: ProjectMediaAsset) {
 
 export function ProjectMediaGalleryPage() {
   const projectId = useParams().projectId ?? "";
+  const navigate = useNavigate();
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadingCount, setUploadingCount] = useState(0);
+  const [selectedIds, dispatchSelection] = useReducer(selectionReducer, []);
+  const [selectedPresetId, setSelectedPresetId] = useState("");
+  const [intentText, setIntentText] = useState("");
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [createPending, setCreatePending] = useState(false);
+  const createInFlightRef = useRef(false);
   const assetsQuery = useProjectAssetsQuery(projectId, projectMediaQueryParams());
   const registerUpload = useRegisterProjectUploadMutation(projectId);
   const refreshMedia = useRefreshAssetMediaMutation();
+  const startRun = useStartUploadedFootageGenerationRunMutation(projectId);
 
   const assets = (assetsQuery.data?.assets ?? []) as ProjectMediaAsset[];
+  const assetById = useMemo(
+    () => new Map(assets.map((asset) => [asset.id, asset])),
+    [assets],
+  );
+  const selectedAssets = selectedIds
+    .map((id) => assetById.get(id))
+    .filter((asset): asset is ProjectMediaAsset => Boolean(asset));
+  const readyVisualAssets = assets.filter(
+    (asset) =>
+      (asset.kind === "image" || asset.kind === "video") && asset.status === "ready",
+  );
+  const selectedPreset =
+    MEDIA_INTENT_PRESETS.find((preset) => preset.id === selectedPresetId) ?? null;
+  const intentHint = presetConstraintHint(selectedPreset, selectedAssets);
+  const canCreate = canCreateMediaIntentRun({
+    intentText,
+    selectedAssets,
+    preset: selectedPreset,
+  });
+  const creating = createPending || startRun.isPending;
   const state = galleryRenderState({
     loading: assetsQuery.isLoading,
     error: assetsQuery.error,
@@ -117,6 +155,34 @@ export function ProjectMediaGalleryPage() {
     }
   }
 
+  async function createRun() {
+    if (!projectId || !canCreate || createInFlightRef.current) return;
+    createInFlightRef.current = true;
+    setCreatePending(true);
+    setCreateError(null);
+    try {
+      const orderedAssetIds = selectedAssets.map((asset) => asset.id);
+      const brief = buildMediaIntentBrief(intentText, orderedAssetIds, selectedPreset);
+      const { briefVersion } = await v1Api.createBriefVersion(projectId, brief);
+      const run = await startRun.mutateAsync({
+        briefVersionId: briefVersion.id,
+        assetIds: orderedAssetIds,
+      });
+      if (run.runId) {
+        navigate(
+          `/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(run.runId)}`,
+        );
+      }
+    } catch (error) {
+      setCreateError(
+        error instanceof Error ? error.message : "Could not start the media run.",
+      );
+    } finally {
+      createInFlightRef.current = false;
+      setCreatePending(false);
+    }
+  }
+
   return (
     <main className={styles.shell}>
       <header className={styles.header}>
@@ -141,8 +207,36 @@ export function ProjectMediaGalleryPage() {
             <strong>{processingCount}</strong>
             Processing
           </span>
+          <span className={styles.summaryPill}>
+            <strong>{selectedIds.length}</strong>
+            Selected
+          </span>
         </div>
       </header>
+
+      <div className={styles.selectionActions}>
+        <button
+          className={styles.secondaryButton}
+          disabled={readyVisualAssets.length === 0}
+          onClick={() =>
+            dispatchSelection({
+              type: "selectAll",
+              assetIds: readyVisualAssets.map((asset) => asset.id),
+            })
+          }
+          type="button"
+        >
+          Select all ready visuals
+        </button>
+        <button
+          className={styles.secondaryButton}
+          disabled={selectedIds.length === 0}
+          onClick={() => dispatchSelection({ type: "clear" })}
+          type="button"
+        >
+          Clear selection
+        </button>
+      </div>
 
       <div
         className={styles.statusLine}
@@ -196,9 +290,18 @@ export function ProjectMediaGalleryPage() {
           {assets.map((asset) => {
             const duration = formatDuration(asset.durationSec);
             const previewUrl = assetPreviewUrl(asset);
+            const selected = selectedPosition(selectedIds, asset.id);
+            const canSelect =
+              (asset.kind === "image" || asset.kind === "video") && asset.status === "ready";
             return (
-              <article className={styles.tile} key={asset.id}>
+              <article
+                className={`${styles.tile} ${selected ? styles.tileSelected : ""}`}
+                key={asset.id}
+              >
                 <span className={statusClassName(asset)}>{statusLabel(asset.status)}</span>
+                {selected ? (
+                  <span className={styles.selectionBadge}>{selected}</span>
+                ) : null}
                 <button
                   aria-label={`View ${assetDisplayTitle(asset)}`}
                   className={styles.previewButton}
@@ -227,6 +330,16 @@ export function ProjectMediaGalleryPage() {
                   <span className={styles.tileMeta}>
                     {kindLabel(asset.kind)} / {assetSourceLabel(asset.source)}
                   </span>
+                  <button
+                    className={styles.selectButton}
+                    disabled={!canSelect}
+                    onClick={() =>
+                      dispatchSelection({ type: "toggle", assetId: asset.id })
+                    }
+                    type="button"
+                  >
+                    {selected ? `Selected ${selected}` : "Select"}
+                  </button>
                   {asset.status === "failed" ? (
                     <span className={styles.failedActions}>
                       <button className={styles.secondaryButton} type="button" disabled>
@@ -242,6 +355,56 @@ export function ProjectMediaGalleryPage() {
             );
           })}
         </section>
+      ) : null}
+
+      {selectedIds.length > 0 ? (
+        <form
+          className={styles.intentBar}
+          onSubmit={(event) => {
+            event.preventDefault();
+            void createRun();
+          }}
+        >
+          <div className={styles.intentField}>
+            <label htmlFor="media-intent">What should we make with these?</label>
+            <input
+              id="media-intent"
+              onChange={(event) => {
+                setSelectedPresetId("");
+                setIntentText(event.currentTarget.value);
+              }}
+              placeholder={`${selectedIds.length} selected`}
+              value={intentText}
+            />
+          </div>
+          <div className={styles.presetField}>
+            <label htmlFor="media-preset">Idea</label>
+            <select
+              id="media-preset"
+              onChange={(event) => {
+                const preset =
+                  MEDIA_INTENT_PRESETS.find(
+                    (item) => item.id === event.currentTarget.value,
+                  ) ?? null;
+                setSelectedPresetId(preset?.id ?? "");
+                if (preset) setIntentText(preset.briefTemplate);
+              }}
+              value={selectedPresetId}
+            >
+              <option value="">Choose an idea...</option>
+              {MEDIA_INTENT_PRESETS.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button className={styles.createButton} disabled={!canCreate || creating} type="submit">
+            {creating ? "Creating..." : "Create"}
+          </button>
+          {intentHint ? <p className={styles.intentHint}>{intentHint}</p> : null}
+          {createError ? <p className={styles.intentError}>{createError}</p> : null}
+        </form>
       ) : null}
 
       <MediaViewer
