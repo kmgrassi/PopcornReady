@@ -46,7 +46,7 @@ interface UploadQueueValue {
 
 const UploadQueueContext = createContext<UploadQueueValue | null>(null);
 
-function isActiveUpload(status: LandingUploadStatus): boolean {
+export function isActiveUploadStatus(status: LandingUploadStatus): boolean {
   return status === "queued" || status === "uploading" || status === "processing";
 }
 
@@ -164,7 +164,7 @@ export function UploadQueueProvider({ children }: { children: React.ReactNode })
 
   const retryUpload = useCallback(
     (item: UploadQueueItem) => {
-      if (isActiveUpload(item.status)) return;
+      if (isActiveUploadStatus(item.status)) return;
       const retryItem = { ...item, status: "queued" as const, progress: 0 };
       updateItem(item.id, { status: "queued", progress: 0, error: undefined });
       void uploadItems([retryItem]);
