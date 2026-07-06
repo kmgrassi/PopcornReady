@@ -224,6 +224,33 @@ test("injects the server-owned wrapper context into each tool execution", async 
   assert.match(seenContext?.toolCallId ?? "", /^[0-9a-f-]{36}$/);
 });
 
+test("reconstructs uploaded-footage selected assets from persisted run summary", async () => {
+  const store = new FakeStore(
+    runFixture({
+      inputSummary:
+        "Make a montage\nbriefVersionId=brief_1\nselectedAssetIds=upload_5,upload_2,upload_4",
+    })
+  );
+  const { model } = scriptedModel([
+    { type: "tool_call", toolName: "assemble_timeline", input: {} },
+    { type: "done" },
+  ]);
+  let seenContext: ToolExecutionContext | undefined;
+  const registry = fakeRegistry({
+    assemble_timeline: (context) => {
+      seenContext = context;
+      return ok(["timeline_1"]);
+    },
+  });
+
+  await runOrchestratorToCompletion("run1", deps(store, model, registry));
+
+  assert.deepEqual(seenContext?.metadata, {
+    entrypoint: "uploaded-footage",
+    assetIds: ["upload_5", "upload_2", "upload_4"],
+  });
+});
+
 test("reconstructs priorResults from persisted actions for each model turn", async () => {
   const store = new FakeStore(runFixture());
   const { model, calls } = scriptedModel([

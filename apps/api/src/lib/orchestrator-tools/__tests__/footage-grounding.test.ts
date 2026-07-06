@@ -63,6 +63,40 @@ test("buildFootageGroundingContext omits assets without transcripts or moments",
   assert.match(result.promptText ?? "", /testing one two three/);
 });
 
+test("buildFootageGroundingContext scopes excerpts to selected assets in order", async () => {
+  const result = await buildFootageGroundingContext({
+    workspaceId: "ws_1",
+    projectId: "proj_1",
+    assetIds: ["asset_3", "asset_2"],
+    listAssets: async () => ({
+      items: [
+        {
+          ...baseAsset,
+          id: "asset_1",
+          context: { transcriptText: "unselected clip" },
+        },
+        {
+          ...baseAsset,
+          id: "asset_2",
+          context: { transcriptText: "second selected" },
+        },
+        {
+          ...baseAsset,
+          id: "asset_3",
+          context: { transcriptText: "first selected" },
+        },
+      ],
+      nextCursor: null,
+    }),
+  });
+
+  assert.deepEqual(
+    result.excerpts.map((excerpt) => excerpt.assetId),
+    ["asset_3", "asset_2"]
+  );
+  assert.doesNotMatch(result.promptText ?? "", /unselected clip/);
+});
+
 test("groundingGraphInputs preserves excerpt asset hashes for stale detection", () => {
   const inputs = groundingGraphInputs(
     {

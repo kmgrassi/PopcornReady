@@ -13,6 +13,7 @@ import {
 import { sanitizeTimeline } from "@popcorn/timeline/timeline";
 import { planBeats, type Clip, type Timeline } from "@popcorn/shared/types";
 import type { GraphAssetInput } from "@/lib/api/v1/asset-graph";
+import { selectedUploadedFootageAssetIds } from "@/lib/orchestrator/uploaded-footage-selection";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 
@@ -178,6 +179,20 @@ function uniqueAssets(assets: V1Asset[]): V1Asset[] {
   });
 }
 
+function sortTimelineByAssetOrder(timeline: Timeline, assetIds: string[]): Timeline {
+  if (assetIds.length === 0) return timeline;
+  const order = new Map(assetIds.map((id, index) => [id, index]));
+  const segments = timeline.segments
+    .map((segment, index) => ({ segment, index }))
+    .sort((a, b) => {
+      const aOrder = order.get(a.segment.clipId) ?? Number.MAX_SAFE_INTEGER;
+      const bOrder = order.get(b.segment.clipId) ?? Number.MAX_SAFE_INTEGER;
+      return aOrder - bOrder || a.index - b.index;
+    })
+    .map(({ segment }, index) => ({ ...segment, id: segment.id || `seg_${index + 1}` }));
+  return { ...timeline, segments };
+}
+
 function graphInputsFor(
   plan: { assetId: string; contentHash: string },
   assets: V1Asset[]
@@ -218,11 +233,13 @@ async function loadAssemblyAssets(input: {
   workspaceId: string;
   projectId: string;
   beatSlotRoles: string[];
+  selectedUploadAssetIds?: string[];
 }): Promise<{
   selectedBeatClips: ActiveAssetSelection[];
   missingBeatIds: string[];
   clips: Clip[];
   inputAssets: V1Asset[];
+  hasSelectedUploadSources: boolean;
 }> {
   const selectedBeatClips = await input.deps.listActiveProjectAssetSelections({
     workspaceId: input.workspaceId,
@@ -235,11 +252,27 @@ async function loadAssemblyAssets(input: {
     .map((slot) => slot.replace(/^beat_clip:/, ""));
 
   const allAssets = await input.deps.listAssets(input.workspaceId, input.projectId, 500, null);
-  const uploadsAndAudio = allAssets.items.filter((asset) => {
-    if (asset.status !== "ready") return false;
-    if (asset.kind === "audio") return asset.role === "voiceover" || asset.role === "soundtrack";
-    return asset.source.type !== "generated" || asset.role === "upload";
-  });
+  const selectedUploadAssetIds = input.selectedUploadAssetIds ?? [];
+  const selectedOrder = new Map(selectedUploadAssetIds.map((id, index) => [id, index]));
+  const readyAssets = allAssets.items.filter((asset) => asset.status === "ready");
+  const readyAudioAssets = readyAssets.filter(
+    (asset) =>
+      asset.kind === "audio" && (asset.role === "voiceover" || asset.role === "soundtrack")
+  );
+  const uploadsAndAudio =
+    selectedUploadAssetIds.length > 0
+      ? [
+          ...readyAssets
+            .filter((asset) => selectedOrder.has(asset.id) && asset.kind !== "audio")
+            .sort((a, b) => selectedOrder.get(a.id)! - selectedOrder.get(b.id)!),
+          ...readyAudioAssets,
+        ]
+      : readyAssets.filter((asset) => {
+          if (asset.kind === "audio") {
+            return asset.role === "voiceover" || asset.role === "soundtrack";
+          }
+          return asset.source.type !== "generated" || asset.role === "upload";
+        });
   const inputAssets = uniqueAssets([
     ...selectedBeatClips.map((selection) => selection.asset),
     ...uploadsAndAudio,
@@ -249,7 +282,13 @@ async function loadAssemblyAssets(input: {
     ...uploadsAndAudio.map((asset) => roleAwareClip(asset)),
   ];
 
-  return { selectedBeatClips, missingBeatIds, clips, inputAssets };
+  return {
+    selectedBeatClips,
+    missingBeatIds,
+    clips,
+    inputAssets,
+    hasSelectedUploadSources: selectedUploadAssetIds.length > 0,
+  };
 }
 
 export function createAssembleTimelineTool(
@@ -260,11 +299,11 @@ export function createAssembleTimelineTool(
   return {
     name: "assemble_timeline",
     description:
-      "Assemble selected beat clips, uploads, and audio into the project's active deterministic timeline. Requires a plan and selected beat_clip assets.",
+      "Assemble selected beat clips, uploads, and audio into the project's active deterministic timeline. Requires a plan plus selected uploads or selected beat_clip assets.",
     usage: {
       preconditions: [
         "An active shot plan exists (call plan_shots first).",
-        "Each planned beat has an active beat_clip selection (call generate_clip first).",
+        "Uploaded-footage runs carry ordered selected asset ids; generated runs need each planned beat to have an active beat_clip selection (call generate_clip first).",
       ],
       produces: [
         "A timeline composite asset selected as the active cut, with provenance edges to the plan, clips, uploads, and audio assets.",
@@ -299,17 +338,23 @@ export function createAssembleTimelineTool(
       if (!activePlan) return planRequired();
 
       const beats = planBeats(activePlan.plan);
+      const selectedUploadAssetIds = selectedUploadedFootageAssetIds(context.metadata) ?? [];
       const beatSlotRoles = beats.map((beat, index) => {
         const beatId = beat.id || `beat_${index + 1}`;
         return `beat_clip:${beatId}`;
       });
-      const { missingBeatIds, clips, inputAssets } = await loadAssemblyAssets({
-        deps: resolved,
-        workspaceId: context.auth.workspaceId,
-        projectId: context.projectId,
-        beatSlotRoles,
-      });
-      if (missingBeatIds.length > 0 || clips.filter((c) => (c.kind || "video") !== "audio").length === 0) {
+      const { missingBeatIds, clips, inputAssets, hasSelectedUploadSources } =
+        await loadAssemblyAssets({
+          deps: resolved,
+          workspaceId: context.auth.workspaceId,
+          projectId: context.projectId,
+          beatSlotRoles,
+          selectedUploadAssetIds,
+        });
+      if (
+        (!hasSelectedUploadSources && missingBeatIds.length > 0) ||
+        clips.filter((c) => (c.kind || "video") !== "audio").length === 0
+      ) {
         return beatClipsRequired(missingBeatIds);
       }
 
@@ -331,11 +376,14 @@ export function createAssembleTimelineTool(
           goal: input.goal ?? defaultGoal(activePlan),
           storyContext: null,
         });
-        const timeline: Timeline = sanitizeTimeline(
-          input.showCaptions === undefined
-            ? draft
-            : { ...draft, showCaptions: input.showCaptions },
-          clips
+        const timeline: Timeline = sortTimelineByAssetOrder(
+          sanitizeTimeline(
+            input.showCaptions === undefined
+              ? draft
+              : { ...draft, showCaptions: input.showCaptions },
+            clips
+          ),
+          selectedUploadAssetIds
         );
         if (timeline.segments.length === 0) {
           throw new Error("Assembled timeline has no valid segments.");

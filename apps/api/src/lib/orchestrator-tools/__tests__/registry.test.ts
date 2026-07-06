@@ -79,6 +79,44 @@ const sampleVideoAsset: V1Asset = {
   updatedAt: "2026-06-17T00:00:00.000Z",
 };
 
+function uploadAsset(id: string, index: number): V1Asset {
+  return {
+    id,
+    schemaVersion: "asset.v1",
+    workspaceId: auth.workspaceId,
+    projectId: "proj_1",
+    kind: "video",
+    role: "upload",
+    filename: `${id}.mp4`,
+    status: "ready",
+    source: { type: "remote_url", url: `https://example.com/${id}.mp4` },
+    remoteUrl: `https://example.com/${id}.mp4`,
+    durationSec: 5 + index,
+    contentHash: `${id}_hash`,
+    createdAt: "2026-06-17T00:00:00.000Z",
+    updatedAt: "2026-06-17T00:00:00.000Z",
+  };
+}
+
+function audioAsset(id: string, role: "voiceover" | "soundtrack"): V1Asset {
+  return {
+    id,
+    schemaVersion: "asset.v1",
+    workspaceId: auth.workspaceId,
+    projectId: "proj_1",
+    kind: "audio",
+    role,
+    filename: `${id}.mp3`,
+    status: "ready",
+    source: { type: "generated", generatedAssetId: id },
+    remoteUrl: `https://example.com/${id}.mp3`,
+    durationSec: 12,
+    contentHash: `${id}_hash`,
+    createdAt: "2026-06-17T00:00:00.000Z",
+    updatedAt: "2026-06-17T00:00:00.000Z",
+  };
+}
+
 // Deps that satisfy plan_shots without touching the DB.
 function planShotsDeps(over: Partial<Parameters<typeof createPlanShotsTool>[0]> = {}) {
   return {
@@ -513,4 +551,90 @@ test("assemble_timeline persists a timeline asset with plan and clip provenance"
     ["plan_hash_1", "clip_hash_1"]
   );
   assert.deepEqual(actionOutputIds, ["timeline_asset_1"]);
+});
+
+test("assemble_timeline scopes uploaded-footage runs to selected assets and preserves order", async () => {
+  let selectorClipIds: string[] = [];
+  let persistedSegmentClipIds: string[] = [];
+  let timelineInput:
+    | {
+        graphInputs: { assetId: string; role?: string; contentHash?: string }[];
+      }
+    | undefined;
+  const uploads = ["upload_1", "upload_2", "upload_3", "upload_4", "upload_5", "upload_6"].map(
+    uploadAsset
+  );
+  const soundtrack = audioAsset("audio_soundtrack", "soundtrack");
+  const registry = new ToolRegistry();
+  registry.register(
+    createAssembleTimelineTool({
+      getActiveProjectPlan: async () => ({
+        plan: samplePlan,
+        assetId: "plan_asset_1",
+        contentHash: "plan_hash_1",
+      }),
+      listActiveProjectAssetSelections: async () => [],
+      listAssets: async () => ({ items: [...uploads, soundtrack], nextCursor: null }),
+      selectClips: async ({ plan, clips }) => {
+        selectorClipIds = clips.map((clip) => clip.id);
+        const visualClips = clips.filter((clip) => clip.kind !== "audio");
+        return {
+          aspectRatio: plan.aspectRatio,
+          fps: 30,
+          segments: [...visualClips].reverse().map((clip, index) => ({
+            id: `seg_${index + 1}`,
+            clipId: clip.id,
+            sourceInSec: 0,
+            sourceOutSec: 2,
+            role: "Hook",
+            beatId: "beat_1",
+            reason: `select ${clip.id}`,
+          })),
+        };
+      },
+      createAction: async () =>
+        ({
+          id: "action_1",
+          schemaVersion: "action.v1",
+          projectId: "proj_1",
+          tool: "assemble_timeline",
+          status: "running",
+          params: {},
+          inputAssetIds: [],
+          jobIds: [],
+          outputAssetIds: [],
+          createdAt: "",
+          updatedAt: "",
+        }) as V1Action,
+      updateAction: async () => ({}) as V1Action,
+      addProjectTimeline: async (input) => {
+        timelineInput = input;
+        persistedSegmentClipIds = input.timeline.segments.map((segment) => segment.clipId);
+        return { timelineAssetId: "timeline_asset_1" };
+      },
+    })
+  );
+
+  const selectedAssetIds = ["upload_5", "upload_2", "upload_4"];
+  const result = await registry.execute(
+    "assemble_timeline",
+    {},
+    {
+      auth,
+      projectId: "proj_1",
+      metadata: { entrypoint: "uploaded-footage", assetIds: selectedAssetIds },
+    }
+  );
+
+  assert.equal(result.status, "succeeded");
+  assert.deepEqual(selectorClipIds, [...selectedAssetIds, "audio_soundtrack"]);
+  assert.deepEqual(persistedSegmentClipIds, selectedAssetIds);
+  assert.deepEqual(
+    timelineInput?.graphInputs.map((input) => input.assetId),
+    ["plan_asset_1", ...selectedAssetIds, "audio_soundtrack"]
+  );
+  assert.deepEqual(
+    timelineInput?.graphInputs.map((input) => input.role),
+    ["plan", "upload", "upload", "upload", "soundtrack"]
+  );
 });

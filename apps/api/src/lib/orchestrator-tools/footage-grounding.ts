@@ -83,11 +83,20 @@ export function buildFootageGroundingPrompt(excerpts: FootageGroundingExcerpt[])
 export async function buildFootageGroundingContext(input: {
   workspaceId: string;
   projectId: string;
+  assetIds?: string[];
   listAssets?: typeof realListAssets;
 }): Promise<FootageGroundingContext> {
   const listAssets = input.listAssets ?? realListAssets;
   const assets = await listAssets(input.workspaceId, input.projectId, 1000, null);
-  const excerpts = assets.items
+  const orderedAssetIds = input.assetIds?.filter((id) => id.trim().length > 0) ?? [];
+  const orderById = new Map(orderedAssetIds.map((id, index) => [id, index]));
+  const scopedItems =
+    orderedAssetIds.length > 0
+      ? assets.items
+          .filter((asset) => orderById.has(asset.id))
+          .sort((a, b) => orderById.get(a.id)! - orderById.get(b.id)!)
+      : assets.items;
+  const excerpts = scopedItems
     .filter((asset) => asset.kind === "video" || asset.kind === "audio")
     .map((asset) => ({
       assetId: asset.id,
