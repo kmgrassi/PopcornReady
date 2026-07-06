@@ -25,6 +25,7 @@ import {
   createAction,
   createBriefVersion,
   getActiveProjectBrief,
+  getAsset,
   getProject,
   recordProjectActivity,
 } from "@/lib/api/v1/store";
@@ -390,6 +391,36 @@ function requestedProvider(body: unknown): string | undefined {
   return trimmed || undefined;
 }
 
+async function requireReadyVisualAssets(input: {
+  workspaceId: string;
+  projectId: string;
+  assetIds: string[];
+}): Promise<void> {
+  for (const assetId of input.assetIds) {
+    let asset;
+    try {
+      asset = await getAsset(input.workspaceId, input.projectId, assetId);
+    } catch (err) {
+      if (!(err instanceof ApiError) || err.code !== "not_found") throw err;
+      throw new ApiError("asset_invalid", `Asset not found in project: ${assetId}`, {
+        fields: [{ path: "assetIds", message: `Unknown asset: ${assetId}` }],
+      });
+    }
+    if (asset.status !== "ready") {
+      throw new ApiError(
+        "asset_not_ready",
+        `Asset ${assetId} is not ready (status: ${asset.status}).`,
+        { fields: [{ path: "assetIds", message: `Asset ${assetId} is ${asset.status}.` }] }
+      );
+    }
+    if (asset.kind === "audio") {
+      throw new ApiError("validation_failed", "Uploaded-footage runs need visual assets.", {
+        fields: [{ path: "assetIds", message: `Asset ${assetId} is audio.` }],
+      });
+    }
+  }
+}
+
 async function assembleRunDetail(runId: string, projectId: string): Promise<GenerationRunDetail> {
   const [run, gates, actions] = await Promise.all([
     getOrchestratorRun(runId),
@@ -550,6 +581,7 @@ orchestratorRunsRouter.post(
         fields: [{ path: "briefVersionId", message: "Required." }],
       });
     }
+    await requireReadyVisualAssets({ workspaceId: auth.workspaceId, projectId, assetIds });
     const summaryParts = [
       body.prompt ? String(body.prompt) : `Generate from ${assetIds.length} uploaded assets.`,
       `briefVersionId=${briefVersionId}`,

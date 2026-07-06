@@ -7,6 +7,7 @@ import {
 import { briefToStoryContext } from "@/lib/v1/generation/prepare";
 import type { ShotPlan } from "@popcorn/shared/types";
 import { buildFootageGroundingContext, groundingGraphInputs } from "./footage-grounding";
+import { selectedUploadedFootageAssetIds } from "@/lib/orchestrator/uploaded-footage-selection";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 
@@ -204,6 +205,7 @@ export function createPlanShotsTool(
       const footageGrounding = await resolved.buildFootageGroundingContext({
         workspaceId: context.auth.workspaceId,
         projectId: context.projectId,
+        assetIds: selectedUploadedFootageAssetIds(context.metadata),
       });
 
       const plan = await resolved.planEdit({

@@ -17,6 +17,15 @@ const clips: Clip[] = [
     source: "upload",
   },
   {
+    id: "upload_d",
+    filename: "upload-d.mp4",
+    url: "/uploads/upload-d.mp4",
+    kind: "video",
+    durationSec: 9,
+    description: "uploaded source d",
+    source: "upload",
+  },
+  {
     id: "generated_b",
     filename: "generated-b.mp4",
     url: "/uploads/generated-b.mp4",
@@ -59,7 +68,7 @@ test("asset selection defaults to uploaded visual assets only", () => {
   );
   assert.deepEqual(
     selected.map((clip) => clip.id),
-    ["upload_a"]
+    ["upload_a", "upload_d"]
   );
 });
 
@@ -76,5 +85,16 @@ test("explicit asset selection validates visual ids", () => {
         parseUploadedFootageEditRequest({ assetIds: ["audio_c"] })
       ),
     /Selected asset not found/
+  );
+});
+
+test("explicit asset selection preserves tapped order", () => {
+  const request = parseUploadedFootageEditRequest({
+    assetIds: ["upload_d", "upload_a", "generated_b"],
+  });
+
+  assert.deepEqual(
+    resolveUploadedFootageClips(clips, request).map((clip) => clip.id),
+    ["upload_d", "upload_a", "generated_b"]
   );
 });

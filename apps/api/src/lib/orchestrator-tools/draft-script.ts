@@ -20,6 +20,7 @@ import {
   groundingGraphInputs,
   type FootageGroundingContext,
 } from "./footage-grounding";
+import { selectedUploadedFootageAssetIds } from "@/lib/orchestrator/uploaded-footage-selection";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 
@@ -421,6 +422,7 @@ export function createDraftScriptTool(
       const footageGrounding = await resolved.buildFootageGroundingContext({
         workspaceId: context.auth.workspaceId,
         projectId: context.projectId,
+        assetIds: selectedUploadedFootageAssetIds(context.metadata),
       });
 
       const scriptDraft = draftScriptFromState({

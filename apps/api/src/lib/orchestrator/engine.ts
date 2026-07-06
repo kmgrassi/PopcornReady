@@ -39,6 +39,7 @@ import { ApiError } from "@/core/errors";
 import { createToolExecutionContext } from "./tool-context";
 import type { ToolCallResult, ToolName } from "./types";
 import { createLogger } from "@/lib/v1/logger";
+import { uploadedFootageMetadataFromSummary } from "./uploaded-footage-selection";
 
 // Credits charged per generation = providerCostUsd * MARGIN, at 1 credit = $0.01.
 const CREDIT_MARGIN = 2;
@@ -354,6 +355,14 @@ function jobAssetIds(result: unknown): string[] {
 
 type Resolved = ReturnType<typeof resolved>;
 
+function runMetadata(run: OrchestratorRun, r: Resolved): Record<string, unknown> | undefined {
+  const metadata = {
+    ...(uploadedFootageMetadataFromSummary(run.inputSummary) ?? {}),
+    ...(r.metadata ?? {}),
+  };
+  return Object.keys(metadata).length ? metadata : undefined;
+}
+
 // Drive the loop, but guarantee a terminal run: any uncaught error (a model/store
 // failure that driveLoop doesn't already convert into a failed result) marks the
 // run 'failed' with the error before rethrowing, so it is never left 'running'.
@@ -456,7 +465,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       agentId: r.agentId ?? "orchestrator",
       messageId: r.messageId,
       requestId: r.requestId,
-      metadata: r.metadata,
+      metadata: runMetadata(run, r),
     });
 
     // Gate handling. Pending/reached gates pause before executing. Approved gates

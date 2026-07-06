@@ -54,5 +54,7 @@ export function resolveUploadedFootageClips(
   if (selected.length === 0) {
     throw new Error("Select at least one uploaded visual asset before editing.");
   }
-  return selected;
+  if (request.assetIds.length === 0) return selected;
+  const clipById = new Map(selected.map((clip) => [clip.id, clip]));
+  return request.assetIds.map((id) => clipById.get(id)).filter((clip): clip is Clip => Boolean(clip));
 }
