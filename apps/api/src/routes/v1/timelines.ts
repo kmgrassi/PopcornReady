@@ -7,7 +7,7 @@ import { ApiError as AgentApiError, toErrorEnvelope } from "@/lib/agent-api/runt
 import type { Artifact, Job, JobType } from "@/lib/agent-api/types";
 import { type ExportOptions, runExportJob } from "@/lib/agent-api/workers";
 import type { ApiResult, HandlerCtx } from "@/lib/api/v1/handler";
-import type { Project } from "@popcorn/shared/types";
+import type { Project, RenderAudioLayer } from "@popcorn/shared/types";
 import {
   type AssembleRequest,
   resolveAssemble,
@@ -136,6 +136,8 @@ function parseExportOptions(body: unknown): ExportOptions {
     audioAssetIds: Array.isArray(input.audioAssetIds)
       ? input.audioAssetIds.filter((id): id is string => typeof id === "string")
       : undefined,
+    audioMixAssetId: typeof input.audioMixAssetId === "string" ? input.audioMixAssetId : undefined,
+    audioMixLayers: parseRenderAudioLayers(input.audioMixLayers),
     durationPolicy:
       typeof input.durationPolicy === "string"
         ? (input.durationPolicy as ExportOptions["durationPolicy"])
@@ -143,6 +145,51 @@ function parseExportOptions(body: unknown): ExportOptions {
     maxDeltaSec: typeof input.maxDeltaSec === "number" ? input.maxDeltaSec : undefined,
     showCaptions: typeof input.showCaptions === "boolean" ? input.showCaptions : undefined,
   };
+}
+
+function parseRenderAudioLayers(value: unknown): RenderAudioLayer[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.flatMap((raw): RenderAudioLayer[] => {
+    const layer = bodyRecord(raw);
+    if (typeof layer.audioAssetId !== "string") return [];
+    const gainDb = typeof layer.gainDb === "number" ? layer.gainDb : 0;
+    const duckUnder = typeof layer.duckUnder === "boolean" ? layer.duckUnder : false;
+    const inSec = typeof layer.inSec === "number" ? layer.inSec : 0;
+    const outSec = typeof layer.outSec === "number" ? layer.outSec : 0;
+    return [
+      {
+        ...(typeof layer.id === "string" ? { id: layer.id } : {}),
+        audioAssetId: layer.audioAssetId,
+        ...(typeof layer.role === "string" ? { role: layer.role } : {}),
+        gainDb,
+        duckUnder,
+        inSec,
+        outSec,
+        duckWindows: Array.isArray(layer.duckWindows)
+          ? layer.duckWindows.flatMap((rawWindow) => {
+              const window = bodyRecord(rawWindow);
+              if (
+                typeof window.startSec !== "number" ||
+                typeof window.endSec !== "number" ||
+                typeof window.gainDb !== "number"
+              ) {
+                return [];
+              }
+              return [
+                {
+                  startSec: window.startSec,
+                  endSec: window.endSec,
+                  gainDb: window.gainDb,
+                  sourceAssetIds: Array.isArray(window.sourceAssetIds)
+                    ? window.sourceAssetIds.filter((id): id is string => typeof id === "string")
+                    : [],
+                },
+              ];
+            })
+          : [],
+      },
+    ];
+  });
 }
 
 async function requireV1Project(

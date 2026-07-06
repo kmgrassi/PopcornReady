@@ -70,6 +70,39 @@ test("createRenderPlanFromTimeline honors measured audio duration and timeline-o
   assert.equal(alignment.truncatesAudio, true);
 });
 
+test("createRenderPlanFromTimeline can carry layered audio mix entries", () => {
+  const { renderPlan, alignment } = createRenderPlanFromTimeline({
+    timeline,
+    audioMixAssetId: "mix_1",
+    audioMixLayers: [
+      {
+        audioAssetId: "voice_1",
+        role: "voiceover",
+        gainDb: 0,
+        duckUnder: false,
+        inSec: 0,
+        outSec: 4,
+        duckWindows: [],
+      },
+      {
+        audioAssetId: "original_1",
+        role: "original_audio",
+        gainDb: -3,
+        duckUnder: true,
+        inSec: 0,
+        outSec: 5,
+        duckWindows: [{ startSec: 0, endSec: 4, gainDb: -12, sourceAssetIds: ["voice_1"] }],
+      },
+    ],
+  });
+
+  assert.equal(renderPlan.audioMixAssetId, "mix_1");
+  assert.equal(renderPlan.audioDurationSec, 5);
+  assert.deepEqual(renderPlan.audioAssetIds, ["voice_1", "original_1"]);
+  assert.equal(renderPlan.audioMixLayers?.[1].duckWindows[0].gainDb, -12);
+  assert.equal(alignment.comparison.audioDurationSec, 5);
+});
+
 test("isRenderDurationPolicy accepts only supported render duration policies", () => {
   assert.equal(isRenderDurationPolicy("match_longest_media"), true);
   assert.equal(isRenderDurationPolicy("fail_on_mismatch"), true);

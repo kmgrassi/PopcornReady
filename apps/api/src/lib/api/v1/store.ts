@@ -631,6 +631,7 @@ function markedContent(
     | "script_draft"
     | "timeline"
     | "narration_script"
+    | "audio_mix"
     | "critique",
   content: unknown
 ): Record<string, unknown> {
@@ -1403,6 +1404,7 @@ async function insertDataAsset(input: {
     | "story_blueprint"
     | "narration_script"
     | "composite"
+    | "audio_mix"
     | "critique";
   contentSchemaKind?:
     | "brief"
@@ -1413,6 +1415,7 @@ async function insertDataAsset(input: {
     | "script_draft"
     | "timeline"
     | "narration_script"
+    | "audio_mix"
     | "critique";
   role: string;
   content: unknown;
@@ -1549,6 +1552,8 @@ type GraphAssetKind =
   | "plan"
   | "story_blueprint"
   | "composite"
+  | "transition"
+  | "audio_mix"
   | "render"
   | "poster";
 

@@ -367,7 +367,9 @@ export interface RenderPlan {
   durationSec: number;
   timelineDurationSec: number;
   audioDurationSec: number;
+  audioMixAssetId?: string;
   audioAssetIds: string[];
+  audioMixLayers?: RenderAudioLayer[];
   output: {
     format: RenderOutputFormat;
     codec: RenderVideoCodec;
@@ -376,6 +378,24 @@ export interface RenderPlan {
     fps: number;
     quality: string;
   };
+}
+
+export interface RenderAudioDuckWindow {
+  startSec: number;
+  endSec: number;
+  gainDb: number;
+  sourceAssetIds: string[];
+}
+
+export interface RenderAudioLayer {
+  id?: string;
+  audioAssetId: string;
+  role?: string;
+  gainDb: number;
+  duckUnder: boolean;
+  inSec: number;
+  outSec: number;
+  duckWindows: RenderAudioDuckWindow[];
 }
 
 export interface CriticScores {
