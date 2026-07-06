@@ -301,6 +301,9 @@ export async function insertBeatSnapshotAsset(input: {
           dialogueSummary: input.beat.dialogue_summary,
           narration: input.beat.narration,
           durationSec: input.beat.duration_sec,
+          shotType: input.beat.shot_type,
+          camera: input.beat.camera,
+          framing: input.beat.framing,
         },
         visibility,
         created_at: now,
@@ -312,6 +315,8 @@ export async function insertBeatSnapshotAsset(input: {
   return (data as { id: string }).id;
 }
 
+// Field list must match the story_beats_require_snapshot trigger: a semantic
+// change the trigger sees but this misses would hit check_violation on update.
 export function semanticBeatChanged(
   before: StoryboardBeatRow,
   after: StoryboardBeatRow
@@ -321,6 +326,9 @@ export function semanticBeatChanged(
     before.visual_description !== after.visual_description ||
     before.dialogue_summary !== after.dialogue_summary ||
     before.narration !== after.narration ||
-    before.duration_sec !== after.duration_sec
+    before.duration_sec !== after.duration_sec ||
+    before.shot_type !== after.shot_type ||
+    before.camera !== after.camera ||
+    before.framing !== after.framing
   );
 }

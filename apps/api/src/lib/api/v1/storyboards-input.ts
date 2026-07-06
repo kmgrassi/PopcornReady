@@ -135,6 +135,9 @@ export function parseBeatInput(body: unknown): BeatInput {
     dialogueSummary: optionalString(obj, "dialogueSummary"),
     narration: optionalString(obj, "narration"),
     durationSec: optionalNonnegativeNumber(obj, "durationSec"),
+    shotType: optionalString(obj, "shotType"),
+    camera: optionalString(obj, "camera"),
+    framing: optionalString(obj, "framing"),
     status: optionalStatus(obj, "status", ITEM_STATUSES),
     beatAssetId: optionalString(obj, "beatAssetId"),
   };

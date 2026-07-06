@@ -3286,6 +3286,9 @@ interface StoryboardBeatRow {
   dialogue_summary: string | null;
   narration: string | null;
   duration_sec: number | null;
+  shot_type: string | null;
+  camera: string | null;
+  framing: string | null;
   status: StoryboardItemStatus;
   beat_asset_id: string | null;
   created_at: string;
@@ -3324,6 +3327,9 @@ export interface SaveStoryboardBeatInput {
   dialogueSummary?: string | null;
   narration?: string | null;
   durationSec?: number | null;
+  shotType?: string | null;
+  camera?: string | null;
+  framing?: string | null;
   status?: StoryboardItemStatus;
 }
 
@@ -3368,6 +3374,9 @@ function mapStoryboardBeat(
     dialogueSummary: row.dialogue_summary,
     narration: row.narration,
     durationSec: row.duration_sec,
+    shotType: row.shot_type,
+    camera: row.camera,
+    framing: row.framing,
     status: row.status,
     beatAssetId: row.beat_asset_id,
     panels,
@@ -3637,6 +3646,8 @@ export async function getProjectStoryboard(
   return null;
 }
 
+// Field list must match the story_beats_require_snapshot trigger: a semantic
+// change the trigger sees but this misses would hit check_violation on update.
 function semanticBeatChanged(
   before: StoryboardBeatRow,
   after: SaveStoryboardBeatInput
@@ -3646,7 +3657,10 @@ function semanticBeatChanged(
     before.visual_description !== (after.visualDescription ?? null) ||
     before.dialogue_summary !== (after.dialogueSummary ?? null) ||
     before.narration !== (after.narration ?? null) ||
-    before.duration_sec !== (after.durationSec ?? null)
+    before.duration_sec !== (after.durationSec ?? null) ||
+    before.shot_type !== (after.shotType ?? null) ||
+    before.camera !== (after.camera ?? null) ||
+    before.framing !== (after.framing ?? null)
   );
 }
 
@@ -3673,6 +3687,9 @@ async function nextBeatSnapshotAssetId(input: {
       dialogue_summary: input.beat.dialogueSummary ?? null,
       narration: input.beat.narration ?? null,
       duration_sec: input.beat.durationSec ?? null,
+      shot_type: input.beat.shotType ?? null,
+      camera: input.beat.camera ?? null,
+      framing: input.beat.framing ?? null,
     },
     lineageId: previous?.lineage_id,
     version: previous ? previous.version + 1 : undefined,
@@ -3971,6 +3988,9 @@ export async function saveProjectStoryboard(
         dialogue_summary: beat.dialogueSummary,
         narration: beat.narration,
         duration_sec: beat.durationSec,
+        shot_type: beat.shotType,
+        camera: beat.camera,
+        framing: beat.framing,
         status: beat.status,
         beat_asset_id: beat.beatAssetId,
         created_at: beat.createdAt,
@@ -4010,6 +4030,9 @@ export async function saveProjectStoryboard(
         dialogue_summary: beat.dialogueSummary ?? null,
         narration: beat.narration ?? null,
         duration_sec: beat.durationSec ?? null,
+        shot_type: beat.shotType ?? null,
+        camera: beat.camera ?? null,
+        framing: beat.framing ?? null,
         status: beat.status ?? "draft",
         beat_asset_id: await nextBeatSnapshotAssetId({
           db,

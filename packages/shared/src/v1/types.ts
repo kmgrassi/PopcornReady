@@ -88,6 +88,9 @@ export interface StoryboardBeat {
   dialogueSummary: string | null;
   narration: string | null;
   durationSec: number | null;
+  shotType: string | null;
+  camera: string | null;
+  framing: string | null;
   status: StoryboardItemStatus;
   beatAssetId: string | null;
   panels: StoryboardPanel[];

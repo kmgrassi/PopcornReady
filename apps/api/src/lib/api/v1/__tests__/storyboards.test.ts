@@ -6,6 +6,8 @@ import {
   buildStoryboardBeatSearchChunk,
   buildStoryboardSceneSearchChunk,
 } from "../storyboard-search-chunks";
+import { semanticBeatChanged } from "../storyboards-repository";
+import type { StoryboardBeatRow } from "../storyboards-types";
 import {
   parseBeatInput,
   parsePanelInput,
@@ -35,9 +37,33 @@ test("storyboard parsers preserve null clears and valid statuses", () => {
     dialogueSummary: undefined,
     narration: undefined,
     durationSec: null,
+    shotType: undefined,
+    camera: undefined,
+    framing: undefined,
     status: undefined,
     beatAssetId: undefined,
   });
+  assert.deepEqual(
+    parseBeatInput({
+      intent: "Open on the hero",
+      shotType: "wide",
+      camera: "slow dolly-in",
+      framing: null,
+    }),
+    {
+      beatIndex: undefined,
+      intent: "Open on the hero",
+      visualDescription: undefined,
+      dialogueSummary: undefined,
+      narration: undefined,
+      durationSec: undefined,
+      shotType: "wide",
+      camera: "slow dolly-in",
+      framing: null,
+      status: undefined,
+      beatAssetId: undefined,
+    }
+  );
   assert.deepEqual(parsePanelInput({ isSelected: true, approvedAt: null }), {
     panelIndex: undefined,
     imageAssetId: undefined,
@@ -66,9 +92,60 @@ test("storyboard parsers reject invalid request shapes", () => {
     (err) => err instanceof ApiError && err.code === "validation_failed"
   );
   assert.throws(
+    () => parseBeatInput({ shotType: 3 }),
+    (err) => err instanceof ApiError && err.code === "validation_failed"
+  );
+  assert.throws(
     () => parsePanelInput({ isSelected: "true" }),
     (err) => err instanceof ApiError && err.code === "validation_failed"
   );
+});
+
+// Every column the story_beats_require_snapshot trigger treats as semantic must
+// flip semanticBeatChanged, or updates through updateBeat hit check_violation.
+test("semanticBeatChanged matches the DB trigger's semantic field list", () => {
+  const base: StoryboardBeatRow = {
+    id: "beat_1",
+    project_id: "project_1",
+    scene_id: "scene_1",
+    beat_index: 0,
+    intent: "Reveal the product.",
+    visual_description: "Steam curls around the mug.",
+    dialogue_summary: null,
+    narration: null,
+    duration_sec: 2,
+    shot_type: "wide",
+    camera: "static",
+    framing: "centered",
+    status: "ready",
+    beat_asset_id: "asset_1",
+    created_at: "2026-01-01T00:00:00.000Z",
+    updated_at: "2026-01-01T00:00:00.000Z",
+  };
+
+  assert.equal(semanticBeatChanged(base, { ...base }), false);
+
+  const semanticEdits: Partial<StoryboardBeatRow>[] = [
+    { intent: "New intent." },
+    { visual_description: "New visual." },
+    { dialogue_summary: "New dialogue." },
+    { narration: "New narration." },
+    { duration_sec: 4 },
+    { shot_type: "close-up" },
+    { camera: "handheld" },
+    { framing: "off-center" },
+  ];
+  for (const edit of semanticEdits) {
+    assert.equal(
+      semanticBeatChanged(base, { ...base, ...edit }),
+      true,
+      `expected ${Object.keys(edit)[0]} change to be semantic`
+    );
+  }
+
+  // Non-semantic bookkeeping changes must not force a snapshot.
+  assert.equal(semanticBeatChanged(base, { ...base, beat_index: 3 }), false);
+  assert.equal(semanticBeatChanged(base, { ...base, status: "approved" }), false);
 });
 
 test("storyboard search chunks use typed labeled source text", () => {
