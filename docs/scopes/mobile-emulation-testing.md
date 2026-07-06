@@ -66,16 +66,29 @@ mobile Chromium locally and in CI.
 
 ### PR 2 — PWA regression spec (manifest + service worker + share target)
 
-**Scope:** a Playwright spec (runs under the mobile projects) that: fetches
-`/manifest.webmanifest` and validates required fields (name, icons incl.
-192/512, `start_url`, `display`, `share_target` declaration); asserts the
-share-target service worker registers successfully; **simulates a share** by
-POSTing a fixture file to the share-target route the way the OS would and
-asserts the handler responds/redirects into the upload flow. This is the
-level-3 stand-in for the uninvokable native share sheet.
+**Scope:** a Playwright spec that: fetches `/manifest.webmanifest` and
+validates required fields (name, icons incl. 192/512, `start_url`,
+`display`, `share_target` declaration); asserts the share-target service
+worker registers successfully; **simulates a share** by POSTing a fixture
+file to the share-target route the way the OS would and asserts the handler
+responds/redirects into the upload flow. This is the level-3 stand-in for the
+uninvokable native share sheet.
+
+**Must run against a production build, not the dev server.** SW registration
+is gated on `import.meta.env.PROD` (`apps/web/src/main.tsx:19`), while the
+default local Playwright web server runs `vite` dev — so this spec would fail
+under the dev server for reasons unrelated to the PWA. The config already
+contains the needed mechanism: hosted mode's web server runs
+`vite build && vite preview` (`apps/web/playwright.config.ts:85`). Add a
+dedicated `pwa` Playwright project that always uses the build+preview server
+command (regardless of auth mode) and scope this spec to it; keep it out of
+the dev-server projects. CI runs the `pwa` project alongside the mobile
+projects.
 
 **Tests:** the spec itself + a deliberate-breakage check in review (rename an
-icon → CI red).
+icon → CI red; and confirm the spec fails-loud, not skips, if accidentally
+run under a dev server — assert on `import.meta.env`-visible build mode or SW
+registration state rather than silently passing).
 
 **Done when:** a manifest typo, SW registration failure, or share-target
 route regression fails CI instead of shipping.
