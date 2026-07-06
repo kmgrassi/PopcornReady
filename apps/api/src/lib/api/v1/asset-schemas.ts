@@ -127,6 +127,7 @@ export type AgentAssetSource =
       requiresTranscode?: boolean;
     }
   | { type: "storage_upload"; path: string; requiresTranscode?: boolean }
+  | { type: "derived"; sourceAssetId: string; relation: "first_frame_of" }
   | { type: "generated"; generatedAssetId: string }
   | {
       type: "catalog";

@@ -42,9 +42,19 @@ export function assetPreviewUrl(asset: ProjectMediaAsset): string | undefined {
 }
 
 export function assetSourceLabel(source: ProjectMediaAsset["source"]): string {
+  if (
+    typeof source === "object" &&
+    source?.type === "derived" &&
+    "relation" in source &&
+    source.relation === "first_frame_of"
+  ) {
+    return "first frame";
+  }
   const raw = typeof source === "object" ? source?.type : source;
   if (!raw) return "asset";
   if (raw === "multipart_upload") return "upload";
+  if (raw === "derived") return "derived";
+  if (raw === "first_frame_of") return "first frame";
   return raw.replaceAll("_", " ");
 }
 

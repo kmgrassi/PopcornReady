@@ -13,7 +13,7 @@ import { validateMobileUploadCandidate } from "@popcorn/shared/mobile-upload-pol
 import { assetStorageKey, writeAssetObject } from "@/lib/storage/asset-write";
 import { createObjectStore } from "@/lib/storage/object-store";
 import { AuthContext } from "./auth";
-import { createThumbnailRendition } from "./asset-renditions";
+import { createThumbnailRendition, extractFirstFrameImage } from "./asset-renditions";
 import { assertProjectUploadPath, createAssetUploadUrl } from "./asset-upload";
 import { sha256Hex } from "./asset-graph";
 import { buildSemanticAnalysis } from "../../assets/semantic-analysis";
@@ -76,6 +76,7 @@ function resolveKind(explicit: AssetKind | undefined, filename: string): AssetKi
 
 function originFor(asset: Pick<V1Asset, "source" | "provenance">): AssetKnowledge["origin"] {
   if (asset.source.type === "generated" || asset.provenance) return "generated";
+  if (asset.source.type === "derived") return "derived";
   if (asset.source.type === "remote_url") return "imported";
   return "uploaded";
 }
@@ -332,6 +333,88 @@ async function recordStorageWriteAction(input: {
   });
 }
 
+async function createFirstFrameAssetForVideo(input: {
+  auth: AuthContext;
+  projectId: string;
+  video: V1Asset;
+  bytes: Buffer;
+}): Promise<V1Asset | null> {
+  if (input.video.kind !== "video" || input.video.status !== "ready") return null;
+
+  const frame = await extractFirstFrameImage({
+    filename: input.video.filename,
+    bytes: input.bytes,
+  });
+  if (!frame) return null;
+
+  const frameAsset = buildFirstFrameAsset({
+    auth: input.auth,
+    projectId: input.projectId,
+    video: input.video,
+    frameBytes: frame.bytes,
+  });
+  const created = await addAssetWithDerivedKnowledge(
+    input.auth,
+    input.projectId,
+    frameAsset,
+    frameAsset.createdAt
+  );
+  return writeBytesForAsset({
+    auth: input.auth,
+    projectId: input.projectId,
+    asset: created,
+    bytes: frame.bytes,
+    sourceType: "first_frame_of",
+    contentType: frame.contentType,
+  });
+}
+
+export function buildFirstFrameAsset(input: {
+  auth: Pick<AuthContext, "workspaceId">;
+  projectId: string;
+  video: V1Asset;
+  frameBytes: Buffer;
+  now?: string;
+}): V1Asset {
+  const now = new Date().toISOString();
+  return {
+    id: "",
+    schemaVersion: SCHEMA_VERSIONS.asset,
+    workspaceId: input.auth.workspaceId,
+    projectId: input.projectId,
+    kind: "image",
+    role: "first_frame",
+    filename: firstFrameFilename(input.video.filename),
+    status: "pending",
+    source: {
+      type: "derived",
+      sourceAssetId: input.video.id,
+      relation: "first_frame_of",
+    },
+    context: {
+      summary: `First frame extracted from ${input.video.filename}.`,
+      recommendedRoles: ["style_reference", "primary_footage"],
+    },
+    graphInputs: [
+      {
+        assetId: input.video.id,
+        relation: "input",
+        role: "first_frame_of",
+        ...(input.video.contentHash ? { contentHash: input.video.contentHash } : {}),
+      },
+    ],
+    contentHash: sha256Hex(input.frameBytes),
+    createdAt: input.now ?? now,
+    updatedAt: input.now ?? now,
+  };
+}
+
+function firstFrameFilename(videoFilename: string): string {
+  const parsed = path.parse(videoFilename);
+  const name = parsed.name || "video";
+  return `${name}-first-frame.webp`;
+}
+
 export async function createStorageUploadUrl(
   auth: AuthContext,
   projectId: string,
@@ -417,6 +500,14 @@ async function writeBytesForAsset(input: {
     contentType: stored.contentType,
   });
   void enqueueAssetEmbeddingRefresh(updated, { reason: "asset_ready" }).catch(() => undefined);
+  if (updated.kind === "video") {
+    await createFirstFrameAssetForVideo({
+      auth: input.auth,
+      projectId: input.projectId,
+      video: updated,
+      bytes: input.bytes,
+    });
+  }
   return updated;
 }
 
@@ -721,6 +812,14 @@ export async function registerAsset(
       contentType: object.contentType || metadata.contentType || "application/octet-stream",
     });
     void enqueueAssetEmbeddingRefresh(ready, { reason: "asset_ready" }).catch(() => undefined);
+    if (ready.kind === "video") {
+      await createFirstFrameAssetForVideo({
+        auth,
+        projectId,
+        video: ready,
+        bytes: object.body,
+      });
+    }
     return ready;
   }
 
