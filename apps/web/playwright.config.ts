@@ -36,10 +36,25 @@ const authMode = (
   "local"
 ).toLowerCase();
 const hostedAuthMode = authMode === "supabase";
+function hasRequestedProject(name: string): boolean {
+  return process.argv.some((arg, index, args) => {
+    if (arg === "--project" || arg === "-p") return args[index + 1] === name;
+    return arg === `--project=${name}` || arg === `-p=${name}`;
+  });
+}
+
+const includePwaProject =
+  hasRequestedProject("pwa") || e2eEnv.POPCORN_E2E_INCLUDE_PWA === "true";
 const apiPort = Number(
   e2eEnv.POPCORN_E2E_API_PORT ?? e2eEnv.PLAYWRIGHT_API_PORT ?? e2eEnv.PORT ?? 4100,
 );
-const baseURL = e2eEnv.PLAYWRIGHT_BASE_URL || `http://127.0.0.1:${webPort}`;
+const webPortOverridden = Boolean(
+  process.env.PLAYWRIGHT_WEB_PORT || process.env.POPCORN_E2E_WEB_PORT,
+);
+const baseURL =
+  process.env.PLAYWRIGHT_BASE_URL ||
+  (!webPortOverridden && e2eEnv.PLAYWRIGHT_BASE_URL) ||
+  `http://127.0.0.1:${webPort}`;
 const apiURL = e2eEnv.VITE_API_URL || `http://127.0.0.1:${apiPort}`;
 const reuseExistingServer =
   e2eEnv.POPCORN_E2E_REUSE_EXISTING_SERVER === "false" ? false : !process.env.CI;
@@ -80,11 +95,37 @@ const webServerEnv = hostedAuthMode
       PLAYWRIGHT_BASE_URL: baseURL,
       PLAYWRIGHT_API_PORT: String(apiPort),
     };
+const pwaWebServerEnv = {
+  ...webServerEnv,
+  NODE_ENV: "production",
+};
 
-const webCommand = hostedAuthMode
+const usePwaWebServer = includePwaProject && !hostedAuthMode;
+const usePreviewWebServer = hostedAuthMode || includePwaProject;
+const webCommand = usePwaWebServer
+  ? `pnpm --filter @popcorn/web exec tsc --noEmit && pnpm --filter @popcorn/web exec vite build && pnpm --filter @popcorn/web exec vite preview --host 127.0.0.1 --port ${webPort} --strictPort`
+  : usePreviewWebServer
   ? `pnpm --filter @popcorn/web exec vite build && pnpm --filter @popcorn/web exec vite preview --host 127.0.0.1 --port ${webPort} --strictPort`
   : `pnpm --filter @popcorn/web exec vite --host 127.0.0.1 --port ${webPort} --strictPort`;
 const mobileCriticalGrep = /@mobile/;
+
+const apiWebServer = {
+  command: "pnpm --filter @popcorn/api start",
+  cwd: repoRoot,
+  env: apiServerEnv,
+  url: `${apiURL}/api/v1/health`,
+  reuseExistingServer,
+  timeout: 120_000,
+};
+
+const appWebServer = {
+  command: webCommand,
+  cwd: repoRoot,
+  env: usePwaWebServer ? pwaWebServerEnv : webServerEnv,
+  url: baseURL,
+  reuseExistingServer: false,
+  timeout: 120_000,
+};
 
 export default defineConfig({
   testDir: "./e2e",
@@ -97,38 +138,33 @@ export default defineConfig({
     baseURL,
     trace: "on-first-retry",
   },
-  webServer: [
-    {
-      command: "pnpm --filter @popcorn/api start",
-      cwd: repoRoot,
-      env: apiServerEnv,
-      url: `${apiURL}/api/v1/health`,
-      reuseExistingServer,
-      timeout: 120_000,
-    },
-    {
-      command: webCommand,
-      cwd: repoRoot,
-      env: webServerEnv,
-      url: baseURL,
-      reuseExistingServer: false,
-      timeout: 120_000,
-    },
-  ],
+  webServer: usePwaWebServer ? [appWebServer] : [apiWebServer, appWebServer],
   projects: [
     {
       name: "chromium",
+      testIgnore: /pwa\/.+\.spec\.ts/,
       use: { ...devices["Desktop Chrome"] },
     },
     {
       name: "mobile-safari",
       grep: mobileCriticalGrep,
+      testIgnore: /pwa\/.+\.spec\.ts/,
       use: { ...devices["iPhone 13"] },
     },
     {
       name: "mobile-chrome",
       grep: mobileCriticalGrep,
+      testIgnore: /pwa\/.+\.spec\.ts/,
       use: { ...devices["Pixel 7"] },
     },
+    ...(includePwaProject
+      ? [
+          {
+            name: "pwa",
+            testMatch: /pwa\/.+\.spec\.ts/,
+            use: { ...devices["Desktop Chrome"] },
+          },
+        ]
+      : []),
   ],
 });

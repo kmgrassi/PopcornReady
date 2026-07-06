@@ -48,6 +48,16 @@ Hosted mode builds the app and serves it through `vite preview` so protected
 routes run with `import.meta.env.DEV === false`; this keeps the dev autopilot
 path out of the hosted auth assertions.
 
+PWA regressions also run against a production preview build because service
+worker registration is gated behind `import.meta.env.PROD`:
+
+```sh
+pnpm --filter @popcorn/web test:e2e:pwa
+```
+
+That command validates the web app manifest, confirms the share-target service
+worker registers, and simulates the OS share-target POST with a fixture file.
+
 Use `PLAYWRIGHT_WEB_PORT` or `POPCORN_E2E_WEB_PORT`, and
 `POPCORN_E2E_API_PORT`, to override the default ports when running beside
 another local stack.

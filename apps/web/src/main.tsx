@@ -16,8 +16,14 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   </React.StrictMode>
 );
 
+function registerShareTargetServiceWorker() {
+  void navigator.serviceWorker.register("/share-target-sw.js");
+}
+
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    void navigator.serviceWorker.register("/share-target-sw.js");
-  });
+  if (document.readyState === "complete") {
+    registerShareTargetServiceWorker();
+  } else {
+    window.addEventListener("load", registerShareTargetServiceWorker, { once: true });
+  }
 }
