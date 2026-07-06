@@ -65,6 +65,18 @@ phone's camera roll is the user's asset library, and upload is the front door.
   pick (upload time dominates on mobile uplinks) under the anonymous session;
   the account-or-skip choice happens while bytes move. Guest → signup
   auto-claim makes this safe.
+- **A draft project is created eagerly on first file pick.** The upload-url
+  endpoint (and every asset) is project-scoped, and today a `projectId` only
+  exists after `createProject` (`createAndStartRun`,
+  `apps/web/src/lib/startRun.ts`). So the first pick triggers, in order:
+  anonymous sign-in (if no session) → `createProject` (a normal project, no
+  run) → signed-URL requests against that id. The draft project id lives in
+  the landing draft state and is reused across re-picks/retries — one landing
+  session, one project. No "attach-later" orphan-upload path: the asset graph
+  requires `project_id` on every asset (one project-scoped pool), and eager
+  drafts also mean abandoned uploads are covered by the PR 6 guest-retention
+  purge for free. The later "create" action starts a run on the same project
+  rather than creating anything new.
 - **Sequential-ish concurrency.** Mobile uplinks choke on parallel large
   PUTs; upload 2 at a time, queue the rest (states per ui-video-upload:
   `queued | uploading | processing | ready | failed`).
@@ -128,7 +140,9 @@ progress, cancel, and retry — no base64.
 **Scope:** the landing hero gains an "upload your clips" affordance next to
 the guest prompt box: `<input type="file" accept="video/*,image/*" multiple
 capture>` (native picker; `capture` offers record-now on phones), preflight
-checks (type/size caps, max clip count/duration), per-file progress list,
+checks (type/size caps, max clip count/duration), eager anonymous sign-in +
+draft-project creation on first pick (see Design decisions — uploads need a
+`projectId` before any upload-url request), per-file progress list,
 then the account-or-skip choice (reusing the guest-generation components), a
 one-line brief input, and an explicit create action calling
 `startUploadedFootageGenerationRun` → run-progress page (no auto-run — see
@@ -141,7 +155,9 @@ hero rather than adding a second screen).
 
 **Isolated testing:**
 - Unit: preflight validation (reject oversize/wrong-type before any network);
-  draft wiring from selected files → entrypoint payload.
+  draft wiring from selected files → entrypoint payload; first-pick
+  sequencing (anon session → one `createProject` → upload-urls all against
+  that id; a second pick reuses the draft project, never creates another).
 - Preview verification at mobile viewport (375×812): picker opens, progress
   renders, failed file shows retry and doesn't block others, happy path lands
   on run progress.
