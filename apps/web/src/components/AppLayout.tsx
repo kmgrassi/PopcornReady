@@ -109,6 +109,7 @@ export function AppLayout() {
 // via the API's hybrid "autopilot" identity; logging in takes over with the real
 // session. Production builds (DEV=false) always require login.
 const DEV_AUTOPILOT = import.meta.env.DEV;
+const MOBILE_NAV_MEDIA_QUERY = "(max-width: 860px)";
 
 export function AuthenticatedAppLayout() {
   const auth = useAuth();
@@ -123,7 +124,19 @@ export function AuthenticatedAppLayout() {
 
   useEffect(() => {
     setNavOpen(false);
-  }, [location.pathname]);
+  }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    const mobileNavQuery = window.matchMedia(MOBILE_NAV_MEDIA_QUERY);
+    const closeWhenDesktop = () => {
+      if (!mobileNavQuery.matches) setNavOpen(false);
+    };
+    closeWhenDesktop();
+    mobileNavQuery.addEventListener("change", closeWhenDesktop);
+    return () => {
+      mobileNavQuery.removeEventListener("change", closeWhenDesktop);
+    };
+  }, []);
 
   useEffect(() => {
     if (navOpen) {
@@ -232,7 +245,10 @@ export function AuthenticatedAppLayout() {
         <Button
           className={styles.newVideo}
           variant="primary"
-          onClick={() => navigate(`/projects/new?new=${Date.now()}`)}
+          onClick={() => {
+            setNavOpen(false);
+            navigate(`/projects/new?new=${Date.now()}`);
+          }}
         >
           Create new video
         </Button>
