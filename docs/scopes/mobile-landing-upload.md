@@ -193,6 +193,13 @@ proven.
 - Initial caps: max clips per guest session, max clip duration/size? (Guest
   abuse surface — suggest 10 clips / 2 min / 200 MB each to start, tightened
   by analytics.)
+- Guest-asset retention: uploads live server-side under the anonymous identity
+  (deliberately **not** browser cache — mobile browsers evict large
+  IndexedDB/Cache entries unpredictably, and pre-auth upload means bytes move
+  while the user decides). Anonymous users who never sign up leave orphaned
+  assets; define a TTL (e.g. purge anon-owned projects untouched for 30 days)
+  and where the cleanup job runs. Signup upgrades the anon identity in place,
+  so claimed assets are exempt by construction.
 - HEVC handling: transcode on ingest (ffmpeg, predictable but adds a job) vs
   probe-and-pass-through until a downstream consumer complains? Decide in
   PR 4 with provider input-format data.
