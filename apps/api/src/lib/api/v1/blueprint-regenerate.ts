@@ -5,9 +5,11 @@
 // replaced blueprint row; provenance lets downstream consumers detect staleness
 // (North Star: recompute only the affected assets, never a forced cascade).
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { ApiError } from "@/core/errors";
 import { developStoryBlueprintForProject } from "@/lib/orchestrator-tools/develop-story-blueprint";
 import { getServiceSupabase } from "@/lib/supabase/clients";
+import { runQuery } from "@/lib/supabase/db-errors";
 import type { AuthContext } from "./auth";
 import { getProject } from "./store";
 import { getStoryboardRow } from "./storyboards-repository";
@@ -29,13 +31,65 @@ export interface RegenerateStoryBlueprintResult {
   supersededStoryboardId: string;
 }
 
+// The regenerate target must be the blueprint the project would actually
+// supersede: addProjectStoryBlueprint chains supersedes_id off the project's
+// current pointer and retires every non-superseded row, so accepting an older
+// id would replace the current blueprint while reporting the old id as the
+// superseded one. Exported for tests.
+export function assertRegenerateTarget(input: {
+  storyboardId: string;
+  storyboardStatus: "draft" | "approved" | "superseded";
+  currentStoryBlueprintId: string | null;
+}): void {
+  if (input.storyboardStatus === "superseded") {
+    throw new ApiError(
+      "validation_failed",
+      "This storyboard has already been superseded; regenerate the project's current storyboard instead.",
+      { currentStoryBlueprintId: input.currentStoryBlueprintId }
+    );
+  }
+  if (
+    input.currentStoryBlueprintId !== null &&
+    input.currentStoryBlueprintId !== input.storyboardId
+  ) {
+    throw new ApiError(
+      "validation_failed",
+      "Only the project's current storyboard can be regenerated.",
+      { currentStoryBlueprintId: input.currentStoryBlueprintId }
+    );
+  }
+}
+
+async function getCurrentStoryBlueprintId(
+  db: SupabaseClient,
+  projectId: string
+): Promise<string | null> {
+  const row = await runQuery(
+    "blueprint-regenerate.currentPointer",
+    db
+      .from("projects")
+      .select("current_story_blueprint_id")
+      .eq("id", projectId)
+      .maybeSingle()
+  );
+  return (
+    (row as { current_story_blueprint_id?: string | null } | null)
+      ?.current_story_blueprint_id ?? null
+  );
+}
+
 export async function regenerateStoryBlueprint(
   input: RegenerateStoryBlueprintInput
 ): Promise<RegenerateStoryBlueprintResult> {
   await getProject(input.auth.workspaceId, input.projectId);
   const db = getServiceSupabase();
   // Throws not_found unless the target blueprint belongs to this project.
-  await getStoryboardRow(db, input.projectId, input.storyboardId);
+  const target = await getStoryboardRow(db, input.projectId, input.storyboardId);
+  assertRegenerateTarget({
+    storyboardId: input.storyboardId,
+    storyboardStatus: target.status,
+    currentStoryBlueprintId: await getCurrentStoryBlueprintId(db, input.projectId),
+  });
 
   const output = await developStoryBlueprintForProject({
     workspaceId: input.auth.workspaceId,
