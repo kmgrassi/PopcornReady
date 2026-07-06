@@ -1,5 +1,9 @@
-import { useRef, useState } from "react";
-import { FOOTAGE_ACCEPT, readSelectedFootage } from "../../../lib/upload";
+import { useEffect, useRef, useState } from "react";
+import {
+  FOOTAGE_ACCEPT,
+  readSelectedFootage,
+  watchUploadInterruptions,
+} from "../../../lib/upload";
 import { ChoiceCard } from "../../ui/ChoiceCard";
 import type { StepProps } from "../useStudioFlow";
 import { StepShell } from "./StepShell";
@@ -25,9 +29,13 @@ export function SourceFootageStep({ draft, update, next, back }: StepProps) {
   const selectionRequestId = useRef(0);
   const isUploadMode = draft.footageChoice === "upload";
   const hasVisualFootage = draft.selectedFootage.some(
-    (selected) =>
-      selected.file.type.startsWith("video/") || selected.file.type.startsWith("image/"),
+    (selected) => selected.kind === "video" || selected.kind === "image",
   );
+
+  useEffect(() => {
+    if (!isUploadMode) return undefined;
+    return watchUploadInterruptions();
+  }, [isUploadMode]);
 
   async function onFilesSelected(files: FileList | null) {
     const requestId = selectionRequestId.current + 1;

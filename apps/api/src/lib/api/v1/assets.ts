@@ -9,6 +9,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
+import { validateMobileUploadCandidate } from "@popcorn/shared/mobile-upload-policy";
 import { assetStorageKey, writeAssetObject } from "@/lib/storage/asset-write";
 import { createObjectStore } from "@/lib/storage/object-store";
 import { AuthContext } from "./auth";
@@ -501,6 +502,27 @@ export async function registerAsset(
     if (bytes.length === 0) {
       throw new ApiError("asset_invalid", "Uploaded asset bytes are empty.");
     }
+    const validation = validateMobileUploadCandidate({
+      filename,
+      mimeType: input.source.mimeType,
+      sizeBytes: bytes.length,
+      durationSec: input.durationSec,
+    });
+    if (!validation.ok) {
+      throw new ApiError(
+        "asset_invalid",
+        validation.issue?.message ?? "Uploaded media is not supported.",
+        {
+          reason: validation.issue?.code ?? "media_unreadable",
+          ...(validation.issue?.limit !== undefined
+            ? { limit: validation.issue.limit }
+            : {}),
+          ...(validation.issue?.actual !== undefined
+            ? { actual: validation.issue.actual }
+            : {}),
+        },
+      );
+    }
 
     const asset: V1Asset = {
       id: "",
@@ -513,6 +535,7 @@ export async function registerAsset(
       source: {
         type: "multipart_upload",
         ...(input.source.mimeType ? { mimeType: input.source.mimeType } : {}),
+        ...(validation.requiresTranscode ? { requiresTranscode: true } : {}),
       },
       durationSec: input.durationSec,
       context: input.context,
