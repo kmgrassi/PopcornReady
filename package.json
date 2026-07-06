@@ -18,6 +18,7 @@
     "dev:local-db": "node scripts/with-local-supabase-env.mjs pnpm dev",
     "dev:api": "turbo run dev --filter=@popcorn/api",
     "dev:web": "turbo run dev --filter=@popcorn/web",
+    "dev:device": "pnpm --filter @popcorn/web dev:device",
     "db:local:start": "supabase start",
     "db:local:reset": "supabase db reset",
     "db:local:status": "supabase status",
