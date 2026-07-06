@@ -298,6 +298,9 @@ export function HomePage() {
     null,
   );
   const [uploadItems, setUploadItems] = useState<LandingUploadItem[]>([]);
+  const [uploadSourceMode, setUploadSourceMode] = useState<"upload" | "record">(
+    "upload",
+  );
   const normalizedPrompt = prompt.trim();
   const promptTooShort =
     normalizedPrompt.length > 0 && normalizedPrompt.length < PROMPT_MIN_LENGTH;
@@ -696,7 +699,7 @@ export function HomePage() {
               rows={4}
             />
             <div className={styles.uploadDrop}>
-              <div>
+              <div className={styles.uploadCopy}>
                 <strong>Or start from your clips</strong>
                 <span>
                   Pick up to {LANDING_MAX_FILES} short videos or stills,{" "}
@@ -704,12 +707,38 @@ export function HomePage() {
                   generates until you tap create.
                 </span>
               </div>
-              <div className={styles.uploadActions}>
+              <div className={styles.uploadControls}>
+                <div
+                  className={styles.uploadModeToggle}
+                  role="radiogroup"
+                  aria-label="Clip source"
+                >
+                  <button
+                    type="button"
+                    className={uploadSourceMode === "upload" ? styles.activeMode : undefined}
+                    role="radio"
+                    aria-checked={uploadSourceMode === "upload"}
+                    onClick={() => setUploadSourceMode("upload")}
+                  >
+                    Upload
+                  </button>
+                  <button
+                    type="button"
+                    className={uploadSourceMode === "record" ? styles.activeMode : undefined}
+                    role="radio"
+                    aria-checked={uploadSourceMode === "record"}
+                    onClick={() => setUploadSourceMode("record")}
+                  >
+                    Record
+                  </button>
+                </div>
                 <label className={styles.uploadPick}>
                   <input
+                    key={uploadSourceMode}
                     type="file"
-                    accept={LANDING_FOOTAGE_ACCEPT}
-                    multiple
+                    accept={uploadSourceMode === "record" ? "video/*" : LANDING_FOOTAGE_ACCEPT}
+                    multiple={uploadSourceMode === "upload"}
+                    capture={uploadSourceMode === "record" ? "environment" : undefined}
                     onChange={(event) => {
                       void handleLandingUploadFiles(event.target.files);
                       event.currentTarget.value = "";
@@ -724,25 +753,9 @@ export function HomePage() {
                     ? "Loading session..."
                     : isPreparingUploadDraft
                     ? "Preparing..."
+                    : uploadSourceMode === "record"
+                    ? "Record new"
                     : "Choose existing"}
-                </label>
-                <label className={styles.uploadPick}>
-                  <input
-                    type="file"
-                    accept={LANDING_FOOTAGE_ACCEPT}
-                    multiple
-                    capture="environment"
-                    onChange={(event) => {
-                      void handleLandingUploadFiles(event.target.files);
-                      event.currentTarget.value = "";
-                    }}
-                    disabled={
-                      authIsResolving ||
-                      uploadItems.length >= LANDING_MAX_FILES ||
-                      uploadIsBusy
-                    }
-                  />
-                  Record new
                 </label>
               </div>
             </div>
