@@ -98,6 +98,25 @@ function uploadAsset(id: string, index: number): V1Asset {
   };
 }
 
+function audioAsset(id: string, role: "voiceover" | "soundtrack"): V1Asset {
+  return {
+    id,
+    schemaVersion: "asset.v1",
+    workspaceId: auth.workspaceId,
+    projectId: "proj_1",
+    kind: "audio",
+    role,
+    filename: `${id}.mp3`,
+    status: "ready",
+    source: { type: "generated", generatedAssetId: id },
+    remoteUrl: `https://example.com/${id}.mp3`,
+    durationSec: 12,
+    contentHash: `${id}_hash`,
+    createdAt: "2026-06-17T00:00:00.000Z",
+    updatedAt: "2026-06-17T00:00:00.000Z",
+  };
+}
+
 // Deps that satisfy plan_shots without touching the DB.
 function planShotsDeps(over: Partial<Parameters<typeof createPlanShotsTool>[0]> = {}) {
   return {
@@ -545,6 +564,7 @@ test("assemble_timeline scopes uploaded-footage runs to selected assets and pres
   const uploads = ["upload_1", "upload_2", "upload_3", "upload_4", "upload_5", "upload_6"].map(
     uploadAsset
   );
+  const soundtrack = audioAsset("audio_soundtrack", "soundtrack");
   const registry = new ToolRegistry();
   registry.register(
     createAssembleTimelineTool({
@@ -554,13 +574,14 @@ test("assemble_timeline scopes uploaded-footage runs to selected assets and pres
         contentHash: "plan_hash_1",
       }),
       listActiveProjectAssetSelections: async () => [],
-      listAssets: async () => ({ items: uploads, nextCursor: null }),
+      listAssets: async () => ({ items: [...uploads, soundtrack], nextCursor: null }),
       selectClips: async ({ plan, clips }) => {
         selectorClipIds = clips.map((clip) => clip.id);
+        const visualClips = clips.filter((clip) => clip.kind !== "audio");
         return {
           aspectRatio: plan.aspectRatio,
           fps: 30,
-          segments: [...clips].reverse().map((clip, index) => ({
+          segments: [...visualClips].reverse().map((clip, index) => ({
             id: `seg_${index + 1}`,
             clipId: clip.id,
             sourceInSec: 0,
@@ -606,14 +627,14 @@ test("assemble_timeline scopes uploaded-footage runs to selected assets and pres
   );
 
   assert.equal(result.status, "succeeded");
-  assert.deepEqual(selectorClipIds, selectedAssetIds);
+  assert.deepEqual(selectorClipIds, [...selectedAssetIds, "audio_soundtrack"]);
   assert.deepEqual(persistedSegmentClipIds, selectedAssetIds);
   assert.deepEqual(
     timelineInput?.graphInputs.map((input) => input.assetId),
-    ["plan_asset_1", ...selectedAssetIds]
+    ["plan_asset_1", ...selectedAssetIds, "audio_soundtrack"]
   );
   assert.deepEqual(
     timelineInput?.graphInputs.map((input) => input.role),
-    ["plan", "upload", "upload", "upload"]
+    ["plan", "upload", "upload", "upload", "soundtrack"]
   );
 });

@@ -255,11 +255,18 @@ async function loadAssemblyAssets(input: {
   const selectedUploadAssetIds = input.selectedUploadAssetIds ?? [];
   const selectedOrder = new Map(selectedUploadAssetIds.map((id, index) => [id, index]));
   const readyAssets = allAssets.items.filter((asset) => asset.status === "ready");
+  const readyAudioAssets = readyAssets.filter(
+    (asset) =>
+      asset.kind === "audio" && (asset.role === "voiceover" || asset.role === "soundtrack")
+  );
   const uploadsAndAudio =
     selectedUploadAssetIds.length > 0
-      ? readyAssets
-          .filter((asset) => selectedOrder.has(asset.id) && asset.kind !== "audio")
-          .sort((a, b) => selectedOrder.get(a.id)! - selectedOrder.get(b.id)!)
+      ? [
+          ...readyAssets
+            .filter((asset) => selectedOrder.has(asset.id) && asset.kind !== "audio")
+            .sort((a, b) => selectedOrder.get(a.id)! - selectedOrder.get(b.id)!),
+          ...readyAudioAssets,
+        ]
       : readyAssets.filter((asset) => {
           if (asset.kind === "audio") {
             return asset.role === "voiceover" || asset.role === "soundtrack";
