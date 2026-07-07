@@ -39,6 +39,7 @@ const devHarnessRoutes = {
   generationCards: "/dev/generation-cards",
   landingUpload: "/dev/landing-upload",
   mediaGallery: "/dev/media-gallery",
+  videoEdit: "/dev/video-edit",
 } as const;
 
 function lazyDevPage(path: string, exportName: string) {
@@ -62,6 +63,9 @@ const DevLandingUploadPage = isDevHarnessEnabled
   : null;
 const DevMediaGalleryPage = isDevHarnessEnabled
   ? lazyDevPage("/src/routes/dev/MobileHarnessPage.tsx", "DevMediaGalleryPage")
+  : null;
+const DevVideoEditPage = isDevHarnessEnabled
+  ? lazyDevPage("/src/routes/dev/VideoEditPage.tsx", "VideoEditPage")
   : null;
 
 // Route table for the SPA. Each page PR ports one former Next app route into
@@ -94,6 +98,10 @@ export function App() {
               <Route
                 path={devHarnessRoutes.mediaGallery}
                 element={<DevPage element={DevMediaGalleryPage} />}
+              />
+              <Route
+                path={devHarnessRoutes.videoEdit}
+                element={<DevPage element={DevVideoEditPage} />}
               />
             </>
           ) : null}
