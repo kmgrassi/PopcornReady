@@ -839,9 +839,12 @@
     white-space: normal;
   }
 
-  .statusGrid,
-  .headerStatusMessage {
+  .statusGrid {
     display: none;
+  }
+
+  .headerStatusMessage {
+    margin: 0;
   }
 
   .mobileStatusNarrative {

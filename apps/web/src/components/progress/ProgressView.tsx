@@ -709,10 +709,10 @@ export function ProgressView({
           <div className={styles.headerStatusPanel} aria-label="Current run status">
             <div className={styles.mobileStatusNarrative}>
               <strong>{progressSentence}</strong>
-              {detail.run.message ? (
-                <p>{detail.run.message}</p>
-              ) : progressContext.length > 0 ? (
+              {progressContext.length > 0 ? (
                 <p>{progressContext.join(" · ")}</p>
+              ) : detail.run.message ? (
+                <p>{detail.run.message}</p>
               ) : null}
             </div>
             <div className={styles.statusGrid}>
