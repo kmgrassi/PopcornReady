@@ -26,7 +26,7 @@ acceptable set.
   turn (engine `toPriorResult`: `{ tool, status, outputAssetIds }`, plus error
   guidance on failures). The model only ever sees IDs + status, so the scenarios
   do too — no real assets needed.
-- **Full tool vocabulary is exposed** every scenario (all 14 `TOOL_NAMES`), so the
+- **Full tool vocabulary is exposed** every scenario (all current `TOOL_NAMES`), so the
   model must pick correctly among everything, as in production.
 - **Acceptable-set assertions, not a single golden.** Each scenario lists `oneOf`
   acceptable next tools. The boundary transitions (fresh→brief, plan→visual prep,

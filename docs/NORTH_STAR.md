@@ -318,10 +318,11 @@ historical — do not build on them.
 
 Realized as the orchestrator tool registry
 (`apps/api/src/lib/orchestrator-tools/default-registry.ts`), driven by the run
-loop in `apps/api/src/lib/orchestrator/engine.ts`. The 15 registered tools:
-`create_brief` · `develop_story_blueprint` · `draft_script` · `plan_shots` ·
+loop in `apps/api/src/lib/orchestrator/engine.ts`. The 16 registered tools:
+`create_or_load_brief` · `develop_story_blueprint` · `draft_script` · `plan_shots` ·
 `plan_visual_anchors` · `generate_anchor` · `generate_audio` ·
 `generate_storyboard` · `generate_keyframe` · `generate_clip` ·
+`fit_audio_to_picture` ·
 `assemble_timeline` · `critique_timeline` · `export_video` · `request_approval` ·
 `publish_to_catalog`. Image regeneration is the `regenerate_asset_version` RPC
 (new immutable version + repoint); broader `regenerate *` coverage across kinds is

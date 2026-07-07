@@ -14,6 +14,11 @@ export function mimeForPath(filePath: string): string {
   if (ext === ".webp") return "image/webp";
   if (ext === ".png") return "image/png";
   if (ext === ".mp4") return "video/mp4";
+  if (ext === ".mov" || ext === ".qt") return "video/quicktime";
+  if (ext === ".webm") return "video/webm";
+  if (ext === ".avi") return "video/avi";
+  if (ext === ".wmv") return "video/wmv";
+  if (ext === ".3gp" || ext === ".3gpp") return "video/3gpp";
   return "application/octet-stream";
 }
 

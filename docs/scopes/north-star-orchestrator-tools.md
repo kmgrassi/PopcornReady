@@ -160,6 +160,7 @@ type ToolName =
   | "generate_anchor" | "regenerate_anchor"
   | "generate_keyframe" | "regenerate_keyframe"
   | "generate_clip" | "regenerate_clip"
+  | "edit_video_asset"
   | "generate_audio" | "rescore_audio"
   | "assemble_timeline" | "reassemble_timeline"
   | "critique" | "export";
@@ -191,10 +192,30 @@ The existing functions map onto tools with minimal rewrap: `planEdit` →
 `plan`; `planCompositionBeats` → composition planning inside `plan`;
 `generateCharacterHeroFrame`/`generateBeatKeyframe`/`generateBeatClip`
 (`oneshot/media-generation.ts`) → `generate_anchor`/`generate_keyframe`/
-`generate_clip`; `generateSoundtrack` → `generate_audio`; the segment-mapping at
+`generate_clip`; prompt-driven changes to existing footage or generated clips →
+`edit_video_asset`; `generateSoundtrack` → `generate_audio`; the segment-mapping at
 `route.ts:419` + `compileTimelineViaEditGraph` → `assemble_timeline`; `critique`
 → `critique`. The visual-review retry (`route.ts:113`) becomes the agent
 reacting to a `regenerate` recommendation, not an inline `if`.
+
+#### `edit_video_asset`
+
+`edit_video_asset` is the Request Changes tool for changing the content of an
+existing uploaded footage asset or generated clip. The source asset is immutable:
+the tool produces a new video asset and records the source as a graph input with
+`relation: "input"` and `role: "edited_from"`. If the source clip is already
+selected into a timeline slot, the edited asset should become that slot's active
+selection; reverting is another selection change, not a destructive edit.
+
+Use it when the user asks to add, remove, replace, or otherwise alter something
+inside existing footage. Keep `generate_clip` for creating a new clip from a
+beat/keyframe prompt. Provider smoke coverage for the Gemini Omni preview edit
+path lives in [video-edit-provider-smoke.md](../manual-tests/video-edit-provider-smoke.md).
+
+Operator caveats for the first provider path: `gemini-omni-flash-preview` is a
+preview model, can be renamed or region-limited, and currently needs a clear
+duration cap before production exposure. Phone footage may require a retry after
+H.264/AAC transcode; the shared Gemini provider performs that retry once.
 
 ### 2. Error / self-heal protocol
 
