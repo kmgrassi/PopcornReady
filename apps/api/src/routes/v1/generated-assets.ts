@@ -2,8 +2,8 @@ import { Router } from "express";
 import { mutation, route } from "@/core/adapter";
 import { ApiError } from "@/core/errors";
 import {
-  createGeneratedAsset,
   getGeneratedAssetJob,
+  startGeneratedAssetJob,
 } from "@/lib/api/v1/generated-assets";
 
 export const generatedAssetsRouter = Router();
@@ -20,7 +20,7 @@ generatedAssetsRouter.post(
   "/projects/:projectId/generated-assets",
   mutation(async ({ auth, body }, params) => {
     const projectId = requiredParam(params, "projectId");
-    return createGeneratedAsset({ auth, projectId, body });
+    return startGeneratedAssetJob({ auth, projectId, body });
   })
 );
 
