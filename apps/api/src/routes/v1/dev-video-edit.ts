@@ -8,14 +8,18 @@
 // (interactions API). No masks, no frame extraction — the model edits the
 // uploaded footage directly.
 
+import { execFile } from "child_process";
 import crypto from "crypto";
 import { promises as fs } from "fs";
 import os from "os";
 import path from "path";
+import { promisify } from "util";
 import express, { Router, type RequestHandler } from "express";
 import { GoogleGenAI } from "@google/genai";
 import { ApiError } from "@/core/errors";
 import { resolveProviderApiKey } from "@/lib/provider-keys/resolve";
+
+const execFileAsync = promisify(execFile);
 
 const OMNI_MODEL = "gemini-omni-flash-preview";
 const FILE_ACTIVE_DEADLINE_MS = 5 * 60 * 1000;
@@ -53,6 +57,31 @@ const ARTIFACT_TYPES: Record<string, string> = {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Mime types the interactions API accepts for video content blocks. Notably
+// this is "video/mov", not the "video/quicktime" browsers report for .mov
+// uploads.
+const SUPPORTED_INPUT_MIMES = new Set([
+  "video/mp4",
+  "video/mpeg",
+  "video/mpg",
+  "video/mov",
+  "video/avi",
+  "video/x-flv",
+  "video/webm",
+  "video/wmv",
+  "video/3gpp",
+]);
+
+function normalizeVideoMime(mime: string | undefined): string {
+  const lowered = (mime || "").toLowerCase().split(";")[0].trim();
+  if (lowered === "video/quicktime") return "video/mov";
+  return SUPPORTED_INPUT_MIMES.has(lowered) ? lowered : "video/mp4";
+}
+
+function isInvalidArgumentError(err: unknown): boolean {
+  return (err as { status?: number })?.status === 400;
 }
 
 interface OutputVideoContent {
@@ -126,29 +155,75 @@ async function runPipeline(
   const ai = new GoogleGenAI({ apiKey });
 
   // 1. Upload the source video to the Files API and wait until it's ACTIVE.
-  let file = await ai.files.upload({
-    file: sourcePath,
-    config: { mimeType: contentType },
-  });
-  const fileDeadline = Date.now() + FILE_ACTIVE_DEADLINE_MS;
-  while (file.state === "PROCESSING" && Date.now() < fileDeadline) {
-    await sleep(3000);
-    file = await ai.files.get({ name: file.name as string });
+  async function uploadAndWaitActive(filePath: string, mimeType: string) {
+    let file = await ai.files.upload({ file: filePath, config: { mimeType } });
+    const fileDeadline = Date.now() + FILE_ACTIVE_DEADLINE_MS;
+    while (file.state === "PROCESSING" && Date.now() < fileDeadline) {
+      await sleep(3000);
+      file = await ai.files.get({ name: file.name as string });
+    }
+    if (file.state !== "ACTIVE" || !file.uri) {
+      throw new Error(`Uploaded video never became ready (state: ${file.state}).`);
+    }
+    return file as typeof file & { uri: string };
   }
-  if (file.state !== "ACTIVE" || !file.uri) {
-    throw new Error(`Uploaded video never became ready (state: ${file.state}).`);
-  }
+
+  const startEdit = (fileUri: string, mimeType: string) =>
+    ai.interactions.create({
+      model: OMNI_MODEL,
+      background: true,
+      input: [
+        { type: "video", uri: fileUri, mime_type: mimeType as "video/mp4" },
+        { type: "text", text: prompt },
+      ],
+    });
+
+  const file = await uploadAndWaitActive(sourcePath, contentType);
   job.stage = "editing";
 
   // 2. Ask Gemini Omni Flash to edit the video from the instruction alone.
-  let interaction = await ai.interactions.create({
-    model: OMNI_MODEL,
-    background: true,
-    input: [
-      { type: "video", uri: file.uri, mime_type: "video/mp4" },
-      { type: "text", text: prompt },
-    ],
-  });
+  // Phone/Mac footage is often HEVC in a QuickTime container with extra
+  // metadata tracks, which the preview model can reject as an invalid
+  // argument — on that specific failure, transcode to a plain H.264 mp4 and
+  // retry once.
+  let interaction;
+  try {
+    interaction = await startEdit(
+      file.uri,
+      normalizeVideoMime(file.mimeType || contentType)
+    );
+  } catch (err) {
+    if (!isInvalidArgumentError(err)) throw err;
+    console.info(
+      "[dev-video-edit] interaction rejected the source video; transcoding to h264 mp4 and retrying"
+    );
+    const convertedPath = path.join(job.dir, "converted.mp4");
+    const ffmpegPath = process.env.FFMPEG_PATH || "ffmpeg";
+    await execFileAsync(ffmpegPath, [
+      "-y",
+      "-i",
+      sourcePath,
+      "-map",
+      "0:v:0",
+      "-map",
+      "0:a:0?",
+      "-c:v",
+      "libx264",
+      "-preset",
+      "veryfast",
+      "-crf",
+      "20",
+      "-pix_fmt",
+      "yuv420p",
+      "-c:a",
+      "aac",
+      "-movflags",
+      "+faststart",
+      convertedPath,
+    ]);
+    const convertedFile = await uploadAndWaitActive(convertedPath, "video/mp4");
+    interaction = await startEdit(convertedFile.uri, "video/mp4");
+  }
   console.info(`[dev-video-edit] omni interaction started: ${interaction.id}`);
 
   const editDeadline = Date.now() + EDIT_DEADLINE_MS;
