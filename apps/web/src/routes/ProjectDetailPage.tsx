@@ -144,10 +144,12 @@ export function ProjectDetailPage() {
       watchTitle={watchTitle}
       storyboard={storyboard}
       storyboardGenerating={storyboardGenerating}
+      storyboardError={storyboardQuery.error}
       canGenerateStoryboard={Boolean(
         !storyboardPreviewIsBlocked(storyboardQuery.isLoading, storyboardQuery.error) &&
           !storyboardGenerating
       )}
+      onStoryboardRetry={() => void storyboardQuery.refetch()}
       onGenerate={() => {
         void generateStoryboardMutation.mutateAsync().then(() => {
           void storyboardQuery.refetch();
@@ -226,6 +228,7 @@ export function ProjectDetailPage() {
         generating: storyboardGenerating,
         hasPlayableOutput,
         projectStatus: project?.status,
+        storyboardError: storyboardQuery.error,
       })}
       mobileRunLink={
         latestRun
@@ -570,7 +573,9 @@ function ProjectMobilePrimaryAction({
   watchTitle,
   storyboard,
   storyboardGenerating,
+  storyboardError,
   canGenerateStoryboard,
+  onStoryboardRetry,
   onGenerate,
 }: {
   projectId: string;
@@ -579,9 +584,18 @@ function ProjectMobilePrimaryAction({
   watchTitle: string;
   storyboard: ProjectStoryboard | null;
   storyboardGenerating: boolean;
+  storyboardError: Error | null;
   canGenerateStoryboard: boolean;
+  onStoryboardRetry: () => void;
   onGenerate: () => void;
 }) {
+  if (storyboardError) {
+    return (
+      <Button variant="cta" fullWidth onClick={onStoryboardRetry}>
+        Retry storyboard
+      </Button>
+    );
+  }
   if (storyboardGenerating) {
     return (
       <ButtonLink variant="cta" fullWidth to="#mobile-stages">
@@ -631,13 +645,16 @@ function mobileProjectStatus({
   generating,
   hasPlayableOutput,
   projectStatus,
+  storyboardError,
 }: {
   storyboard: ProjectStoryboard | null;
   progress: StoryboardProgress;
   generating: boolean;
   hasPlayableOutput: boolean;
   projectStatus?: string;
+  storyboardError?: Error | null;
 }) {
+  if (storyboardError) return "Storyboard could not load. Retry to continue.";
   if (generating) {
     if (progress.total > 0) {
       return `Generating storyboard: ${progress.ready + progress.failed} of ${progress.total} panels ready.`;

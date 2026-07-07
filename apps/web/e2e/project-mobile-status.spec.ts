@@ -7,6 +7,8 @@ const imageDataUrl =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 1000'%3E%3Crect width='800' height='1000' fill='%2314111c'/%3E%3Ccircle cx='400' cy='360' r='180' fill='%23f5b62a'/%3E%3Crect x='180' y='620' width='440' height='90' rx='20' fill='%23ff7a4d'/%3E%3C/svg%3E";
 
 test("mobile project overview renders one status-card job @mobile", async ({ page }) => {
+  test.skip(!page.viewportSize() || page.viewportSize()!.width > 760, "Mobile-only composition.");
+
   await mockProjectOverview(page);
 
   await page.goto(`/projects/${projectId}`);
