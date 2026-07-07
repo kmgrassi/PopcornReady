@@ -39,6 +39,10 @@ const VIDEO_USD_PER_SEC: Record<GenerativeProviderName, number> = {
   mock: 0,
 };
 
+// Placeholder until Google publishes Gemini Omni video-edit pricing. The scope
+// intentionally uses the current Veo video rate so budget checks never reserve $0.
+const GEMINI_OMNI_EDIT_USD_PER_SOURCE_SEC = VIDEO_USD_PER_SEC.gemini;
+
 const AUDIO_USD_PER_SEC: Record<GenerativeProviderName, number> = {
   openai: 0.01,
   ideogram: 0,
@@ -80,9 +84,18 @@ export function estimateCostUsd(input: CostEstimateInput): number {
   }
   const seconds = Math.max(0, Number(input.durationSec) || 0);
   if (seconds === 0) return 0;
-  const rate =
-    input.kind === "video"
-      ? VIDEO_USD_PER_SEC[input.provider] ?? 0
-      : AUDIO_USD_PER_SEC[input.provider] ?? 0;
+  const rate = rateForTimedGeneration(input);
   return roundCents(rate * seconds);
+}
+
+function rateForTimedGeneration(input: CostEstimateInput): number {
+  if (input.kind === "video" && input.provider === "gemini" && isGeminiOmniEdit(input.model)) {
+    return GEMINI_OMNI_EDIT_USD_PER_SOURCE_SEC;
+  }
+  if (input.kind === "video") return VIDEO_USD_PER_SEC[input.provider] ?? 0;
+  return AUDIO_USD_PER_SEC[input.provider] ?? 0;
+}
+
+function isGeminiOmniEdit(model: string | undefined): boolean {
+  return model === "gemini-omni-flash-preview";
 }

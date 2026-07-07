@@ -3,28 +3,16 @@
 // in production. No auth — it stores nothing in the DB and keeps all artifacts
 // in a per-job temp directory.
 //
-// Pipeline: upload the user's video to the Gemini Files API, then ask
-// Gemini Omni Flash to edit it from the natural-language instruction
-// (interactions API). No masks, no frame extraction — the model edits the
-// uploaded footage directly.
+// Pipeline: call the shared Gemini provider's Omni edit branch. No masks, no
+// frame extraction — the model edits the uploaded footage directly.
 
-import { execFile } from "child_process";
 import crypto from "crypto";
 import { promises as fs } from "fs";
 import os from "os";
 import path from "path";
-import { promisify } from "util";
 import express, { Router, type RequestHandler } from "express";
-import { GoogleGenAI } from "@google/genai";
 import { ApiError } from "@/core/errors";
-import { resolveProviderApiKey } from "@/lib/provider-keys/resolve";
-
-const execFileAsync = promisify(execFile);
-
-const OMNI_MODEL = "gemini-omni-flash-preview";
-const FILE_ACTIVE_DEADLINE_MS = 5 * 60 * 1000;
-const EDIT_DEADLINE_MS = 20 * 60 * 1000;
-const POLL_INTERVAL_MS = 10_000;
+import { geminiProvider } from "@/lib/generative/providers/gemini";
 
 export function isVideoEditHarnessEnabled(
   env: NodeJS.ProcessEnv = process.env
@@ -55,207 +43,33 @@ const ARTIFACT_TYPES: Record<string, string> = {
   video: "video/mp4",
 };
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-// Mime types the interactions API accepts for video content blocks. Notably
-// this is "video/mov", not the "video/quicktime" browsers report for .mov
-// uploads.
-const SUPPORTED_INPUT_MIMES = new Set([
-  "video/mp4",
-  "video/mpeg",
-  "video/mpg",
-  "video/mov",
-  "video/avi",
-  "video/x-flv",
-  "video/webm",
-  "video/wmv",
-  "video/3gpp",
-]);
-
-function normalizeVideoMime(mime: string | undefined): string {
-  const lowered = (mime || "").toLowerCase().split(";")[0].trim();
-  if (lowered === "video/quicktime") return "video/mov";
-  return SUPPORTED_INPUT_MIMES.has(lowered) ? lowered : "video/mp4";
-}
-
-function isInvalidArgumentError(err: unknown): boolean {
-  return (err as { status?: number })?.status === 400;
-}
-
-interface OutputVideoContent {
-  type?: string;
-  uri?: string;
-  data?: string;
-  mime_type?: string;
-}
-
-// Walk the interaction's steps and return the last video content block the
-// model produced.
-function findOutputVideo(interaction: unknown): OutputVideoContent | null {
-  const steps =
-    ((interaction as { steps?: Array<{ type?: string; content?: unknown[] }> })
-      .steps) || [];
-  let found: OutputVideoContent | null = null;
-  for (const step of steps) {
-    if (step?.type !== "model_output" || !Array.isArray(step.content)) continue;
-    for (const block of step.content) {
-      const content = block as OutputVideoContent;
-      if (content?.type === "video" && (content.uri || content.data)) {
-        found = content;
-      }
-    }
-  }
-  return found;
-}
-
-async function downloadOutputVideo(
-  ai: GoogleGenAI,
-  apiKey: string,
-  video: OutputVideoContent,
-  outputPath: string
-): Promise<void> {
-  if (video.data) {
-    await fs.writeFile(outputPath, Buffer.from(video.data, "base64"));
-    return;
-  }
-  if (!video.uri) throw new Error("Edited video has neither data nor uri.");
-
-  try {
-    await ai.files.download({ file: video.uri, downloadPath: outputPath });
-    const stat = await fs.stat(outputPath);
-    if (stat.size > 0) return;
-  } catch {
-    // fall through to a direct authenticated fetch
-  }
-
-  const url = video.uri.includes("alt=media")
-    ? video.uri
-    : `${video.uri}${video.uri.includes("?") ? "&" : "?"}alt=media`;
-  const response = await fetch(url, {
-    headers: { "x-goog-api-key": apiKey },
-  });
-  if (!response.ok) {
-    throw new Error(`Downloading the edited video failed (${response.status}).`);
-  }
-  await fs.writeFile(outputPath, Buffer.from(await response.arrayBuffer()));
-}
-
 async function runPipeline(
   job: VideoEditJob,
-  prompt: string,
-  contentType: string
+  prompt: string
 ): Promise<void> {
   const sourcePath = job.artifacts.source;
   if (!sourcePath) throw new Error("Job has no source video.");
 
-  const apiKey = await resolveProviderApiKey("gemini");
-  if (!apiKey) throw new Error("GEMINI_API_KEY is not set for the Gemini provider.");
-  const ai = new GoogleGenAI({ apiKey });
-
-  // 1. Upload the source video to the Files API and wait until it's ACTIVE.
-  async function uploadAndWaitActive(filePath: string, mimeType: string) {
-    let file = await ai.files.upload({ file: filePath, config: { mimeType } });
-    const fileDeadline = Date.now() + FILE_ACTIVE_DEADLINE_MS;
-    while (file.state === "PROCESSING" && Date.now() < fileDeadline) {
-      await sleep(3000);
-      file = await ai.files.get({ name: file.name as string });
-    }
-    if (file.state !== "ACTIVE" || !file.uri) {
-      throw new Error(`Uploaded video never became ready (state: ${file.state}).`);
-    }
-    return file as typeof file & { uri: string };
-  }
-
-  const startEdit = (fileUri: string, mimeType: string) =>
-    ai.interactions.create({
-      model: OMNI_MODEL,
-      background: true,
-      input: [
-        { type: "video", uri: fileUri, mime_type: mimeType as "video/mp4" },
-        { type: "text", text: prompt },
-      ],
-    });
-
-  const file = await uploadAndWaitActive(sourcePath, contentType);
   job.stage = "editing";
-
-  // 2. Ask Gemini Omni Flash to edit the video from the instruction alone.
-  // Phone/Mac footage is often HEVC in a QuickTime container with extra
-  // metadata tracks, which the preview model can reject as an invalid
-  // argument — on that specific failure, transcode to a plain H.264 mp4 and
-  // retry once.
-  let interaction;
-  try {
-    interaction = await startEdit(
-      file.uri,
-      normalizeVideoMime(file.mimeType || contentType)
-    );
-  } catch (err) {
-    if (!isInvalidArgumentError(err)) throw err;
-    console.info(
-      "[dev-video-edit] interaction rejected the source video; transcoding to h264 mp4 and retrying"
-    );
-    const convertedPath = path.join(job.dir, "converted.mp4");
-    const ffmpegPath = process.env.FFMPEG_PATH || "ffmpeg";
-    await execFileAsync(ffmpegPath, [
-      "-y",
-      "-i",
-      sourcePath,
-      "-map",
-      "0:v:0",
-      "-map",
-      "0:a:0?",
-      "-c:v",
-      "libx264",
-      "-preset",
-      "veryfast",
-      "-crf",
-      "20",
-      "-pix_fmt",
-      "yuv420p",
-      "-c:a",
-      "aac",
-      "-movflags",
-      "+faststart",
-      convertedPath,
-    ]);
-    const convertedFile = await uploadAndWaitActive(convertedPath, "video/mp4");
-    interaction = await startEdit(convertedFile.uri, "video/mp4");
-  }
-  console.info(`[dev-video-edit] omni interaction started: ${interaction.id}`);
-
-  const editDeadline = Date.now() + EDIT_DEADLINE_MS;
-  while (
-    (interaction.status === "in_progress" ||
-      interaction.status === "requires_action") &&
-    Date.now() < editDeadline
-  ) {
-    await sleep(POLL_INTERVAL_MS);
-    interaction = await ai.interactions.get(interaction.id);
-  }
-  if (interaction.status !== "completed") {
-    const detail =
-      interaction.status === "in_progress"
-        ? "timed out before completion"
-        : `ended with status "${interaction.status}"`;
-    throw new Error(`Gemini Omni video edit ${detail}.`);
-  }
-
-  // 3. Pull the edited video out of the interaction output.
-  const outputVideo = findOutputVideo(interaction);
-  if (!outputVideo) {
-    const text = (interaction as { output_text?: string }).output_text || "";
-    throw new Error(
-      `Gemini Omni returned no video output. ${text.slice(0, 300)}`
-    );
-  }
   job.stage = "downloading";
+  const result = await geminiProvider.generateAsset({
+    provider: "gemini",
+    kind: "video",
+    prompt,
+    editSourceVideoPath: sourcePath,
+  });
   const videoPath = path.join(job.dir, "output.mp4");
-  await downloadOutputVideo(ai, apiKey, outputVideo, videoPath);
+  await fs.writeFile(videoPath, result.bytes);
   job.artifacts.video = videoPath;
   job.stage = "done";
+}
+
+function extensionForContentType(contentType: string): string {
+  const normalized = contentType.toLowerCase().split(";")[0].trim();
+  if (normalized === "video/quicktime" || normalized === "video/mov") return "mov";
+  if (normalized === "video/webm") return "webm";
+  if (normalized === "video/3gpp") return "3gp";
+  return "mp4";
 }
 
 function jobStatusBody(job: VideoEditJob) {
@@ -311,7 +125,7 @@ devVideoEditRouter.post(
 
     const id = crypto.randomUUID();
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "popcornready-video-edit-"));
-    const sourcePath = path.join(dir, "source.mp4");
+    const sourcePath = path.join(dir, `source.${extensionForContentType(contentType)}`);
     await fs.writeFile(sourcePath, body);
 
     const job: VideoEditJob = {
@@ -323,7 +137,7 @@ devVideoEditRouter.post(
     };
     jobs.set(id, job);
 
-    void runPipeline(job, prompt, contentType).catch((err) => {
+    void runPipeline(job, prompt).catch((err) => {
       job.stage = "error";
       job.error = err instanceof Error ? err.message : String(err);
       console.error(`[dev-video-edit] job ${id} failed:`, err);
