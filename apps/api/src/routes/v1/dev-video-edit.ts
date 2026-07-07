@@ -3,23 +3,24 @@
 // in production. No auth — it stores nothing in the DB and keeps all artifacts
 // in a per-job temp directory.
 //
-// Pipeline (no true video-to-video provider is wired yet, see
-// docs/scopes — this approximates an edit with the keys we have):
-//   1. ffmpeg extracts the first frame of the uploaded video
-//   2. Gemini image-edit ("nano banana") applies the prompt to that frame
-//   3. Veo image-to-video animates the edited frame into a new clip
+// Pipeline: upload the user's video to the Gemini Files API, then ask
+// Gemini Omni Flash to edit it from the natural-language instruction
+// (interactions API). No masks, no frame extraction — the model edits the
+// uploaded footage directly.
 
-import { execFile } from "child_process";
 import crypto from "crypto";
 import { promises as fs } from "fs";
 import os from "os";
 import path from "path";
-import { promisify } from "util";
 import express, { Router, type RequestHandler } from "express";
+import { GoogleGenAI } from "@google/genai";
 import { ApiError } from "@/core/errors";
-import { geminiProvider } from "@/lib/generative/providers/gemini";
+import { resolveProviderApiKey } from "@/lib/provider-keys/resolve";
 
-const execFileAsync = promisify(execFile);
+const OMNI_MODEL = "gemini-omni-flash-preview";
+const FILE_ACTIVE_DEADLINE_MS = 5 * 60 * 1000;
+const EDIT_DEADLINE_MS = 20 * 60 * 1000;
+const POLL_INTERVAL_MS = 10_000;
 
 export function isVideoEditHarnessEnabled(
   env: NodeJS.ProcessEnv = process.env
@@ -29,12 +30,7 @@ export function isVideoEditHarnessEnabled(
   return enabled && env.NODE_ENV !== "production";
 }
 
-type JobStage =
-  | "extracting_frame"
-  | "editing_frame"
-  | "animating"
-  | "done"
-  | "error";
+type JobStage = "uploading" | "editing" | "downloading" | "done" | "error";
 
 interface VideoEditJob {
   id: string;
@@ -44,8 +40,6 @@ interface VideoEditJob {
   createdAt: number;
   artifacts: {
     source?: string;
-    frame?: string;
-    editedFrame?: string;
     video?: string;
   };
 }
@@ -54,91 +48,137 @@ const jobs = new Map<string, VideoEditJob>();
 
 const ARTIFACT_TYPES: Record<string, string> = {
   source: "video/mp4",
-  frame: "image/png",
-  editedFrame: "image/png",
   video: "video/mp4",
 };
 
-async function runFfmpeg(args: string[]): Promise<void> {
-  const ffmpegPath = process.env.FFMPEG_PATH || "ffmpeg";
-  await execFileAsync(ffmpegPath, args);
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function probeSize(
-  filePath: string
-): Promise<{ width: number; height: number } | null> {
-  const ffprobePath = process.env.FFPROBE_PATH || "ffprobe";
-  try {
-    const { stdout } = await execFileAsync(ffprobePath, [
-      "-v",
-      "error",
-      "-select_streams",
-      "v:0",
-      "-show_entries",
-      "stream=width,height",
-      "-of",
-      "csv=s=x:p=0",
-      filePath,
-    ]);
-    const [width, height] = stdout.trim().split("x").map(Number);
-    if (Number.isFinite(width) && Number.isFinite(height)) {
-      return { width, height };
+interface OutputVideoContent {
+  type?: string;
+  uri?: string;
+  data?: string;
+  mime_type?: string;
+}
+
+// Walk the interaction's steps and return the last video content block the
+// model produced.
+function findOutputVideo(interaction: unknown): OutputVideoContent | null {
+  const steps =
+    ((interaction as { steps?: Array<{ type?: string; content?: unknown[] }> })
+      .steps) || [];
+  let found: OutputVideoContent | null = null;
+  for (const step of steps) {
+    if (step?.type !== "model_output" || !Array.isArray(step.content)) continue;
+    for (const block of step.content) {
+      const content = block as OutputVideoContent;
+      if (content?.type === "video" && (content.uri || content.data)) {
+        found = content;
+      }
     }
-  } catch {
-    // fall through — orientation defaults to landscape
   }
-  return null;
+  return found;
 }
 
-async function runPipeline(job: VideoEditJob, prompt: string): Promise<void> {
+async function downloadOutputVideo(
+  ai: GoogleGenAI,
+  apiKey: string,
+  video: OutputVideoContent,
+  outputPath: string
+): Promise<void> {
+  if (video.data) {
+    await fs.writeFile(outputPath, Buffer.from(video.data, "base64"));
+    return;
+  }
+  if (!video.uri) throw new Error("Edited video has neither data nor uri.");
+
+  try {
+    await ai.files.download({ file: video.uri, downloadPath: outputPath });
+    const stat = await fs.stat(outputPath);
+    if (stat.size > 0) return;
+  } catch {
+    // fall through to a direct authenticated fetch
+  }
+
+  const url = video.uri.includes("alt=media")
+    ? video.uri
+    : `${video.uri}${video.uri.includes("?") ? "&" : "?"}alt=media`;
+  const response = await fetch(url, {
+    headers: { "x-goog-api-key": apiKey },
+  });
+  if (!response.ok) {
+    throw new Error(`Downloading the edited video failed (${response.status}).`);
+  }
+  await fs.writeFile(outputPath, Buffer.from(await response.arrayBuffer()));
+}
+
+async function runPipeline(
+  job: VideoEditJob,
+  prompt: string,
+  contentType: string
+): Promise<void> {
   const sourcePath = job.artifacts.source;
   if (!sourcePath) throw new Error("Job has no source video.");
 
-  // 1. First frame. Cap at 1280 wide so the image models get a sane input.
-  const framePath = path.join(job.dir, "frame.png");
-  await runFfmpeg([
-    "-y",
-    "-i",
-    sourcePath,
-    "-frames:v",
-    "1",
-    "-vf",
-    "scale='min(1280,iw)':-2",
-    framePath,
-  ]);
-  job.artifacts.frame = framePath;
-  job.stage = "editing_frame";
+  const apiKey = await resolveProviderApiKey("gemini");
+  if (!apiKey) throw new Error("GEMINI_API_KEY is not set for the Gemini provider.");
+  const ai = new GoogleGenAI({ apiKey });
 
-  const size = await probeSize(sourcePath);
-  const portrait = size ? size.height > size.width : false;
-
-  // 2. Edit the frame with the user's instruction, preserving the scene.
-  const edited = await geminiProvider.generateAsset({
-    provider: "gemini",
-    kind: "image",
-    prompt:
-      `Edit this photo: ${prompt}. ` +
-      "Keep the rest of the scene, lighting, camera angle, and framing exactly the same as the reference photo. Photorealistic.",
-    referencePaths: [framePath],
+  // 1. Upload the source video to the Files API and wait until it's ACTIVE.
+  let file = await ai.files.upload({
+    file: sourcePath,
+    config: { mimeType: contentType },
   });
-  const editedFramePath = path.join(job.dir, `edited.${edited.extension}`);
-  await fs.writeFile(editedFramePath, edited.bytes);
-  job.artifacts.editedFrame = editedFramePath;
-  job.stage = "animating";
+  const fileDeadline = Date.now() + FILE_ACTIVE_DEADLINE_MS;
+  while (file.state === "PROCESSING" && Date.now() < fileDeadline) {
+    await sleep(3000);
+    file = await ai.files.get({ name: file.name as string });
+  }
+  if (file.state !== "ACTIVE" || !file.uri) {
+    throw new Error(`Uploaded video never became ready (state: ${file.state}).`);
+  }
+  job.stage = "editing";
 
-  // 3. Animate the edited frame with Veo (image-to-video).
-  const video = await geminiProvider.generateAsset({
-    provider: "gemini",
-    kind: "video",
-    prompt:
-      `${prompt}. The scene matches the reference image exactly — same room, camera angle, and lighting. ` +
-      "Subtle handheld camera motion, natural ambient movement. Photorealistic.",
-    referencePaths: [editedFramePath],
-    size: portrait ? "720x1280" : "1280x720",
-    seconds: 8,
+  // 2. Ask Gemini Omni Flash to edit the video from the instruction alone.
+  let interaction = await ai.interactions.create({
+    model: OMNI_MODEL,
+    background: true,
+    input: [
+      { type: "video", uri: file.uri, mime_type: "video/mp4" },
+      { type: "text", text: prompt },
+    ],
   });
+  console.info(`[dev-video-edit] omni interaction started: ${interaction.id}`);
+
+  const editDeadline = Date.now() + EDIT_DEADLINE_MS;
+  while (
+    (interaction.status === "in_progress" ||
+      interaction.status === "requires_action") &&
+    Date.now() < editDeadline
+  ) {
+    await sleep(POLL_INTERVAL_MS);
+    interaction = await ai.interactions.get(interaction.id);
+  }
+  if (interaction.status !== "completed") {
+    const detail =
+      interaction.status === "in_progress"
+        ? "timed out before completion"
+        : `ended with status "${interaction.status}"`;
+    throw new Error(`Gemini Omni video edit ${detail}.`);
+  }
+
+  // 3. Pull the edited video out of the interaction output.
+  const outputVideo = findOutputVideo(interaction);
+  if (!outputVideo) {
+    const text = (interaction as { output_text?: string }).output_text || "";
+    throw new Error(
+      `Gemini Omni returned no video output. ${text.slice(0, 300)}`
+    );
+  }
+  job.stage = "downloading";
   const videoPath = path.join(job.dir, "output.mp4");
-  await fs.writeFile(videoPath, video.bytes);
+  await downloadOutputVideo(ai, apiKey, outputVideo, videoPath);
   job.artifacts.video = videoPath;
   job.stage = "done";
 }
@@ -192,6 +232,7 @@ devVideoEditRouter.post(
         "Send the video file as the raw request body with a video/* content type."
       );
     }
+    const contentType = String(req.headers["content-type"] || "video/mp4");
 
     const id = crypto.randomUUID();
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "popcornready-video-edit-"));
@@ -200,14 +241,14 @@ devVideoEditRouter.post(
 
     const job: VideoEditJob = {
       id,
-      stage: "extracting_frame",
+      stage: "uploading",
       dir,
       createdAt: Date.now(),
       artifacts: { source: sourcePath },
     };
     jobs.set(id, job);
 
-    void runPipeline(job, prompt).catch((err) => {
+    void runPipeline(job, prompt, contentType).catch((err) => {
       job.stage = "error";
       job.error = err instanceof Error ? err.message : String(err);
       console.error(`[dev-video-edit] job ${id} failed:`, err);

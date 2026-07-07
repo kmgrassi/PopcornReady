@@ -2,9 +2,9 @@
 // on the couch"), and watch the AI produce an edited clip. Talks to the
 // flag-gated /api/v1/dev/video-edit endpoint (ENABLE_VIDEO_EDIT_HARNESS).
 //
-// Pipeline shown to the user: first frame -> Gemini image edit -> Veo
-// image-to-video. This is an approximation of a true video-to-video edit; see
-// the note rendered at the bottom of the page.
+// The edit is a true video edit: the uploaded footage goes to the Gemini
+// Files API and Gemini Omni Flash applies the instruction directly — no
+// masks, no frame extraction.
 
 import { useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -12,24 +12,19 @@ import styles from "./VideoEditPage.module.css";
 
 const API_BASE = (import.meta.env.VITE_API_URL?.trim() || "").replace(/\/$/, "");
 
-type JobStage =
-  | "extracting_frame"
-  | "editing_frame"
-  | "animating"
-  | "done"
-  | "error";
+type JobStage = "uploading" | "editing" | "downloading" | "done" | "error";
 
 interface JobStatus {
   jobId: string;
   stage: JobStage;
   error: string | null;
-  artifacts: Partial<Record<"source" | "frame" | "editedFrame" | "video", string>>;
+  artifacts: Partial<Record<"source" | "video", string>>;
 }
 
 const STAGES: Array<{ key: JobStage; label: string }> = [
-  { key: "extracting_frame", label: "Extracting a frame from your video" },
-  { key: "editing_frame", label: "Applying your edit to the frame (Gemini)" },
-  { key: "animating", label: "Animating the edited scene (Veo)" },
+  { key: "uploading", label: "Uploading your video to Gemini" },
+  { key: "editing", label: "Editing the video (Gemini Omni)" },
+  { key: "downloading", label: "Fetching the edited video" },
   { key: "done", label: "Done" },
 ];
 
@@ -197,27 +192,21 @@ export function VideoEditPage() {
                 <figcaption>Your video</figcaption>
               </figure>
             ) : null}
-            {artifactUrl("editedFrame") ? (
+            {artifactUrl("video") ? (
               <figure className={styles.resultCell}>
-                <img src={artifactUrl("editedFrame") ?? undefined} alt="Edited frame" />
-                <figcaption>Edited frame</figcaption>
+                <video src={artifactUrl("video") ?? undefined} controls playsInline />
+                <figcaption>Edited video</figcaption>
               </figure>
             ) : null}
           </div>
-          {artifactUrl("video") ? (
-            <figure className={styles.finalResult}>
-              <video src={artifactUrl("video") ?? undefined} controls playsInline />
-              <figcaption>Edited video</figcaption>
-            </figure>
-          ) : null}
         </section>
       )}
 
       <footer className={styles.note}>
-        Dev harness. The edit re-animates your scene from an AI-edited first
-        frame (Gemini + Veo) — a true frame-by-frame video edit needs a
-        video-to-video provider (e.g. Runway Aleph), which isn&apos;t wired up
-        yet.
+        Dev harness. Your footage is edited directly by Gemini Omni Flash
+        (preview): the model finds the region to change from the instruction
+        alone. The video is uploaded to the Gemini Files API under your API
+        key.
       </footer>
     </div>
   );
