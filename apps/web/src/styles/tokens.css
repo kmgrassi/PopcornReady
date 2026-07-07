@@ -67,6 +67,10 @@
   /* Layout */
   --content-max: 1120px;
   --sidebar-w: 248px;
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
   --bp-mobile: 640px;
   --bp-tablet: 900px;
   --touch-target-min: 44px;

@@ -31,7 +31,7 @@
   flex-direction: column;
   align-items: center;
   gap: var(--space-5);
-  min-height: calc(100vh - 58px - 144px);
+  min-height: calc(100dvh - 58px - 144px);
   padding-bottom: 96px;
 }
 

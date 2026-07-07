@@ -10,7 +10,7 @@
 
 .dialog {
   width: min(980px, 100%);
-  max-height: min(760px, calc(100vh - (var(--space-4) * 2)));
+  max-height: min(760px, calc(100dvh - (var(--space-4) * 2)));
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto auto;
   gap: var(--space-4);
@@ -199,7 +199,7 @@
 
 @media (max-width: 760px) {
   .dialog {
-    max-height: calc(100vh - (var(--space-4) * 2));
+    max-height: calc(100dvh - (var(--space-4) * 2));
     overflow-y: auto;
   }
 
