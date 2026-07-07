@@ -27,6 +27,23 @@ export function PublicProjectPage() {
   const storyboard = data?.storyboard ?? null;
   const canAdminDelete = canAccessAdminSurface(auth);
   const canFork = auth.status === "authenticated" || auth.status === "disabled";
+  const copyAction = canFork ? (
+    <Button
+      variant="primary"
+      onClick={() => {
+        void forkProjectMutation.mutateAsync().then((response) => {
+          navigate(`/projects/${encodeURIComponent(response.project.id)}`);
+        });
+      }}
+      isLoading={forkProjectMutation.isPending}
+    >
+      Copy to my projects
+    </Button>
+  ) : (
+    <ButtonLink variant="primary" to="/login">
+      Sign in to copy
+    </ButtonLink>
+  );
 
   return (
     <ProjectOverviewPage
@@ -40,27 +57,7 @@ export function PublicProjectPage() {
       titleFallback="Shared project"
       loadingSubtitle="Loading the shared project."
       readOnly
-      headerActions={
-        <>
-          {canFork ? (
-            <Button
-              variant="primary"
-              onClick={() => {
-                void forkProjectMutation.mutateAsync().then((response) => {
-                  navigate(`/projects/${encodeURIComponent(response.project.id)}`);
-                });
-              }}
-              isLoading={forkProjectMutation.isPending}
-            >
-              Copy to my projects
-            </Button>
-          ) : (
-            <ButtonLink variant="primary" to="/login">
-              Sign in to copy
-            </ButtonLink>
-          )}
-        </>
-      }
+      headerActions={copyAction}
       storyboardPreview={{
         loading: false,
         error: null,
@@ -70,6 +67,7 @@ export function PublicProjectPage() {
         generationError: null,
       }}
       media={data?.media ?? null}
+      mobilePrimaryAction={copyAction}
       dangerSection={
         canAdminDelete && project ? (
           <ProjectDangerSection
