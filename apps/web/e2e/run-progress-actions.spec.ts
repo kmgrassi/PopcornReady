@@ -116,7 +116,7 @@ test.describe("run progress actions", () => {
 
     await expect.poll(() => routes.actionBodies[0]).toEqual({
       action: "approve",
-      body: { note: "Tighten the pacing before final export." },
+      body: {},
     });
     await expect(page.getByText("Review approved. Final render is in progress.")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Quality review ready for review" })).toHaveCount(0);

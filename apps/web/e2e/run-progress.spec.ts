@@ -329,7 +329,7 @@ test("submits review-gate approve and reject actions with notes @mobile", async 
   await expect(page.getByText("Visuals are in progress.")).toBeVisible();
   expect(requests).toContainEqual({
     action: "approve",
-    body: { note: "Keep the close-up, simplify the transition." },
+    body: {},
   });
 
   detail = runDetail({
