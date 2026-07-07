@@ -345,6 +345,7 @@ export function ProjectOverviewPage({
             storyboard={storyboard}
             storyboardProgressState={storyboardPreview.progress}
             storyboardGenerating={storyboardPreview.generating}
+            storyboardError={storyboardPreview.error}
             readOnly={readOnly}
             media={media}
             status={mobileStatus}
@@ -405,6 +406,7 @@ function MobileProjectStatus({
   storyboard,
   storyboardProgressState,
   storyboardGenerating,
+  storyboardError,
   readOnly,
   media,
   status,
@@ -416,6 +418,7 @@ function MobileProjectStatus({
   storyboard: ProjectStoryboard | null;
   storyboardProgressState: StoryboardProgress;
   storyboardGenerating: boolean;
+  storyboardError: Error | null;
   readOnly: boolean;
   media?: ProjectWatchMedia | null;
   status?: string;
@@ -443,6 +446,7 @@ function MobileProjectStatus({
                 generating: storyboardGenerating,
                 hasPlayableOutput: Boolean(media),
                 projectStatus: project.status,
+                storyboardError,
               })}
           </p>
         </div>
