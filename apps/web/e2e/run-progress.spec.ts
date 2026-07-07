@@ -43,11 +43,45 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function getVisibleStageRail(page: Page) {
-  const mobilePipelineToggle = page.getByText("Show pipeline").filter({ visible: true });
-  if ((await mobilePipelineToggle.count()) > 0) {
-    await mobilePipelineToggle.first().click();
+  const visibleRail = page
+    .getByRole("complementary", { name: "Stage rail" })
+    .filter({ visible: true });
+  if (await visibleRail.first().getByText("Pipeline").isVisible().catch(() => false)) {
+    return visibleRail.first();
   }
-  return page.getByRole("complementary", { name: "Stage rail" });
+
+  const summaryToggle = page
+    .locator("summary")
+    .filter({ hasText: "Show pipeline" })
+    .filter({ visible: true });
+  if ((await summaryToggle.count()) > 0) {
+    await summaryToggle.first().click();
+  } else {
+    await page.getByText("Show pipeline").filter({ visible: true }).first().click();
+  }
+
+  await expect(visibleRail.first().getByText("Pipeline")).toBeVisible();
+  return visibleRail.first();
+}
+
+async function fillReviewFeedback(page: Page, note: string) {
+  const legacyFeedback = page.getByLabel("Feedback");
+  if (await legacyFeedback.isVisible().catch(() => false)) {
+    await legacyFeedback.fill(note);
+    return;
+  }
+
+  await page.getByRole("button", { name: "Request changes" }).click();
+  await page.getByLabel("What should change?").fill(note);
+}
+
+async function submitReviewChanges(page: Page) {
+  const sendChanges = page.getByRole("button", { name: "Send changes" });
+  if (await sendChanges.isVisible().catch(() => false)) {
+    await sendChanges.click();
+    return;
+  }
+  await page.getByRole("button", { name: "Request changes" }).click();
 }
 
 test("polls an active run, cancels it, and clears the recovery hint @mobile", async ({ page }) => {
@@ -288,10 +322,10 @@ test("submits review-gate approve and reject actions with notes @mobile", async 
   await expect(page.getByRole("button", { name: "Approve and continue" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Request changes" })).toBeVisible();
 
-  await page.getByLabel("Feedback").fill("Keep the close-up, simplify the transition.");
+  await fillReviewFeedback(page, "Keep the close-up, simplify the transition.");
   await page.getByRole("button", { name: "Approve and continue" }).click();
 
-  await expect(page.getByLabel("Feedback")).toHaveCount(0);
+  await expect(page.getByLabel(/^(Feedback|What should change\?)$/)).toBeHidden();
   await expect(page.getByText("Visuals are in progress.")).toBeVisible();
   expect(requests).toContainEqual({
     action: "approve",
@@ -311,10 +345,10 @@ test("submits review-gate approve and reject actions with notes @mobile", async 
     message: "Storyboard is ready for review.",
   });
   await page.reload();
-  await page.getByLabel("Feedback").fill("Make the ending less busy.");
-  await page.getByRole("button", { name: "Request changes" }).click();
+  await fillReviewFeedback(page, "Make the ending less busy.");
+  await submitReviewChanges(page);
 
-  await expect(page.getByLabel("Feedback")).toHaveValue("");
+  await expect(page.getByLabel(/^(Feedback|What should change\?)$/)).toHaveValue("");
   await expect(page.getByText("Needs review")).toBeVisible();
   expect(requests).toContainEqual({
     action: "reject",

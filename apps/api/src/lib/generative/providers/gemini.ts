@@ -74,6 +74,9 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Mime types the interactions API accepts for video content blocks. Notably
+// this is "video/mov", not the "video/quicktime" browsers report for .mov
+// uploads.
 const SUPPORTED_OMNI_VIDEO_MIMES = new Set([
   "video/mp4",
   "video/mpeg",
@@ -111,6 +114,8 @@ function isInvalidArgumentError(err: unknown): boolean {
   return (err as { status?: number })?.status === 400;
 }
 
+// Walk the interaction's steps and return the last video content block the
+// model produced.
 export function findGeminiOmniOutputVideo(
   interaction: unknown
 ): OutputVideoContent | null {

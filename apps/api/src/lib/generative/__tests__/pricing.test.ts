@@ -33,6 +33,15 @@ test("video cost scales at ~$0.50 per second", () => {
   );
   assert.equal(
     estimateCostUsd({
+      provider: "gemini",
+      kind: "video",
+      model: "gemini-omni-flash-preview",
+      durationSec: 6,
+    }),
+    3
+  );
+  assert.equal(
+    estimateCostUsd({
       provider: "nvidia_api_catalog",
       kind: "video",
       durationSec: 6,
