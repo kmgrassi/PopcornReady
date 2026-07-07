@@ -149,7 +149,6 @@
 
 .headerStatusPanel {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-4);
   width: 100%;
   border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
@@ -158,16 +157,35 @@
   padding: var(--space-4);
 }
 
-.headerStatusPanel div {
+.statusGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.headerStatusPanel div,
+.statusGrid div {
   min-width: 0;
 }
 
-.headerStatusPanel strong {
+.headerStatusPanel strong,
+.statusGrid strong {
   display: block;
   margin-top: var(--space-1);
   color: var(--text-strong);
   font-size: var(--text-lg);
   line-height: var(--line-caption);
+}
+
+.mobileStatusNarrative {
+  display: none;
+}
+
+.mobileStatusNarrative p {
+  margin: var(--space-2) 0 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--line-body);
 }
 
 .headerStatusMessage {
@@ -435,6 +453,10 @@
   padding: var(--space-5);
   position: sticky;
   top: var(--space-4);
+}
+
+.mobilePipelineDetails {
+  display: none;
 }
 
 .sidePanelHeading {
@@ -809,6 +831,7 @@
   }
 
   .headerStatusPanel {
+    gap: var(--space-3);
     grid-template-columns: 1fr;
   }
 
@@ -816,9 +839,86 @@
     white-space: normal;
   }
 
+  .statusGrid {
+    display: none;
+  }
+
+  .headerStatusMessage {
+    margin: 0;
+  }
+
+  .mobileStatusNarrative {
+    display: block;
+  }
+
+  .mobileStatusNarrative strong {
+    margin: 0;
+    font-size: var(--title-sm);
+    line-height: var(--line-heading);
+  }
+
   .sidePanel {
-    position: static;
-    order: 2;
+    display: none;
+  }
+
+  .mobilePipelineDetails {
+    display: grid;
+    border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--surface) 88%, var(--bg));
+    box-shadow: var(--shadow-sm);
+  }
+
+  .mobilePipelineDetails summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    min-height: 48px;
+    border-radius: inherit;
+    color: var(--text-strong);
+    cursor: pointer;
+    font-size: var(--text-md);
+    font-weight: 850;
+    list-style: none;
+    padding: 0 var(--space-4);
+  }
+
+  .mobilePipelineDetails summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .mobilePipelineDetails summary:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  .mobilePipelineDetails[open] summary {
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+  }
+
+  .mobilePipelineDetails[open] summary span:last-child {
+    transform: rotate(45deg);
+  }
+
+  .mobilePipelineDetails summary span:last-child {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: var(--surface-2);
+    color: var(--muted);
+    transition: transform var(--transition), color var(--transition), border-color var(--transition);
+  }
+
+  .mobilePipelineContent {
+    display: grid;
+    gap: var(--space-5);
+    padding: var(--space-4);
   }
 
   .cardHeader {
@@ -839,5 +939,13 @@
 
   .secondaryButton {
     width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .headerMeterFill,
+  .stageProgressFill,
+  .mobilePipelineDetails summary span:last-child {
+    transition: none;
   }
 }

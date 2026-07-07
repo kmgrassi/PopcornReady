@@ -129,7 +129,7 @@ test.describe("run progress actions", () => {
     await installRunProgressRoutes(page, { detail: failed });
 
     await page.goto(`/projects/${e2eProjectId}/runs/${failed.run.runId}`);
-    await expect(page.getByText("Generation failed")).toBeVisible();
+    await expect(page.getByText("Generation failed", { exact: true })).toBeVisible();
     await expect(page.getByText("Continuity check failed.")).toBeVisible();
 
     const succeeded = makeRunDetail("run-succeeded", {
