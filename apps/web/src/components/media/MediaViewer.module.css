@@ -4,7 +4,10 @@
   z-index: 1000;
   display: grid;
   place-items: center;
-  padding: var(--space-5);
+  padding: calc(var(--space-5) + var(--safe-area-top))
+    calc(var(--space-5) + var(--safe-area-right))
+    calc(var(--space-5) + var(--safe-area-bottom))
+    calc(var(--space-5) + var(--safe-area-left));
 }
 
 .backdrop {
@@ -21,7 +24,7 @@
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   width: min(1120px, 100%);
-  max-height: min(760px, calc(100vh - var(--space-7)));
+  max-height: min(760px, calc(100dvh - var(--space-7)));
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -101,13 +104,13 @@
 .visualMedia {
   display: block;
   width: 100%;
-  height: min(640px, calc(100vh - 210px));
-  max-height: calc(100vh - 210px);
+  height: min(640px, calc(100dvh - 210px));
+  max-height: calc(100dvh - 210px);
   object-fit: contain;
 }
 
 video.visualMedia {
-  height: min(640px, calc(100vh - 210px));
+  height: min(640px, calc(100dvh - 210px));
 }
 
 .audioPanel {
@@ -205,11 +208,14 @@ video.visualMedia {
 
 @media (max-width: 760px) {
   .overlay {
-    padding: var(--space-3);
+    padding: calc(var(--space-3) + var(--safe-area-top))
+      calc(var(--space-3) + var(--safe-area-right))
+      calc(var(--space-3) + var(--safe-area-bottom))
+      calc(var(--space-3) + var(--safe-area-left));
   }
 
   .dialog {
-    max-height: calc(100vh - var(--space-5));
+    max-height: calc(100dvh - var(--space-5));
   }
 
   .header {
@@ -222,7 +228,7 @@ video.visualMedia {
 
   .visualMedia,
   video.visualMedia {
-    max-height: calc(100vh - 180px);
+    max-height: calc(100dvh - 180px);
   }
 
   .navButton {

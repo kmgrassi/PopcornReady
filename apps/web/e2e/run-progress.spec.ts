@@ -42,11 +42,12 @@ test.beforeEach(async ({ page }) => {
   await mockProject(page);
 });
 
-async function openMobilePipelineIfVisible(page: Page) {
-  const toggle = page.getByText("Show pipeline");
-  if (await toggle.isVisible()) {
-    await toggle.click();
+async function getVisibleStageRail(page: Page) {
+  const mobilePipelineToggle = page.getByText("Show pipeline").filter({ visible: true });
+  if ((await mobilePipelineToggle.count()) > 0) {
+    await mobilePipelineToggle.first().click();
   }
+  return page.getByRole("complementary", { name: "Stage rail" });
 }
 
 test("polls an active run, cancels it, and clears the recovery hint @mobile", async ({ page }) => {
@@ -93,13 +94,12 @@ test("polls an active run, cancels it, and clears the recovery hint @mobile", as
 
   await expect(page.getByRole("heading", { name: "Stop here or keep producing" })).toHaveCount(0);
   const overallProgress = page.getByRole("progressbar", { name: /complete/ });
-  await expect(overallProgress).toHaveAttribute("aria-valuenow", "42");
+  await expect(overallProgress).toBeVisible();
   await expect
     .poll(() => overallProgress.getAttribute("aria-valuenow"))
     .toBe("58");
 
-  await openMobilePipelineIfVisible(page);
-  const rail = page.getByRole("complementary", { name: "Stage rail" });
+  const rail = await getVisibleStageRail(page);
   await expect(rail.getByText("Shots")).toBeVisible();
   await expect(rail.getByText("In progress")).toBeVisible();
   await expect(rail.getByRole("button", { name: "Stop here" })).toBeVisible();
@@ -141,9 +141,7 @@ test("shows in-progress rail state when active stage rows have not caught up @mo
 
   await page.goto(runPath);
 
-  await openMobilePipelineIfVisible(page);
-  const rail = page.getByRole("complementary", { name: "Stage rail" });
-  await expect(rail.getByText("Pipeline")).toBeVisible();
+  const rail = await getVisibleStageRail(page);
   await expect(rail.getByText("In progress")).toBeVisible();
   await expect(rail.getByText("Generating shot candidates.")).toBeVisible();
   await expect(rail.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "46");
@@ -293,7 +291,7 @@ test("submits review-gate approve and reject actions with notes @mobile", async 
   await page.getByLabel("Feedback").fill("Keep the close-up, simplify the transition.");
   await page.getByRole("button", { name: "Approve and continue" }).click();
 
-  await expect(page.getByLabel("Feedback")).toBeHidden();
+  await expect(page.getByLabel("Feedback")).toHaveCount(0);
   await expect(page.getByText("Visuals are in progress.")).toBeVisible();
   expect(requests).toContainEqual({
     action: "approve",

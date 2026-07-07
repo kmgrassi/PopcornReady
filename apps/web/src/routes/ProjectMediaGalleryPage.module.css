@@ -223,6 +223,16 @@
   font-size: var(--text-xs);
 }
 
+.lineageMeta {
+  display: -webkit-box;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--text) 82%, var(--muted));
+  font-size: var(--text-xs);
+  line-height: var(--line-caption);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .selectButton {
   width: fit-content;
   border: 1px solid var(--border);
@@ -343,7 +353,7 @@
 
 .intentBar {
   position: sticky;
-  bottom: var(--space-4);
+  bottom: calc(var(--space-4) + var(--safe-area-bottom));
   z-index: 5;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(180px, 240px) auto;
@@ -417,7 +427,8 @@
 
 @media (max-width: 720px) {
   .shell {
-    padding: var(--space-5) var(--space-4) calc(var(--space-7) + 120px);
+    padding: var(--space-5) var(--space-4)
+      calc(var(--space-7) + 120px + var(--safe-area-bottom));
   }
 
   .header {
@@ -450,5 +461,6 @@
 
   .intentBar {
     grid-template-columns: 1fr;
+    padding-bottom: calc(var(--space-4) + var(--safe-area-bottom));
   }
 }

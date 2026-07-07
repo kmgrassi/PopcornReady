@@ -4,6 +4,17 @@ export type ProjectMediaAsset = Omit<V1Asset, "source"> & {
   source: V1Asset["source"] | { type?: string | null } | string | null;
   thumbnailUrl?: string | null;
   remoteUrl?: string | null;
+  graphInputs?: Array<{
+    assetId: string;
+    relation?: string;
+    role?: string;
+  }>;
+  provenance?: {
+    prompt?: string;
+    instruction?: string;
+    editInstruction?: string;
+    sourceAssetId?: string;
+  };
 };
 
 export type GalleryRenderState = "loading" | "error" | "empty" | "ready";
@@ -56,6 +67,38 @@ export function assetSourceLabel(source: ProjectMediaAsset["source"]): string {
   if (raw === "derived") return "derived";
   if (raw === "first_frame_of") return "first frame";
   return raw.replaceAll("_", " ");
+}
+
+const PROVENANCE_PREVIEW_MAX = 96;
+
+function compactText(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function previewText(value: string): string {
+  const compact = compactText(value);
+  if (compact.length <= PROVENANCE_PREVIEW_MAX) return compact;
+  return `${compact.slice(0, PROVENANCE_PREVIEW_MAX - 3)}...`;
+}
+
+export function editedAssetLineageLabel(
+  asset: Pick<ProjectMediaAsset, "graphInputs" | "provenance">,
+  assetById: ReadonlyMap<string, Pick<ProjectMediaAsset, "filename" | "id"> & { name?: string }>,
+): string | null {
+  const sourceInput = asset.graphInputs?.find(
+    (input) => input.relation === "input" && input.role === "edited_from",
+  );
+  const sourceAssetId = sourceInput?.assetId ?? asset.provenance?.sourceAssetId;
+  if (!sourceAssetId) return null;
+
+  const source = assetById.get(sourceAssetId);
+  const sourceLabel = source ? assetDisplayTitle(source) : "source";
+  const instruction =
+    asset.provenance?.instruction ??
+    asset.provenance?.editInstruction ??
+    asset.provenance?.prompt;
+  const instructionLabel = instruction?.trim() ? ` · ${previewText(instruction)}` : "";
+  return `Edited from ${sourceLabel}${instructionLabel}`;
 }
 
 export function formatDuration(seconds?: number | null): string | null {

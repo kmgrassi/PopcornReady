@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   GENERATION_STAGE_LABELS,
   type GenerationStageItem,
@@ -183,18 +182,7 @@ export function ReviewGatePanel({
   onFeedbackNoteChange,
   onApprove,
 }: ReviewGatePanelProps) {
-  const [feedbackOpen, setFeedbackOpen] = useState(Boolean(feedbackNote));
   const isBriefReviewGate = stageType === "brief_intake";
-  const showFeedbackField = feedbackOpen || Boolean(feedbackNote);
-
-  function requestChanges() {
-    if (!reviewActions) return;
-    if (!showFeedbackField) {
-      setFeedbackOpen(true);
-      return;
-    }
-    reviewActions.onReject(feedbackNote);
-  }
 
   return (
     <section className={styles.reviewPanel} aria-labelledby="review-gate-heading">
@@ -233,25 +221,23 @@ export function ReviewGatePanel({
           </span>
         </div>
       )}
-      {showFeedbackField ? (
-        <div className={styles.feedbackField}>
-          <label className={styles.feedbackLabel} htmlFor="review-feedback-note">
-            What should change?
-          </label>
-          <textarea
-            id="review-feedback-note"
-            className={styles.feedbackTextarea}
-            value={feedbackNote}
-            onChange={(event) => onFeedbackNoteChange(event.target.value)}
-            placeholder="Tell the agent what to revise before continuing."
-            disabled={!!pending}
-            rows={4}
-          />
-          <p className={styles.feedbackHint}>
-            Your note goes back to the generator for this checkpoint.
-          </p>
-        </div>
-      ) : null}
+      <div className={styles.feedbackField}>
+        <label className={styles.feedbackLabel} htmlFor="review-feedback-note">
+          Feedback
+        </label>
+        <textarea
+          id="review-feedback-note"
+          className={styles.feedbackTextarea}
+          value={feedbackNote}
+          onChange={(event) => onFeedbackNoteChange(event.target.value)}
+          placeholder="Optional feedback before continuing..."
+          disabled={!!pending}
+          rows={4}
+        />
+        <p className={styles.feedbackHint}>
+          Use this when you want the generator to revise this stage before continuing.
+        </p>
+      </div>
       {actionError ? (
         <p className={styles.error} role="alert">
           {actionError}
@@ -262,15 +248,19 @@ export function ReviewGatePanel({
           <>
             <button
               type="button"
-              className={styles.secondaryButton}
-              onClick={requestChanges}
+              className={styles.reviewCancelButton}
+              onClick={reviewActions.onCancel}
               disabled={!!pending}
             >
-              {pending === "reject"
-                ? "Requesting..."
-                : showFeedbackField
-                  ? "Send changes"
-                  : "Request changes"}
+              {pending === "cancel" ? "Stopping..." : "Stop here"}
+            </button>
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              onClick={() => reviewActions.onReject(feedbackNote)}
+              disabled={!!pending}
+            >
+              {pending === "reject" ? "Requesting..." : "Request changes"}
             </button>
           </>
         ) : null}
@@ -282,19 +272,6 @@ export function ReviewGatePanel({
         >
           {pending === "approve" ? "Approving..." : "Approve and continue"}
         </button>
-        {reviewActions ? (
-          <details className={styles.moreActions}>
-            <summary>More</summary>
-            <button
-              type="button"
-              className={styles.reviewCancelButton}
-              onClick={reviewActions.onCancel}
-              disabled={!!pending}
-            >
-              {pending === "cancel" ? "Stopping..." : "Stop here"}
-            </button>
-          </details>
-        ) : null}
       </div>
     </section>
   );

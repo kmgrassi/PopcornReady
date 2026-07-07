@@ -51,6 +51,20 @@ const BOARD_FEEDBACK_TOOL = "board_feedback";
 const ANONYMOUS_RUN_QUOTA_LIMIT = 1;
 const ANONYMOUS_RUN_QUOTA_WINDOW_MS = 24 * 60 * 60 * 1000;
 const AFTER_GATE_PREFIX = "after:";
+const BOARD_REVISION_SCOPES = ["concept", "brief", "script", "board", "tile", "asset"] as const;
+const ASSET_USES = [
+  "primary_footage",
+  "b_roll",
+  "character_reference",
+  "style_reference",
+  "location_reference",
+  "logo_or_brand",
+  "music",
+  "voiceover",
+  "dialogue",
+  "sound_effect",
+  "title_or_graphic",
+] as const;
 
 export const orchestratorRunsRouter = Router();
 
@@ -97,22 +111,20 @@ export function parseBoardRevisionTarget(body: unknown, runId: string): BoardRev
   }
   const target = isRecord(body.target) ? body.target : {};
   const scope =
-    target.scope === "concept" ||
-    target.scope === "brief" ||
-    target.scope === "script" ||
-    target.scope === "board" ||
-    target.scope === "tile"
-      ? target.scope
+    typeof target.scope === "string" &&
+    BOARD_REVISION_SCOPES.includes(target.scope as (typeof BOARD_REVISION_SCOPES)[number])
+      ? (target.scope as BoardRevisionTarget["scope"])
       : undefined;
   if (!scope) {
+    const expected = BOARD_REVISION_SCOPES.join(", ");
     throw new ApiError(
       "validation_failed",
-      "target.scope must be concept, brief, script, board, or tile.",
+      `target.scope must be ${expected}.`,
       {
         fields: [
           {
             path: "target.scope",
-            message: "Expected concept, brief, script, board, or tile.",
+            message: `Expected ${expected}.`,
           },
         ],
       }
@@ -137,6 +149,20 @@ export function parseBoardRevisionTarget(body: unknown, runId: string): BoardRev
   ] as const) {
     const value = optionalStringField(target, key);
     if (value) parsed[key] = value;
+  }
+  const targetAssetUse = optionalStringField(target, "targetAssetUse");
+  if (targetAssetUse) {
+    if (!ASSET_USES.includes(targetAssetUse as (typeof ASSET_USES)[number])) {
+      throw new ApiError("validation_failed", "target.targetAssetUse is not supported.", {
+        fields: [{ path: "target.targetAssetUse", message: "Unknown asset use." }],
+      });
+    }
+    parsed.targetAssetUse = targetAssetUse as BoardRevisionTarget["targetAssetUse"];
+  }
+  if (scope === "asset" && !parsed.assetId && !parsed.clipAssetId && !parsed.keyframeAssetId) {
+    throw new ApiError("validation_failed", "Asset revisions require an asset id.", {
+      fields: [{ path: "target.assetId", message: "Required for target.scope=asset." }],
+    });
   }
   if (isRecord(target.currentBrief)) {
     parsed.currentBrief = parseBrief(target.currentBrief, "target.currentBrief");

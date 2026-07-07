@@ -192,6 +192,67 @@ test("parseBoardRevisionTarget rejects an invalid currentBrief payload", () => {
   );
 });
 
+test("parseBoardRevisionTarget accepts primary footage asset targets", () => {
+  const target = parseBoardRevisionTarget(
+    {
+      target: {
+        scope: "asset",
+        assetId: "source_office_clip",
+        targetAssetUse: "primary_footage",
+        label: "Uploaded office clip",
+      },
+    },
+    "run_1"
+  );
+
+  assert.equal(target.scope, "asset");
+  assert.equal(target.assetId, "source_office_clip");
+  assert.equal(target.targetAssetUse, "primary_footage");
+});
+
+test("parseBoardRevisionTarget rejects asset scope without an asset id", () => {
+  assert.throws(
+    () =>
+      parseBoardRevisionTarget(
+        {
+          target: {
+            scope: "asset",
+            targetAssetUse: "primary_footage",
+          },
+        },
+        "run_1"
+      ),
+    (err: unknown) => {
+      assert.ok(err instanceof ApiError);
+      assert.equal(err.code, "validation_failed");
+      assert.match(err.message, /require an asset id/i);
+      return true;
+    }
+  );
+});
+
+test("parseBoardRevisionTarget rejects unsupported asset target uses", () => {
+  assert.throws(
+    () =>
+      parseBoardRevisionTarget(
+        {
+          target: {
+            scope: "asset",
+            assetId: "source_office_clip",
+            targetAssetUse: "banana",
+          },
+        },
+        "run_1"
+      ),
+    (err: unknown) => {
+      assert.ok(err instanceof ApiError);
+      assert.equal(err.code, "validation_failed");
+      assert.match(err.message, /targetAssetUse/i);
+      return true;
+    }
+  );
+});
+
 test("projects a regenerated stage from the latest action instead of stale failures", () => {
   const payload = projectRunDetailFromParts(
     runFixture({ status: "waiting" }),
@@ -352,6 +413,57 @@ test("projects audio fit actions into the audio generation stage", () => {
   );
   assert.equal(audioStage?.type, "audio_generation");
   assert.deepEqual(audioStage?.artifactIds, ["audio_fit_critique_1"]);
+});
+
+test("projects video edit actions as video asset-generation stage items", () => {
+  const payload = projectRunDetailFromParts(
+    runFixture({ status: "waiting" }),
+    [],
+    [
+      actionFixture("edit_video_asset", {
+        id: "edit_action",
+        status: "running",
+        params: { prompt: "Add a dinosaur sitting on the couch." },
+        outputAssetIds: ["edited_clip_asset"],
+        jobIds: ["job_edit_1"],
+      }),
+    ]
+  );
+
+  assert.deepEqual(
+    payload.stages.map((stage) => ({
+      type: stage.type,
+      label: stage.label,
+      status: stage.status,
+      artifactIds: stage.artifactIds,
+      jobIds: stage.jobIds,
+    })),
+    [
+      {
+        type: "asset_generation",
+        label: "Video Edits",
+        status: "running",
+        artifactIds: ["edited_clip_asset"],
+        jobIds: ["job_edit_1"],
+      },
+    ]
+  );
+  assert.deepEqual(
+    payload.stageItems.map((item) => ({
+      kind: item.kind,
+      purpose: item.purpose,
+      promptPreview: item.promptPreview,
+      assetId: item.assetId,
+    })),
+    [
+      {
+        kind: "video",
+        purpose: "shot",
+        promptPreview: "Add a dinosaur sitting on the couch.",
+        assetId: "edited_clip_asset",
+      },
+    ]
+  );
 });
 
 test("projects data-only tool outputs as non-visual stage items", () => {
