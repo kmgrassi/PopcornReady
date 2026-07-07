@@ -97,7 +97,16 @@ provider unit tests green.
   - Include the source in `graphInputs`:
     `{assetId: editSourceAssetId, relation: "input", role: "edited_from"}`.
   - Provenance payload: instruction, provider/model, source asset id, source
-    duration; `assetRole: "edited_clip"`.
+    duration.
+  - **Role: the edited asset keeps the role its slot expects — no new
+    `edited_clip` role.** `selectGeneratedBeatClipAsset` hard-rejects
+    anything but `role === "beat_clip"` (store.ts ~3273), and slot consumers
+    look assets up with `expectedRole: "beat_clip"` (`generate-clip.ts`,
+    `generate-clip-job.ts`) — a novel role would fail selection and make
+    reruns treat the beat as empty and regenerate over the edit. The
+    "edited" fact is carried entirely by the `edited_from` graph input and
+    provenance. Edits of unslotted library footage keep the source's
+    role/use unchanged for the same reason.
   - Billing flows through the existing hooks unchanged
     (`assertRunBudgetAllows`, `recordModelCallCost` with `unit: "seconds"`
     of source duration, `noteBillableGeneration("gemini", costUsd)`).
@@ -126,7 +135,14 @@ points.*
   factory. `execution: "async"`; `parseInput` takes
   `{sourceAssetId, instruction, beatId?}`; precondition failures return
   `unmetRequirements` + `suggestedNextTools` (e.g. source not ready → suggest
-  waiting on upload processing). `estimateCost` uses the PR 1 pricing entry
+  waiting on upload processing). The job is created with a **deterministic
+  `idempotencyKey`** — `createOrGetJob` only dedups when the caller supplies
+  one, and the existing generation tools don't, so without it a retried tool
+  call mints duplicate edited assets. Key =
+  `sha256(sourceAssetId, source contentHash, normalized instruction, model)`
+  so re-running the same edit reuses the in-flight/completed job while a
+  *different* instruction on the same source is a new edit.
+  `estimateCost` uses the PR 1 pricing entry
   with source duration.
 - `edit-video-asset-job.ts`: `runEditVideoAssetJob` per the
   `generate-clip-job` pattern — `jobs.setStep`, call `createGeneratedAsset`
@@ -243,7 +259,11 @@ the activation switch.
   clean for beat-slotted clips; for footage not yet placed on a timeline the
   edit simply yields a new library asset. PR 2 should implement the second
   case as the default and only swap selections when the source holds a slot.
-- **Idempotency/retries.** `createOrGetJob` + `inputsFingerprint` give
-  dedup for identical (source, instruction) pairs; confirm the fingerprint
-  includes the instruction so a *different* instruction on the same source
-  is a new asset, not a cache hit.
+- **Idempotency/retries.** `createOrGetJob` deduplicates **only when the
+  caller supplies an `idempotencyKey`** (the column is nullable and the
+  existing generation tools create jobs without one) — do not rely on
+  `inputsFingerprint`, which is asset-graph metadata, not job dedup. PR 3
+  therefore requires the tool to pass a deterministic key derived from
+  `(sourceAssetId, source contentHash, normalized instruction, model)`:
+  retrying the same edit reuses the in-flight/completed job, while a
+  different instruction on the same source is a new edit.
