@@ -599,6 +599,34 @@ export function ProgressView({
           {headerSlot ? <div className={styles.headerSlot}>{headerSlot}</div> : null}
         </div>
         <div className={styles.headerActions}>
+          <div className={styles.mobileStatusPanel} aria-label="Current run status">
+            <p className={styles.mobileStatusSentence}>
+              {detail.run.reviewGate
+                ? `${currentStageDisplay} is ready for approval.`
+                : terminal
+                  ? headerStatus(detail.run)
+                  : `${currentStageDisplay} - stage ${progress.currentStage} of ${VISIBLE_STAGE_COUNT}.`}
+            </p>
+            <div
+              className={styles.headerMeter}
+              role="progressbar"
+              aria-valuenow={progress.percent}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label={`${progress.percent}% complete`}
+            >
+              <div
+                className={styles.headerMeterFill}
+                style={{ width: `${Math.max(2, progress.percent)}%` }}
+              />
+            </div>
+            {nextStageLabel ? (
+              <p className={styles.mobileStatusMeta}>Next: {nextStageLabel}</p>
+            ) : null}
+            {!terminal && detail.run.message ? (
+              <p className={styles.mobileStatusMeta}>{detail.run.message}</p>
+            ) : null}
+          </div>
           <div className={styles.headerStatusPanel} aria-label="Current run status">
             <div>
               <span className={styles.statusLabel}>Status</span>
@@ -766,6 +794,61 @@ export function ProgressView({
             </section>
           ) : null}
         </section>
+
+        <details className={styles.mobilePipeline}>
+          <summary>Show pipeline</summary>
+          <div className={styles.mobilePipelineBody}>
+            {showBackgroundActivity ? (
+              <div className={styles.backgroundActivity} role="status">
+                <span className={styles.backgroundSpinner} aria-hidden="true" />
+                <span>
+                  {cancelAction?.pending
+                    ? "Stopping after the current step..."
+                    : "Working in the background"}
+                </span>
+              </div>
+            ) : null}
+            <StageRail
+              stages={detail.stages}
+              runStatus={detail.run.status}
+              currentStageType={detail.run.currentStageType}
+              runProgressPercent={detail.run.progressPercent}
+              runMessage={detail.run.message}
+              reviewGate={detail.run.reviewGate}
+              stageLinks={stageLinks}
+              stopAction={
+                showCancelAction && cancelAction
+                  ? {
+                      pending: cancelAction.pending,
+                      error: cancelAction.error,
+                      onStop: cancelAction.onCancel,
+                    }
+                  : undefined
+              }
+              restartAction={restartAction}
+            />
+            {showCancelAction && cancelAction?.error ? (
+              <p className={styles.error} role="alert">
+                {cancelAction.error}
+              </p>
+            ) : null}
+            <p className={styles.sidePanelMeta}>
+              Started {formatDateTime(detail.run.startedAt)}. Updated{" "}
+              {formatDateTime(detail.run.updatedAt)}.
+            </p>
+            <div className={styles.diagnostics}>
+              <span className={styles.runIdLabel}>Run ID</span>
+              <code className={styles.runId} title={detail.run.runId}>{shortId(detail.run.runId)}</code>
+              <button
+                type="button"
+                className={styles.copyButton}
+                onClick={() => void navigator.clipboard?.writeText(detail.run.runId)}
+              >
+                Copy
+              </button>
+            </div>
+          </div>
+        </details>
 
         <aside className={styles.sidePanel} aria-label="Stage rail">
           <div className={styles.sidePanelHeader}>

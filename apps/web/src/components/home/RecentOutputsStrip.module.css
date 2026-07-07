@@ -121,7 +121,38 @@
 }
 
 @media (max-width: 560px) {
+  .section {
+    gap: var(--space-3);
+  }
+
   .strip {
     grid-template-columns: 1fr;
+    gap: var(--space-2);
+  }
+
+  .output {
+    display: grid;
+    grid-template-columns: 96px minmax(0, 1fr);
+    align-items: center;
+    border-radius: var(--radius-sm);
+  }
+
+  .output:hover {
+    transform: none;
+  }
+
+  .thumb {
+    height: 72px;
+    aspect-ratio: auto;
+  }
+
+  .outputBody {
+    padding: var(--space-3);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .output {
+    transition: none;
   }
 }

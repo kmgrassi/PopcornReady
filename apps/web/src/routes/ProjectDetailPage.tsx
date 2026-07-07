@@ -292,6 +292,15 @@ export function ProjectOverviewPage({
 
       {!loading && !error && project ? (
         <div className={stagePanel ? styles.projectPageLayout : styles.projectContent} id="overview">
+          <MobileProjectStatus
+            project={project}
+            projectId={projectId}
+            storyboard={storyboard}
+            storyboardPreview={storyboardPreview}
+            media={media}
+            stagePanel={stagePanel}
+            readOnly={readOnly}
+          />
           <div className={stagePanel ? styles.projectContent : undefined}>
             <section className={styles.projectTopLayout}>
               <div className={styles.projectPrimaryColumn}>
@@ -332,6 +341,120 @@ export function ProjectOverviewPage({
         </div>
       ) : null}
     </main>
+  );
+}
+
+function MobileProjectStatus({
+  project,
+  projectId,
+  storyboard,
+  storyboardPreview,
+  media,
+  stagePanel,
+  readOnly,
+}: {
+  project: V1Project;
+  projectId: string;
+  storyboard: ProjectStoryboard | null;
+  storyboardPreview: {
+    loading: boolean;
+    error: Error | null;
+    onRetry: () => void;
+    generating: boolean;
+    progress: StoryboardProgress;
+    generationError: Error | null;
+    onGenerate?: () => void;
+  };
+  media?: ProjectWatchMedia | null;
+  stagePanel?: ReactNode;
+  readOnly: boolean;
+}) {
+  const brief = project.brief;
+  const hasStoryboard = Boolean(storyboard);
+  const progressPercent = storyboardPreview.progress.total
+    ? storyboardPreview.progress.percent
+    : storyboardPreview.generating
+      ? 18
+      : hasStoryboard
+        ? 100
+        : 0;
+  const completedPanels = storyboardPreview.progress.ready + storyboardPreview.progress.failed;
+  const statusSentence = storyboardPreview.generating
+    ? `Generating storyboard - ${completedPanels} of ${storyboardPreview.progress.total || "many"} panels`
+    : media
+      ? "Final video is ready to watch"
+      : hasStoryboard
+        ? "Storyboard is ready for review"
+        : "Ready to generate the storyboard";
+  const primaryAction = media ? (
+    <ButtonLink variant="cta" size="lg" to={`/projects/${encodeURIComponent(projectId)}/watch`}>
+      Watch
+    </ButtonLink>
+  ) : hasStoryboard ? (
+    <ButtonLink variant="cta" size="lg" to={`/projects/${encodeURIComponent(projectId)}/storyboard`}>
+      Review storyboard
+    </ButtonLink>
+  ) : !readOnly && storyboardPreview.onGenerate ? (
+    <Button
+      variant="cta"
+      size="lg"
+      onClick={storyboardPreview.onGenerate}
+      disabled={storyboardPreview.generating}
+      isLoading={storyboardPreview.generating}
+    >
+      Generate storyboard
+    </Button>
+  ) : (
+    <ButtonLink variant="cta" size="lg" to={`/projects/${encodeURIComponent(projectId)}/concept`}>
+      View concept
+    </ButtonLink>
+  );
+
+  return (
+    <section className={styles.mobileStatusCard} aria-label="Project status">
+      <ProjectPoster name={project.name} posterUrl={project.posterUrl} />
+      <div className={styles.mobileStatusBody}>
+        <div className={styles.mobileStatusCopy}>
+          <StatusChip status={project.status} />
+          <h2>{project.name}</h2>
+          <p>{statusSentence}</p>
+        </div>
+        <div
+          className={styles.mobileMeter}
+          role="progressbar"
+          aria-valuenow={progressPercent}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`${progressPercent}% complete`}
+        >
+          <span style={{ width: `${Math.max(3, progressPercent)}%` }} />
+        </div>
+        <div className={styles.mobilePrimaryAction}>{primaryAction}</div>
+        <details className={styles.mobileDetails}>
+          <summary>Project details</summary>
+          <dl>
+            <div>
+              <dt>Hook</dt>
+              <dd>{brief?.hookQuestion ?? brief?.oneBigIdea ?? "Not set"}</dd>
+            </div>
+            <div>
+              <dt>Length</dt>
+              <dd>{formatDuration(brief?.targetLengthSec) ?? "Unset"}</dd>
+            </div>
+            <div>
+              <dt>Format</dt>
+              <dd>{[brief?.aspectRatio, brief?.format, brief?.platform].filter(Boolean).join(" / ") || "Unset"}</dd>
+            </div>
+          </dl>
+        </details>
+        {stagePanel ? (
+          <details className={styles.mobileDetails}>
+            <summary>View stages</summary>
+            <div className={styles.mobileStagePanel}>{stagePanel}</div>
+          </details>
+        ) : null}
+      </div>
+    </section>
   );
 }
 

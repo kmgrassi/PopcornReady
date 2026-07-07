@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   GENERATION_STAGE_LABELS,
   type GenerationStageItem,
@@ -97,6 +98,8 @@ function BriefReviewOutput({
   brief: VideoBriefInput | null;
   loading: boolean;
 }) {
+  const [showAll, setShowAll] = useState(false);
+
   if (loading) {
     return (
       <div className={styles.briefReviewCard}>
@@ -115,6 +118,7 @@ function BriefReviewOutput({
     ["Payoff", brief.payoff],
     ["Caveat", brief.caveat],
   ].filter((entry): entry is [string, string] => Boolean(entry[1]));
+  const visibleFields = showAll ? fields : fields.slice(0, 2);
 
   return (
     <article className={styles.briefReviewCard}>
@@ -128,14 +132,25 @@ function BriefReviewOutput({
         <p className={styles.briefReviewVisual}>{brief.strongestVisual}</p>
       ) : null}
       {fields.length > 0 ? (
-        <dl className={styles.briefReviewFields}>
-          {fields.map(([label, value]) => (
-            <div className={styles.briefReviewField} key={label}>
-              <dt>{label}</dt>
-              <dd>{value}</dd>
-            </div>
-          ))}
-        </dl>
+        <>
+          <dl className={styles.briefReviewFields}>
+            {visibleFields.map(([label, value]) => (
+              <div className={styles.briefReviewField} key={label}>
+                <dt>{label}</dt>
+                <dd>{value}</dd>
+              </div>
+            ))}
+          </dl>
+          {fields.length > visibleFields.length ? (
+            <button
+              className={styles.disclosureButton}
+              type="button"
+              onClick={() => setShowAll(true)}
+            >
+              Show all brief details
+            </button>
+          ) : null}
+        </>
       ) : null}
     </article>
   );
@@ -155,6 +170,8 @@ export function ReviewGatePanel({
   onApprove,
 }: ReviewGatePanelProps) {
   const isBriefReviewGate = stageType === "brief_intake";
+  const [feedbackOpen, setFeedbackOpen] = useState(Boolean(feedbackNote.trim()));
+  const canSubmitFeedback = Boolean(feedbackNote.trim());
 
   return (
     <section className={styles.reviewPanel} aria-labelledby="review-gate-heading">
@@ -193,23 +210,25 @@ export function ReviewGatePanel({
           </span>
         </div>
       )}
-      <div className={styles.feedbackField}>
-        <label className={styles.feedbackLabel} htmlFor="review-feedback-note">
-          Feedback
-        </label>
-        <textarea
-          id="review-feedback-note"
-          className={styles.feedbackTextarea}
-          value={feedbackNote}
-          onChange={(event) => onFeedbackNoteChange(event.target.value)}
-          placeholder="Optional feedback before continuing..."
-          disabled={!!pending}
-          rows={4}
-        />
-        <p className={styles.feedbackHint}>
-          Use this when you want the generator to revise this stage before continuing.
-        </p>
-      </div>
+      {feedbackOpen ? (
+        <div className={styles.feedbackField}>
+          <label className={styles.feedbackLabel} htmlFor="review-feedback-note">
+            What should change?
+          </label>
+          <textarea
+            id="review-feedback-note"
+            className={styles.feedbackTextarea}
+            value={feedbackNote}
+            onChange={(event) => onFeedbackNoteChange(event.target.value)}
+            placeholder="Tell the agent what to revise before continuing..."
+            disabled={!!pending}
+            rows={4}
+          />
+          <p className={styles.feedbackHint}>
+            This sends the checkpoint back through the agent before production continues.
+          </p>
+        </div>
+      ) : null}
       {actionError ? (
         <p className={styles.error} role="alert">
           {actionError}
@@ -220,20 +239,33 @@ export function ReviewGatePanel({
           <>
             <button
               type="button"
-              className={styles.reviewCancelButton}
-              onClick={reviewActions.onCancel}
-              disabled={!!pending}
-            >
-              {pending === "cancel" ? "Stopping..." : "Stop here"}
-            </button>
-            <button
-              type="button"
               className={styles.secondaryButton}
-              onClick={() => reviewActions.onReject(feedbackNote)}
-              disabled={!!pending}
+              onClick={() => {
+                if (!feedbackOpen) {
+                  setFeedbackOpen(true);
+                  return;
+                }
+                reviewActions.onReject(feedbackNote);
+              }}
+              disabled={!!pending || (feedbackOpen && !canSubmitFeedback)}
             >
-              {pending === "reject" ? "Requesting..." : "Request changes"}
+              {pending === "reject"
+                ? "Requesting..."
+                : feedbackOpen
+                  ? "Send changes"
+                  : "Request changes"}
             </button>
+            <details className={styles.moreActions}>
+              <summary>More</summary>
+              <button
+                type="button"
+                className={styles.reviewCancelButton}
+                onClick={reviewActions.onCancel}
+                disabled={!!pending}
+              >
+                {pending === "cancel" ? "Stopping..." : "Stop here"}
+              </button>
+            </details>
           </>
         ) : null}
         <button

@@ -114,6 +114,29 @@
   margin: var(--space-1) 0 0;
 }
 
+.disclosureButton {
+  justify-self: start;
+  min-height: 38px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 800;
+  padding: 0 var(--space-3);
+}
+
+.disclosureButton:hover {
+  border-color: color-mix(in srgb, var(--cta) 45%, var(--border));
+}
+
+.disclosureButton:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
 .reviewOutputs {
   display: grid;
   gap: var(--space-4);
@@ -202,12 +225,51 @@
   padding-top: var(--space-2);
 }
 
+.moreActions {
+  position: relative;
+  margin-right: auto;
+}
+
+.moreActions summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: var(--text-md);
+  font-weight: 750;
+  list-style: none;
+  padding: 0 var(--space-3);
+}
+
+.moreActions summary::-webkit-details-marker {
+  display: none;
+}
+
+.moreActions summary:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.moreActions summary:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
 .primaryButton,
 .secondaryButton {
   border-radius: var(--radius-sm);
   cursor: pointer;
   font: inherit;
   font-size: var(--text-md);
+  transition:
+    background 180ms ease-out,
+    border-color 180ms ease-out,
+    color 180ms ease-out,
+    transform 180ms ease-out;
 }
 
 .primaryButton {
@@ -249,8 +311,7 @@
   font: inherit;
   font-size: var(--text-md);
   font-weight: 750;
-  margin-right: auto;
-  padding: 0;
+  padding: 0 var(--space-3);
 }
 
 .reviewCancelButton:hover {
@@ -274,18 +335,45 @@
   }
 
   .reviewActionRow {
-    align-items: stretch;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: 1fr;
   }
 
   .primaryButton,
   .secondaryButton,
   .reviewCancelButton {
     width: 100%;
+    min-height: 48px;
+  }
+
+  .primaryButton {
+    order: 1;
+  }
+
+  .secondaryButton {
+    order: 2;
+  }
+
+  .moreActions {
+    order: 3;
+    margin-right: 0;
+  }
+
+  .moreActions summary {
+    justify-content: center;
+    min-height: 44px;
+    width: 100%;
   }
 
   .reviewCancelButton {
     justify-content: center;
-    margin-right: 0;
+    margin-top: var(--space-2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .primaryButton,
+  .secondaryButton {
+    transition: none;
   }
 }
