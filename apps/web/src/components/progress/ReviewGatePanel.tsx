@@ -91,6 +91,19 @@ function briefMetaItems(brief: VideoBriefInput): string[] {
   ].filter((item): item is string => Boolean(item));
 }
 
+function splitBriefReviewFields(fields: [string, string][]) {
+  const priority = new Set(["Hook", "Big idea"]);
+  const visible = [
+    ...fields.filter(([label]) => priority.has(label)),
+    ...fields.filter(([label]) => !priority.has(label)),
+  ].slice(0, 2);
+  const visibleLabels = new Set(visible.map(([label]) => label));
+  return {
+    visible,
+    hidden: fields.filter(([label]) => !visibleLabels.has(label)),
+  };
+}
+
 function BriefReviewOutput({
   brief,
   loading,
@@ -116,8 +129,8 @@ function BriefReviewOutput({
     ["Payoff", brief.payoff],
     ["Caveat", brief.caveat],
   ].filter((entry): entry is [string, string] => Boolean(entry[1]));
-  const visibleFields = fields.slice(0, 2);
-  const hiddenFields = fields.slice(2);
+  const { visible: visibleFields, hidden: hiddenFields } =
+    splitBriefReviewFields(fields);
 
   return (
     <article className={styles.briefReviewCard}>
