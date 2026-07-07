@@ -46,11 +46,6 @@
 
 @media (max-width: 760px) {
   .summary {
-    width: 100%;
-    border-radius: var(--radius-md);
-  }
-
-  .counts {
-    width: 100%;
+    display: none;
   }
 }

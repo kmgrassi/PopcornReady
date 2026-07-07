@@ -597,6 +597,10 @@ export function ProgressView({
     lastCompletedStageLabel ? `Last completed: ${lastCompletedStageLabel}` : null,
     nextStageLabel ? `Next: ${nextStageLabel}` : null,
   ].filter((item): item is string => Boolean(item));
+  const progressDetails = [
+    detail.run.message,
+    ...progressContext,
+  ].filter((item): item is string => Boolean(item));
 
   function renderPipelineDepth() {
     return (
@@ -709,11 +713,9 @@ export function ProgressView({
           <div className={styles.headerStatusPanel} aria-label="Current run status">
             <div className={styles.mobileStatusNarrative}>
               <strong>{progressSentence}</strong>
-              {progressContext.length > 0 ? (
-                <p>{progressContext.join(" · ")}</p>
-              ) : detail.run.message ? (
-                <p>{detail.run.message}</p>
-              ) : null}
+              {progressDetails.map((item) => (
+                <p key={item}>{item}</p>
+              ))}
             </div>
             <div className={styles.statusGrid}>
               <div>
@@ -744,9 +746,6 @@ export function ProgressView({
                 </strong>
               </div>
             </div>
-            {!terminal && detail.run.message ? (
-              <p className={styles.headerStatusMessage}>{detail.run.message}</p>
-            ) : null}
             <div
               className={styles.headerMeter}
               role="progressbar"
@@ -885,7 +884,7 @@ export function ProgressView({
 
           <details className={styles.mobilePipelineDetails}>
             <summary>
-              <span>Show pipeline</span>
+              Show pipeline
               <span aria-hidden="true">+</span>
             </summary>
             <div
