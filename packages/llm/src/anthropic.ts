@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 
 import {
   ChooseToolArgs,
+  JsonSchema,
   LlmClient,
   LlmEffort,
   StructuredArgs,
@@ -44,7 +45,47 @@ interface AnthropicMessageResponse {
   content?: AnthropicContentBlock[] | null;
 }
 
-type MessageCreate = (params: Record<string, unknown>) => Promise<AnthropicMessageResponse>;
+export interface AnthropicImageBlock {
+  type: "image";
+  source: {
+    type: "base64";
+    media_type: string;
+    data: string;
+  };
+}
+
+export interface AnthropicSystemTextBlock {
+  type: "text";
+  text: string;
+  cache_control?: {
+    type: "ephemeral";
+  };
+}
+
+export interface AnthropicToolDefinition {
+  name: string;
+  description: string;
+  input_schema: JsonSchema;
+}
+
+export type AnthropicUserContent =
+  | string
+  | Array<AnthropicSystemTextBlock | AnthropicImageBlock>;
+
+export interface AnthropicMessageCreateRequest {
+  model: string;
+  max_tokens: number;
+  system?: AnthropicSystemTextBlock[] | string;
+  tools?: AnthropicToolDefinition[];
+  tool_choice?:
+    | { type: "tool"; name: string }
+    | { type: "auto" };
+  messages: Array<{ role: "user"; content: AnthropicUserContent }>;
+}
+
+type MessageCreate = (
+  params: AnthropicMessageCreateRequest
+) => Promise<AnthropicMessageResponse>;
 
 // Low-reasoning calls route to the cheaper fast model.
 const FAST_EFFORTS = new Set<LlmEffort>(["minimal", "low"]);
@@ -57,7 +98,7 @@ export interface AnthropicDeps {
   createMessage?: MessageCreate;
 }
 
-export function toAnthropicTool(spec: ToolSpec): Record<string, unknown> {
+export function toAnthropicTool(spec: ToolSpec): AnthropicToolDefinition {
   return {
     name: spec.name,
     description: spec.description,
@@ -140,13 +181,13 @@ export function createAnthropicLlmClient(deps: AnthropicDeps = {}): LlmClient {
   let createMessage = deps.createMessage;
   const ensureCreate = (): MessageCreate => {
     if (createMessage) return createMessage;
-    createMessage = ((params: Record<string, unknown>) =>
+    createMessage = ((params: AnthropicMessageCreateRequest) =>
       anthropicClient().messages.create(params as never)) as MessageCreate;
     return createMessage;
   };
   const structuredImpl = async <T>(
     args: StructuredArgs,
-    userContent: unknown
+    userContent: AnthropicUserContent
   ): Promise<T> => {
     const callModel = pickModel(args.effort);
     const res = await ensureCreate()({

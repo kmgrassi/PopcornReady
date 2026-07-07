@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   type OpenAiCompletionLike,
+  type OpenAiCreateRequest,
   type OpenAiFunctionTool,
   createOpenAiLlmClient,
   interpretOpenAiToolResponse,
@@ -11,7 +12,7 @@ import {
 } from "./openai";
 import type { ToolSpec } from "./types";
 
-type OpenAiRequest = Parameters<NonNullable<Parameters<typeof createOpenAiLlmClient>[0]["create"]>>[0];
+type OpenAiRequest = OpenAiCreateRequest;
 type OpenAiResponse = Awaited<
   ReturnType<NonNullable<Parameters<typeof createOpenAiLlmClient>[0]["create"]>>
 >;
