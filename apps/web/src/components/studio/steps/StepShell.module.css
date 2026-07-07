@@ -89,6 +89,10 @@
   margin-top: var(--space-2, 8px);
 }
 
+.footerSpacer {
+  display: block;
+}
+
 .stageFooter {
   position: sticky;
   bottom: 0;
@@ -122,5 +126,69 @@
 
   .heading {
     font-size: 2.35rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .stageFrame {
+    min-height: calc(100dvh - 112px - 96px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    padding-bottom: 0;
+  }
+
+  .step {
+    min-height: 100%;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .stage {
+    gap: var(--space-5);
+    padding: var(--space-2) 0 var(--space-5);
+  }
+
+  .header {
+    gap: var(--space-2);
+  }
+
+  .heading {
+    font-size: 2rem;
+    letter-spacing: 0;
+    line-height: 1.12;
+    text-wrap: balance;
+  }
+
+  .description {
+    font-size: 1rem;
+    line-height: 1.5;
+    text-wrap: pretty;
+  }
+
+  .footer {
+    justify-content: stretch;
+  }
+
+  .backAction,
+  .footerSpacer {
+    display: none;
+  }
+
+  .stageFooter {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 30;
+    width: 100%;
+    min-height: calc(76px + env(safe-area-inset-bottom));
+    padding: var(--space-3) var(--space-4) calc(var(--space-3) + env(safe-area-inset-bottom));
+    background: color-mix(in srgb, var(--bg) 94%, transparent);
+  }
+
+  .stageFooter > :last-child {
+    width: 100%;
+    min-height: 52px;
+    margin-left: 0;
   }
 }
