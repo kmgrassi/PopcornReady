@@ -415,6 +415,57 @@ test("projects audio fit actions into the audio generation stage", () => {
   assert.deepEqual(audioStage?.artifactIds, ["audio_fit_critique_1"]);
 });
 
+test("projects video edit actions as video asset-generation stage items", () => {
+  const payload = projectRunDetailFromParts(
+    runFixture({ status: "waiting" }),
+    [],
+    [
+      actionFixture("edit_video_asset", {
+        id: "edit_action",
+        status: "running",
+        params: { prompt: "Add a dinosaur sitting on the couch." },
+        outputAssetIds: ["edited_clip_asset"],
+        jobIds: ["job_edit_1"],
+      }),
+    ]
+  );
+
+  assert.deepEqual(
+    payload.stages.map((stage) => ({
+      type: stage.type,
+      label: stage.label,
+      status: stage.status,
+      artifactIds: stage.artifactIds,
+      jobIds: stage.jobIds,
+    })),
+    [
+      {
+        type: "asset_generation",
+        label: "Video Edits",
+        status: "running",
+        artifactIds: ["edited_clip_asset"],
+        jobIds: ["job_edit_1"],
+      },
+    ]
+  );
+  assert.deepEqual(
+    payload.stageItems.map((item) => ({
+      kind: item.kind,
+      purpose: item.purpose,
+      promptPreview: item.promptPreview,
+      assetId: item.assetId,
+    })),
+    [
+      {
+        kind: "video",
+        purpose: "shot",
+        promptPreview: "Add a dinosaur sitting on the couch.",
+        assetId: "edited_clip_asset",
+      },
+    ]
+  );
+});
+
 test("projects data-only tool outputs as non-visual stage items", () => {
   const payload = projectRunDetailFromParts(
     runFixture({ status: "running" }),
