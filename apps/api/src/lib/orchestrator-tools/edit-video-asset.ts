@@ -153,7 +153,9 @@ function idempotencyKey(input: {
   sourceAssetId: string;
   sourceContentHash?: string;
   instruction: string;
+  provider: EditVideoProvider;
   model: string;
+  beatId?: string;
 }): string {
   return createHash("sha256")
     .update(
@@ -161,7 +163,9 @@ function idempotencyKey(input: {
         sourceAssetId: input.sourceAssetId,
         sourceContentHash: input.sourceContentHash ?? "",
         instruction: normalizedInstruction(input.instruction),
+        provider: input.provider,
         model: input.model,
+        beatId: input.beatId ?? "",
       })
     )
     .digest("hex");
@@ -311,7 +315,9 @@ export function createEditVideoAssetTool(
           sourceAssetId: source.id,
           sourceContentHash: source.contentHash,
           instruction: input.instruction,
+          provider,
           model,
+          beatId: input.beatId,
         }),
       });
 

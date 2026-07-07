@@ -173,6 +173,48 @@ test("edit_video_asset creates a deterministic idempotent job and kicks the work
   assert.equal(kicked?.provider, "mock");
 });
 
+test("edit_video_asset idempotency separates provider and beat targets", async () => {
+  const keys: string[] = [];
+  const tool = createEditVideoAssetTool({
+    getAsset: async () => asset(),
+    createJob: async (input) => {
+      keys.push(input.idempotencyKey ?? "");
+      return queuedJob(false);
+    },
+    runEditVideoAssetJob: async () => {},
+  });
+
+  await tool.execute(
+    {
+      sourceAssetId: "source_1",
+      instruction: "Add a dinosaur.",
+      provider: "mock",
+      beatId: "beat_1",
+    },
+    { auth, projectId: "proj_1" }
+  );
+  await tool.execute(
+    {
+      sourceAssetId: "source_1",
+      instruction: "Add a dinosaur.",
+      provider: "gemini",
+      beatId: "beat_1",
+    },
+    { auth, projectId: "proj_1" }
+  );
+  await tool.execute(
+    {
+      sourceAssetId: "source_1",
+      instruction: "Add a dinosaur.",
+      provider: "mock",
+      beatId: "beat_2",
+    },
+    { auth, projectId: "proj_1" }
+  );
+
+  assert.equal(new Set(keys).size, 3);
+});
+
 test("runEditVideoAssetJob passes edit provenance fields, selects beat clips, and resumes", async () => {
   const spy = jobsSpy();
   const generatedBodies: Record<string, unknown>[] = [];
@@ -214,7 +256,7 @@ test("runEditVideoAssetJob passes edit provenance fields, selects beat clips, an
   );
 
   assert.equal(generatedBodies[0]?.editSourceAssetId, "source_1");
-  assert.deepEqual(generatedBodies[0]?.referenceAssetIds, ["source_1"]);
+  assert.equal(generatedBodies[0]?.referenceAssetIds, undefined);
   assert.deepEqual(generatedBodies[0]?.graphInputs, [
     {
       assetId: "source_1",

@@ -99,7 +99,6 @@ export async function runEditVideoAssetJob(
         durationSec: input.sourceDurationSec ?? 8,
         seconds: input.sourceDurationSec ?? 8,
         editSourceAssetId: input.sourceAssetId,
-        referenceAssetIds: [input.sourceAssetId],
         graphInputs: graphInputsForEdit(input),
         ...(role ? { assetRole: role } : {}),
         ...(input.beatId ? { beatId: input.beatId } : {}),
