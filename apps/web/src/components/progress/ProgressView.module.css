@@ -162,6 +162,11 @@
   min-width: 0;
 }
 
+.mobileNarrativeStatus,
+.mobilePipeline {
+  display: none;
+}
+
 .headerStatusPanel strong {
   display: block;
   margin-top: var(--space-1);
@@ -839,5 +844,91 @@
 
   .secondaryButton {
     width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .shell {
+    padding: var(--space-4) var(--space-3) var(--space-7);
+  }
+
+  .header {
+    margin-bottom: var(--space-4);
+  }
+
+  .eyebrow,
+  .headerDescription,
+  .statusCell,
+  .sidePanel {
+    display: none;
+  }
+
+  .title {
+    margin-bottom: var(--space-3);
+    font-size: var(--title-md);
+  }
+
+  .headerStatusPanel {
+    gap: var(--space-3);
+    padding: var(--space-4);
+  }
+
+  .mobileNarrativeStatus {
+    display: grid;
+    gap: var(--space-1);
+  }
+
+  .mobileNarrativeStatus strong {
+    margin: 0;
+    color: var(--text-strong);
+    font-size: var(--text-lg);
+  }
+
+  .mobileNarrativeStatus span {
+    color: var(--muted);
+    font-size: var(--text-sm);
+    font-weight: 750;
+  }
+
+  .headerStatusMessage {
+    display: none;
+  }
+
+  .card,
+  .planRecap {
+    padding: var(--space-4);
+  }
+
+  .planRecapFacts,
+  .planRecapMeta {
+    display: none;
+  }
+
+  .mobilePipeline {
+    display: grid;
+    gap: var(--space-4);
+    border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--surface) 88%, var(--bg));
+    padding: 0 var(--space-4);
+  }
+
+  .mobilePipeline summary {
+    min-height: 48px;
+    cursor: pointer;
+    color: var(--text-strong);
+    font-weight: 850;
+    line-height: 48px;
+  }
+
+  .mobilePipeline[open] {
+    padding-bottom: var(--space-4);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .headerMeterFill,
+  .stageProgressFill {
+    transition: none;
   }
 }

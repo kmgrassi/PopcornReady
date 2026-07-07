@@ -67,6 +67,8 @@
   /* Layout */
   --content-max: 1120px;
   --sidebar-w: 248px;
+  --bp-mobile: 640px;
+  --bp-tablet: 900px;
 
   /* Motion */
   --transition: 160ms ease;

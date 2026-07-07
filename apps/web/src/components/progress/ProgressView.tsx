@@ -492,6 +492,14 @@ export function ProgressView({
     Storyboard: `${projectPath}/storyboard`,
     "Final Render": `${projectPath}/watch`,
   };
+  const progressSentence = detail.run.reviewGate
+    ? `${currentStageDisplay} is ready for review`
+    : `${currentStageDisplay} - stage ${progress.currentStage} of ${VISIBLE_STAGE_COUNT}`;
+  const secondaryProgressSentence = nextStageLabel
+    ? `Next: ${nextStageLabel}`
+    : lastCompletedStageLabel
+      ? `Last completed: ${lastCompletedStageLabel}`
+      : detail.run.message ?? null;
 
   async function approveFallback() {
     const reviewGate = detail.run.reviewGate;
@@ -600,28 +608,32 @@ export function ProgressView({
         </div>
         <div className={styles.headerActions}>
           <div className={styles.headerStatusPanel} aria-label="Current run status">
-            <div>
+            <div className={styles.mobileNarrativeStatus}>
+              <strong>{progressSentence}</strong>
+              {secondaryProgressSentence ? <span>{secondaryProgressSentence}</span> : null}
+            </div>
+            <div className={styles.statusCell}>
               <span className={styles.statusLabel}>Status</span>
               <strong>{headerStatus(detail.run)}</strong>
             </div>
             {lastCompletedStageLabel ? (
-              <div>
+              <div className={styles.statusCell}>
                 <span className={styles.statusLabel}>Last completed</span>
                 <strong>{lastCompletedStageLabel}</strong>
               </div>
             ) : (
-              <div>
+              <div className={styles.statusCell}>
                 <span className={styles.statusLabel}>Current step</span>
                 <strong>{currentStageDisplay}</strong>
               </div>
             )}
             {nextStageLabel ? (
-              <div>
+              <div className={styles.statusCell}>
                 <span className={styles.statusLabel}>Next step</span>
                 <strong>{nextStageLabel}</strong>
               </div>
             ) : null}
-            <div>
+            <div className={styles.statusCell}>
               <span className={styles.statusLabel}>Progress</span>
               <strong>
                 Stage {progress.currentStage} of {VISIBLE_STAGE_COUNT}
@@ -766,6 +778,48 @@ export function ProgressView({
             </section>
           ) : null}
         </section>
+
+        <details className={styles.mobilePipeline}>
+          <summary>Show pipeline</summary>
+          {showBackgroundActivity ? (
+            <div className={styles.backgroundActivity} role="status">
+              <span className={styles.backgroundSpinner} aria-hidden="true" />
+              <span>
+                {cancelAction?.pending
+                  ? "Stopping after the current step..."
+                  : "Working in the background"}
+              </span>
+            </div>
+          ) : null}
+          <StageRail
+            stages={detail.stages}
+            runStatus={detail.run.status}
+            currentStageType={detail.run.currentStageType}
+            runProgressPercent={detail.run.progressPercent}
+            runMessage={detail.run.message}
+            reviewGate={detail.run.reviewGate}
+            stageLinks={stageLinks}
+            stopAction={
+              showCancelAction && cancelAction
+                ? {
+                    pending: cancelAction.pending,
+                    error: cancelAction.error,
+                    onStop: cancelAction.onCancel,
+                  }
+                : undefined
+            }
+            restartAction={restartAction}
+          />
+          {showCancelAction && cancelAction?.error ? (
+            <p className={styles.error} role="alert">
+              {cancelAction.error}
+            </p>
+          ) : null}
+          <p className={styles.sidePanelMeta}>
+            Started {formatDateTime(detail.run.startedAt)}. Updated{" "}
+            {formatDateTime(detail.run.updatedAt)}.
+          </p>
+        </details>
 
         <aside className={styles.sidePanel} aria-label="Stage rail">
           <div className={styles.sidePanelHeader}>

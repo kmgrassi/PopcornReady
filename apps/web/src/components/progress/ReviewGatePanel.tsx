@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   GENERATION_STAGE_LABELS,
   type GenerationStageItem,
@@ -97,6 +98,8 @@ function BriefReviewOutput({
   brief: VideoBriefInput | null;
   loading: boolean;
 }) {
+  const [showAll, setShowAll] = useState(false);
+
   if (loading) {
     return (
       <div className={styles.briefReviewCard}>
@@ -108,13 +111,16 @@ function BriefReviewOutput({
   if (!brief) return null;
 
   const fields = [
-    ["Audience", brief.audience],
-    ["Style", brief.style],
     ["Hook", brief.hookQuestion],
     ["Big idea", brief.oneBigIdea],
+  ].filter((entry): entry is [string, string] => Boolean(entry[1]));
+  const extraFields = [
+    ["Audience", brief.audience],
+    ["Style", brief.style],
     ["Payoff", brief.payoff],
     ["Caveat", brief.caveat],
   ].filter((entry): entry is [string, string] => Boolean(entry[1]));
+  const visibleFields = showAll ? [...fields, ...extraFields] : fields;
 
   return (
     <article className={styles.briefReviewCard}>
@@ -127,15 +133,24 @@ function BriefReviewOutput({
       {brief.strongestVisual ? (
         <p className={styles.briefReviewVisual}>{brief.strongestVisual}</p>
       ) : null}
-      {fields.length > 0 ? (
+      {visibleFields.length > 0 ? (
         <dl className={styles.briefReviewFields}>
-          {fields.map(([label, value]) => (
+          {visibleFields.map(([label, value]) => (
             <div className={styles.briefReviewField} key={label}>
               <dt>{label}</dt>
               <dd>{value}</dd>
             </div>
           ))}
         </dl>
+      ) : null}
+      {extraFields.length > 0 ? (
+        <button
+          type="button"
+          className={styles.showAllButton}
+          onClick={() => setShowAll((current) => !current)}
+        >
+          {showAll ? "Show less" : "Show all"}
+        </button>
       ) : null}
     </article>
   );
@@ -155,6 +170,7 @@ export function ReviewGatePanel({
   onApprove,
 }: ReviewGatePanelProps) {
   const isBriefReviewGate = stageType === "brief_intake";
+  const [showFeedback, setShowFeedback] = useState(Boolean(feedbackNote));
 
   return (
     <section className={styles.reviewPanel} aria-labelledby="review-gate-heading">
@@ -193,23 +209,25 @@ export function ReviewGatePanel({
           </span>
         </div>
       )}
-      <div className={styles.feedbackField}>
-        <label className={styles.feedbackLabel} htmlFor="review-feedback-note">
-          Feedback
-        </label>
-        <textarea
-          id="review-feedback-note"
-          className={styles.feedbackTextarea}
-          value={feedbackNote}
-          onChange={(event) => onFeedbackNoteChange(event.target.value)}
-          placeholder="Optional feedback before continuing..."
-          disabled={!!pending}
-          rows={4}
-        />
-        <p className={styles.feedbackHint}>
-          Use this when you want the generator to revise this stage before continuing.
-        </p>
-      </div>
+      {showFeedback ? (
+        <div className={styles.feedbackField}>
+          <label className={styles.feedbackLabel} htmlFor="review-feedback-note">
+            Feedback
+          </label>
+          <textarea
+            id="review-feedback-note"
+            className={styles.feedbackTextarea}
+            value={feedbackNote}
+            onChange={(event) => onFeedbackNoteChange(event.target.value)}
+            placeholder="Optional feedback before continuing..."
+            disabled={!!pending}
+            rows={4}
+          />
+          <p className={styles.feedbackHint}>
+            Use this when you want the generator to revise this stage before continuing.
+          </p>
+        </div>
+      ) : null}
       {actionError ? (
         <p className={styles.error} role="alert">
           {actionError}
@@ -220,20 +238,29 @@ export function ReviewGatePanel({
           <>
             <button
               type="button"
-              className={styles.reviewCancelButton}
-              onClick={reviewActions.onCancel}
-              disabled={!!pending}
-            >
-              {pending === "cancel" ? "Stopping..." : "Stop here"}
-            </button>
-            <button
-              type="button"
               className={styles.secondaryButton}
-              onClick={() => reviewActions.onReject(feedbackNote)}
+              onClick={() => {
+                if (!showFeedback) {
+                  setShowFeedback(true);
+                  return;
+                }
+                reviewActions.onReject(feedbackNote);
+              }}
               disabled={!!pending}
             >
-              {pending === "reject" ? "Requesting..." : "Request changes"}
+              {pending === "reject" ? "Requesting..." : showFeedback ? "Send request" : "Request changes"}
             </button>
+            <details className={styles.moreActions}>
+              <summary>More</summary>
+              <button
+                type="button"
+                className={styles.reviewCancelButton}
+                onClick={reviewActions.onCancel}
+                disabled={!!pending}
+              >
+                {pending === "cancel" ? "Stopping..." : "Stop here"}
+              </button>
+            </details>
           </>
         ) : null}
         <button

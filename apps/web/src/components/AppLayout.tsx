@@ -111,6 +111,7 @@ export function AppLayout() {
 // session. Production builds (DEV=false) always require login.
 const DEV_AUTOPILOT = import.meta.env.DEV;
 const MOBILE_NAV_MEDIA_QUERY = "(max-width: 860px)";
+const MOBILE_TAB_PATHS = ["/dashboard", "/library", "/projects", "/account"];
 
 export function AuthenticatedAppLayout() {
   const auth = useAuth();
@@ -194,6 +195,9 @@ export function AuthenticatedAppLayout() {
 
   const showAdmin = canAccessAdminSurface(auth);
   const canSignOut = auth.configured && auth.status === "authenticated";
+  const isMobileTabPath = MOBILE_TAB_PATHS.some((path) =>
+    location.pathname === path || location.pathname.startsWith(`${path}/`),
+  );
   async function signOut() {
     if (!canSignOut) return;
     await auth.signOut();
@@ -359,7 +363,11 @@ export function AuthenticatedAppLayout() {
           <button
             ref={menuButtonRef}
             type="button"
-            className={styles.menuButton}
+            className={
+              isMobileTabPath
+                ? `${styles.menuButton} ${styles.menuButtonTabHidden}`
+                : styles.menuButton
+            }
             aria-label="Open navigation menu"
             aria-expanded={navOpen}
             aria-controls="dashboard-sidebar"
@@ -407,8 +415,84 @@ export function AuthenticatedAppLayout() {
         <main className={styles.routeFrame}>
           <Outlet />
         </main>
+        <MobileTabBar />
       </div>
     </div>
+  );
+}
+
+function MobileTabBar() {
+  const createTo = `/projects/new?new=${Date.now()}`;
+  return (
+    <nav className={styles.mobileTabBar} aria-label="Primary mobile">
+      <NavLink
+        to="/library"
+        className={({ isActive }) =>
+          isActive ? `${styles.mobileTab} ${styles.mobileTabActive}` : styles.mobileTab
+        }
+      >
+        <TabIcon kind="library" />
+        <span>Library</span>
+      </NavLink>
+      <NavLink
+        to={createTo}
+        className={({ isActive }) =>
+          isActive
+            ? `${styles.mobileTab} ${styles.mobileTabCreate} ${styles.mobileTabActive}`
+            : `${styles.mobileTab} ${styles.mobileTabCreate}`
+        }
+      >
+        <TabIcon kind="create" />
+        <span>Create</span>
+      </NavLink>
+      <NavLink
+        to="/dashboard"
+        className={({ isActive }) =>
+          isActive ? `${styles.mobileTab} ${styles.mobileTabActive}` : styles.mobileTab
+        }
+      >
+        <TabIcon kind="activity" />
+        <span>Activity</span>
+      </NavLink>
+      <NavLink
+        to="/account"
+        className={({ isActive }) =>
+          isActive ? `${styles.mobileTab} ${styles.mobileTabActive}` : styles.mobileTab
+        }
+      >
+        <TabIcon kind="account" />
+        <span>Account</span>
+      </NavLink>
+    </nav>
+  );
+}
+
+function TabIcon({ kind }: { kind: "library" | "create" | "activity" | "account" }) {
+  if (kind === "library") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 6.5h16v11H4zM8 6.5v11M16 6.5v11" />
+      </svg>
+    );
+  }
+  if (kind === "create") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 5v14M5 12h14" />
+      </svg>
+    );
+  }
+  if (kind === "activity") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 13h4l2-5 4 10 2-5h4" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4.5 20a7.5 7.5 0 0 1 15 0" />
+    </svg>
   );
 }
 

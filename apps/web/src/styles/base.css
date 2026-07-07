@@ -56,3 +56,13 @@ button {
   cursor: pointer;
   font-size: 14px;
 }
+
+@media (max-width: 640px) {
+  button,
+  input,
+  select,
+  textarea,
+  [role="button"] {
+    min-height: 44px;
+  }
+}

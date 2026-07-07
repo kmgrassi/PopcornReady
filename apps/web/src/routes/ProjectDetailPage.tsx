@@ -292,6 +292,14 @@ export function ProjectOverviewPage({
 
       {!loading && !error && project ? (
         <div className={stagePanel ? styles.projectPageLayout : styles.projectContent} id="overview">
+          <MobileProjectOverview
+            projectId={projectId}
+            project={project}
+            storyboard={storyboard}
+            storyboardPreview={storyboardPreview}
+            media={media}
+            stagePanel={stagePanel}
+          />
           <div className={stagePanel ? styles.projectContent : undefined}>
             <section className={styles.projectTopLayout}>
               <div className={styles.projectPrimaryColumn}>
@@ -332,6 +340,99 @@ export function ProjectOverviewPage({
         </div>
       ) : null}
     </main>
+  );
+}
+
+function MobileProjectOverview({
+  projectId,
+  project,
+  storyboard,
+  storyboardPreview,
+  media,
+  stagePanel,
+}: {
+  projectId: string;
+  project: V1Project;
+  storyboard: ProjectStoryboard | null;
+  storyboardPreview: {
+    loading: boolean;
+    error: Error | null;
+    generating: boolean;
+    progress: StoryboardProgress;
+    onGenerate?: () => void;
+  };
+  media?: ProjectWatchMedia | null;
+  stagePanel?: ReactNode;
+}) {
+  const brief = project.brief;
+  const storyDone =
+    storyboardPreview.progress.total > 0
+      ? storyboardPreview.progress.ready + storyboardPreview.progress.failed
+      : storyboard?.scenes.length ?? 0;
+  const storyTotal = storyboardPreview.progress.total || storyboard?.scenes.length || 0;
+  const progressPercent = storyTotal > 0 ? Math.round((storyDone / storyTotal) * 100) : 0;
+  const statusSentence = storyboardPreview.generating
+    ? `Generating storyboard - ${storyDone} of ${storyTotal || "?"} panels`
+    : storyboard
+      ? `Storyboard ready - ${storyboard.scenes.length} scenes`
+      : media
+        ? "Video ready to watch"
+        : "Ready for storyboard generation";
+  const action = media
+    ? { label: "Watch", to: `/projects/${encodeURIComponent(projectId)}/watch` }
+    : storyboard
+      ? { label: "Review storyboard", to: `/projects/${encodeURIComponent(projectId)}/storyboard` }
+      : null;
+
+  return (
+    <section className={styles.mobileOverview} aria-label="Mobile project status">
+      <ProjectPoster name={project.name} posterUrl={project.posterUrl} />
+      <div className={styles.mobileStatusCard}>
+        <div>
+          <StatusChip status={project.status} />
+          <h2>{project.name}</h2>
+          <p>{statusSentence}</p>
+        </div>
+        <div
+          className={styles.mobileProgress}
+          role="progressbar"
+          aria-valuenow={progressPercent}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`${progressPercent}% complete`}
+        >
+          <span style={{ width: `${Math.max(2, progressPercent)}%` }} />
+        </div>
+        {action ? (
+          <ButtonLink variant="cta" to={action.to}>
+            {action.label}
+          </ButtonLink>
+        ) : storyboardPreview.onGenerate ? (
+          <Button
+            variant="cta"
+            disabled={storyboardPreview.generating || storyboardPreview.loading}
+            isLoading={storyboardPreview.generating || storyboardPreview.loading}
+            onClick={storyboardPreview.onGenerate}
+          >
+            Generate storyboard
+          </Button>
+        ) : null}
+      </div>
+      <details className={styles.mobileDetails}>
+        <summary>Project details</summary>
+        <dl>
+          <DetailTerm label="Hook" value={brief?.hookQuestion} />
+          <DetailTerm label="Big idea" value={brief?.oneBigIdea ?? brief?.goal} />
+          <DetailTerm label="Visual" value={brief?.strongestVisual} />
+        </dl>
+      </details>
+      {stagePanel ? (
+        <details className={styles.mobileDetails}>
+          <summary>View stages</summary>
+          <div className={styles.mobileStagePanel}>{stagePanel}</div>
+        </details>
+      ) : null}
+    </section>
   );
 }
 
