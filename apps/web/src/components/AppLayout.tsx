@@ -156,11 +156,12 @@ export function AppLayout() {
 // session. Production builds (DEV=false) always require login.
 const DEV_AUTOPILOT = import.meta.env.DEV;
 const FALLBACK_TABLET_BREAKPOINT = "900px";
+const FALLBACK_MOBILE_BREAKPOINT = "640px";
 
-function getTabletBreakpointQuery() {
+function getBreakpointQuery(token: string, fallback: string) {
   const breakpoint =
-    getComputedStyle(document.documentElement).getPropertyValue("--bp-tablet").trim() ||
-    FALLBACK_TABLET_BREAKPOINT;
+    getComputedStyle(document.documentElement).getPropertyValue(token).trim() ||
+    fallback;
   return `(max-width: ${breakpoint})`;
 }
 
@@ -180,7 +181,9 @@ export function AuthenticatedAppLayout() {
   }, [location.pathname, location.search]);
 
   useEffect(() => {
-    const mobileNavQuery = window.matchMedia(getTabletBreakpointQuery());
+    const mobileNavQuery = window.matchMedia(
+      getBreakpointQuery("--bp-tablet", FALLBACK_TABLET_BREAKPOINT),
+    );
     const closeWhenDesktop = () => {
       if (!mobileNavQuery.matches) setNavOpen(false);
     };
@@ -188,6 +191,20 @@ export function AuthenticatedAppLayout() {
     mobileNavQuery.addEventListener("change", closeWhenDesktop);
     return () => {
       mobileNavQuery.removeEventListener("change", closeWhenDesktop);
+    };
+  }, []);
+
+  useEffect(() => {
+    const phoneTabsQuery = window.matchMedia(
+      getBreakpointQuery("--bp-mobile", FALLBACK_MOBILE_BREAKPOINT),
+    );
+    const closeWhenPhoneTabsTakeOver = () => {
+      if (phoneTabsQuery.matches) setNavOpen(false);
+    };
+    closeWhenPhoneTabsTakeOver();
+    phoneTabsQuery.addEventListener("change", closeWhenPhoneTabsTakeOver);
+    return () => {
+      phoneTabsQuery.removeEventListener("change", closeWhenPhoneTabsTakeOver);
     };
   }, []);
 
@@ -233,7 +250,9 @@ export function AuthenticatedAppLayout() {
   const meQuery = useMeQuery(authScope, {
     enabled: dashboardQueriesEnabled,
   });
-  const dashboardSummaryQuery = useDashboardSummaryQuery(authScope);
+  const dashboardSummaryQuery = useDashboardSummaryQuery(authScope, {
+    enabled: dashboardQueriesEnabled,
+  });
   const me = meQuery.data ?? null;
   const mobileActivityCount =
     dashboardSummaryQuery.data?.summary.activeRuns.filter((run) =>
