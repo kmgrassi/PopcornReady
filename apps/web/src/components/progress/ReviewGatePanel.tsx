@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   GENERATION_STAGE_LABELS,
   type GenerationStageItem,
@@ -91,6 +90,19 @@ function briefMetaItems(brief: VideoBriefInput): string[] {
   ].filter((item): item is string => Boolean(item));
 }
 
+function splitBriefReviewFields(fields: [string, string][]) {
+  const priority = new Set(["Hook", "Big idea"]);
+  const visible = [
+    ...fields.filter(([label]) => priority.has(label)),
+    ...fields.filter(([label]) => !priority.has(label)),
+  ].slice(0, 2);
+  const visibleLabels = new Set(visible.map(([label]) => label));
+  return {
+    visible,
+    hidden: fields.filter(([label]) => !visibleLabels.has(label)),
+  };
+}
+
 function BriefReviewOutput({
   brief,
   loading,
@@ -98,8 +110,6 @@ function BriefReviewOutput({
   brief: VideoBriefInput | null;
   loading: boolean;
 }) {
-  const [showAll, setShowAll] = useState(false);
-
   if (loading) {
     return (
       <div className={styles.briefReviewCard}>
@@ -118,7 +128,8 @@ function BriefReviewOutput({
     ["Payoff", brief.payoff],
     ["Caveat", brief.caveat],
   ].filter((entry): entry is [string, string] => Boolean(entry[1]));
-  const visibleFields = showAll ? fields : fields.slice(0, 2);
+  const { visible: visibleFields, hidden: hiddenFields } =
+    splitBriefReviewFields(fields);
 
   return (
     <article className={styles.briefReviewCard}>
@@ -131,26 +142,28 @@ function BriefReviewOutput({
       {brief.strongestVisual ? (
         <p className={styles.briefReviewVisual}>{brief.strongestVisual}</p>
       ) : null}
-      {fields.length > 0 ? (
-        <>
+      {visibleFields.length > 0 ? (
+        <dl className={styles.briefReviewFields}>
+          {visibleFields.map(([label, value]) => (
+            <div className={styles.briefReviewField} key={label}>
+              <dt>{label}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+      {hiddenFields.length > 0 ? (
+        <details className={styles.briefReviewMore}>
+          <summary>Show all</summary>
           <dl className={styles.briefReviewFields}>
-            {visibleFields.map(([label, value]) => (
+            {hiddenFields.map(([label, value]) => (
               <div className={styles.briefReviewField} key={label}>
                 <dt>{label}</dt>
                 <dd>{value}</dd>
               </div>
             ))}
           </dl>
-          {fields.length > visibleFields.length ? (
-            <button
-              className={styles.disclosureButton}
-              type="button"
-              onClick={() => setShowAll(true)}
-            >
-              Show all brief details
-            </button>
-          ) : null}
-        </>
+        </details>
       ) : null}
     </article>
   );

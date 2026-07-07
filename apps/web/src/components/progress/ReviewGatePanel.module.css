@@ -95,6 +95,30 @@
   margin: var(--space-1) 0 0;
 }
 
+.briefReviewMore {
+  border-top: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
+  padding-top: var(--space-3);
+}
+
+.briefReviewMore summary {
+  width: max-content;
+  max-width: 100%;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 850;
+}
+
+.briefReviewMore summary:hover {
+  color: var(--text-strong);
+}
+
+.briefReviewMore summary:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
 .briefReviewField {
   min-width: 0;
 }
@@ -324,7 +348,7 @@
   .reviewCancelButton {
     justify-content: center;
     margin-right: 0;
-    margin-top: var(--space-2);
+    min-height: 44px;
   }
 }
 
@@ -332,5 +356,43 @@
   .primaryButton,
   .secondaryButton {
     transition: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .reviewPanel {
+    gap: var(--space-4);
+    padding: var(--space-4);
+  }
+
+  .reviewBadge {
+    letter-spacing: 0;
+  }
+
+  .reviewTitle {
+    margin-top: var(--space-3);
+    font-size: var(--title-md);
+  }
+
+  .reviewDescription,
+  .briefReviewVisual {
+    font-size: var(--text-md);
+  }
+
+  .briefReviewCard {
+    padding: var(--space-4);
+  }
+
+  .briefReviewMetaRow {
+    display: none;
+  }
+
+  .briefReviewGoal {
+    font-size: var(--title-sm);
+  }
+
+  .primaryButton,
+  .secondaryButton {
+    min-height: 48px;
   }
 }
