@@ -56,3 +56,22 @@ button {
   cursor: pointer;
   font-size: 14px;
 }
+
+@media (max-width: 640px) {
+  button,
+  [role="button"],
+  input,
+  select,
+  textarea,
+  a {
+    min-width: var(--touch-target-min);
+    min-height: var(--touch-target-min);
+  }
+
+  input[type="checkbox"],
+  input[type="radio"],
+  input[type="hidden"] {
+    min-width: initial;
+    min-height: initial;
+  }
+}
