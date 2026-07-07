@@ -151,7 +151,7 @@
   position: relative;
   display: flex;
   align-items: center;
-  min-height: 40px;
+  min-height: var(--touch-target-min);
   padding: 0 var(--space-3);
   border-radius: var(--radius-sm);
   color: var(--muted);
@@ -250,8 +250,8 @@
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
   padding: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -349,7 +349,7 @@
   min-width: 0;
 }
 
-@media (max-width: 860px) {
+@media (max-width: 900px) {
   .shell {
     grid-template-columns: 1fr;
     max-width: 100vw;
@@ -400,11 +400,6 @@
 
   .desktopOnly {
     display: none;
-  }
-
-  /* Comfortable touch targets inside the drawer. */
-  .navLink {
-    min-height: 44px;
   }
 
   .content,

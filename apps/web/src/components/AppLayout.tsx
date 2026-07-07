@@ -110,7 +110,14 @@ export function AppLayout() {
 // via the API's hybrid "autopilot" identity; logging in takes over with the real
 // session. Production builds (DEV=false) always require login.
 const DEV_AUTOPILOT = import.meta.env.DEV;
-const MOBILE_NAV_MEDIA_QUERY = "(max-width: 860px)";
+const FALLBACK_TABLET_BREAKPOINT = "900px";
+
+function getTabletBreakpointQuery() {
+  const breakpoint =
+    getComputedStyle(document.documentElement).getPropertyValue("--bp-tablet").trim() ||
+    FALLBACK_TABLET_BREAKPOINT;
+  return `(max-width: ${breakpoint})`;
+}
 
 export function AuthenticatedAppLayout() {
   const auth = useAuth();
@@ -128,7 +135,7 @@ export function AuthenticatedAppLayout() {
   }, [location.pathname, location.search]);
 
   useEffect(() => {
-    const mobileNavQuery = window.matchMedia(MOBILE_NAV_MEDIA_QUERY);
+    const mobileNavQuery = window.matchMedia(getTabletBreakpointQuery());
     const closeWhenDesktop = () => {
       if (!mobileNavQuery.matches) setNavOpen(false);
     };
