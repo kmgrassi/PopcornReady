@@ -195,7 +195,18 @@ export function VideoEditPage() {
             {artifactUrl("video") ? (
               <figure className={styles.resultCell}>
                 <video src={artifactUrl("video") ?? undefined} controls playsInline />
-                <figcaption>Edited video</figcaption>
+                <figcaption>
+                  Edited video
+                  {" · "}
+                  <a
+                    className={styles.artifactLink}
+                    href={artifactUrl("video") ?? undefined}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open in new tab
+                  </a>
+                </figcaption>
               </figure>
             ) : null}
           </div>

@@ -241,6 +241,21 @@
   color: var(--muted);
 }
 
+.artifactLink {
+  color: var(--link, var(--accent));
+  text-decoration: none;
+}
+
+.artifactLink:hover {
+  text-decoration: underline;
+}
+
+.artifactLink:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 55%, transparent);
+  border-radius: 4px;
+}
+
 .note {
   font-size: 13px;
   line-height: 1.5;
