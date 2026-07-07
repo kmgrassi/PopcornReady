@@ -734,7 +734,7 @@ export interface GenerationStageItem {
 }
 
 export interface BoardRevisionTarget {
-  scope: "concept" | "brief" | "script" | "board" | "tile";
+  scope: "concept" | "brief" | "script" | "board" | "tile" | "asset";
   runId?: string;
   stageId?: string;
   itemId?: string;
@@ -748,6 +748,7 @@ export interface BoardRevisionTarget {
   keyframeAssetId?: string;
   clipAssetId?: string;
   assetId?: string;
+  targetAssetUse?: AssetUse;
   artifactId?: string;
   label?: string;
 }
