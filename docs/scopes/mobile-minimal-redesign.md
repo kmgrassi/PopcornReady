@@ -177,8 +177,11 @@ on it.
 - Migrate the ad-hoc 360–1100px queries screen by screen; shell and page
   should change shape at the same width.
 - Enforce `min-height: 44px` / `min-width: 44px` on all interactive elements
-  at mobile widths in `globals.css`, instead of the current per-component
-  opt-ins. Fix the 40×40 hamburger (or delete it per P0-1).
+  at mobile widths in `base.css` (the token/base/utility layer), instead of
+  the current per-component opt-ins. Per the styling guidance in `AGENTS.md`,
+  do **not** add this to the legacy `globals.css` monolith — it is retired
+  and must not grow; component-specific sizing belongs in co-located
+  `*.module.css`. Fix the 40×40 hamburger (or delete it per P0-1).
 
 ### P1-2 · Make the dashboard a feed, not a panel collection
 
