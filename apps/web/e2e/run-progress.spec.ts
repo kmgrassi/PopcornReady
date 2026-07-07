@@ -42,6 +42,14 @@ test.beforeEach(async ({ page }) => {
   await mockProject(page);
 });
 
+async function getVisibleStageRail(page: Page) {
+  const mobilePipelineToggle = page.getByText("Show pipeline").filter({ visible: true });
+  if ((await mobilePipelineToggle.count()) > 0) {
+    await mobilePipelineToggle.first().click();
+  }
+  return page.getByRole("complementary", { name: "Stage rail" });
+}
+
 test("polls an active run, cancels it, and clears the recovery hint @mobile", async ({ page }) => {
   let getCount = 0;
   let canceled = false;
@@ -91,8 +99,7 @@ test("polls an active run, cancels it, and clears the recovery hint @mobile", as
     .poll(() => overallProgress.getAttribute("aria-valuenow"))
     .toBe("58");
 
-  await page.getByText("Show pipeline").click();
-  const rail = page.getByRole("complementary", { name: "Stage rail" });
+  const rail = await getVisibleStageRail(page);
   await expect(rail.getByText("Shots")).toBeVisible();
   await expect(rail.getByText("In progress")).toBeVisible();
   await expect(rail.getByRole("button", { name: "Stop here" })).toBeVisible();
@@ -134,8 +141,7 @@ test("shows in-progress rail state when active stage rows have not caught up @mo
 
   await page.goto(runPath);
 
-  await page.getByText("Show pipeline").click();
-  const rail = page.getByRole("complementary", { name: "Stage rail" });
+  const rail = await getVisibleStageRail(page);
   await expect(rail.getByText("Pipeline")).toBeVisible();
   await expect(rail.getByText("In progress")).toBeVisible();
   await expect(rail.getByText("Generating shot candidates.")).toBeVisible();
