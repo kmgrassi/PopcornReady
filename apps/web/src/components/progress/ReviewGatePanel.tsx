@@ -91,6 +91,19 @@ function briefMetaItems(brief: VideoBriefInput): string[] {
   ].filter((item): item is string => Boolean(item));
 }
 
+function splitBriefReviewFields(fields: [string, string][]) {
+  const priority = new Set(["Hook", "Big idea"]);
+  const visible = [
+    ...fields.filter(([label]) => priority.has(label)),
+    ...fields.filter(([label]) => !priority.has(label)),
+  ].slice(0, 2);
+  const visibleLabels = new Set(visible.map(([label]) => label));
+  return {
+    visible,
+    hidden: fields.filter(([label]) => !visibleLabels.has(label)),
+  };
+}
+
 function BriefReviewOutput({
   brief,
   loading,
@@ -98,8 +111,6 @@ function BriefReviewOutput({
   brief: VideoBriefInput | null;
   loading: boolean;
 }) {
-  const [showAll, setShowAll] = useState(false);
-
   if (loading) {
     return (
       <div className={styles.briefReviewCard}>
@@ -111,16 +122,15 @@ function BriefReviewOutput({
   if (!brief) return null;
 
   const fields = [
-    ["Hook", brief.hookQuestion],
-    ["Big idea", brief.oneBigIdea],
-  ].filter((entry): entry is [string, string] => Boolean(entry[1]));
-  const extraFields = [
     ["Audience", brief.audience],
     ["Style", brief.style],
+    ["Hook", brief.hookQuestion],
+    ["Big idea", brief.oneBigIdea],
     ["Payoff", brief.payoff],
     ["Caveat", brief.caveat],
   ].filter((entry): entry is [string, string] => Boolean(entry[1]));
-  const visibleFields = showAll ? [...fields, ...extraFields] : fields;
+  const { visible: visibleFields, hidden: hiddenFields } =
+    splitBriefReviewFields(fields);
 
   return (
     <article className={styles.briefReviewCard}>
@@ -143,14 +153,18 @@ function BriefReviewOutput({
           ))}
         </dl>
       ) : null}
-      {extraFields.length > 0 ? (
-        <button
-          type="button"
-          className={styles.showAllButton}
-          onClick={() => setShowAll((current) => !current)}
-        >
-          {showAll ? "Show less" : "Show all"}
-        </button>
+      {hiddenFields.length > 0 ? (
+        <details className={styles.briefReviewMore}>
+          <summary>Show all</summary>
+          <dl className={styles.briefReviewFields}>
+            {hiddenFields.map(([label, value]) => (
+              <div className={styles.briefReviewField} key={label}>
+                <dt>{label}</dt>
+                <dd>{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </details>
       ) : null}
     </article>
   );
@@ -169,8 +183,18 @@ export function ReviewGatePanel({
   onFeedbackNoteChange,
   onApprove,
 }: ReviewGatePanelProps) {
+  const [feedbackOpen, setFeedbackOpen] = useState(Boolean(feedbackNote));
   const isBriefReviewGate = stageType === "brief_intake";
-  const [showFeedback, setShowFeedback] = useState(Boolean(feedbackNote));
+  const showFeedbackField = feedbackOpen || Boolean(feedbackNote);
+
+  function requestChanges() {
+    if (!reviewActions) return;
+    if (!showFeedbackField) {
+      setFeedbackOpen(true);
+      return;
+    }
+    reviewActions.onReject(feedbackNote);
+  }
 
   return (
     <section className={styles.reviewPanel} aria-labelledby="review-gate-heading">
@@ -209,22 +233,22 @@ export function ReviewGatePanel({
           </span>
         </div>
       )}
-      {showFeedback ? (
+      {showFeedbackField ? (
         <div className={styles.feedbackField}>
           <label className={styles.feedbackLabel} htmlFor="review-feedback-note">
-            Feedback
+            What should change?
           </label>
           <textarea
             id="review-feedback-note"
             className={styles.feedbackTextarea}
             value={feedbackNote}
             onChange={(event) => onFeedbackNoteChange(event.target.value)}
-            placeholder="Optional feedback before continuing..."
+            placeholder="Tell the agent what to revise before continuing."
             disabled={!!pending}
             rows={4}
           />
           <p className={styles.feedbackHint}>
-            Use this when you want the generator to revise this stage before continuing.
+            Your note goes back to the generator for this checkpoint.
           </p>
         </div>
       ) : null}
@@ -239,28 +263,15 @@ export function ReviewGatePanel({
             <button
               type="button"
               className={styles.secondaryButton}
-              onClick={() => {
-                if (!showFeedback) {
-                  setShowFeedback(true);
-                  return;
-                }
-                reviewActions.onReject(feedbackNote);
-              }}
+              onClick={requestChanges}
               disabled={!!pending}
             >
-              {pending === "reject" ? "Requesting..." : showFeedback ? "Send request" : "Request changes"}
+              {pending === "reject"
+                ? "Requesting..."
+                : showFeedbackField
+                  ? "Send changes"
+                  : "Request changes"}
             </button>
-            <details className={styles.moreActions}>
-              <summary>More</summary>
-              <button
-                type="button"
-                className={styles.reviewCancelButton}
-                onClick={reviewActions.onCancel}
-                disabled={!!pending}
-              >
-                {pending === "cancel" ? "Stopping..." : "Stop here"}
-              </button>
-            </details>
           </>
         ) : null}
         <button
@@ -271,6 +282,19 @@ export function ReviewGatePanel({
         >
           {pending === "approve" ? "Approving..." : "Approve and continue"}
         </button>
+        {reviewActions ? (
+          <details className={styles.moreActions}>
+            <summary>More</summary>
+            <button
+              type="button"
+              className={styles.reviewCancelButton}
+              onClick={reviewActions.onCancel}
+              disabled={!!pending}
+            >
+              {pending === "cancel" ? "Stopping..." : "Stop here"}
+            </button>
+          </details>
+        ) : null}
       </div>
     </section>
   );

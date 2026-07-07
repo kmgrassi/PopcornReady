@@ -6,6 +6,7 @@ import {
   isCharacterReferenceHarnessEnabled,
 } from "./dev-character-reference.js";
 import { devToolTestsRouter, isToolTestHarnessEnabled } from "./dev-tool-tests.js";
+import { devVideoEditRouter, isVideoEditHarnessEnabled } from "./dev-video-edit.js";
 import { devWebE2ERouter, isWebE2EHarnessEnabled } from "./dev-web-e2e.js";
 import { discoverRouter } from "./discover.js";
 import { guestRetentionRouter } from "./guest-retention.js";
@@ -35,5 +36,10 @@ export function mountPublicV1Routes(v1: Router) {
   // Dev-only live-generation character-reference harness. Never mounted in production.
   if (isCharacterReferenceHarnessEnabled()) {
     v1.use(devCharacterReferenceRouter);
+  }
+
+  // Dev-only "upload a video, AI edits it" harness. Never mounted in production.
+  if (isVideoEditHarnessEnabled()) {
+    v1.use(devVideoEditRouter);
   }
 }

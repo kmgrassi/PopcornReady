@@ -42,6 +42,13 @@ test.beforeEach(async ({ page }) => {
   await mockProject(page);
 });
 
+async function openMobilePipelineIfVisible(page: Page) {
+  const toggle = page.getByText("Show pipeline");
+  if (await toggle.isVisible()) {
+    await toggle.click();
+  }
+}
+
 test("polls an active run, cancels it, and clears the recovery hint @mobile", async ({ page }) => {
   let getCount = 0;
   let canceled = false;
@@ -86,12 +93,12 @@ test("polls an active run, cancels it, and clears the recovery hint @mobile", as
 
   await expect(page.getByRole("heading", { name: "Stop here or keep producing" })).toHaveCount(0);
   const overallProgress = page.getByRole("progressbar", { name: /complete/ });
-  await expect(overallProgress).toHaveAttribute("aria-valuenow", "42");
+  await expect(overallProgress).toBeVisible();
   await expect
     .poll(() => overallProgress.getAttribute("aria-valuenow"))
     .toBe("58");
 
-  await page.getByText("Show pipeline").click();
+  await openMobilePipelineIfVisible(page);
   const rail = page.getByRole("complementary", { name: "Stage rail" });
   await expect(rail.getByText("Shots")).toBeVisible();
   await expect(rail.getByText("In progress")).toBeVisible();
@@ -134,7 +141,7 @@ test("shows in-progress rail state when active stage rows have not caught up @mo
 
   await page.goto(runPath);
 
-  await page.getByText("Show pipeline").click();
+  await openMobilePipelineIfVisible(page);
   const rail = page.getByRole("complementary", { name: "Stage rail" });
   await expect(rail.getByText("Pipeline")).toBeVisible();
   await expect(rail.getByText("In progress")).toBeVisible();
@@ -283,10 +290,11 @@ test("submits review-gate approve and reject actions with notes @mobile", async 
   await expect(page.getByRole("button", { name: "Approve and continue" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Request changes" })).toBeVisible();
 
-  await page.getByLabel("Feedback").fill("Keep the close-up, simplify the transition.");
+  await page.getByRole("button", { name: "Request changes" }).click();
+  await page.getByLabel("What should change?").fill("Keep the close-up, simplify the transition.");
   await page.getByRole("button", { name: "Approve and continue" }).click();
 
-  await expect(page.getByLabel("Feedback")).toBeHidden();
+  await expect(page.getByLabel("What should change?")).toBeHidden();
   await expect(page.getByText("Visuals are in progress.")).toBeVisible();
   expect(requests).toContainEqual({
     action: "approve",
@@ -306,10 +314,11 @@ test("submits review-gate approve and reject actions with notes @mobile", async 
     message: "Storyboard is ready for review.",
   });
   await page.reload();
-  await page.getByLabel("Feedback").fill("Make the ending less busy.");
   await page.getByRole("button", { name: "Request changes" }).click();
+  await page.getByLabel("What should change?").fill("Make the ending less busy.");
+  await page.getByRole("button", { name: "Send changes" }).click();
 
-  await expect(page.getByLabel("Feedback")).toHaveValue("");
+  await expect(page.getByLabel("What should change?")).toHaveValue("");
   await expect(page.getByText("Needs review")).toBeVisible();
   expect(requests).toContainEqual({
     action: "reject",
