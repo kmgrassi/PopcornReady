@@ -91,6 +91,7 @@ test("polls an active run, cancels it, and clears the recovery hint @mobile", as
     .poll(() => overallProgress.getAttribute("aria-valuenow"))
     .toBe("58");
 
+  await page.getByText("Show pipeline").click();
   const rail = page.getByRole("complementary", { name: "Stage rail" });
   await expect(rail.getByText("Shots")).toBeVisible();
   await expect(rail.getByText("In progress")).toBeVisible();
@@ -133,6 +134,7 @@ test("shows in-progress rail state when active stage rows have not caught up @mo
 
   await page.goto(runPath);
 
+  await page.getByText("Show pipeline").click();
   const rail = page.getByRole("complementary", { name: "Stage rail" });
   await expect(rail.getByText("Pipeline")).toBeVisible();
   await expect(rail.getByText("In progress")).toBeVisible();

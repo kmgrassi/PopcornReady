@@ -10,6 +10,7 @@ import { RunProgressPage } from "./routes/RunProgressPage";
 import { StoryboardPage } from "./routes/StoryboardPage";
 import { AdminPage } from "./routes/AdminPage";
 import { AdminEvalsPage } from "./routes/AdminEvalsPage";
+import { ActivityPage } from "./routes/ActivityPage";
 import { AnchorDetailPage } from "./routes/anchors/AnchorDetailPage";
 import { AnchorsPage } from "./routes/anchors/AnchorsPage";
 import { AnchorsMinePage } from "./routes/AnchorsMinePage";
@@ -101,6 +102,7 @@ export function App() {
 
         <Route element={<AuthenticatedAppLayout />}>
           <Route path="/dashboard" element={<LaunchpadPage />} />
+          <Route path="/activity" element={<ActivityPage />} />
           <Route path="/inspiration" element={<InspirationPage />} />
           <Route path="/library" element={<LibraryPage />} />
           <Route path="/library/:tab" element={<LibraryPage />} />

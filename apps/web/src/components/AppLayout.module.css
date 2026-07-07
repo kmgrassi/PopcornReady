@@ -157,7 +157,7 @@
   position: relative;
   display: flex;
   align-items: center;
-  min-height: 40px;
+  min-height: var(--touch-target-min);
   padding: 0 var(--space-3);
   border-radius: var(--radius-sm);
   color: var(--muted);
@@ -256,8 +256,8 @@
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
   padding: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -355,7 +355,11 @@
   min-width: 0;
 }
 
-@media (max-width: 860px) {
+.mobileTabBar {
+  display: none;
+}
+
+@media (max-width: 900px) {
   .shell {
     grid-template-columns: 1fr;
     max-width: 100vw;
@@ -408,11 +412,6 @@
     display: none;
   }
 
-  /* Comfortable touch targets inside the drawer. */
-  .navLink {
-    min-height: 44px;
-  }
-
   .content,
   .routeFrame {
     width: 100%;
@@ -452,8 +451,139 @@
   }
 }
 
+@media (max-width: 640px) {
+  .sidebar,
+  .scrim,
+  .menuButton,
+  .account {
+    display: none;
+  }
+
+  .topbar {
+    min-height: 52px;
+    padding: calc(var(--space-2) + var(--safe-area-top)) var(--space-4)
+      var(--space-2);
+  }
+
+  .breadcrumbSlot {
+    order: initial;
+    flex: 1 1 auto;
+  }
+
+  .routeFrame {
+    padding-bottom: calc(74px + var(--safe-area-bottom));
+  }
+
+  .mobileTabBar {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 30;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-1);
+    padding: var(--space-2) var(--space-2)
+      calc(var(--space-2) + var(--safe-area-bottom));
+    border-top: 1px solid var(--border);
+    background: var(--nav-bg);
+    box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.32);
+    backdrop-filter: blur(14px);
+  }
+
+  .mobileTab {
+    position: relative;
+    display: flex;
+    min-width: 0;
+    min-height: 52px;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-1);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: var(--text-xs);
+    font-weight: 800;
+    line-height: 1.1;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+    transition:
+      background var(--transition),
+      color var(--transition),
+      transform var(--transition);
+  }
+
+  .mobileTab svg {
+    display: block;
+    width: 21px;
+    height: 21px;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 2;
+  }
+
+  .mobileTab:hover,
+  .mobileTabActive {
+    background: var(--surface-2);
+    color: var(--text-strong);
+  }
+
+  .mobileTab:active {
+    transform: translateY(1px);
+  }
+
+  .mobileTab:focus-visible {
+    outline: none;
+    box-shadow: var(--ring);
+  }
+
+  .mobileTabPrimary {
+    background: var(--cta);
+    color: var(--cta-contrast);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .mobileTabPrimary:hover,
+  .mobileTabPrimary.mobileTabActive {
+    background: var(--cta);
+    color: var(--cta-contrast);
+  }
+
+  .mobileTabIconWrap {
+    position: relative;
+    display: inline-flex;
+  }
+
+  .mobileTabBadge {
+    position: absolute;
+    top: -8px;
+    right: -10px;
+    display: inline-flex;
+    min-width: 17px;
+    height: 17px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 var(--space-1);
+    border: 1px solid var(--nav-bg);
+    border-radius: var(--radius-pill);
+    background: var(--cta);
+    color: var(--cta-contrast);
+    font-size: 10px;
+    font-weight: 900;
+    line-height: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .sidebar {
+  .sidebar,
+  .mobileTab {
     transition: none;
   }
 }

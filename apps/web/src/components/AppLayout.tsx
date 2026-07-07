@@ -31,7 +31,12 @@ import {
   getDashboardBreadcrumbParams,
   getDashboardBreadcrumbs,
 } from "../lib/dashboardBreadcrumbs";
-import { queryClient, useMeQuery, useProjectQuery } from "../lib/queryClient";
+import {
+  queryClient,
+  useDashboardSummaryQuery,
+  useMeQuery,
+  useProjectQuery,
+} from "../lib/queryClient";
 import { UploadQueueProvider } from "../lib/uploadQueue";
 import styles from "./AppLayout.module.css";
 
@@ -51,6 +56,46 @@ const PRIMARY_NAV = [
     label: "Inspiration",
     to: "/inspiration",
     activePaths: ["/inspiration"],
+  },
+];
+
+type MobileTabItem = {
+  label: string;
+  to: string;
+  activePaths: readonly string[];
+  excludePaths?: readonly string[];
+  icon: "library" | "create" | "activity" | "account";
+  primary?: boolean;
+  badge?: "activity";
+};
+
+const MOBILE_TABS: readonly MobileTabItem[] = [
+  {
+    label: "Library",
+    to: "/library",
+    activePaths: ["/library", "/projects", "/assets", "/outputs"],
+    excludePaths: ["/projects/new"],
+    icon: "library",
+  },
+  {
+    label: "Create",
+    to: "/projects/new",
+    activePaths: ["/projects/new"],
+    icon: "create",
+    primary: true,
+  },
+  {
+    label: "Activity",
+    to: "/activity",
+    activePaths: ["/activity", "/runs"],
+    icon: "activity",
+    badge: "activity",
+  },
+  {
+    label: "Account",
+    to: "/account",
+    activePaths: ["/account", "/settings", "/faq", "/admin", "/inspiration"],
+    icon: "account",
   },
 ];
 
@@ -110,7 +155,15 @@ export function AppLayout() {
 // via the API's hybrid "autopilot" identity; logging in takes over with the real
 // session. Production builds (DEV=false) always require login.
 const DEV_AUTOPILOT = import.meta.env.DEV;
-const MOBILE_NAV_MEDIA_QUERY = "(max-width: 860px)";
+const FALLBACK_TABLET_BREAKPOINT = "900px";
+const FALLBACK_MOBILE_BREAKPOINT = "640px";
+
+function getBreakpointQuery(token: string, fallback: string) {
+  const breakpoint =
+    getComputedStyle(document.documentElement).getPropertyValue(token).trim() ||
+    fallback;
+  return `(max-width: ${breakpoint})`;
+}
 
 export function AuthenticatedAppLayout() {
   const auth = useAuth();
@@ -128,7 +181,9 @@ export function AuthenticatedAppLayout() {
   }, [location.pathname, location.search]);
 
   useEffect(() => {
-    const mobileNavQuery = window.matchMedia(MOBILE_NAV_MEDIA_QUERY);
+    const mobileNavQuery = window.matchMedia(
+      getBreakpointQuery("--bp-tablet", FALLBACK_TABLET_BREAKPOINT),
+    );
     const closeWhenDesktop = () => {
       if (!mobileNavQuery.matches) setNavOpen(false);
     };
@@ -136,6 +191,20 @@ export function AuthenticatedAppLayout() {
     mobileNavQuery.addEventListener("change", closeWhenDesktop);
     return () => {
       mobileNavQuery.removeEventListener("change", closeWhenDesktop);
+    };
+  }, []);
+
+  useEffect(() => {
+    const phoneTabsQuery = window.matchMedia(
+      getBreakpointQuery("--bp-mobile", FALLBACK_MOBILE_BREAKPOINT),
+    );
+    const closeWhenPhoneTabsTakeOver = () => {
+      if (phoneTabsQuery.matches) setNavOpen(false);
+    };
+    closeWhenPhoneTabsTakeOver();
+    phoneTabsQuery.addEventListener("change", closeWhenPhoneTabsTakeOver);
+    return () => {
+      phoneTabsQuery.removeEventListener("change", closeWhenPhoneTabsTakeOver);
     };
   }, []);
 
@@ -181,7 +250,14 @@ export function AuthenticatedAppLayout() {
   const meQuery = useMeQuery(authScope, {
     enabled: dashboardQueriesEnabled,
   });
+  const dashboardSummaryQuery = useDashboardSummaryQuery(authScope, {
+    enabled: dashboardQueriesEnabled,
+  });
   const me = meQuery.data ?? null;
+  const mobileActivityCount =
+    dashboardSummaryQuery.data?.summary.activeRuns.filter((run) =>
+      run.status === "queued" || run.status === "running" || Boolean(run.reviewGate)
+    ).length ?? 0;
   const accountLabel = useMemo(() => {
     if (auth.isAnonymous) return "Guest account";
     if (auth.user?.email) return auth.user.email;
@@ -407,9 +483,99 @@ export function AuthenticatedAppLayout() {
         <main className={styles.routeFrame}>
           <Outlet />
         </main>
+        <MobileTabBar activityCount={mobileActivityCount} />
       </div>
     </div>
   );
+}
+
+function MobileTabBar({ activityCount }: { activityCount: number }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  return (
+    <nav className={styles.mobileTabBar} aria-label="Primary mobile">
+      {MOBILE_TABS.map((item) => {
+        const isActive = item.activePaths.some((path) =>
+          location.pathname === path || location.pathname.startsWith(`${path}/`)
+        ) && !item.excludePaths?.some((path) =>
+          location.pathname === path || location.pathname.startsWith(`${path}/`)
+        );
+        const className = [
+          styles.mobileTab,
+          isActive ? styles.mobileTabActive : "",
+          item.primary ? styles.mobileTabPrimary : "",
+        ]
+          .filter(Boolean)
+          .join(" ");
+        const badge =
+          item.badge === "activity" && activityCount > 0
+            ? Math.min(activityCount, 9).toString()
+            : null;
+
+        if (item.primary) {
+          return (
+            <button
+              key={item.to}
+              type="button"
+              className={className}
+              aria-current={isActive ? "page" : undefined}
+              onClick={() => navigate(`/projects/new?new=${Date.now()}`)}
+            >
+              <MobileTabIcon name={item.icon} />
+              <span>{item.label}</span>
+            </button>
+          );
+        }
+
+        return (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            className={className}
+            aria-current={isActive ? "page" : undefined}
+          >
+            <span className={styles.mobileTabIconWrap}>
+              <MobileTabIcon name={item.icon} />
+              {badge ? <span className={styles.mobileTabBadge}>{badge}</span> : null}
+            </span>
+            <span>{item.label}</span>
+          </NavLink>
+        );
+      })}
+    </nav>
+  );
+}
+
+function MobileTabIcon({ name }: { name: MobileTabItem["icon"] }) {
+  switch (name) {
+    case "library":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 6.5h16M4 12h16M4 17.5h16" />
+          <path d="M7 4.5v15M17 4.5v15" />
+        </svg>
+      );
+    case "create":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      );
+    case "activity":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 13h4l2-6 4 10 2-4h4" />
+        </svg>
+      );
+    case "account":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" />
+          <path d="M5 20a7 7 0 0 1 14 0" />
+        </svg>
+      );
+  }
 }
 
 export function RootProviders({ children }: { children: ReactNode }) {
