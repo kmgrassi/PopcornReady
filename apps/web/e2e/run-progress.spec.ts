@@ -84,6 +84,31 @@ async function submitReviewChanges(page: Page) {
   await page.getByRole("button", { name: "Request changes" }).click();
 }
 
+async function requestReviewChanges(page: Page, note: string) {
+  const legacyFeedback = page.getByLabel("Feedback");
+  if (await legacyFeedback.isVisible()) {
+    await legacyFeedback.fill(note);
+    await page.getByRole("button", { name: "Request changes" }).click();
+    return;
+  }
+
+  await page.getByRole("button", { name: "Request changes" }).click();
+  await page.getByLabel("What should change?").fill(note);
+  await page.getByRole("button", { name: "Send changes" }).click();
+}
+
+async function expectReviewFeedbackCleared(page: Page) {
+  const feedback = page.getByLabel(/^(Feedback|What should change\?)$/);
+  await expect
+    .poll(async () => {
+      if ((await feedback.count()) === 0) return "";
+      const first = feedback.first();
+      if (!(await first.isVisible().catch(() => false))) return "";
+      return first.inputValue();
+    })
+    .toBe("");
+}
+
 test("polls an active run, cancels it, and clears the recovery hint @mobile", async ({ page }) => {
   let getCount = 0;
   let canceled = false;
@@ -325,11 +350,11 @@ test("submits review-gate approve and reject actions with notes @mobile", async 
   await fillReviewFeedback(page, "Keep the close-up, simplify the transition.");
   await page.getByRole("button", { name: "Approve and continue" }).click();
 
-  await expect(page.getByLabel(/^(Feedback|What should change\?)$/)).toBeHidden();
+  await expectReviewFeedbackCleared(page);
   await expect(page.getByText("Visuals are in progress.")).toBeVisible();
   expect(requests).toContainEqual({
     action: "approve",
-    body: {},
+    body: { note: "Keep the close-up, simplify the transition." },
   });
 
   detail = runDetail({
@@ -345,10 +370,9 @@ test("submits review-gate approve and reject actions with notes @mobile", async 
     message: "Storyboard is ready for review.",
   });
   await page.reload();
-  await fillReviewFeedback(page, "Make the ending less busy.");
-  await submitReviewChanges(page);
+  await requestReviewChanges(page, "Make the ending less busy.");
 
-  await expect(page.getByLabel(/^(Feedback|What should change\?)$/)).toHaveValue("");
+  await expectReviewFeedbackCleared(page);
   await expect(page.getByText("Needs review")).toBeVisible();
   expect(requests).toContainEqual({
     action: "reject",
