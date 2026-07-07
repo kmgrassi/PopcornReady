@@ -58,7 +58,6 @@ export function PublicProjectPage() {
       loadingSubtitle="Loading the shared project."
       readOnly
       headerActions={copyAction}
-      mobilePrimaryAction={copyAction}
       storyboardPreview={{
         loading: false,
         error: null,
@@ -68,6 +67,7 @@ export function PublicProjectPage() {
         generationError: null,
       }}
       media={data?.media ?? null}
+      mobilePrimaryAction={copyAction}
       dangerSection={
         canAdminDelete && project ? (
           <ProjectDangerSection

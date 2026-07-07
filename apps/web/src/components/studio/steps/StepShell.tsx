@@ -52,11 +52,11 @@ export function StepShell({
   const footer = (
     <footer className={[styles.footer, stage ? styles.stageFooter : ""].filter(Boolean).join(" ")}>
       {onBack ? (
-        <Button variant="secondary" onClick={onBack}>
+        <Button className={styles.backAction} variant="secondary" onClick={onBack}>
           Back
         </Button>
       ) : (
-        <span />
+        <span className={styles.footerSpacer} />
       )}
       {onNext ? (
         <Button

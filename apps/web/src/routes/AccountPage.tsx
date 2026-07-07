@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
+import { canAccessAdminSurface } from "../components/auth/AdminRoute";
 import { useAuth } from "../components/auth/AuthProvider";
 import { Button } from "../components/ui/Button";
 import {
@@ -38,6 +39,7 @@ export function AccountPage() {
   const buy = useBuyCreditsMutation();
 
   const credits = creditsQuery.data;
+  const showAdmin = canAccessAdminSurface(auth);
   const balance = credits?.balanceCredits ?? null;
   const creditValueUsd = credits?.creditValueUsd ?? 0.01;
   // Local mode is an explicit server flag — never inferred from a missing balance
@@ -92,6 +94,16 @@ export function AccountPage() {
             ) : null}
           </>
         )}
+      </section>
+
+      <section className={styles.section}>
+        <h2>More</h2>
+        <div className={styles.linkGrid}>
+          <Link to="/settings">Settings</Link>
+          <Link to="/faq">FAQ</Link>
+          <Link to="/inspiration">Inspiration</Link>
+          {showAdmin ? <Link to="/admin">Admin workbench</Link> : null}
+        </div>
       </section>
 
       {!isLocal ? (

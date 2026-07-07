@@ -69,6 +69,7 @@
   --sidebar-w: 248px;
   --bp-mobile: 640px;
   --bp-tablet: 900px;
+  --touch-target-min: 44px;
 
   /* Motion */
   --transition: 160ms ease;

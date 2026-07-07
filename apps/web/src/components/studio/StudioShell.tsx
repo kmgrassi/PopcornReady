@@ -8,10 +8,11 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "../ui/Button";
 import { StatusChecklist } from "../ui/StatusChecklist";
 import { StudioEmptyState } from "./StudioEmptyState";
-import { StudioStepper } from "./StudioStepper";
+import { STEP_LABELS, StudioStepper } from "./StudioStepper";
 import { buildChecklistItems } from "./statusChecklist";
 import {
   EMPTY_BRIEF_DRAFT,
+  STUDIO_SETUP_STEPS,
   STUDIO_STEPS,
   useStudioFlow,
   type BriefDraft,
@@ -435,6 +436,7 @@ function StudioFlowView({
       });
   }, [autoStartGeneration, flow, navigateToRun, onAutoStartGenerationSettled]);
 
+  const mobileStep = <MobileStudioProgress step={flow.step} onBack={flow.back} />;
   const isStartingGeneration =
     isRedirectingToRun ||
     (flow.state === "initial" &&
@@ -445,7 +447,8 @@ function StudioFlowView({
   if (isStartingGeneration) {
     return (
       <main className={styles.shell}>
-        <StudioStepper step="plan" />
+        <DesktopStudioStepper step="plan" />
+        <MobileStudioProgress step="plan" />
         <section className={styles.redirecting}>
           <p className={styles.workspaceEyebrow}>Starting run</p>
           <h2 className={styles.generatingHeading}>Opening project runs</h2>
@@ -461,7 +464,8 @@ function StudioFlowView({
   if (flow.state === "initial" && flow.step === "plan" && flow.error) {
     return (
       <main className={styles.shell}>
-        <StudioStepper step="plan" />
+        <DesktopStudioStepper step="plan" />
+        <MobileStudioProgress step="plan" onBack={() => flow.goTo("brief")} />
         <section className={styles.redirecting}>
           <p className={styles.workspaceEyebrow}>Starting run</p>
           <h2 className={styles.generatingHeading}>Could not start production</h2>
@@ -500,7 +504,8 @@ function StudioFlowView({
     const canRecover = TERMINAL_RECOVERABLE_RUN_STATUSES.includes(runStatus);
     return (
       <main className={styles.shell}>
-        <StudioStepper step={flow.step} />
+        <DesktopStudioStepper step={flow.step} />
+        <MobileStudioProgress step={flow.step} />
         <section className={styles.generating}>
           <div className={styles.workspaceIntro}>
             <p className={styles.workspaceEyebrow}>Produce</p>
@@ -548,7 +553,7 @@ function StudioFlowView({
 
     return (
       <main className={styles.shell}>
-        <StudioStepper step={flow.step} onStepClick={guardedGoToStep} />
+        <DesktopStudioStepper step={flow.step} onStepClick={guardedGoToStep} />
         {flow.step === "export" ? (
           <section className={styles.stepBody}>
             <ExportStep {...stepProps} />
@@ -577,11 +582,12 @@ function StudioFlowView({
   // initial + started: the wizard's setup steps.
   return (
     <main className={styles.shell}>
-      <StudioStepper
+      <DesktopStudioStepper
         step={flow.step}
         onStepClick={guardedGoToStep}
         clickableThroughStep="footage"
       />
+      {mobileStep}
       <section className={styles.stepBody}>
         <ActiveStep
           key={`${flow.step}:${openPanel ?? ""}`}
@@ -593,6 +599,46 @@ function StudioFlowView({
         />
       </section>
     </main>
+  );
+}
+
+function DesktopStudioStepper(props: Parameters<typeof StudioStepper>[0]) {
+  return (
+    <div className={styles.desktopStepper}>
+      <StudioStepper {...props} />
+    </div>
+  );
+}
+
+function MobileStudioProgress({
+  step,
+  onBack,
+}: {
+  step: StudioStep;
+  onBack?: () => void;
+}) {
+  const setupStep = STUDIO_SETUP_STEPS.includes(step) ? step : "plan";
+  const currentIndex = STUDIO_SETUP_STEPS.indexOf(setupStep);
+  const progress = ((currentIndex + 1) / STUDIO_SETUP_STEPS.length) * 100;
+
+  return (
+    <header className={styles.mobileProgress} aria-label="Studio progress">
+      <div className={styles.mobileProgressBar} aria-hidden="true">
+        <span style={{ width: `${progress}%` }} />
+      </div>
+      <div className={styles.mobileProgressRow}>
+        {onBack && currentIndex > 0 ? (
+          <button className={styles.mobileBack} type="button" onClick={onBack}>
+            <span>Back</span>
+          </button>
+        ) : (
+          <span className={styles.mobileBackPlaceholder} aria-hidden="true" />
+        )}
+        <p className={styles.mobileStepLabel}>
+          Step {currentIndex + 1} of {STUDIO_SETUP_STEPS.length} - {STEP_LABELS[setupStep]}
+        </p>
+      </div>
+    </header>
   );
 }
 
