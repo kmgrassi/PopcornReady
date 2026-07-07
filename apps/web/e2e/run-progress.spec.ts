@@ -43,7 +43,10 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function getVisibleStageRail(page: Page) {
-  const mobilePipelineToggle = page.getByText("Show pipeline").filter({ visible: true });
+  const mobilePipelineToggle = page
+    .locator("summary")
+    .filter({ hasText: "Show pipeline" })
+    .filter({ visible: true });
   if ((await mobilePipelineToggle.count()) > 0) {
     await mobilePipelineToggle.first().click();
   }
@@ -288,10 +291,11 @@ test("submits review-gate approve and reject actions with notes @mobile", async 
   await expect(page.getByRole("button", { name: "Approve and continue" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Request changes" })).toBeVisible();
 
-  await page.getByLabel("Feedback").fill("Keep the close-up, simplify the transition.");
+  await page.getByRole("button", { name: "Request changes" }).click();
+  await page.getByLabel("What should change?").fill("Keep the close-up, simplify the transition.");
   await page.getByRole("button", { name: "Approve and continue" }).click();
 
-  await expect(page.getByLabel("Feedback")).toHaveCount(0);
+  await expect(page.getByLabel("What should change?")).toBeHidden();
   await expect(page.getByText("Visuals are in progress.")).toBeVisible();
   expect(requests).toContainEqual({
     action: "approve",
@@ -311,10 +315,11 @@ test("submits review-gate approve and reject actions with notes @mobile", async 
     message: "Storyboard is ready for review.",
   });
   await page.reload();
-  await page.getByLabel("Feedback").fill("Make the ending less busy.");
   await page.getByRole("button", { name: "Request changes" }).click();
+  await page.getByLabel("What should change?").fill("Make the ending less busy.");
+  await page.getByRole("button", { name: "Send changes" }).click();
 
-  await expect(page.getByLabel("Feedback")).toHaveValue("");
+  await expect(page.getByLabel("What should change?")).toHaveValue("");
   await expect(page.getByText("Needs review")).toBeVisible();
   expect(requests).toContainEqual({
     action: "reject",

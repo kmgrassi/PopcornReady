@@ -60,6 +60,7 @@ test.describe("run progress actions", () => {
     await page.goto(`/projects/${e2eProjectId}/runs/${gated.run.runId}`);
     await expect(page.getByRole("heading", { name: "Concept ready for review" })).toBeVisible();
 
+    await page.locator("summary").filter({ hasText: "More" }).click();
     await page.getByRole("button", { name: "Stop here" }).click();
 
     await expect.poll(() => routes.actionBodies[0]).toEqual({
@@ -80,7 +81,8 @@ test.describe("run progress actions", () => {
     await page.goto(`/projects/${e2eProjectId}/runs/${gated.run.runId}`);
     await expect(page.getByRole("heading", { name: "Quality review ready for review" })).toBeVisible();
 
-    const feedback = page.getByLabel("Feedback");
+    await page.getByRole("button", { name: "Request changes" }).click();
+    const feedback = page.getByLabel("What should change?");
     await feedback.fill("Tighten the pacing before final export.");
     await page.getByRole("button", { name: "Approve and continue" }).click();
 
@@ -99,8 +101,9 @@ test.describe("run progress actions", () => {
     const rejectRoutes = await installRunProgressRoutes(page, { detail: gatedAgain });
 
     await page.goto(`/projects/${e2eProjectId}/runs/${gatedAgain.run.runId}`);
-    await page.getByLabel("Feedback").fill("Regenerate with a stronger ending.");
     await page.getByRole("button", { name: "Request changes" }).click();
+    await page.getByLabel("What should change?").fill("Regenerate with a stronger ending.");
+    await page.getByRole("button", { name: "Send changes" }).click();
 
     await expect.poll(() => rejectRoutes.actionBodies[0]).toEqual({
       action: "reject",
@@ -110,7 +113,7 @@ test.describe("run progress actions", () => {
       },
     });
     await expect(page.getByText("Feedback received. Regenerating this stage.")).toBeVisible();
-    await expect(page.getByLabel("Feedback")).toHaveCount(0);
+    await expect(page.getByLabel("What should change?")).toHaveCount(0);
   });
 
   test("failed runs and successful studio-linked runs render the right recovery paths", async ({
