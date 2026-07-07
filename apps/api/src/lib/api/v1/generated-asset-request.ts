@@ -41,6 +41,7 @@ export interface ParsedRequest {
   durationSec: number;
   providerSeconds?: number;
   referenceAssetIds: string[];
+  editSourceAssetId?: string;
   beatId?: string;
   anchorIds: string[];
   characterProfileIds: string[];
@@ -297,6 +298,10 @@ export function parseGeneratedAssetRequest(body: unknown): ParsedRequest {
     durationSec,
     providerSeconds: kind === "image" ? undefined : durationSec,
     referenceAssetIds: parseStringArray(body.referenceAssetIds),
+    editSourceAssetId:
+      typeof body.editSourceAssetId === "string" && body.editSourceAssetId.trim()
+        ? body.editSourceAssetId.trim()
+        : undefined,
     beatId:
       typeof body.beatId === "string" && body.beatId.trim()
         ? body.beatId.trim()

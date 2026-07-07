@@ -36,6 +36,7 @@ export type ToolName =
   | "generate_storyboard"
   | "generate_keyframe"
   | "generate_clip"
+  | "edit_video_asset"
   | "generate_audio"
   | "fit_audio_to_picture"
   | "assemble_timeline"

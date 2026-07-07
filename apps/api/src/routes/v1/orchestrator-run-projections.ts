@@ -28,13 +28,14 @@ const TOOL_ORDER: Record<string, number> = {
   generate_storyboard: 6,
   generate_keyframe: 7,
   generate_clip: 8,
-  generate_audio: 9,
-  fit_audio_to_picture: 10,
-  assemble_timeline: 11,
-  critique_timeline: 12,
-  request_approval: 13,
-  export_video: 14,
-  publish_to_catalog: 15,
+  edit_video_asset: 9,
+  generate_audio: 10,
+  fit_audio_to_picture: 11,
+  assemble_timeline: 12,
+  critique_timeline: 13,
+  request_approval: 14,
+  export_video: 15,
+  publish_to_catalog: 16,
 };
 
 const TOOL_LABELS: Record<string, string> = {
@@ -47,6 +48,7 @@ const TOOL_LABELS: Record<string, string> = {
   generate_storyboard: "Storyboard",
   generate_keyframe: "Keyframes",
   generate_clip: "Clips",
+  edit_video_asset: "Video Edit",
   generate_audio: "Audio",
   fit_audio_to_picture: "Audio Sync",
   assemble_timeline: "Timeline",
@@ -85,6 +87,7 @@ export function toolStage(tool: string): GenerationStageType {
     case "generate_anchor":
     case "generate_keyframe":
     case "generate_clip":
+    case "edit_video_asset":
       return "asset_generation";
     case "generate_audio":
     case "fit_audio_to_picture":
@@ -113,6 +116,7 @@ function toolItemKind(tool: string): GenerationStageItemKind {
     case "publish_to_catalog":
       return "caption";
     case "generate_clip":
+    case "edit_video_asset":
       return "video";
     case "generate_audio":
     case "fit_audio_to_picture":
@@ -142,6 +146,7 @@ function toolItemPurpose(tool: string): GenerationStageItemPurpose {
     case "generate_keyframe":
       return "keyframe";
     case "generate_clip":
+    case "edit_video_asset":
       return "shot";
     case "generate_audio":
     case "fit_audio_to_picture":
