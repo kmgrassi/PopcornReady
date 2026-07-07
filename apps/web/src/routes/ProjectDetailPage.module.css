@@ -963,6 +963,10 @@
     transition: width 220ms ease;
   }
 
+  .mobilePrimaryAction {
+    display: grid;
+  }
+
   .mobileDetails {
     border: 1px solid var(--border);
     border-radius: var(--radius-md);

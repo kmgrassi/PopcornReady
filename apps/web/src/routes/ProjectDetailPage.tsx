@@ -237,6 +237,7 @@ export function ProjectOverviewPage({
   loadingSubtitle,
   readOnly,
   headerActions,
+  mobilePrimaryAction,
   storyboardPreview,
   media,
   dangerSection,
@@ -253,6 +254,7 @@ export function ProjectOverviewPage({
   loadingSubtitle: string;
   readOnly: boolean;
   headerActions?: ReactNode;
+  mobilePrimaryAction?: ReactNode;
   storyboardPreview: {
     loading: boolean;
     error: Error | null;
@@ -299,6 +301,7 @@ export function ProjectOverviewPage({
             storyboardPreview={storyboardPreview}
             media={media}
             stagePanel={stagePanel}
+            mobilePrimaryAction={mobilePrimaryAction}
           />
           <div className={stagePanel ? styles.projectContent : undefined}>
             <section className={styles.projectTopLayout}>
@@ -350,6 +353,7 @@ function MobileProjectOverview({
   storyboardPreview,
   media,
   stagePanel,
+  mobilePrimaryAction,
 }: {
   projectId: string;
   project: V1Project;
@@ -357,12 +361,15 @@ function MobileProjectOverview({
   storyboardPreview: {
     loading: boolean;
     error: Error | null;
+    onRetry: () => void;
     generating: boolean;
     progress: StoryboardProgress;
+    generationError: Error | null;
     onGenerate?: () => void;
   };
   media?: ProjectWatchMedia | null;
   stagePanel?: ReactNode;
+  mobilePrimaryAction?: ReactNode;
 }) {
   const brief = project.brief;
   const storyDone =
@@ -371,7 +378,10 @@ function MobileProjectOverview({
       : storyboard?.scenes.length ?? 0;
   const storyTotal = storyboardPreview.progress.total || storyboard?.scenes.length || 0;
   const progressPercent = storyTotal > 0 ? Math.round((storyDone / storyTotal) * 100) : 0;
-  const statusSentence = storyboardPreview.generating
+  const storyboardError = storyboardPreview.error ?? storyboardPreview.generationError;
+  const statusSentence = storyboardError
+    ? "Storyboard needs attention. Retry to continue."
+    : storyboardPreview.generating
     ? `Generating storyboard - ${storyDone} of ${storyTotal || "?"} panels`
     : storyboard
       ? `Storyboard ready - ${storyboard.scenes.length} scenes`
@@ -403,7 +413,13 @@ function MobileProjectOverview({
         >
           <span style={{ width: `${Math.max(2, progressPercent)}%` }} />
         </div>
-        {action ? (
+        {mobilePrimaryAction ? (
+          <div className={styles.mobilePrimaryAction}>{mobilePrimaryAction}</div>
+        ) : storyboardError ? (
+          <Button variant="cta" onClick={storyboardPreview.onRetry}>
+            Retry storyboard
+          </Button>
+        ) : action ? (
           <ButtonLink variant="cta" to={action.to}>
             {action.label}
           </ButtonLink>
