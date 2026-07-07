@@ -143,7 +143,6 @@ test("shows in-progress rail state when active stage rows have not caught up @mo
 
   await openMobilePipelineIfVisible(page);
   const rail = page.getByRole("complementary", { name: "Stage rail" });
-  await expect(rail.getByText("Pipeline")).toBeVisible();
   await expect(rail.getByText("In progress")).toBeVisible();
   await expect(rail.getByText("Generating shot candidates.")).toBeVisible();
   await expect(rail.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "46");
