@@ -117,16 +117,16 @@ export async function runEditVideoAssetJob(
       projectId: input.projectId,
       body: {
         kind: "video",
-        provider: input.provider ?? "gemini",
+        ...(input.provider ? { provider: input.provider } : {}),
         ...(input.model ? { model: input.model } : {}),
         prompt: input.instruction,
         description: input.instruction,
         durationSec: source.durationSec ?? 8,
         seconds: source.durationSec ?? 8,
+        editSourceAssetId: input.sourceAssetId,
         assetRole: editedAssetRole(source),
         ...(input.beatId ? { beatId: input.beatId } : {}),
         name: `Edited ${source.name || source.filename || "video"}`,
-        referenceAssetIds: [input.sourceAssetId],
         graphInputs: [
           {
             assetId: input.sourceAssetId,

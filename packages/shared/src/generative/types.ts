@@ -177,6 +177,7 @@ export interface GeminiVideoRequest extends BaseGenerateAssetRequest {
   model?: string;
   size?: string;
   seconds?: number;
+  editSourceVideoPath?: string;
 }
 
 export interface GeminiImageRequest extends BaseGenerateAssetRequest {

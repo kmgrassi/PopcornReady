@@ -197,7 +197,37 @@ function idempotencyKey(input: EditVideoAssetInput, source: V1Asset): string {
     .update(input.provider ?? DEFAULT_VIDEO_EDIT_PROVIDER)
     .update("\0")
     .update(input.model ?? "")
+    .update("\0")
+    .update(input.beatId ?? "")
     .digest("hex");
+}
+
+function terminalJobResult(
+  job: Awaited<ReturnType<AgentApiStore["createOrGetJob"]>>["job"]
+): ToolCallResult<EditVideoAssetOutput> | null {
+  if (job.status === "succeeded") {
+    const output = (job.result ?? {}) as EditVideoAssetOutput;
+    const assetIds = Array.isArray(output.assetIds) ? output.assetIds : [];
+    return {
+      status: "succeeded",
+      resourceIds: assetIds,
+      output,
+    };
+  }
+  if (job.status === "failed" || job.status === "canceled") {
+    return {
+      status: "failed",
+      error: {
+        kind: job.status === "canceled" ? "timeout" : "provider_failed",
+        message:
+          job.error?.message ||
+          `edit_video_asset job ${job.id} ended with status ${job.status}.`,
+        recoverable: true,
+        details: { jobId: job.id, status: job.status },
+      },
+    };
+  }
+  return null;
 }
 
 export function createEditVideoAssetTool(
@@ -296,6 +326,9 @@ export function createEditVideoAssetTool(
           ...(input.model ? { model: input.model } : {}),
           ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
         });
+      } else {
+        const terminal = terminalJobResult(job);
+        if (terminal) return terminal;
       }
 
       return { status: "accepted", jobId: job.id, resumesWhen: "job_terminal" };

@@ -258,6 +258,29 @@ async function runGeneration(
       throw err;
     }
   }
+  let editSourceVideoPath: string | undefined;
+  if (parsed.editSourceAssetId) {
+    const asset = await getAsset(
+      auth.workspaceId,
+      projectId,
+      parsed.editSourceAssetId
+    );
+    if (asset.kind !== "video") {
+      throw new ApiError(
+        "asset_invalid",
+        `Edit source asset must be a video: ${parsed.editSourceAssetId}.`,
+        { assetIds: [parsed.editSourceAssetId] }
+      );
+    }
+    if (asset.status !== "ready" || !asset.storageKey) {
+      throw new ApiError(
+        "asset_not_ready",
+        `Edit source asset is not ready: ${parsed.editSourceAssetId}.`,
+        { assetIds: [parsed.editSourceAssetId] }
+      );
+    }
+    editSourceVideoPath = await localPathForAssetBytes(asset);
+  }
 
   if (item) {
     await item.update({
@@ -340,6 +363,7 @@ async function runGeneration(
       provider: "gemini",
       kind: "video",
       ...baseRequest,
+      editSourceVideoPath,
     });
   } else if (parsed.provider === "gemini" && parsed.kind === "image") {
     result = await provider.generateAsset({
@@ -734,6 +758,14 @@ export async function runGeneratedAssetJob(args: {
     projectId,
     parsed.referenceAssetIds
   );
+  if (parsed.editSourceAssetId) {
+    const [editSourceAssetId] = await canonicalizeAssetIds(
+      auth.workspaceId,
+      projectId,
+      [parsed.editSourceAssetId]
+    );
+    parsed.editSourceAssetId = editSourceAssetId;
+  }
   parsed.anchorIds = await canonicalizeAssetIds(auth.workspaceId, projectId, parsed.anchorIds);
   if (parsed.graphInputs?.length) {
     const canonical = await canonicalizeAssetIds(
