@@ -63,17 +63,34 @@
   box-shadow: var(--ring);
 }
 
-@media (max-width: 760px) {
+@media (max-width: 640px) {
   .hero {
     grid-template-columns: 1fr;
+    gap: var(--space-5);
     padding: var(--space-5);
   }
 
   .copy h1 {
-    font-size: var(--title-lg);
+    font-size: var(--title-md);
+    line-height: var(--line-heading);
+    text-wrap: balance;
+  }
+
+  .copy p {
+    font-size: var(--text-md);
+    line-height: var(--line-body);
   }
 
   .actions {
-    justify-content: flex-start;
+    display: grid;
+    justify-content: stretch;
+  }
+
+  .actions > a:first-child {
+    width: 100%;
+  }
+
+  .libraryLink {
+    justify-self: center;
   }
 }

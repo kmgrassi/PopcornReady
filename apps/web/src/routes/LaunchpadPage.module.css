@@ -7,9 +7,23 @@
   gap: var(--space-6);
 }
 
-@media (max-width: 760px) {
+.mobileFeed {
+  display: grid;
+  gap: var(--space-6);
+}
+
+@media (max-width: 640px) {
   .page {
-    padding: var(--space-5) var(--space-3) var(--space-7);
+    padding: var(--space-4) var(--space-3) calc(var(--space-8) + var(--space-5));
+    gap: var(--space-4);
+  }
+
+  .desktopStats {
+    display: none;
+  }
+
+  .mobileFeed {
+    gap: var(--space-5);
   }
 }
 
