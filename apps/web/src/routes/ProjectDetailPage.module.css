@@ -84,6 +84,10 @@
   min-width: 0;
 }
 
+.mobileOverview {
+  display: none;
+}
+
 .projectPrimaryColumn {
   display: grid;
   gap: var(--space-5);
@@ -1205,5 +1209,107 @@
   .stats,
   .stageSummary {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .header,
+  .projectContent > .projectTopLayout,
+  .projectPageLayout > .projectContent,
+  .stageAside {
+    display: none;
+  }
+
+  .projectPageLayout {
+    display: block;
+  }
+
+  .mobileOverview {
+    display: grid;
+    gap: var(--space-4);
+  }
+
+  .mobileOverview .poster {
+    width: calc(100% + (2 * var(--space-3)));
+    margin-inline: calc(-1 * var(--space-3));
+    border-inline: 0;
+    border-radius: 0;
+    aspect-ratio: 4 / 5;
+  }
+
+  .mobileStatusCard {
+    display: grid;
+    gap: var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--space-4);
+    background: var(--panel);
+  }
+
+  .mobileStatusCard h2 {
+    margin: var(--space-3) 0 0;
+    color: var(--text-strong);
+    font-size: var(--title-sm);
+    line-height: var(--line-heading);
+  }
+
+  .mobileStatusCard p {
+    margin: var(--space-2) 0 0;
+    color: var(--text);
+    font-size: var(--text-md);
+    font-weight: 800;
+    line-height: var(--line-body);
+  }
+
+  .mobileProgress {
+    height: 8px;
+    overflow: hidden;
+    border-radius: var(--radius-pill);
+    background: var(--panel-2);
+  }
+
+  .mobileProgress span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--cta);
+    transition: width 220ms ease;
+  }
+
+  .mobilePrimaryAction {
+    display: grid;
+  }
+
+  .mobileDetails {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--panel);
+    padding: 0 var(--space-4);
+  }
+
+  .mobileDetails summary {
+    min-height: 48px;
+    cursor: pointer;
+    color: var(--text-strong);
+    font-weight: 850;
+    line-height: 48px;
+  }
+
+  .mobileDetails dl {
+    display: grid;
+    gap: var(--space-3);
+    margin: 0;
+    padding: 0 0 var(--space-4);
+  }
+
+  .mobileStagePanel {
+    padding-bottom: var(--space-4);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobileProgress span,
+  .generatingTrack span {
+    transition: none;
   }
 }
