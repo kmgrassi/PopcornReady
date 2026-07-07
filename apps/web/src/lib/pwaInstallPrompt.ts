@@ -12,6 +12,10 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 const DISMISSED_KEY = "popcornready:pwa-install-prompt-dismissed";
+let globalDeferredPrompt: BeforeInstallPromptEvent | null = null;
+let globalInstalled = false;
+let listenerRegistered = false;
+const subscribers = new Set<() => void>();
 
 function storageDismissed(): boolean {
   if (typeof window === "undefined") {
@@ -51,39 +55,64 @@ function isStandaloneDisplay(): boolean {
   );
 }
 
+function notifySubscribers() {
+  subscribers.forEach((callback) => callback());
+}
+
+export function initializePwaInstallPrompt() {
+  if (
+    listenerRegistered ||
+    typeof window === "undefined" ||
+    typeof navigator === "undefined"
+  ) {
+    return;
+  }
+
+  listenerRegistered = true;
+  globalInstalled = isStandaloneDisplay();
+
+  window.addEventListener("beforeinstallprompt", (event) => {
+    event.preventDefault();
+
+    if (!storageDismissed() && !isStandaloneDisplay()) {
+      globalDeferredPrompt = event as BeforeInstallPromptEvent;
+      notifySubscribers();
+    }
+  });
+
+  window.addEventListener("appinstalled", () => {
+    globalInstalled = true;
+    globalDeferredPrompt = null;
+    notifySubscribers();
+  });
+}
+
 export function usePwaInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] =
-    useState<BeforeInstallPromptEvent | null>(null);
+    useState<BeforeInstallPromptEvent | null>(globalDeferredPrompt);
   const [dismissed, setDismissed] = useState(storageDismissed);
-  const [installed, setInstalled] = useState(() => isStandaloneDisplay());
+  const [installed, setInstalled] = useState(() => globalInstalled || isStandaloneDisplay());
 
   useEffect(() => {
-    function handleBeforeInstallPrompt(event: Event) {
-      event.preventDefault();
-
-      if (!dismissed && !isStandaloneDisplay()) {
-        setDeferredPrompt(event as BeforeInstallPromptEvent);
-      }
-    }
-
-    function handleInstalled() {
-      setInstalled(true);
-      setDeferredPrompt(null);
-    }
-
-    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
-    window.addEventListener("appinstalled", handleInstalled);
-
-    return () => {
-      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
-      window.removeEventListener("appinstalled", handleInstalled);
+    initializePwaInstallPrompt();
+    const syncPromptState = () => {
+      setDeferredPrompt(globalDeferredPrompt);
+      setInstalled(globalInstalled || isStandaloneDisplay());
     };
-  }, [dismissed]);
+
+    syncPromptState();
+    subscribers.add(syncPromptState);
+    return () => {
+      subscribers.delete(syncPromptState);
+    };
+  }, []);
 
   const dismiss = useCallback(() => {
     setStorageDismissed();
     setDismissed(true);
+    globalDeferredPrompt = null;
     setDeferredPrompt(null);
+    notifySubscribers();
   }, []);
 
   const promptInstall = useCallback(async () => {
@@ -94,7 +123,9 @@ export function usePwaInstallPrompt() {
     await deferredPrompt.prompt();
     const choice = await deferredPrompt.userChoice;
 
+    globalDeferredPrompt = null;
     setDeferredPrompt(null);
+    notifySubscribers();
 
     if (choice.outcome === "dismissed") {
       dismiss();
