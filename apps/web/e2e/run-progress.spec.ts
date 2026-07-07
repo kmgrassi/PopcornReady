@@ -43,14 +43,25 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function getVisibleStageRail(page: Page) {
-  const mobilePipelineToggle = page
+  const visibleRail = page
+    .getByRole("complementary", { name: "Stage rail" })
+    .filter({ visible: true });
+  if (await visibleRail.first().getByText("Pipeline").isVisible().catch(() => false)) {
+    return visibleRail.first();
+  }
+
+  const summaryToggle = page
     .locator("summary")
     .filter({ hasText: "Show pipeline" })
     .filter({ visible: true });
-  if ((await mobilePipelineToggle.count()) > 0) {
-    await mobilePipelineToggle.first().click();
+  if ((await summaryToggle.count()) > 0) {
+    await summaryToggle.first().click();
+  } else {
+    await page.getByText("Show pipeline").filter({ visible: true }).first().click();
   }
-  return page.getByRole("complementary", { name: "Stage rail" });
+
+  await expect(visibleRail.first().getByText("Pipeline")).toBeVisible();
+  return visibleRail.first();
 }
 
 async function fillReviewFeedback(page: Page, note: string) {
