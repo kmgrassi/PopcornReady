@@ -198,6 +198,7 @@ function isLibraryTab(value: string): value is LibraryTab {
 }
 
 const STATIC_ROUTE_LABELS: Record<string, string> = {
+  "/activity": "Activity",
   "/inspiration": "Inspiration",
   "/templates": "Templates",
   "/brand": "Brand Kit",
