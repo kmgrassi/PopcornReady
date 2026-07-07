@@ -14,6 +14,7 @@ import {
   assetDisplayTitle,
   assetPreviewUrl,
   assetSourceLabel,
+  editedAssetLineageLabel,
   formatDuration,
   galleryRenderState,
   kindLabel,
@@ -311,6 +312,7 @@ export function ProjectMediaGalleryPage() {
             const duration = formatDuration(asset.durationSec);
             const previewUrl = assetPreviewUrl(asset);
             const selected = selectedPosition(selectedIds, asset.id);
+            const lineageLabel = editedAssetLineageLabel(asset, assetById);
             const canSelect =
               (asset.kind === "image" || asset.kind === "video") && asset.status === "ready";
             return (
@@ -350,6 +352,9 @@ export function ProjectMediaGalleryPage() {
                   <span className={styles.tileMeta}>
                     {kindLabel(asset.kind)} / {assetSourceLabel(asset.source)}
                   </span>
+                  {lineageLabel ? (
+                    <span className={styles.lineageMeta}>{lineageLabel}</span>
+                  ) : null}
                   <button
                     className={styles.selectButton}
                     disabled={!canSelect}

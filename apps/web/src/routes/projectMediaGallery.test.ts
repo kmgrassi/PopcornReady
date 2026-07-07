@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   assetDisplayTitle,
   assetSourceLabel,
+  editedAssetLineageLabel,
   formatDuration,
   galleryRenderState,
   projectMediaQueryKey,
@@ -90,4 +91,34 @@ test("assetSourceLabel normalizes raw API source objects", () => {
     "first frame",
   );
   assert.equal(assetSourceLabel(null), "asset");
+});
+
+test("editedAssetLineageLabel surfaces edited_from provenance without controls", () => {
+  const source = {
+    id: "source_asset",
+    filename: "office.mov",
+    name: "Office couch",
+  };
+  const assetById = new Map([[source.id, source]]);
+
+  assert.equal(
+    editedAssetLineageLabel(
+      {
+        graphInputs: [
+          { assetId: "reference_asset", relation: "input", role: "reference" },
+          { assetId: source.id, relation: "input", role: "edited_from" },
+        ],
+        provenance: {
+          prompt:
+            "Add a dinosaur sitting on the couch while preserving the camera angle.",
+        },
+      },
+      assetById,
+    ),
+    "Edited from Office couch · Add a dinosaur sitting on the couch while preserving the camera angle.",
+  );
+  assert.equal(
+    editedAssetLineageLabel({ graphInputs: [], provenance: { prompt: "Generate" } }, assetById),
+    null,
+  );
 });

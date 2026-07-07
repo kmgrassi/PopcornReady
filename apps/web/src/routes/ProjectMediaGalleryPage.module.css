@@ -223,6 +223,16 @@
   font-size: var(--text-xs);
 }
 
+.lineageMeta {
+  display: -webkit-box;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--text) 82%, var(--muted));
+  font-size: var(--text-xs);
+  line-height: var(--line-caption);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .selectButton {
   width: fit-content;
   border: 1px solid var(--border);
