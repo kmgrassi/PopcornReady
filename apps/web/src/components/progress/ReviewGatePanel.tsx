@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   GENERATION_STAGE_LABELS,
   type GenerationStageItem,
@@ -90,6 +91,19 @@ function briefMetaItems(brief: VideoBriefInput): string[] {
   ].filter((item): item is string => Boolean(item));
 }
 
+function splitBriefReviewFields(fields: [string, string][]) {
+  const priority = new Set(["Hook", "Big idea"]);
+  const visible = [
+    ...fields.filter(([label]) => priority.has(label)),
+    ...fields.filter(([label]) => !priority.has(label)),
+  ].slice(0, 2);
+  const visibleLabels = new Set(visible.map(([label]) => label));
+  return {
+    visible,
+    hidden: fields.filter(([label]) => !visibleLabels.has(label)),
+  };
+}
+
 function BriefReviewOutput({
   brief,
   loading,
@@ -115,6 +129,8 @@ function BriefReviewOutput({
     ["Payoff", brief.payoff],
     ["Caveat", brief.caveat],
   ].filter((entry): entry is [string, string] => Boolean(entry[1]));
+  const { visible: visibleFields, hidden: hiddenFields } =
+    splitBriefReviewFields(fields);
 
   return (
     <article className={styles.briefReviewCard}>
@@ -127,15 +143,28 @@ function BriefReviewOutput({
       {brief.strongestVisual ? (
         <p className={styles.briefReviewVisual}>{brief.strongestVisual}</p>
       ) : null}
-      {fields.length > 0 ? (
+      {visibleFields.length > 0 ? (
         <dl className={styles.briefReviewFields}>
-          {fields.map(([label, value]) => (
+          {visibleFields.map(([label, value]) => (
             <div className={styles.briefReviewField} key={label}>
               <dt>{label}</dt>
               <dd>{value}</dd>
             </div>
           ))}
         </dl>
+      ) : null}
+      {hiddenFields.length > 0 ? (
+        <details className={styles.briefReviewMore}>
+          <summary>Show all</summary>
+          <dl className={styles.briefReviewFields}>
+            {hiddenFields.map(([label, value]) => (
+              <div className={styles.briefReviewField} key={label}>
+                <dt>{label}</dt>
+                <dd>{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </details>
       ) : null}
     </article>
   );
@@ -154,7 +183,18 @@ export function ReviewGatePanel({
   onFeedbackNoteChange,
   onApprove,
 }: ReviewGatePanelProps) {
+  const [feedbackOpen, setFeedbackOpen] = useState(Boolean(feedbackNote));
   const isBriefReviewGate = stageType === "brief_intake";
+  const showFeedbackField = feedbackOpen || Boolean(feedbackNote);
+
+  function requestChanges() {
+    if (!reviewActions) return;
+    if (!showFeedbackField) {
+      setFeedbackOpen(true);
+      return;
+    }
+    reviewActions.onReject(feedbackNote);
+  }
 
   return (
     <section className={styles.reviewPanel} aria-labelledby="review-gate-heading">
@@ -193,23 +233,25 @@ export function ReviewGatePanel({
           </span>
         </div>
       )}
-      <div className={styles.feedbackField}>
-        <label className={styles.feedbackLabel} htmlFor="review-feedback-note">
-          Feedback
-        </label>
-        <textarea
-          id="review-feedback-note"
-          className={styles.feedbackTextarea}
-          value={feedbackNote}
-          onChange={(event) => onFeedbackNoteChange(event.target.value)}
-          placeholder="Optional feedback before continuing..."
-          disabled={!!pending}
-          rows={4}
-        />
-        <p className={styles.feedbackHint}>
-          Use this when you want the generator to revise this stage before continuing.
-        </p>
-      </div>
+      {showFeedbackField ? (
+        <div className={styles.feedbackField}>
+          <label className={styles.feedbackLabel} htmlFor="review-feedback-note">
+            What should change?
+          </label>
+          <textarea
+            id="review-feedback-note"
+            className={styles.feedbackTextarea}
+            value={feedbackNote}
+            onChange={(event) => onFeedbackNoteChange(event.target.value)}
+            placeholder="Tell the agent what to revise before continuing."
+            disabled={!!pending}
+            rows={4}
+          />
+          <p className={styles.feedbackHint}>
+            Your note goes back to the generator for this checkpoint.
+          </p>
+        </div>
+      ) : null}
       {actionError ? (
         <p className={styles.error} role="alert">
           {actionError}
@@ -220,19 +262,15 @@ export function ReviewGatePanel({
           <>
             <button
               type="button"
-              className={styles.reviewCancelButton}
-              onClick={reviewActions.onCancel}
-              disabled={!!pending}
-            >
-              {pending === "cancel" ? "Stopping..." : "Stop here"}
-            </button>
-            <button
-              type="button"
               className={styles.secondaryButton}
-              onClick={() => reviewActions.onReject(feedbackNote)}
+              onClick={requestChanges}
               disabled={!!pending}
             >
-              {pending === "reject" ? "Requesting..." : "Request changes"}
+              {pending === "reject"
+                ? "Requesting..."
+                : showFeedbackField
+                  ? "Send changes"
+                  : "Request changes"}
             </button>
           </>
         ) : null}
@@ -244,6 +282,19 @@ export function ReviewGatePanel({
         >
           {pending === "approve" ? "Approving..." : "Approve and continue"}
         </button>
+        {reviewActions ? (
+          <details className={styles.moreActions}>
+            <summary>More</summary>
+            <button
+              type="button"
+              className={styles.reviewCancelButton}
+              onClick={reviewActions.onCancel}
+              disabled={!!pending}
+            >
+              {pending === "cancel" ? "Stopping..." : "Stop here"}
+            </button>
+          </details>
+        ) : null}
       </div>
     </section>
   );
