@@ -888,7 +888,13 @@ export function ProgressView({
               <span>Show pipeline</span>
               <span aria-hidden="true">+</span>
             </summary>
-            <div className={styles.mobilePipelineContent}>{renderPipelineDepth()}</div>
+            <div
+              className={styles.mobilePipelineContent}
+              role="complementary"
+              aria-label="Stage rail"
+            >
+              {renderPipelineDepth()}
+            </div>
           </details>
         </section>
 
