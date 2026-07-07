@@ -2,7 +2,7 @@ import { Stepper } from "../ui/Stepper";
 import { STUDIO_SETUP_STEPS, type StudioStep } from "./studioSteps";
 
 /** Human labels for the wizard steps shown in the rail. */
-const STEP_LABELS: Record<StudioStep, string> = {
+export const STEP_LABELS: Record<StudioStep, string> = {
   brief: "Idea",
   footage: "Footage",
   plan: "Production Plan",

@@ -258,6 +258,38 @@ function workspaceReturnLabel({
   return "Open project";
 }
 
+function mobileProgressSentence({
+  run,
+  currentStageDisplay,
+  progress,
+}: {
+  run: GenerationRun;
+  currentStageDisplay: string;
+  progress: ReturnType<typeof progressSummary>;
+}): string {
+  if (run.reviewGate) {
+    return `${currentStageDisplay} is ready for review.`;
+  }
+
+  if (run.status === "queued") {
+    return `${currentStageDisplay} is queued.`;
+  }
+
+  if (run.status === "running") {
+    return `${currentStageDisplay} is in progress - stage ${progress.currentStage} of ${VISIBLE_STAGE_COUNT}.`;
+  }
+
+  if (run.status === "succeeded") {
+    return "Your video is complete.";
+  }
+
+  if (run.status === "failed") {
+    return `${currentStageDisplay} needs attention.`;
+  }
+
+  return "This run was canceled.";
+}
+
 const BOARD_STAGE_TYPES = new Set<GenerationStageType>([
   "storyboard",
   "asset_generation",
@@ -555,6 +587,85 @@ export function ProgressView({
     ? () => reviewActions.onApprove(feedbackNote)
     : approveFallback;
 
+  const progressSentence = mobileProgressSentence({
+    run: detail.run,
+    currentStageDisplay,
+    progress,
+  });
+
+  const progressContext = [
+    lastCompletedStageLabel ? `Last completed: ${lastCompletedStageLabel}` : null,
+    nextStageLabel ? `Next: ${nextStageLabel}` : null,
+  ].filter((item): item is string => Boolean(item));
+  const progressDetails = [
+    detail.run.message,
+    ...progressContext,
+  ].filter((item): item is string => Boolean(item));
+
+  function renderPipelineDepth() {
+    return (
+      <>
+        <div className={styles.sidePanelHeader}>
+          <div>
+            <p className={styles.eyebrow}>Pipeline</p>
+            <h2 className={styles.sidePanelHeading}>Stages</h2>
+          </div>
+        </div>
+        {showBackgroundActivity ? (
+          <div className={styles.backgroundActivity} role="status">
+            <span className={styles.backgroundSpinner} aria-hidden="true" />
+            <span>
+              {cancelAction?.pending
+                ? "Stopping after the current step..."
+                : "Working in the background"}
+            </span>
+          </div>
+        ) : null}
+        <StageRail
+          stages={detail.stages}
+          runStatus={detail.run.status}
+          currentStageType={detail.run.currentStageType}
+          runProgressPercent={detail.run.progressPercent}
+          runMessage={detail.run.message}
+          reviewGate={detail.run.reviewGate}
+          stageLinks={stageLinks}
+          stopAction={
+            showCancelAction && cancelAction
+              ? {
+                  pending: cancelAction.pending,
+                  error: cancelAction.error,
+                  onStop: cancelAction.onCancel,
+                }
+              : undefined
+          }
+          restartAction={restartAction}
+        />
+        {showCancelAction && cancelAction?.error ? (
+          <p className={styles.error} role="alert">
+            {cancelAction.error}
+          </p>
+        ) : null}
+        <p className={styles.sidePanelMeta}>
+          Started {formatDateTime(detail.run.startedAt)}. Updated{" "}
+          {formatDateTime(detail.run.updatedAt)}.
+        </p>
+        <div className={styles.diagnostics}>
+          <span className={styles.runIdLabel}>Run ID</span>
+          <code className={styles.runId} title={detail.run.runId}>
+            {shortId(detail.run.runId)}
+          </code>
+          <button
+            type="button"
+            className={styles.copyButton}
+            onClick={() => void navigator.clipboard?.writeText(detail.run.runId)}
+          >
+            Copy
+          </button>
+        </div>
+      </>
+    );
+  }
+
   async function submitBoardFeedback(input: {
     message: string;
     target: BoardRevisionTarget;
@@ -599,65 +710,42 @@ export function ProgressView({
           {headerSlot ? <div className={styles.headerSlot}>{headerSlot}</div> : null}
         </div>
         <div className={styles.headerActions}>
-          <div className={styles.mobileStatusPanel} aria-label="Current run status">
-            <p className={styles.mobileStatusSentence}>
-              {detail.run.reviewGate
-                ? `${currentStageDisplay} is ready for approval.`
-                : terminal
-                  ? headerStatus(detail.run)
-                  : `${currentStageDisplay} - stage ${progress.currentStage} of ${VISIBLE_STAGE_COUNT}.`}
-            </p>
-            <div
-              className={styles.headerMeter}
-              role="progressbar"
-              aria-valuenow={progress.percent}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label={`${progress.percent}% complete`}
-            >
-              <div
-                className={styles.headerMeterFill}
-                style={{ width: `${Math.max(2, progress.percent)}%` }}
-              />
-            </div>
-            {nextStageLabel ? (
-              <p className={styles.mobileStatusMeta}>Next: {nextStageLabel}</p>
-            ) : null}
-            {!terminal && detail.run.message ? (
-              <p className={styles.mobileStatusMeta}>{detail.run.message}</p>
-            ) : null}
-          </div>
           <div className={styles.headerStatusPanel} aria-label="Current run status">
-            <div>
-              <span className={styles.statusLabel}>Status</span>
-              <strong>{headerStatus(detail.run)}</strong>
+            <div className={styles.mobileStatusNarrative}>
+              <strong>{progressSentence}</strong>
+              {progressDetails.map((item) => (
+                <p key={item}>{item}</p>
+              ))}
             </div>
-            {lastCompletedStageLabel ? (
+            <div className={styles.statusGrid}>
               <div>
-                <span className={styles.statusLabel}>Last completed</span>
-                <strong>{lastCompletedStageLabel}</strong>
+                <span className={styles.statusLabel}>Status</span>
+                <strong>{headerStatus(detail.run)}</strong>
               </div>
-            ) : (
+              {lastCompletedStageLabel ? (
+                <div>
+                  <span className={styles.statusLabel}>Last completed</span>
+                  <strong>{lastCompletedStageLabel}</strong>
+                </div>
+              ) : (
+                <div>
+                  <span className={styles.statusLabel}>Current step</span>
+                  <strong>{currentStageDisplay}</strong>
+                </div>
+              )}
+              {nextStageLabel ? (
+                <div>
+                  <span className={styles.statusLabel}>Next step</span>
+                  <strong>{nextStageLabel}</strong>
+                </div>
+              ) : null}
               <div>
-                <span className={styles.statusLabel}>Current step</span>
-                <strong>{currentStageDisplay}</strong>
+                <span className={styles.statusLabel}>Progress</span>
+                <strong>
+                  Stage {progress.currentStage} of {VISIBLE_STAGE_COUNT}
+                </strong>
               </div>
-            )}
-            {nextStageLabel ? (
-              <div>
-                <span className={styles.statusLabel}>Next step</span>
-                <strong>{nextStageLabel}</strong>
-              </div>
-            ) : null}
-            <div>
-              <span className={styles.statusLabel}>Progress</span>
-              <strong>
-                Stage {progress.currentStage} of {VISIBLE_STAGE_COUNT}
-              </strong>
             </div>
-            {!terminal && detail.run.message ? (
-              <p className={styles.headerStatusMessage}>{detail.run.message}</p>
-            ) : null}
             <div
               className={styles.headerMeter}
               role="progressbar"
@@ -793,119 +881,24 @@ export function ProgressView({
               />
             </section>
           ) : null}
+
+          <details className={styles.mobilePipelineDetails}>
+            <summary>
+              Show pipeline
+              <span aria-hidden="true">+</span>
+            </summary>
+            <div
+              className={styles.mobilePipelineContent}
+              role="complementary"
+              aria-label="Stage rail"
+            >
+              {renderPipelineDepth()}
+            </div>
+          </details>
         </section>
 
-        <details className={styles.mobilePipeline}>
-          <summary>Show pipeline</summary>
-          <div className={styles.mobilePipelineBody}>
-            {showBackgroundActivity ? (
-              <div className={styles.backgroundActivity} role="status">
-                <span className={styles.backgroundSpinner} aria-hidden="true" />
-                <span>
-                  {cancelAction?.pending
-                    ? "Stopping after the current step..."
-                    : "Working in the background"}
-                </span>
-              </div>
-            ) : null}
-            <StageRail
-              stages={detail.stages}
-              runStatus={detail.run.status}
-              currentStageType={detail.run.currentStageType}
-              runProgressPercent={detail.run.progressPercent}
-              runMessage={detail.run.message}
-              reviewGate={detail.run.reviewGate}
-              stageLinks={stageLinks}
-              stopAction={
-                showCancelAction && cancelAction
-                  ? {
-                      pending: cancelAction.pending,
-                      error: cancelAction.error,
-                      onStop: cancelAction.onCancel,
-                    }
-                  : undefined
-              }
-              restartAction={restartAction}
-            />
-            {showCancelAction && cancelAction?.error ? (
-              <p className={styles.error} role="alert">
-                {cancelAction.error}
-              </p>
-            ) : null}
-            <p className={styles.sidePanelMeta}>
-              Started {formatDateTime(detail.run.startedAt)}. Updated{" "}
-              {formatDateTime(detail.run.updatedAt)}.
-            </p>
-            <div className={styles.diagnostics}>
-              <span className={styles.runIdLabel}>Run ID</span>
-              <code className={styles.runId} title={detail.run.runId}>{shortId(detail.run.runId)}</code>
-              <button
-                type="button"
-                className={styles.copyButton}
-                onClick={() => void navigator.clipboard?.writeText(detail.run.runId)}
-              >
-                Copy
-              </button>
-            </div>
-          </div>
-        </details>
-
         <aside className={styles.sidePanel} aria-label="Stage rail">
-          <div className={styles.sidePanelHeader}>
-            <div>
-              <p className={styles.eyebrow}>Pipeline</p>
-              <h2 className={styles.sidePanelHeading}>Stages</h2>
-            </div>
-          </div>
-          {showBackgroundActivity ? (
-            <div className={styles.backgroundActivity} role="status">
-              <span className={styles.backgroundSpinner} aria-hidden="true" />
-              <span>
-                {cancelAction?.pending
-                  ? "Stopping after the current step..."
-                  : "Working in the background"}
-              </span>
-            </div>
-          ) : null}
-          <StageRail
-            stages={detail.stages}
-            runStatus={detail.run.status}
-            currentStageType={detail.run.currentStageType}
-            runProgressPercent={detail.run.progressPercent}
-            runMessage={detail.run.message}
-            reviewGate={detail.run.reviewGate}
-            stageLinks={stageLinks}
-            stopAction={
-              showCancelAction && cancelAction
-                ? {
-                    pending: cancelAction.pending,
-                    error: cancelAction.error,
-                    onStop: cancelAction.onCancel,
-                  }
-                : undefined
-            }
-            restartAction={restartAction}
-          />
-          {showCancelAction && cancelAction?.error ? (
-            <p className={styles.error} role="alert">
-              {cancelAction.error}
-            </p>
-          ) : null}
-          <p className={styles.sidePanelMeta}>
-            Started {formatDateTime(detail.run.startedAt)}. Updated{" "}
-            {formatDateTime(detail.run.updatedAt)}.
-          </p>
-          <div className={styles.diagnostics}>
-            <span className={styles.runIdLabel}>Run ID</span>
-            <code className={styles.runId} title={detail.run.runId}>{shortId(detail.run.runId)}</code>
-            <button
-              type="button"
-              className={styles.copyButton}
-              onClick={() => void navigator.clipboard?.writeText(detail.run.runId)}
-            >
-              Copy
-            </button>
-          </div>
+          {renderPipelineDepth()}
         </aside>
       </div>
     </div>

@@ -3,8 +3,10 @@ import { Link, Navigate, useLocation, useNavigate, useParams } from "react-route
 import type {
   ProjectVisibility,
   ProjectStoryboard,
+  StoryboardPanel,
   V1Project,
 } from "@popcorn/shared/v1/types";
+import { AssetImage } from "../components/media/AssetImage";
 import type { ProjectWatchMedia, WorkspaceOutput } from "../lib/api-client";
 import { useAuth } from "../components/auth/AuthProvider";
 import { Button, ButtonLink } from "../components/ui/Button";
@@ -134,6 +136,27 @@ export function ProjectDetailPage() {
     : latestRun
       ? "Open this project's latest run."
       : "Runs are available after this project starts generation.";
+  const mobilePrimaryAction = project ? (
+    <ProjectMobilePrimaryAction
+      projectId={projectId}
+      hasPlayableOutput={hasPlayableOutput}
+      watchDisabled={watchDisabled}
+      watchTitle={watchTitle}
+      storyboard={storyboard}
+      storyboardGenerating={storyboardGenerating}
+      storyboardError={storyboardQuery.error}
+      canGenerateStoryboard={Boolean(
+        !storyboardPreviewIsBlocked(storyboardQuery.isLoading, storyboardQuery.error) &&
+          !storyboardGenerating
+      )}
+      onStoryboardRetry={() => void storyboardQuery.refetch()}
+      onGenerate={() => {
+        void generateStoryboardMutation.mutateAsync().then(() => {
+          void storyboardQuery.refetch();
+        });
+      }}
+    />
+  ) : null;
 
   return (
     <ProjectOverviewPage
@@ -198,6 +221,20 @@ export function ProjectDetailPage() {
         },
       }}
       media={null}
+      mobilePrimaryAction={mobilePrimaryAction}
+      mobileStatus={mobileProjectStatus({
+        storyboard,
+        progress: storyboardProgressState,
+        generating: storyboardGenerating,
+        hasPlayableOutput,
+        projectStatus: project?.status,
+        storyboardError: storyboardQuery.error,
+      })}
+      mobileRunLink={
+        latestRun
+          ? `/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(latestRun.runId)}`
+          : null
+      }
       dangerSection={
         project ? (
           <ProjectDangerSection
@@ -225,6 +262,10 @@ export function ProjectDetailPage() {
   );
 }
 
+function storyboardPreviewIsBlocked(loading: boolean, error: Error | null) {
+  return loading || Boolean(error);
+}
+
 export function ProjectOverviewPage({
   projectId,
   project,
@@ -241,6 +282,9 @@ export function ProjectOverviewPage({
   media,
   dangerSection,
   stagePanel,
+  mobilePrimaryAction,
+  mobileStatus,
+  mobileRunLink,
 }: {
   projectId: string;
   project: V1Project | null;
@@ -265,6 +309,9 @@ export function ProjectOverviewPage({
   media?: ProjectWatchMedia | null;
   dangerSection?: ReactNode;
   stagePanel?: ReactNode;
+  mobilePrimaryAction?: ReactNode;
+  mobileStatus?: string;
+  mobileRunLink?: string | null;
 }) {
   return (
     <main className={styles.shell}>
@@ -291,54 +338,63 @@ export function ProjectOverviewPage({
       ) : null}
 
       {!loading && !error && project ? (
-        <div className={stagePanel ? styles.projectPageLayout : styles.projectContent} id="overview">
+        <>
           <MobileProjectStatus
             project={project}
             projectId={projectId}
             storyboard={storyboard}
-            storyboardPreview={storyboardPreview}
-            media={media}
-            stagePanel={stagePanel}
+            storyboardProgressState={storyboardPreview.progress}
+            storyboardGenerating={storyboardPreview.generating}
+            storyboardError={storyboardPreview.error}
             readOnly={readOnly}
+            media={media}
+            status={mobileStatus}
+            primaryAction={mobilePrimaryAction}
+            runLink={mobileRunLink}
           />
-          <div className={stagePanel ? styles.projectContent : undefined}>
-            <section className={styles.projectTopLayout}>
-              <div className={styles.projectPrimaryColumn}>
-                <ProjectConcept project={project} projectId={projectId} readOnly={readOnly} />
-              </div>
-              <div className={styles.projectStoryboardColumn}>
-                <StoryboardPreview
-                  projectId={projectId}
-                  storyboard={storyboard}
-                  loading={storyboardPreview.loading}
-                  error={storyboardPreview.error}
-                  onRetry={storyboardPreview.onRetry}
-                  generating={storyboardPreview.generating}
-                  progress={storyboardPreview.progress}
-                  generationError={storyboardPreview.generationError}
-                  onGenerate={storyboardPreview.onGenerate}
-                  readOnly={readOnly}
-                />
-                <div className={styles.projectContextGrid}>
-                  <ProjectBrief project={project} projectId={projectId} readOnly={readOnly} />
-                  <ProjectScript
-                    project={project}
+          <div
+            className={`${stagePanel ? styles.projectPageLayout : styles.projectContent} ${styles.desktopProjectOverview}`}
+            id="overview"
+          >
+            <div className={stagePanel ? styles.projectContent : undefined}>
+              <section className={styles.projectTopLayout}>
+                <div className={styles.projectPrimaryColumn}>
+                  <ProjectConcept project={project} projectId={projectId} readOnly={readOnly} />
+                </div>
+                <div className={styles.projectStoryboardColumn}>
+                  <StoryboardPreview
                     projectId={projectId}
                     storyboard={storyboard}
+                    loading={storyboardPreview.loading}
+                    error={storyboardPreview.error}
+                    onRetry={storyboardPreview.onRetry}
+                    generating={storyboardPreview.generating}
+                    progress={storyboardPreview.progress}
+                    generationError={storyboardPreview.generationError}
+                    onGenerate={storyboardPreview.onGenerate}
                     readOnly={readOnly}
                   />
+                  <div className={styles.projectContextGrid}>
+                    <ProjectBrief project={project} projectId={projectId} readOnly={readOnly} />
+                    <ProjectScript
+                      project={project}
+                      projectId={projectId}
+                      storyboard={storyboard}
+                      readOnly={readOnly}
+                    />
+                  </div>
                 </div>
-              </div>
-            </section>
-            {media ? <ProjectWatchVideo media={media} /> : null}
-            {dangerSection}
+              </section>
+              {media ? <ProjectWatchVideo media={media} /> : null}
+              {dangerSection}
+            </div>
+            {stagePanel ? (
+              <aside className={styles.stageAside} aria-label="Run pipeline">
+                {stagePanel}
+              </aside>
+            ) : null}
           </div>
-          {stagePanel ? (
-            <aside className={styles.stageAside} aria-label="Run pipeline">
-              {stagePanel}
-            </aside>
-          ) : null}
-        </div>
+        </>
       ) : null}
     </main>
   );
@@ -348,113 +404,289 @@ function MobileProjectStatus({
   project,
   projectId,
   storyboard,
-  storyboardPreview,
-  media,
-  stagePanel,
+  storyboardProgressState,
+  storyboardGenerating,
+  storyboardError,
   readOnly,
+  media,
+  status,
+  primaryAction,
+  runLink,
 }: {
   project: V1Project;
   projectId: string;
   storyboard: ProjectStoryboard | null;
-  storyboardPreview: {
-    loading: boolean;
-    error: Error | null;
-    onRetry: () => void;
-    generating: boolean;
-    progress: StoryboardProgress;
-    generationError: Error | null;
-    onGenerate?: () => void;
-  };
-  media?: ProjectWatchMedia | null;
-  stagePanel?: ReactNode;
+  storyboardProgressState: StoryboardProgress;
+  storyboardGenerating: boolean;
+  storyboardError: Error | null;
   readOnly: boolean;
+  media?: ProjectWatchMedia | null;
+  status?: string;
+  primaryAction?: ReactNode;
+  runLink?: string | null;
 }) {
   const brief = project.brief;
-  const hasStoryboard = Boolean(storyboard);
-  const progressPercent = storyboardPreview.progress.total
-    ? storyboardPreview.progress.percent
-    : storyboardPreview.generating
-      ? 18
-      : hasStoryboard
-        ? 100
-        : 0;
-  const completedPanels = storyboardPreview.progress.ready + storyboardPreview.progress.failed;
-  const statusSentence = storyboardPreview.generating
-    ? `Generating storyboard - ${completedPanels} of ${storyboardPreview.progress.total || "many"} panels`
-    : media
-      ? "Final video is ready to watch"
-      : hasStoryboard
-        ? "Storyboard is ready for review"
-        : "Ready to generate the storyboard";
-  const primaryAction = media ? (
-    <ButtonLink variant="cta" size="lg" to={`/projects/${encodeURIComponent(projectId)}/watch`}>
-      Watch
-    </ButtonLink>
-  ) : hasStoryboard ? (
-    <ButtonLink variant="cta" size="lg" to={`/projects/${encodeURIComponent(projectId)}/storyboard`}>
-      Review storyboard
-    </ButtonLink>
-  ) : !readOnly && storyboardPreview.onGenerate ? (
-    <Button
-      variant="cta"
-      size="lg"
-      onClick={storyboardPreview.onGenerate}
-      disabled={storyboardPreview.generating}
-      isLoading={storyboardPreview.generating}
-    >
-      Generate storyboard
-    </Button>
-  ) : (
-    <ButtonLink variant="cta" size="lg" to={`/projects/${encodeURIComponent(projectId)}/concept`}>
-      View concept
-    </ButtonLink>
-  );
+  const title = brief?.oneBigIdea ?? brief?.goal ?? project.name;
+  const sceneCount = storyboard?.scenes.length ?? 0;
+  const momentCount =
+    storyboard?.scenes.reduce((total, scene) => total + scene.beats.length, 0) ?? 0;
 
   return (
-    <section className={styles.mobileStatusCard} aria-label="Project status">
-      <ProjectPoster name={project.name} posterUrl={project.posterUrl} />
-      <div className={styles.mobileStatusBody}>
-        <div className={styles.mobileStatusCopy}>
-          <StatusChip status={project.status} />
-          <h2>{project.name}</h2>
-          <p>{statusSentence}</p>
+    <section className={styles.mobileProjectStatus} aria-label="Project status">
+      <MobileProjectHero project={project} storyboard={storyboard} media={media} />
+      <div className={styles.mobileStatusCard}>
+        <div className={styles.mobileStatusText}>
+          <span className={styles.eyebrow}>Project</span>
+          <h2>{title}</h2>
+          <p>
+            {status ??
+              mobileProjectStatus({
+                storyboard,
+                progress: storyboardProgressState,
+                generating: storyboardGenerating,
+                hasPlayableOutput: Boolean(media),
+                projectStatus: project.status,
+                storyboardError,
+              })}
+          </p>
         </div>
         <div
-          className={styles.mobileMeter}
+          className={styles.mobileProgressTrack}
           role="progressbar"
-          aria-valuenow={progressPercent}
+          aria-label="Storyboard progress"
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-label={`${progressPercent}% complete`}
+          aria-valuenow={storyboardProgressState.percent}
         >
-          <span style={{ width: `${Math.max(3, progressPercent)}%` }} />
+          <span style={{ width: `${storyboardProgressState.percent}%` }} />
         </div>
-        <div className={styles.mobilePrimaryAction}>{primaryAction}</div>
-        <details className={styles.mobileDetails}>
-          <summary>Project details</summary>
-          <dl>
-            <div>
-              <dt>Hook</dt>
-              <dd>{brief?.hookQuestion ?? brief?.oneBigIdea ?? "Not set"}</dd>
-            </div>
-            <div>
-              <dt>Length</dt>
-              <dd>{formatDuration(brief?.targetLengthSec) ?? "Unset"}</dd>
-            </div>
-            <div>
-              <dt>Format</dt>
-              <dd>{[brief?.aspectRatio, brief?.format, brief?.platform].filter(Boolean).join(" / ") || "Unset"}</dd>
-            </div>
-          </dl>
+        {primaryAction ? <div className={styles.mobilePrimaryAction}>{primaryAction}</div> : null}
+      </div>
+
+      <div className={styles.mobileDisclosureList}>
+        <details className={styles.mobileDisclosure}>
+          <summary>
+            <span>Storyboard</span>
+            <strong>
+              {sceneCount > 0
+                ? `${sceneCount} ${sceneCount === 1 ? "scene" : "scenes"}`
+                : "Not started"}
+            </strong>
+          </summary>
+          <p>
+            {momentCount > 0
+              ? `${momentCount} ${momentCount === 1 ? "moment" : "moments"} are ready to review.`
+              : "Storyboard scenes and panels will appear after generation starts."}
+          </p>
+          {!readOnly && storyboard ? (
+            <ButtonLink
+              variant="secondary"
+              size="sm"
+              to={`/projects/${encodeURIComponent(projectId)}/storyboard`}
+            >
+              Open storyboard
+            </ButtonLink>
+          ) : null}
         </details>
-        {stagePanel ? (
-          <details className={styles.mobileDetails}>
-            <summary>View stages</summary>
-            <div className={styles.mobileStagePanel}>{stagePanel}</div>
+        <details className={styles.mobileDisclosure}>
+          <summary>
+            <span>Direction</span>
+            <strong>{brief?.format ?? brief?.platform ?? "Brief"}</strong>
+          </summary>
+          {brief?.hookQuestion ? <p>{brief.hookQuestion}</p> : null}
+          {brief?.strongestVisual ? <p>{brief.strongestVisual}</p> : null}
+          {!readOnly ? (
+            <div className={styles.mobileDisclosureActions}>
+              <ButtonLink
+                variant="secondary"
+                size="sm"
+                to={`/projects/${encodeURIComponent(projectId)}/brief`}
+              >
+                Open brief
+              </ButtonLink>
+              <ButtonLink
+                variant="ghost"
+                size="sm"
+                to={`/projects/${encodeURIComponent(projectId)}/script`}
+              >
+                Script
+              </ButtonLink>
+            </div>
+          ) : null}
+        </details>
+        {!readOnly ? (
+          <details className={styles.mobileDisclosure} id="mobile-stages">
+            <summary>
+              <span>Stages</span>
+              <strong>{storyboardGenerating ? "In progress" : runLink ? "Latest run" : "Waiting"}</strong>
+            </summary>
+            <p>
+              Pipeline details stay one tap away so the main screen stays focused on the next step.
+            </p>
+            {runLink ? (
+              <ButtonLink variant="secondary" size="sm" to={runLink}>
+                View stages
+              </ButtonLink>
+            ) : null}
           </details>
         ) : null}
       </div>
     </section>
+  );
+}
+
+function MobileProjectHero({
+  project,
+  storyboard,
+  media,
+}: {
+  project: V1Project;
+  storyboard: ProjectStoryboard | null;
+  media?: ProjectWatchMedia | null;
+}) {
+  const panel = latestStoryboardPanel(storyboard);
+  if (panel) {
+    return (
+      <AssetImage
+        kind="image"
+        url={panel.thumbnailUrl ?? panel.url}
+        assetId={panel.imageAssetId ?? null}
+        prompt={panel.prompt ?? null}
+        status={panel.status}
+        mediaClassName={styles.mobileHeroImage}
+        placeholderClassName={`${styles.mobileHeroImage} ${styles.posterEmpty}`}
+      />
+    );
+  }
+  if (media?.posterUrl) {
+    return (
+      <ImageWithSkeleton
+        className={styles.mobileHeroImage}
+        src={media.posterUrl}
+        alt=""
+      />
+    );
+  }
+  return <ProjectPoster name={project.name} posterUrl={project.posterUrl} />;
+}
+
+function ProjectMobilePrimaryAction({
+  projectId,
+  hasPlayableOutput,
+  watchDisabled,
+  watchTitle,
+  storyboard,
+  storyboardGenerating,
+  storyboardError,
+  canGenerateStoryboard,
+  onStoryboardRetry,
+  onGenerate,
+}: {
+  projectId: string;
+  hasPlayableOutput: boolean;
+  watchDisabled: boolean;
+  watchTitle: string;
+  storyboard: ProjectStoryboard | null;
+  storyboardGenerating: boolean;
+  storyboardError: Error | null;
+  canGenerateStoryboard: boolean;
+  onStoryboardRetry: () => void;
+  onGenerate: () => void;
+}) {
+  if (storyboardError) {
+    return (
+      <Button variant="cta" fullWidth onClick={onStoryboardRetry}>
+        Retry storyboard
+      </Button>
+    );
+  }
+  if (storyboardGenerating) {
+    return (
+      <ButtonLink variant="cta" fullWidth to="#mobile-stages">
+        View stages
+      </ButtonLink>
+    );
+  }
+  if (hasPlayableOutput) {
+    return (
+      <ButtonLink
+        variant="cta"
+        fullWidth
+        to={`/projects/${encodeURIComponent(projectId)}/watch`}
+        aria-disabled={watchDisabled}
+        title={watchTitle}
+      >
+        Watch
+      </ButtonLink>
+    );
+  }
+  if (storyboard) {
+    return (
+      <ButtonLink
+        variant="cta"
+        fullWidth
+        to={`/projects/${encodeURIComponent(projectId)}/storyboard`}
+      >
+        Review storyboard
+      </ButtonLink>
+    );
+  }
+  return (
+    <Button
+      variant="cta"
+      fullWidth
+      disabled={!canGenerateStoryboard}
+      onClick={onGenerate}
+    >
+      Create storyboard
+    </Button>
+  );
+}
+
+function mobileProjectStatus({
+  storyboard,
+  progress,
+  generating,
+  hasPlayableOutput,
+  projectStatus,
+  storyboardError,
+}: {
+  storyboard: ProjectStoryboard | null;
+  progress: StoryboardProgress;
+  generating: boolean;
+  hasPlayableOutput: boolean;
+  projectStatus?: string;
+  storyboardError?: Error | null;
+}) {
+  if (storyboardError) return "Storyboard could not load. Retry to continue.";
+  if (generating) {
+    if (progress.total > 0) {
+      return `Generating storyboard: ${progress.ready + progress.failed} of ${progress.total} panels ready.`;
+    }
+    return "Generating storyboard: preparing scenes.";
+  }
+  if (hasPlayableOutput) return "Ready to watch.";
+  if (storyboard) {
+    const sceneCount = storyboard.scenes.length;
+    return `Storyboard ready: ${sceneCount} ${sceneCount === 1 ? "scene" : "scenes"} to review.`;
+  }
+  if (projectStatus === "failed") return "Needs attention before generation can continue.";
+  return "Ready for a storyboard.";
+}
+
+function latestStoryboardPanel(storyboard: ProjectStoryboard | null): StoryboardPanel | null {
+  if (!storyboard) return null;
+  const panels = storyboard.scenes.flatMap((scene) =>
+    scene.beats.flatMap((beat) => beat.panels),
+  );
+  return (
+    panels.find((panel) => {
+      const hasUrl = Boolean(panel.thumbnailUrl ?? panel.url);
+      const isReady = panel.status === "approved" || panel.status === "ready";
+      return hasUrl && isReady;
+    }) ??
+    panels.find((panel) => Boolean(panel.thumbnailUrl ?? panel.url)) ??
+    null
   );
 }
 

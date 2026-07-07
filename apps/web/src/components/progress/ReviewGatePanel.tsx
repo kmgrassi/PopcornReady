@@ -170,8 +170,6 @@ export function ReviewGatePanel({
   onApprove,
 }: ReviewGatePanelProps) {
   const isBriefReviewGate = stageType === "brief_intake";
-  const [feedbackOpen, setFeedbackOpen] = useState(Boolean(feedbackNote.trim()));
-  const canSubmitFeedback = Boolean(feedbackNote.trim());
 
   return (
     <section className={styles.reviewPanel} aria-labelledby="review-gate-heading">
@@ -210,25 +208,23 @@ export function ReviewGatePanel({
           </span>
         </div>
       )}
-      {feedbackOpen ? (
-        <div className={styles.feedbackField}>
-          <label className={styles.feedbackLabel} htmlFor="review-feedback-note">
-            What should change?
-          </label>
-          <textarea
-            id="review-feedback-note"
-            className={styles.feedbackTextarea}
-            value={feedbackNote}
-            onChange={(event) => onFeedbackNoteChange(event.target.value)}
-            placeholder="Tell the agent what to revise before continuing..."
-            disabled={!!pending}
-            rows={4}
-          />
-          <p className={styles.feedbackHint}>
-            This sends the checkpoint back through the agent before production continues.
-          </p>
-        </div>
-      ) : null}
+      <div className={styles.feedbackField}>
+        <label className={styles.feedbackLabel} htmlFor="review-feedback-note">
+          Feedback
+        </label>
+        <textarea
+          id="review-feedback-note"
+          className={styles.feedbackTextarea}
+          value={feedbackNote}
+          onChange={(event) => onFeedbackNoteChange(event.target.value)}
+          placeholder="Optional feedback before continuing..."
+          disabled={!!pending}
+          rows={4}
+        />
+        <p className={styles.feedbackHint}>
+          Use this when you want the generator to revise this stage before continuing.
+        </p>
+      </div>
       {actionError ? (
         <p className={styles.error} role="alert">
           {actionError}
@@ -239,33 +235,20 @@ export function ReviewGatePanel({
           <>
             <button
               type="button"
-              className={styles.secondaryButton}
-              onClick={() => {
-                if (!feedbackOpen) {
-                  setFeedbackOpen(true);
-                  return;
-                }
-                reviewActions.onReject(feedbackNote);
-              }}
-              disabled={!!pending || (feedbackOpen && !canSubmitFeedback)}
+              className={styles.reviewCancelButton}
+              onClick={reviewActions.onCancel}
+              disabled={!!pending}
             >
-              {pending === "reject"
-                ? "Requesting..."
-                : feedbackOpen
-                  ? "Send changes"
-                  : "Request changes"}
+              {pending === "cancel" ? "Stopping..." : "Stop here"}
             </button>
-            <details className={styles.moreActions}>
-              <summary>More</summary>
-              <button
-                type="button"
-                className={styles.reviewCancelButton}
-                onClick={reviewActions.onCancel}
-                disabled={!!pending}
-              >
-                {pending === "cancel" ? "Stopping..." : "Stop here"}
-              </button>
-            </details>
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              onClick={() => reviewActions.onReject(feedbackNote)}
+              disabled={!!pending}
+            >
+              {pending === "reject" ? "Requesting..." : "Request changes"}
+            </button>
           </>
         ) : null}
         <button

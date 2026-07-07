@@ -48,10 +48,14 @@ export function LaunchpadPage() {
             ) : null}
             <HeroCard action={action} />
             {summaryState.summary.counts ? (
-              <OverviewStats counts={summaryState.summary.counts} />
+              <div className={styles.desktopStats}>
+                <OverviewStats counts={summaryState.summary.counts} />
+              </div>
             ) : null}
-            <ActiveRunsPanel runs={summaryState.summary.activeRuns ?? []} />
-            <RecentOutputsStrip outputs={summaryState.summary.recentOutputs ?? []} />
+            <div className={styles.mobileFeed}>
+              <ActiveRunsPanel runs={summaryState.summary.activeRuns ?? []} />
+              <RecentOutputsStrip outputs={summaryState.summary.recentOutputs ?? []} />
+            </div>
           </>
         )
       ) : null}

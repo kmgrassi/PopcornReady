@@ -11,7 +11,7 @@ export function RecentOutputsStrip({
   return (
     <section className={styles.section} aria-labelledby="recent-outputs-title">
       <div className={styles.header}>
-        <h2 id="recent-outputs-title">Recent outputs</h2>
+        <h2 id="recent-outputs-title">Latest from your studio</h2>
         <Link to="/library/projects">View projects</Link>
       </div>
 
