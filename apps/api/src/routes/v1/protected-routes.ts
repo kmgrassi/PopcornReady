@@ -9,6 +9,7 @@ import { briefRouter } from "./brief.js";
 import { catalogProtectedRouter } from "./catalog.js";
 import { creditsRouter } from "./credits.js";
 import { evalRouter } from "./eval.js";
+import { generatedAssetsRouter } from "./generated-assets.js";
 import { manualTestsRouter } from "./manual-tests.js";
 import { meRouter } from "./me.js";
 import { miscCapabilitiesRouter } from "./misc-capabilities.js";
@@ -45,4 +46,5 @@ export function mountProtectedV1Routes(v1: Router) {
   v1.use(timelinesRouter);
   v1.use(workspaceModelSettingsRouter);
   v1.use(evalRouter);
+  v1.use(generatedAssetsRouter);
 }

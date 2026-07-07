@@ -653,6 +653,27 @@ export async function createGeneratedAsset(
   return { status: 202, body: { job: finished } };
 }
 
+export async function startGeneratedAssetJob(
+  args: CreateGeneratedAssetArgs
+): Promise<ApiResult> {
+  const { auth, projectId, body, progress } = args;
+  const job = await enqueueGeneratedAssetJob({ auth, projectId, body });
+  void runGeneratedAssetJob({
+    auth,
+    projectId,
+    jobId: job.id,
+    progress,
+  }).catch((err) => {
+    logger.error("generated_asset.background_job_failed", {
+      workspaceId: auth.workspaceId,
+      projectId,
+      jobId: job.id,
+      error: { message: err instanceof Error ? err.message : String(err) },
+    });
+  });
+  return { status: 202, body: { job } };
+}
+
 export async function enqueueGeneratedAssetJob(
   args: Pick<CreateGeneratedAssetArgs, "auth" | "projectId" | "body">
 ): Promise<V1Job> {
