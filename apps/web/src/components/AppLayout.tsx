@@ -78,7 +78,7 @@ export function RootLayout() {
 export function AppLayout() {
   return (
     <div className="web-shell">
-      <header className="web-shell-header">
+      <header className={`web-shell-header ${styles.publicHeader}`}>
         <Link className={`web-shell-brand ${styles.publicBrand}`} to="/">
           <LogoMark
             className={`web-shell-logo ${styles.publicLogo} ${styles.logoStyleGlow} ${styles.logoColorPopcornYellow}`}
