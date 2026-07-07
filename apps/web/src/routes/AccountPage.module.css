@@ -56,6 +56,33 @@
   margin: 0;
 }
 
+.installCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.installCard h2 {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-lg);
+}
+
+.installCard p {
+  margin: 0;
+}
+
+.installActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
 .section h2 {
   margin: 0 0 0.5rem;
   font-size: 1.05rem;
@@ -117,4 +144,15 @@
 
 .credit {
   color: var(--success, #2e7d32);
+}
+
+@media (max-width: 640px) {
+  .installCard {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .installActions {
+    justify-content: flex-end;
+  }
 }
