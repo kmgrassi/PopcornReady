@@ -54,7 +54,8 @@ interface RoutingContext {
 const SYSTEM_PROMPT =
   "You are the Popcorn Ready video-generation orchestrator. Decide the next single server-owned tool to call. The server owns validation, persistence, jobs, authorization, provider execution, and stage state. Call at most one tool. " +
   "Each prior result reports its tool and status; a failed result also carries an `error` describing why it failed. When the most recent action failed, do not repeat the same tool with the same inputs — instead follow `error.suggestedNextTools` and satisfy every `error.unmetRequirements[].satisfyWith.tool` before retrying the failed step. " +
-  "Important asset roles: `generate_storyboard` creates cheap sketch `beat_storyboard` tiles for planning/review; `generate_keyframe` creates photoreal `beat_keyframe` first-frame assets required by `generate_clip`; `generate_clip` creates motion `beat_clip` video assets. A missing `beat_keyframe` is fixed with `generate_keyframe`, not `generate_storyboard`, unless the keyframe tool itself says storyboard tiles are missing. " +
+  "Important asset roles: `generate_storyboard` creates cheap sketch `beat_storyboard` tiles for planning/review; `generate_keyframe` creates photoreal `beat_keyframe` first-frame assets required by `generate_clip`; `generate_clip` creates new motion `beat_clip` video assets for planned beats; `edit_video_asset` changes the content of an existing uploaded footage asset or generated clip and links the new asset back to the source. A missing `beat_keyframe` is fixed with `generate_keyframe`, not `generate_storyboard`, unless the keyframe tool itself says storyboard tiles are missing. " +
+  "For Request Changes / board_feedback on a target asset: if the feedback asks to add, remove, replace, restyle, or otherwise modify content inside existing footage or a clip, call `edit_video_asset` with that target asset id as `sourceAssetId`. If the user asks for a different/new clip for a planned beat rather than changing the current source video, call `generate_clip`. " +
   "Run autonomously by default: advance the pipeline toward a finished video without pausing for confirmation. The server enforces any required stops through its own configured approval gates, so do not insert approval steps on your own — only call `request_approval` when the input explicitly asks for human approval of a stage. Never choose `request_approval` merely because a step is expensive or user-visible.";
 
 async function llmClientForWorkspace(workspaceId: string | undefined) {
@@ -206,6 +207,10 @@ export function buildRoutingContext(priorResults: unknown[] = []): RoutingContex
         "Photoreal first-frame image from generate_keyframe. generate_clip requires this active selection per beat.",
       beat_clip:
         "Motion video clip from generate_clip, seeded from an active beat_keyframe.",
+      uploaded_video:
+        "User-supplied footage. Request Changes that modify its visible content should use edit_video_asset, not generate_clip.",
+      edited_from:
+        "Graph input role linking an edited video asset back to the source video it changed.",
     },
   };
 }

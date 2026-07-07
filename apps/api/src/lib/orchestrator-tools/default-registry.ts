@@ -12,6 +12,10 @@ import {
   type DevelopStoryBlueprintDeps,
 } from "./develop-story-blueprint";
 import { createDraftScriptTool, type DraftScriptDeps } from "./draft-script";
+import {
+  createEditVideoAssetTool,
+  type EditVideoAssetDeps,
+} from "./edit-video-asset";
 import { createExportVideoTool, type ExportVideoDeps } from "./export-video";
 import {
   createFitAudioToPictureTool,
@@ -55,6 +59,7 @@ export interface DefaultToolRegistryDeps {
   generateAudio?: Partial<GenerateAudioDeps>;
   generateKeyframe?: Partial<GenerateKeyframeDeps>;
   generateClip?: Partial<GenerateClipDeps>;
+  editVideoAsset?: Partial<EditVideoAssetDeps>;
   generateStoryboard?: Partial<GenerateStoryboardDeps>;
   planVisualAnchors?: Partial<PlanVisualAnchorsDeps>;
   requestApproval?: Partial<RequestApprovalDeps>;
@@ -76,6 +81,7 @@ export function createDefaultToolRegistry(
   registry.register(createGenerateStoryboardTool(deps.generateStoryboard));
   registry.register(createGenerateKeyframeTool(deps.generateKeyframe));
   registry.register(createGenerateClipTool(deps.generateClip));
+  registry.register(createEditVideoAssetTool(deps.editVideoAsset));
   registry.register(createFitAudioToPictureTool(deps.fitAudioToPicture));
   registry.register(createCritiqueTimelineTool(deps.critiqueTimeline));
   registry.register(createExportVideoTool(deps.exportVideo));

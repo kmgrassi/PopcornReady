@@ -192,6 +192,67 @@ test("parseBoardRevisionTarget rejects an invalid currentBrief payload", () => {
   );
 });
 
+test("parseBoardRevisionTarget accepts primary footage asset targets", () => {
+  const target = parseBoardRevisionTarget(
+    {
+      target: {
+        scope: "asset",
+        assetId: "source_office_clip",
+        targetAssetUse: "primary_footage",
+        label: "Uploaded office clip",
+      },
+    },
+    "run_1"
+  );
+
+  assert.equal(target.scope, "asset");
+  assert.equal(target.assetId, "source_office_clip");
+  assert.equal(target.targetAssetUse, "primary_footage");
+});
+
+test("parseBoardRevisionTarget rejects asset scope without an asset id", () => {
+  assert.throws(
+    () =>
+      parseBoardRevisionTarget(
+        {
+          target: {
+            scope: "asset",
+            targetAssetUse: "primary_footage",
+          },
+        },
+        "run_1"
+      ),
+    (err: unknown) => {
+      assert.ok(err instanceof ApiError);
+      assert.equal(err.code, "validation_failed");
+      assert.match(err.message, /require an asset id/i);
+      return true;
+    }
+  );
+});
+
+test("parseBoardRevisionTarget rejects unsupported asset target uses", () => {
+  assert.throws(
+    () =>
+      parseBoardRevisionTarget(
+        {
+          target: {
+            scope: "asset",
+            assetId: "source_office_clip",
+            targetAssetUse: "banana",
+          },
+        },
+        "run_1"
+      ),
+    (err: unknown) => {
+      assert.ok(err instanceof ApiError);
+      assert.equal(err.code, "validation_failed");
+      assert.match(err.message, /targetAssetUse/i);
+      return true;
+    }
+  );
+});
+
 test("projects a regenerated stage from the latest action instead of stale failures", () => {
   const payload = projectRunDetailFromParts(
     runFixture({ status: "waiting" }),

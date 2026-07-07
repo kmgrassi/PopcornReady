@@ -10,6 +10,7 @@ import { createOrLoadBriefBattery } from "./specs/create-or-load-brief";
 import { critiqueTimelineBattery } from "./specs/critique-timeline";
 import { developStoryBlueprintBattery } from "./specs/develop-story-blueprint";
 import { draftScriptBattery } from "./specs/draft-script";
+import { editVideoAssetBattery } from "./specs/edit-video-asset";
 import { exportVideoBattery } from "./specs/export-video";
 import { fitAudioToPictureBattery } from "./specs/fit-audio-to-picture";
 import { generateAnchorBattery } from "./specs/generate-anchor";
@@ -32,6 +33,7 @@ const ALL_BATTERIES: ToolBattery[] = [
   generateStoryboardBattery,
   generateKeyframeBattery,
   generateClipBattery,
+  editVideoAssetBattery,
   generateAudioBattery,
   fitAudioToPictureBattery,
   assembleTimelineBattery,
