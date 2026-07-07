@@ -61,6 +61,35 @@
   font-size: 1.05rem;
 }
 
+.linkGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.linkGrid a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-strong);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.linkGrid a:hover {
+  border-color: var(--accent-border);
+}
+
+.linkGrid a:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
 .packs {
   display: flex;
   flex-wrap: wrap;

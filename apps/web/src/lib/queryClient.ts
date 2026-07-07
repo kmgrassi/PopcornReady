@@ -445,8 +445,12 @@ export function useCreateProviderSmokeAssetMutation() {
   });
 }
 
-export function useDashboardSummaryQuery(authScope: string) {
-  const meQuery = useMeQuery(authScope);
+export function useDashboardSummaryQuery(
+  authScope: string,
+  options: { enabled?: boolean } = {},
+) {
+  const enabled = options.enabled ?? true;
+  const meQuery = useMeQuery(authScope, { enabled });
 
   const summaryQuery = useQuery({
     queryKey: meQuery.data
@@ -454,7 +458,7 @@ export function useDashboardSummaryQuery(authScope: string) {
       : ["dashboard", "summary", "pending"],
     queryFn: ({ signal }: { signal: QuerySignal }) =>
       dashboardApi.getSummary(meQuery.data!.workspaceId, signal),
-    enabled: Boolean(meQuery.data),
+    enabled: enabled && Boolean(meQuery.data),
     refetchInterval: (query) => {
       const data = query.state.data as DashboardSummaryResponse | undefined;
       if (!data?.summary.activeRuns.some((run) => isRunActive(run.status))) return false;
@@ -466,9 +470,10 @@ export function useDashboardSummaryQuery(authScope: string) {
 
   return {
     data: summaryQuery.data ?? null,
-    error: meQuery.error ?? summaryQuery.error ?? null,
-    loading: meQuery.isLoading || summaryQuery.isLoading,
+    error: enabled ? meQuery.error ?? summaryQuery.error ?? null : null,
+    loading: enabled && (meQuery.isLoading || summaryQuery.isLoading),
     refresh: () => {
+      if (!enabled) return;
       void meQuery.refetch();
       void summaryQuery.refetch();
     },
