@@ -554,7 +554,6 @@ function StudioFlowView({
     return (
       <main className={styles.shell}>
         <DesktopStudioStepper step={flow.step} onStepClick={guardedGoToStep} />
-        {mobileStep}
         {flow.step === "export" ? (
           <section className={styles.stepBody}>
             <ExportStep {...stepProps} />
