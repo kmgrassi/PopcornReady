@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { canAccessAdminSurface } from "../components/auth/AdminRoute";
 import { useAuth } from "../components/auth/AuthProvider";
 import { Button } from "../components/ui/Button";
+import { usePwaInstallPrompt } from "../lib/pwaInstallPrompt";
 import {
   useBuyCreditsMutation,
   useCreditPacksQuery,
@@ -28,6 +29,7 @@ function usd(credits: number, creditValueUsd: number): string {
 
 export function AccountPage() {
   const auth = useAuth();
+  const installPrompt = usePwaInstallPrompt();
   const authScope = auth.user?.id ?? (DEV_AUTOPILOT ? "dev-autopilot" : auth.status);
   const enabled =
     auth.status !== "loading" &&
@@ -105,6 +107,30 @@ export function AccountPage() {
           {showAdmin ? <Link to="/admin">Admin workbench</Link> : null}
         </div>
       </section>
+
+      {installPrompt.isAvailable ? (
+        <section className={styles.installCard} aria-labelledby="pwa-install-title">
+          <div>
+            <h2 id="pwa-install-title">Add to home screen</h2>
+            <p className="muted">
+              Open Popcorn Ready from your phone home screen for quicker camera,
+              upload, and review access.
+            </p>
+          </div>
+          <div className={styles.installActions}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void installPrompt.promptInstall()}
+            >
+              Add app
+            </Button>
+            <Button variant="ghost" size="sm" onClick={installPrompt.dismiss}>
+              Dismiss
+            </Button>
+          </div>
+        </section>
+      ) : null}
 
       {!isLocal ? (
         <section className={styles.section}>
