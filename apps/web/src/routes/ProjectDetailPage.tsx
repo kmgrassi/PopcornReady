@@ -144,7 +144,7 @@ export function ProjectDetailPage() {
       watchTitle={watchTitle}
       storyboard={storyboard}
       storyboardGenerating={storyboardGenerating}
-      storyboardError={storyboardQuery.error}
+      storyboardError={generateStoryboardMutation.error ?? storyboardGenerationError}
       canGenerateStoryboard={Boolean(
         !storyboardPreviewIsBlocked(storyboardQuery.isLoading, storyboardQuery.error) &&
           !storyboardGenerating
@@ -228,7 +228,7 @@ export function ProjectDetailPage() {
         generating: storyboardGenerating,
         hasPlayableOutput,
         projectStatus: project?.status,
-        storyboardError: storyboardQuery.error,
+        storyboardError: generateStoryboardMutation.error ?? storyboardGenerationError,
       })}
       mobileRunLink={
         latestRun
@@ -345,11 +345,11 @@ export function ProjectOverviewPage({
             storyboard={storyboard}
             storyboardProgressState={storyboardPreview.progress}
             storyboardGenerating={storyboardPreview.generating}
-            storyboardError={storyboardPreview.error}
+            storyboardError={storyboardPreview.generationError ?? storyboardPreview.error}
             readOnly={readOnly}
             media={media}
             status={mobileStatus}
-            primaryAction={mobilePrimaryAction}
+            primaryAction={mobilePrimaryAction ?? headerActions}
             runLink={mobileRunLink}
           />
           <div
