@@ -140,7 +140,7 @@ test.describe("run progress actions", () => {
       },
     });
     await expect(page.getByText("Feedback received. Regenerating this stage.")).toBeVisible();
-    await expect(page.getByLabel(/^(Feedback|What should change\?)$/)).toHaveCount(0);
+    await expect(page.getByLabel(/^(Feedback|What should change\?)$/)).toBeHidden();
   });
 
   test("failed runs and successful studio-linked runs render the right recovery paths", async ({
