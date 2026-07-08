@@ -15,6 +15,33 @@ import {
 // gpt-4.1) reject it, so only send it when the model is a reasoning one.
 const REASONING_MODEL = /^(gpt-5|o[1-9])/i;
 
+interface OpenAiTextPart {
+  type: "text";
+  text: string;
+}
+
+interface OpenAiImageUrlPart {
+  type: "image_url";
+  image_url: {
+    url: string;
+  };
+}
+
+type OpenAiContentPart = OpenAiTextPart | OpenAiImageUrlPart;
+type OpenAiUserContent = string | OpenAiContentPart[];
+
+interface OpenAiSystemMessage {
+  role: "system";
+  content: string;
+}
+
+interface OpenAiUserMessage {
+  role: "user";
+  content: OpenAiUserContent;
+}
+
+type OpenAiMessageParam = OpenAiSystemMessage | OpenAiUserMessage;
+
 function reasoningParams(
   model: string,
   effort?: LlmEffort
@@ -58,7 +85,24 @@ export interface OpenAiFunctionTool {
   };
 }
 
-type ChatCreate = (params: Record<string, unknown>) => Promise<OpenAiCompletionLike>;
+interface OpenAiNamedToolChoice {
+  type: "function";
+  function: {
+    name: string;
+  };
+}
+
+interface OpenAiChatRequest {
+  model: string;
+  messages: OpenAiMessageParam[];
+  tools?: OpenAiFunctionTool[];
+  tool_choice?: "auto" | OpenAiNamedToolChoice;
+  parallel_tool_calls?: boolean;
+  max_completion_tokens?: number;
+  reasoning_effort?: LlmEffort;
+}
+
+type ChatCreate = (params: OpenAiChatRequest) => Promise<OpenAiCompletionLike>;
 
 // Low-reasoning calls route to the cheaper fast model.
 const FAST_EFFORTS = new Set<LlmEffort>(["minimal", "low"]);
@@ -191,7 +235,7 @@ export function createOpenAiLlmClient(deps: OpenAiDeps): LlmClient {
 
   const structuredImpl = async <T>(
     args: StructuredArgs,
-    userContent: unknown
+    userContent: OpenAiUserContent
   ): Promise<T> => {
     const callModel = pickModel(args.effort);
     const tool = toOpenAITool({
@@ -226,7 +270,7 @@ export function createOpenAiLlmClient(deps: OpenAiDeps): LlmClient {
     },
     async structuredVision<T>(args: StructuredVisionArgs) {
       const { promises: fs } = await import("node:fs");
-      const parts: unknown[] = [{ type: "text", text: args.user }];
+      const parts: OpenAiContentPart[] = [{ type: "text", text: args.user }];
       for (const image of args.images) {
         const bytes = await fs.readFile(image.path);
         parts.push({
