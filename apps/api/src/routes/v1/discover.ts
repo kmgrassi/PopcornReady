@@ -11,6 +11,7 @@ import {
   listPublicProjects,
 } from "@/lib/api/v1/store";
 import { searchPublicDiscovery } from "@/lib/api/v1/asset-embedding-search";
+import { isPublicProjectId } from "./discover-ids.js";
 
 export const discoverRouter = Router();
 
@@ -38,13 +39,11 @@ function searchParamsFor(req: Parameters<RequestHandler>[0]): URLSearchParams {
   return new URL(req.originalUrl, "http://localhost").searchParams;
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 // Optional, caller-supplied workspace id to exclude from the public feed (the
 // signed-in viewer's own workspace). Ignore anything not uuid-shaped so a bad
 // value can't reach Postgres as a malformed filter.
 function optionalWorkspaceId(value: string | null): string | undefined {
-  return value && UUID_RE.test(value) ? value : undefined;
+  return value && isPublicProjectId(value) ? value : undefined;
 }
 
 discoverRouter.get(
@@ -67,8 +66,8 @@ discoverRouter.get(
   "/discover/projects/:projectId",
   publicRoute(async (req) => {
     const projectId = req.params.projectId;
-    if (!projectId) {
-      throw new ApiError("validation_failed", "projectId is required.");
+    if (!projectId || !isPublicProjectId(projectId)) {
+      throw new ApiError("not_found", "Public project not found.");
     }
     const bundle = await getPublicProjectBundle(projectId);
     if (!bundle) {
