@@ -3,8 +3,8 @@
 // in production. No auth — it stores nothing in the DB and keeps all artifacts
 // in a per-job temp directory.
 //
-// Pipeline: call the shared Gemini provider's Omni edit branch. No masks, no
-// frame extraction — the model edits the uploaded footage directly.
+// The endpoint calls the shared Gemini provider path, so this remains useful as
+// a manual provider smoke rig without carrying a second Omni implementation.
 
 import crypto from "crypto";
 import { promises as fs } from "fs";
@@ -22,7 +22,7 @@ export function isVideoEditHarnessEnabled(
   return enabled && env.NODE_ENV !== "production";
 }
 
-type JobStage = "uploading" | "editing" | "downloading" | "done" | "error";
+type JobStage = "queued" | "editing" | "done" | "error";
 
 interface VideoEditJob {
   id: string;
@@ -30,6 +30,7 @@ interface VideoEditJob {
   error?: string;
   dir: string;
   createdAt: number;
+  sourceContentType: string;
   artifacts: {
     source?: string;
     video?: string;
@@ -39,19 +40,15 @@ interface VideoEditJob {
 const jobs = new Map<string, VideoEditJob>();
 
 const ARTIFACT_TYPES: Record<string, string> = {
-  source: "video/mp4",
   video: "video/mp4",
 };
+const ARTIFACT_NAMES = ["source", "video"] as const;
 
-async function runPipeline(
-  job: VideoEditJob,
-  prompt: string
-): Promise<void> {
+async function runPipeline(job: VideoEditJob, prompt: string): Promise<void> {
   const sourcePath = job.artifacts.source;
   if (!sourcePath) throw new Error("Job has no source video.");
 
   job.stage = "editing";
-  job.stage = "downloading";
   const result = await geminiProvider.generateAsset({
     provider: "gemini",
     kind: "video",
@@ -68,13 +65,15 @@ function extensionForContentType(contentType: string): string {
   const normalized = contentType.toLowerCase().split(";")[0].trim();
   if (normalized === "video/quicktime" || normalized === "video/mov") return "mov";
   if (normalized === "video/webm") return "webm";
+  if (normalized === "video/avi") return "avi";
+  if (normalized === "video/wmv") return "wmv";
   if (normalized === "video/3gpp") return "3gp";
   return "mp4";
 }
 
 function jobStatusBody(job: VideoEditJob) {
   const artifacts: Record<string, string> = {};
-  for (const key of Object.keys(ARTIFACT_TYPES)) {
+  for (const key of ARTIFACT_NAMES) {
     if (job.artifacts[key as keyof VideoEditJob["artifacts"]]) {
       artifacts[key] = `/api/v1/dev/video-edit/${job.id}/artifacts/${key}`;
     }
@@ -130,9 +129,10 @@ devVideoEditRouter.post(
 
     const job: VideoEditJob = {
       id,
-      stage: "uploading",
+      stage: "queued",
       dir,
       createdAt: Date.now(),
+      sourceContentType: contentType,
       artifacts: { source: sourcePath },
     };
     jobs.set(id, job);
@@ -162,6 +162,10 @@ devVideoEditRouter.get("/dev/video-edit/:jobId/artifacts/:name", (req, res) => {
   const job = jobs.get(req.params.jobId);
   const name = req.params.name as keyof VideoEditJob["artifacts"];
   const filePath = job?.artifacts[name];
+  if (job && name === "source" && filePath) {
+    res.type(job.sourceContentType).sendFile(filePath);
+    return;
+  }
   if (!job || !filePath || !ARTIFACT_TYPES[name]) {
     res.status(404).json({ error: "Unknown job or artifact." });
     return;

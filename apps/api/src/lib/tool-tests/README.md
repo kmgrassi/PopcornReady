@@ -6,7 +6,7 @@ tool with **schema-valid input**, and does the real handler's database write
 succeed? Each case runs **end-to-end** against a real model and a real, throwaway
 Postgres sandbox, then tears the sandbox down.
 
-This is the verification rig for the North Star migration: as each of the 14
+This is the verification rig for the North Star migration: as each
 orchestrator tools gets wired to a live handler, fill in its battery and prove it
 here before relying on it. Today only `plan_shots` and `create_or_load_brief` are
 wired; the other 12 ship as `pending` placeholders.
@@ -100,5 +100,5 @@ tool lacks a battery.
 | `bridge.ts` | adapts the real `orchestrator-tools` registry to the driver registry |
 | `sandbox.ts` / `sandbox-guard.ts` | throwaway workspace lifecycle + delete guard |
 | `runner.ts` | runs a case/suite end-to-end |
-| `batteries.ts` | aggregates all 14 batteries |
+| `batteries.ts` | aggregates one battery per `TOOL_NAMES` entry |
 | `specs/*.ts` | one battery per tool |
