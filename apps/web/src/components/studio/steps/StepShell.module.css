@@ -177,12 +177,12 @@
   .stageFooter {
     position: fixed;
     right: 0;
-    bottom: 0;
+    bottom: calc(74px + var(--safe-area-bottom));
     left: 0;
     z-index: 30;
     width: 100%;
-    min-height: calc(76px + env(safe-area-inset-bottom));
-    padding: var(--space-3) var(--space-4) calc(var(--space-3) + env(safe-area-inset-bottom));
+    min-height: 76px;
+    padding: var(--space-3) var(--space-4);
     background: color-mix(in srgb, var(--bg) 94%, transparent);
   }
 
