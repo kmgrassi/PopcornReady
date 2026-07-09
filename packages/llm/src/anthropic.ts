@@ -222,7 +222,7 @@ export function createAnthropicLlmClient(deps: AnthropicDeps = {}): LlmClient {
     },
     async structuredVision<T>(args: StructuredVisionArgs) {
       const { promises: fs } = await import("node:fs");
-      const imageBlocks = await Promise.all(
+      const imageBlocks: AnthropicImageBlock[] = await Promise.all(
         args.images.map(async (image) => {
           const bytes = await fs.readFile(image.path);
           return {
