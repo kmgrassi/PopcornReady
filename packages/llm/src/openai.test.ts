@@ -6,6 +6,7 @@ import test from "node:test";
 
 import {
   type OpenAiCompletionLike,
+  type OpenAiCreateRequest,
   type OpenAiFunctionTool,
   createOpenAiLlmClient,
   interpretOpenAiToolResponse,
@@ -14,7 +15,7 @@ import {
 } from "./openai";
 import type { ToolSpec } from "./types";
 
-type OpenAiRequest = Parameters<NonNullable<Parameters<typeof createOpenAiLlmClient>[0]["create"]>>[0];
+type OpenAiRequest = OpenAiCreateRequest;
 type OpenAiResponse = Awaited<
   ReturnType<NonNullable<Parameters<typeof createOpenAiLlmClient>[0]["create"]>>
 >;
@@ -148,6 +149,26 @@ test("chooseTool sends function tools + tool_choice auto and uses max_completion
   assert.ok("max_completion_tokens" in sent);
   assert.ok(!("max_tokens" in sent));
   assert.equal(decision.type, "tool_call");
+});
+
+test("default OpenAI client fails with a clear missing-key error", async () => {
+  const previous = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  try {
+    const client = createOpenAiLlmClient({ model: "gpt-5" });
+    await assert.rejects(
+      () =>
+        client.chooseTool({
+          system: "sys",
+          userPayload: { a: 1 },
+          tools: [planShots],
+        }),
+      /OPENAI_API_KEY is not set for the OpenAI LLM provider/
+    );
+  } finally {
+    if (previous === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previous;
+  }
 });
 
 test("low/minimal effort routes to the fast model; medium/high/none use the primary", async () => {

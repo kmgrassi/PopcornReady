@@ -6,7 +6,7 @@
 
 set check_function_bodies = off;
 
-alter table public.assets drop constraint assets_kind_media;
+alter table public.assets drop constraint if exists assets_kind_media;
 alter table public.assets add constraint assets_kind_media check (
   (kind in ('brief','beat','narration_script','critique','plan','story_blueprint','composite','transition','transcript')
      and media = 'data')
@@ -46,7 +46,7 @@ begin
 end;
 $$;
 
-create table public.transcript_segments (
+create table if not exists public.transcript_segments (
   id                    uuid primary key default gen_random_uuid(),
   schema_version        text not null default 'transcriptSegment.v1',
   workspace_id          uuid not null references public.workspaces (id) on delete cascade,
@@ -65,20 +65,23 @@ create table public.transcript_segments (
   constraint transcript_segments_words_array check (jsonb_typeof(words) = 'array')
 );
 
-create unique index transcript_segments_asset_position_idx
+create unique index if not exists transcript_segments_asset_position_idx
   on public.transcript_segments (transcript_asset_id, position);
-create index transcript_segments_project_asset_idx
+create index if not exists transcript_segments_project_asset_idx
   on public.transcript_segments (project_id, transcript_asset_id);
 
+drop trigger if exists transcript_segments_set_updated_at on public.transcript_segments;
 create trigger transcript_segments_set_updated_at
   before update on public.transcript_segments
   for each row execute function public.set_updated_at();
 
 alter table public.transcript_segments enable row level security;
 
+drop policy if exists transcript_segments_owner on public.transcript_segments;
 create policy transcript_segments_owner on public.transcript_segments
   for all using (public.owns_workspace(workspace_id) and public.owns_project(project_id))
   with check (public.owns_workspace(workspace_id) and public.owns_project(project_id));
 
+drop policy if exists transcript_segments_public_read on public.transcript_segments;
 create policy transcript_segments_public_read on public.transcript_segments
   for select using (public.project_is_public(project_id));

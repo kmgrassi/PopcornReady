@@ -2,21 +2,18 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  type AnthropicMessageCreateRequest,
+  type AnthropicToolDefinition,
   createAnthropicLlmClient,
   interpretAnthropicToolResponse,
   toAnthropicTool,
 } from "./anthropic";
 import type { ToolSpec } from "./types";
 
-type AnthropicRequest = Parameters<NonNullable<NonNullable<Parameters<typeof createAnthropicLlmClient>[0]>["createMessage"]>>[0];
+type AnthropicRequest = AnthropicMessageCreateRequest;
 type AnthropicResponse = Awaited<
   ReturnType<NonNullable<NonNullable<Parameters<typeof createAnthropicLlmClient>[0]>["createMessage"]>>
 >;
-type AnthropicToolSpec = {
-  name: string;
-  description: string;
-  input_schema: unknown;
-};
 
 const planShots: ToolSpec = {
   name: "plan_shots",
@@ -29,7 +26,7 @@ const planShots: ToolSpec = {
 };
 
 test("toAnthropicTool uses input_schema", () => {
-  const tool = toAnthropicTool(planShots) as AnthropicToolSpec;
+  const tool: AnthropicToolDefinition = toAnthropicTool(planShots);
   assert.equal(tool.name, "plan_shots");
   assert.equal(tool.description, "Plan scenes and beats.");
   assert.deepEqual(tool.input_schema, planShots.parameters);
