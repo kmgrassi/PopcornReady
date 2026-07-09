@@ -15,10 +15,10 @@ function fakeRpcDb() {
   const from: CatalogDb["from"] = () => {
     throw new Error("fakeRpcDb.from should not be called in searchCatalogEntries tests");
   };
-  const rpc: CatalogDb["rpc"] = (name, params) => {
+  const rpc = ((name: string, params?: Record<string, unknown>) => {
     calls.push({ name, params: params ?? {} });
     return Promise.resolve({ data: [], error: null });
-  };
+  }) as unknown as CatalogDb["rpc"];
   return {
     calls,
     db: { from, rpc } satisfies CatalogDb,

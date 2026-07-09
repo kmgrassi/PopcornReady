@@ -243,7 +243,7 @@ export async function cloneStoryEntry(
 }
 
 export async function materializePreview(input: {
-  db: SupabaseClient;
+  db: CatalogDb;
   entryId: string;
   workspaceId: string;
   sourceAssetId: string;
@@ -330,7 +330,7 @@ function storyBlueprintFromCatalogEntry(entry: CatalogEntryRow): StoryBlueprint 
 }
 
 async function cloneStoryChildrenFromSnapshot(
-  db: SupabaseClient,
+  db: CatalogDb,
   blueprint: StoryBlueprint,
   targetBlueprintId: string,
   targetWorkspaceId: string,
