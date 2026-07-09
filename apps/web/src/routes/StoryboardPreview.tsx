@@ -9,7 +9,7 @@ import { Button, ButtonLink } from "../components/ui/Button";
 import { Spinner } from "../components/ui/Spinner";
 import { EmptyState, ErrorState } from "../components/ui/StateCard";
 import type { StoryboardProgress } from "../lib/v1/storyboard/progress";
-import styles from "./ProjectDetailPage.module.css";
+import styles from "./StoryboardPreview.module.css";
 import { formatDuration, titleCase } from "./project-detail-format";
 
 export function StoryboardPreview({
