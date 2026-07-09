@@ -70,6 +70,11 @@ export function StoryboardPage() {
   const loading = storyboardQuery.isLoading;
   const error = storyboardQuery.error ?? null;
   const revising = revisingBeats.size > 0;
+  const headerDescription = loading
+    ? "Loading storyboard..."
+    : storyboard
+      ? "Click any panel to request changes."
+      : "Generate a storyboard from the project page to see scenes, beats, and panels here.";
 
   return (
     <main className={styles.shell}>
@@ -82,7 +87,7 @@ export function StoryboardPage() {
             {project?.name ?? "Project"}
           </Link>
           <h1>Storyboard</h1>
-          <p>Click any panel to request changes.</p>
+          <p>{headerDescription}</p>
         </div>
         <div className={styles.headerActions}>
           {revising ? (
