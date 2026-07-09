@@ -67,20 +67,57 @@ interface StoryConceptPosterResponse {
   poster: StoryConceptPoster;
 }
 
+const RANDOM_INSPIRATION_TIMEOUT_MS = 12_000;
+
 export const inspirationQueryKeys = {
   random: (nonce: number) => ["inspiration", "random", nonce] as const,
 };
 
+function randomInspirationSignal(signal?: AbortSignal) {
+  const controller = new AbortController();
+  let timedOut = false;
+  const timeout = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, RANDOM_INSPIRATION_TIMEOUT_MS);
+  const abort = () => controller.abort();
+  signal?.addEventListener("abort", abort, { once: true });
+
+  return {
+    signal: controller.signal,
+    timedOut: () => timedOut,
+    cleanup: () => {
+      window.clearTimeout(timeout);
+      signal?.removeEventListener("abort", abort);
+    },
+  };
+}
+
 export function useRandomStoryInspiration(nonce: number) {
   return useQuery({
     queryKey: inspirationQueryKeys.random(nonce),
-    queryFn: ({ signal }) =>
-      apiRequest<RandomStoryInspirationResponse>("/api/v1/inspiration/random", {
-        signal,
-      }),
+    queryFn: async ({ signal }) => {
+      const request = randomInspirationSignal(signal);
+      try {
+        return await apiRequest<RandomStoryInspirationResponse>(
+          "/api/v1/inspiration/random",
+          {
+            signal: request.signal,
+          },
+        );
+      } catch (error) {
+        if (request.timedOut()) {
+          throw new Error("Story generation is taking too long. Try again.");
+        }
+        throw error;
+      } finally {
+        request.cleanup();
+      }
+    },
     staleTime: 0,
     gcTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
+    retry: false,
   });
 }
 

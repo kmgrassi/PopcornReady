@@ -1,14 +1,10 @@
 import { Navigate, useNavigate, useParams } from "react-router-dom";
-import { canAccessAdminSurface } from "../components/auth/AdminRoute";
 import { useAuth } from "../components/auth/AuthProvider";
 import { Button, ButtonLink } from "../components/ui/Button";
 import { usePublicProjectQuery } from "../lib/project-queries";
-import {
-  useAdminDeletePublicProjectMutation,
-  useForkPublicProjectMutation,
-} from "../lib/queryClient";
+import { useForkPublicProjectMutation } from "../lib/queryClient";
 import { storyboardProgress } from "../lib/v1/storyboard/progress";
-import { ProjectDangerSection, ProjectOverviewPage } from "./ProjectDetailPage";
+import { ProjectOverviewPage } from "./ProjectDetailPage";
 
 // Public, no-login read-only view of a shared project. Reuses the same
 // presentational components as the authenticated project page.
@@ -17,7 +13,6 @@ export function PublicProjectPage() {
   const navigate = useNavigate();
   const auth = useAuth();
   const query = usePublicProjectQuery(projectId ?? null);
-  const deleteProjectMutation = useAdminDeletePublicProjectMutation(projectId ?? "");
   const forkProjectMutation = useForkPublicProjectMutation(projectId ?? "");
 
   if (!projectId) return <Navigate to="/" replace />;
@@ -25,7 +20,6 @@ export function PublicProjectPage() {
   const data = query.data ?? null;
   const project = data?.project ?? null;
   const storyboard = data?.storyboard ?? null;
-  const canAdminDelete = canAccessAdminSurface(auth);
   const canFork = auth.status === "authenticated" || auth.status === "disabled";
   const copyAction = canFork ? (
     <Button
@@ -68,20 +62,6 @@ export function PublicProjectPage() {
       }}
       media={data?.media ?? null}
       mobilePrimaryAction={copyAction}
-      dangerSection={
-        canAdminDelete && project ? (
-          <ProjectDangerSection
-            project={project}
-            deleting={deleteProjectMutation.isPending}
-            error={deleteProjectMutation.error}
-            onDelete={() => {
-              void deleteProjectMutation.mutateAsync().then(() => {
-                navigate("/library/projects", { replace: true });
-              });
-            }}
-          />
-        ) : null
-      }
     />
   );
 }

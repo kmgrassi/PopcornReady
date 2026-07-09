@@ -1,0 +1,70 @@
+.page {
+  display: grid;
+  gap: var(--space-6);
+  padding: var(--space-6);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-4);
+}
+
+.card {
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
+  min-height: 220px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  padding: var(--space-4);
+}
+
+.cardHeader {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.cardHeader h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-lg);
+  line-height: var(--line-heading);
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--line-body);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.skeleton {
+  min-height: 180px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(90deg, transparent, var(--panel-muted), transparent),
+    var(--panel);
+  background-size: 200% 100%;
+  animation: uploadsShimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes uploadsShimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
