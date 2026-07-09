@@ -1,4 +1,3 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { getServiceSupabase } from "@/lib/supabase/clients";
 import { runQuery } from "@/lib/supabase/db-errors";
 import { assetEmbeddingConfig } from "./asset-embeddings/config";
@@ -11,6 +10,7 @@ import {
   CATALOG_COLUMNS,
   CATALOG_SCHEMA_VERSION,
   LOCAL_CATALOG_EMAIL,
+  type CatalogDb,
   type CatalogDeps,
   type CatalogEntry,
   type CatalogEntryRow,
@@ -28,7 +28,7 @@ import type {
 
 export type { CatalogDeps, CatalogEntry, CatalogPage } from "./catalog-types";
 
-function dbFrom(deps?: CatalogDeps): SupabaseClient {
+function dbFrom(deps?: CatalogDeps): CatalogDb {
   return deps?.db ?? getServiceSupabase();
 }
 
@@ -398,7 +398,7 @@ export async function useCatalogEntry(input: {
 }
 
 export async function publisherUserIdForWorkspace(
-  db: SupabaseClient,
+  db: CatalogDb,
   workspaceId: string
 ): Promise<string> {
   const workspace = await runQuery(
@@ -426,7 +426,7 @@ export async function publisherUserIdForWorkspace(
 }
 
 async function ownedCatalogEntryRow(
-  db: SupabaseClient,
+  db: CatalogDb,
   entryId: string,
   publisherUserId: string
 ): Promise<CatalogEntryRow> {
@@ -444,7 +444,7 @@ async function ownedCatalogEntryRow(
 }
 
 async function publishedCatalogEntryRow(
-  db: SupabaseClient,
+  db: CatalogDb,
   entryId: string
 ): Promise<CatalogEntryRow> {
   const row = await runQuery(
@@ -461,7 +461,7 @@ async function publishedCatalogEntryRow(
 }
 
 async function targetProjectRow(
-  db: SupabaseClient,
+  db: CatalogDb,
   workspaceId: string,
   projectId: string
 ): Promise<TargetProjectRow> {
@@ -480,7 +480,7 @@ async function targetProjectRow(
 }
 
 async function incrementUseCount(
-  db: SupabaseClient,
+  db: CatalogDb,
   entryId: string
 ): Promise<CatalogEntryRow> {
   const current = await runQuery(

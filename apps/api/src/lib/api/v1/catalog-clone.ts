@@ -1,5 +1,4 @@
 import path from "node:path";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { assetStorageKey, contentTypeForFilename } from "@/lib/storage/asset-write";
 import {
   readStorageConfig,
@@ -16,6 +15,7 @@ import {
 } from "./store";
 import { markedJson } from "./store-internal";
 import {
+  type CatalogDb,
   type CatalogEntryRow,
   type TargetProjectRow,
 } from "./catalog-types";
@@ -28,7 +28,7 @@ import {
 import { sourceAssetRow } from "./catalog-snapshots";
 
 export async function cloneAssetEntry(
-  db: SupabaseClient,
+  db: CatalogDb,
   entry: CatalogEntryRow,
   project: TargetProjectRow,
   deps?: { store?: ObjectStore }
@@ -127,7 +127,7 @@ export async function cloneAssetEntry(
 }
 
 export async function cloneStoryEntry(
-  db: SupabaseClient,
+  db: CatalogDb,
   entry: CatalogEntryRow,
   project: TargetProjectRow
 ): Promise<{ storyBlueprint: Record<string, unknown> }> {
@@ -243,7 +243,7 @@ export async function cloneStoryEntry(
 }
 
 export async function materializePreview(input: {
-  db: SupabaseClient;
+  db: CatalogDb;
   entryId: string;
   workspaceId: string;
   sourceAssetId: string;
@@ -330,7 +330,7 @@ function storyBlueprintFromCatalogEntry(entry: CatalogEntryRow): StoryBlueprint 
 }
 
 async function cloneStoryChildrenFromSnapshot(
-  db: SupabaseClient,
+  db: CatalogDb,
   blueprint: StoryBlueprint,
   targetBlueprintId: string,
   targetWorkspaceId: string,
