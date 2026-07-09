@@ -378,6 +378,20 @@ function StudioFlowView({
     briefRef.current = flow.brief;
   }, [flow.brief]);
 
+  const replaceDraftStepUrl = useCallback(
+    (nextStep: StudioStep) => {
+      const urlDraftId =
+        draftId === LOCAL_DRAFT_ID
+          ? new URLSearchParams(window.location.search).get("draft")
+          : draftId;
+      if (!urlDraftId) return;
+      navigate(studioDraftPath({ draftId: urlDraftId, step: nextStep, openPanel }), {
+        replace: true,
+      });
+    },
+    [draftId, navigate, openPanel],
+  );
+
   const guardedGoToStep = useCallback(
     (nextStep: StudioStep) => {
       if (draftId === LOCAL_DRAFT_ID && nextStep !== "brief") {
@@ -389,9 +403,16 @@ function StudioFlowView({
         return;
       }
       flow.goTo(nextStep);
+      replaceDraftStepUrl(nextStep);
     },
-    [draftId, flow.goTo, onPersistLocalDraft],
+    [draftId, flow.goTo, onPersistLocalDraft, replaceDraftStepUrl],
   );
+
+  const guardedGoBackStep = useCallback(() => {
+    const currentIndex = STUDIO_STEPS.indexOf(flow.step);
+    const previousStep = STUDIO_STEPS[Math.max(currentIndex - 1, 0)];
+    guardedGoToStep(previousStep);
+  }, [flow.step, guardedGoToStep]);
 
   useEffect(() => {
     if (initialStep) guardedGoToStep(initialStep);
@@ -436,7 +457,7 @@ function StudioFlowView({
       });
   }, [autoStartGeneration, flow, navigateToRun, onAutoStartGenerationSettled]);
 
-  const mobileStep = <MobileStudioProgress step={flow.step} onBack={flow.back} />;
+  const mobileStep = <MobileStudioProgress step={flow.step} onBack={guardedGoBackStep} />;
   const isStartingGeneration =
     isRedirectingToRun ||
     (flow.state === "initial" &&
@@ -661,12 +682,18 @@ function ActiveStep({
     onGoToStep(nextStep);
   }, [flow.step, onGoToStep]);
 
+  const guardedBack = useCallback(() => {
+    const currentIndex = STUDIO_STEPS.indexOf(flow.step);
+    const previousStep = STUDIO_STEPS[Math.max(currentIndex - 1, 0)];
+    onGoToStep(previousStep);
+  }, [flow.step, onGoToStep]);
+
   const stepProps = {
     draft: flow.brief,
     projectId: flow.projectId,
     update: flow.update,
     next: guardedNext,
-    back: flow.back,
+    back: guardedBack,
     completeDraft: flow.completeDraft,
   };
 
