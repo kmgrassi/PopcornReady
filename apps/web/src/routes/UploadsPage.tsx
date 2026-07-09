@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "../components/auth/AuthProvider";
 import { ProjectUploadButton } from "../components/project-upload/ProjectUploadButton";
-import { ButtonLink } from "../components/ui/Button";
+import { Button, ButtonLink } from "../components/ui/Button";
 import { PageHeader } from "../components/ui/PageHeader";
 import { EmptyState, ErrorState } from "../components/ui/StateCard";
 import { useDashboardProjectsQuery } from "../lib/v1/dashboard/query";
@@ -11,7 +11,7 @@ import styles from "./UploadsPage.module.css";
 export function UploadsPage() {
   const auth = useAuth();
   const authScope = auth.user?.id ?? (import.meta.env.DEV ? "dev-autopilot" : auth.status);
-  const projectsQuery = useDashboardProjectsQuery(authScope, 12, "mine");
+  const projectsQuery = useDashboardProjectsQuery(authScope, 24, "mine");
 
   return (
     <main className={styles.page}>
@@ -88,6 +88,18 @@ export function UploadsPage() {
               </div>
             </article>
           ))}
+          {projectsQuery.hasMore ? (
+            <div className={styles.loadMore}>
+              <Button
+                variant="secondary"
+                onClick={() => void projectsQuery.fetchNextPage()}
+                disabled={projectsQuery.loadingMore}
+                isLoading={projectsQuery.loadingMore}
+              >
+                Load more projects
+              </Button>
+            </div>
+          ) : null}
         </section>
       ) : null}
     </main>

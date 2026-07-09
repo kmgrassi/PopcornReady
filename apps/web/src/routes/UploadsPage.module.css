@@ -49,6 +49,13 @@
   align-items: center;
 }
 
+.loadMore {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: center;
+  padding-block: var(--space-2);
+}
+
 .skeleton {
   min-height: 180px;
   border: 1px solid var(--border);
