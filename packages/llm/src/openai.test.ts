@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import {
@@ -324,4 +327,49 @@ test("structured sends a required return_result function tool", async () => {
   assert.equal(sent.parallel_tool_calls, false);
   assert.equal(sentTools[0]?.function.name, "return_result");
   assert.ok(!("response_format" in sent));
+});
+
+test("structuredVision sends typed text + image content parts", async () => {
+  const imagePath = path.join(os.tmpdir(), `openai-vision-${Date.now()}.png`);
+  await fs.writeFile(imagePath, Buffer.from("not-a-real-png"));
+
+  try {
+    let sent: OpenAiRequest | undefined;
+    const client = createOpenAiLlmClient({
+      model: "gpt-5",
+      create: async (params): Promise<OpenAiResponse> => {
+        sent = params;
+        return {
+          choices: [
+            {
+              message: {
+                tool_calls: [
+                  { function: { name: "return_result", arguments: '{"ok":true}' } },
+                ],
+              },
+            },
+          ],
+        };
+      },
+    });
+
+    await client.structuredVision({
+      cachedSystem: "s",
+      user: "describe",
+      schema: { type: "object", properties: { ok: { type: "boolean" } } },
+      images: [{ path: imagePath, mediaType: "image/png" }],
+    });
+
+    assert.ok(sent);
+    const userMessage = sent.messages[1];
+    assert.equal(userMessage?.role, "user");
+    assert.ok(Array.isArray(userMessage?.content));
+    if (Array.isArray(userMessage?.content)) {
+      assert.deepEqual(userMessage.content[0], { type: "text", text: "describe" });
+      assert.equal(userMessage.content[1]?.type, "image_url");
+      assert.match(String(userMessage.content[1]?.image_url.url), /^data:image\/png;base64,/);
+    }
+  } finally {
+    await fs.unlink(imagePath);
+  }
 });
