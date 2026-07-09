@@ -62,6 +62,8 @@ type ChatCreate = (params: Record<string, unknown>) => Promise<OpenAiCompletionL
 
 // Low-reasoning calls route to the cheaper fast model.
 const FAST_EFFORTS = new Set<LlmEffort>(["minimal", "low"]);
+const MISSING_OPENAI_KEY_MESSAGE =
+  "OPENAI_API_KEY is not set for the OpenAI LLM provider.";
 
 export interface OpenAiDeps {
   model: string;
@@ -198,6 +200,9 @@ export function createOpenAiLlmClient(deps: OpenAiDeps): LlmClient {
   let create = deps.create;
   const ensureCreate = (): ChatCreate => {
     if (create) return create;
+    if (!process.env.OPENAI_API_KEY?.trim()) {
+      throw new Error(MISSING_OPENAI_KEY_MESSAGE);
+    }
     const client = new OpenAI();
     create = client.chat.completions.create.bind(
       client.chat.completions
