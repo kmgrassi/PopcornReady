@@ -4,10 +4,7 @@ import {
   type GateableGenerationStageType,
 } from "@popcorn/shared/v1/types";
 import { StudioShell } from "../components/studio/StudioShell";
-import {
-  normalizeStudioStep,
-  type StudioStep,
-} from "../components/studio/studioSteps";
+import type { StudioStep } from "../components/studio/studioSteps";
 import type { BriefDraft } from "../components/studio/useStudioFlow";
 
 const PROJECT_CREATION_STEP_SET = new Set<StudioStep>([
@@ -21,9 +18,7 @@ const PROJECT_CREATION_STEP_SET = new Set<StudioStep>([
 ]);
 
 function parseCreationStep(value: string | null): StudioStep | undefined {
-  return PROJECT_CREATION_STEP_SET.has(value as StudioStep)
-    ? normalizeStudioStep(value)
-    : undefined;
+  return PROJECT_CREATION_STEP_SET.has(value as StudioStep) ? (value as StudioStep) : undefined;
 }
 
 function parseReviewGates(value: string | null): GateableGenerationStageType[] {
