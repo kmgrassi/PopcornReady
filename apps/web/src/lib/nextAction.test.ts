@@ -39,3 +39,26 @@ test("deriveNextAction sends failed dashboard runs to recovery", () => {
   assert.match(action.body, /Cookie launch stopped at Export/);
 });
 
+test("deriveNextAction does not call unknown failed stages preparing", () => {
+  const action = deriveNextAction(
+    summary({
+      counts: { projects: 1, activeRuns: 1, outputs: 0 },
+      activeRuns: [
+        {
+          runId: "run-1",
+          projectId: "project-1",
+          projectName: "Cookie launch",
+          status: "failed",
+          progressPercent: 50,
+          updatedAt: "2026-07-09T15:00:00.000Z",
+        },
+      ],
+    }),
+  );
+
+  assert.equal(action.type, "failed_run");
+  assert.equal(
+    action.body,
+    "Cookie launch stopped. Open the run to see what failed and retry from the failed stage.",
+  );
+});

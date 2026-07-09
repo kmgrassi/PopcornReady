@@ -59,7 +59,9 @@ export function ActiveRunsPanel({
                 </div>
 
                 <span className={styles.stage}>
-                  {formatStage(run.currentStageType)}
+                  {failed && !run.currentStageType
+                    ? "Stopped"
+                    : formatStage(run.currentStageType)}
                 </span>
 
                 {failed ? (
