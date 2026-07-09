@@ -1,63 +1,5 @@
 import { Link } from "react-router-dom";
-
-const TEMPLATE_GROUPS = [
-  "Launch",
-  "Social",
-  "Education",
-  "Product",
-  "Internal",
-];
-
-const TEMPLATES = [
-  {
-    id: "launch-teaser",
-    title: "Launch teaser",
-    group: "Launch",
-    length: "30s",
-    aspect: "9:16",
-    brief: "Fast hook, three proof points, product reveal, closing CTA.",
-  },
-  {
-    id: "founder-update",
-    title: "Founder update",
-    group: "Internal",
-    length: "60s",
-    aspect: "16:9",
-    brief: "Direct-to-camera outline with b-roll prompts and chapter beats.",
-  },
-  {
-    id: "ugc-cutdown",
-    title: "UGC cutdown",
-    group: "Social",
-    length: "20s",
-    aspect: "9:16",
-    brief: "Grab the strongest customer moment and package it for short-form.",
-  },
-  {
-    id: "feature-demo",
-    title: "Feature demo",
-    group: "Product",
-    length: "45s",
-    aspect: "16:9",
-    brief: "Problem, workflow, outcome, and polished product screenshots.",
-  },
-  {
-    id: "how-to",
-    title: "How-to lesson",
-    group: "Education",
-    length: "90s",
-    aspect: "16:9",
-    brief: "Step-by-step lesson with recap cards and clear visual anchors.",
-  },
-  {
-    id: "event-recap",
-    title: "Event recap",
-    group: "Social",
-    length: "45s",
-    aspect: "1:1",
-    brief: "Montage structure with attendee quotes and branded end slate.",
-  },
-];
+import { STUDIO_TEMPLATE_GROUPS, STUDIO_TEMPLATES } from "../lib/studioTemplates";
 
 export function TemplatesPage() {
   return (
@@ -77,20 +19,20 @@ export function TemplatesPage() {
       </section>
 
       <nav className="studio-secondary-pills" aria-label="Template categories">
-        {TEMPLATE_GROUPS.map((group) => (
+        {STUDIO_TEMPLATE_GROUPS.map((group) => (
           <span key={group}>{group}</span>
         ))}
       </nav>
 
       <section className="studio-template-grid" aria-label="Template gallery">
-        {TEMPLATES.map((template) => (
+        {STUDIO_TEMPLATES.map((template) => (
           <article className="studio-template-card" key={template.id}>
             <div className="studio-template-preview" aria-hidden="true">
               <span>{template.aspect}</span>
             </div>
             <div className="studio-template-meta">
               <span>{template.group}</span>
-              <span>{template.length}</span>
+              <span>{template.lengthLabel}</span>
             </div>
             <h2>{template.title}</h2>
             <p>{template.brief}</p>
