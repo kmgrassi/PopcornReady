@@ -254,7 +254,7 @@ function getRequestSupabaseOrService(): SupabaseClient {
 // iso/throwOnError/markedJson/unmarkedJson now live in ./store-internal.
 
 export async function defaultVisibilityForWorkspace(
-  db: SupabaseClient,
+  db: Pick<SupabaseClient, "from" | "rpc">,
   workspaceId: string
 ): Promise<"public" | "private"> {
   const workspace = await runQuery(

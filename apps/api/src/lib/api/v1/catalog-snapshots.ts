@@ -1,8 +1,8 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { contentTypeForFilename } from "@/lib/storage/asset-write";
 import { runQuery } from "@/lib/supabase/db-errors";
 import { ApiError, notFound } from "./errors";
 import {
+  type CatalogDb,
   type SourceAssetRow,
   type StoryActRow,
   type StoryBlueprintRow,
@@ -18,7 +18,7 @@ import {
 } from "./catalog-utils";
 
 export async function sourceAssetRow(
-  db: SupabaseClient,
+  db: CatalogDb,
   workspaceId: string,
   assetId: string
 ): Promise<SourceAssetRow> {
@@ -36,7 +36,7 @@ export async function sourceAssetRow(
 }
 
 export async function assetSnapshot(
-  db: SupabaseClient,
+  db: CatalogDb,
   workspaceId: string,
   sourceAssetId: string,
   kind: "character" | "image"
@@ -97,7 +97,7 @@ export async function assetSnapshot(
 }
 
 export async function storySnapshot(
-  db: SupabaseClient,
+  db: CatalogDb,
   workspaceId: string,
   sourceStoryBlueprintId: string
 ): Promise<{

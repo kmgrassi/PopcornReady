@@ -4,6 +4,8 @@ import type { ObjectStore } from "@/lib/storage/object-store";
 import type { AssetEmbeddingProvider } from "./asset-embeddings/provider";
 import type { CatalogEntryKind, CatalogEntryStatus } from "./schemas";
 
+export type CatalogDb = Pick<SupabaseClient, "from" | "rpc">;
+
 export const CATALOG_SCHEMA_VERSION = "catalogEntry.v1";
 export const LOCAL_CATALOG_EMAIL = "local-catalog@popcornready.local";
 
@@ -133,7 +135,7 @@ export interface CatalogPage {
 }
 
 export interface CatalogDeps {
-  db?: SupabaseClient;
+  db?: CatalogDb;
   store?: ObjectStore;
   embeddingProvider?: AssetEmbeddingProvider;
 }

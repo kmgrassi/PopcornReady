@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildCatalogAssetSource, buildSearchText, searchCatalogEntries } from "../catalog";
+import type { CatalogDb } from "../catalog-types";
 import { ApiError } from "../errors";
 import {
   parseCatalogEntriesQuery,
@@ -11,14 +12,16 @@ import {
 
 function fakeRpcDb() {
   const calls: Array<{ name: string; params: Record<string, unknown> }> = [];
+  const from: CatalogDb["from"] = () => {
+    throw new Error("fakeRpcDb.from should not be called in searchCatalogEntries tests");
+  };
+  const rpc: CatalogDb["rpc"] = (name, params) => {
+    calls.push({ name, params: params ?? {} });
+    return Promise.resolve({ data: [], error: null });
+  };
   return {
     calls,
-    db: {
-      rpc(name: string, params: Record<string, unknown>) {
-        calls.push({ name, params });
-        return Promise.resolve({ data: [], error: null });
-      },
-    },
+    db: { from, rpc } satisfies CatalogDb,
   };
 }
 
@@ -29,8 +32,7 @@ test("searchCatalogEntries passes the curated-text query embedding to the RPC", 
     const { calls, db } = fakeRpcDb();
     await searchCatalogEntries(
       { q: "cyberpunk hero", limit: 10, cursor: null },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      { db: db as any, embeddingProvider: { embed: async () => [0.1, 0.2, 0.3] } }
+      { db, embeddingProvider: { embed: async () => [0.1, 0.2, 0.3] } }
     );
     assert.equal(calls.length, 1);
     assert.equal(calls[0].name, "search_public_catalog_entries");
@@ -51,8 +53,7 @@ test("searchCatalogEntries falls back to full-text (null embedding) without an A
     await searchCatalogEntries(
       { q: "cyberpunk hero", limit: 10, cursor: null },
       {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        db: db as any,
+        db,
         embeddingProvider: {
           embed: async () => {
             embedCalls += 1;
