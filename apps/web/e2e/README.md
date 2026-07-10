@@ -29,7 +29,9 @@ pnpm test:e2e:local-db
 
 That command wraps Playwright with `scripts/with-local-supabase-env.mjs`, reads
 the local URL and keys from `supabase status -o json`, sets
-`DB_BACKEND=supabase`, and loads `apps/web/e2e/e2e.local-db.env`.
+`DB_BACKEND=supabase`, and loads `apps/web/e2e/e2e.local-db.env`. Unlike the
+fast local-auth suite, it runs `AUTH_MODE=supabase` and signs up a real local
+user to cover the production authentication path.
 
 Hosted Supabase auth is opt-in and skipped unless all required secrets are
 present:
