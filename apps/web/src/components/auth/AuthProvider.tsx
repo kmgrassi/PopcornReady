@@ -6,7 +6,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import type { User } from "@supabase/supabase-js";
+import type { Session, User } from "@supabase/supabase-js";
 import { v1Api } from "../../lib/api-client";
 import {
   clearAllSupabaseAuthStorage,
@@ -71,6 +71,15 @@ function isAnonymousUser(user: User | null): boolean {
   return Boolean(user?.is_anonymous);
 }
 
+async function verifiedSessionUser(session: Session | null): Promise<User | null> {
+  if (!session) return null;
+  const { data, error } = await getSupabaseClient().auth.getUser();
+  if (error || !data.user) {
+    throw error || new Error("Invalid or expired session.");
+  }
+  return data.user;
+}
+
 async function registerAnonymousDeviceTokenBestEffort() {
   try {
     await v1Api.registerAnonymousDeviceToken(ensureAnonymousDeviceRecoveryToken());
@@ -127,8 +136,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
+      if (event === "INITIAL_SESSION") return;
       setUser(session?.user ?? null);
       setStatus(session?.user ? "authenticated" : "unauthenticated");
       // Only clear a surfaced error on a *successful* auth. A SIGNED_OUT event —
@@ -139,14 +149,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     void supabase.auth
       .getSession()
-      .then(({ data, error: sessionError }) => {
+      .then(async ({ data, error: sessionError }) => {
         if (!mounted) return;
         if (sessionError) throw sessionError;
-        setUser(data.session?.user ?? null);
-        setStatus(data.session?.user ? "authenticated" : "unauthenticated");
+        const verifiedUser = await verifiedSessionUser(data.session);
+        setUser(verifiedUser);
+        setStatus(verifiedUser ? "authenticated" : "unauthenticated");
       })
       .catch((err) => {
         if (!mounted) return;
+        clearAllSupabaseAuthStorage();
         setUser(null);
         setStatus("unauthenticated");
         setError(describeAuthError(err));
@@ -215,9 +227,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (existingError) {
         clearAllSupabaseAuthStorage();
       } else if (existingData.session?.user) {
-        setUser(existingData.session.user);
+        const verifiedUser = await verifiedSessionUser(existingData.session);
+        setUser(verifiedUser);
         setStatus("authenticated");
-        if (isAnonymousUser(existingData.session.user)) {
+        if (isAnonymousUser(verifiedUser)) {
           await recoverOrRegisterAnonymousDevice();
         }
         return;
