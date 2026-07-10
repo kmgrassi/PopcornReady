@@ -59,8 +59,10 @@ export function ActiveRunsPanel({
                 </div>
 
                 <span className={styles.stage}>
-                  {failed && !run.currentStageType
-                    ? "Stopped"
+                  {failed
+                    ? run.currentStageType
+                      ? `Stopped at ${formatStage(run.currentStageType)}`
+                      : "Stopped"
                     : formatStage(run.currentStageType)}
                 </span>
 
@@ -76,7 +78,7 @@ export function ActiveRunsPanel({
                 <div className={styles.progress}>
                   <span className={styles.track} aria-hidden="true">
                     <span
-                      className={`${styles.fill} ${needsReview ? styles.fillPaused : ""}`}
+                      className={`${styles.fill} ${needsReview ? styles.fillPaused : ""} ${failed ? styles.fillFailed : ""}`}
                       style={{ width: `${pct}%` }}
                     />
                   </span>

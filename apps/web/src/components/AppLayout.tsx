@@ -48,9 +48,19 @@ const VALID_THEMES = new Set(["popcorn", "popcorn-warm", "popcorn-night", "popco
 // it a dedicated tab shell.
 const PRIMARY_NAV = [
   {
+    label: "Dashboard",
+    to: "/dashboard",
+    activePaths: ["/dashboard"],
+  },
+  {
     label: "Library",
     to: "/library",
     activePaths: ["/library", "/projects", "/assets"],
+  },
+  {
+    label: "Activity",
+    to: "/activity",
+    activePaths: ["/activity", "/runs"],
   },
   {
     label: "Inspiration",
@@ -319,9 +329,11 @@ export function AuthenticatedAppLayout() {
           />
         </div>
 
+        {/* Quiet tier on purpose: each screen's featured action (e.g. the
+            launchpad hero) owns the single gold CTA. */}
         <Button
           className={styles.newVideo}
-          variant="primary"
+          variant="secondary"
           onClick={() => {
             setNavOpen(false);
             navigate(`/projects/new?new=${Date.now()}`);

@@ -152,6 +152,11 @@
   background: var(--cta);
 }
 
+/* A failed run's bar must not read as live progress. */
+.fillFailed {
+  background: var(--danger-border);
+}
+
 .pct {
   min-width: 38px;
   color: var(--muted);
