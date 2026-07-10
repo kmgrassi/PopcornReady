@@ -231,6 +231,10 @@ function StoryboardPanelThumb({ panel, label }: { panel: StoryboardPanel; label:
       placeholderClassName={`${styles.storyImage} ${styles.storyImageEmpty}`}
       alt={`${label} storyboard panel`}
       placeholder={<span>{titleCase(panel.status)}</span>}
+      // The thumb sits inside the scene card's Link; recovery controls would
+      // nest a button in the anchor and bubble clicks into navigation.
+      // Failed panels regenerate from the storyboard page this card opens.
+      allowRegenerate={false}
     />
   );
 }
