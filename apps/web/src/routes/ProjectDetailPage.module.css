@@ -102,7 +102,7 @@
 
 .projectContextGrid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: var(--space-4);
   min-width: 0;
 }
@@ -840,6 +840,7 @@
 
 .dangerActions {
   display: flex;
+  gap: var(--space-3);
   justify-content: flex-end;
 }
 
@@ -967,7 +968,10 @@
   background: var(--panel-2);
 }
 
-@media (max-width: 1100px) {
+/* Collapse before the columns hit min-content: the ~250px app sidebar
+   eats into the viewport, so a 1100px query left the three-column grid
+   overflowing on common laptop widths. */
+@media (max-width: 1400px) {
   .projectPageLayout,
   .layout {
     grid-template-columns: 1fr;

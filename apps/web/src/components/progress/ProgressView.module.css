@@ -705,6 +705,9 @@
   color: var(--muted);
   font-size: var(--text-sm);
   line-height: var(--line-caption);
+  /* Stage messages can carry raw provider errors (long unbroken JSON/ids);
+     never let them force the layout wide. */
+  overflow-wrap: anywhere;
 }
 
 .stage_running .stageGlyph,
