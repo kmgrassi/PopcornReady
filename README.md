@@ -120,7 +120,7 @@ or update the relevant query keys after mutations.
 ```bash
 pnpm install
 cp .env.local.example .env.local   # add provider keys (Supabase, ANTHROPIC_API_KEY, …)
-pnpm dev                            # runs both apps via Turborepo
+pnpm db:local:start                 # starts the local Supabase stack
 pnpm dev:local-db                   # runs both apps against local Supabase/Postgres
 # or individually:
 pnpm dev:api                        # Express API → http://localhost:4000
@@ -128,6 +128,10 @@ pnpm dev:web                        # Vite SPA    → http://localhost:3000
 ```
 
 Open the web app at http://localhost:3000 (it calls the API on :4000).
+
+`pnpm dev:local-db` is the recommended local command. It injects the running
+local Supabase URL and keys for both the API store and browser auth; `pnpm dev`
+is for environments that already provide equivalent Supabase settings.
 
 **Env loading:** the `.env*` files live at the **repo root** and load
 automatically — the API reads `.env.local` (authoritative, your local secrets),
