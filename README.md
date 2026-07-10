@@ -151,8 +151,9 @@ pnpm test:e2e:local-db
 
 The local dev and test commands read the local Supabase URL and keys from
 `supabase status`, set `DB_BACKEND=supabase`, and point both API and Vite auth
-env at the local Supabase API URL from `supabase status`. The test command then
-runs the Playwright suite against local Postgres.
+env at the local Supabase API URL from `supabase status`. The local-db E2E
+command also uses `AUTH_MODE=supabase` and creates a real local user, so the
+login, JWT verification, domain-user mapping, and RLS path match production.
 See [`supabase/README.md`](supabase/README.md) for the hosted-vs-local migration
 commands.
 

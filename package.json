@@ -14,7 +14,7 @@
     "test": "turbo run test",
     "test:e2e": "turbo run test:e2e",
     "test:e2e:mobile": "turbo run test:e2e:mobile --filter=@popcorn/web",
-    "test:e2e:local-db": "node scripts/with-local-supabase-env.mjs pnpm --filter @popcorn/web test:e2e",
+    "test:e2e:local-db": "AUTH_MODE=supabase POPCORN_E2E_AUTH_MODE=supabase node scripts/with-local-supabase-env.mjs pnpm --filter @popcorn/web test:e2e",
     "lint": "turbo run lint",
     "dev:local-db": "node scripts/with-local-supabase-env.mjs pnpm dev",
     "dev:api": "turbo run dev --filter=@popcorn/api",
@@ -23,7 +23,7 @@
     "db:local:start": "supabase start",
     "db:local:reset": "supabase db reset",
     "db:local:status": "supabase status",
-    "db:local:test:e2e": "node scripts/with-local-supabase-env.mjs pnpm --filter @popcorn/web test:e2e",
+    "db:local:test:e2e": "AUTH_MODE=supabase POPCORN_E2E_AUTH_MODE=supabase node scripts/with-local-supabase-env.mjs pnpm --filter @popcorn/web test:e2e",
     "prod:storyboard": "node scripts/start-storyboard-from-prompt.mjs"
   },
   "devDependencies": {

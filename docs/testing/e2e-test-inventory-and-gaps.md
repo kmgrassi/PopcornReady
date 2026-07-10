@@ -122,9 +122,8 @@ Covered:
 Remaining gaps:
 
 - No required CI-hosted strict-auth run yet.
-- No automated local Supabase signup/onboarding test. Manual testing has proven
-  it works, but the suite does not yet create a new local Supabase user and
-  assert `/api/v1/me` resolves `authMode: "supabase"`.
+- Local Supabase E2E signs up a new user, verifies `/api/v1/me` resolves
+  `authMode: "supabase"`, signs out, and signs back in.
 - Admin/non-admin hosted authorization should be covered with explicit fixtures
   or credentials.
 
