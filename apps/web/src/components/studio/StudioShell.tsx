@@ -35,6 +35,9 @@ import styles from "./StudioShell.module.css";
 
 const LOCAL_DRAFT_ID = "local";
 const TERMINAL_RECOVERABLE_RUN_STATUSES: GenerationRunStatus[] = ["failed", "canceled"];
+const START_RUN_HANDOFF_TIMEOUT_MS = 30_000;
+const START_RUN_HANDOFF_TIMEOUT_MESSAGE =
+  "Production did not start in time. Check your connection, then retry.";
 
 function studioDraftPath({
   draftId,
@@ -365,6 +368,7 @@ function StudioFlowView({
 }) {
   const navigate = useNavigate();
   const [isRedirectingToRun, setIsRedirectingToRun] = useState(autoStartGeneration);
+  const [startRunTimedOut, setStartRunTimedOut] = useState(false);
   const autoStartRequestedRef = useRef(false);
   const flow = useStudioFlow({
     initialBrief,
@@ -442,28 +446,55 @@ function StudioFlowView({
     const shouldStartGeneration =
       autoStartGeneration || (flow.state === "initial" && flow.step === "plan");
     if (!shouldStartGeneration || autoStartRequestedRef.current) return;
+    if (flow.error || startRunTimedOut) return;
     if (flow.state !== "initial" || !flow.brief.goal.trim()) return;
 
     autoStartRequestedRef.current = true;
     setIsRedirectingToRun(true);
+    setStartRunTimedOut(false);
     void flow.startGeneration()
       .then((result) => {
         onAutoStartGenerationSettled?.();
         navigateToRun(result.projectId, result.runId);
       })
       .catch(() => {
+        onAutoStartGenerationSettled?.();
         autoStartRequestedRef.current = false;
         setIsRedirectingToRun(false);
       });
-  }, [autoStartGeneration, flow, navigateToRun, onAutoStartGenerationSettled]);
+  }, [
+    autoStartGeneration,
+    flow,
+    navigateToRun,
+    onAutoStartGenerationSettled,
+    startRunTimedOut,
+  ]);
 
-  const mobileStep = <MobileStudioProgress step={flow.step} onBack={guardedGoBackStep} />;
-  const isStartingGeneration =
+  const isWaitingForRunHandoff =
     isRedirectingToRun ||
     (flow.state === "initial" &&
       flow.step === "plan" &&
       Boolean(flow.brief.goal.trim()) &&
       !flow.error);
+
+  useEffect(() => {
+    if (!isWaitingForRunHandoff) {
+      setStartRunTimedOut(false);
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      onAutoStartGenerationSettled?.();
+      autoStartRequestedRef.current = false;
+      setIsRedirectingToRun(false);
+      setStartRunTimedOut(true);
+    }, START_RUN_HANDOFF_TIMEOUT_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [isWaitingForRunHandoff, onAutoStartGenerationSettled]);
+
+  const mobileStep = <MobileStudioProgress step={flow.step} onBack={guardedGoBackStep} />;
+  const isStartingGeneration = isWaitingForRunHandoff && !startRunTimedOut;
 
   if (isStartingGeneration) {
     return (
@@ -482,7 +513,7 @@ function StudioFlowView({
     );
   }
 
-  if (flow.state === "initial" && flow.step === "plan" && flow.error) {
+  if (flow.state === "initial" && flow.step === "plan" && (flow.error || startRunTimedOut)) {
     return (
       <main className={styles.shell}>
         <DesktopStudioStepper step="plan" />
@@ -490,12 +521,15 @@ function StudioFlowView({
         <section className={styles.redirecting}>
           <p className={styles.workspaceEyebrow}>Starting run</p>
           <h2 className={styles.generatingHeading}>Could not start production</h2>
-          <p className="new-project-error">{flow.error}</p>
+          <p className="new-project-error">
+            {flow.error ?? START_RUN_HANDOFF_TIMEOUT_MESSAGE}
+          </p>
           <div className={styles.recoveryActions}>
             <Button
               variant="cta"
               onClick={() => {
                 autoStartRequestedRef.current = false;
+                setStartRunTimedOut(false);
                 setIsRedirectingToRun(true);
                 void flow.startGeneration()
                   .then((result) => {
