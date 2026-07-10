@@ -36,6 +36,19 @@ export interface OrchestratorRun {
   completedAt?: string;
 }
 
+/** A runnable persisted run together with the workspace needed by the detached engine. */
+export interface RecoverableOrchestratorRun {
+  run: OrchestratorRun;
+  workspaceId: string;
+}
+
+export interface ClaimedOrchestratorDispatch {
+  dispatchId: string;
+  runId: string;
+  workspaceId: string;
+  leaseToken: string;
+}
+
 export interface OrchestratorRunGate {
   id: string;
   orchestratorRunId: string;
@@ -286,6 +299,86 @@ export async function listOrchestratorRunsForProject(
       .order("created_at", { ascending: false })
   );
   return ((data as OrchestratorRunRow[]) ?? []).map(mapRun);
+}
+
+/**
+ * Returns the durable work queue.  Routes only create or update these rows;
+ * the recovery worker is the single owner that drives them afterwards.
+ */
+export async function listRecoverableOrchestratorRuns(): Promise<RecoverableOrchestratorRun[]> {
+  const db = getServiceSupabase();
+  const data = await runQuery(
+    "store.listRecoverableOrchestratorRuns",
+    db
+      .from("orchestrator_runs")
+      .select("*, projects!inner(workspace_id)")
+      .in("status", ["queued", "running", "waiting"])
+      .order("updated_at", { ascending: true })
+  );
+  return ((data ?? []) as Array<OrchestratorRunRow & { projects: { workspace_id: string } | null }>)
+    .filter((row) => Boolean(row.projects?.workspace_id))
+    .map((row) => ({
+      run: mapRun(row),
+      workspaceId: row.projects!.workspace_id,
+    }));
+}
+
+export async function enqueueOrchestratorDispatch(runId: string, workspaceId: string): Promise<void> {
+  const db = getServiceSupabase();
+  await runQuery(
+    "store.enqueueOrchestratorDispatch",
+    db.from("orchestrator_dispatches").upsert(
+      {
+        orchestrator_run_id: runId,
+        workspace_id: workspaceId,
+        status: "queued",
+        available_at: new Date().toISOString(),
+        lease_token: null,
+        lease_expires_at: null,
+      },
+      { onConflict: "orchestrator_run_id" }
+    )
+  );
+}
+
+export async function claimOrchestratorDispatches(
+  limit = 4,
+  leaseSeconds = 120
+): Promise<ClaimedOrchestratorDispatch[]> {
+  const db = getServiceSupabase();
+  const data = await runQuery(
+    "store.claimOrchestratorDispatches",
+    db.rpc("claim_orchestrator_dispatches", { p_limit: limit, p_lease_seconds: leaseSeconds })
+  );
+  return ((data ?? []) as Array<{
+    dispatch_id: string;
+    orchestrator_run_id: string;
+    workspace_id: string;
+    lease_token: string;
+  }>).map((row) => ({
+    dispatchId: row.dispatch_id,
+    runId: row.orchestrator_run_id,
+    workspaceId: row.workspace_id,
+    leaseToken: row.lease_token,
+  }));
+}
+
+export async function releaseOrchestratorDispatch(input: {
+  dispatchId: string;
+  leaseToken: string;
+  delaySeconds: number;
+  completed: boolean;
+}): Promise<void> {
+  const db = getServiceSupabase();
+  await runQuery(
+    "store.releaseOrchestratorDispatch",
+    db.rpc("release_orchestrator_dispatch", {
+      p_dispatch_id: input.dispatchId,
+      p_lease_token: input.leaseToken,
+      p_delay_seconds: input.delaySeconds,
+      p_completed: input.completed,
+    })
+  );
 }
 
 export async function updateOrchestratorRun(

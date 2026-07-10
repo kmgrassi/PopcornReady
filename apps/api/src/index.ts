@@ -1,6 +1,7 @@
 // Must be first: loads the repo-root env files before anything reads process.env.
 import "./env.js";
 import { startGuestRetentionScheduler } from "./lib/api/v1/guest-retention.js";
+import { startOrchestratorRecoveryWorker } from "./lib/orchestrator/recovery-worker.js";
 import { createServer } from "./server.js";
 
 const port = Number(process.env.PORT || 4000);
@@ -8,6 +9,7 @@ const shutdownGraceMs = Number(process.env.SHUTDOWN_GRACE_MS || 115_000);
 
 const app = createServer();
 const guestRetentionTimer = startGuestRetentionScheduler();
+const orchestratorRecoveryTimer = startOrchestratorRecoveryWorker();
 
 const server = app.listen(port, () => {
   // eslint-disable-next-line no-console
@@ -20,6 +22,7 @@ function shutdown(signal: NodeJS.Signals) {
   if (shuttingDown) return;
   shuttingDown = true;
   if (guestRetentionTimer) clearInterval(guestRetentionTimer);
+  if (orchestratorRecoveryTimer) clearInterval(orchestratorRecoveryTimer);
   const startedAt = Date.now();
   // eslint-disable-next-line no-console
   console.log(`[api] received ${signal}; draining HTTP server for up to ${shutdownGraceMs}ms`);

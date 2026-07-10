@@ -7,11 +7,9 @@ import type {
   OrchestratorRunGate,
   RunActionSummary,
 } from "@/lib/api/v1/orchestrator-store";
-import type { resumeOrchestratorRun } from "@/lib/orchestrator/engine";
 import { projectRunDetailFromParts } from "../orchestrator-run-projections.js";
-import { parseBoardRevisionTarget, resumeRunInBackground } from "../orchestrator-runs";
+import { parseBoardRevisionTarget, stopAfterTools } from "../orchestrator-runs";
 
-type Resume = typeof resumeOrchestratorRun;
 
 function runFixture(overrides: Partial<OrchestratorRun> = {}): OrchestratorRun {
   return {
@@ -73,6 +71,12 @@ test("does not surface a storyboard-only orchestrator success as a ready video",
   assert.equal(payload.run.currentStageType, "storyboard");
   assert.match(payload.run.message ?? "", /no video export is ready/i);
   assert.equal(payload.resultArtifacts?.length, 0);
+});
+
+test("prompt runs stop after storyboard unless explicitly run through", () => {
+  assert.deepEqual(stopAfterTools({}), ["generate_storyboard"]);
+  assert.deepEqual(stopAfterTools({ runThrough: true }), []);
+  assert.deepEqual(stopAfterTools({ stopAfter: "brief_intake" }), ["create_or_load_brief"]);
 });
 
 test("surfaces orchestrator success as ready once export_video produced output", () => {
@@ -535,54 +539,4 @@ test("projects full action prompts into stage items", () => {
   assert.ok(payload.stageItems[0]?.promptPreview);
   assert.notEqual(payload.stageItems[0]?.promptPreview, longPrompt);
   assert.match(payload.stageItems[0]?.promptPreview ?? "", /…$/);
-});
-
-test("resumeRunInBackground starts resume and returns before it settles", async () => {
-  let resolveResume: (() => void) | undefined;
-  let resumeStarted = false;
-  let resumeSettled = false;
-  const resume: Resume = async (_runId, deps) => {
-    resumeStarted = true;
-    assert.equal(deps.workspaceId, "ws1");
-    assert.equal(deps.agentId, "orchestrator");
-    await new Promise<void>((resolve) => {
-      resolveResume = resolve;
-    });
-    resumeSettled = true;
-    return {
-      id: "run1",
-      schemaVersion: "orchestrator_run.v1",
-      projectId: "proj1",
-      status: "succeeded",
-      inputSummary: "done",
-      spentUsd: 0,
-      createdAt: "t0",
-      updatedAt: "t1",
-    };
-  };
-
-  resumeRunInBackground("ws1", "run1", resume);
-
-  assert.equal(resumeStarted, true);
-  assert.equal(resumeSettled, false, "caller must not wait for resume completion");
-  resolveResume?.();
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(resumeSettled, true);
-});
-
-test("resumeRunInBackground logs background resume failures", async () => {
-  const error = new Error("model timeout");
-  const logged: unknown[][] = [];
-  const resume: Resume = async () => {
-    throw error;
-  };
-
-  resumeRunInBackground("ws1", "run1", resume, (...args: unknown[]) => {
-    logged.push(args);
-  });
-  await new Promise((resolve) => setImmediate(resolve));
-
-  assert.equal(logged.length, 1);
-  assert.equal(logged[0][0], "orchestrator resume failed");
-  assert.equal(logged[0][1], error);
 });

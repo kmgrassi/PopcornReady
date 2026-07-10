@@ -31,7 +31,7 @@ import {
 } from "@/lib/api/v1/store";
 import { startPosterGenerationInBackground } from "@/lib/api/v1/poster-background";
 import { parseBrief } from "@/lib/api/v1/schemas";
-import { runOrchestratorToCompletion, resumeOrchestratorRun } from "@/lib/orchestrator/engine";
+import { enqueueOrchestratorDispatch } from "@/lib/orchestrator/recovery-worker";
 import {
   GENERATION_STAGE_ORDER,
   GATEABLE_GENERATION_STAGE_TYPES,
@@ -273,8 +273,9 @@ function requestedGateTools(body: unknown): string[] {
   return [...new Set(tools)];
 }
 
-function stopAfterTools(body: unknown): string[] {
-  if (!isRecord(body) || typeof body.stopAfter !== "string") return [];
+export function stopAfterTools(body: unknown): string[] {
+  if (isRecord(body) && body.runThrough === true) return [];
+  if (!isRecord(body) || typeof body.stopAfter !== "string") return ["generate_storyboard"];
   switch (body.stopAfter) {
     case "brief_intake":
       return ["create_or_load_brief"];
@@ -518,30 +519,6 @@ async function stopAfterCurrentStep(run: OrchestratorRun): Promise<void> {
   });
 }
 
-function startRun(workspaceId: string, runId: string, actorId: string): void {
-  void runOrchestratorToCompletion(runId, {
-    workspaceId,
-    actorId,
-    agentId: "orchestrator",
-  }).catch((err) => {
-    console.error("orchestrator run failed", err);
-  });
-}
-
-export function resumeRunInBackground(
-  workspaceId: string,
-  runId: string,
-  resume: typeof resumeOrchestratorRun = resumeOrchestratorRun,
-  logError: typeof console.error = console.error
-): void {
-  void resume(runId, {
-    workspaceId,
-    agentId: "orchestrator",
-  }).catch((err) => {
-    logError("orchestrator resume failed", err);
-  });
-}
-
 orchestratorRunsRouter.post(
   "/projects/:projectId/generation-entrypoints/prompt",
   mutation(async ({ auth, body, req }, params) => {
@@ -577,11 +554,8 @@ orchestratorRunsRouter.post(
       anonymousQuota: anonymousRunQuotaForAuth(auth),
     });
     if (!replayed) {
-      startPosterGenerationInBackground(auth, projectId, {
-        provider: requestedProvider(body),
-        runId: run.id,
-      });
-      startRun(auth.workspaceId, run.id, auth.actor.id);
+      await enqueueOrchestratorDispatch(run.id, auth.workspaceId);
+      startPosterGenerationInBackground(auth, projectId, { provider: requestedProvider(body) });
     }
     return { status: 202, body: { runId: run.id } };
   })
@@ -628,11 +602,8 @@ orchestratorRunsRouter.post(
       anonymousQuota: anonymousRunQuotaForAuth(auth),
     });
     if (!replayed) {
-      startPosterGenerationInBackground(auth, projectId, {
-        provider: requestedProvider(body),
-        runId: run.id,
-      });
-      startRun(auth.workspaceId, run.id, auth.actor.id);
+      await enqueueOrchestratorDispatch(run.id, auth.workspaceId);
+      startPosterGenerationInBackground(auth, projectId, { provider: requestedProvider(body) });
     }
     return { status: 202, body: { runId: run.id } };
   })
@@ -676,7 +647,7 @@ orchestratorRunsRouter.post(
     const gate = gates.find((candidate) => candidate.status === "reached");
     if (gate) {
       await resolveGate(gate.id, "approved");
-      resumeRunInBackground(auth.workspaceId, runId);
+      await enqueueOrchestratorDispatch(runId, auth.workspaceId);
     }
     return { status: 202, body: await assembleRunDetail(runId, projectId) };
   })
@@ -693,7 +664,7 @@ orchestratorRunsRouter.post(
     const gate = gates.find((candidate) => candidate.status === "reached");
     if (gate) {
       await resolveGate(gate.id, "rejected");
-      resumeRunInBackground(auth.workspaceId, runId);
+      await enqueueOrchestratorDispatch(runId, auth.workspaceId);
     }
     return { status: 202, body: await assembleRunDetail(runId, projectId) };
   })
@@ -745,7 +716,7 @@ orchestratorRunsRouter.post(
         startedAt: run.startedAt ?? new Date().toISOString(),
       });
     }
-    resumeRunInBackground(auth.workspaceId, runId);
+    await enqueueOrchestratorDispatch(runId, auth.workspaceId);
 
     return {
       status: 202,
@@ -803,7 +774,7 @@ orchestratorRunsRouter.post(
         startedAt: run.startedAt ?? new Date().toISOString(),
       });
     }
-    resumeRunInBackground(auth.workspaceId, run.id);
+    await enqueueOrchestratorDispatch(run.id, auth.workspaceId);
 
     return {
       status: 202,
@@ -915,7 +886,7 @@ orchestratorRunsRouter.post(
       completedAt: null as unknown as string,
       error: null as unknown as Record<string, unknown>,
     });
-    resumeRunInBackground(auth.workspaceId, runId);
+    await enqueueOrchestratorDispatch(runId, auth.workspaceId);
 
     return { status: 202, body: await assembleRunDetail(runId, projectId) };
   })
