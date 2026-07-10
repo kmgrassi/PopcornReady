@@ -626,11 +626,20 @@
   padding: var(--space-5);
 }
 
+/* Flex-with-wrap (not 1fr/auto grid): the actions row is wider than the
+   storyboard column can spare, so it drops below the title instead of
+   crushing it. */
 .storyboardHeader {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
   align-items: start;
-  gap: var(--space-4);
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+}
+
+.storyboardHeader > div:first-child {
+  flex: 1 1 220px;
+  min-width: 0;
 }
 
 .storyboardHeader h2 {
@@ -657,75 +666,97 @@
   gap: var(--space-2);
 }
 
-.storyboardBoard {
-  display: grid;
-  gap: var(--space-4);
+.changeSentNotice {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--good) 45%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--good) 10%, transparent);
+  color: var(--text);
+  font-size: var(--text-sm);
 }
 
-.sceneGroup {
+.changeRequestSummary {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--line-body);
+}
+
+/* Scene-level filmstrip: one row, horizontal scroll, snap per card. */
+.sceneStrip {
   display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(170px, 210px);
   gap: var(--space-3);
+  overflow-x: auto;
+  padding-bottom: var(--space-2);
+  scroll-snap-type: x proximity;
+}
+
+.sceneStripCard {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
   min-width: 0;
-  border-top: 1px solid var(--border);
-  padding-top: var(--space-4);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  color: var(--text);
+  text-decoration: none;
+  scroll-snap-align: start;
+  transition:
+    border-color var(--transition),
+    transform var(--transition);
 }
 
-.sceneHeader {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: var(--space-3);
+a.sceneStripCard:hover {
+  border-color: var(--accent-border);
+  transform: translateY(-1px);
 }
 
-.sceneHeader span,
-.beatMeta {
+a.sceneStripCard:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.sceneStripMeta {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: 0 var(--space-3) var(--space-3);
+}
+
+.sceneStripMeta span {
   color: var(--muted);
   font-size: var(--text-xs);
   font-weight: 900;
   text-transform: uppercase;
 }
 
-.sceneHeader h3 {
-  margin: var(--space-1) 0 0;
-  color: var(--text-strong);
-  font-size: var(--text-lg);
-  line-height: 1.2;
-}
-
-.sceneHeader strong {
-  color: var(--muted);
-  font-size: var(--text-sm);
-  font-weight: 900;
-  white-space: nowrap;
-}
-
-.beatGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
-  gap: var(--space-3);
-}
-
-.beatCard {
-  display: grid;
-  min-width: 0;
+.sceneStripMeta h3 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--panel-2);
+  margin: 0;
+  color: var(--text-strong);
+  font-size: var(--text-sm);
+  line-height: 1.25;
 }
 
-.beatBody {
-  display: grid;
-  gap: var(--space-2);
-  min-width: 0;
-  padding: var(--space-3);
+.sceneStripMeta p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 700;
 }
 
-.beatMeta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
+@media (prefers-reduced-motion: reduce) {
+  .sceneStripCard {
+    transition: none;
+  }
 }
 
 .storyImage {
@@ -736,32 +767,6 @@
   border-radius: var(--radius-sm);
   background: var(--media-bg);
   object-fit: cover;
-}
-
-.storyPrompt {
-  border-top: 1px solid var(--border);
-  padding-top: var(--space-2);
-}
-
-.storyPrompt summary {
-  color: var(--text);
-  cursor: pointer;
-  font-size: var(--text-sm);
-  font-weight: 800;
-}
-
-.storyPrompt summary:focus-visible {
-  outline: none;
-  border-radius: var(--radius-sm);
-  box-shadow: var(--ring);
-}
-
-.storyPrompt p {
-  margin: var(--space-2) 0 0;
-  color: var(--muted);
-  font-size: var(--text-sm);
-  font-weight: 700;
-  line-height: var(--line-body);
 }
 
 .stagePanelBody {

@@ -3,6 +3,7 @@ import type {
   ProjectStoryboard,
   StoryboardBeat,
   StoryboardPanel,
+  StoryboardScene,
 } from "@popcorn/shared/v1/types";
 import { AssetImage } from "../components/media/AssetImage";
 import { Button, ButtonLink } from "../components/ui/Button";
@@ -22,6 +23,7 @@ export function StoryboardPreview({
   progress,
   generationError,
   onGenerate,
+  onRequestChanges,
   readOnly,
 }: {
   projectId: string;
@@ -33,6 +35,7 @@ export function StoryboardPreview({
   progress: StoryboardProgress;
   generationError: Error | null;
   onGenerate?: () => void;
+  onRequestChanges?: () => void;
   readOnly: boolean;
 }) {
   const scenes = storyboardScenes(storyboard);
@@ -65,6 +68,11 @@ export function StoryboardPreview({
           </p>
         </div>
         <div className={styles.storyboardHeaderActions}>
+          {storyboard && !readOnly && onRequestChanges ? (
+            <Button variant="ghost" size="sm" onClick={onRequestChanges}>
+              Request changes
+            </Button>
+          ) : null}
           {storyboard && !readOnly ? (
             <ButtonLink
               variant="ghost"
@@ -111,28 +119,12 @@ export function StoryboardPreview({
       ) : null}
       {!loading && !error && storyboard ? (
         hasPreviewBeats ? (
-          <div className={styles.storyboardBoard}>
-            {scenes.map((scene) => {
-              if (scene.beats.length === 0) return null;
-              return (
-                <article className={styles.sceneGroup} key={scene.id}>
-                  <header className={styles.sceneHeader}>
-                    <div>
-                      <span>Scene {scene.sceneIndex + 1}</span>
-                      <h3>{scene.title ?? scene.summary ?? "Untitled scene"}</h3>
-                    </div>
-                    {scene.durationSec ? (
-                      <strong>{formatDuration(scene.durationSec)}</strong>
-                    ) : null}
-                  </header>
-                  <div className={styles.beatGrid}>
-                    {scene.beats.map((beat) => (
-                      <StoryboardBeatCard beat={beat} key={beat.id} />
-                    ))}
-                  </div>
-                </article>
-              );
-            })}
+          // Scene-level filmstrip only: the overview stays a short read, and
+          // moment-level depth lives on the storyboard page.
+          <div className={styles.sceneStrip}>
+            {scenes.map((scene) => (
+              <SceneStripCard key={scene.id} projectId={projectId} scene={scene} readOnly={readOnly} />
+            ))}
           </div>
         ) : !generating ? (
           <p className={styles.muted}>Storyboard structure exists, but no panel images are ready yet.</p>
@@ -142,33 +134,51 @@ export function StoryboardPreview({
   );
 }
 
-function StoryboardBeatCard({ beat }: { beat: StoryboardBeat }) {
-  const panel = selectedPanel(beat);
-  const label = `Moment ${beat.beatIndex + 1}`;
-  const prompt = panel?.prompt?.trim() || beat.visualDescription?.trim() || null;
-
-  return (
-    <article className={styles.beatCard}>
+function SceneStripCard({
+  projectId,
+  scene,
+  readOnly,
+}: {
+  projectId: string;
+  scene: StoryboardScene;
+  readOnly: boolean;
+}) {
+  const label = `Scene ${scene.sceneIndex + 1}`;
+  const panel = scene.beats.map(selectedPanel).find(Boolean) ?? null;
+  const momentCount = scene.beats.length;
+  const body = (
+    <>
       {panel ? (
         <StoryboardPanelThumb panel={panel} label={label} />
       ) : (
         <div className={`${styles.storyImage} ${styles.storyImageEmpty}`}>
-          <span>{titleCase(beat.status)}</span>
+          <span>No panels yet</span>
         </div>
       )}
-      <div className={styles.beatBody}>
-        <div className={styles.beatMeta}>
-          <span>{label}</span>
-          {beat.durationSec ? <span>{formatDuration(beat.durationSec)}</span> : null}
-        </div>
-        {prompt ? (
-          <details className={styles.storyPrompt}>
-            <summary>Scene description prompt</summary>
-            <p>{prompt}</p>
-          </details>
-        ) : null}
+      <div className={styles.sceneStripMeta}>
+        <span>
+          {label}
+          {scene.durationSec ? ` · ${formatDuration(scene.durationSec)}` : ""}
+        </span>
+        <h3>{scene.title ?? scene.summary ?? "Untitled scene"}</h3>
+        <p>
+          {momentCount} {momentCount === 1 ? "moment" : "moments"}
+        </p>
       </div>
-    </article>
+    </>
+  );
+
+  if (readOnly) {
+    return <article className={styles.sceneStripCard}>{body}</article>;
+  }
+  return (
+    <Link
+      className={styles.sceneStripCard}
+      to={`/projects/${encodeURIComponent(projectId)}/storyboard`}
+      aria-label={`Open ${label} in the storyboard`}
+    >
+      {body}
+    </Link>
   );
 }
 
