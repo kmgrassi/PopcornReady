@@ -44,6 +44,17 @@ import {
   inputsFingerprint,
   type GraphAssetInput,
 } from "./asset-graph";
+import {
+  CONTENT_SCHEMA_KEY,
+  inputIds,
+  markedContent,
+  unmarkedContent,
+  type AssetMedia,
+  type ContentSchemaKind,
+  type DataAssetRow,
+  type GraphAssetKind,
+  type TranscriptSegmentRow,
+} from "./store-content";
 import { ApiError, notFound } from "./errors";
 import type { GeneratedAssetProvenance } from "./provenance";
 import type { AssetSemanticAnalysis } from "../../assets/semantic-analysis";
@@ -74,11 +85,7 @@ import {
   type ScriptDraft,
   type Timeline,
 } from "@popcorn/shared/types";
-import type {
-  TranscriptAssetContent,
-  TranscriptSegment,
-  TranscriptWord,
-} from "@popcorn/shared/transcript";
+import type { TranscriptAssetContent, TranscriptSegment } from "@popcorn/shared/transcript";
 import type { Asset } from "@popcorn/shared/assets/types";
 import type { GeneratedStoryboardTile } from "@/lib/generative/storyboard-tile";
 import {
@@ -381,41 +388,6 @@ function mapProject(
   };
 }
 
-// --- brief versions --------------------------------------------------------
-interface DataAssetRow {
-  id: string;
-  schema_version: string;
-  workspace_id: string;
-  project_id: string;
-  lineage_id: string;
-  version: number;
-  kind: GraphAssetKind;
-  media: AssetMedia;
-  status: "ready" | "pending";
-  role: string | null;
-  content: unknown;
-  content_hash: string | null;
-  inputs_fingerprint: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-interface TranscriptSegmentRow {
-  id: string;
-  schema_version: string;
-  workspace_id: string;
-  project_id: string;
-  transcript_asset_id: string;
-  position: number;
-  start_sec: number;
-  end_sec: number;
-  text: string;
-  speaker: string | null;
-  words: TranscriptWord[];
-  created_at: string;
-  updated_at: string;
-}
-
 export interface ProjectTranscript {
   asset: {
     id: string;
@@ -431,43 +403,6 @@ export interface ProjectTranscript {
     content: TranscriptAssetContent;
   };
   segments: TranscriptSegment[];
-}
-
-// Typed-JSONB guardrail (assets_content_schema_check / assets_params_schema_check):
-// jsonb document payloads must carry a schema marker. Stamp it on write, strip
-// it when projecting the payload back out as a domain object.
-const CONTENT_SCHEMA_KEY = "schema_version";
-
-function markedContent(
-  kind:
-    | "brief"
-    | "beat"
-    | "plan"
-    | "visual_anchor_plan"
-    | "story_blueprint"
-    | "script_draft"
-    | "timeline"
-    | "narration_script"
-    | "audio_mix"
-    | "critique"
-    | "transcript",
-  content: unknown
-): Record<string, unknown> {
-  const schema =
-    kind === "story_blueprint"
-      ? "storyBlueprint.v1"
-      : kind === "script_draft"
-        ? "scriptDraft.v1"
-        : `${kind}.v1`;
-  return { [CONTENT_SCHEMA_KEY]: schema, ...(content as Record<string, unknown>) };
-}
-
-function unmarkedContent<T>(content: unknown): T {
-  if (content && typeof content === "object" && !Array.isArray(content)) {
-    const { [CONTENT_SCHEMA_KEY]: _schema, ...rest } = content as Record<string, unknown>;
-    return rest as T;
-  }
-  return content as T;
 }
 
 function mapBriefVersion(row: DataAssetRow): V1BriefVersion {
@@ -943,10 +878,6 @@ export async function getPosterGenerationContext(
   };
 }
 
-function inputIds(inputs: GraphAssetInput[]): string[] {
-  return [...new Set(inputs.map((input) => input.assetId).filter(Boolean))].sort();
-}
-
 function posterMatchesGeneration(
   row: PosterAssetRow,
   input: {
@@ -1319,18 +1250,7 @@ async function insertDataAsset(input: {
     | "composite"
     | "audio_mix"
     | "critique";
-  contentSchemaKind?:
-    | "brief"
-    | "beat"
-    | "plan"
-    | "visual_anchor_plan"
-    | "story_blueprint"
-    | "script_draft"
-    | "timeline"
-    | "narration_script"
-    | "audio_mix"
-    | "transcript"
-    | "critique";
+  contentSchemaKind?: ContentSchemaKind;
   role: string;
   content: unknown;
   // Upstream asset snapshot. The DB trigger mirrors this into asset_edges, so the
@@ -1613,27 +1533,6 @@ interface AssetContextEnvelope {
   clipUnderstanding?: V1Asset["clipUnderstanding"];
   analysis?: V1AssetAnalysis;
 }
-
-type GraphAssetKind =
-  | "source_footage"
-  | "brief"
-  | "beat"
-  | "anchor"
-  | "keyframe"
-  | "clip"
-  | "audio_track"
-  | "narration_script"
-  | "transcript"
-  | "critique"
-  | "plan"
-  | "story_blueprint"
-  | "composite"
-  | "transition"
-  | "audio_mix"
-  | "render"
-  | "poster";
-
-type AssetMedia = "data" | "image" | "video" | "audio";
 
 interface AssetRow {
   id: string;
