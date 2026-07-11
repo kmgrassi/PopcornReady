@@ -364,6 +364,8 @@ export interface StartGenerationRunInput {
   assetIds?: string[];
   reviewGates?: GateableGenerationStageType[];
   stopAfter?: GateableGenerationStageType;
+  /** Continue past the default storyboard checkpoint through final export. */
+  runThrough?: boolean;
   provider?: string;
   seedAsset?: {
     kind?: "image" | "video";
