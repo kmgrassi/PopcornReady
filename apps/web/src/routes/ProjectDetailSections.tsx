@@ -39,10 +39,12 @@ export function ProjectConcept({
   project,
   projectId,
   readOnly,
+  onRequestChanges,
 }: {
   project: V1Project;
   projectId: string;
   readOnly: boolean;
+  onRequestChanges?: () => void;
 }) {
   const brief = project.brief;
   const title = brief?.oneBigIdea ?? brief?.goal ?? project.name;
@@ -77,6 +79,11 @@ export function ProjectConcept({
               </Button>
               <span>{helperText}</span>
             </div>
+          ) : null}
+          {!readOnly && onRequestChanges ? (
+            <Button variant="ghost" size="sm" onClick={onRequestChanges}>
+              Request changes
+            </Button>
           ) : null}
           {!readOnly ? (
             <ButtonLink
@@ -280,10 +287,12 @@ export function ProjectBrief({
   project,
   projectId,
   readOnly,
+  onRequestChanges,
 }: {
   project: V1Project;
   projectId: string;
   readOnly: boolean;
+  onRequestChanges?: () => void;
 }) {
   const brief = project.brief;
   return (
@@ -295,6 +304,11 @@ export function ProjectBrief({
         </div>
         {!readOnly ? (
           <div className={styles.sectionHeaderActions}>
+            {onRequestChanges ? (
+              <Button variant="ghost" size="sm" onClick={onRequestChanges}>
+                Request changes
+              </Button>
+            ) : null}
             <ButtonLink
               variant="ghost"
               size="sm"
@@ -328,11 +342,13 @@ export function ProjectScript({
   projectId,
   storyboard,
   readOnly,
+  onRequestChanges,
 }: {
   project: V1Project;
   projectId: string;
   storyboard: ProjectStoryboard | null;
   readOnly: boolean;
+  onRequestChanges?: () => void;
 }) {
   const scriptLines = storyboardScriptLines(storyboard);
   const narrationScript = project.brief?.narration?.script?.trim();
@@ -346,6 +362,11 @@ export function ProjectScript({
         </div>
         {!readOnly ? (
           <div className={styles.sectionHeaderActions}>
+            {onRequestChanges ? (
+              <Button variant="ghost" size="sm" onClick={onRequestChanges}>
+                Request changes
+              </Button>
+            ) : null}
             <ButtonLink
               variant="ghost"
               size="sm"

@@ -7,6 +7,7 @@ import {
   type GenerationStageType,
   type RunReviewGate,
 } from "@popcorn/shared/v1/types";
+import { humanizeStageMessage } from "../../lib/stage-message";
 import { JudgmentBadge } from "../evals/JudgmentBadge";
 import styles from "./ProgressView.module.css";
 
@@ -246,10 +247,11 @@ export function StageRail({
         const progressPercent = inferredRunning
           ? runProgressPercent
           : runningStage?.progressPercent ?? stage?.progressPercent;
-        const message =
+        const message = humanizeStageMessage(
           failedStage?.error?.message ??
-          (inferredRunning ? runMessage : runningStage?.message) ??
-          visibleStage.description;
+            (inferredRunning ? runMessage : runningStage?.message) ??
+            visibleStage.description
+        );
         const awaitingReview = groupStages.some((candidate) => reviewGate?.stageId === candidate.stageId);
         const statusKey = awaitingReview ? "review" : status;
         const showStopAction = status === "running" && !awaitingReview && Boolean(stopAction);
