@@ -1,0 +1,33 @@
+.page {
+  display: grid;
+  min-height: min(70vh, 42rem);
+  place-items: center;
+  padding: var(--space-6);
+}
+
+.card {
+  width: min(100%, 32rem);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-8);
+  text-align: center;
+}
+
+.card h1 {
+  margin: 0;
+  color: var(--text);
+}
+
+.card p {
+  margin: var(--space-3) 0 0;
+  color: var(--text-muted);
+}
+
+.link {
+  display: inline-block;
+  margin-top: var(--space-5);
+  color: var(--accent);
+  font-weight: 700;
+}
