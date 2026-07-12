@@ -1,0 +1,4 @@
+{
+  "site_url": "https://popcornready.ai/auth/callback",
+  "redirect_urls": ["https://popcornready.ai/auth/callback"]
+}

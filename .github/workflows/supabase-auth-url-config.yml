@@ -1,0 +1,30 @@
+name: Apply Supabase Auth URL configuration
+
+# Keeps production email-auth redirects in source control. Unlike `supabase
+# config push`, this applies only the two Auth URL fields and preserves all
+# unrelated hosted Auth settings.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/production/auth-url-config.json"
+      - "scripts/apply-production-auth-url-config.sh"
+      - ".github/workflows/supabase-auth-url-config.yml"
+  workflow_dispatch: {}
+
+concurrency:
+  group: supabase-auth-url-config
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: mllkugitfwasiwgbortk
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply hosted Auth redirect URLs
+        run: scripts/apply-production-auth-url-config.sh
