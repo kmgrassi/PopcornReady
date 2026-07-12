@@ -39,7 +39,13 @@ export function AuthForm({ mode }: AuthFormProps) {
     signOut,
     clearError,
   } = useAuth();
-  const quickStartResume = usePendingQuickStartRun(status, location.state);
+  // Anonymous sessions must be signed out before a pending quick start can be
+  // claimed. Otherwise the resume may begin with the guest token and lose
+  // authentication halfway through when the sign-out effect runs.
+  const quickStartResume = usePendingQuickStartRun(
+    isAnonymous ? "loading" : status,
+    location.state,
+  );
   const [ready, setReady] = useState(false);
   const [showSignupIntro, setShowSignupIntro] = useState(false);
   const [email, setEmail] = useState("");
