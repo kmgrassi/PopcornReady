@@ -30,6 +30,7 @@ import { PublicProjectPage } from "./routes/PublicProjectPage";
 import { SignupPage } from "./routes/SignupPage";
 import { SpritePage } from "./routes/SpritePage";
 import { AccountPage } from "./routes/AccountPage";
+import { AuthCallbackPage } from "./routes/AuthCallbackPage";
 import { SettingsPage } from "./routes/SettingsPage";
 import { TemplatesPage } from "./routes/TemplatesPage";
 import { UploadsPage } from "./routes/UploadsPage";
@@ -77,6 +78,7 @@ export function App() {
       <Route element={<RootLayout />}>
         <Route element={<AppLayout />}>
           <Route index element={<HomePage />} />
+          <Route path="/auth/callback" element={<AuthCallbackPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/sprite" element={<SpritePage />} />
