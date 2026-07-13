@@ -21,7 +21,7 @@ interface StoryboardBoardProps {
   items: GenerationStageItem[];
   storyboard?: ProjectStoryboard | null;
   pendingTargetKey?: string | null;
-  activeTargetKey?: string | null;
+  activeTargetKeys?: string[];
   error?: string | null;
   onFeedback: (input: {
     message: string;
@@ -146,7 +146,7 @@ export function StoryboardBoard({
   items,
   storyboard,
   pendingTargetKey,
-  activeTargetKey,
+  activeTargetKeys = [],
   error,
   onFeedback,
 }: StoryboardBoardProps) {
@@ -189,7 +189,8 @@ export function StoryboardBoard({
       <div className={styles.grid}>
         {tiles.map((tile, index) => {
           const key = targetKey(tile.target);
-          const regenerating = pendingTargetKey === key || activeTargetKey === key;
+          const regenerating =
+            pendingTargetKey === key || activeTargetKeys.includes(key);
           const regenAssetId = tile.target.assetId ?? tile.item?.assetId;
           const canRegenerate =
             !tile.mediaUrl && tile.item?.kind === "image" && Boolean(regenAssetId);
