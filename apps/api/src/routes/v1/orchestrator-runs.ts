@@ -20,6 +20,7 @@ import {
   type OrchestratorRun,
   type OrchestratorRunGate,
   type RunActionSummary,
+  type UpdateOrchestratorRunPatch,
 } from "@/lib/api/v1/orchestrator-store";
 import {
   createAction,
@@ -68,6 +69,32 @@ const ASSET_USES = [
 ] as const;
 
 export const orchestratorRunsRouter = Router();
+
+/**
+ * Board feedback is an explicit request to re-enter the agent loop. Terminal
+ * runs are therefore resumable here; only a live or approval-waiting run can
+ * keep its current status.
+ */
+export function boardRevisionRequiresRunResume(status: OrchestratorRun["status"]): boolean {
+  return status !== "running" && status !== "waiting";
+}
+
+export function boardRevisionResumePatch(run: OrchestratorRun): UpdateOrchestratorRunPatch {
+  return {
+    status: "running",
+    startedAt: run.startedAt ?? new Date().toISOString(),
+    clearCompletedAt: true,
+    clearError: true,
+  };
+}
+
+export function boardRevisionGateIdsToReset(
+  run: OrchestratorRun,
+  gates: OrchestratorRunGate[]
+): string[] {
+  if (run.status !== "canceled") return [];
+  return gates.filter((gate) => gate.status === "reached").map((gate) => gate.id);
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -725,12 +752,6 @@ orchestratorRunsRouter.post(
     const runId = requireParam(params, "runId");
     await requireProjectAccess(auth.workspaceId, projectId);
     const run = await requireProjectRun(runId, projectId);
-    if (run.status === "failed" || run.status === "canceled") {
-      throw new ApiError(
-        "validation_failed",
-        "Board feedback cannot revise a failed or canceled generation run."
-      );
-    }
     const request = parseBoardRevisionRequest(body, runId);
     const action = await createAction({
       projectId,
@@ -746,11 +767,10 @@ orchestratorRunsRouter.post(
       rationale: "User requested an AI-mediated board or tile revision.",
       proposal: boardRevisionProposal(request),
     });
-    if (run.status === "queued" || run.status === "succeeded") {
-      await updateOrchestratorRun(runId, {
-        status: "running",
-        startedAt: run.startedAt ?? new Date().toISOString(),
-      });
+    if (boardRevisionRequiresRunResume(run.status)) {
+      const gates = await listRunGates(runId);
+      await resetGatesToPending(boardRevisionGateIdsToReset(run, gates));
+      await updateOrchestratorRun(runId, boardRevisionResumePatch(run));
     }
     await enqueueOrchestratorDispatch(runId, auth.workspaceId);
 
@@ -922,8 +942,8 @@ orchestratorRunsRouter.post(
     }
     await updateOrchestratorRun(runId, {
       status: "running",
-      completedAt: null as unknown as string,
-      error: null as unknown as Record<string, unknown>,
+      clearCompletedAt: true,
+      clearError: true,
     });
     await enqueueOrchestratorDispatch(runId, auth.workspaceId);
 
@@ -962,8 +982,8 @@ orchestratorRunsRouter.post(
     await updateOrchestratorRun(runId, {
       status: "running",
       startedAt: run.startedAt ?? new Date().toISOString(),
-      completedAt: null as unknown as string,
-      error: null as unknown as Record<string, unknown>,
+      clearCompletedAt: true,
+      clearError: true,
     });
     await enqueueOrchestratorDispatch(runId, auth.workspaceId);
 
