@@ -4,6 +4,7 @@ import type { OrchestratorRun } from "@/lib/api/v1/orchestrator-store";
 import {
   isOrchestratorRecoveryEnabled,
   orchestratorRecoveryIntervalMs,
+  orchestratorTickBackoffMs,
   recoverOrchestratorRuns,
 } from "../recovery-worker";
 
@@ -52,4 +53,13 @@ test("recovery is enabled by default and has a safe lower interval bound", () =>
   assert.equal(isOrchestratorRecoveryEnabled({}), true);
   assert.equal(isOrchestratorRecoveryEnabled({ ORCHESTRATOR_RECOVERY_ENABLED: "false" }), false);
   assert.equal(orchestratorRecoveryIntervalMs({ ORCHESTRATOR_RECOVERY_INTERVAL_MS: "10" }), 1_000);
+});
+
+test("failed ticks back off exponentially and cap at 30s", () => {
+  assert.equal(orchestratorTickBackoffMs(0), 0);
+  assert.equal(orchestratorTickBackoffMs(1, 1_000), 2_000);
+  assert.equal(orchestratorTickBackoffMs(2, 1_000), 4_000);
+  assert.equal(orchestratorTickBackoffMs(3, 1_000), 8_000);
+  assert.equal(orchestratorTickBackoffMs(10, 1_000), 30_000);
+  assert.equal(orchestratorTickBackoffMs(1_000, 1_000), 30_000);
 });

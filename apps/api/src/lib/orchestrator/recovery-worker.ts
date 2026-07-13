@@ -11,6 +11,22 @@ import { resumeOrchestratorRun, runOrchestratorToCompletion } from "./engine";
 
 const DEFAULT_INTERVAL_MS = 1_000;
 const ASYNC_RETRY_SECONDS = 10;
+const MAX_TICK_BACKOFF_MS = 30_000;
+
+/**
+ * Delay before the next claim attempt after `consecutiveFailures` failed ticks.
+ * A failed tick means the claim/release DB call itself errored (e.g. statement
+ * timeout while a migration holds a table lock), so retrying every interval
+ * only hammers the database; back off exponentially instead, capped so the
+ * worker recovers within seconds of the database becoming healthy.
+ */
+export function orchestratorTickBackoffMs(
+  consecutiveFailures: number,
+  baseIntervalMs: number = DEFAULT_INTERVAL_MS
+): number {
+  if (consecutiveFailures <= 0) return 0;
+  return Math.min(baseIntervalMs * 2 ** consecutiveFailures, MAX_TICK_BACKOFF_MS);
+}
 
 export function isOrchestratorRecoveryEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return (env.ORCHESTRATOR_RECOVERY_ENABLED ?? "true").toLowerCase() !== "false";
@@ -90,11 +106,26 @@ export function startOrchestratorRecoveryWorker(options: { env?: NodeJS.ProcessE
   if (!isOrchestratorRecoveryEnabled(env)) return null;
   const logger = options.logger ?? defaults.logger;
   let active = false;
+  let consecutiveFailures = 0;
+  let nextAttemptAt = 0;
   const tick = () => {
-    if (active) return;
+    if (active || Date.now() < nextAttemptAt) return;
     active = true;
     recoverOrchestratorRuns({ logger })
-      .catch((error) => logger.error("orchestrator_worker.tick_failed", { error: { message: error instanceof Error ? error.message : "Worker failed." } }))
+      .then(() => {
+        consecutiveFailures = 0;
+        nextAttemptAt = 0;
+      })
+      .catch((error) => {
+        consecutiveFailures += 1;
+        const backoffMs = orchestratorTickBackoffMs(consecutiveFailures, orchestratorRecoveryIntervalMs(env));
+        nextAttemptAt = Date.now() + backoffMs;
+        logger.error("orchestrator_worker.tick_failed", {
+          consecutiveFailures,
+          backoffMs,
+          error: { message: error instanceof Error ? error.message : "Worker failed." },
+        });
+      })
       .finally(() => { active = false; });
   };
   tick();
