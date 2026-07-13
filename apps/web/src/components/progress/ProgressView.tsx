@@ -854,6 +854,9 @@ export function ProgressView({
                 open={Boolean(selectedAssetItem)}
                 title={selectedAssetItem?.label ?? "Edit asset"}
                 subtitle={selectedAssetItem?.promptPreview ?? selectedAssetItem?.purpose}
+                initialMessage={
+                  selectedAssetItem?.prompt ?? selectedAssetItem?.promptPreview ?? null
+                }
                 pending={selectedAssetPending}
                 error={selectedAssetItem ? boardFeedbackError : null}
                 modelPurpose={
