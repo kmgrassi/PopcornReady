@@ -2,6 +2,7 @@ import { createHash } from "crypto";
 import { Router } from "express";
 import { mutation, route } from "@/core/adapter";
 import { ApiError } from "@/core/errors";
+import { applyCreditTransaction, getCreditBalance } from "@/lib/api/v1/credits";
 import { runIdempotent } from "@/lib/api/v1/idempotency";
 import {
   clearProjectSelections,
@@ -30,6 +31,13 @@ import {
   getProject,
   recordProjectActivity,
 } from "@/lib/api/v1/store";
+import { regenerateImageAsset } from "@/lib/api/v1/regenerate-asset";
+import { estimateCostUsd } from "@/lib/generative/pricing";
+import {
+  billableUsdSoFar,
+  userHasAnyProviderKey,
+  withProviderKeyUser,
+} from "@/lib/provider-keys/resolve";
 import { startPosterGenerationInBackground } from "@/lib/api/v1/poster-background";
 import { parseBrief } from "@/lib/api/v1/schemas";
 import { enqueueOrchestratorDispatch } from "@/lib/orchestrator/recovery-worker";
@@ -40,6 +48,7 @@ import {
   type BoardRevisionTarget,
   type GenerationStageType,
 } from "@popcorn/shared/v1/types";
+import type { GenerativeProviderName } from "@popcorn/shared/generative/types";
 import {
   projectRun,
   projectRunDetailFromParts,
@@ -53,6 +62,8 @@ const ANONYMOUS_RUN_QUOTA_LIMIT = 1;
 const ANONYMOUS_RUN_QUOTA_WINDOW_MS = 24 * 60 * 60 * 1000;
 const AFTER_GATE_PREFIX = "after:";
 const INSUFFICIENT_CREDITS_ERROR_KIND = "insufficient_credits";
+const CREDIT_MARGIN = 2;
+const CREDITS_PER_USD = 100;
 const BOARD_REVISION_SCOPES = ["concept", "brief", "script", "board", "tile", "asset"] as const;
 const ASSET_USES = [
   "primary_footage",
@@ -238,6 +249,18 @@ function boardRevisionProposal(request: ReturnType<typeof parseBoardRevisionRequ
     target: request.target,
     ...(request.generationModel ? { generationModel: request.generationModel } : {}),
   };
+}
+
+/**
+ * A tile already backed by an image has a complete, immutable regeneration
+ * contract. Do not delegate that narrow request to the general-purpose model:
+ * it could acknowledge the feedback and then terminate without an output.
+ */
+export function isDirectImageTileRevision(
+  target: BoardRevisionTarget,
+  asset: { kind: string } | undefined
+): boolean {
+  return target.scope === "tile" && Boolean(target.assetId) && asset?.kind === "image";
 }
 
 function generationActions(actions: RunActionSummary[]): RunActionSummary[] {
@@ -753,6 +776,9 @@ orchestratorRunsRouter.post(
     await requireProjectAccess(auth.workspaceId, projectId);
     const run = await requireProjectRun(runId, projectId);
     const request = parseBoardRevisionRequest(body, runId);
+    const targetAsset = request.target.assetId
+      ? await getAsset(auth.workspaceId, projectId, request.target.assetId)
+      : undefined;
     const action = await createAction({
       projectId,
       orchestratorRunId: runId,
@@ -767,6 +793,87 @@ orchestratorRunsRouter.post(
       rationale: "User requested an AI-mediated board or tile revision.",
       proposal: boardRevisionProposal(request),
     });
+
+    if (
+      isTerminalRun(run) &&
+      targetAsset &&
+      isDirectImageTileRevision(request.target, targetAsset)
+    ) {
+      // The image service creates the immutable version and a `regenerate_asset`
+      // action attached to this run. The run result therefore reflects an actual
+      // output instead of a model-only acknowledgement of the feedback.
+      try {
+        const provider = (request.generationModel?.provider ?? targetAsset.provenance?.provider ?? "openai") as GenerativeProviderName;
+        const model = request.generationModel?.model ?? targetAsset.provenance?.model;
+        const estimatedCostUsd = estimateCostUsd({ provider, kind: "image", model });
+        const estimatedCredits = Math.ceil(estimatedCostUsd * CREDIT_MARGIN * CREDITS_PER_USD);
+        if (
+          estimatedCredits > 0 &&
+          (await getCreditBalance(auth.actor.id)) < estimatedCredits &&
+          !(await userHasAnyProviderKey(auth.actor.id))
+        ) {
+          throw new ApiError(
+            "insufficient_credits",
+            "Out of credits. Buy credits or add your own provider API keys to keep generating."
+          );
+        }
+
+        await updateOrchestratorRun(runId, boardRevisionResumePatch(run));
+        const billableUsd = await withProviderKeyUser(auth.actor.id, async () => {
+          const beforeUsd = billableUsdSoFar();
+          await regenerateImageAsset({
+            workspaceId: auth.workspaceId,
+            assetId: targetAsset.id,
+            prompt: request.message,
+            ...(request.generationModel
+              ? { provider: request.generationModel.provider, model: request.generationModel.model }
+              : {}),
+            orchestratorRunId: runId,
+          });
+          return billableUsdSoFar() - beforeUsd;
+        });
+        if (billableUsd > 0) {
+          const credits = Math.ceil(billableUsd * CREDIT_MARGIN * CREDITS_PER_USD);
+          await applyCreditTransaction({
+            userId: auth.actor.id,
+            deltaCredits: -credits,
+            reason: "generation_debit",
+            runId,
+            costUsd: billableUsd,
+            idempotencyKey: `run:${runId}:board-revision:${action.id}`,
+          });
+          await updateOrchestratorRun(runId, {
+            spentUsd: run.spentUsd + billableUsd,
+          });
+        }
+      } catch (error) {
+        await updateOrchestratorRun(runId, {
+          status: "failed",
+          completedAt: new Date().toISOString(),
+          error: {
+            kind: "revision_generation_failed",
+            message: error instanceof Error ? error.message : String(error),
+          },
+        });
+        throw error;
+      }
+      await updateOrchestratorRun(runId, {
+        status: "succeeded",
+        completedAt: new Date().toISOString(),
+        clearError: true,
+      });
+      return {
+        status: 200,
+        body: {
+          revision: {
+            id: action.id,
+            message: request.message,
+            target: request.target,
+            createdAt: action.createdAt,
+          },
+        },
+      };
+    }
     if (boardRevisionRequiresRunResume(run.status)) {
       const gates = await listRunGates(runId);
       await resetGatesToPending(boardRevisionGateIdsToReset(run, gates));

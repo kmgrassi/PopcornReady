@@ -16,6 +16,10 @@ Shipped:
 
 - `POST /api/v1/assets/:assetId/regenerate` regenerates image assets from a
   saved or user-provided prompt.
+- Image-backed tile revisions submitted from a run use that immutable image
+  regeneration path directly; their `regenerate_asset` action is attached to
+  the originating run so the run cannot report a feedback-only success. They
+  use the same platform-key credit precheck and debit accounting as run tools.
 - `regenerate_asset_version` mints a new immutable image version and repoints
   storyboard panels plus active selections.
 - Several orchestrator tools accept `feedback` inputs and can produce new

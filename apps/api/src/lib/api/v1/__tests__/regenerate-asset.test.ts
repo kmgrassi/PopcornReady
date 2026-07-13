@@ -144,6 +144,20 @@ test("a caller-supplied prompt wins over the saved one and is persisted", async 
   assert.equal((calls.applyMedia?.update.provenance as { prompt: string }).prompt, "a brand new prompt");
 });
 
+test("attaches the immutable regeneration action to its requesting run", async () => {
+  const asset = imageAsset();
+  const { calls, deps } = makeDeps(asset);
+
+  await regenerateImageAsset({
+    workspaceId: "ws-1",
+    assetId: asset.id,
+    orchestratorRunId: "run-1",
+    deps,
+  });
+
+  assert.equal(calls.applyMedia?.update.orchestratorRunId, "run-1");
+});
+
 test("caller-supplied provider and model override saved provenance", async () => {
   const asset = imageAsset();
   const { calls, deps } = makeDeps(asset);

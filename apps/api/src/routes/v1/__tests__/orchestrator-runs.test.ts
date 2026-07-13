@@ -12,6 +12,7 @@ import {
   boardRevisionGateIdsToReset,
   boardRevisionRequiresRunResume,
   boardRevisionResumePatch,
+  isDirectImageTileRevision,
   parseBoardRevisionTarget,
   runFailedForInsufficientCredits,
   stopAfterTools,
@@ -292,6 +293,21 @@ test("parseBoardRevisionTarget rejects unsupported asset target uses", () => {
       assert.match(err.message, /targetAssetUse/i);
       return true;
     }
+  );
+});
+
+test("routes image-backed tile revisions to immutable image regeneration", () => {
+  assert.equal(
+    isDirectImageTileRevision({ scope: "tile", runId: "run_1", assetId: "asset_1" }, { kind: "image" }),
+    true
+  );
+  assert.equal(
+    isDirectImageTileRevision({ scope: "asset", runId: "run_1", assetId: "asset_1" }, { kind: "image" }),
+    false
+  );
+  assert.equal(
+    isDirectImageTileRevision({ scope: "tile", runId: "run_1", assetId: "asset_1" }, { kind: "video" }),
+    false
   );
 });
 

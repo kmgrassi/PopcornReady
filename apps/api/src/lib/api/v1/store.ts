@@ -5785,6 +5785,8 @@ export interface RegeneratedAssetMedia {
   contentHash?: string;
   durationSec?: number;
   provenance: GeneratedAssetProvenance;
+  /** Optional parent run for the provenance action; never persisted as asset media. */
+  orchestratorRunId?: string;
 }
 
 // Regenerate an image asset by MINTING A NEW IMMUTABLE VERSION: a fresh row in
@@ -5818,6 +5820,7 @@ export async function applyRegeneratedAssetMedia(
 
   const action = await createAction({
     projectId,
+    ...(update.orchestratorRunId ? { orchestratorRunId: update.orchestratorRunId } : {}),
     tool: "regenerate_asset",
     status: "running",
     params: {

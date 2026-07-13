@@ -93,6 +93,7 @@ export function toolStage(tool: string): GenerationStageType {
     case "generate_keyframe":
     case "generate_clip":
     case "edit_video_asset":
+    case "regenerate_asset":
       return "asset_generation";
     case "generate_audio":
     case "fit_audio_to_picture":
@@ -123,6 +124,8 @@ function toolItemKind(tool: string): GenerationStageItemKind {
     case "generate_clip":
     case "edit_video_asset":
       return "video";
+    case "regenerate_asset":
+      return "image";
     case "generate_audio":
     case "fit_audio_to_picture":
       return "audio";

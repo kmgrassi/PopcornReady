@@ -23,3 +23,9 @@
 - Friction or failure: No alternate-agent CLI is configured, so independent review is documented but not executed in this task.
 - Suggested improvement: Configure `AGENT_REVIEW_COMMAND` for a provider different from the implementing agent.
 - Follow-up: `TODOS.md` visual-regression and performance-baseline items.
+
+### 2026-07-13 — API-20260713-01
+- What helped: Durable action history and Railway deployment context made the no-op completion reproducible without rerunning customer work.
+- Friction or failure: A feedback action was allowed to complete a run without a downstream output; direct image regeneration needed explicit run-credit accounting.
+- Suggested improvement: Add route-level integration coverage for terminal image-tile revisions with mocked generation and credit dependencies.
+- Follow-up: none.

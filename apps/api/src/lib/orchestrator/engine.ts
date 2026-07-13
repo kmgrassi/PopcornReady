@@ -338,6 +338,33 @@ function toPriorResult(action: RunActionSummary): Record<string, unknown> {
   return base;
 }
 
+function hasUnfulfilledTargetedRevision(actions: RunActionSummary[]): boolean {
+  const latestFeedbackIndex = actions
+    .map((action) => action.tool)
+    .lastIndexOf("board_feedback");
+  if (latestFeedbackIndex < 0) return false;
+  const feedback = actions[latestFeedbackIndex];
+  const target = feedback?.params.target;
+  if (!target || typeof target !== "object" || Array.isArray(target)) return false;
+  const scope = (target as { scope?: unknown }).scope;
+  if (scope !== "tile" && scope !== "asset") return false;
+  const revisionOutputTools = new Set([
+    "regenerate_asset",
+    "generate_anchor",
+    "generate_keyframe",
+    "generate_clip",
+    "edit_video_asset",
+  ]);
+  return !actions
+    .slice(latestFeedbackIndex + 1)
+    .some(
+      (action) =>
+        revisionOutputTools.has(action.tool) &&
+        action.status === "applied" &&
+        action.outputAssetIds.length > 0
+    );
+}
+
 function invocationOutputAssetIds(result: ToolCallResult): string[] {
   if (result.status === "succeeded") return result.resourceIds;
   if (result.status === "waiting_for_approval") return result.previewArtifactIds;
@@ -437,6 +464,22 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
     }
 
     if (decision.type === "done") {
+      if (hasUnfulfilledTargetedRevision(prior)) {
+        const error = {
+          kind: "revision_not_applied",
+          message:
+            "The requested asset revision completed without producing a downstream action.",
+          recoverable: false,
+        };
+        logger.error("orchestrator.revision_not_applied", {
+          workspaceId: r.workspaceId,
+          projectId: run.projectId,
+          runId: run.id,
+          turn,
+          model: decision.model,
+        });
+        return finish(run, "failed", r, error);
+      }
       logger.info("orchestrator.done", {
         workspaceId: r.workspaceId,
         projectId: run.projectId,
