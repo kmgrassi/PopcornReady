@@ -1,6 +1,7 @@
 import { client as anthropicClient, MODEL } from "../anthropic";
 import {
   ChooseToolArgs,
+  JsonObject,
   LlmClient,
   LlmEffort,
   StructuredArgs,
@@ -85,14 +86,20 @@ function isStructuredResultToolUse(
   return isToolUseBlock(block) && block.name === STRUCTURED_RESULT_TOOL;
 }
 
-function resultFromAnthropicToolUse<T>(res: AnthropicMessageResponse): T {
+function isJsonObject(value: unknown): value is JsonObject {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function resultFromAnthropicToolUse<T extends object>(
+  res: AnthropicMessageResponse
+): T {
   const content = asContentBlocks(res.content);
   const toolUse = content.find(isStructuredResultToolUse);
   if (!toolUse) {
     throw new Error(`Model did not call required tool: ${STRUCTURED_RESULT_TOOL}`);
   }
   const input = toolUse.input;
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
+  if (!isJsonObject(input)) {
     throw new Error(`Model returned invalid tool input for ${STRUCTURED_RESULT_TOOL}.`);
   }
   return input as T;
@@ -117,10 +124,7 @@ export function interpretAnthropicToolResponse(
     if (allowed && !allowed.has(name)) {
       throw new Error(`Model requested an unknown tool: ${name}`);
     }
-    const input =
-      toolUse.input && typeof toolUse.input === "object" && !Array.isArray(toolUse.input)
-        ? (toolUse.input as Record<string, unknown>)
-        : {};
+    const input = isJsonObject(toolUse.input) ? toolUse.input : {};
     return { type: "tool_call", toolName: name, input, model };
   }
 
@@ -145,7 +149,7 @@ export function createAnthropicLlmClient(deps: AnthropicDeps = {}): LlmClient {
     return createMessage;
   };
 
-  const structuredImpl = async <T>(
+  const structuredImpl = async <T extends object>(
     args: StructuredArgs,
     userContent: unknown
   ): Promise<T> => {
@@ -186,10 +190,10 @@ export function createAnthropicLlmClient(deps: AnthropicDeps = {}): LlmClient {
   return {
     provider: "anthropic",
     model,
-    structured<T>(args: StructuredArgs) {
+    structured<T extends object>(args: StructuredArgs) {
       return structuredImpl<T>(args, args.user);
     },
-    async structuredVision<T>(args: StructuredVisionArgs) {
+    async structuredVision<T extends object>(args: StructuredVisionArgs) {
       const { promises: fs } = await import("fs");
       const imageBlocks = await Promise.all(
         args.images.map(async (image) => {

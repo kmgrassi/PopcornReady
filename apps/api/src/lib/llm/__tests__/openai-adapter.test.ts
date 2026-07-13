@@ -108,6 +108,26 @@ test("interpretOpenAiToolResponse returns done with text when no tool is called"
   if (decision.type === "done") assert.equal(decision.text, "All complete.");
 });
 
+test("structured rejects a non-object tool payload", async () => {
+  const client = createOpenAiLlmClient({
+    model: "gpt-5",
+    create: async () => ({
+      choices: [
+        {
+          message: {
+            tool_calls: [{ function: { name: "return_result", arguments: '"oops"' } }],
+          },
+        },
+      ],
+    }),
+  });
+
+  await assert.rejects(
+    () => client.structured({ cachedSystem: "s", user: "u", schema: {} }),
+    /expected a JSON object/
+  );
+});
+
 test("chooseTool sends function tools + tool_choice auto and uses max_completion_tokens", async () => {
   let sent: OpenAiCreateRequest | undefined;
   const client = createOpenAiLlmClient({
