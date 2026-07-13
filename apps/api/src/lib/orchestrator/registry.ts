@@ -56,6 +56,7 @@ const mediaToolNames = new Set<ToolName>([
   "generate_storyboard",
   "generate_keyframe",
   "generate_clip",
+  "regenerate_image_asset",
   "edit_video_asset",
   "generate_audio",
   "export_video",
@@ -81,6 +82,8 @@ function toolDescription(name: ToolName): string {
       return "Generate a keyframe image for a beat.";
     case "generate_clip":
       return "Generate a motion clip for a beat.";
+    case "regenerate_image_asset":
+      return "Regenerate one existing image asset from a replacement prompt, minting a new immutable version and repointing its active selections.";
     case "edit_video_asset":
       return "Edit existing uploaded footage or a generated clip in place conceptually, producing a new video asset linked to the source.";
     case "generate_audio":

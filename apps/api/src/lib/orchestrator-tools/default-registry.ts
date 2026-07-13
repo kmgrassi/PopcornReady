@@ -25,6 +25,10 @@ import { createGenerateAnchorTool, type GenerateAnchorDeps } from "./generate-an
 import { createGenerateAudioTool, type GenerateAudioDeps } from "./generate-audio";
 import { createGenerateClipTool, type GenerateClipDeps } from "./generate-clip";
 import {
+  createRegenerateImageAssetTool,
+  type RegenerateImageAssetToolDeps,
+} from "./regenerate-image-asset";
+import {
   createGenerateKeyframeTool,
   type GenerateKeyframeDeps,
 } from "./generate-keyframe";
@@ -59,6 +63,7 @@ export interface DefaultToolRegistryDeps {
   generateAudio?: Partial<GenerateAudioDeps>;
   generateKeyframe?: Partial<GenerateKeyframeDeps>;
   generateClip?: Partial<GenerateClipDeps>;
+  regenerateImageAsset?: Partial<RegenerateImageAssetToolDeps>;
   editVideoAsset?: Partial<EditVideoAssetDeps>;
   generateStoryboard?: Partial<GenerateStoryboardDeps>;
   planVisualAnchors?: Partial<PlanVisualAnchorsDeps>;
@@ -81,6 +86,7 @@ export function createDefaultToolRegistry(
   registry.register(createGenerateStoryboardTool(deps.generateStoryboard));
   registry.register(createGenerateKeyframeTool(deps.generateKeyframe));
   registry.register(createGenerateClipTool(deps.generateClip));
+  registry.register(createRegenerateImageAssetTool(deps.regenerateImageAsset));
   registry.register(createEditVideoAssetTool(deps.editVideoAsset));
   registry.register(createFitAudioToPictureTool(deps.fitAudioToPicture));
   registry.register(createCritiqueTimelineTool(deps.critiqueTimeline));
