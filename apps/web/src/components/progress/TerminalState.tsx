@@ -1,13 +1,20 @@
 "use client";
 
 import type { GenerationRun } from "@popcorn/shared/v1/types";
+import { Button } from "../ui/Button";
 import { formatElapsed, useElapsedTime } from "./useElapsedTime";
+import styles from "./TerminalState.module.css";
 
 interface TerminalStateProps {
   run: GenerationRun;
+  creditRecovery?: {
+    balanceCredits: number;
+    pending?: boolean;
+    onContinue: () => void;
+  };
 }
 
-export function TerminalState({ run }: TerminalStateProps) {
+export function TerminalState({ run, creditRecovery }: TerminalStateProps) {
   const elapsed = useElapsedTime(run.startedAt, run.completedAt);
 
   if (run.status === "succeeded") {
@@ -62,6 +69,22 @@ export function TerminalState({ run }: TerminalStateProps) {
           <p className="terminal-state-meta muted">
             This stage can be retried.
           </p>
+        ) : null}
+        {run.error?.code === "insufficient_credits" && creditRecovery ? (
+          <div className={styles.creditRecovery}>
+            <p className="terminal-state-meta">
+              Your balance is now {creditRecovery.balanceCredits.toLocaleString()} credits. Continue from
+              the failed step without regenerating completed assets.
+            </p>
+            <Button
+              variant="secondary"
+              size="sm"
+              isLoading={creditRecovery.pending}
+              onClick={creditRecovery.onContinue}
+            >
+              Continue generation
+            </Button>
+          </div>
         ) : null}
       </div>
     );

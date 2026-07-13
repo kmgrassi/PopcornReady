@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { GenerationRun, GenerationStageType } from "@popcorn/shared/v1/types";
 import { AnonymousUpgradeBanner } from "../components/auth/AnonymousUpgradeBanner";
+import { useAuth } from "../components/auth/AuthProvider";
 import { ProgressView } from "../components/progress/ProgressView";
 import type { GenerationRunDetail } from "../lib/v1/generation-runs/status";
 import {
@@ -11,6 +12,8 @@ import {
 } from "../lib/v1/generation-runs/recovery";
 import {
   useGenerationRunQuery,
+  useCreditsQuery,
+  useRetryGenerationRunAfterCreditUpdateMutation,
   useRestartGenerationRunFromStageMutation,
   useUpdateGenerationRunMutation,
 } from "../lib/queryClient";
@@ -52,6 +55,7 @@ function RunProgress({
   projectId: string;
   runId: string;
 }) {
+  const auth = useAuth();
   const [actionError, setActionError] = useState<string | null>(null);
   const [reviewFeedbackNote, setReviewFeedbackNote] = useState("");
   const hint = readLastRunHint(projectId);
@@ -60,6 +64,13 @@ function RunProgress({
   const updateRun = useUpdateGenerationRunMutation(projectId, runId);
   const restartRun = useRestartGenerationRunFromStageMutation(projectId, runId);
   const payload = runQuery.data ?? null;
+  const authScope = auth.user?.id ?? auth.status;
+  const creditFailure = payload?.run.status === "failed" && payload.run.error?.code === "insufficient_credits";
+  const creditsQuery = useCreditsQuery(authScope, {
+    enabled: auth.status === "authenticated" && creditFailure,
+    refetchInterval: creditFailure ? 5_000 : false,
+  });
+  const retryAfterCreditUpdate = useRetryGenerationRunAfterCreditUpdateMutation(projectId, runId);
   const error =
     runQuery.error instanceof Error
       ? runQuery.error.message
@@ -141,6 +152,18 @@ function RunProgress({
     }
   }
 
+  async function continueAfterCreditUpdate() {
+    if (retryAfterCreditUpdate.isPending) return;
+    setActionError(null);
+    try {
+      const data = await retryAfterCreditUpdate.mutateAsync();
+      applyPayload(data);
+      void runQuery.refetch();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   if (!payload) {
     return (
       <main className="progress-shell">
@@ -185,6 +208,15 @@ function RunProgress({
         pendingStageType: restartRun.isPending ? restartRun.variables ?? null : null,
         onRestart: (stageType) => void restartFromStage(stageType),
       }}
+      creditRecovery={
+        creditFailure && typeof creditsQuery.data?.balanceCredits === "number" && creditsQuery.data.balanceCredits > 0
+          ? {
+              balanceCredits: creditsQuery.data.balanceCredits,
+              pending: retryAfterCreditUpdate.isPending,
+              onContinue: () => void continueAfterCreditUpdate(),
+            }
+          : undefined
+      }
       reviewActions={
         payload.run.reviewGate
           ? {

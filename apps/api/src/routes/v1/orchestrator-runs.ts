@@ -51,6 +51,7 @@ const BOARD_FEEDBACK_TOOL = "board_feedback";
 const ANONYMOUS_RUN_QUOTA_LIMIT = 1;
 const ANONYMOUS_RUN_QUOTA_WINDOW_MS = 24 * 60 * 60 * 1000;
 const AFTER_GATE_PREFIX = "after:";
+const INSUFFICIENT_CREDITS_ERROR_KIND = "insufficient_credits";
 const BOARD_REVISION_SCOPES = ["concept", "brief", "script", "board", "tile", "asset"] as const;
 const ASSET_USES = [
   "primary_footage",
@@ -472,6 +473,10 @@ function isTerminalRun(run: OrchestratorRun): boolean {
   return run.status === "succeeded" || run.status === "failed" || run.status === "canceled";
 }
 
+export function isInsufficientCreditsFailure(action: RunActionSummary | undefined): boolean {
+  return action?.status === "failed" && action.error?.kind === INSUFFICIENT_CREDITS_ERROR_KIND;
+}
+
 function latestActionWithStatus(
   actions: RunActionSummary[],
   status: "running" | "applied"
@@ -851,6 +856,45 @@ function parseRestartStageType(body: unknown): GenerationStageType {
   }
   return value as GenerationStageType;
 }
+
+// Continue a terminal, credit-blocked run without discarding work that already
+// succeeded before the account was funded.
+orchestratorRunsRouter.post(
+  "/projects/:projectId/generation-runs/:runId/retry-after-credit-update",
+  mutation(async ({ auth }, params) => {
+    const projectId = requireParam(params, "projectId");
+    const runId = requireParam(params, "runId");
+    await requireProjectAccess(auth.workspaceId, projectId);
+    const run = await requireProjectRun(runId, projectId);
+    if (run.status !== "failed") {
+      throw new ApiError(
+        "validation_failed",
+        "Only a failed run can be continued after a credit update."
+      );
+    }
+
+    const actions = await listRunActions(runId);
+    const failedAction = [...actions].reverse().find((action) => action.status === "failed");
+    if (!failedAction || !isInsufficientCreditsFailure(failedAction)) {
+      throw new ApiError(
+        "validation_failed",
+        "This run did not stop because its account ran out of credits."
+      );
+    }
+
+    // Preserve the completed plan, keyframes, and active selections. Hiding
+    // only the failed action lets the agent retry it without regenerating work.
+    await supersedeRunActions([failedAction.id]);
+    await updateOrchestratorRun(runId, {
+      status: "running",
+      completedAt: null as unknown as string,
+      error: null as unknown as Record<string, unknown>,
+    });
+    await enqueueOrchestratorDispatch(runId, auth.workspaceId);
+
+    return { status: 202, body: await assembleRunDetail(runId, projectId) };
+  })
+);
 
 // Re-enter a run at an arbitrary stage: supersede that stage + everything
 // downstream (so the agent's action log no longer shows them done), reset their

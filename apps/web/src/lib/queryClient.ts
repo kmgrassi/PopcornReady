@@ -893,6 +893,19 @@ export function useRestartGenerationRunFromStageMutation(projectId: string, runI
   });
 }
 
+export function useRetryGenerationRunAfterCreditUpdateMutation(projectId: string, runId: string) {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => v1Api.retryGenerationRunAfterCreditUpdate(projectId, runId),
+    onSuccess: (data) => {
+      client.setQueryData(queryKeys.generationRun(projectId, runId), data);
+      void client.invalidateQueries({ queryKey: ["dashboard"] });
+      void client.invalidateQueries({ queryKey: ["workspaces"] });
+    },
+  });
+}
+
 export function useStartPromptGenerationRunMutation(projectId: string) {
   const client = useQueryClient();
 

@@ -55,6 +55,11 @@ interface ProgressViewProps {
     pendingStageType?: GenerationStageType | null;
     onRestart: (stageType: GenerationStageType) => void;
   };
+  creditRecovery?: {
+    balanceCredits: number;
+    pending?: boolean;
+    onContinue: () => void;
+  };
   onBoardRevisionSuccess?: () => Promise<void> | void;
   headerSlot?: ReactNode;
   /** Optional list of other demo runs to link to from the header. */
@@ -417,6 +422,7 @@ export function ProgressView({
   reviewActions,
   cancelAction,
   restartAction,
+  creditRecovery,
   onBoardRevisionSuccess,
   headerSlot,
   alternateRuns,
@@ -790,7 +796,7 @@ export function ProgressView({
 
       <div className={styles.body}>
         <section className={styles.main}>
-          {terminal ? <TerminalState run={detail.run} /> : null}
+          {terminal ? <TerminalState run={detail.run} creditRecovery={creditRecovery} /> : null}
 
           <PlanRecap project={project} loading={projectLoading} />
 
