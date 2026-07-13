@@ -116,6 +116,7 @@ export function StudioShell({
   const autoStartRequestedRef = useRef(false);
   const handledNewDraftRequestRef = useRef<string | null>(null);
   const createDraftInFlightRef = useRef(false);
+  const createDraftPromiseRef = useRef<Promise<string | null> | null>(null);
   const [pendingAutoStartGeneration, setPendingAutoStartGeneration] =
     useState(autoStartGeneration);
   const draftsQuery = useStudioDraftsQuery();
@@ -220,35 +221,46 @@ export function StudioShell({
   const persistLocalDraft = useCallback(
     async (draft: BriefDraft, step: StudioStep) => {
       if (activeDraftId !== LOCAL_DRAFT_ID) return activeDraftId;
-      if (createDraftInFlightRef.current) return null;
+      if (createDraftPromiseRef.current) return createDraftPromiseRef.current;
 
       createDraftInFlightRef.current = true;
       setDraftActionError(null);
-      try {
-        const record = await createDraftMutation.mutateAsync({ draft, step });
-        // Adopt the persisted draft in place — no flow remount. The mounted
-        // flow's state is the source of truth here, and a remount would drop
-        // focus plus any keystrokes typed while the create was in flight.
-        setActiveDraftId(record.draftId);
-        navigate(
-          studioDraftPath({
-            draftId: record.draftId,
-            step,
-            openPanel,
-            autoStart: pendingAutoStartGeneration,
-          }),
-          { replace: true },
-        );
-        return record.draftId;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Could not create draft.";
-        setDraftActionError(message);
-        return null;
-      } finally {
-        createDraftInFlightRef.current = false;
-      }
+      const createDraftPromise = (async () => {
+        try {
+          const record = await createDraftMutation.mutateAsync({ draft, step });
+          // Adopt the persisted draft in place — no flow remount. The mounted
+          // flow's state is the source of truth here, and a remount would drop
+          // focus plus any keystrokes typed while the create was in flight.
+          setActiveDraftId(record.draftId);
+          navigate(
+            studioDraftPath({
+              draftId: record.draftId,
+              step,
+              openPanel,
+              autoStart: pendingAutoStartGeneration,
+            }),
+            { replace: true },
+          );
+          return record.draftId;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Could not create draft.";
+          setDraftActionError(message);
+          return null;
+        } finally {
+          createDraftInFlightRef.current = false;
+          createDraftPromiseRef.current = null;
+        }
+      })();
+      createDraftPromiseRef.current = createDraftPromise;
+      return createDraftPromise;
     },
-    [activeDraftId, createDraftMutation, navigate, openPanel, pendingAutoStartGeneration],
+    [
+      activeDraftId,
+      createDraftMutation,
+      navigate,
+      openPanel,
+      pendingAutoStartGeneration,
+    ],
   );
 
   useEffect(() => {
@@ -422,7 +434,10 @@ function StudioFlowView({
         void onPersistLocalDraft(briefRef.current, nextStep).then((persistedId) => {
           // The created record already carries nextStep; advance the mounted
           // flow to match (draft adoption no longer remounts it).
-          if (persistedId) flow.goTo(nextStep);
+          if (persistedId) {
+            flow.goTo(nextStep);
+            replaceDraftStepUrl(nextStep);
+          }
         });
         return;
       }
