@@ -1,4 +1,5 @@
 import { getLlmClient } from "../llm";
+import { getAsset } from "../api/v1/store";
 import { getWorkspaceModelSetting } from "../api/v1/model-settings";
 import { ToolRegistry } from "./registry";
 import {
@@ -17,6 +18,7 @@ export interface ModelTurnInput {
   priorResults?: unknown[];
   registry: ToolRegistry;
   maxTokens?: number;
+  resolveAssetKind?: AssetKindResolver;
 }
 
 export type OrchestratorModel = (
@@ -38,6 +40,10 @@ interface PriorToolResult {
 
 interface BoardFeedbackRequest {
   message: string;
+  generationModel?: {
+    provider: string;
+    model: string;
+  };
   target: { scope?: string; assetId?: string };
 }
 
@@ -56,6 +62,12 @@ interface RoutingContext {
   };
   assetRoleGuide: Record<string, string>;
 }
+
+type AssetKindResolver = (
+  workspaceId: string,
+  projectId: string,
+  assetId: string
+) => Promise<"image" | "video" | "audio" | undefined>;
 
 const SYSTEM_PROMPT =
   "You are the Popcorn Ready video-generation orchestrator. Decide the next single server-owned tool to call. The server owns validation, persistence, jobs, authorization, provider execution, and stage state. Call at most one tool. " +
@@ -109,6 +121,18 @@ function boardFeedbackRequest(value: unknown): BoardFeedbackRequest | null {
   if (typeof message !== "string" || !message.trim() || !isRecord(target)) return null;
   return {
     message: message.trim(),
+    ...(isRecord(value.generationModel) &&
+    typeof value.generationModel.provider === "string" &&
+    value.generationModel.provider.trim() &&
+    typeof value.generationModel.model === "string" &&
+    value.generationModel.model.trim()
+      ? {
+          generationModel: {
+            provider: value.generationModel.provider.trim(),
+            model: value.generationModel.model.trim(),
+          },
+        }
+      : {}),
     target: {
       ...(typeof target.scope === "string" ? { scope: target.scope } : {}),
       ...(typeof target.assetId === "string" ? { assetId: target.assetId } : {}),
@@ -122,16 +146,35 @@ function boardFeedbackRequest(value: unknown): BoardFeedbackRequest | null {
  * be incorrectly completed with no generation action.
  */
 export function deterministicBoardFeedbackRoute(
-  priorResults: unknown[] = []
-): { toolName: "regenerate_image_asset"; input: Record<string, unknown> } | undefined {
+  workspaceId: string | undefined,
+  projectId: string,
+  priorResults: unknown[] = [],
+  resolveAssetKind: AssetKindResolver = async (resolvedWorkspaceId, resolvedProjectId, assetId) => {
+    const asset = await getAsset(resolvedWorkspaceId, resolvedProjectId, assetId);
+    return asset.kind;
+  }
+): Promise<{ toolName: "regenerate_image_asset"; input: Record<string, unknown> } | undefined> {
   const latest = priorResult(priorResults.at(-1));
-  if (latest?.tool !== "board_feedback" || latest.status !== "applied") return undefined;
+  if (latest?.tool !== "board_feedback" || latest.status !== "applied" || !workspaceId) {
+    return Promise.resolve(undefined);
+  }
   const request = boardFeedbackRequest(latest.request);
-  if (request?.target.scope !== "tile" || !request.target.assetId) return undefined;
-  return {
-    toolName: "regenerate_image_asset",
-    input: { assetId: request.target.assetId, prompt: request.message },
-  };
+  if (request?.target.scope !== "tile" || !request.target.assetId) {
+    return Promise.resolve(undefined);
+  }
+  return resolveAssetKind(workspaceId, projectId, request.target.assetId)
+    .then((assetKind) => {
+      if (assetKind !== "image") return undefined;
+      return {
+        toolName: "regenerate_image_asset" as const,
+        input: {
+          assetId: request.target.assetId,
+          prompt: request.message,
+          ...(request.generationModel ? request.generationModel : {}),
+        },
+      };
+    })
+    .catch(() => undefined);
 }
 
 function recoveryToolsFromError(error: PriorToolResult["error"]): ToolName[] {
@@ -266,8 +309,14 @@ export const orchestratorModel: OrchestratorModel = async ({
   // Headroom so reasoning models (e.g. gpt-5) have budget left for the tool call
   // after thinking; non-reasoning models only use what they need.
   maxTokens = 4000,
+  resolveAssetKind,
 }) => {
-  const deterministicRoute = deterministicBoardFeedbackRoute(priorResults);
+  const deterministicRoute = await deterministicBoardFeedbackRoute(
+    workspaceId,
+    projectId,
+    priorResults,
+    resolveAssetKind
+  );
   if (deterministicRoute) {
     return { type: "tool_call", ...deterministicRoute, model: "deterministic-board-feedback-router" };
   }
