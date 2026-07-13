@@ -1,42 +1,34 @@
-name: Deploy API (Railway)
+name: Verify API Deploy (Railway)
 
-# Canonical production deploy path for the Express API (@popcorn/api on Railway).
+# Production deploy verification for the Express API (@popcorn/api on Railway).
 #
-# Why this exists: Railway's native GitHub auto-deploy was the only trigger, and
-# a manual/env-triggered redeploy once resurrected a stale image built from an
-# OLD commit — silently rolling production *backward* and 404'ing routes that
-# only exist on newer main. This workflow makes "what's live == main HEAD" a
-# hard guarantee: every push to main runs `railway up`, which uploads THIS
-# checked-out commit and builds it on Railway, so the live image can never lag
-# or revert to an older build.
+# Railway's native GitHub integration deploys every push to main. This workflow
+# does not deploy and does not need a Railway token; it builds the checked-out
+# API as a visible gate, then polls production until /api/v1/health reports the
+# pushed commit. That keeps "what's live == main HEAD" observable without a
+# duplicated token-based deploy path.
 #
-# Railway's native auto-deploy for this service MUST be turned off so the two
-# triggers don't double-fire (see railway.toml).
-#
-# workflow_dispatch is allowed for manual redeploys, but the job is gated to
-# refs/heads/main so a manual run against a stale branch can't ship non-main
-# code to production with the prod token.
+# workflow_dispatch is allowed for manual verification, but the job is gated to
+# refs/heads/main so a manual run against a stale branch cannot mark non-main
+# code as the production target.
 
 on:
   push:
     branches: [main]
   workflow_dispatch: {}
 
-# Serialize deploys in push order. The last push's job runs last and deploys
-# last, so production deterministically converges on the newest commit. We do
-# NOT cancel in-progress jobs: a cancelled GitHub job would not stop a Railway
-# build it already kicked off, which could let an older build win the race.
+# Serialize verification in push order. The Railway integration owns deployment;
+# this job only waits for production to report the matching commit.
 concurrency:
-  group: railway-production-deploy
+  group: railway-production-verify
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  verify:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # Only ever deploy main. push already filters to main; this also blocks a
-    # workflow_dispatch run targeting any other branch from reaching the prod
-    # token (mirrors .github/workflows/supabase-migrations.yml).
+    # Only ever verify main. push already filters to main; this also blocks a
+    # workflow_dispatch run targeting any other branch.
     if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
@@ -54,37 +46,14 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # Build gate: mirror railway.toml's buildCommand so a broken build fails
-      # the deploy here (red, visible) instead of leaving prod on an old image.
+      # this verification workflow before we wait on Railway deployment.
       - name: Build @popcorn/api
         run: pnpm --filter @popcorn/api... build
 
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli@5.20.0
-
-      # Stamp the commit being shipped into the environment (without triggering a
-      # redeploy) so the running app can report it at /api/v1/health. The next
-      # `railway up` bakes this value into the new deployment.
-      - name: Set deploy commit marker
-        run: railway variables set "APP_COMMIT_SHA=${GITHUB_SHA}" --service popcornready --skip-deploys
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-
-      # `railway up` uploads the checked-out source and builds it on Railway,
-      # producing a deployment from this exact commit. RAILWAY_TOKEN is a
-      # project token scoped to the production environment, so project +
-      # environment are implied; --service selects the API service. --ci streams
-      # build logs and exits non-zero if the Railway BUILD fails.
-      - name: Deploy to Railway
-        run: railway up --ci --service popcornready
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-
-      # `railway up` (and any run with CI=true, which GitHub Actions sets) returns
-      # when the BUILD finishes, not when the deployment boots and passes the
-      # healthcheck. Poll the public health endpoint until it reports this exact
-      # commit so a build that ships but fails to start/healthcheck fails the job
-      # — preserving the "what's live == main HEAD" guarantee — instead of going
-      # green while prod is still on the previous image.
+      # Railway's native GitHub integration builds and deploys the pushed commit.
+      # Poll the public health endpoint until it reports this exact commit so a
+      # deploy that fails to boot/healthcheck fails this job instead of going
+      # unnoticed.
       - name: Verify production is serving this commit
         run: |
           set -euo pipefail

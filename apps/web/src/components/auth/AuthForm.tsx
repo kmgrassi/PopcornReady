@@ -29,8 +29,23 @@ function postAuthRedirectPath(state: unknown): string {
 export function AuthForm({ mode }: AuthFormProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { status, error, configured, signIn, signUp, clearError } = useAuth();
-  const quickStartResume = usePendingQuickStartRun(status, location.state);
+  const {
+    status,
+    isAnonymous,
+    error,
+    configured,
+    signIn,
+    signUp,
+    signOut,
+    clearError,
+  } = useAuth();
+  // Anonymous sessions must be signed out before a pending quick start can be
+  // claimed. Otherwise the resume may begin with the guest token and lose
+  // authentication halfway through when the sign-out effect runs.
+  const quickStartResume = usePendingQuickStartRun(
+    isAnonymous ? "loading" : status,
+    location.state,
+  );
   const [ready, setReady] = useState(false);
   const [showSignupIntro, setShowSignupIntro] = useState(false);
   const [email, setEmail] = useState("");
@@ -55,7 +70,7 @@ export function AuthForm({ mode }: AuthFormProps) {
       return;
     }
 
-    if (status === "authenticated") {
+    if (status === "authenticated" && !isAnonymous) {
       setReady(true);
       return;
     }
@@ -63,7 +78,14 @@ export function AuthForm({ mode }: AuthFormProps) {
     let cancelled = false;
     void (async () => {
       try {
-        await getSupabaseClient().auth.signOut({ scope: "local" });
+        if (isAnonymous) {
+          // A guest session is useful for the studio, but it must not trap a
+          // quota-exhausted guest on the dashboard when they choose Log in or
+          // Sign up. End it before showing the credential form.
+          await signOut();
+        } else {
+          await getSupabaseClient().auth.signOut({ scope: "local" });
+        }
       } catch {
         // Ignore transient sign-out errors while clearing stale local sessions.
       } finally {
@@ -75,11 +97,12 @@ export function AuthForm({ mode }: AuthFormProps) {
     return () => {
       cancelled = true;
     };
-  }, [configured, status]);
+  }, [configured, isAnonymous, signOut, status]);
 
   useEffect(() => {
     if (
       status === "authenticated" &&
+      !isAnonymous &&
       !quickStartResume.hasPending &&
       !quickStartResume.starting
     ) {
@@ -90,6 +113,7 @@ export function AuthForm({ mode }: AuthFormProps) {
     navigate,
     quickStartResume.hasPending,
     quickStartResume.starting,
+    isAnonymous,
     status,
   ]);
 

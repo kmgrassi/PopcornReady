@@ -35,6 +35,23 @@
   justify-content: flex-end;
 }
 
+.changeSentNotice {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--good) 45%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--good) 10%, transparent);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
+.changeRequestSummary {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--line-body);
+}
+
 .backLink {
   color: var(--muted);
   font-size: var(--text-sm);
@@ -80,7 +97,7 @@
 
 .projectContextGrid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: var(--space-4);
   min-width: 0;
 }
@@ -173,7 +190,7 @@
   background: var(--panel-2);
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1400px) {
   .projectPageLayout,
   .layout {
     grid-template-columns: 1fr;

@@ -28,6 +28,14 @@ export type NextAction =
       to: string;
     }
   | {
+      type: "failed_run";
+      run: DashboardActiveRunSummary;
+      title: string;
+      body: string;
+      ctaLabel: string;
+      to: string;
+    }
+  | {
       type: "review_cut";
       output: DashboardRecentOutput;
       title: string;
@@ -80,6 +88,20 @@ export function deriveNextAction(
       body: `${activeRun.projectName} is ${formatStage(activeRun.currentStageType).toLowerCase()} at ${activeRun.progressPercent ?? 0}% complete.`,
       ctaLabel: "Open progress",
       to: runPath(activeRun),
+    };
+  }
+
+  const failedRun = activeRuns.find((run) => run.status === "failed");
+  if (failedRun) {
+    return {
+      type: "failed_run",
+      run: failedRun,
+      title: "A generation needs attention",
+      body: failedRun.currentStageType
+        ? `${failedRun.projectName} stopped at ${formatStage(failedRun.currentStageType)}. Open the run to see what failed and retry from the failed stage.`
+        : `${failedRun.projectName} stopped. Open the run to see what failed and retry from the failed stage.`,
+      ctaLabel: "Review failure",
+      to: runPath(failedRun),
     };
   }
 

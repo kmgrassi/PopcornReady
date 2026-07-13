@@ -22,6 +22,7 @@ export interface StartRunResult {
 export interface CreateAndStartRunOptions {
   enforceGuestRunLimit?: boolean;
   stopAfter?: GateableGenerationStageType;
+  runThrough?: boolean;
 }
 
 export const LONG_VIDEO_PLANNING_REVIEW_THRESHOLD_SEC = 30;
@@ -201,6 +202,7 @@ export async function createAndStartRun(
     provider: draft.provider,
     reviewGates,
     ...(options.stopAfter ? { stopAfter: options.stopAfter } : {}),
+    ...(options.runThrough ? { runThrough: true } : {}),
     showCaptions: draft.showCaptions,
     seedAsset: {
       kind: effectiveSeedKind,

@@ -30,6 +30,8 @@ function eyebrowFor(action: NextAction) {
       return "Waiting on you";
     case "watch_run":
       return "Running now";
+    case "failed_run":
+      return "Needs attention";
     case "review_cut":
       return "Ready to review";
     case "start":

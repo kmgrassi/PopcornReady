@@ -48,10 +48,16 @@
 }
 
 .storyboardHeader {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
   align-items: start;
-  gap: var(--space-4);
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+}
+
+.storyboardHeader > div:first-child {
+  flex: 1 1 220px;
+  min-width: 0;
 }
 
 .storyboardHeader h2 {
@@ -76,6 +82,75 @@
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-2);
+}
+
+.sceneStrip {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(170px, 210px);
+  gap: var(--space-3);
+  overflow-x: auto;
+  padding-bottom: var(--space-2);
+  scroll-snap-type: x proximity;
+}
+
+.sceneStripCard {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  color: var(--text);
+  text-decoration: none;
+  scroll-snap-align: start;
+  transition:
+    border-color var(--transition),
+    transform var(--transition);
+}
+
+a.sceneStripCard:hover {
+  border-color: var(--accent-border);
+  transform: translateY(-1px);
+}
+
+a.sceneStripCard:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.sceneStripMeta {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: 0 var(--space-3) var(--space-3);
+}
+
+.sceneStripMeta span {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.sceneStripMeta h3 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  margin: 0;
+  color: var(--text-strong);
+  font-size: var(--text-sm);
+  line-height: 1.25;
+}
+
+.sceneStripMeta p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 700;
 }
 
 .storyboardBoard {
@@ -252,6 +327,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .sceneStripCard {
+    transition: none;
+  }
+
   .generatingTrack span {
     transition: none;
   }

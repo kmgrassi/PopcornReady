@@ -39,10 +39,12 @@ export function ProjectConcept({
   project,
   projectId,
   readOnly,
+  onRequestChanges,
 }: {
   project: V1Project;
   projectId: string;
   readOnly: boolean;
+  onRequestChanges?: () => void;
 }) {
   const brief = project.brief;
   const title = brief?.oneBigIdea ?? brief?.goal ?? project.name;
@@ -77,6 +79,11 @@ export function ProjectConcept({
               </Button>
               <span>{helperText}</span>
             </div>
+          ) : null}
+          {!readOnly && onRequestChanges ? (
+            <Button variant="ghost" size="sm" onClick={onRequestChanges}>
+              Request changes
+            </Button>
           ) : null}
           {!readOnly ? (
             <ButtonLink
@@ -280,10 +287,12 @@ export function ProjectBrief({
   project,
   projectId,
   readOnly,
+  onRequestChanges,
 }: {
   project: V1Project;
   projectId: string;
   readOnly: boolean;
+  onRequestChanges?: () => void;
 }) {
   const brief = project.brief;
   return (
@@ -295,6 +304,11 @@ export function ProjectBrief({
         </div>
         {!readOnly ? (
           <div className={styles.sectionHeaderActions}>
+            {onRequestChanges ? (
+              <Button variant="ghost" size="sm" onClick={onRequestChanges}>
+                Request changes
+              </Button>
+            ) : null}
             <ButtonLink
               variant="ghost"
               size="sm"
@@ -328,11 +342,13 @@ export function ProjectScript({
   projectId,
   storyboard,
   readOnly,
+  onRequestChanges,
 }: {
   project: V1Project;
   projectId: string;
   storyboard: ProjectStoryboard | null;
   readOnly: boolean;
+  onRequestChanges?: () => void;
 }) {
   const scriptLines = storyboardScriptLines(storyboard);
   const narrationScript = project.brief?.narration?.script?.trim();
@@ -346,6 +362,11 @@ export function ProjectScript({
         </div>
         {!readOnly ? (
           <div className={styles.sectionHeaderActions}>
+            {onRequestChanges ? (
+              <Button variant="ghost" size="sm" onClick={onRequestChanges}>
+                Request changes
+              </Button>
+            ) : null}
             <ButtonLink
               variant="ghost"
               size="sm"
@@ -386,8 +407,11 @@ export function ProjectDangerSection({
   onDelete: () => void;
 }) {
   const [confirmation, setConfirmation] = useState("");
+  const [expanded, setExpanded] = useState(false);
   const confirmed = confirmation === project.name;
 
+  // Collapsed by default: the overview is read-optimized, so the destructive
+  // flow only unfolds after an explicit step.
   return (
     <section className={`${styles.panel} ${styles.dangerPanel}`} id="danger">
       <div className={styles.sectionHeader}>
@@ -395,38 +419,63 @@ export function ProjectDangerSection({
           <span className={styles.eyebrow}>Danger</span>
           <h2>Delete project</h2>
         </div>
+        {!expanded ? (
+          <div className={styles.sectionHeaderActions}>
+            <Button
+              variant="ghost"
+              className={styles.dangerButton}
+              onClick={() => setExpanded(true)}
+            >
+              Delete project…
+            </Button>
+          </div>
+        ) : null}
       </div>
-      <p className={styles.muted}>
-        Delete this project from your library. Runs, storyboards, and generated
-        assets for this project will no longer appear in the app.
-      </p>
-      <label className={styles.confirmField}>
-        <span>Type {project.name} to confirm</span>
-        <input
-          value={confirmation}
-          onChange={(event) => setConfirmation(event.target.value)}
-          disabled={deleting}
-          autoComplete="off"
-        />
-      </label>
-      <div className={styles.dangerActions}>
-        <Button
-          variant="secondary"
-          className={styles.dangerButton}
-          disabled={!confirmed || deleting}
-          isLoading={deleting}
-          onClick={onDelete}
-        >
-          Delete project
-        </Button>
-      </div>
-      {error ? (
-        <ErrorState
-          title="Unable to delete project"
-          body="We couldn't delete this project. Check your session and try again."
-          error={error}
-          onRetry={onDelete}
-        />
+      {expanded ? (
+        <>
+          <p className={styles.muted}>
+            Delete this project from your library. Runs, storyboards, and generated
+            assets for this project will no longer appear in the app.
+          </p>
+          <label className={styles.confirmField}>
+            <span>Type {project.name} to confirm</span>
+            <input
+              value={confirmation}
+              onChange={(event) => setConfirmation(event.target.value)}
+              disabled={deleting}
+              autoComplete="off"
+            />
+          </label>
+          <div className={styles.dangerActions}>
+            <Button
+              variant="ghost"
+              disabled={deleting}
+              onClick={() => {
+                setExpanded(false);
+                setConfirmation("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="secondary"
+              className={styles.dangerButton}
+              disabled={!confirmed || deleting}
+              isLoading={deleting}
+              onClick={onDelete}
+            >
+              Delete project
+            </Button>
+          </div>
+          {error ? (
+            <ErrorState
+              title="Unable to delete project"
+              body="We couldn't delete this project. Check your session and try again."
+              error={error}
+              onRetry={onDelete}
+            />
+          ) : null}
+        </>
       ) : null}
     </section>
   );

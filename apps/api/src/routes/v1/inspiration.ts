@@ -168,7 +168,10 @@ async function nextInspiration(): Promise<RandomStoryInspiration> {
   if (inspirationBuffer.length && Date.now() - inspirationBufferedAt < BUFFER_TTL_MS) {
     return inspirationBuffer.shift() as RandomStoryInspiration;
   }
-  const batch = await generateRankedBatch(BATCH_SIZE);
+  const batch =
+    authMode() === "supabase"
+      ? await generateRankedBatch(BATCH_SIZE)
+      : await generateCatalogBatch(BATCH_SIZE);
   const [best, ...rest] = batch;
   inspirationBuffer = rest;
   inspirationBufferedAt = Date.now();
@@ -191,6 +194,63 @@ async function generateRankedBatch(count: number): Promise<RandomStoryInspiratio
     };
     return { ...base, signature: signConcept(base) };
   });
+}
+
+async function generateCatalogBatch(count: number): Promise<RandomStoryInspiration[]> {
+  const rows = await listStoryElements();
+  return Array.from({ length: count }, () => {
+    const elements = pickIngredientSet(rows);
+    const concept = catalogConceptFor(elements);
+    return { ...concept, signature: signConcept(concept) };
+  });
+}
+
+function catalogConceptFor(elements: InspirationElements): SignableConcept & {
+  ingredients: Record<InspirationElementGroup, InspirationIngredientSummary>;
+} {
+  const title = titleCaseWords([
+    elements.setting[1]?.name,
+    elements.plot[0]?.name,
+  ].filter(Boolean).join(" ")) || "Untitled Story";
+  const setting = names(elements.setting) || "an unexpected world";
+  const plot = names(elements.plot) || "a defining challenge";
+  const arc = names(elements.arc) || "a personal change";
+  const antagonist = names(elements.antagonist) || "a force standing in the way";
+  const stakes = names(elements.stakes) || "everything that matters";
+  const theme = names(elements.theme) || "the cost of change";
+  const structure = names(elements.structure) || "a clean dramatic build";
+  return {
+    movieTitle: title,
+    logline: `In ${setting}, a protagonist faces ${plot} while ${antagonist} threatens ${stakes}.`,
+    premise: `A catalog-built local inspiration concept about ${theme}, shaped around ${arc} and structured as ${structure}.`,
+    ingredients: ingredientSummaries(elements),
+    elements,
+  };
+}
+
+function names(elements: InspirationElement[]): string {
+  return elements.map((element) => element.name).filter(Boolean).join(", ");
+}
+
+function titleCaseWords(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\b[a-z]/g, (letter) => letter.toUpperCase())
+    .slice(0, 96);
+}
+
+function ingredientSummaries(
+  elements: InspirationElements
+): Record<InspirationElementGroup, InspirationIngredientSummary> {
+  return {
+    plot: { emoji: "🎬", summary: names(elements.plot) },
+    setting: { emoji: "🌆", summary: names(elements.setting) },
+    arc: { emoji: "↗️", summary: names(elements.arc) },
+    antagonist: { emoji: "⚡", summary: names(elements.antagonist) },
+    theme: { emoji: "💡", summary: names(elements.theme) },
+    stakes: { emoji: "🔥", summary: names(elements.stakes) },
+    structure: { emoji: "🧭", summary: names(elements.structure) },
+  };
 }
 
 async function listStoryElements(): Promise<StoryElementRow[]> {

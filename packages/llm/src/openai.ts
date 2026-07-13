@@ -18,7 +18,7 @@ const REASONING_MODEL = /^(gpt-5|o[1-9])/i;
 function reasoningParams(
   model: string,
   effort?: LlmEffort
-): Record<string, unknown> {
+): Pick<OpenAiCreateRequest, "reasoning_effort"> {
   if (!effort || !REASONING_MODEL.test(model)) return {};
   return { reasoning_effort: effort };
 }
@@ -58,10 +58,52 @@ export interface OpenAiFunctionTool {
   };
 }
 
-type ChatCreate = (params: Record<string, unknown>) => Promise<OpenAiCompletionLike>;
+export interface OpenAiTextContentPart {
+  type: "text";
+  text: string;
+}
+
+export interface OpenAiImageUrlContentPart {
+  type: "image_url";
+  image_url: {
+    url: string;
+  };
+}
+
+export type OpenAiUserContentPart =
+  | OpenAiTextContentPart
+  | OpenAiImageUrlContentPart;
+
+export type OpenAiUserContent = string | OpenAiUserContentPart[];
+
+export type OpenAiToolChoice =
+  | "auto"
+  | {
+      type: "function";
+      function: {
+        name: string;
+      };
+    };
+
+export interface OpenAiCreateRequest {
+  model: string;
+  messages: Array<
+    | { role: "system"; content: string }
+    | { role: "user"; content: OpenAiUserContent }
+  >;
+  tools?: OpenAiFunctionTool[];
+  tool_choice?: OpenAiToolChoice;
+  parallel_tool_calls?: boolean;
+  max_completion_tokens: number;
+  reasoning_effort?: LlmEffort;
+}
+
+type ChatCreate = (params: OpenAiCreateRequest) => Promise<OpenAiCompletionLike>;
 
 // Low-reasoning calls route to the cheaper fast model.
 const FAST_EFFORTS = new Set<LlmEffort>(["minimal", "low"]);
+const MISSING_OPENAI_KEY_MESSAGE =
+  "OPENAI_API_KEY is not set for the OpenAI LLM provider.";
 
 export interface OpenAiDeps {
   model: string;
@@ -178,6 +220,9 @@ export function createOpenAiLlmClient(deps: OpenAiDeps): LlmClient {
   let create = deps.create;
   const ensureCreate = (): ChatCreate => {
     if (create) return create;
+    if (!process.env.OPENAI_API_KEY?.trim()) {
+      throw new Error(MISSING_OPENAI_KEY_MESSAGE);
+    }
     const client = new OpenAI();
     create = client.chat.completions.create.bind(
       client.chat.completions
@@ -191,7 +236,7 @@ export function createOpenAiLlmClient(deps: OpenAiDeps): LlmClient {
 
   const structuredImpl = async <T>(
     args: StructuredArgs,
-    userContent: unknown
+    userContent: OpenAiUserContent
   ): Promise<T> => {
     const callModel = pickModel(args.effort);
     const tool = toOpenAITool({
@@ -226,7 +271,7 @@ export function createOpenAiLlmClient(deps: OpenAiDeps): LlmClient {
     },
     async structuredVision<T>(args: StructuredVisionArgs) {
       const { promises: fs } = await import("node:fs");
-      const parts: unknown[] = [{ type: "text", text: args.user }];
+      const parts: OpenAiUserContentPart[] = [{ type: "text", text: args.user }];
       for (const image of args.images) {
         const bytes = await fs.readFile(image.path);
         parts.push({

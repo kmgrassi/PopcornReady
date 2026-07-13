@@ -18,7 +18,7 @@ const REASONING_MODEL = /^(gpt-5|o[1-9])/i;
 function reasoningParams(
   model: string,
   effort?: LlmEffort
-): Record<string, unknown> {
+): Pick<OpenAiCreateRequest, "reasoning_effort"> {
   if (!effort || !REASONING_MODEL.test(model)) return {};
   return { reasoning_effort: effort };
 }
@@ -26,25 +26,25 @@ function reasoningParams(
 // Loose typing on the wire call keeps us resilient to SDK type-version drift and
 // lets us pass reasoning-model params (max_completion_tokens) the strict types
 // may not yet expose — mirrors the `as any` pattern in lib/anthropic.ts.
-interface OpenAiFunctionCallPayload {
+export interface OpenAiFunctionCallPayload {
   name?: string | null;
   arguments?: string | null;
 }
 
-interface OpenAiToolCall {
+export interface OpenAiToolCall {
   function?: OpenAiFunctionCallPayload | null;
 }
 
-interface OpenAiMessageLike {
+export interface OpenAiMessageLike {
   content?: string | null;
   tool_calls?: OpenAiToolCall[] | null;
 }
 
-interface OpenAiChoiceLike {
+export interface OpenAiChoiceLike {
   message?: OpenAiMessageLike | null;
 }
 
-interface OpenAiCompletionLike {
+export interface OpenAiCompletionLike {
   model?: string | null;
   choices?: OpenAiChoiceLike[] | null;
 }
@@ -58,10 +58,52 @@ export interface OpenAiFunctionTool {
   };
 }
 
-type ChatCreate = (params: Record<string, unknown>) => Promise<OpenAiCompletionLike>;
+export interface OpenAiTextContentPart {
+  type: "text";
+  text: string;
+}
+
+export interface OpenAiImageUrlContentPart {
+  type: "image_url";
+  image_url: {
+    url: string;
+  };
+}
+
+export type OpenAiUserContentPart =
+  | OpenAiTextContentPart
+  | OpenAiImageUrlContentPart;
+
+export type OpenAiUserContent = string | OpenAiUserContentPart[];
+
+export type OpenAiToolChoice =
+  | "auto"
+  | {
+      type: "function";
+      function: {
+        name: string;
+      };
+    };
+
+export interface OpenAiCreateRequest {
+  model: string;
+  messages: Array<
+    | { role: "system"; content: string }
+    | { role: "user"; content: OpenAiUserContent }
+  >;
+  tools?: OpenAiFunctionTool[];
+  tool_choice?: OpenAiToolChoice;
+  parallel_tool_calls?: boolean;
+  max_completion_tokens: number;
+  reasoning_effort?: LlmEffort;
+}
+
+type ChatCreate = (params: OpenAiCreateRequest) => Promise<OpenAiCompletionLike>;
 
 // Low-reasoning calls route to the cheaper fast model.
 const FAST_EFFORTS = new Set<LlmEffort>(["minimal", "low"]);
+const MISSING_OPENAI_KEY_MESSAGE =
+  "OPENAI_API_KEY is not set for the OpenAI LLM provider.";
 
 export interface OpenAiDeps {
   model: string;
@@ -198,6 +240,9 @@ export function createOpenAiLlmClient(deps: OpenAiDeps): LlmClient {
   let create = deps.create;
   const ensureCreate = (): ChatCreate => {
     if (create) return create;
+    if (!process.env.OPENAI_API_KEY?.trim()) {
+      throw new Error(MISSING_OPENAI_KEY_MESSAGE);
+    }
     const client = new OpenAI();
     create = client.chat.completions.create.bind(
       client.chat.completions
@@ -211,7 +256,7 @@ export function createOpenAiLlmClient(deps: OpenAiDeps): LlmClient {
 
   const structuredImpl = async <T>(
     args: StructuredArgs,
-    userContent: unknown
+    userContent: OpenAiUserContent
   ): Promise<T> => {
     const callModel = pickModel(args.effort);
     const tool = toOpenAITool({
@@ -219,7 +264,7 @@ export function createOpenAiLlmClient(deps: OpenAiDeps): LlmClient {
       description: "Return the structured result for this task.",
       parameters: sanitizeForOpenAI(args.schema),
     });
-    const requestParams = {
+    const requestParams: OpenAiCreateRequest = {
       model: callModel,
       messages: [
         { role: "system", content: args.cachedSystem },
@@ -254,8 +299,8 @@ export function createOpenAiLlmClient(deps: OpenAiDeps): LlmClient {
       return structuredImpl<T>(args, args.user);
     },
     async structuredVision<T>(args: StructuredVisionArgs) {
-      const { promises: fs } = await import("fs");
-      const parts: unknown[] = [{ type: "text", text: args.user }];
+      const { promises: fs } = await import("node:fs");
+      const parts: OpenAiUserContentPart[] = [{ type: "text", text: args.user }];
       for (const image of args.images) {
         const bytes = await fs.readFile(image.path);
         parts.push({

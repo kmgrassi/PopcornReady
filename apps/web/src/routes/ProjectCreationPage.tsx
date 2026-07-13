@@ -4,11 +4,9 @@ import {
   type GateableGenerationStageType,
 } from "@popcorn/shared/v1/types";
 import { StudioShell } from "../components/studio/StudioShell";
-import {
-  normalizeStudioStep,
-  type StudioStep,
-} from "../components/studio/studioSteps";
+import type { StudioStep } from "../components/studio/studioSteps";
 import type { BriefDraft } from "../components/studio/useStudioFlow";
+import { studioTemplateById } from "../lib/studioTemplates";
 
 const PROJECT_CREATION_STEP_SET = new Set<StudioStep>([
   "brief",
@@ -21,9 +19,7 @@ const PROJECT_CREATION_STEP_SET = new Set<StudioStep>([
 ]);
 
 function parseCreationStep(value: string | null): StudioStep | undefined {
-  return PROJECT_CREATION_STEP_SET.has(value as StudioStep)
-    ? normalizeStudioStep(value)
-    : undefined;
+  return PROJECT_CREATION_STEP_SET.has(value as StudioStep) ? (value as StudioStep) : undefined;
 }
 
 function parseReviewGates(value: string | null): GateableGenerationStageType[] {
@@ -42,11 +38,13 @@ export function ProjectCreationPage() {
   const openPanel = params.get("panel") ?? undefined;
   const reviewGates = parseReviewGates(params.get("reviewGates"));
   const draftId = params.get("draft");
+  const template = studioTemplateById(params.get("template"));
   const newDraftRequest = params.get("new") ?? undefined;
   const autoStartGeneration =
     params.get("autoStart") === "1" || (Boolean(goal.trim()) && !draftId);
 
   const initialBrief: Partial<BriefDraft> = {
+    ...template?.draft,
     ...(goal ? { goal } : {}),
     ...(Number.isFinite(length) && length > 0 ? { targetLengthSec: length } : {}),
     ...(reviewGates.length > 0 ? { reviewGates } : {}),
@@ -56,7 +54,7 @@ export function ProjectCreationPage() {
     <StudioShell
       initialBrief={initialBrief}
       initialStep={initialStep}
-      initialStarted={params.has("start") || Boolean(initialStep || goal)}
+      initialStarted={params.has("start") || Boolean(initialStep || goal || template)}
       openPanel={openPanel}
       draftId={draftId}
       newDraftRequest={newDraftRequest}

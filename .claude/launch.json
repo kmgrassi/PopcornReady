@@ -2,9 +2,15 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "popcorn-ready-dev",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "name": "popcorn-api",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "NODE_ENV=development PORT=4200 npm --prefix apps/api run dev"],
+      "port": 4200
+    },
+    {
+      "name": "popcorn-web",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "NODE_ENV=development PLAYWRIGHT_API_PORT=4200 npm --prefix apps/web run dev"],
       "port": 3000
     }
   ]

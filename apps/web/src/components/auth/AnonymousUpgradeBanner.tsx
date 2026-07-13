@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { ChangeEvent, FormEvent, useState } from "react";
 import { Button } from "../ui/Button";
 import { useAuth } from "./AuthProvider";
 import styles from "./AnonymousUpgradeBanner.module.css";
@@ -8,6 +8,17 @@ type UpgradeStep = "email" | "verify";
 function describeError(err: unknown): string {
   if (err instanceof Error) return err.message;
   return "Could not create your account. Try again.";
+}
+
+function emailValueIsValid(value: string): boolean {
+  const normalizedValue = value.trim();
+  if (!normalizedValue) return false;
+
+  const input = document.createElement("input");
+  input.type = "email";
+  input.required = true;
+  input.value = normalizedValue;
+  return input.checkValidity();
 }
 
 export function AnonymousUpgradeBanner({
@@ -23,20 +34,27 @@ export function AnonymousUpgradeBanner({
   const [error, setError] = useState<string | null>(null);
   const [complete, setComplete] = useState(false);
   const [pending, setPending] = useState(false);
+  const [emailIsValid, setEmailIsValid] = useState(false);
   const showUpgrade = auth.isAnonymous || step === "verify" || pending || complete;
+  const normalizedEmail = email.trim();
 
   if (!auth.configured || auth.status !== "authenticated" || !showUpgrade) {
     return null;
   }
 
+  function updateEmail(event: ChangeEvent<HTMLInputElement>) {
+    setEmail(event.target.value);
+    setEmailIsValid(emailValueIsValid(event.target.value));
+  }
+
   async function sendVerification(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending || !email.trim()) return;
+    if (pending || !emailIsValid) return;
     setError(null);
     setComplete(false);
     setPending(true);
     try {
-      await auth.beginAnonymousAccountUpgrade(email);
+      await auth.beginAnonymousAccountUpgrade(normalizedEmail);
       setStep("verify");
     } catch (err) {
       setError(describeError(err));
@@ -47,7 +65,7 @@ export function AnonymousUpgradeBanner({
 
   async function confirmUpgrade(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending || !email.trim() || !token.trim() || !password) return;
+    if (pending || !emailIsValid || !token.trim() || !password) return;
     if (password.length < 6) {
       setError("Use a password with at least 6 characters.");
       return;
@@ -56,7 +74,7 @@ export function AnonymousUpgradeBanner({
     setComplete(false);
     setPending(true);
     try {
-      await auth.completeAnonymousAccountUpgrade(email, token, password);
+      await auth.completeAnonymousAccountUpgrade(normalizedEmail, token, password);
       setComplete(true);
       setStep("email");
       setToken("");
@@ -96,12 +114,12 @@ export function AnonymousUpgradeBanner({
               type="email"
               autoComplete="email"
               value={email}
-              onChange={(event) => setEmail(event.target.value)}
+              onChange={updateEmail}
               disabled={pending}
               required
             />
           </div>
-          <Button variant="secondary" type="submit" isLoading={pending} disabled={!email.trim()}>
+          <Button variant="secondary" type="submit" isLoading={pending} disabled={!emailIsValid}>
             Send code
           </Button>
         </form>
@@ -114,7 +132,7 @@ export function AnonymousUpgradeBanner({
               type="email"
               autoComplete="email"
               value={email}
-              onChange={(event) => setEmail(event.target.value)}
+              onChange={updateEmail}
               disabled={pending}
               required
             />
@@ -149,7 +167,7 @@ export function AnonymousUpgradeBanner({
             variant="secondary"
             type="submit"
             isLoading={pending}
-            disabled={!email.trim() || !token.trim() || password.length < 6}
+            disabled={!emailIsValid || !token.trim() || password.length < 6}
           >
             Create account
           </Button>

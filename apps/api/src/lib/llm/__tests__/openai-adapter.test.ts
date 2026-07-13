@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  type OpenAiCreateRequest,
   type OpenAiFunctionTool,
   createOpenAiLlmClient,
   interpretOpenAiToolResponse,
@@ -108,7 +109,7 @@ test("interpretOpenAiToolResponse returns done with text when no tool is called"
 });
 
 test("chooseTool sends function tools + tool_choice auto and uses max_completion_tokens", async () => {
-  let sent: Record<string, unknown> | undefined;
+  let sent: OpenAiCreateRequest | undefined;
   const client = createOpenAiLlmClient({
     model: "gpt-5",
     create: async (params) => {
@@ -143,6 +144,26 @@ test("chooseTool sends function tools + tool_choice auto and uses max_completion
   assert.equal(decision.type, "tool_call");
 });
 
+test("default OpenAI client fails with a clear missing-key error", async () => {
+  const previous = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  try {
+    const client = createOpenAiLlmClient({ model: "gpt-5" });
+    await assert.rejects(
+      () =>
+        client.chooseTool({
+          system: "sys",
+          userPayload: { a: 1 },
+          tools: [planShots],
+        }),
+      /OPENAI_API_KEY is not set for the OpenAI LLM provider/
+    );
+  } finally {
+    if (previous === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previous;
+  }
+});
+
 test("low/minimal effort routes to the fast model; medium/high/none use the primary", async () => {
   const seen: string[] = [];
   const client = createOpenAiLlmClient({
@@ -171,7 +192,7 @@ test("low/minimal effort routes to the fast model; medium/high/none use the prim
 });
 
 test("reasoning_effort is sent for reasoning models (gpt-5) and omitted for gpt-4o", async () => {
-  let reasoning: Record<string, unknown> | undefined;
+  let reasoning: OpenAiCreateRequest | undefined;
   const gpt5 = createOpenAiLlmClient({
     model: "gpt-5",
     create: async (params) => {
@@ -193,7 +214,7 @@ test("reasoning_effort is sent for reasoning models (gpt-5) and omitted for gpt-
   assert.ok(reasoning);
   assert.equal(reasoning.reasoning_effort, "minimal");
 
-  let nonReasoning: Record<string, unknown> | undefined;
+  let nonReasoning: OpenAiCreateRequest | undefined;
   const gpt4o = createOpenAiLlmClient({
     model: "gpt-4o",
     create: async (params) => {
@@ -216,7 +237,7 @@ test("reasoning_effort is sent for reasoning models (gpt-5) and omitted for gpt-
   assert.ok(!("reasoning_effort" in nonReasoning));
 
   // No effort -> no reasoning_effort (provider default).
-  let noEffort: Record<string, unknown> | undefined;
+  let noEffort: OpenAiCreateRequest | undefined;
   const gpt5b = createOpenAiLlmClient({
     model: "gpt-5",
     create: async (params) => {
@@ -270,7 +291,7 @@ test("structured requires return_result tool call and parses arguments", async (
 });
 
 test("structured sends a required return_result function tool", async () => {
-  let sent: Record<string, unknown> | undefined;
+  let sent: OpenAiCreateRequest | undefined;
   const client = createOpenAiLlmClient({
     model: "gpt-5",
     create: async (params) => {
