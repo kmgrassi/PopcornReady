@@ -1,5 +1,6 @@
 import type { AuthContext } from "@/lib/api/v1/auth";
 import { createGeneratedAsset } from "@/lib/api/v1/generated-assets";
+import { getAsset } from "@/lib/api/v1/store";
 import type { ToolBattery } from "../types";
 
 function localAuth(workspaceId: string): AuthContext {
@@ -16,12 +17,6 @@ function assetIdsFromJob(result: { body: Record<string, unknown> }): string[] {
   return Array.isArray(job.result?.assetIds)
     ? job.result.assetIds.filter((id): id is string => typeof id === "string")
     : [];
-}
-
-function isUuid(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    value
-  );
 }
 
 async function seedUploadedVideo(sandbox: { workspaceId: string; projectId: string }) {
@@ -52,20 +47,39 @@ async function waitForEditedAsset(
   for (let attempt = 0; attempt < 20; attempt += 1) {
     const { data } = await db
       .from("asset_edges")
-      .select("from_asset_id, to_asset_id, role")
+      .select("from_id, to_id, role")
       .eq("project_id", projectId)
-      .eq("to_asset_id", sourceAssetId)
+      .eq("to_id", sourceAssetId)
       .eq("role", "edited_from");
     if (data && data.length > 0) return data[0];
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   const { data } = await db
     .from("asset_edges")
-    .select("from_asset_id, to_asset_id, role")
+    .select("from_id, to_id, role")
     .eq("project_id", projectId)
-    .eq("to_asset_id", sourceAssetId)
+    .eq("to_id", sourceAssetId)
     .eq("role", "edited_from");
   return data?.[0] ?? null;
+}
+
+async function selectionPointsTo(
+  db: Parameters<NonNullable<ToolBattery["cases"][number]["verify"]>>[0]["db"],
+  projectId: string,
+  slotRole: string,
+  assetId: string
+): Promise<boolean> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const { data } = await db
+      .from("current_selections")
+      .select("active_asset_id")
+      .eq("project_id", projectId)
+      .eq("slot_role", slotRole)
+      .maybeSingle();
+    if (data?.active_asset_id === assetId) return true;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return false;
 }
 
 export const editVideoAssetBattery: ToolBattery = {
@@ -103,11 +117,10 @@ export const editVideoAssetBattery: ToolBattery = {
           failures.push("missing sourceAssetId in model input");
           return failures;
         }
-        const sourceQuery = db.from("assets").select("id").eq("project_id", sandbox.projectId);
-        const { data: source } = await (isUuid(sourceRef)
-          ? sourceQuery.eq("id", sourceRef).maybeSingle()
-          : sourceQuery.eq("slug", sourceRef).maybeSingle());
-        const sourceAssetId = typeof source?.id === "string" ? source.id : "";
+        const source = await getAsset(sandbox.workspaceId, sandbox.projectId, sourceRef).catch(
+          () => null
+        );
+        const sourceAssetId = source?.id ?? "";
         if (!sourceAssetId) {
           failures.push(`source asset did not resolve: ${sourceRef}`);
           return failures;
@@ -118,7 +131,7 @@ export const editVideoAssetBattery: ToolBattery = {
           return failures;
         }
         const editedAssetId =
-          typeof edge.from_asset_id === "string" ? edge.from_asset_id : "";
+          typeof edge.from_id === "string" ? edge.from_id : "";
         if (!editedAssetId) {
           failures.push("edited_from edge did not identify an edited asset");
           return failures;
@@ -141,13 +154,13 @@ export const editVideoAssetBattery: ToolBattery = {
           }
         }
 
-        const { data: selection } = await db
-          .from("current_selections")
-          .select("active_asset_id")
-          .eq("project_id", sandbox.projectId)
-          .eq("slot_role", "primary_footage")
-          .maybeSingle();
-        if (selection?.active_asset_id !== editedAssetId) {
+        const selected = await selectionPointsTo(
+          db,
+          sandbox.projectId,
+          "primary_footage",
+          editedAssetId
+        );
+        if (!selected) {
           failures.push("primary_footage selection did not swap to edited asset");
         }
         return failures;
