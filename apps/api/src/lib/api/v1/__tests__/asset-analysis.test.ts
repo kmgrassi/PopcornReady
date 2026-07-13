@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
 import {
   analyzeAssetBatch,
+  extractAssetAnalysisToolPayload,
   getAssetAnalysisJob,
   videoSampleTimes,
 } from "../asset-analysis";
@@ -100,6 +101,87 @@ test("videoSampleTimes uses five default samples and ten for long videos", () =>
   ]);
   assert.equal(videoSampleTimes(180, 5, 10).length, 10);
   assert.deepEqual(videoSampleTimes(undefined, 5, 10), [0]);
+});
+
+test("extractAssetAnalysisToolPayload normalizes function_call arguments", () => {
+  const payload = extractAssetAnalysisToolPayload({
+    output: [
+      {
+        type: "function_call",
+        name: "summarize_asset_frames",
+        arguments: JSON.stringify({
+          summary: "Two people cooking.",
+          subjects: ["chef", 7],
+          actions: ["stirring"],
+          setting: " kitchen ",
+          mood: " warm ",
+          likelyUses: ["b-roll"],
+          cautions: ["logo visible"],
+          confidence: "high",
+        }),
+      },
+    ],
+  });
+
+  assert.deepEqual(payload, {
+    summary: "Two people cooking.",
+    subjects: ["chef", "7"],
+    actions: ["stirring"],
+    setting: "kitchen",
+    mood: "warm",
+    likelyUses: ["b-roll"],
+    cautions: ["logo visible"],
+    confidence: "high",
+  });
+});
+
+test("extractAssetAnalysisToolPayload reads tool_call content blocks and defaults invalid confidence", () => {
+  const payload = extractAssetAnalysisToolPayload({
+    output: [
+      {
+        content: [
+          {
+            type: "tool_call",
+            name: "summarize_asset_frames",
+            input: {
+              summary: "Crowd cheering.",
+              subjects: ["audience"],
+              actions: ["clapping"],
+              likelyUses: ["highlight"],
+              cautions: [],
+              confidence: "certainly",
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.deepEqual(payload, {
+    summary: "Crowd cheering.",
+    subjects: ["audience"],
+    actions: ["clapping"],
+    setting: undefined,
+    mood: undefined,
+    likelyUses: ["highlight"],
+    cautions: [],
+    confidence: "medium",
+  });
+});
+
+test("extractAssetAnalysisToolPayload returns undefined for malformed tool arguments", () => {
+  assert.equal(
+    extractAssetAnalysisToolPayload({
+      output: [
+        {
+          type: "function_call",
+          name: "summarize_asset_frames",
+          arguments: "{not json",
+        },
+      ],
+    }),
+    undefined
+  );
 });
 
 test("parseAnalyzeBatch applies PR2 defaults and validates sample counts", () => {

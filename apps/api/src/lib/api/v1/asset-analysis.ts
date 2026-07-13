@@ -71,6 +71,20 @@ interface AssetAnalysisOutcome {
   error?: { code: string; message: string };
 }
 
+type AssetAnalysisObservations = NonNullable<V1AssetAnalysis["observations"]>;
+type AssetAnalysisConfidence = AssetAnalysisObservations["confidence"];
+
+export interface AssetAnalysisToolPayload {
+  summary: string;
+  subjects: string[];
+  actions: string[];
+  setting?: string;
+  mood?: string;
+  likelyUses: string[];
+  cautions: string[];
+  confidence: AssetAnalysisConfidence;
+}
+
 export function videoSampleTimes(
   durationSec: number | undefined,
   defaultSamples: number,
@@ -172,42 +186,79 @@ async function extractVideoFrames(args: {
   return frames;
 }
 
-function toolResultFromOpenAIResponse(data: unknown): unknown {
-  const output = (data as { output?: unknown[] })?.output;
-  if (Array.isArray(output)) {
-    for (const item of output) {
-      if (
-        (item as { type?: unknown })?.type === "function_call" &&
-        (item as { name?: unknown })?.name === ASSET_ANALYSIS_TOOL
-      ) {
-        const args = (item as { arguments?: unknown })?.arguments;
-        if (typeof args !== "string" || !args.trim()) return undefined;
-        try {
-          return JSON.parse(args);
-        } catch {
-          return undefined;
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function optionalTrimmedString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function confidenceOrDefault(value: unknown): AssetAnalysisConfidence {
+  return value === "high" || value === "medium" || value === "low"
+    ? value
+    : "medium";
+}
+
+function normalizeAssetAnalysisToolPayload(
+  value: Record<string, unknown>
+): AssetAnalysisToolPayload {
+  return {
+    summary: typeof value.summary === "string" ? value.summary : "",
+    subjects: stringArray(value.subjects),
+    actions: stringArray(value.actions),
+    setting: optionalTrimmedString(value.setting),
+    mood: optionalTrimmedString(value.mood),
+    likelyUses: stringArray(value.likelyUses),
+    cautions: stringArray(value.cautions),
+    confidence: confidenceOrDefault(value.confidence),
+  };
+}
+
+export function extractAssetAnalysisToolPayload(
+  data: unknown
+): AssetAnalysisToolPayload | undefined {
+  const output = isRecord(data) ? data.output : undefined;
+  if (!Array.isArray(output)) return undefined;
+
+  for (const item of output) {
+    if (
+      isRecord(item) &&
+      item.type === "function_call" &&
+      item.name === ASSET_ANALYSIS_TOOL
+    ) {
+      const args = item.arguments;
+      if (typeof args !== "string" || !args.trim()) return undefined;
+      try {
+        const parsed = JSON.parse(args);
+        if (isRecord(parsed)) {
+          return normalizeAssetAnalysisToolPayload(parsed);
         }
+      } catch {
+        return undefined;
       }
-      const content = (item as { content?: unknown[] })?.content;
-      if (!Array.isArray(content)) continue;
-      for (const part of content) {
-        if (
-          (part as { type?: unknown })?.type === "tool_call" &&
-          (part as { name?: unknown })?.name === ASSET_ANALYSIS_TOOL
-        ) {
-          const input = (part as { input?: unknown })?.input;
-          if (input && typeof input === "object" && !Array.isArray(input)) {
-            return input;
-          }
-        }
+      return undefined;
+    }
+
+    const content = isRecord(item) ? item.content : undefined;
+    if (!Array.isArray(content)) continue;
+    for (const part of content) {
+      if (
+        isRecord(part) &&
+        part.type === "tool_call" &&
+        part.name === ASSET_ANALYSIS_TOOL &&
+        isRecord(part.input)
+      ) {
+        return normalizeAssetAnalysisToolPayload(part.input);
       }
     }
   }
-  return undefined;
-}
 
-function stringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
+  return undefined;
 }
 
 async function summarizeWithOpenAI(
@@ -286,9 +337,7 @@ async function summarizeWithOpenAI(
     );
   }
 
-  const parsed = toolResultFromOpenAIResponse(await response.json()) as
-    | Record<string, unknown>
-    | undefined;
+  const parsed = extractAssetAnalysisToolPayload(await response.json());
   if (!parsed) {
     throw new ApiError(
       "model_output_invalid",
@@ -296,25 +345,15 @@ async function summarizeWithOpenAI(
     );
   }
 
-  const confidence = String(parsed.confidence || "medium");
   return {
-    summary: String(parsed.summary || ""),
-    subjects: stringArray(parsed.subjects),
-    actions: stringArray(parsed.actions),
-    setting:
-      typeof parsed.setting === "string" && parsed.setting.trim()
-        ? parsed.setting.trim()
-        : undefined,
-    mood:
-      typeof parsed.mood === "string" && parsed.mood.trim()
-        ? parsed.mood.trim()
-        : undefined,
-    likelyUses: stringArray(parsed.likelyUses),
-    cautions: stringArray(parsed.cautions),
-    confidence:
-      confidence === "high" || confidence === "medium" || confidence === "low"
-        ? confidence
-        : "medium",
+    summary: parsed.summary,
+    subjects: parsed.subjects,
+    actions: parsed.actions,
+    setting: parsed.setting,
+    mood: parsed.mood,
+    likelyUses: parsed.likelyUses,
+    cautions: parsed.cautions,
+    confidence: parsed.confidence,
     model: { provider: "openai", model },
   };
 }
