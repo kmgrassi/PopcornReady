@@ -10,7 +10,7 @@ import { ImageWithSkeleton } from "../components/ui/ImageWithSkeleton";
 import type { ProjectWatchMedia } from "../lib/api-client";
 import type { StoryboardProgress } from "../lib/v1/storyboard/progress";
 import { ProjectPoster } from "./ProjectDetailSections";
-import styles from "./ProjectDetailPage.module.css";
+import styles from "./ProjectMobileStatus.module.css";
 
 export function MobileProjectStatus({
   project,
@@ -179,7 +179,14 @@ function MobileProjectHero({
       />
     );
   }
-  return <ProjectPoster name={project.name} posterUrl={project.posterUrl} />;
+  return (
+    <ProjectPoster
+      name={project.name}
+      posterUrl={project.posterUrl}
+      className={styles.mobileHeroImage}
+      emptyClassName={styles.posterEmpty}
+    />
+  );
 }
 
 export function ProjectMobilePrimaryAction({

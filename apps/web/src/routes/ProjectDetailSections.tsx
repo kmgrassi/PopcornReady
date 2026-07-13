@@ -12,7 +12,7 @@ import { ImageWithSkeleton } from "../components/ui/ImageWithSkeleton";
 import { VisibilityBadge } from "../components/ui/VisibilityBadge";
 import { useSetProjectVisibilityMutation } from "../lib/queryClient";
 import { formatDate, formatDuration, titleCase } from "./project-detail-format";
-import styles from "./ProjectDetailPage.module.css";
+import styles from "./ProjectDetailSections.module.css";
 
 export function ProjectWatchVideo({ media }: { media: ProjectWatchMedia }) {
   return (
@@ -296,7 +296,7 @@ export function ProjectBrief({
 }) {
   const brief = project.brief;
   return (
-    <section className={styles.panel} id="brief">
+    <section className={`${styles.panel} ${styles.compactPanel}`} id="brief">
       <div className={styles.sectionHeader}>
         <div>
           <span className={styles.eyebrow}>Brief</span>
@@ -354,7 +354,7 @@ export function ProjectScript({
   const narrationScript = project.brief?.narration?.script?.trim();
 
   return (
-    <section className={styles.panel} id="script">
+    <section className={`${styles.panel} ${styles.compactPanel}`} id="script">
       <div className={styles.sectionHeader}>
         <div>
           <span className={styles.eyebrow}>Script</span>
@@ -481,12 +481,23 @@ export function ProjectDangerSection({
   );
 }
 
-export function ProjectPoster({ name, posterUrl }: { name: string; posterUrl?: string | null }) {
+export function ProjectPoster({
+  name,
+  posterUrl,
+  className,
+  emptyClassName,
+}: {
+  name: string;
+  posterUrl?: string | null;
+  className?: string;
+  emptyClassName?: string;
+}) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const posterClassName = className ?? styles.poster;
   if (posterUrl && posterUrl !== failedUrl) {
     return (
       <ImageWithSkeleton
-        className={styles.poster}
+        className={posterClassName}
         src={posterUrl}
         alt=""
         onError={() => setFailedUrl(posterUrl)}
@@ -494,7 +505,7 @@ export function ProjectPoster({ name, posterUrl }: { name: string; posterUrl?: s
     );
   }
   return (
-    <div className={`${styles.poster} ${styles.posterEmpty}`} aria-hidden="true">
+    <div className={`${posterClassName} ${emptyClassName ?? styles.posterEmpty}`} aria-hidden="true">
       <span>{name.trim().charAt(0).toUpperCase() || "?"}</span>
     </div>
   );

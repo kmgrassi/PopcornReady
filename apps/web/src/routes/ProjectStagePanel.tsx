@@ -7,7 +7,7 @@ import {
   useGenerationRunQuery,
   useUpdateGenerationRunMutation,
 } from "../lib/queryClient";
-import styles from "./ProjectDetailPage.module.css";
+import styles from "./ProjectStagePanel.module.css";
 import { formatDate, titleCase } from "./project-detail-format";
 
 const STAGE_PANEL_COMPACT_QUERY = "(max-width: 900px)";
