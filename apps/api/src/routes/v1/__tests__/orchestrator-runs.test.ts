@@ -9,6 +9,7 @@ import type {
 } from "@/lib/api/v1/orchestrator-store";
 import { projectRunDetailFromParts } from "../orchestrator-run-projections.js";
 import {
+  boardRevisionRequiresRunResume,
   parseBoardRevisionTarget,
   runFailedForInsufficientCredits,
   stopAfterTools,
@@ -59,6 +60,15 @@ function gateFixture(
     ...overrides,
   };
 }
+
+test("board feedback resumes terminal runs, including failed and canceled runs", () => {
+  assert.equal(boardRevisionRequiresRunResume("failed"), true);
+  assert.equal(boardRevisionRequiresRunResume("canceled"), true);
+  assert.equal(boardRevisionRequiresRunResume("succeeded"), true);
+  assert.equal(boardRevisionRequiresRunResume("queued"), true);
+  assert.equal(boardRevisionRequiresRunResume("running"), false);
+  assert.equal(boardRevisionRequiresRunResume("waiting"), false);
+});
 
 test("does not surface a storyboard-only orchestrator success as a ready video", () => {
   const payload = projectRunDetailFromParts(

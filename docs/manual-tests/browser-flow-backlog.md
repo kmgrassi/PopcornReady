@@ -110,6 +110,11 @@ Purpose: verify long-running generation states and user-controlled gates.
 - Verify reject/regenerate keeps the run from continuing silently.
 - Open generated assets from the progress view.
 - Trigger targeted generated-asset feedback where enabled.
+- On a seeded failed run and on a seeded canceled run that each contain a generated
+  asset, open that asset's **Request Changes** flow and submit a targeted note.
+  Verify the request is accepted (not rejected with a terminal-run validation
+  error), the run returns to `running`, its prior terminal error is cleared, and
+  the revision is dispatched for the agent to process.
 - Verify malformed, missing, or unauthorized run URLs show useful error states
   with navigation back to a stable surface.
 
