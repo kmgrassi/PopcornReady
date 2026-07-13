@@ -3,6 +3,10 @@ set -euo pipefail
 
 phase="${1:-}"
 worksheet_id="${2:-}"
+if [[ "$phase" == "--" ]]; then
+  phase="${2:-}"
+  worksheet_id="${3:-}"
+fi
 if [[ -z "$phase" || -z "$worksheet_id" ]]; then
   echo "Usage: pnpm agent:review -- <research|plan|implementation|wrap-up> <WORKSHEET_ID>" >&2
   exit 2
