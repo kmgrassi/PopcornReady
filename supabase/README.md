@@ -46,6 +46,15 @@ supabase link --project-ref <ref>
 supabase db push
 ```
 
+## Hosted Auth URL configuration
+
+Production Auth URLs are intentionally kept separate from `config.toml`, which
+configures the local CLI stack. On merges that change
+`production/auth-url-config.json`, GitHub Actions applies only the hosted Auth
+`site_url` and redirect allow-list through the Supabase Management API. This
+prevents a local configuration push from replacing unrelated production Auth
+settings.
+
 ## ⚠️ Identity & RLS — read before writing a policy
 
 There are **three different ids** and mixing them up is the #1 data-layer bug:
