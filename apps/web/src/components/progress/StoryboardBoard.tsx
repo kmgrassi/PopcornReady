@@ -87,7 +87,10 @@ function storyboardTiles(
         key,
         label: `Beat ${beat.beatIndex + 1}`,
         intent: beat.intent || beat.visualDescription,
-        prompt: panel?.prompt ?? item?.prompt ?? item?.promptPreview,
+        // A storyboard panel's saved asset prompt is the only authoritative
+        // generation prompt. Do not substitute a stage/action preview when an
+        // older asset has no prompt provenance.
+        prompt: panel?.prompt,
         sceneLabel: scene.title || `Scene ${scene.sceneIndex + 1}`,
         item,
         scene,
@@ -117,7 +120,7 @@ function itemTiles(runId: string, items: GenerationStageItem[]): Tile[] {
     key: item.itemId,
     label: item.label || `Frame ${index + 1}`,
     intent: item.promptPreview,
-    prompt: item.prompt ?? item.promptPreview,
+    prompt: item.prompt,
     item,
     target: {
       scope: "tile",

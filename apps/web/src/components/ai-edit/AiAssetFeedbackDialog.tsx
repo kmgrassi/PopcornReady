@@ -76,6 +76,7 @@ export function AiAssetFeedbackDialog({
 
   const trimmed = message.trim();
   const canSubmit = Boolean(trimmed) && !pending;
+  const hasSavedPrompt = Boolean(initialMessage?.trim());
   const selectedProviderConfig =
     purposeConfig && provider ? providerConfig(purposeConfig, provider) : null;
 
@@ -121,7 +122,13 @@ export function AiAssetFeedbackDialog({
         <div className={styles.body}>
           <div className={styles.assetPane}>{asset}</div>
           <label className={styles.feedbackPane}>
-            <span>{initialMessage?.trim() ? "Original prompt" : "Feedback for the AI"}</span>
+            <span>Generation prompt</span>
+            {!hasSavedPrompt ? (
+              <p className={styles.promptUnavailable} role="status">
+                The generation prompt for this asset couldn't be found. Enter a new prompt to
+                request changes.
+              </p>
+            ) : null}
             <textarea
               value={message}
               rows={8}
