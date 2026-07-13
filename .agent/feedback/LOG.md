@@ -34,3 +34,9 @@
 - Friction or failure: `pnpm --` forwarding and partially staged markdown made the first tooling cut validate the wrong content.
 - Suggested improvement: Add a lightweight script-level regression harness for agent tooling so review-fix cases do not rely on ad hoc shell probes.
 - Follow-up: none.
+
+### 2026-07-13 — API-20260713-01
+- What helped: The review findings mapped cleanly onto existing orchestrator budget/credit helpers, so the direct path could be aligned without reworking the broader route.
+- Friction or failure: The first direct-regeneration cut bypassed run-budget enforcement, treated local actors like billable users, and flattened recoverable billing failures into a generic run error.
+- Suggested improvement: Add an end-to-end route test for terminal tile revisions that exercises budget, local-auth, and insufficient-credit outcomes through the HTTP handler.
+- Follow-up: none.

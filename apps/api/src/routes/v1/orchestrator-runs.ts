@@ -24,6 +24,7 @@ import {
   type UpdateOrchestratorRunPatch,
 } from "@/lib/api/v1/orchestrator-store";
 import {
+  assertRunBudgetAllows,
   createAction,
   createBriefVersion,
   getActiveProjectBrief,
@@ -35,6 +36,7 @@ import { regenerateImageAsset } from "@/lib/api/v1/regenerate-asset";
 import { estimateCostUsd } from "@/lib/generative/pricing";
 import {
   billableUsdSoFar,
+  currentRunUserId,
   userHasAnyProviderKey,
   withProviderKeyUser,
 } from "@/lib/provider-keys/resolve";
@@ -105,6 +107,68 @@ export function boardRevisionGateIdsToReset(
 ): string[] {
   if (run.status !== "canceled") return [];
   return gates.filter((gate) => gate.status === "reached").map((gate) => gate.id);
+}
+
+export function boardRevisionBillingUserId(
+  auth: Pick<import("@/lib/api/v1/auth").AuthContext, "actor" | "isLocal">
+): string | null {
+  return auth.isLocal ? currentRunUserId() : auth.actor.id;
+}
+
+export async function preflightDirectImageTileRevision(args: {
+  auth: Pick<import("@/lib/api/v1/auth").AuthContext, "actor" | "isLocal">;
+  runId: string;
+  projectId: string;
+  estimatedCostUsd: number;
+  getCreditBalanceFn?: typeof getCreditBalance;
+  userHasAnyProviderKeyFn?: typeof userHasAnyProviderKey;
+  assertRunBudgetAllowsFn?: typeof assertRunBudgetAllows;
+}): Promise<string | null> {
+  const billingUserId = boardRevisionBillingUserId(args.auth);
+  if (!(args.estimatedCostUsd > 0)) return billingUserId;
+
+  await (args.assertRunBudgetAllowsFn ?? assertRunBudgetAllows)({
+    runId: args.runId,
+    projectId: args.projectId,
+    additionalCostUsd: args.estimatedCostUsd,
+  });
+
+  if (!billingUserId) return billingUserId;
+
+  const estimatedCredits = Math.ceil(args.estimatedCostUsd * CREDIT_MARGIN * CREDITS_PER_USD);
+  const balance = await (args.getCreditBalanceFn ?? getCreditBalance)(billingUserId);
+  if (
+    balance < estimatedCredits &&
+    !(await (args.userHasAnyProviderKeyFn ?? userHasAnyProviderKey)(billingUserId))
+  ) {
+    throw new ApiError(
+      "insufficient_credits",
+      "Out of credits. Buy credits or add your own provider API keys to keep generating."
+    );
+  }
+  return billingUserId;
+}
+
+export function boardRevisionRunError(error: unknown): {
+  kind: string;
+  message: string;
+} {
+  if (error instanceof ApiError) {
+    return {
+      kind: error.code,
+      message: error.message,
+    };
+  }
+  if (error instanceof Error && /^Run budget exceeded:/.test(error.message)) {
+    return {
+      kind: "budget_exceeded",
+      message: error.message,
+    };
+  }
+  return {
+    kind: "revision_generation_failed",
+    message: error instanceof Error ? error.message : String(error),
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -806,20 +870,15 @@ orchestratorRunsRouter.post(
         const provider = (request.generationModel?.provider ?? targetAsset.provenance?.provider ?? "openai") as GenerativeProviderName;
         const model = request.generationModel?.model ?? targetAsset.provenance?.model;
         const estimatedCostUsd = estimateCostUsd({ provider, kind: "image", model });
-        const estimatedCredits = Math.ceil(estimatedCostUsd * CREDIT_MARGIN * CREDITS_PER_USD);
-        if (
-          estimatedCredits > 0 &&
-          (await getCreditBalance(auth.actor.id)) < estimatedCredits &&
-          !(await userHasAnyProviderKey(auth.actor.id))
-        ) {
-          throw new ApiError(
-            "insufficient_credits",
-            "Out of credits. Buy credits or add your own provider API keys to keep generating."
-          );
-        }
+        const billingUserId = await preflightDirectImageTileRevision({
+          auth,
+          runId,
+          projectId,
+          estimatedCostUsd,
+        });
 
         await updateOrchestratorRun(runId, boardRevisionResumePatch(run));
-        const billableUsd = await withProviderKeyUser(auth.actor.id, async () => {
+        const billableUsd = await withProviderKeyUser(billingUserId, async () => {
           const beforeUsd = billableUsdSoFar();
           await regenerateImageAsset({
             workspaceId: auth.workspaceId,
@@ -832,10 +891,10 @@ orchestratorRunsRouter.post(
           });
           return billableUsdSoFar() - beforeUsd;
         });
-        if (billableUsd > 0) {
+        if (billableUsd > 0 && billingUserId) {
           const credits = Math.ceil(billableUsd * CREDIT_MARGIN * CREDITS_PER_USD);
           await applyCreditTransaction({
-            userId: auth.actor.id,
+            userId: billingUserId,
             deltaCredits: -credits,
             reason: "generation_debit",
             runId,
@@ -847,13 +906,11 @@ orchestratorRunsRouter.post(
           });
         }
       } catch (error) {
+        const runError = boardRevisionRunError(error);
         await updateOrchestratorRun(runId, {
           status: "failed",
           completedAt: new Date().toISOString(),
-          error: {
-            kind: "revision_generation_failed",
-            message: error instanceof Error ? error.message : String(error),
-          },
+          error: runError,
         });
         throw error;
       }
