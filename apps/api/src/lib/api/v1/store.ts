@@ -1727,6 +1727,7 @@ function mapAssetRow(row: AssetRow): V1Asset {
   if (row.role != null) asset.role = row.role;
   if (row.name != null) asset.name = row.name;
   if (row.slug != null) asset.slug = row.slug;
+  if (row.description != null) asset.description = row.description;
   if (envelope.context !== undefined) asset.context = envelope.context;
   if (envelope.userContext !== undefined) asset.userContext = envelope.userContext;
   if (envelope.agentContext !== undefined) asset.agentContext = envelope.agentContext;

@@ -574,3 +574,48 @@ test("credit recovery accepts run-level insufficient-credit failures without a f
     false
   );
 });
+
+test("backfills stage item prompts from linked asset metadata", () => {
+  const payload = projectRunDetailFromParts(
+    runFixture({ status: "running" }),
+    [],
+    [
+      actionFixture("generate_anchor", {
+        outputAssetIds: ["anchor_with_prompt", "anchor_with_description"],
+      }),
+    ],
+    new Map([
+      ["anchor_with_prompt", { prompt: "A reusable neon bakery exterior at midnight." }],
+      [
+        "anchor_with_description",
+        { description: "A close character reference for the midnight baker." },
+      ],
+    ])
+  );
+
+  assert.deepEqual(
+    payload.stageItems.map((item) => item.prompt),
+    [
+      "A reusable neon bakery exterior at midnight.",
+      "A close character reference for the midnight baker.",
+    ]
+  );
+});
+
+test("keeps an explicit action prompt ahead of linked asset metadata", () => {
+  const payload = projectRunDetailFromParts(
+    runFixture({ status: "running" }),
+    [],
+    [
+      actionFixture("generate_keyframe", {
+        params: { prompt: "The prompt submitted for this action." },
+        outputAssetIds: ["keyframe_asset"],
+      }),
+    ],
+    new Map([
+      ["keyframe_asset", { prompt: "A different persisted provider prompt." }],
+    ])
+  );
+
+  assert.equal(payload.stageItems[0]?.prompt, "The prompt submitted for this action.");
+});
