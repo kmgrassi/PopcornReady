@@ -9,7 +9,9 @@ import type {
 } from "@/lib/api/v1/orchestrator-store";
 import { projectRunDetailFromParts } from "../orchestrator-run-projections.js";
 import {
+  boardRevisionGateIdsToReset,
   boardRevisionRequiresRunResume,
+  boardRevisionResumePatch,
   parseBoardRevisionTarget,
   runFailedForInsufficientCredits,
   stopAfterTools,
@@ -68,6 +70,28 @@ test("board feedback resumes terminal runs, including failed and canceled runs",
   assert.equal(boardRevisionRequiresRunResume("queued"), true);
   assert.equal(boardRevisionRequiresRunResume("running"), false);
   assert.equal(boardRevisionRequiresRunResume("waiting"), false);
+});
+
+test("board feedback clears terminal state and reached gates before resuming a canceled run", () => {
+  const run = runFixture({
+    status: "canceled",
+    startedAt: "2026-06-15T00:00:01.000Z",
+    completedAt: "2026-06-15T00:00:02.000Z",
+    error: { message: "Previous failure" },
+  });
+  assert.deepEqual(boardRevisionResumePatch(run), {
+    status: "running",
+    startedAt: "2026-06-15T00:00:01.000Z",
+    clearCompletedAt: true,
+    clearError: true,
+  });
+  assert.deepEqual(boardRevisionGateIdsToReset(run, [gateFixture("generate_keyframe")]), [
+    "gate_generate_keyframe",
+  ]);
+  assert.deepEqual(
+    boardRevisionGateIdsToReset(runFixture({ status: "failed" }), [gateFixture("generate_keyframe")]),
+    []
+  );
 });
 
 test("does not surface a storyboard-only orchestrator success as a ready video", () => {

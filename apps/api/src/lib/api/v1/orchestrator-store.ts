@@ -91,7 +91,12 @@ export interface AnonymousQuotaInput {
 
 export type UpdateOrchestratorRunPatch = Partial<
   Pick<OrchestratorRun, "status" | "spentUsd" | "error" | "startedAt" | "completedAt">
->;
+> & {
+  /** Clear the persisted terminal error with a SQL NULL. */
+  clearError?: boolean;
+  /** Clear the completion time with a SQL NULL when reopening a run. */
+  clearCompletedAt?: boolean;
+};
 
 interface OrchestratorRunRow {
   id: string;
@@ -388,11 +393,11 @@ export async function updateOrchestratorRun(
   const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (patch.status !== undefined) row.status = patch.status;
   if (patch.spentUsd !== undefined) row.spent_usd = patch.spentUsd;
-  if (patch.error !== undefined) {
-    row.error = markedJson("orchestrator_error.v1", patch.error) ?? null;
-  }
+  if (patch.clearError) row.error = null;
+  else if (patch.error !== undefined) row.error = markedJson("orchestrator_error.v1", patch.error);
   if (patch.startedAt !== undefined) row.started_at = patch.startedAt;
-  if (patch.completedAt !== undefined) row.completed_at = patch.completedAt;
+  if (patch.clearCompletedAt) row.completed_at = null;
+  else if (patch.completedAt !== undefined) row.completed_at = patch.completedAt;
 
   const db = getServiceSupabase();
   const data = await runQuery(

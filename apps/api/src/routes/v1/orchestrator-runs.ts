@@ -20,6 +20,7 @@ import {
   type OrchestratorRun,
   type OrchestratorRunGate,
   type RunActionSummary,
+  type UpdateOrchestratorRunPatch,
 } from "@/lib/api/v1/orchestrator-store";
 import {
   createAction,
@@ -76,6 +77,23 @@ export const orchestratorRunsRouter = Router();
  */
 export function boardRevisionRequiresRunResume(status: OrchestratorRun["status"]): boolean {
   return status !== "running" && status !== "waiting";
+}
+
+export function boardRevisionResumePatch(run: OrchestratorRun): UpdateOrchestratorRunPatch {
+  return {
+    status: "running",
+    startedAt: run.startedAt ?? new Date().toISOString(),
+    clearCompletedAt: true,
+    clearError: true,
+  };
+}
+
+export function boardRevisionGateIdsToReset(
+  run: OrchestratorRun,
+  gates: OrchestratorRunGate[]
+): string[] {
+  if (run.status !== "canceled") return [];
+  return gates.filter((gate) => gate.status === "reached").map((gate) => gate.id);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -750,12 +768,9 @@ orchestratorRunsRouter.post(
       proposal: boardRevisionProposal(request),
     });
     if (boardRevisionRequiresRunResume(run.status)) {
-      await updateOrchestratorRun(runId, {
-        status: "running",
-        startedAt: run.startedAt ?? new Date().toISOString(),
-        completedAt: null as unknown as string,
-        error: null as unknown as Record<string, unknown>,
-      });
+      const gates = await listRunGates(runId);
+      await resetGatesToPending(boardRevisionGateIdsToReset(run, gates));
+      await updateOrchestratorRun(runId, boardRevisionResumePatch(run));
     }
     await enqueueOrchestratorDispatch(runId, auth.workspaceId);
 
@@ -927,8 +942,8 @@ orchestratorRunsRouter.post(
     }
     await updateOrchestratorRun(runId, {
       status: "running",
-      completedAt: null as unknown as string,
-      error: null as unknown as Record<string, unknown>,
+      clearCompletedAt: true,
+      clearError: true,
     });
     await enqueueOrchestratorDispatch(runId, auth.workspaceId);
 
@@ -967,8 +982,8 @@ orchestratorRunsRouter.post(
     await updateOrchestratorRun(runId, {
       status: "running",
       startedAt: run.startedAt ?? new Date().toISOString(),
-      completedAt: null as unknown as string,
-      error: null as unknown as Record<string, unknown>,
+      clearCompletedAt: true,
+      clearError: true,
     });
     await enqueueOrchestratorDispatch(runId, auth.workspaceId);
 
