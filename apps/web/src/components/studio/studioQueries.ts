@@ -11,6 +11,10 @@ import type { GenerationRunResultArtifact } from "../../lib/v1/generation-runs/s
 
 const RUN_POLL_INTERVAL_MS = 2_000;
 const REVIEW_GATE_POLL_INTERVAL_MS = 15_000;
+// Hidden documents must keep a slow poll alive (with refetchIntervalInBackground)
+// rather than return false: returning false cancels the interval, and embedded
+// webviews never emit the focus/visibility events that would restart it.
+const HIDDEN_POLL_INTERVAL_MS = 30_000;
 
 const studioQueryKeys = {
   generationRun: (projectId: string, runId: string) =>
@@ -65,9 +69,10 @@ export function useStudioGenerationRunQuery(
     refetchInterval: (query) => {
       const data = query.state.data;
       if (!data || isRunTerminal(data.run.status)) return false;
-      if (document.visibilityState === "hidden") return false;
+      if (document.visibilityState === "hidden") return HIDDEN_POLL_INTERVAL_MS;
       return data.run.reviewGate ? REVIEW_GATE_POLL_INTERVAL_MS : RUN_POLL_INTERVAL_MS;
     },
+    refetchIntervalInBackground: true,
   });
 }
 
@@ -164,9 +169,10 @@ export function useStudioTimelineExportQuery(
     refetchInterval: (query) => {
       const data = query.state.data;
       if (!data || isExportTerminal(data.job.status)) return false;
-      if (document.visibilityState === "hidden") return false;
+      if (document.visibilityState === "hidden") return HIDDEN_POLL_INTERVAL_MS;
       return RUN_POLL_INTERVAL_MS;
     },
+    refetchIntervalInBackground: true,
   });
 }
 

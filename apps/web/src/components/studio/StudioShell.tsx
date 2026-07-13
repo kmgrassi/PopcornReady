@@ -34,6 +34,7 @@ import {
 import styles from "./StudioShell.module.css";
 
 const LOCAL_DRAFT_ID = "local";
+const LOCAL_DRAFT_AUTOSAVE_DELAY_MS = 1_000;
 const TERMINAL_RECOVERABLE_RUN_STATUSES: GenerationRunStatus[] = ["failed", "canceled"];
 const START_RUN_HANDOFF_TIMEOUT_MS = 30_000;
 const START_RUN_HANDOFF_TIMEOUT_MESSAGE =
@@ -225,9 +226,10 @@ export function StudioShell({
       setDraftActionError(null);
       try {
         const record = await createDraftMutation.mutateAsync({ draft, step });
+        // Adopt the persisted draft in place — no flow remount. The mounted
+        // flow's state is the source of truth here, and a remount would drop
+        // focus plus any keystrokes typed while the create was in flight.
         setActiveDraftId(record.draftId);
-        setInitialPayload(record.payload);
-        setFlowKey((current) => current + 1);
         navigate(
           studioDraftPath({
             draftId: record.draftId,
@@ -330,8 +332,11 @@ export function StudioShell({
   }
 
   return (
+    // Keyed on flowKey alone: switching drafts bumps flowKey to remount, while
+    // in-place draft adoption (persistLocalDraft) changes activeDraftId without
+    // remounting the flow mid-edit.
     <StudioFlowView
-      key={`${activeDraftId}-${flowKey}`}
+      key={`flow-${flowKey}`}
       draftId={activeDraftId}
       initialBrief={seededBrief}
       initialPayload={initialPayload}
@@ -382,6 +387,17 @@ function StudioFlowView({
     briefRef.current = flow.brief;
   }, [flow.brief]);
 
+  // Autosave the not-yet-persisted draft once it has a goal, so brief edits
+  // survive a refresh before the first step advance. After the draft record is
+  // adopted, useStudioFlow's own debounced persistDraft takes over.
+  useEffect(() => {
+    if (draftId !== LOCAL_DRAFT_ID || !flow.brief.goal.trim()) return;
+    const timer = window.setTimeout(() => {
+      void onPersistLocalDraft(briefRef.current, flow.step);
+    }, LOCAL_DRAFT_AUTOSAVE_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [draftId, flow.brief, flow.step, onPersistLocalDraft]);
+
   const replaceDraftStepUrl = useCallback(
     (nextStep: StudioStep) => {
       const urlDraftId =
@@ -403,7 +419,11 @@ function StudioFlowView({
           flow.goTo("brief");
           return;
         }
-        void onPersistLocalDraft(briefRef.current, nextStep);
+        void onPersistLocalDraft(briefRef.current, nextStep).then((persistedId) => {
+          // The created record already carries nextStep; advance the mounted
+          // flow to match (draft adoption no longer remounts it).
+          if (persistedId) flow.goTo(nextStep);
+        });
         return;
       }
       flow.goTo(nextStep);

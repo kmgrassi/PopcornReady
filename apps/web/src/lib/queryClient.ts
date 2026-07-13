@@ -54,6 +54,10 @@ const POLL_INTERVAL_MS = 2_000;
 const REVIEW_POLL_INTERVAL_MS = 15_000;
 const DASHBOARD_POLL_INTERVAL_MS = 5_000;
 const DASHBOARD_HIDDEN_POLL_INTERVAL_MS = 30_000;
+// Hidden documents must keep a slow poll alive (with refetchIntervalInBackground)
+// rather than return false: returning false cancels the interval, and embedded
+// webviews never emit the focus/visibility events that would restart it.
+const HIDDEN_POLL_INTERVAL_MS = 30_000;
 
 interface QueryToastMeta extends Record<string, unknown> {
   errorMessage?: string;
@@ -466,6 +470,7 @@ export function useDashboardSummaryQuery(
         ? DASHBOARD_HIDDEN_POLL_INTERVAL_MS
         : DASHBOARD_POLL_INTERVAL_MS;
     },
+    refetchIntervalInBackground: true,
   });
 
   return {
@@ -649,9 +654,10 @@ export function useProjectStoryboardQuery(
       const active =
         pollWhileActive || storyboardProgress(data?.storyboard ?? null).isGenerating;
       if (!active) return false;
-      if (document.visibilityState === "hidden") return false;
+      if (document.visibilityState === "hidden") return HIDDEN_POLL_INTERVAL_MS;
       return POLL_INTERVAL_MS;
     },
+    refetchIntervalInBackground: true,
   });
 }
 
@@ -685,9 +691,10 @@ export function useProjectStoryboardJobQuery(projectId: string, enabled = true) 
     refetchInterval: (query) => {
       const data = query.state.data as ProjectStoryboardJobResponse | undefined;
       if (!shouldPollStoryboardJob(data)) return false;
-      if (document.visibilityState === "hidden") return false;
+      if (document.visibilityState === "hidden") return HIDDEN_POLL_INTERVAL_MS;
       return POLL_INTERVAL_MS;
     },
+    refetchIntervalInBackground: true,
   });
 }
 
@@ -706,9 +713,10 @@ export function useProjectAssetsQuery(
         ReturnType<typeof v1Api.listProjectAssets>
       > | undefined;
       if (!shouldPollProjectAssets(data?.assets)) return false;
-      if (document.visibilityState === "hidden") return false;
+      if (document.visibilityState === "hidden") return HIDDEN_POLL_INTERVAL_MS;
       return POLL_INTERVAL_MS;
     },
+    refetchIntervalInBackground: true,
   });
 }
 
@@ -840,9 +848,10 @@ export function useGenerationRunQuery(projectId: string, runId: string, enabled 
     refetchInterval: (query) => {
       const data = query.state.data as GenerationRunDetail | undefined;
       if (!shouldPollRun(data)) return false;
-      if (document.visibilityState === "hidden") return false;
+      if (document.visibilityState === "hidden") return HIDDEN_POLL_INTERVAL_MS;
       return data?.run.reviewGate ? REVIEW_POLL_INTERVAL_MS : POLL_INTERVAL_MS;
     },
+    refetchIntervalInBackground: true,
   });
 }
 
