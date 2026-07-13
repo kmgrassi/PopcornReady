@@ -137,6 +137,20 @@ test("structured routes to the fast model and delegates required tool-call helpe
   assert.deepEqual(seen, ["claude-haiku"]);
 });
 
+test("structured rejects a non-object tool payload", async () => {
+  const client = createAnthropicLlmClient({
+    model: "claude-x",
+    createMessage: async (): Promise<AnthropicResponse> => ({
+      content: [{ type: "tool_use", name: "return_result", input: "oops" }],
+    }),
+  });
+
+  await assert.rejects(
+    () => client.structured({ cachedSystem: "s", user: "u", schema: {} }),
+    /invalid tool input/
+  );
+});
+
 test("chooseTool sends input_schema tools + tool_choice auto and maps the result", async () => {
   let sent: AnthropicRequest | undefined;
   const client = createAnthropicLlmClient({

@@ -2,6 +2,7 @@ import OpenAI from "openai";
 
 import {
   ChooseToolArgs,
+  JsonObject,
   JsonSchema,
   LlmClient,
   LlmEffort,
@@ -147,8 +148,8 @@ export function sanitizeForOpenAI(schema: JsonSchema): JsonSchema {
   const walk = (value: unknown): unknown => {
     if (Array.isArray(value)) return value.map(walk);
     if (value && typeof value === "object") {
-      const out: Record<string, unknown> = {};
-      for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+      const out: JsonObject = {};
+      for (const [key, val] of Object.entries(value as JsonObject)) {
         if (UNSUPPORTED_SCHEMA_KEYS.has(key)) continue;
         out[key] = walk(val);
       }
@@ -159,7 +160,11 @@ export function sanitizeForOpenAI(schema: JsonSchema): JsonSchema {
   return walk(schema) as JsonSchema;
 }
 
-function toolInputFromOpenAIMessage<T>(
+function isJsonObject(value: unknown): value is JsonObject {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function toolInputFromOpenAIMessage<T extends object>(
   message: OpenAiMessageLike | null | undefined,
   expectedTool: string
 ): T {
@@ -172,8 +177,20 @@ function toolInputFromOpenAIMessage<T>(
     throw new Error(`Model did not call required tool: ${expectedTool}`);
   }
   try {
-    return JSON.parse(raw) as T;
-  } catch {
+    const parsed = JSON.parse(raw);
+    if (!isJsonObject(parsed)) {
+      throw new Error(
+        `Model returned invalid tool arguments for ${expectedTool}: expected a JSON object.`
+      );
+    }
+    return parsed as T;
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.includes("expected a JSON object")
+    ) {
+      throw error;
+    }
     throw new Error(
       `Model returned invalid tool arguments for ${expectedTool}: ${raw.slice(0, 500)}`
     );
@@ -193,13 +210,13 @@ export function interpretOpenAiToolResponse(
     // The orchestrator asks for one tool at a time; if the model returns several
     // (parallel tool calls), act on the first and ignore the rest.
     const call = calls[0];
-    let input: Record<string, unknown> = {};
+    let input: JsonObject = {};
     const raw = call?.function?.arguments;
     if (typeof raw === "string" && raw.trim()) {
       try {
         const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-          input = parsed as Record<string, unknown>;
+        if (isJsonObject(parsed)) {
+          input = parsed;
         }
       } catch {
         // Malformed arguments → empty input; the registry will reject if needed.
@@ -234,7 +251,7 @@ export function createOpenAiLlmClient(deps: OpenAiDeps): LlmClient {
   const pickModel = (effort?: LlmEffort): string =>
     effort && FAST_EFFORTS.has(effort) ? fastModel : model;
 
-  const structuredImpl = async <T>(
+  const structuredImpl = async <T extends object>(
     args: StructuredArgs,
     userContent: OpenAiUserContent
   ): Promise<T> => {
@@ -266,10 +283,10 @@ export function createOpenAiLlmClient(deps: OpenAiDeps): LlmClient {
     provider: "openai",
     model,
     modelFor: pickModel,
-    structured<T>(args: StructuredArgs) {
+    structured<T extends object>(args: StructuredArgs) {
       return structuredImpl<T>(args, args.user);
     },
-    async structuredVision<T>(args: StructuredVisionArgs) {
+    async structuredVision<T extends object>(args: StructuredVisionArgs) {
       const { promises: fs } = await import("node:fs");
       const parts: OpenAiUserContentPart[] = [{ type: "text", text: args.user }];
       for (const image of args.images) {

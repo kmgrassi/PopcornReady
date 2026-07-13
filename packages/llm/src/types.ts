@@ -11,7 +11,8 @@ export type LlmProvider = "openai" | "anthropic";
 // judgement. Unset -> the provider default (treated as "medium").
 export type LlmEffort = "minimal" | "low" | "medium" | "high";
 
-export type JsonSchema = Record<string, unknown>;
+export type JsonObject = Record<string, unknown>;
+export type JsonSchema = JsonObject;
 
 // A tool the model may choose to call, in a provider-neutral shape. Adapters
 // map this to OpenAI `function` tools or Anthropic `input_schema` tools.
@@ -25,7 +26,7 @@ export type ToolChoiceResult =
   | {
       type: "tool_call";
       toolName: string;
-      input: Record<string, unknown>;
+      input: JsonObject;
       model: string;
     }
   | {
@@ -68,8 +69,8 @@ export interface LlmClient {
   // minimal/low). Callers use it to record reviewer/judge provenance.
   modelFor(effort?: LlmEffort): string;
   // Structured result via a required tool call (planEdit/critique/revise/...).
-  structured<T>(args: StructuredArgs): Promise<T>;
-  structuredVision<T>(args: StructuredVisionArgs): Promise<T>;
+  structured<T extends object>(args: StructuredArgs): Promise<T>;
+  structuredVision<T extends object>(args: StructuredVisionArgs): Promise<T>;
   // One tool-calling turn: pick the next tool, or finish with text.
   chooseTool(args: ChooseToolArgs): Promise<ToolChoiceResult>;
 }
