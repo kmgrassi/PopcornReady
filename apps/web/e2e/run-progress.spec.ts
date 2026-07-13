@@ -224,6 +224,7 @@ test("opens generated asset feedback in a modal and posts the targeted revision 
         label: "Score bed",
         status: "succeeded",
         provider: "fixture",
+        prompt: "Warm cinematic score with a dramatic orchestral swell.",
         promptPreview: "Warm cinematic score.",
         assetId: "asset-score-1",
         createdAt: now,
@@ -272,7 +273,10 @@ test("opens generated asset feedback in a modal and posts the targeted revision 
   const dialog = page.getByRole("dialog", { name: "Score bed" });
   await expect(dialog).toBeVisible();
 
-  const feedback = dialog.getByLabel("Feedback for the AI");
+  const feedback = dialog.getByLabel("Original prompt");
+  await expect(feedback).toHaveValue(
+    "Warm cinematic score with a dramatic orchestral swell."
+  );
   await feedback.fill("Make the score less dramatic.");
   await expect.poll(() => getCount).toBeGreaterThan(1);
   await expect(dialog).toBeVisible();
