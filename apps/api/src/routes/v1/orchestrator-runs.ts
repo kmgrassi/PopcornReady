@@ -477,6 +477,10 @@ export function isInsufficientCreditsFailure(action: RunActionSummary | undefine
   return action?.status === "failed" && action.error?.kind === INSUFFICIENT_CREDITS_ERROR_KIND;
 }
 
+export function runFailedForInsufficientCredits(run: OrchestratorRun): boolean {
+  return run.status === "failed" && run.error?.kind === INSUFFICIENT_CREDITS_ERROR_KIND;
+}
+
 function latestActionWithStatus(
   actions: RunActionSummary[],
   status: "running" | "applied"
@@ -875,7 +879,9 @@ orchestratorRunsRouter.post(
 
     const actions = await listRunActions(runId);
     const failedAction = [...actions].reverse().find((action) => action.status === "failed");
-    if (!failedAction || !isInsufficientCreditsFailure(failedAction)) {
+    const failedForInsufficientCredits =
+      isInsufficientCreditsFailure(failedAction) || runFailedForInsufficientCredits(run);
+    if (!failedForInsufficientCredits) {
       throw new ApiError(
         "validation_failed",
         "This run did not stop because its account ran out of credits."
@@ -884,7 +890,9 @@ orchestratorRunsRouter.post(
 
     // Preserve the completed plan, keyframes, and active selections. Hiding
     // only the failed action lets the agent retry it without regenerating work.
-    await supersedeRunActions([failedAction.id]);
+    if (failedAction) {
+      await supersedeRunActions([failedAction.id]);
+    }
     await updateOrchestratorRun(runId, {
       status: "running",
       completedAt: null as unknown as string,
