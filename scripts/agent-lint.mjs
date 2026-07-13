@@ -23,14 +23,27 @@ const files = explicitFiles.length > 0 ? explicitFiles : changedFiles();
 const errors = [];
 const fixed = [];
 
+function hasUnstagedChanges(file) {
+  const diff = execFileSync("git", ["diff", "--name-only", "--", file], { encoding: "utf8" }).trim();
+  return diff.length > 0;
+}
+
+function readContent(file) {
+  if (!staged) return readFileSync(resolve(file), "utf8");
+  return execFileSync("git", ["show", `:${file}`], { encoding: "utf8" });
+}
+
 for (const file of files) {
   if (!file.endsWith(".md") || (!file.startsWith("docs/agent-system/") && !file.startsWith(".agent/"))) continue;
   const path = resolve(file);
-  let content = readFileSync(path, "utf8");
+  const content = readContent(file);
   const summaryCount = (content.match(/^<!-- agent-summary:/gm) ?? []).length;
   if (summaryCount < 7) errors.push(`${file}: requires seven agent-summary lines (found ${summaryCount})`);
   if (!content.endsWith("\n")) {
     if (!fix) errors.push(`${file}: missing final newline (run pnpm agent:lint:fix)`);
+    else if (staged && hasUnstagedChanges(file)) {
+      errors.push(`${file}: cannot auto-fix staged file with unstaged changes; stage the intended content first`);
+    }
     else {
       writeFileSync(path, `${content}\n`);
       fixed.push(file);

@@ -25,6 +25,7 @@ Create a router-style agent system that makes work discoverable, testable, revie
 
 - Added `AGENT_WORKFLOW.md` and converted `AGENTS.md` into a task router while preserving existing conventions.
 - Added agent-system policies, queue, worksheet/feedback templates, hook installer, lint, validation, sweep, and external-review adapter.
+- Followed up on PR review: `scripts/agent-review.sh` now skips pnpm's leading `--`, and `scripts/agent-lint.mjs` validates staged markdown from the index while refusing auto-fixes that would stage unrelated unstaged changes.
 
 ## Validation evidence
 
@@ -32,11 +33,14 @@ Create a router-style agent system that makes work discoverable, testable, revie
 - `pnpm agent:lint -- --staged --fix` passed for the staged repository changes.
 - `pnpm agent:validate -- --scope docs` passed.
 - `git diff --cached --check` passed.
+- `pnpm agent:review -- research AGENT-OPS-001` now reaches the configured-reviewer guard instead of misparsing `--`.
+- `node scripts/agent-lint.mjs --staged` passed when the staged blob was valid and the worktree copy was intentionally invalid, confirming staged-content validation.
+- `node scripts/agent-lint.mjs --staged --fix` now refuses to auto-fix a staged file with unstaged changes, preventing unrelated hunks from being staged.
 - Runtime application execution is not applicable: this PR changes repository process documentation and local tooling only, not web or API behavior.
 
 ## Independent reviews
 
-Unavailable. The workspace exposes no configured alternate-agent CLI or `AGENT_REVIEW_COMMAND`; this limitation and adapter setup are recorded in the feedback log.
+Unavailable. The workspace exposes no configured alternate-agent CLI or `AGENT_REVIEW_COMMAND`; the review smoke still fails at that explicit guard, and this limitation is recorded in the feedback log.
 
 ## Blockers and risks
 
@@ -44,4 +48,4 @@ Visual-regression and performance budgets need stable fixtures and a product dec
 
 ## Next action / handoff
 
-Open a review-ready PR. The first follow-up should configure an independent reviewer, then use it at all four checkpoints.
+Addressed the open Codex review findings; rerun GitHub checks if needed and request re-review.
