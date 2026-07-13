@@ -17,6 +17,8 @@ export interface AiAssetFeedbackDialogProps {
   asset: ReactNode;
   pending?: boolean;
   error?: string | null;
+  /** Seeds the editable request with the prompt that generated the asset. */
+  initialMessage?: string | null;
   modelPurpose?: ModelSettingPurpose | null;
   initialModelSelection?: AssetGenerationModelSelection | null;
   onSubmit: (
@@ -33,6 +35,7 @@ export function AiAssetFeedbackDialog({
   asset,
   pending = false,
   error,
+  initialMessage,
   modelPurpose,
   initialModelSelection,
   onSubmit,
@@ -52,11 +55,11 @@ export function AiAssetFeedbackDialog({
 
   useEffect(() => {
     if (!open) return;
-    setMessage("");
+    setMessage(initialMessage ?? "");
     setProvider(initialProvider);
     setModel(initialModel);
     setModelTouched(false);
-  }, [initialModel, initialProvider, open]);
+  }, [initialMessage, initialModel, initialProvider, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -118,7 +121,7 @@ export function AiAssetFeedbackDialog({
         <div className={styles.body}>
           <div className={styles.assetPane}>{asset}</div>
           <label className={styles.feedbackPane}>
-            <span>Feedback for the AI</span>
+            <span>{initialMessage?.trim() ? "Original prompt" : "Feedback for the AI"}</span>
             <textarea
               value={message}
               rows={8}

@@ -232,6 +232,7 @@ export function StoryboardBoard({
         open={Boolean(selectedTile)}
         title={selectedTile?.label ?? "Edit asset"}
         subtitle={selectedSubtitle}
+        initialMessage={selectedTile?.prompt}
         pending={selectedPending}
         error={selectedTile ? error : null}
         modelPurpose={
