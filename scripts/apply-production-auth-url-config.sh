@@ -35,7 +35,7 @@ current_config="$(curl --fail-with-body --silent --show-error \
   --header "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
   "$api_url")"
 
-uri_allow_list="$(jq -cn \
+uri_allow_list="$(jq -cnr \
   --arg existing "$(jq -r '.uri_allow_list // ""' <<<"$current_config")" \
   --argjson required "$redirect_urls" '
     ($existing | split(",") | map(gsub("^\\s+|\\s+$"; "") | select(length > 0)) + $required)
