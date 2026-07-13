@@ -273,7 +273,7 @@ test("opens generated asset feedback in a modal and posts the targeted revision 
   const dialog = page.getByRole("dialog", { name: "Score bed" });
   await expect(dialog).toBeVisible();
 
-  const feedback = dialog.getByLabel("Original prompt");
+  const feedback = dialog.getByLabel("Generation prompt");
   await expect(feedback).toHaveValue(
     "Warm cinematic score with a dramatic orchestral swell."
   );

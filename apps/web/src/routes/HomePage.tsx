@@ -40,7 +40,7 @@ import styles from "./HomePage.module.css";
 
 const GITHUB_URL = "https://github.com/kmgrassi/popcornready";
 const PROMPT_MIN_LENGTH = 12;
-const LENGTH_OPTIONS = [15, 30, 45, 60];
+const LENGTH_OPTIONS = [10, 15, 30, 45, 60];
 
 function formatBytes(bytes: number) {
   if (bytes === 0) return "0 B";

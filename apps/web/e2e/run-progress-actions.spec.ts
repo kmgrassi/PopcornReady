@@ -18,8 +18,8 @@ async function clickStopHere(page: Page) {
 }
 
 async function fillReviewFeedback(page: Page, note: string) {
-  const legacyFeedback = page.getByLabel("Feedback");
-  if (await legacyFeedback.isVisible().catch(() => false)) {
+  const legacyFeedback = page.locator("textarea#review-feedback-note").filter({ visible: true });
+  if ((await legacyFeedback.count()) === 1) {
     await legacyFeedback.fill(note);
     return;
   }
