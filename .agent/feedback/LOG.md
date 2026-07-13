@@ -28,7 +28,6 @@
 - What helped: Durable action history and Railway deployment context made the no-op completion reproducible without rerunning customer work.
 - Friction or failure: A feedback action was allowed to complete a run without a downstream output; direct image regeneration needed explicit run-credit accounting.
 - Suggested improvement: Add route-level integration coverage for terminal image-tile revisions with mocked generation and credit dependencies.
-
 ### 2026-07-13 — AGENT-OPS-001
 - What helped: The review surfaced two concrete command-line correctness gaps that were easy to reproduce with small shell smokes.
 - Friction or failure: `pnpm --` forwarding and partially staged markdown made the first tooling cut validate the wrong content.
