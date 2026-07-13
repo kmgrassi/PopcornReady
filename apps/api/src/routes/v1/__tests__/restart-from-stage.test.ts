@@ -8,6 +8,7 @@ import type {
 import {
   downstreamActionIds,
   downstreamGateIds,
+  isInsufficientCreditsFailure,
   restartSelectionScope,
 } from "../orchestrator-runs";
 
@@ -86,4 +87,21 @@ test("restartSelectionScope from asset_generation clears beat + downstream selec
 test("restartSelectionScope from timeline only clears the cut selection", () => {
   const scope = restartSelectionScope(GENERATION_STAGE_ORDER.timeline_assembly);
   assert.deepEqual(scope, { exactRoles: ["cut"], rolePrefixes: [] });
+});
+
+test("credit recovery accepts only a failed insufficient-credit action", () => {
+  const creditFailure: RunActionSummary = {
+    ...action("a-credit", "generate_clip"),
+    status: "failed",
+    error: { kind: "insufficient_credits", message: "Out of credits." },
+  };
+  assert.equal(isInsufficientCreditsFailure(creditFailure), true);
+  assert.equal(isInsufficientCreditsFailure(action("a-provider", "generate_clip")), false);
+  assert.equal(
+    isInsufficientCreditsFailure({
+      ...creditFailure,
+      error: { kind: "provider_failed", message: "Provider failed." },
+    }),
+    false,
+  );
 });

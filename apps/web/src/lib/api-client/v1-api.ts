@@ -517,6 +517,11 @@ export const v1Api = {
         body: body ?? {},
       }
     ),
+  retryGenerationRunAfterCreditUpdate: (projectId: string, runId: string) =>
+    apiRequest<GenerationRunDetail>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/generation-runs/${encodeURIComponent(runId)}/retry-after-credit-update`,
+      { method: "POST" }
+    ),
   // Re-enter a run at an earlier stage: supersede that stage + downstream and
   // resume so the agent re-runs from there.
   restartGenerationRunFromStage: (

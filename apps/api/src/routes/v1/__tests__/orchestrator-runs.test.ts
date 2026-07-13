@@ -8,7 +8,11 @@ import type {
   RunActionSummary,
 } from "@/lib/api/v1/orchestrator-store";
 import { projectRunDetailFromParts } from "../orchestrator-run-projections.js";
-import { parseBoardRevisionTarget, stopAfterTools } from "../orchestrator-runs";
+import {
+  parseBoardRevisionTarget,
+  runFailedForInsufficientCredits,
+  stopAfterTools,
+} from "../orchestrator-runs";
 
 
 function runFixture(overrides: Partial<OrchestratorRun> = {}): OrchestratorRun {
@@ -539,4 +543,34 @@ test("projects full action prompts into stage items", () => {
   assert.ok(payload.stageItems[0]?.promptPreview);
   assert.notEqual(payload.stageItems[0]?.promptPreview, longPrompt);
   assert.match(payload.stageItems[0]?.promptPreview ?? "", /…$/);
+});
+
+test("credit recovery accepts run-level insufficient-credit failures without a failed action", () => {
+  assert.equal(
+    runFailedForInsufficientCredits(
+      runFixture({
+        status: "failed",
+        error: { kind: "insufficient_credits", message: "Ran out of credits mid-run." },
+      })
+    ),
+    true
+  );
+  assert.equal(
+    runFailedForInsufficientCredits(
+      runFixture({
+        status: "failed",
+        error: { kind: "provider_failed", message: "Provider quota failure." },
+      })
+    ),
+    false
+  );
+  assert.equal(
+    runFailedForInsufficientCredits(
+      runFixture({
+        status: "running",
+        error: { kind: "insufficient_credits", message: "Still running." },
+      })
+    ),
+    false
+  );
 });
