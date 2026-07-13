@@ -61,6 +61,7 @@ export interface V1Asset {
   // Stable, project-scoped, lowercase handle written by the generating agent. Agents
   // may reference this asset by (project, slug); resolved in getAssetRow.
   slug?: string | null;
+  description?: string;
   filename: string;
   status: "ready" | "pending";
   source: AgentAssetSource;

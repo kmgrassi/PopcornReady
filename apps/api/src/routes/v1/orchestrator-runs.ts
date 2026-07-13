@@ -449,7 +449,11 @@ async function requireReadyVisualAssets(input: {
   }
 }
 
-async function assembleRunDetail(runId: string, projectId: string): Promise<GenerationRunDetail> {
+async function assembleRunDetail(
+  runId: string,
+  workspaceId: string,
+  projectId: string
+): Promise<GenerationRunDetail> {
   const [run, gates, actions] = await Promise.all([
     getOrchestratorRun(runId),
     listRunGates(runId),
@@ -458,7 +462,26 @@ async function assembleRunDetail(runId: string, projectId: string): Promise<Gene
   if (run.projectId !== projectId) {
     throw new ApiError("not_found", `Generation run not found: ${runId}`);
   }
-  return projectRunDetailFromParts(run, gates, actions);
+  const outputAssetIds = [...new Set(actions.flatMap((action) => action.outputAssetIds))];
+  const assetPrompts = new Map<string, { prompt?: string; description?: string }>();
+  await Promise.all(
+    outputAssetIds.map(async (assetId) => {
+      try {
+        const asset = await getAsset(workspaceId, projectId, assetId);
+        const prompt = asset.provenance?.prompt?.trim();
+        const description = asset.description?.trim();
+        if (prompt || description) {
+          assetPrompts.set(assetId, {
+            ...(prompt ? { prompt } : {}),
+            ...(description ? { description } : {}),
+          });
+        }
+      } catch (err) {
+        if (!(err instanceof ApiError) || err.code !== "not_found") throw err;
+      }
+    })
+  );
+  return projectRunDetailFromParts(run, gates, actions, assetPrompts);
 }
 
 async function requireProjectRun(runId: string, projectId: string): Promise<OrchestratorRun> {
@@ -641,7 +664,11 @@ orchestratorRunsRouter.get(
     const runId = requireParam(params, "runId");
     await requireProjectAccess(auth.workspaceId, projectId);
     await recordProjectActivity(auth.workspaceId, projectId);
-    return { status: 200, body: await assembleRunDetail(runId, projectId), headers: NO_STORE_HEADERS };
+    return {
+      status: 200,
+      body: await assembleRunDetail(runId, auth.workspaceId, projectId),
+      headers: NO_STORE_HEADERS,
+    };
   })
 );
 
@@ -658,7 +685,7 @@ orchestratorRunsRouter.post(
       await resolveGate(gate.id, "approved");
       await enqueueOrchestratorDispatch(runId, auth.workspaceId);
     }
-    return { status: 202, body: await assembleRunDetail(runId, projectId) };
+    return { status: 202, body: await assembleRunDetail(runId, auth.workspaceId, projectId) };
   })
 );
 
@@ -675,7 +702,7 @@ orchestratorRunsRouter.post(
       await resolveGate(gate.id, "rejected");
       await enqueueOrchestratorDispatch(runId, auth.workspaceId);
     }
-    return { status: 202, body: await assembleRunDetail(runId, projectId) };
+    return { status: 202, body: await assembleRunDetail(runId, auth.workspaceId, projectId) };
   })
 );
 
@@ -687,7 +714,7 @@ orchestratorRunsRouter.post(
     await requireProjectAccess(auth.workspaceId, projectId);
     const run = await requireProjectRun(runId, projectId);
     await stopAfterCurrentStep(run);
-    return { status: 200, body: await assembleRunDetail(runId, projectId) };
+    return { status: 200, body: await assembleRunDetail(runId, auth.workspaceId, projectId) };
   })
 );
 
@@ -900,7 +927,7 @@ orchestratorRunsRouter.post(
     });
     await enqueueOrchestratorDispatch(runId, auth.workspaceId);
 
-    return { status: 202, body: await assembleRunDetail(runId, projectId) };
+    return { status: 202, body: await assembleRunDetail(runId, auth.workspaceId, projectId) };
   })
 );
 
@@ -940,6 +967,6 @@ orchestratorRunsRouter.post(
     });
     await enqueueOrchestratorDispatch(runId, auth.workspaceId);
 
-    return { status: 202, body: await assembleRunDetail(runId, projectId) };
+    return { status: 202, body: await assembleRunDetail(runId, auth.workspaceId, projectId) };
   })
 );

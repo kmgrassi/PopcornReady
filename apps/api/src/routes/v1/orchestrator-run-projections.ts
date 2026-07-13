@@ -71,6 +71,11 @@ export interface GenerationRunDetail {
   }>;
 }
 
+export interface RunAssetPrompt {
+  prompt?: string;
+  description?: string;
+}
+
 function generationActions(actions: RunActionSummary[]): RunActionSummary[] {
   return actions.filter((action) => action.tool !== BOARD_FEEDBACK_TOOL);
 }
@@ -390,35 +395,44 @@ function actionPrompt(action: RunActionSummary): string | undefined {
   return typeof prompt === "string" && prompt.trim() ? prompt : undefined;
 }
 
-function projectStageItems(run: OrchestratorRun, actions: RunActionSummary[]): GenerationStageItem[] {
+function projectStageItems(
+  run: OrchestratorRun,
+  actions: RunActionSummary[],
+  assetPrompts: ReadonlyMap<string, RunAssetPrompt>
+): GenerationStageItem[] {
   return generationActions(actions).flatMap((action) => {
     const type = toolStage(action.tool);
-    const prompt = actionPrompt(action);
-    return action.outputAssetIds.map((assetId, index) => ({
-      itemId: `${action.id}:${assetId}`,
-      stageId: toolStageId(run.id, action.tool),
-      kind: toolItemKind(action.tool),
-      purpose: toolItemPurpose(action.tool),
-      label: `${action.tool} output ${index + 1}`,
-      status: actionStatus(action.status),
-      ...(prompt ? { prompt, promptPreview: promptPreview(prompt) } : {}),
-      assetId,
-      artifactId: assetId,
-      createdAt: action.createdAt,
-      updatedAt: action.createdAt,
-    }));
+    const actionLevelPrompt = actionPrompt(action);
+    return action.outputAssetIds.map((assetId, index) => {
+      const assetPrompt = assetPrompts.get(assetId);
+      const prompt = actionLevelPrompt ?? assetPrompt?.prompt ?? assetPrompt?.description;
+      return {
+        itemId: `${action.id}:${assetId}`,
+        stageId: toolStageId(run.id, action.tool),
+        kind: toolItemKind(action.tool),
+        purpose: toolItemPurpose(action.tool),
+        label: `${action.tool} output ${index + 1}`,
+        status: actionStatus(action.status),
+        ...(prompt ? { prompt, promptPreview: promptPreview(prompt) } : {}),
+        assetId,
+        artifactId: assetId,
+        createdAt: action.createdAt,
+        updatedAt: action.createdAt,
+      };
+    });
   });
 }
 
 export function projectRunDetailFromParts(
   run: OrchestratorRun,
   gates: OrchestratorRunGate[],
-  actions: RunActionSummary[]
+  actions: RunActionSummary[],
+  assetPrompts: ReadonlyMap<string, RunAssetPrompt> = new Map()
 ): GenerationRunDetail {
   return {
     run: projectRun(run, gates, actions),
     stages: projectStages(run, actions),
-    stageItems: projectStageItems(run, actions),
+    stageItems: projectStageItems(run, actions, assetPrompts),
     resultArtifacts: projectResultArtifacts(run, actions),
   };
 }
