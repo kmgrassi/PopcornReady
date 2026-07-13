@@ -117,6 +117,7 @@
 }
 
 .feedbackPane textarea {
+  grid-row: -2 / -1;
   min-height: 280px;
   width: 100%;
   resize: none;
