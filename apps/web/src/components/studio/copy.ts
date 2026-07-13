@@ -33,6 +33,7 @@ export const studioCopy = {
 } as const;
 
 export const lengthOptions = [
+  { value: 10, label: "10s", description: "Teaser" },
   { value: 30, label: "30s", description: "Ad" },
   { value: 60, label: "60s", description: "Short" },
   { value: 120, label: "2 min", description: "Explainer" },
