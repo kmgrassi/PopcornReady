@@ -86,6 +86,7 @@
 }
 
 .media {
+  position: relative;
   display: grid;
   place-items: center;
   aspect-ratio: 16 / 9;
@@ -112,6 +113,40 @@
   color: var(--text-strong);
   font-size: var(--text-lg);
   font-weight: 850;
+}
+
+/* Keep the current frame visible while the agent produces its replacement, so
+   the board shows exactly which asset is changing instead of only a global run
+   notification. */
+.regenerating {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: color-mix(in srgb, var(--bg) 64%, transparent);
+  color: var(--text-strong);
+  font-size: var(--text-xs);
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.regeneratingSpinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: var(--radius-pill);
+  animation: storyboard-regenerating-spin 0.8s linear infinite;
+}
+
+@keyframes storyboard-regenerating-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .tileBody {
@@ -159,5 +194,11 @@
 @media (max-width: 820px) {
   .header {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .regeneratingSpinner {
+    animation: none;
   }
 }

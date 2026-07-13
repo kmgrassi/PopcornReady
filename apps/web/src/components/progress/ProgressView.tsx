@@ -433,6 +433,10 @@ export function ProgressView({
   const [fallbackError, setFallbackError] = useState<string | null>(null);
   const [fallbackFeedbackNote, setFallbackFeedbackNote] = useState("");
   const [boardFeedbackPendingKey, setBoardFeedbackPendingKey] = useState<string | null>(null);
+  // The request returns as soon as the agent has queued the work. Keep the
+  // target key after that handoff so its board tile remains visibly in progress
+  // for the background generation, not just the network request.
+  const [boardFeedbackActiveKey, setBoardFeedbackActiveKey] = useState<string | null>(null);
   const [boardFeedbackError, setBoardFeedbackError] = useState<string | null>(null);
   const [selectedAssetItemId, setSelectedAssetItemId] = useState<string | null>(null);
   const reviewGateKey = detail.run.reviewGate?.stageId ?? null;
@@ -448,7 +452,14 @@ export function ProgressView({
 
   useEffect(() => {
     setSelectedAssetItemId(null);
+    setBoardFeedbackActiveKey(null);
   }, [run.runId]);
+
+  useEffect(() => {
+    if (isTerminal(detail.run.status)) {
+      setBoardFeedbackActiveKey(null);
+    }
+  }, [detail.run.status]);
 
   useEffect(() => {
     setFallbackFeedbackNote("");
@@ -682,6 +693,7 @@ export function ProgressView({
     setBoardFeedbackError(null);
     try {
       await v1Api.createRunBoardRevision(detail.run.projectId, detail.run.runId, input);
+      setBoardFeedbackActiveKey(key);
       await onBoardRevisionSuccess?.();
     } catch (err) {
       setBoardFeedbackError(
@@ -830,6 +842,7 @@ export function ProgressView({
                   items={generatedOutputGroups.boardItems}
                   storyboard={projectStoryboard}
                   pendingTargetKey={boardFeedbackPendingKey}
+                  activeTargetKey={boardFeedbackActiveKey}
                   error={boardFeedbackError}
                   onFeedback={submitBoardFeedback}
                 />

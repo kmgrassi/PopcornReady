@@ -21,6 +21,7 @@ interface StoryboardBoardProps {
   items: GenerationStageItem[];
   storyboard?: ProjectStoryboard | null;
   pendingTargetKey?: string | null;
+  activeTargetKey?: string | null;
   error?: string | null;
   onFeedback: (input: {
     message: string;
@@ -145,6 +146,7 @@ export function StoryboardBoard({
   items,
   storyboard,
   pendingTargetKey,
+  activeTargetKey,
   error,
   onFeedback,
 }: StoryboardBoardProps) {
@@ -187,6 +189,7 @@ export function StoryboardBoard({
       <div className={styles.grid}>
         {tiles.map((tile, index) => {
           const key = targetKey(tile.target);
+          const regenerating = pendingTargetKey === key || activeTargetKey === key;
           const regenAssetId = tile.target.assetId ?? tile.item?.assetId;
           const canRegenerate =
             !tile.mediaUrl && tile.item?.kind === "image" && Boolean(regenAssetId);
@@ -197,7 +200,7 @@ export function StoryboardBoard({
                 type="button"
                 onClick={() => setSelectedTile(tile)}
                 aria-label={`Edit ${tile.label} with AI`}
-                aria-busy={pendingTargetKey === key || undefined}
+                aria-busy={regenerating || undefined}
               >
                 <div className={styles.media}>
                   {tile.mediaUrl ? (
@@ -209,6 +212,12 @@ export function StoryboardBoard({
                   ) : (
                     <span aria-hidden="true">{index + 1}</span>
                   )}
+                  {regenerating ? (
+                    <span className={styles.regenerating} role="status" aria-live="polite">
+                      <span className={styles.regeneratingSpinner} aria-hidden />
+                      Regenerating…
+                    </span>
+                  ) : null}
                 </div>
                 <div className={styles.tileBody}>
                   <div className={styles.tileMeta}>
