@@ -634,25 +634,7 @@
   }
 }
 
-/* ================================================================
- * Landing route — modern, AI-native theme + overrides
- * ----------------------------------------------------------------
- * These hook the pre-existing GLOBAL chrome/landing classes
- * (`.web-shell`, `.landing`, `.lp-*`) that HomePage still consumes from
- * globals.css, so each selector is wrapped in `:global(...)` and scoped to the
- * marketing surface via `.web-shell:has(.landing)` / `.landing`. They never
- * leak into the dashboard, login, or signup. New self-contained pieces
- * (AgentRunPreview, Reveal) are proper scoped modules instead.
- *
- * `@keyframes` below are module-scoped; postcss-modules rewrites the matching
- * `animation` references file-wide, so the names stay linked. (Even if a name
- * failed to link, the effect is only a missing decorative animation.)
- * ================================================================ */
-
-/* 1 — Marketing palette. The landing now inherits the active app theme's
- * palette, so the footer theme switcher re-themes it like every other surface.
- * Only the landing-only design helpers (--lp-*) live here; the dark set is the
- * default (Accent/Night), with light-theme variants overridden below. */
+/* Landing global chrome overrides stay together so scoped keyframes keep their consumers. */
 :global(html:has(.landing)) {
   background: var(--bg);
 }
@@ -678,10 +660,7 @@
   color-scheme: dark;
 }
 
-/* Light themes (Warm, Studio): flip the white-alpha glass/edges/texture to
- * dark-alpha so glass surfaces keep visible frosting + hairline borders on pale
- * backgrounds, soften the drop shadows, and darken the hero headline so it
- * stays legible. The accent-tinted aurora glow works on either background. */
+/* Light themes flip glass edges and shadows while preserving landing scope. */
 :global(html[data-theme="popcorn-warm"] .web-shell:has(.landing)),
 :global(html[data-theme="popcorn-studio"] .web-shell:has(.landing)) {
   --lp-glass: rgba(0, 0, 0, 0.03);
@@ -708,9 +687,7 @@
   border-top-color: var(--border);
 }
 
-/* 2 — Generative hero backdrop: aurora glow + masked dot grid sit behind the
- * page top. `isolation` keeps the z-index:-1 layers behind the content but in
- * front of the shell. */
+/* Generative hero backdrop. */
 :global(.landing) {
   position: relative;
   isolation: isolate;
@@ -815,7 +792,7 @@
   }
 }
 
-/* 3 — Hero typography */
+/* Hero typography */
 :global(.web-shell:has(.landing) .lp-eyebrow) {
   display: inline-flex;
   align-items: center;
@@ -862,8 +839,7 @@
   letter-spacing: -0.025em;
 }
 
-/* 4 — Glass surfaces + depth: gradient hairline borders via the
- * padding-box / border-box clip trick, an inner top highlight, hover lift. */
+/* Glass surfaces + depth */
 :global(.web-shell:has(.landing) .lp-card),
 :global(.web-shell:has(.landing) .lp-step),
 :global(.web-shell:has(.landing) .lp-price-card),
@@ -917,7 +893,7 @@
     0 0 18px rgba(245, 182, 42, 0.14);
 }
 
-/* Primary CTA — gradient fill + glow */
+/* Primary CTA */
 :global(.web-shell:has(.landing) .lp-prompt-submit),
 :global(.web-shell:has(.landing) .lp-submit-config-toggle) {
   background: linear-gradient(120deg, var(--accent), var(--accent-2));
@@ -938,9 +914,7 @@
   box-shadow: 0 16px 40px rgba(245, 120, 60, 0.38);
 }
 
-/* 5 — "How it works" connected pipeline. Each card needs its own positioned
- * context so the connector pseudo-elements anchor to that card (not the grid
- * container) and bridge the gap between consecutive steps. */
+/* "How it works" connected pipeline. */
 :global(.web-shell:has(.landing) .lp-steps) {
   position: relative;
 }
@@ -1001,7 +975,7 @@
   }
 }
 
-/* 6 — Reduced motion: hold the decorative animations still. */
+/* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
   :global(.landing)::before,
   :global(.web-shell:has(.landing) .lp-eyebrow)::before,
