@@ -53,3 +53,9 @@
 - Friction or failure: Playwright browser cache revisions were mismatched, so visual smoke needed installed system Chrome instead of the managed binary.
 - Suggested improvement: Add a repo script for local web smoke that selects an available browser executable and records the fallback.
 - Follow-up: none.
+
+### 2026-07-14T11:48:56-04:00 — ARCH-20260714-04
+- What helped: Inspecting the live migrations and generated-assets path separated durable identities the system already owns from the one missing session boundary and the general action/asset integrity gap.
+- Friction or failure: Naming a finite domain turn an “assignment” initially encouraged redundant assignment, report, output, queue, approval, job, and cost tables despite existing run/action/runtime records.
+- Suggested improvement: Before adding agent-specific persistence, map every proposed lifecycle concept to the current schema and document the transactional, tenancy, privacy, and retry invariant that prevents reuse.
+- Follow-up: `docs/scopes/specialist-agent-orchestration-prs.md` PRs 4–6, 9–10, and 12.
