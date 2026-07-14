@@ -41,3 +41,9 @@
 - Friction or failure: “Persistent child agent” initially blurred a durable session identity with a finite terminal run and hid serialization/stale-result risks.
 - Suggested improvement: Name session, assignment, run, message, and graph-state boundaries explicitly in every multi-agent architecture scope.
 - Follow-up: `docs/scopes/specialist-agent-orchestration-prs.md` PRs 4–8.
+
+### 2026-07-14 — ARCH-20260714-03
+- What helped: Treating standalone creation as a second entry mode into the same domain runtime exposed reusable session, provenance, and output contracts instead of creating three new generator silos.
+- Friction or failure: “Run a sub-agent independently” initially left project ownership, approval, report recipient, shared-session contention, and selection movement underspecified.
+- Suggested improvement: For every new agent entrypoint, require an origin/recipient matrix plus explicit queue, cost-gate, output-lineage, and selection semantics before designing routes or UI.
+- Follow-up: `docs/scopes/specialist-agent-orchestration-prs.md` PRs 4–13.
