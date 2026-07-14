@@ -3,6 +3,7 @@ import {
   getActiveProjectPlan as realGetActiveProjectPlan,
   getProjectStoryboard as realGetProjectStoryboard,
 } from "@/lib/api/v1/store";
+import { toolDefinitionMetadata } from "./capability-catalog";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 import { runGenerateKeyframeJob as realRunGenerateKeyframeJob } from "./generate-keyframe-job";
@@ -148,7 +149,7 @@ export function createGenerateKeyframeTool(
   const resolved = { ...defaultDeps, ...deps };
 
   return {
-    name: "generate_keyframe",
+    ...toolDefinitionMetadata("generate_keyframe"),
     description:
       "Generate photoreal beat_keyframe first-frame images for planned beats. Requires plan_shots and generate_storyboard first. Runs asynchronously and skips beats with active keyframes. This is the recovery tool when generate_clip says beat_keyframe assets are missing. Do not include provider unless the user explicitly asks to override workspace settings.",
     usage: {
@@ -169,7 +170,6 @@ export function createGenerateKeyframeTool(
     },
     inputSchema: generateKeyframeInputSchema,
     outputSchema: generateKeyframeOutputSchema,
-    execution: "async",
     parseInput: parseGenerateKeyframeInput,
     estimateCost: () => ({
       estimatedCostUsd: 0,

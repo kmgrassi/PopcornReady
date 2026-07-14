@@ -1,4 +1,5 @@
 import { createReachedApprovalGate as realCreateReachedApprovalGate } from "@/lib/api/v1/orchestrator-store";
+import { toolDefinitionMetadata } from "./capability-catalog";
 import type { ToolCallResult, ToolDefinition, ToolName } from "./types";
 import { ToolInputError } from "./types";
 
@@ -153,7 +154,7 @@ export function createRequestApprovalTool(
   const resolved = { ...defaultDeps, ...deps };
 
   return {
-    name: "request_approval",
+    ...toolDefinitionMetadata("request_approval"),
     description:
       "Pause the run at a user approval gate before continuing with expensive or user-visible work.",
     usage: {
@@ -166,7 +167,6 @@ export function createRequestApprovalTool(
     },
     inputSchema: requestApprovalInputSchema,
     outputSchema: requestApprovalOutputSchema,
-    execution: "approval",
     parseInput: parseRequestApprovalInput,
     estimateCost: () => ({
       estimatedCostUsd: 0,

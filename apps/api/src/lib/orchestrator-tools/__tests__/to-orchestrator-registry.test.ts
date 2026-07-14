@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createDefaultToolRegistry } from "../default-registry";
+import { getToolCapability } from "../capability-catalog";
 import {
   composeToolDescription,
   toOrchestratorRegistry,
@@ -30,7 +31,8 @@ test("composeToolDescription appends only the usage sections that are present", 
 });
 
 test("bridged tools expose composed usage guidance to the model", () => {
-  const registry = toOrchestratorRegistry(createDefaultToolRegistry());
+  const realRegistry = createDefaultToolRegistry();
+  const registry = toOrchestratorRegistry(realRegistry);
   const planShots = registry.get("plan_shots");
   assert.ok(planShots, "plan_shots must be in the bridged registry");
 
@@ -41,6 +43,27 @@ test("bridged tools expose composed usage guidance to the model", () => {
   assert.match(planShots.description, /create_or_load_brief first/);
   assert.match(planShots.description, /Produces:/);
   assert.match(planShots.description, /Use this when:/);
+  assert.strictEqual(planShots.inputSchema, realRegistry.get("plan_shots").inputSchema);
+  assert.strictEqual(planShots.outputSchema, realRegistry.get("plan_shots").outputSchema);
+});
+
+test("bridge carries catalog metadata without changing model schemas or descriptions", () => {
+  const realRegistry = createDefaultToolRegistry();
+  const registry = toOrchestratorRegistry(realRegistry);
+  for (const [name, bridged] of registry) {
+    const real = realRegistry.get(name);
+    const metadata = getToolCapability(name);
+    assert.equal(bridged.capability, metadata.capability);
+    assert.equal(bridged.ownerRole, metadata.ownerRole);
+    assert.equal(bridged.label, metadata.label);
+    assert.equal(bridged.displayOrder, metadata.displayOrder);
+    assert.equal(bridged.costClass, metadata.costClass);
+    assert.deepEqual(bridged.gate, metadata.gate);
+    assert.equal(bridged.mode, real.execution);
+    assert.equal(bridged.description, composeToolDescription(real.description, real.usage));
+    assert.strictEqual(bridged.inputSchema, real.inputSchema);
+    assert.strictEqual(bridged.outputSchema, real.outputSchema);
+  }
 });
 
 test("bridged tools delegate cost estimates to the real registry", async () => {

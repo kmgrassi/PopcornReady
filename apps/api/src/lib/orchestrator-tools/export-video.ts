@@ -5,6 +5,7 @@ import { assetToClip } from "@/lib/v1/generation/prepare";
 import { canonicalContentHash } from "@/lib/api/v1/asset-graph";
 import type { Project } from "@popcorn/shared/types";
 import type { VersionedTimeline } from "@popcorn/shared/v1/types";
+import { toolDefinitionMetadata } from "./capability-catalog";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 import { runExportVideoJob as realRunExportVideoJob } from "./export-video-job";
@@ -187,7 +188,7 @@ export function createExportVideoTool(
   const resolved = { ...defaultDeps, ...deps };
 
   return {
-    name: "export_video",
+    ...toolDefinitionMetadata("export_video"),
     description:
       "Render the active timeline into a final mp4 export artifact. Requires assemble_timeline first. Runs asynchronously.",
     usage: {
@@ -202,7 +203,6 @@ export function createExportVideoTool(
     },
     inputSchema: exportVideoInputSchema,
     outputSchema: exportVideoOutputSchema,
-    execution: "async",
     parseInput: parseExportVideoInput,
     estimateCost: () => ({
       estimatedCostUsd: 0,

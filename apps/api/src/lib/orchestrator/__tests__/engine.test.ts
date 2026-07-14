@@ -17,6 +17,7 @@ import {
 import type { ToolCallResult, ToolError, ToolExecutionContext, ToolName } from "../types";
 import type { OrchestratorModel } from "../model";
 import type { ToolRegistry } from "../registry";
+import { driverToolDefinitionMetadata } from "@/lib/orchestrator-tools/capability-catalog";
 
 // ---------- fakes (no DB, no network) ----------
 
@@ -115,12 +116,11 @@ function fakeRegistry(
   for (const [name, fn] of Object.entries(handlers)) {
     const toolName = name as ToolName;
     map.set(name as ToolName, {
-      name: toolName,
+      ...driverToolDefinitionMetadata(toolName),
       description: "",
       inputSchema: {},
       outputSchema: {},
       requiredResourceIds: [],
-      mode: "sync",
       estimateCostUsd: () => estimates[toolName],
       execute: async (_input, context) => fn!(context),
     });

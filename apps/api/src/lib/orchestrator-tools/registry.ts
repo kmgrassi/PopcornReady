@@ -5,12 +5,14 @@ import type {
   ToolExecutionContext,
   ToolName,
 } from "./types";
+import { assertToolDefinitionMetadata } from "./capability-catalog";
 import { ToolInputError } from "./types";
 
 export class ToolRegistry {
   private readonly definitions = new Map<ToolName, ToolDefinition>();
 
   register(definition: ToolDefinition): void {
+    assertToolDefinitionMetadata(definition);
     if (this.definitions.has(definition.name)) {
       throw new Error(`Tool already registered: ${definition.name}`);
     }

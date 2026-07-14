@@ -7,6 +7,7 @@ import {
 } from "@/lib/api/v1/store";
 import type { ShotPlan, Scene } from "@popcorn/shared/types";
 import type { ProjectStoryboard, StoryboardScene } from "@popcorn/shared/v1/types";
+import { toolDefinitionMetadata } from "./capability-catalog";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 
@@ -272,7 +273,7 @@ export function createPlanVisualAnchorsTool(
   const resolved = { ...defaultDeps, ...deps };
 
   return {
-    name: "plan_visual_anchors",
+    ...toolDefinitionMetadata("plan_visual_anchors"),
     description:
       "Identify reusable character, location, and style anchors from the active shot plan and persist a typed visual-anchor plan. Requires plan_shots first.",
     usage: {
@@ -287,7 +288,6 @@ export function createPlanVisualAnchorsTool(
     },
     inputSchema: planVisualAnchorsInputSchema,
     outputSchema: planVisualAnchorsOutputSchema,
-    execution: "sync",
     parseInput: parsePlanVisualAnchorsInput,
     estimateCost: () => ({
       estimatedCostUsd: 0,

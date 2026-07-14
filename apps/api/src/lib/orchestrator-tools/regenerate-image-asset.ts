@@ -2,6 +2,7 @@ import {
   regenerateImageAsset as realRegenerateImageAsset,
   type RegenerateImageAssetArgs,
 } from "@/lib/api/v1/regenerate-asset";
+import { toolDefinitionMetadata } from "./capability-catalog";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 
@@ -96,7 +97,7 @@ export function createRegenerateImageAssetTool(
 ): ToolDefinition<RegenerateImageAssetInput, RegenerateImageAssetOutput> {
   const resolved = { ...defaultDeps, ...deps };
   return {
-    name: "regenerate_image_asset",
+    ...toolDefinitionMetadata("regenerate_image_asset"),
     description:
       "Regenerate one existing image asset from a replacement prompt. Mints a new immutable version and repoints active selections to it.",
     usage: {
@@ -106,7 +107,6 @@ export function createRegenerateImageAssetTool(
     },
     inputSchema: regenerateImageAssetInputSchema,
     outputSchema: regenerateImageAssetOutputSchema,
-    execution: "sync",
     parseInput: parseRegenerateImageAssetInput,
     estimateCost: () => ({
       notes: "Provider cost is recorded by the image regeneration executor.",

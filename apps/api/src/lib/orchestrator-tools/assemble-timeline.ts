@@ -14,6 +14,7 @@ import { sanitizeTimeline } from "@popcorn/timeline/timeline";
 import { planBeats, type Clip, type Timeline } from "@popcorn/shared/types";
 import type { GraphAssetInput } from "@/lib/api/v1/asset-graph";
 import { selectedUploadedFootageAssetIds } from "@/lib/orchestrator/uploaded-footage-selection";
+import { toolDefinitionMetadata } from "./capability-catalog";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 
@@ -297,7 +298,7 @@ export function createAssembleTimelineTool(
   const resolved = { ...defaultDeps, ...deps };
 
   return {
-    name: "assemble_timeline",
+    ...toolDefinitionMetadata("assemble_timeline"),
     description:
       "Assemble selected beat clips, uploads, and audio into the project's active deterministic timeline. Requires a plan plus selected uploads or selected beat_clip assets.",
     usage: {
@@ -315,7 +316,6 @@ export function createAssembleTimelineTool(
     },
     inputSchema: assembleTimelineInputSchema,
     outputSchema: assembleTimelineOutputSchema,
-    execution: "sync",
     parseInput: parseAssembleTimelineInput,
     estimateCost: () => ({
       estimatedCostUsd: 0,

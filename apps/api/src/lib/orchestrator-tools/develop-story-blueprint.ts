@@ -4,6 +4,7 @@ import {
   type StoryBlueprint,
 } from "@/lib/api/v1/store";
 import type { VideoBrief } from "@/lib/api/v1/schemas";
+import { toolDefinitionMetadata } from "./capability-catalog";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 
@@ -307,7 +308,7 @@ export function createDevelopStoryBlueprintTool(
   deps: Partial<DevelopStoryBlueprintDeps> = {}
 ): ToolDefinition<DevelopStoryBlueprintInput, DevelopStoryBlueprintOutput> {
   return {
-    name: "develop_story_blueprint",
+    ...toolDefinitionMetadata("develop_story_blueprint"),
     description:
       "Develop a structured story blueprint from the active project brief and persist it as the current canonical story resource. Requires a brief first.",
     usage: {
@@ -322,7 +323,6 @@ export function createDevelopStoryBlueprintTool(
     },
     inputSchema: developStoryBlueprintInputSchema,
     outputSchema: developStoryBlueprintOutputSchema,
-    execution: "sync",
     parseInput: parseDevelopStoryBlueprintInput,
     estimateCost: () => ({
       estimatedCostUsd: 0,

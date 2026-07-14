@@ -6,7 +6,7 @@
 <!-- agent-summary: DomainTask.v1 travels down and exactly one done, blocked, or question DomainReport.v1 returns at a turn boundary. -->
 <!-- agent-summary: Creator-direct work and root-origin work share a serialized session but retain distinct trusted origins and recipients. -->
 <!-- agent-summary: The creative-director hierarchy and two-level root/domain split remain conditional on the Gate 0 proceed decision. -->
-<!-- agent-summary: packages/shared/src/domain-agent-contract.ts is the executable TypeScript source for this document. -->
+<!-- agent-summary: The shared contract and API capability catalog are the executable TypeScript sources for this document. -->
 
 > **Status:** Accepted contract for the standalone domain foundation and the
 > proposed hierarchy boundary. Persistent Visuals/Audio sessions,
@@ -183,13 +183,40 @@ to unconsumed outputs or targets without downstream consumers.
 ## Capability ownership
 
 The current flat production registry remains authoritative until Gate 0 says
-`proceed`. Under the proposed hierarchy, ownership would be:
+`proceed`. The current executable primitive vocabulary and its ownership,
+canonical labels/order, execution modes, cost classes, and approval-gate
+metadata live in
+[`apps/api/src/lib/orchestrator-tools/capability-catalog.ts`](../apps/api/src/lib/orchestrator-tools/capability-catalog.ts).
+Every rich primitive definition is checked against that catalog when it is
+registered, and the driver stubs and real-to-driver bridge consume the same
+metadata. The existing flat `createDefaultToolRegistry()` remains the active
+production source and retains its existing definitions and insertion order.
+`regenerate_image_asset` is classified as synchronous media work: its live rich
+handler and bridge were already synchronous, while the old dormant stub
+incorrectly inferred asynchronous execution from a media-name set. The catalog
+corrects that dormant inconsistency without changing active execution.
+
+Explicit dormant builders now make the proposed boundary testable without
+activating it:
+
+- `root-registry.ts` exposes the ten current Creative Director-owned
+  primitives, including optional catalog publication;
+- `visuals-registry.ts` exposes only the six current image/motion primitives;
+  and
+- `audio-registry.ts` exposes only audio generation and picture fitting.
+
+The three registries are an exact, disjoint partition of the current 18-tool
+vocabulary. Domain registries contain no root, sibling, approval, assembly, or
+dispatch capability. Future delegation and standalone generic generation tools
+are intentionally absent and join only in their owning roadmap PRs.
+
+Under the proposed hierarchy, responsibility is:
 
 | Owner | Model-visible responsibility/capabilities |
 | --- | --- |
-| Creative director, conditional | brief, story, script, shot and visual-anchor planning; timeline assembly and critique; approval, export, optional catalog publication; `delegate_visuals`, `delegate_audio`, and later batched domain dispatch |
-| Visuals | anchor, storyboard, keyframe, clip, standalone image/video, immutable image regeneration, and content-aware video edit capabilities |
-| Audio | narration/dialogue/music/sound generation and fitting audio to picture |
+| Creative director, conditional | current brief, story, script, shot and visual-anchor planning; timeline assembly and critique; approval, export, and optional catalog publication; future delegation and batched dispatch after their owning PRs |
+| Visuals | current anchor, storyboard, keyframe, clip, immutable image regeneration, and content-aware video edit capabilities; future standalone image/video capabilities after their owning PR |
+| Audio | current narration/dialogue/music/sound generation and fitting audio to picture |
 | Runtime, never model-facing | authorization, session/run claim, enqueue/lease, wait/resume, report acknowledgement, retry, cancellation, gate persistence, cost settlement, provider callback fencing |
 
 The conditional creative director retains coherence decisions; it is not only
@@ -197,6 +224,19 @@ a router. It owns cross-modality intent, story and pacing decisions, visual
 anchor planning, assembly, critique, approval, budgets, export, and deciding
 when a domain should work. Visuals and Audio self-heal only inside their own
 capability boundary and return `blocked` or `question` across that boundary.
+
+`domain-recovery-projection.ts` is the pure, dormant translation boundary for
+that future specialist context. It projects both suggested recovery tools and
+precondition satisfiers. Same-owner primitives remain actionable with only
+exact server-authorized `DomainTarget` identities under a trusted project ID.
+Hint strings cannot authorize targets: IDs must match the trusted target set,
+pass bounded stable-ID validation, and fit bounded trusted-input and emitted
+target caps, or the projection falls back to the trusted project target. Cross-owner primitive
+names and raw hints are removed and replaced by a required domain, stable
+targets, and a generic reason; duplicates collapse and unknown historical tool
+strings fail closed. The raw error remains unchanged for audit. This projector
+is not wired into the current flat model, engine, persistence, or action audit;
+the domain runtime PRs own that activation.
 
 ## Two-level and deterministic boundaries
 

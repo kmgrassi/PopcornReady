@@ -748,6 +748,12 @@ hierarchy from the active North Star architecture.
 
 **Depends on:** PR 2.
 
+**Implementation status:** implemented as an active-behavior-compatible boundary. The
+canonical current 18-tool catalog, exact dormant 10/6/2 role registries, bridge
+metadata, projection parity, and pure domain-recovery translation are covered
+by executable contract tests. The flat production registry remains active;
+specialist routing is not enabled by this PR.
+
 **Deliver:**
 
 - Add required `ownerRole`/capability metadata to primitive definitions.

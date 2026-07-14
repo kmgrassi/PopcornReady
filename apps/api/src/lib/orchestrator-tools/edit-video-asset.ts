@@ -6,6 +6,7 @@ import {
 } from "@/lib/api/v1/store";
 import { estimateCostUsd as estimateGenerativeCostUsd } from "@/lib/generative/pricing";
 import { createLogger } from "@/lib/v1/logger";
+import { toolDefinitionMetadata } from "./capability-catalog";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 import { runEditVideoAssetJob as realRunEditVideoAssetJob } from "./edit-video-asset-job";
@@ -236,7 +237,7 @@ export function createEditVideoAssetTool(
   const resolved = { ...defaultDeps, ...deps };
 
   return {
-    name: "edit_video_asset",
+    ...toolDefinitionMetadata("edit_video_asset"),
     description:
       "Edit the content of an existing uploaded footage asset or generated video clip. Produces a new video asset linked to the source with an edited_from graph input. Runs asynchronously.",
     usage: {
@@ -255,7 +256,6 @@ export function createEditVideoAssetTool(
     },
     inputSchema: editVideoAssetInputSchema,
     outputSchema: editVideoAssetOutputSchema,
-    execution: "async",
     parseInput: parseEditVideoAssetInput,
     estimateCost: (input) => ({
       estimatedCostUsd: estimateGenerativeCostUsd({
