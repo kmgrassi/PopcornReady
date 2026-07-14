@@ -94,3 +94,9 @@
 - Friction or failure: Fresh caretaker worktrees do not contain dependencies, so the lockfile install was required before validation.
 - Suggested improvement: Add a standard dependency-bootstrap helper for caretaker worktrees.
 - Follow-up: none.
+
+### 2026-07-14T18:32:00-04:00 — PR-CARETAKER-20260714-01
+- What helped: Rechecking branch protection after successful checks made the remaining merge blocker explicit.
+- Friction or failure: `mergeable=true` does not imply mergeable under branch protection; `main` still requires one approving review.
+- Suggested improvement: Include `mergeStateStatus` and required-review state in caretaker merge gates.
+- Follow-up: none.

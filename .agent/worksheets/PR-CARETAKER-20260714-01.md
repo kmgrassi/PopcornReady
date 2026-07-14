@@ -38,7 +38,8 @@ Resolve the merge conflict on PR #781, preserve all feedback-log entries, run re
 - `pnpm --filter @popcorn/web build` passed (Vite build; existing large-chunk warning only).
 - `pnpm --filter @popcorn/web test` passed (31 tests).
 - `pnpm agent:validate -- --scope all` passed (lint, web typecheck, API typecheck).
-- Pending: final GitHub checks and mergeability after push.
+- GitHub final state after push: PR #781 is conflict-free and `mergeable`, with smoke SUCCESS, deploy preview SUCCESS, redirect SUCCESS, and header/pages checks NEUTRAL/SKIPPED.
+- GitHub reports `mergeStateStatus=BLOCKED` and `reviewDecision=REVIEW_REQUIRED` because `main` requires one approving review; no approving review is available to this caretaker run.
 
 ## Independent reviews
 
@@ -47,8 +48,9 @@ Resolve the merge conflict on PR #781, preserve all feedback-log entries, run re
 ## Blockers and risks
 
 - Main may advance again after this conflict resolution; re-check mergeability and checks before merging.
+- Branch protection requires one eligible approving review; do not bypass it or self-approve.
 - Do not merge if review-required status or any unresolved actionable feedback remains.
 
 ## Next action / handoff
 
-Validation is complete. Commit the conflict resolution and records, push PR #781, re-audit GitHub state, then merge only if all caretaker criteria are satisfied.
+Validation and the post-push audit are complete. PR #781 remains open for an eligible approving review; merge only after that review and a fresh green/neutral, conflict-free, mergeable audit.
