@@ -29,3 +29,9 @@
 - Friction or failure: `pnpm --` forwarding and partially staged markdown made the first tooling cut validate the wrong content.
 - Suggested improvement: Add a lightweight script-level regression harness for agent tooling so review-fix cases do not rely on ad hoc shell probes.
 - Follow-up: none.
+
+### 2026-07-14 — WEB-20260714-01
+- What helped: Independent review caught the key CSS-module risk before moving keyframes and later caught untracked split files before PR creation.
+- Friction or failure: Playwright browser cache revisions were mismatched, so visual smoke needed installed system Chrome instead of the managed binary.
+- Suggested improvement: Add a repo script for local web smoke that selects an available browser executable and records the fallback.
+- Follow-up: none.
