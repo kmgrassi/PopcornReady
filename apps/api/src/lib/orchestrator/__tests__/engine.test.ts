@@ -64,6 +64,11 @@ class FakeStore implements OrchestratorEngineStore {
     this.run = { ...this.run, ...patch };
     return { ...this.run };
   }
+  async claimOrchestratorRunResume() {
+    if (this.run.status !== "waiting") return null;
+    this.run = { ...this.run, status: "running" };
+    return { ...this.run };
+  }
   async listRunGates() {
     return this.gates.map((g) => ({ ...g }));
   }
@@ -149,6 +154,7 @@ function deps(store: FakeStore, model: OrchestratorModel, registry: ToolRegistry
     store,
     model,
     registry,
+    jobs: { getJob: async () => null },
     resolveOwnerUserId: async () => null,
     ...extra,
   };
@@ -360,6 +366,107 @@ test("parks on an accepted async job, then resumes to completion when the job su
   // the parking action is finalized with the assets its job produced
   assert.equal(store.actions[0].status, "applied");
   assert.deepEqual(store.actions[0].outputAssetIds, ["tile_1", "tile_2"]);
+});
+
+test("continues when an async job finishes before the initial park completes", async () => {
+  const store = new FakeStore(runFixture());
+  const { model } = scriptedModel([
+    { type: "tool_call", toolName: "generate_storyboard" },
+    { type: "tool_call", toolName: "generate_keyframe" },
+    { type: "done" },
+  ]);
+  const registry = fakeRegistry({
+    generate_storyboard: () => ({ status: "accepted", jobId: "job1", resumesWhen: "job_terminal" }),
+    generate_keyframe: () => ok(["keyframe_1"]),
+  });
+
+  const run = await runOrchestratorToCompletion(
+    "run1",
+    deps(store, model, registry, {
+      jobs: { getJob: async () => ({ status: "succeeded", result: { assetIds: ["tile_1"] } }) },
+    })
+  );
+
+  assert.equal(run.status, "succeeded");
+  assert.deepEqual(
+    store.actions.map((action) => [action.tool, action.status, action.outputAssetIds]),
+    [
+      ["generate_storyboard", "applied", ["tile_1"]],
+      ["generate_keyframe", "applied", ["keyframe_1"]],
+    ]
+  );
+});
+
+test("does not start a concurrent loop when an async completion arrives while the run is active", async () => {
+  const store = new FakeStore(runFixture({ status: "running" }));
+  const { model } = scriptedModel([{ type: "tool_call", toolName: "generate_keyframe" }]);
+  const registry = fakeRegistry({ generate_keyframe: () => ok(["keyframe_1"]) });
+
+  const result = await resumeOrchestratorRun("run1", deps(store, model, registry));
+
+  assert.equal(result.status, "running");
+  assert.equal(store.actions.length, 0, "only the owning loop may execute the next tool");
+});
+
+test("only one caller claims a parked async job for resume", async () => {
+  const store = new FakeStore(runFixture());
+  const { model } = scriptedModel([
+    { type: "tool_call", toolName: "generate_storyboard" },
+    { type: "tool_call", toolName: "generate_keyframe" },
+    { type: "done" },
+  ]);
+  const registry = fakeRegistry({
+    generate_storyboard: () => ({ status: "accepted", jobId: "job1", resumesWhen: "job_terminal" }),
+    generate_keyframe: () => ok(["keyframe_1"]),
+  });
+  await runOrchestratorToCompletion("run1", deps(store, model, registry));
+  const completionDeps = deps(store, model, registry, {
+    jobs: { getJob: async () => ({ status: "succeeded", result: { assetIds: ["tile_1"] } }) },
+  });
+
+  await Promise.all([
+    resumeOrchestratorRun("run1", completionDeps),
+    resumeOrchestratorRun("run1", completionDeps),
+  ]);
+
+  assert.deepEqual(
+    store.actions.map((action) => action.tool),
+    ["generate_storyboard", "generate_keyframe"]
+  );
+});
+
+test("recovery reconciles a claimed async job before it starts another model turn", async () => {
+  const store = new FakeStore(runFixture({ status: "running" }));
+  store.actions.push({
+    id: "a0",
+    tool: "generate_storyboard",
+    status: "running",
+    params: {},
+    outputAssetIds: [],
+    jobIds: ["job1"],
+    createdAt: "t1",
+  });
+  const { model } = scriptedModel([
+    { type: "tool_call", toolName: "generate_keyframe" },
+    { type: "done" },
+  ]);
+  const registry = fakeRegistry({ generate_keyframe: () => ok(["keyframe_1"]) });
+
+  const run = await runOrchestratorToCompletion(
+    "run1",
+    deps(store, model, registry, {
+      jobs: { getJob: async () => ({ status: "succeeded", result: { assetIds: ["tile_1"] } }) },
+    })
+  );
+
+  assert.equal(run.status, "succeeded");
+  assert.deepEqual(
+    store.actions.map((action) => [action.tool, action.status, action.outputAssetIds]),
+    [
+      ["generate_storyboard", "applied", ["tile_1"]],
+      ["generate_keyframe", "applied", ["keyframe_1"]],
+    ]
+  );
 });
 
 test("finishes after an after-gate async job succeeds", async () => {

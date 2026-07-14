@@ -1,4 +1,5 @@
 import { agentApiStore, type AgentApiStore } from "@/lib/agent-api/jobs";
+import { scheduleOrchestratorResume } from "@/lib/orchestrator/schedule-resume";
 import type { AuthContext } from "@/lib/api/v1/auth";
 import { createGeneratedAsset as realCreateGeneratedAsset } from "@/lib/api/v1/generated-assets";
 import {
@@ -24,10 +25,7 @@ export interface GenerateClipJobDeps {
   getActiveProjectScopedAsset: typeof realGetActiveProjectScopedAsset;
   selectGeneratedBeatClipAsset: typeof realSelectGeneratedBeatClipAsset;
   jobs: Pick<AgentApiStore, "setStep" | "succeed" | "fail">;
-  resumeOrchestratorRun?: (
-    runId: string,
-    deps: { workspaceId: string }
-  ) => Promise<unknown>;
+  enqueueOrchestratorDispatch?: (runId: string, workspaceId: string) => Promise<unknown>;
 }
 
 const defaultDeps: GenerateClipJobDeps = {
@@ -51,10 +49,7 @@ async function resume(
   runId: string,
   workspaceId: string
 ): Promise<void> {
-  const fn =
-    deps.resumeOrchestratorRun ??
-    (await import("@/lib/orchestrator/engine")).resumeOrchestratorRun;
-  await fn(runId, { workspaceId });
+  await scheduleOrchestratorResume({ runId, workspaceId, enqueue: deps.enqueueOrchestratorDispatch });
 }
 
 function assetIdsFromResult(result: Awaited<ReturnType<typeof realCreateGeneratedAsset>>): string[] {

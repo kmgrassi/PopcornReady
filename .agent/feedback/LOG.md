@@ -18,6 +18,12 @@
 - Follow-up: <TODO / PR / none>
 ```
 
+### 2026-07-14T12:32:20-04:00 — API-20260714-02
+- What helped: Treating the dispatch lease as the single turn owner exposed the inline-completion race clearly.
+- Friction or failure: Inline provider completion could race invocation parking and wake duplicate engine turns.
+- Suggested improvement: Route completion through a lease-fenced durable wake and validate the migration path with concurrency fixtures.
+- Follow-up: Specialist-agent orchestration PRs 4–6 must extend the same lease and tenancy invariants.
+
 ### 2026-07-13T13:20:10-04:00 — AGENT-OPS-001
 - What helped: Existing E2E inventory and repository conventions supplied a useful base.
 - Friction or failure: No alternate-agent CLI is configured, so independent review is documented but not executed in this task.

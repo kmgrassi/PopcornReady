@@ -12,6 +12,7 @@
 import { createAction, updateAction } from "@/lib/api/v1/store";
 import {
   getOrchestratorRun,
+  claimOrchestratorRunResume,
   listRunActions,
   listRunGates,
   markGateReached,
@@ -71,6 +72,8 @@ export interface OrchestratorEngineStore {
     runId: string,
     patch: UpdateOrchestratorRunPatch
   ): Promise<OrchestratorRun>;
+  /** Atomically claims a waiting run for exactly one resume caller. */
+  claimOrchestratorRunResume?: (runId: string) => Promise<OrchestratorRun | null>;
   listRunGates(runId: string): Promise<OrchestratorRunGate[]>;
   markGateReached(runId: string, stage: string): Promise<OrchestratorRunGate | null>;
   listRunActions(runId: string): Promise<RunActionSummary[]>;
@@ -124,6 +127,7 @@ export function defaultEngineStore(): OrchestratorEngineStore {
   return {
     getOrchestratorRun,
     updateOrchestratorRun,
+    claimOrchestratorRunResume,
     listRunGates,
     markGateReached,
     listRunActions,
@@ -249,6 +253,8 @@ export async function runOrchestratorToCompletion(
     });
   }
   if (run.status !== "running") return run;
+  const reconciled = await reconcileInFlightJob(run, r);
+  if (reconciled) return reconciled;
   return driveGuarded(run, r);
 }
 
@@ -260,12 +266,45 @@ export async function resumeOrchestratorRun(
   deps: EngineDeps
 ): Promise<OrchestratorRun> {
   const r = resolved(deps);
-  let run = await r.store.getOrchestratorRun(runId);
-  if (run.status === "running") return driveGuarded(run, r);
+  const run = await r.store.getOrchestratorRun(runId);
+  return resumeRun(run, r);
+}
+
+// Resume a parked run using an already-resolved dependency set. Keeping this
+// separate lets the main loop reconcile an async job that finished between the
+// tool returning `accepted` and the run being parked. That narrow timing window
+// used to leave storyboard work marked complete while its keyframe attempt had
+// already run against an incomplete storyboard.
+async function resumeRun(run: OrchestratorRun, r: Resolved): Promise<OrchestratorRun> {
+  // A completion callback can beat the initial invocation's action write and
+  // transition to `waiting`. Do not start a second loop in that window: the
+  // originating loop reconciles a terminal job immediately after it parks.
+  // Recovery workers deliberately use runOrchestratorToCompletion for genuinely
+  // orphaned `running` runs.
+  if (run.status === "running") return run;
   if (run.status !== "waiting") return run;
 
+  if (r.store.claimOrchestratorRunResume) {
+    const claimed = await r.store.claimOrchestratorRunResume(run.id);
+    if (!claimed) return r.store.getOrchestratorRun(run.id);
+    run = claimed;
+  }
+
+  const reconciled = await reconcileInFlightJob(run, r);
+  if (reconciled) return reconciled;
+  return driveGuarded(run, r);
+}
+
+// Finalize an accepted async invocation before permitting a model turn. This is
+// used both by normal resume and by recovery of a process that died after
+// claiming `waiting -> running`; the action row is the durable source of truth
+// for whether a job still owns the run.
+async function reconcileInFlightJob(
+  run: OrchestratorRun,
+  r: Resolved
+): Promise<OrchestratorRun | null> {
   // Determine the parking action (latest in-flight action carrying a job id).
-  const actions = await r.store.listRunActions(runId);
+  const actions = await r.store.listRunActions(run.id);
   const parkingAction = [...actions]
     .reverse()
     .find((action) => action.status === "running" && action.jobIds.length > 0);
@@ -273,7 +312,7 @@ export async function resumeOrchestratorRun(
 
   if (parkingAction && parkingJobId) {
     const job = await r.jobs.getJob(parkingJobId);
-    if (!job) return run; // unknown job — leave parked for the sweeper
+    if (!job) return park(run, r); // unknown job — leave parked for the sweeper
     if (job.status === "failed" || job.status === "canceled") {
       await r.store.markInvocation(parkingAction.id, {
         status: "failed",
@@ -284,24 +323,22 @@ export async function resumeOrchestratorRun(
         message: `parking job ${parkingJobId} ended ${job.status}`,
       });
     }
-    if (job.status !== "succeeded") return run; // still running — stay parked
+    if (job.status !== "succeeded") return park(run, r); // still running — stay parked
     // Job done → finalize the parking action with the assets it produced.
     await r.store.markInvocation(parkingAction.id, {
       status: "applied",
       outputAssetIds: jobAssetIds(job.result),
     });
-    const gates = await r.store.listRunGates(runId);
+    const gates = await r.store.listRunGates(run.id);
     const gate = gates.find((g) => g.stage === parkingAction.tool);
     if (gate?.status === "pending" || gate?.status === "rejected") {
-      await r.store.markGateReached(runId, parkingAction.tool);
+      await r.store.markGateReached(run.id, parkingAction.tool);
       return park(run, r);
     }
     const stopped = await finishIfAfterGateReached(run, parkingAction.tool, r);
     if (stopped) return stopped;
   }
-  // Job done (or gate the caller resolved) → continue the loop.
-  run = await r.store.updateOrchestratorRun(runId, { status: "running" });
-  return driveGuarded(run, r);
+  return null;
 }
 
 // Project a persisted action into the compact result the model sees each turn.
@@ -660,7 +697,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       if (stopped) return stopped;
     }
 
-    if (result.status === "accepted" || result.status === "waiting_for_approval") {
+    if (result.status === "accepted") {
       logger.info("orchestrator.parked_after_tool", {
         workspaceId: r.workspaceId,
         projectId: run.projectId,
@@ -669,7 +706,28 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
         tool: decision.toolName,
         resultStatus: result.status,
       });
-      return park(run, r); // parked on a job / approval gate
+      const parked = await park(run, r);
+
+      // A fast inline worker can finish before the accepted invocation has been
+      // recorded and the run has reached `waiting`. Reconcile its terminal state
+      // after parking so the successful storyboard assets are visible before the
+      // next model turn chooses keyframes or clips.
+      const job = await r.jobs.getJob(result.jobId);
+      if (job?.status === "succeeded" || job?.status === "failed" || job?.status === "canceled") {
+        return resumeRun(parked, r);
+      }
+      return parked;
+    }
+    if (result.status === "waiting_for_approval") {
+      logger.info("orchestrator.parked_after_tool", {
+        workspaceId: r.workspaceId,
+        projectId: run.projectId,
+        runId: run.id,
+        turn,
+        tool: decision.toolName,
+        resultStatus: result.status,
+      });
+      return park(run, r); // parked on an approval gate
     }
     if (result.status === "failed" && !result.error.recoverable) {
       return finish(run, "failed", r, { ...result.error });

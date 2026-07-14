@@ -328,21 +328,16 @@ export async function listRecoverableOrchestratorRuns(): Promise<RecoverableOrch
     }));
 }
 
-export async function enqueueOrchestratorDispatch(runId: string, workspaceId: string): Promise<void> {
+export async function enqueueOrchestratorDispatch(
+  runId: string,
+  _workspaceId?: string
+): Promise<void> {
   const db = getServiceSupabase();
   await runQuery(
     "store.enqueueOrchestratorDispatch",
-    db.from("orchestrator_dispatches").upsert(
-      {
-        orchestrator_run_id: runId,
-        workspace_id: workspaceId,
-        status: "queued",
-        available_at: new Date().toISOString(),
-        lease_token: null,
-        lease_expires_at: null,
-      },
-      { onConflict: "orchestrator_run_id" }
-    )
+    db.rpc("wake_orchestrator_dispatch", {
+      p_orchestrator_run_id: runId,
+    })
   );
 }
 
@@ -405,6 +400,26 @@ export async function updateOrchestratorRun(
     db.from("orchestrator_runs").update(row).eq("id", runId).select("*").single()
   );
   return mapRun(data as OrchestratorRunRow);
+}
+
+// Atomically claim a parked run before driving it. A completion callback and the
+// recovery worker may race to resume the same job; only the caller that flips
+// waiting -> running owns the next orchestrator turn.
+export async function claimOrchestratorRunResume(
+  runId: string
+): Promise<OrchestratorRun | null> {
+  const db = getServiceSupabase();
+  const data = await runQuery(
+    `store.claimOrchestratorRunResume ${runId}`,
+    db
+      .from("orchestrator_runs")
+      .update({ status: "running", updated_at: new Date().toISOString() })
+      .eq("id", runId)
+      .eq("status", "waiting")
+      .select("*")
+      .maybeSingle()
+  );
+  return data ? mapRun(data as OrchestratorRunRow) : null;
 }
 
 export async function listRunGates(runId: string): Promise<OrchestratorRunGate[]> {
