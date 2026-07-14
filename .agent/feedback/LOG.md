@@ -35,3 +35,9 @@
 - Friction or failure: Tool ownership and counts are duplicated across types, prompts, documentation, and UI projections, making the current surface easy to misstate.
 - Suggested improvement: Establish one canonical capability catalog and derive specialist registries, labels, gates, and detailed documentation from it.
 - Follow-up: `docs/scopes/specialist-agent-orchestration-prs.md` PRs 1–2.
+
+### 2026-07-14 — ARCH-20260714-02
+- What helped: Comparing the proposal to the concrete `driveLoop` injection seams separated reusable runtime mechanics from agent-role configuration.
+- Friction or failure: “Persistent child agent” initially blurred a durable session identity with a finite terminal run and hid serialization/stale-result risks.
+- Suggested improvement: Name session, assignment, run, message, and graph-state boundaries explicitly in every multi-agent architecture scope.
+- Follow-up: `docs/scopes/specialist-agent-orchestration-prs.md` PRs 4–8.

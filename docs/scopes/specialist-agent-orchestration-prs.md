@@ -1,12 +1,12 @@
-# Specialist-agent orchestration — architecture and PR roadmap
+# Creative-director and domain-agent orchestration — architecture and PR roadmap
 
-<!-- agent-summary: Proposed roadmap for replacing the all-tools orchestrator with a project router and scoped specialist agents. -->
-<!-- agent-summary: The root orchestrator owns intent, project-state reasoning, delegation, blast radius, budget, approval, and completion. -->
-<!-- agent-summary: Story, image, video, audio, edit, and review agents own creative execution through role-scoped primitive tools. -->
-<!-- agent-summary: Existing granular tools, asset-graph writes, selections, actions, jobs, and deterministic rendering remain the execution foundation. -->
-<!-- agent-summary: Specialist runs are durable child orchestrator runs; specialists cannot delegate to one another or silently broaden scope. -->
-<!-- agent-summary: Cross-domain prerequisites return typed handoffs to the root, while providers and renderers remain non-agent workers. -->
-<!-- agent-summary: Nineteen ordered PRs deliver contracts, durability, specialists, routing, feedback, parallelism, UI projection, and cleanup. -->
+<!-- agent-summary: Proposed roadmap for replacing the all-tools orchestrator with a creative director and persistent domain agents. -->
+<!-- agent-summary: The creative director owns planning, cross-modality coherence, timeline assembly, critique, approval, routing, and export. -->
+<!-- agent-summary: Visuals and Audio reuse the existing driveLoop with domain prompts, restricted registries, and project-scoped sessions. -->
+<!-- agent-summary: Inter-agent communication occurs only at durable turn boundaries through done, blocked, or question reports. -->
+<!-- agent-summary: The immutable asset graph is the only canonical creative-state channel; tasks and reports carry intent and stable IDs. -->
+<!-- agent-summary: Actions record root, session, assignment, run, job, and asset lineage from the first implementation slice. -->
+<!-- agent-summary: Seventeen ordered PRs cover evaluation, contracts, durability, agents, feedback, parallelism, UI, rollout, and cleanup. -->
 
 > **Status:** Proposed implementation scope. This document does not describe
 > shipped behavior. It records the target decision and an independently
@@ -14,862 +14,970 @@
 >
 > **Sources of truth:** [`NORTH_STAR.md`](../NORTH_STAR.md),
 > [`ui-interaction-model.md`](../ui-interaction-model.md), and the asset-graph
-> rules in [`CLAUDE.md`](../../CLAUDE.md) remain authoritative until PR 1 lands
+> rules in [`CLAUDE.md`](../../CLAUDE.md) remain authoritative until PR 2 lands
 > the explicit architecture amendment described below.
 
 ## Objective
 
-Make the top-level orchestrator a **project manager and router**, not the agent
-that personally reasons over every story, image, video, audio, timeline, review,
-and infrastructure tool.
+Keep one agent responsible for the **creative whole** without forcing that
+agent to reason over every media-generation tool.
 
-Given a creator request, the root orchestrator should:
+The root orchestrator is the project's **creative director and router**. It
+owns the brief, story development, shot planning, cross-modality coherence,
+timeline assembly, critique, approval, blast radius, and final export. It
+delegates bounded generation assignments to persistent domain agents and
+reconciles their results into one coherent production.
 
-1. read a compact projection of current project state;
-2. determine the requested scope and affected graph region;
-3. select the responsible specialist;
-4. issue a typed, bounded work order;
-5. coordinate cross-domain prerequisites, budgets, approvals, and completion;
-6. reconcile the result into the project and decide what happens next.
+Domain agents own execution craft. The first cut has two domains because that
+is the smallest partition supported by the current tool vocabulary:
 
-Specialist agents do the creative work. Each specialist receives only the
-project context relevant to its assignment and only the primitive tools it is
-allowed to use. Provider calls, job execution, storage, and rendering remain
-server-owned execution infrastructure beneath those tools; final rendering is
-deterministic.
+- **Visuals** owns the complete still-to-motion chain, including anchors,
+  storyboards, keyframes, clips, and visual revisions.
+- **Audio** owns voice, dialogue, music, sound, fitting, and audio revisions.
+
+Each agent is the same durable `driveLoop` configured with a different prompt,
+tool registry, context source, and completion policy. This roadmap does not add
+a second agent runtime or turn creative choices into an opaque server workflow.
 
 ## The decision
 
-### One root, six specialists, no deeper hierarchy
+### One creative director, persistent domain agents, no deeper hierarchy
 
 ```mermaid
 flowchart TD
-  Creator["Creator request"] --> Root["Project orchestrator"]
-  State["Project state + asset graph"] --> Root
+  Creator["Creator request"] --> Root["Creative director driveLoop"]
+  Graph["Assets + edges + selections + actions"] --> Root
 
-  Root --> Story["Story agent"]
-  Root --> Image["Image agent"]
-  Root --> Video["Video agent"]
-  Root --> Audio["Audio agent"]
-  Root --> Edit["Edit agent"]
-  Root --> Review["Review agent"]
+  Root --> RootTools["Planning + assemble + critique + approval + export"]
+  Root --> Visuals["Persistent Visuals session"]
+  Root --> Audio["Persistent Audio session"]
 
-  Story --> Primitives["Scoped primitive tools"]
-  Image --> Primitives
-  Video --> Primitives
-  Audio --> Primitives
-  Edit --> Primitives
-  Review --> Primitives
-
-  Primitives --> Jobs["Async media jobs + deterministic workers"]
-  Jobs --> Graph["Actions + assets + edges + selections"]
-  Graph --> State
+  Visuals --> VisualTools["Visual primitive tools"]
+  Audio --> AudioTools["Audio primitive tools"]
+  VisualTools --> Jobs["Async provider jobs"]
+  AudioTools --> Jobs
+  Jobs --> Graph
+  RootTools --> Graph
 ```
 
 The hierarchy stops at two agent levels:
 
-- The **root orchestrator** may delegate to a specialist.
-- A **specialist may call its own primitive tools** but may not delegate to
-  another specialist or create a grandchild agent run.
-- When a specialist discovers a cross-domain prerequisite, it returns a typed
-  `handoff_required` result to the root. The root decides whether and how to
-  delegate the follow-up.
+- The creative director may dispatch work to a domain session.
+- A domain agent may call its own primitive tools but may not dispatch another
+  agent or silently broaden its assignment.
+- A cross-domain prerequisite returns to the creative director as `blocked`.
+  The creative director decides whether to dispatch a sibling domain and when
+  to resume the blocked session.
+- A creative judgment outside a domain's authority returns as `question`. The
+  creative director answers it directly or uses the existing creator approval
+  path, then resumes the same domain session.
 
-This preserves one clear owner for project-wide intent and prevents hidden agent
-chains, cycles, unbounded context growth, and specialists silently expanding the
-blast radius.
+There is no free-form agent chat and no mid-flight message injection. Every
+inter-agent exchange is a persisted, replayable turn boundary.
 
-### Agent responsibilities
+### The creative director is not a router alone
 
-| Agent | Owns | Does not own |
+Routing is one responsibility, not the identity of the root agent. The root
+must retain the tools and context where project-wide coherence is decided:
+
+- brief, story, script, shot, and visual-anchor planning;
+- visual tone versus audio mood;
+- narration duration versus picture duration;
+- pacing, cuts, and timeline assembly;
+- whole-cut critique and repair prioritization;
+- approval proposals and budget tradeoffs;
+- export readiness and completion.
+
+The root delegates detailed media execution and provider-level recovery. It
+does not delegate ownership of the creative whole.
+
+### Same loop, different agents
+
+The existing engine in `apps/api/src/lib/orchestrator/engine.ts` already:
+
+1. loads a durable run and its prior actions;
+2. asks a model to choose one available tool or finish;
+3. executes and records the tool call;
+4. parks on an async job or approval gate; and
+5. resumes by applying the same loop to persisted state.
+
+It also already accepts injected `model` and `registry` dependencies. The new
+architecture turns those injection seams into an explicit production
+configuration:
+
+```text
+AgentDefinition = role prompt + scoped registry + context source + outcome policy
+Agent invocation = existing driveLoop + AgentDefinition + durable run
+```
+
+The current system effectively runs:
+
+```text
+driveLoop(one root prompt, one flat history, all primitive tools)
+```
+
+The target runs the same implementation in three configurations:
+
+```text
+driveLoop(creative-director prompt, root context, root tools)
+driveLoop(visuals prompt, Visuals session context, visual tools)
+driveLoop(audio prompt, Audio session context, audio tools)
+```
+
+Reusing the loop does **not** mean the work is configuration-only. Durable
+sessions, assignment provenance, turn-boundary scheduling, typed outcomes,
+scope enforcement, and tree-wide controls still require implementation. It
+means parking, resumption, action recording, job waiting, provider-key context,
+and failure handling remain one shared engine rather than multiple forks.
+
+### Responsibilities
+
+| Agent or layer | Owns | Does not own |
 | --- | --- | --- |
-| Project orchestrator | User intent, project-state interpretation, routing, dependency/blast-radius decisions, work-order boundaries, budget allocation, approval, completion | Media craft, provider parameters, detailed prerequisite sequences inside one domain |
-| Story agent | Brief, narrative blueprint, script, scene/beat and shot planning | Images, clips, audio, timeline assembly |
-| Image agent | Visual-anchor planning, anchor images, storyboard tiles, keyframes, still-image revisions | Motion generation, audio, timeline edits |
-| Video agent | Motion clips and content-aware edits to existing footage or generated clips | Still-image generation, audio, final timeline structure |
-| Audio agent | Voice, dialogue, music, sound, duration fitting, synchronization critique | Visual or timeline generation |
-| Edit agent | Timeline assembly, pacing, cuts, compositing intent, deterministic export preparation | Source-media generation and cross-domain quality judgment |
-| Review agent | Cross-media critique, continuity/quality checks, issue classification, recommended owner | Mutating assets or automatically spending on revisions |
+| Creative director | User intent, brief/story/script/shot/visual-anchor planning, cross-modality coherence, routing, blast radius, timeline assembly, critique, approval, budget tradeoffs, export, completion | Provider parameters, fine-grained media generation, in-domain prerequisite sequences |
+| Visuals | Anchor-image generation, storyboard tiles, keyframes, clips, still/video revisions, visual continuity inside an assignment | Story/anchor-plan rewrites, audio, timeline assembly, approval, cross-project decisions |
+| Audio | Voice, dialogue, music, sound, fitting audio to picture, audio continuity inside an assignment | Story rewrites, visuals, timeline assembly, approval, cross-project decisions |
+| Durable runtime | Turn execution, persistence, dispatch claims, waiting, retry, cancellation, authorization, cost settlement, gates | Creative routing, aesthetic judgment, hidden workflow sequencing |
+| Providers/workers | Deterministic execution of a chosen tool, storage, rendering | Agent decisions, delegation, project interpretation |
 
-Export/rendering is deterministic infrastructure, not a seventh creative agent.
-`export_video` remains a narrow root-level terminal capability after the edit is
-ready and any required approval is satisfied. `publish_to_catalog` remains an
-explicit optional distribution action outside the core video-production path.
+`export_video` remains deterministic execution invoked by the creative
+director. `publish_to_catalog` remains an explicit optional distribution action
+outside the core video-production path.
+
+Future domain agents are possible, but a new domain must be justified by a
+cohesive tool cluster and decision-eval evidence. The design does not target a
+particular number of dispatch tools.
+
+## Decision Gate 0 — prove the split is worth activating
+
+The hierarchy is an adoption option, not an assumption that more agents are
+automatically better. Before schema or runtime investment, expand the existing
+orchestrator decision evals and establish a repeated-sample baseline for:
+
+- wrong next-tool or premature-done decisions;
+- performance as project history and available tools grow;
+- cross-modality coherence decisions;
+- recovery from within-domain and cross-domain precondition misses;
+- unnecessary turns and repeated failed calls; and
+- selective-regeneration decisions with stable graph IDs.
+
+Agree on a material-improvement threshold before running the comparison. If the
+flat agent is not measurably suffering, merge the architecture contract and
+provenance/registry no-regret work as appropriate, but defer the session and
+dispatch rollout. Do not run both architectures against live billable providers
+for comparison; compare decisions with fixtures or mocked execution.
 
 ## Current baseline
 
-As of 2026-07-14, the production orchestrator is a durable single-agent loop:
+As of 2026-07-14, the production orchestrator is one durable all-tools agent:
 
 - `apps/api/src/lib/orchestrator/model.ts` gives one model every registered tool
   schema and asks it to choose at most one tool per turn.
-- `apps/api/src/lib/orchestrator/engine.ts` records one action per invocation,
-  parks on one async job or approval gate, and resumes from persisted state.
-- `orchestrator_runs` has no agent role, parent/child relationship, delegation
-  link, typed terminal result, or explicit child wait state.
+- `apps/api/src/lib/orchestrator/engine.ts` implements the durable `driveLoop`,
+  records actions, parks on an async job or approval gate, and resumes from
+  persisted state.
+- `EngineDeps` already injects a model and tool registry, but production uses
+  one root prompt and the default all-tools registry.
+- The root model still receives `inputSummary`, compact prior actions, and tool
+  schemas rather than a stable-ID project-state projection.
+- `orchestrator_runs` has no agent role, persistent domain session, assignment,
+  parent/root link, typed inter-agent report, or domain wait state.
 - `actions` links invocations to one run, but action append is not idempotently
-  retryable and actions have no relational delegation link.
-- The root model does not yet read a stable-ID project-state view. It receives
-  `inputSummary`, compact prior actions, and the tool schemas, so “look at the
-  project and route the request” requires a new read projection.
-- The leased `orchestrator_dispatches` queue already provides the detached
-  execution foundation child runs should reuse.
-- The current vocabulary has **18 registered tool names**. Documentation and UI
-  projections contain older 15/16/17-tool assumptions and should stop carrying
-  hand-maintained tool counts.
-- Run projections assume all actions belong to one flat run and impose a static
-  tool order for display.
-- The same tool-name vocabulary is duplicated across orchestrator type modules,
-  and some tools create leaf actions in addition to the engine's wrapper action.
-  Delegation needs one canonical invocation identity plus explicit parent-child
-  action relationships where leaf actions remain valuable.
-- `spent_usd` and model/provider cost records do not currently form one complete
-  async cost ledger. Nested runs must not inherit that undercounting or introduce
-  double settlement.
-- Request Changes appends `board_feedback` into the run, but restart behavior
-  still relies partly on fixed stage boundaries rather than graph-scoped
-  specialist routing.
-
-This roadmap reuses the durable loop rather than introducing a second workflow
-engine.
+  retryable and does not attribute a decision through root action, domain
+  session, assignment, job, and produced assets.
+- The leased `orchestrator_dispatches` queue provides the detached execution
+  foundation that domain assignment runs should reuse.
+- The current vocabulary has 18 registered tool names. Other documentation and
+  UI projections contain older hand-maintained counts, so authoritative prose
+  should stop treating a count as a contract.
+- Run projections assume one flat history and impose a static tool order.
+- `spent_usd` and model/provider cost records do not yet form one complete async
+  cost ledger.
+- Request Changes still relies partly on fixed stage boundaries rather than
+  graph-scoped creative-director decisions.
 
 ### Related scopes to reuse, not fork
 
+- [`orchestrator-decision-evals.md`](orchestrator-decision-evals.md) provides
+  the existing real-model, no-execution routing harness that Gate 0 extends.
 - [`graph-rerun-decisioning-prs.md`](graph-rerun-decisioning-prs.md) owns the
   graph candidate set, semantic pruning, fingerprint pins, and costed rerun
-  proposal. PR 16 integrates that contract rather than inventing a second blast-
+  proposal. PR 13 integrates that contract rather than inventing another blast-
   radius model.
-- [`regeneration-coverage-prs.md`](regeneration-coverage-prs.md) owns broad
-  immutable-version regeneration coverage. Specialists call that vocabulary;
-  they do not create mutable replacement paths.
+- [`regeneration-coverage-prs.md`](regeneration-coverage-prs.md) owns immutable-
+  version regeneration coverage. Domain agents call that vocabulary; they do
+  not create mutable replacement paths.
 - [`ooda-feedback-loop.md`](ooda-feedback-loop.md) and
   [`ooda-feedback-implementation-prs.md`](ooda-feedback-implementation-prs.md)
-  own critique-to-revision learning and feedback capture. The review specialist
-  supplies structured findings to that loop.
+  own critique-to-revision learning and feedback capture. The creative
+  director's critique supplies structured findings to that loop.
 - [`orchestrator-step-durability.md`](orchestrator-step-durability.md) owns the
-  existing bounded store retry work. PR 3 closes its explicitly deferred
-  idempotent-action gap.
+  existing bounded store retry work. PR 4 closes its deferred idempotent-action
+  gap.
 - [`story-development-agent-handoff.md`](story-development-agent-handoff.md) is
-  useful historical context but contains pre-asset-graph assumptions; PR 1 must
-  mark superseded sections instead of treating it as current implementation.
+  historical context with pre-asset-graph assumptions. PR 2 must mark
+  superseded sections instead of treating it as current implementation.
 
 ## Tool ownership
 
-The existing primitive tools remain granular and idempotent. PR 2 makes the
-ownership below executable metadata instead of prompt-only convention.
+The primitive tools survive intact. PR 3 makes this ownership executable
+metadata rather than prompt-only convention.
 
-| Role | Primitive tools |
+| Role | Model-visible tools |
 | --- | --- |
-| Story | `create_or_load_brief`, `develop_story_blueprint`, `draft_script`, `plan_shots` |
-| Image | `plan_visual_anchors`, `generate_anchor`, `generate_storyboard`, `generate_keyframe`, `regenerate_image_asset` |
-| Video | `generate_clip`, `edit_video_asset` |
-| Audio | `generate_audio`, `fit_audio_to_picture` |
-| Edit | `assemble_timeline` |
-| Review | `critique_timeline` |
-| Root/control plane | six `delegate_*` tools, deterministic `export_video`, optional explicit `publish_to_catalog`, and model `done` |
-| Engine-owned, not model-facing | approval gates, child wait/resume, retries, cancellation, cost settlement |
+| Creative director | `create_or_load_brief`, `develop_story_blueprint`, `draft_script`, `plan_shots`, `plan_visual_anchors`, `assemble_timeline`, `critique_timeline`, `request_approval`, `export_video`, `delegate_visuals`, `delegate_audio`, PR 14's batched `delegate_domains`, optional `publish_to_catalog`, and model `done` |
+| Visuals | `generate_anchor`, `generate_storyboard`, `generate_keyframe`, `generate_clip`, `regenerate_image_asset`, `edit_video_asset`, and domain `done` / report outcomes |
+| Audio | `generate_audio`, `fit_audio_to_picture`, and domain `done` / report outcomes |
+| Runtime-owned, not model-facing | Session/assignment claim, wait/resume, report acknowledgement, retry, cancellation, authorization, cost settlement, gate persistence |
 
-`request_approval` should stop being a generally available model tool. A
-specialist returns a costed proposal or `approval_required`; the root/runtime
-creates the gate. This keeps approval a control-plane concern and matches the
-observe-first Request Changes contract.
+The exact root tool count is not a design target. The reliability hypothesis is
+that root generation choices collapse into a small number of domain dispatches
+while coherence tools remain available where they belong.
 
-### Cross-domain preconditions
+`request_approval` stays a **root-only model tool**. The creative director
+decides what proposal to present and why; the runtime persists and enforces the
+gate. Domain agents cannot create independent creator-facing approvals.
 
-Role scoping intentionally means a specialist cannot always satisfy every
-primitive tool error itself.
+### In-domain self-healing
 
-Example:
+The Visuals registry intentionally spans still and motion generation:
 
 ```text
-Video agent calls generate_clip
+Visuals calls generate_clip
   -> tool reports missing beat_keyframe
-  -> image tools are not visible to the video agent
-  -> video child run returns handoff_required(image, beat_keyframe:<beat id>)
-  -> root delegates the bounded prerequisite to the image agent
-  -> root retries or resumes the video assignment
+  -> generate_keyframe is in the same Visuals registry
+  -> Visuals generates the keyframe and retries generate_clip
+  -> Visuals returns done with the produced asset IDs
 ```
 
-Within-domain prerequisites stay local. The image agent may move from anchor
-planning to storyboard to keyframe because all three belong to its scoped craft.
-Changing the story because a shot is difficult does not stay local; that is a
-new project-level decision for the root.
+That sequence remains inside one session because it is one visual craft problem.
+Changing the story to avoid a difficult shot is outside Visuals authority and
+returns `question` or `blocked` to the creative director.
 
-## Delegation contracts
+## Turn-boundary communication contract
 
-The exact TypeScript spelling belongs in PR 1, but every implementation must
-preserve these semantics.
+### Down: `DomainTask.v1`
 
-### `SpecialistTask.v1`
+Every dispatch is a typed, versioned assignment stored with the originating
+root action:
 
-A typed, versioned work order stored as the delegation action's parameters:
-
-- `role` — one of `story | image | video | audio | edit | review`;
-- `objective` — the outcome requested by the root;
-- `instruction` — creator intent rewritten for the bounded assignment;
+- `domain` — `visuals | audio`;
+- `objective` — the requested outcome;
+- `instruction` — creator intent rewritten for the bounded domain assignment;
 - `target` — stable project, storyboard, scene, beat, panel, asset, lineage, or
-  timeline IDs; never position-only references;
-- `requiredOutputs` — asset kinds, selection roles, or review artifacts that
-  define completion;
-- `preserve` — approved assets, fingerprints, selections, or constraints that
-  must not change;
-- `candidateAffectedAssetIds` — graph-computed candidates the specialist may
-  inspect, not an instruction to regenerate all of them;
-- `budgetUsd` — the specialist's maximum allocation;
-- `approvalContext` — approved proposal/fingerprint token when resuming work
-  that required human confirmation;
-- `acceptanceCriteria` — concise checks the specialist must satisfy before
-  returning `completed`.
+  timeline IDs, never position-only references;
+- `requiredOutputs` — asset kinds or selection roles that define completion;
+- `creativeConstraints` — tone, mood, pacing, continuity, and other constraints
+  set by the creative director;
+- `preserve` — approved assets, selections, fingerprints, or pins that must not
+  change;
+- `candidateAffectedAssetIds` — graph-computed candidates the domain may
+  inspect, not permission to regenerate all of them;
+- `budgetUsd` — maximum allocation for the assignment;
+- `approvalContext` — an approved proposal/fingerprint token when relevant;
+- `acceptanceCriteria` — concise checks the domain must satisfy before `done`;
+- `causation` — originating root run, action, and creator message IDs.
 
-The work order is control/audit data, so typed, schema-marked JSONB in
-`actions.params` is appropriate. Stable user-facing storyboards, beats, panels,
-timelines, and approvals remain relational rows; this roadmap does not move
-product structure into JSONB.
+The task is typed control/audit data, so schema-marked JSONB is appropriate.
+Stable creator-facing storyboards, beats, panels, timelines, approvals, and
+creative state remain relational and graph-backed.
 
-### `SpecialistResult.v1`
+### Up: `DomainReport.v1`
 
-A compact, typed terminal result persisted on the child run and projected back
-to the root:
+A domain turn emits exactly one agent-authored outcome:
 
-- `completed` — assignment satisfied; includes output asset IDs and changed
-  selection roles;
-- `handoff_required` — names the required role, stable target IDs, requirement,
-  and why the current specialist cannot satisfy it;
-- `approval_required` — includes proposal, affected IDs, pinned fingerprints,
-  and estimated cost;
-- `blocked_on_user` — the assignment requires genuinely missing creator input;
-- `failed` — structured terminal error with retryability.
+- `done` — includes output asset IDs, changed selection roles, acceptance
+  evidence, and a compact session summary;
+- `blocked` — carries a domain-safe projection of the existing
+  `PreconditionMiss` shape plus the required domain, stable targets, and why the
+  current domain cannot satisfy it. Raw sibling primitive names in
+  `satisfyWith` or `suggestedNextTools` remain in the action audit but are
+  translated before the domain model sees or emits the report;
+- `question` — carries one bounded creative question, relevant target IDs,
+  available options/tradeoffs, and the fingerprint that must still match when
+  the answer is applied.
 
-The root sees the compact result plus IDs, not the specialist's full prompt,
-reasoning trace, raw provider response, or media payload.
+`failed`, `canceled`, `timed_out`, and `superseded` remain runtime assignment
+states, not additional agent-to-agent report vocabulary. A missing tool/graph
+prerequisite is `blocked`; a creative judgment outside domain authority is
+`question`.
 
-## Durable run model
+Every task and report has a durable sequence number, idempotency key, persisted
+acknowledgement, and exactly-once parent wake-up. A domain question is addressed
+to the creative director, not directly to the creator. The root answers from
+the brief/project constraints and creates the next assignment turn in the same
+session. If creator input is truly necessary, the root converts its recommended
+answer into the existing approve/reject proposal flow; rejection returns normal
+creator feedback to the root rather than introducing a separate domain-question
+UI mutation.
 
-Specialists are durable child runs, not in-memory helper calls and not raw
-provider jobs.
+### The asset graph is the real communication channel
+
+Tasks and reports carry control flow, intent, constraints, and stable IDs. They
+do not copy creative state between agents.
+
+At the start of every domain turn, the agent re-reads the authorized projection
+of current assets, edges, selections, pins, and relational story objects. It
+writes results as new immutable assets/actions and moves selections through
+existing append-only mechanisms. The next agent observes those graph writes.
+
+Session history may retain recent instructions, answers, unresolved questions,
+and compact summaries for conversational continuity. It is routing context,
+never an alternate source of creative truth. Compaction must retain referenced
+asset/action IDs and must not preserve stale copied project snapshots.
+
+## Durable session and run model
+
+A persistent session is an identity and continuity boundary; an assignment run
+is a finite, replayable execution of `driveLoop`.
+
+The persistence identities are deliberately distinct:
+
+- `agent_session_id` identifies the permanent project/domain continuity record;
+  there is exactly one for each `(project_id, domain)` for the project's lifetime.
+- `domain_assignment_id` identifies one root-to-domain turn. The row contains
+  `DomainTask.v1`, sequence, status, correlation/continuation IDs, and pins.
+- `orchestrator_run.id` identifies the one finite `driveLoop` run for that
+  assignment. Async parking/resumption and infrastructure retries reuse it.
+- `DomainReport.v1` is the single acknowledged result keyed to the assignment.
+  A `blocked` or `question` successor is a new assignment and run in the same
+  session.
+
+There is no separate free-form “message” persistence entity in the first cut;
+task and report are the two typed turn-boundary records.
 
 ```text
 root orchestrator_run
-  -> delegation action (running)
-      -> child orchestrator_run (agent_role=image)
-          -> primitive actions
-              -> async jobs
-          -> typed terminal result
-      -> delegation action (applied / failed)
-  -> root resumes with compact child result
+  -> root delegation action (running)
+      -> domain agent_session (project_id + domain, persistent)
+          -> domain_assignment N (contains DomainTask.v1)
+              -> child orchestrator_run (finite driveLoop invocation)
+                  -> primitive actions
+                      -> async jobs
+                      -> assets + edges + selections
+              -> DomainReport.v1 N
+          -> compact session context for assignment N+1
+      -> root delegation action (applied / failed)
+  -> root resumes exactly once with the report and current graph state
 ```
+
+Do not reopen a terminal child run to simulate persistence. Introduce an
+explicit session identity and link ordinary finite runs/assignments to it. One
+persistent session exists per `(project_id, domain)` in the initial design;
+every assignment has a monotonically increasing sequence and at most one active
+claim.
 
 Required invariants:
 
-1. A delegation action is created idempotently before its child run.
-2. A child run has exactly one parent run and one delegation action.
-3. Parent and child always share `project_id` and workspace authorization.
-4. A specialist registry cannot contain delegation tools or tools owned by a
-   different role.
-5. Every primitive call is checked against the work order's stable target IDs;
-   a scoped registry alone is not sufficient authorization to touch the whole
-   project.
-6. Child terminalization finalizes the delegation action exactly once and
-   re-enqueues the parent exactly once.
-7. Late job completion cannot revive a canceled root or superseded child.
-8. Costs are charged once. Root reporting includes descendant spend without
-   copying or summing the same charge twice.
-9. Approval is rooted in the creator-facing run. Specialists cannot create
-   independent user-facing gates.
-10. Assets remain immutable; changes mint versions and move selections.
-11. Existing action, asset-edge, and selection provenance remains visible even
-    though the root sees a compact result.
+1. A root delegation action and domain assignment are created idempotently
+   before domain execution begins.
+2. Every domain run links to one session, assignment, originating root run, and
+   originating root action.
+3. Root, session, assignment, and child run always share project/workspace
+   authorization.
+4. A domain registry cannot contain dispatch, root coherence, or sibling tools.
+5. Every primitive call is checked against the assignment's stable targets; a
+   restricted registry alone is not authorization for the whole project.
+6. Assignments in one persistent session are serialized from the first dispatch
+   implementation. A second request may queue or supersede according to explicit
+   policy but may not run concurrently against stale selection pins.
+7. A domain report is persisted and acknowledged exactly once; it wakes the
+   waiting root exactly once.
+8. A late completion from assignment N cannot mutate active selections or
+   revive work after assignment N+1 supersedes it.
+9. Costs are charged once and aggregated across the root run family without
+   copying charges.
+10. Root cancellation cascades to active assignments and cancellable jobs; late
+    callbacks are fenced.
+11. Creator approval is rooted in the creative-director run. Domain agents
+    cannot create independent gates.
+12. Assets remain immutable; changes mint versions and append selections.
+13. Session compaction preserves control continuity and stable IDs without
+    becoming a second creative-state store.
+14. Existing action, edge, selection, job, and asset provenance remains visible
+    even though the root consumes a compact report.
 
 ## PR dependency map
 
 ```mermaid
 flowchart TD
-  P1["PR 1 — Architecture contract"] --> P2["PR 2 — Tool ownership"]
-  P1 --> P3["PR 3 — Idempotent actions"]
-  P3 --> P4["PR 4 — Hierarchical runs"]
-  P4 --> P5["PR 5 — Delegation lifecycle"]
-  P2 --> P5
-  P2 --> P6["PR 6 — Project-state packets"]
-  P4 --> P6
-  P5 --> P7["PR 7 — Specialist runtime + eval harness"]
-  P6 --> P7
-
-  P7 --> P8["PR 8 — Control-plane hardening"]
-  P8 --> P9["PR 9 — Story agent"]
-  P8 --> P10["PR 10 — Image agent"]
-  P8 --> P11["PR 11 — Video agent"]
-  P8 --> P12["PR 12 — Audio agent"]
-  P8 --> P13["PR 13 — Edit agent"]
-  P8 --> P14["PR 14 — Review agent"]
-
-  P9 --> P15["PR 15 — Root router"]
-  P10 --> P15
-  P11 --> P15
-  P12 --> P15
-  P13 --> P15
-  P14 --> P15
-
-  P15 --> P16["PR 16 — Request Changes routing"]
-  P16 --> P17["PR 17 — Parallel fan-out/fan-in"]
-  P17 --> P18["PR 18 — API + UI projection"]
-  P18 --> P19["PR 19 — Cutover + cleanup"]
+  P1["PR 1 — Decision-eval gate"] --> P2["PR 2 — Architecture contract"]
+  P2 --> P3["PR 3 — Tool ownership"]
+  P2 --> P4["PR 4 — Session/provenance schema"]
+  P4 --> P5["PR 5 — Idempotent provenance wiring"]
+  P3 --> P6["PR 6 — Turn-boundary dispatch"]
+  P5 --> P6
+  P3 --> P7["PR 7 — Graph context + scope"]
+  P4 --> P7
+  P6 --> P8["PR 8 — Reused driveLoop profiles"]
+  P7 --> P8
+  P8 --> P9["PR 9 — Tree controls"]
+  P9 --> P10["PR 10 — Visuals"]
+  P9 --> P11["PR 11 — Audio"]
+  P10 --> P12["PR 12 — Creative director"]
+  P11 --> P12
+  P12 --> P13["PR 13 — Request Changes"]
+  P13 --> P14["PR 14 — Parallel dispatch"]
+  P14 --> P15["PR 15 — API + UI"]
+  P15 --> P16["PR 16 — Default-on rollout"]
+  P16 --> P17["PR 17 — Cleanup"]
 ```
 
-PRs 9–14 intentionally own distinct specialist files and can proceed in
-parallel after PR 8. PR 18 is predominantly `apps/web`; it can begin against
-fixture payloads once the PR 5 run-tree contract is stable, but it should merge
-after the final API projection is known.
+PRs 10 and 11 intentionally own distinct domain files and can proceed in
+parallel after PR 9. PR 15 is predominantly `apps/web`; fixture work may begin
+after the PR 6 session/report contract stabilizes, but it should merge after the
+final API projection is known.
+
+### Requirements for every implementation PR
+
+Every PR below follows [`AGENT_WORKFLOW.md`](../../AGENT_WORKFLOW.md): keep a
+worksheet and feedback entry, add a targeted observable test, exercise the real
+affected app/API path, request the required independent reviews, run
+`pnpm agent:lint:fix` and scoped `pnpm agent:validate`, and open a ready PR.
+Documentation-only contract PRs record why runtime execution is not applicable.
+PR 15 additionally uses TanStack Query for server state and co-located CSS
+Modules for new UI styling.
 
 ## PR roadmap
 
-### PR 1 — Architecture contract and North Star amendment
+### PR 1 — Baseline decision evals and adoption gate
 
 **Depends on:** this scope being approved.
 
 **Deliver:**
 
-- Add an architecture decision record establishing the two-level hierarchy,
-  role boundaries, deterministic worker boundary, and no specialist-to-
-  specialist delegation rule.
-- Amend `docs/NORTH_STAR.md` Principles 1, 3, 6, 7, and 10: the root owns the
-  project flow and blast radius through delegation; one engine means one durable
-  runtime reused by every agent; determinism stays in primitive tool contracts;
-  specialists self-heal only within their domain; and the **agent system** is
-  the only writer while each specialist writes only inside its work order.
-- Define `AgentRole`, `SpecialistTask.v1`, `SpecialistResult.v1`, and terminal
-  outcome types in a focused shared module.
-- Document the six root delegation capabilities and direct export boundary.
-- Correct tool-count drift by removing hard-coded counts from authoritative
-  prose.
+- Extend the existing decision-eval harness with long-context, tool-overload,
+  cross-modality, selective-regeneration, premature-done, and recovery cases.
+- Run repeated samples against the flat production registry and record accuracy,
+  unnecessary-turn, and recovery baselines.
+- Add fixture-only simulations of the proposed creative-director/domain
+  decision surface; never duplicate live billable generation.
+- Record the agreed threshold and an explicit proceed/defer decision.
 
-**Acceptance:** reviewers can classify every current tool, every future tool
-must declare an owner, and the new model no longer conflicts with the North Star
-language.
+**Acceptance:** the team can state which failure mode the hierarchy addresses
+and what improvement justifies runtime investment. A defer decision leaves the
+remaining roadmap valid for later adoption.
+
+**Validation:** deterministic eval unit tests plus repeated opt-in real-model
+decision reports.
+
+### PR 2 — Architecture contract and North Star amendment
+
+**Depends on:** PR 1 proceed decision. The written contract may still land if
+runtime activation is deferred, provided its status is explicit.
+
+**Deliver:**
+
+- Add an architecture decision record establishing the creative-director role,
+  persistent Visuals/Audio sessions, two-level limit, graph-as-state rule, and
+  turn-boundary-only communication.
+- Amend `docs/NORTH_STAR.md` Principles 1, 3, 6, 7, and 10: the creative
+  director owns the whole flow; one engine means one `driveLoop` shared by all
+  agents; domains self-heal only in-lane; graph state moves between agents by ID;
+  and the agent system remains the only writer.
+- Define `AgentRole`, `DomainTask.v1`, `DomainReport.v1`, report payloads, and
+  runtime assignment states in a focused shared module.
+- Document the root coherence tools, domain dispatches, deterministic worker
+  boundary, and future-domain admission rule.
+- Remove hard-coded tool counts from authoritative prose.
+
+**Acceptance:** reviewers can classify every current tool and outcome, and the
+target no longer conflicts with North Star's “central agent” wording.
 
 **Validation:** shared-package type tests, documentation links, and
 `pnpm agent:validate -- --scope docs`.
 
-### PR 2 — Tool ownership metadata and role-scoped registry views
+### PR 3 — Canonical capability ownership and restricted registries
 
-**Depends on:** PR 1.
-
-**Deliver:**
-
-- Add required `ownerRole`/capability metadata to primitive tool definitions.
-- Replace the duplicated orchestrator/orchestrator-tool name unions with one
-  canonical capability catalog that also owns label, execution mode, cost
-  class, and gate metadata.
-- Create explicit registry builders for `story`, `image`, `video`, `audio`,
-  `edit`, and `review`; avoid a new catch-all `index.ts`.
-- Add an assertion that every primitive tool has exactly one owner.
-- Prevent a specialist registry from containing root delegation/control tools
-  or tools owned by another role.
-- Convert cross-domain `suggestedNextTools` into a role-level handoff candidate
-  instead of exposing the missing tool to the wrong specialist.
-- Make run/UI labels derive from the same metadata where practical, eliminating
-  duplicate tool-order/count maps.
-
-**Acceptance:** registry tests prove the exact mapping in [Tool ownership](#tool-ownership)
-and fail when an unowned or multiply owned tool is registered.
-
-**Validation:** orchestrator-tool registry unit tests and tool-test bridge tests.
-
-### PR 3 — Idempotent action lifecycle and stable invocation IDs
-
-**Depends on:** PR 1. Can proceed in parallel with PR 2.
+**Depends on:** PR 2.
 
 **Deliver:**
 
-- Preallocate a stable action/tool-call UUID before executing a mutating tool.
-- Let `createAction` accept that ID or an explicit invocation idempotency key.
-- Add a uniqueness constraint that makes invocation recording safely
-  retryable within a run.
-- Record `running` before a child run or external job is launched, then patch
-  lifecycle fields on completion.
-- Add `parent_action_id` (or the equivalent relational link) for leaf actions
-  emitted inside one primitive invocation, and pass the canonical action ID into
-  asset/provider paths instead of minting unrelated wrapper identities.
-- Include `recordInvocation` in bounded store retry without risking duplicate
-  action rows.
-- Preserve immutable decision fields and append-only audit behavior.
+- Add required `ownerRole`/capability metadata to primitive definitions.
+- Replace duplicated tool-name unions with one canonical capability catalog
+  that also owns label, execution mode, cost class, and gate metadata.
+- Create explicit registry builders for `root`, `visuals`, and `audio`; avoid a
+  catch-all `index.ts`.
+- Assert every primitive tool has exactly one model-facing owner.
+- Prevent domain registries from containing root, sibling, or dispatch tools.
+- Translate both cross-domain `suggestedNextTools` and
+  `unmetRequirements[].satisfyWith` into domain/stable-target `blocked`
+  candidates instead of exposing hidden sibling primitive tools.
+- Derive run/UI labels from the same metadata where practical.
+
+**Acceptance:** registry tests prove the mapping in [Tool ownership](#tool-ownership)
+and fail on unowned, multiply owned, or cross-domain tools.
+
+**Validation:** registry unit tests and tool-test bridge tests.
+
+### PR 4 — Persistent session, assignment, and provenance schema
+
+**Depends on:** PR 2. Can proceed in parallel with PR 3.
+
+**Deliver:**
+
+- Add a persistent project/domain session identity with a uniqueness constraint
+  for `(project_id, domain)`.
+- Add finite domain assignments with monotonic sequence, continuation,
+  correlation, current pins, originating root run, and originating root action.
+- Link finite assignment runs and actions to `agent_session_id` and assignment;
+  add `parent_action_id` where a primitive emits valuable leaf actions.
+- Persist schema-marked domain reports and compact session summaries.
+- Add constraints for same-project ownership, one active assignment claim,
+  maximum depth, and no self-parenting.
+- Extend RLS through existing project/workspace ownership helpers.
+- Keep dispatch rows one-per-finite-run so assignments reuse the leased queue.
+
+**Acceptance:** DB tests create/reuse a Visuals session, link multiple finite
+assignments and actions to their originating root decisions, reject invalid or
+cross-project relationships, and preserve separate run histories.
+
+**Validation:** local Supabase migration check, migration/RLS/tenancy tests, and
+no migration-history rewrite.
+
+### PR 5 — Idempotent action lifecycle, session store, and provenance wiring
+
+**Depends on:** PR 4.
+
+**Deliver:**
+
+- Preallocate stable action/tool-call IDs before mutating tools execute.
+- Make invocation creation idempotently retryable within a run.
+- Record `running` before external work launches, then patch lifecycle fields.
+- Extend store queries for session lookup/create, assignment enqueue/claim,
+  history reads, report acknowledgement, and root-family projection.
+- Pass the canonical root/session/assignment/run/action provenance context into
+  primitive, job, asset, edge, and selection paths instead of minting unrelated
+  wrapper identities.
+- Include invocation recording in bounded store retry without duplicate action
+  rows, and preserve immutable decision fields and append-only audit behavior.
 
 **Acceptance:** crash/retry tests prove one logical invocation creates one
-action even when the write response is lost or the dispatch is reclaimed.
+action, session claims are stable, and every generated asset can be traced back
+to the root decision before dispatch is enabled.
 
-**Validation:** migration/RLS tests, store integration tests, engine retry tests,
-and the existing action immutability tests.
+**Validation:** API store, concurrency, engine retry, provenance integration,
+and action immutability tests.
 
-### PR 4 — Hierarchical orchestrator-run schema and store
+### PR 6 — Turn-boundary dispatch, reports, and parent wake-up
 
-**Depends on:** PR 3.
-
-**Deliver:**
-
-- Add additive relational hierarchy fields to `orchestrator_runs`: `agent_role`,
-  `root_run_id`, `parent_run_id`, and `delegation_action_id` (exact names may
-  follow local conventions).
-- Add a typed, schema-marked terminal result surface for specialist results.
-- Add parent/role indexes and database constraints for same-project ownership,
-  one parent action per child, no self-parenting, and maximum supported depth.
-- Extend store mappers and queries for child creation, child listing, root
-  lookup, and run-tree reads.
-- Extend RLS through project/workspace ownership using existing helpers; never
-  compare domain IDs directly to `auth.uid()`.
-- Keep dispatch rows one-per-run so child runs reuse the existing leased queue.
-
-**Acceptance:** DB tests create a root and six role variants, reject invalid
-links/cross-project children, and read the tree under the correct workspace.
-
-**Validation:** local Supabase migration check, API store tests, RLS/tenancy
-tests, and no migration-history rewrite.
-
-### PR 5 — Delegation tool and parent/child execution lifecycle
-
-**Depends on:** PR 4 and PR 2.
+**Depends on:** PRs 3 and 5.
 
 **Deliver:**
 
-- Implement the server-owned primitive for creating a specialist child run
-  from a typed task and the pre-recorded delegation action.
-- Make child creation plus dispatch enqueue atomic/idempotent so a crash cannot
-  leave an unreachable child or enqueue the same work twice.
-- Add child wait/resume semantics distinct from media-job wait semantics.
-- Finalize the delegation action from the child terminal result and propagate
-  output asset IDs to the root's compact prior-result projection.
-- Re-enqueue the root exactly once after child terminalization.
-- Ensure failed/reclaimed dispatches, inline-fast child completion, and late
-  callbacks cannot create concurrent root turns.
-- Keep the root and child as separate durable histories; do not copy every
-  child primitive action into the root action log.
-- Enforce depth, per-root child-count, and turn limits at the runtime boundary.
+- Implement root-only `delegate_visuals` and `delegate_audio` tools that append
+  typed tasks to the persistent session.
+- Create the assignment, finite run, and dispatch enqueue atomically and
+  idempotently.
+- Add a domain-wait state distinct from media-job and approval waits.
+- Persist exactly one `done | blocked | question` report per completed domain
+  turn, acknowledge it, finalize the delegation action, and wake the root once.
+- Resume a questioned/blocked session through a later sequenced assignment,
+  never an out-of-band message.
+- Define continuation semantics explicitly: `blocked`/`question` closes the
+  current finite assignment, and the root response creates a successor with
+  `continues_assignment_id`, `correlation_id`, current pins, and a new sequence.
+- Add attempt/cycle limits so two domains cannot bounce the same unmet
+  requirement indefinitely.
+- Atomically serialize one active turn per session, deduplicate task/report writes,
+  and claim/wake the root exactly once.
+- Fence cancellation, inline completion, reclaimed dispatches, duplicate
+  callbacks, supersession, and late reports before any domain can run live.
+- Enforce depth, per-root assignment, report, continuation, and turn limits.
+- Keep this PR at the durable transport boundary: use a fake domain report
+  producer in lifecycle tests. Production `driveLoop` report emission lands in
+  PR 8, so no domain profile can be enabled here.
 
-**Acceptance:** an engine test executes root → child → async primitive job →
-child resume → root resume across process boundaries with no duplicate action or
-turn.
+**Acceptance:** a transport test executes root → persistent session assignment
+→ fake report producer → report → root resume across processes, then sends
+follow-up feedback through the same session without duplication.
 
-**Validation:** engine, recovery-worker, dispatch-lease, race, and cancellation
-unit/integration tests.
+**Validation:** engine, task/report transport, recovery-worker, dispatch-lease, race,
+cancellation, and idempotency tests.
 
-### PR 6 — Project-state projection and specialist context packets
+### PR 7 — Fresh graph context, assignment scope, and session compaction
 
-**Depends on:** PR 2 and PR 4. Can proceed in parallel with PR 5.
+**Depends on:** PRs 3 and 4. Can proceed in parallel with PRs 5–6 after the
+schema contract is stable.
 
 **Deliver:**
 
-- Build a typed project-state projection for the root containing active assets,
-  active selections, relevant relational story objects, run/child status,
-  approvals, and graph stale candidates.
-- Build role-filtered context packets that include stable IDs and concise
-  summaries rather than raw media or full project dumps.
+- Build a typed root projection containing active assets/selections, relational
+  story objects, domain status, approvals, graph stale candidates, and pins.
+- Build role-filtered domain projections from the current graph at the start of
+  every assignment turn.
+- Keep tasks and reports ID-based; never copy a project snapshot into session
+  memory as canonical state.
 - Make target scope explicit for project, storyboard, scene, beat, panel, asset,
   lineage, timeline item, or export requests.
-- Thread that target scope into tool execution context and reject primitive
-  inputs that reach outside the authorized work order.
-- Separate trusted system instructions from creator/project content to reduce
-  prompt-injection risk.
-- Enforce workspace/project authorization before a task packet is assembled.
-- Add compaction/windowing rules so long child histories do not grow model
-  context without bound.
+- Reject primitive inputs outside the assignment's stable targets.
+- Enforce allowed-target and authorized graph-closure checks server-side for
+  every selection append, edge, and minted asset—not only in prompts or parsed
+  tool inputs. Narrow project-wide primitives before a domain can call them.
+- Separate trusted instructions from creator/project content and enforce
+  workspace/project authorization before context assembly.
+- Compact long session histories while preserving unresolved questions,
+  constraints, report summaries, and referenced asset/action IDs.
 
-**Acceptance:** fixtures prove each role receives the context it needs and does
-not receive unrelated provider secrets, raw media payloads, hidden tools, or
-cross-project data.
+**Acceptance:** fixtures prove every role sees current authorized graph state,
+not stale copied state, and cannot inspect secrets, hidden tools, unrelated
+assets, or another project.
 
-**Validation:** projection unit tests, tenancy tests, token-size fixtures, and
-Request Changes target fixtures.
+**Validation:** projection, tenancy, prompt-boundary, target-scope, compaction,
+token-size, and stale-pin fixtures.
 
-### PR 7 — Reusable specialist runtime and split evaluation harness
+### PR 8 — Role-configured reuse of the existing driveLoop
 
-**Depends on:** PRs 5 and 6.
-
-**Deliver:**
-
-- Parameterize the existing durable engine with an `agentRole`, role prompt,
-  role registry, role context builder, and role completion policy.
-- Keep one implementation of parking, resumption, action recording, provider-key
-  context, and error handling; do not fork six engines.
-- Reject recursive delegation from specialist runs.
-- Translate out-of-domain precondition misses into `handoff_required`.
-- Split evaluations into root-routing decisions and specialist leaf-tool
-  decisions.
-- Add a shared specialist test harness with fake stores plus opt-in real-model
-  cases.
-
-**Acceptance:** a fixture specialist can call only its two fake owned tools,
-complete durably, return a compact result, and request a cross-domain handoff
-without seeing the other role's schema.
-
-**Validation:** model tests, engine tests, registry-isolation tests, decision
-eval fixtures, and opt-in real-provider routing eval.
-
-### PR 8 — Budget, approval, cancellation, and recovery across the run tree
-
-**Depends on:** PR 7.
+**Depends on:** PRs 6 and 7.
 
 **Deliver:**
 
-- Allocate child budgets from root remaining budget and settle actual spend
+- Introduce `AgentDefinition` with role prompt, registry, context builder, and
+  completion/report policy. Keep it declarative and prohibit dispatch tools in
+  every non-root definition.
+- Parameterize the existing production engine entrypoint to run a root or
+  domain definition; do not create a generalized second agent engine.
+- Keep one implementation of parking, resumption, action recording, job
+  waiting, provider-key context, timeout, and error handling.
+- Reject recursive delegation from domain definitions.
+- Convert out-of-domain `PreconditionMiss` failures to `blocked`; expose a
+  bounded `question` completion for creative escalation.
+- Connect production domain completion to PR 6's durable report transport and
+  prove `done | blocked | question` emission through the shared loop.
+- Split evaluations into root creative/routing decisions and domain leaf-tool
+  decisions, using one shared fake-store harness.
+- Run the existing flat-root engine and decision suite unchanged through the
+  parameterized entrypoint before any domain profile depends on it.
+
+**Acceptance:** the current root behavior/evals pass unchanged through the
+parameterized entrypoint; fixture definitions run through that exact production
+`driveLoop`, see only their registries/context, self-heal in-domain, and emit a
+typed report without a forked runtime.
+
+**Validation:** model, engine, registry-isolation, report-contract, decision-eval,
+and opt-in real-provider routing tests.
+
+### PR 9 — Budget, root approval, cancellation, and recovery across assignments
+
+**Depends on:** PR 8.
+
+**Deliver:**
+
+- Allocate assignment budgets from the root ceiling and settle actual spend
   exactly once.
-- Reconcile async media cost and model-call cost into the same root run family;
-  do not rely only on synchronous `ToolCallResult.costUsd`.
-- Roll descendant model/provider costs into root reporting without double
-  charging credits.
-- Convert `approval_required` results into root gates addressed to a delegation
-  action/work order—not only a raw tool name—with proposals, affected IDs,
-  estimates, and pinned fingerprints.
-- Cascade root cancellation to active children and cancellable jobs; ignore late
-  completion after cancellation/supersession.
-- Define retry/redelegate policy for recoverable child failure and terminal
-  policy for non-recoverable failure.
-- Extend recovery sweeps and dispatch leases to parent/child waits.
+- Reconcile async provider and model-call costs in one root-family ledger.
+- Keep `request_approval` as a root-only creative-director tool while the
+  runtime persists/enforces gates addressed to a proposal and originating work.
+- Cascade root/session cancellation to active assignments and cancellable jobs;
+  ignore late completion after cancellation or supersession.
+- Define retry/re-dispatch policy for recoverable assignment failure and
+  terminal policy for non-recoverable failure.
+- Extend recovery sweeps to domain waits, unacknowledged reports, active claims,
+  and parent wake-up.
 
-**Acceptance:** tests cover insufficient credits, mid-child budget exhaustion,
-approval/rejection, root cancellation, child failure, worker crash, late job
-completion, and exactly-once parent resume.
+**Acceptance:** tests cover insufficient credits, budget exhaustion, approval
+and rejection, cancellation, worker crash, question/resume, blocked/resume,
+late completion, and exactly-once cost/report settlement.
 
-**Validation:** engine/store/credit-ledger/gate/recovery tests plus a local
-cancel-and-resume API smoke.
+**Validation:** engine/store/credit/gate/recovery tests plus a local mocked API
+cancel-and-resume smoke.
 
-No media specialist may be enabled against live provider work before this PR.
+No domain agent may be enabled against live provider work before this PR.
 
-### PR 9 — Story specialist
+### PR 10 — Visuals domain profile
 
-**Depends on:** PR 8.
+**Depends on:** PR 9.
 
-**Owns:** new story-agent prompt/config/evals and story registry file. Avoid
-editing other specialist files.
+**Owns:** new Visuals prompt/config/evals and Visuals registry file.
 
 **Deliver:**
 
-- Scope the story agent to brief, blueprint, script, and shot/beat plan tools.
-- Make blueprint/script optional for visual-first and uploaded-footage projects.
-- Preserve duration-aware planning and stable IDs.
-- Support story-level Request Changes by minting new graph-backed versions and
-  returning affected narrative/plan assets.
-- Return handoffs for visual, audio, motion, or edit work rather than calling
-  those tools.
+- Scope Visuals to generated anchors, storyboards, keyframes, clips, immutable
+  image regeneration, and content-aware video edits; visual-anchor planning
+  remains with the creative director.
+- Narrow project-wide primitives with explicit beat, panel, anchor, source
+  asset, or lineage targets.
+- Keep storyboard → keyframe → clip prerequisite recovery inside the session.
+- Preserve anchor identity, selected slots, immutable source links, content
+  hashes, provider/duration constraints, and uploaded-footage grounding.
+- Keep minor/photorealistic-provider policy in deterministic tool contracts.
+- Return `blocked` for missing root-owned visual-anchor plans or required Audio
+  work, and `question` when the visual change requires story, pacing, or
+  approval judgment.
 
-**Acceptance:** fresh prompt, existing-brief, visual-first, uploaded-footage,
-story revision, and rejected-plan scenarios route correctly and persist the
-expected provenance chain.
+**Acceptance:** first-pass visual generation, targeted still revision, new clip,
+uploaded-footage edit, missing keyframe recovery, and creative escalation all
+run through one persistent Visuals session with correct lineage.
 
-**Validation:** story decision evals, primitive tool tests, asset-edge
-assertions, and opt-in tool smoke.
+**Validation:** Visuals decision evals, tool batteries, provider-policy tests,
+graph/selection assertions, follow-up-session tests, and opt-in media smoke.
 
-### PR 10 — Image specialist
+### PR 11 — Audio domain profile
 
-**Depends on:** PR 8.
+**Depends on:** PR 9. Can proceed in parallel with PR 10.
 
-**Owns:** new image-agent prompt/config/evals and image registry file.
-
-**Deliver:**
-
-- Scope the image agent to visual-anchor planning, anchors, storyboard tiles,
-  keyframes, and immutable still-image regeneration.
-- Narrow any project-wide image primitive with explicit beat, panel, anchor, or
-  asset targets before relying on it for a bounded work order.
-- Let it satisfy image-domain prerequisites locally.
-- Preserve anchor identity, selected storyboard/keyframe slots, content hashes,
-  and graph inputs.
-- Keep minor/photorealistic-provider routing in deterministic tool contracts,
-  including the Gemini requirement.
-- Return a story handoff when the requested visual change requires narrative
-  restructuring and a video handoff when motion is the requested output.
-
-**Acceptance:** `beat -> storyboard -> keyframe` and targeted image revision run
-inside one image child; missing story/plan returns a bounded handoff.
-
-**Validation:** image decision evals, provider-policy tests, tool batteries,
-asset/selection assertions, and opt-in image smoke.
-
-### PR 11 — Video specialist
-
-**Depends on:** PR 8.
-
-**Owns:** new video-agent prompt/config/evals and video registry file.
+**Owns:** new Audio prompt/config/evals and Audio registry file.
 
 **Deliver:**
 
-- Scope the video agent to new beat clips and content-aware edits of existing
-  footage/generated clips.
-- Require named beat/source-asset targets; do not let a bounded assignment fan
-  out across every missing clip implicitly.
-- Disambiguate “make a new take” (`generate_clip`) from “change this footage”
-  (`edit_video_asset`).
-- Preserve immutable source links, selected beat-clip roles, duration/provider
-  constraints, and uploaded-footage grounding.
-- Translate missing keyframe/anchor requirements into image-agent handoffs.
-- Return edit/audio handoffs rather than altering timelines or sound.
+- Scope Audio to narration, dialogue, music, sound generation, and fitting audio
+  to picture.
+- Add explicit narration, dialogue, music, beat, asset, or timeline-slot targets
+  where current tools accept only project-wide intent.
+- Preserve typed mix/alignment metadata, active selections, timing constraints,
+  and immutable graph inputs.
+- Distinguish regenerating delivery/fitting from changing spoken meaning, which
+  becomes `question` for the creative director.
+- Return `blocked` when current picture assets are a hard prerequisite.
 
-**Acceptance:** new-clip, uploaded-footage edit, generated-clip edit, missing
-keyframe, and unsupported-duration scenarios route correctly.
+**Acceptance:** voiceover, music, refit, “redo warmer,” dialogue-meaning change,
+and picture-too-short scenarios produce correct local work or typed escalation
+across one persistent Audio session.
 
-**Validation:** video decision evals, tool batteries, graph lineage assertions,
-and opt-in provider smoke.
+**Validation:** Audio decision evals, alignment tests, tool batteries,
+asset-edge/selection assertions, follow-up-session tests, and opt-in audio smoke.
 
-### PR 12 — Audio specialist
+### PR 12 — Creative-director profile and root tool surface
 
-**Depends on:** PR 8.
-
-**Owns:** new audio-agent prompt/config/evals and audio registry file.
+**Depends on:** PRs 10 and 11.
 
 **Deliver:**
 
-- Scope the audio agent to narration/dialogue/music/sound generation and fitting
-  audio to picture.
-- Add explicit narration, dialogue, music, beat, or timeline-slot targets where
-  current tools only accept project-wide intent.
-- Preserve typed mix/alignment metadata, active audio selections, and timing
-  critiques.
-- Distinguish rewriting spoken content (story handoff) from regenerating voice
-  delivery or fitting existing text (audio work).
-- Return edit/video handoffs when picture timing must change.
+- Replace the flat all-tools root registry with the exact root ownership in
+  [Tool ownership](#tool-ownership).
+- Add a creative-director prompt that explicitly owns story, cross-modality
+  constraints, visual-anchor planning, assembly, critique, approval, blast
+  radius, and completion.
+- Feed the root current graph state, compact domain reports, unresolved
+  questions, active assignments, costs, gates, and pins.
+- Make the root choose between its coherence tools and domain dispatch, never a
+  leaf media/provider tool.
+- Support fresh projects, partial projects, resumes, multi-domain requests,
+  blocked prerequisites, creative questions, and follow-up feedback.
+- Ship behind a temporary feature flag, off by default.
+- Compare decisions only; never execute flat and hierarchical billable work in
+  shadow mode.
 
-**Acceptance:** voiceover, music, refit, dialogue-text change, and picture-too-
-short scenarios produce the correct local work or handoff.
+**Acceptance:** root evals preserve creative coherence and choose the correct
+root tool/domain/done across the scenario matrix; the registry cannot name a
+leaf Visuals or Audio tool.
 
-**Validation:** audio decision evals, alignment tests, tool batteries, asset-edge
-assertions, and opt-in audio smoke.
+**Validation:** creative-director/routing evals, end-to-end fake assignments,
+entry-route tests, and a local mocked-provider API smoke.
 
-### PR 13 — Edit specialist
+### PR 13 — Request Changes and graph-scoped selective regeneration
 
-**Depends on:** PR 8.
-
-**Owns:** new edit-agent prompt/config/evals and edit registry file.
-
-**Deliver:**
-
-- Scope the edit agent to deterministic timeline assembly driven by creative
-  pacing/cut/compositing intent.
-- Read selected source media by ID and persist the composite timeline plus child
-  edges.
-- Return media handoffs for missing or unsuitable source assets rather than
-  generating them.
-- Produce an export-ready outcome but do not render or publish.
-
-**Acceptance:** generated-media assembly, uploaded-footage assembly, pacing
-revision, missing audio, and missing clip scenarios behave correctly.
-
-**Validation:** edit decision evals, timeline tests, composite edge assertions,
-and deterministic assembly smoke.
-
-### PR 14 — Review specialist
-
-**Depends on:** PR 8.
-
-**Owns:** new review-agent prompt/config/evals and review registry file.
-
-**Deliver:**
-
-- Scope the review agent to read-only inspection and `critique_timeline`.
-- Return structured issues classified by owning role, target stable IDs,
-  severity, confidence, and whether creator approval is required.
-- Never regenerate, reselect, assemble, or export from the review child.
-- Support acceptance criteria for continuity, visual quality, audio fit, pacing,
-  safety, and output readiness.
-
-**Acceptance:** a mixed critique produces bounded recommendations for multiple
-roles without performing the revisions itself.
-
-**Validation:** review decision evals, structured-output tests, and cross-domain
-issue fixtures.
-
-### PR 15 — Root orchestrator router and delegation tool surface
-
-**Depends on:** PRs 9–14.
-
-**Deliver:**
-
-- Replace the root model's 18-tool catalog with six typed `delegate_*` tools,
-  deterministic `export_video`, optional explicit catalog publishing, and
-  `done`.
-- Feed the root the project-state projection and compact specialist outcomes.
-- Make the root choose scope/role, not leaf media tools or provider settings.
-- Add routing for fresh runs, partial projects, resumes, and multi-domain
-  creator requests.
-- Ship behind a temporary `POPCORN_SPECIALIST_AGENT_ROUTER` flag, off by default.
-- Do not execute both old and new generation paths in shadow mode; comparison
-  mode may evaluate decisions only, never duplicate billable work.
-
-**Acceptance:** root evals select the right specialist/export/done across the
-full scenario matrix and cannot name a primitive tool.
-
-**Validation:** root decision evals, end-to-end fake child runs, existing entry
-route tests, and one local API smoke with mocked media providers.
-
-### PR 16 — Request Changes and graph-scoped selective regeneration
-
-**Depends on:** PR 15.
+**Depends on:** PR 12; `graph-rerun-decisioning-prs.md` PR 1 (read-only proposal
+assembly) and PR 2 (agent decision/pinned-ID contract); and
+`regeneration-coverage-prs.md` PR 1 plus the enabled kind-specific coverage PRs
+(PR 2 keyframe, PR 3 clip, PR 4 audio, PR 5 cut, PR 6 storyboard). A scenario
+must remain disabled until its corresponding immutable regeneration path exists.
+Reuse graph-rerun PR 4/5 execution/fallback contracts where they have landed;
+do not duplicate them here.
 
 **Deliver:**
 
 - Route every object-scoped Request Changes message through a new/revived root
-  turn with its stable target IDs and current provenance.
+  turn with stable target IDs and current provenance.
 - Replace fixed restart-stage boundaries with `downstream_assets()` candidates
-  plus root semantic pruning.
-- Produce a proposed specialist work plan before expensive/fan-out revisions.
-- Preserve unaffected assets and selections; mint new versions only for changed
-  work and reconcile downstream selections through the responsible specialists.
-- Keep approval, rejection, and direct selection among existing assets as the
-  existing explicit UI carve-outs.
+  plus creative-director semantic pruning.
+- Reuse the appropriate persistent domain session for follow-up feedback such
+  as “redo beats 3–5 warmer.”
+- Propose a costed root work plan before expensive/fan-out revisions.
+- Preserve unaffected assets/selections and fence work with current
+  fingerprints.
+- Keep approval, rejection, and selection among existing assets as the existing
+  explicit UI carve-outs.
 
-**Acceptance:** image-only, clip-only, narration-only, pacing-only, upstream
-character, and multi-domain requests regenerate only the approved affected
-region and remain auditable.
+**Acceptance:** visual-only, audio-only, pacing-only, upstream-story, and mixed
+requests regenerate only the approved graph region and remain auditable.
 
-**Validation:** API integration tests with real graph fixtures, Request Changes
-component/API E2E, and stale-candidate/pruning decision evals.
+**Validation:** API integration with graph fixtures, Request Changes E2E, stale-
+candidate/pruning evals, and persistent-session follow-up tests.
 
-### PR 17 — Parallel specialist fan-out and deterministic fan-in
+### PR 14 — Cross-session parallel dispatch and deterministic fan-in
 
-**Depends on:** PR 16. Serial delegation must be stable first.
+**Depends on:** PR 13. Serial delegation must be stable first.
 
 **Deliver:**
 
-- Let the root issue one typed delegation plan containing independent child
-  tasks, such as image and audio work.
-- Create children atomically/idempotently and park the root on a durable join.
-- Resume only when the required children are terminal; keep optional/failed
-  branches explicit.
-- Add budget reservation so concurrent children cannot collectively exceed the
-  root ceiling.
+- Add one root-only batched `delegate_domains` capability. A single model tool
+  call atomically creates independent Visuals/Audio assignments and parks the
+  root on their durable join; separate parking delegate calls cannot implement
+  fan-out because the first would stop the current root turn.
+- Reuse PR 6's one-active-assignment session guarantee while allowing different
+  domain sessions to run in parallel.
+- Reserve budget so concurrent assignments cannot exceed the root ceiling.
+- Resume only when required reports arrive; keep optional/failed branches
+  explicit.
 - Reconcile immutable assets/selections using fingerprints so late results
   cannot overwrite newer choices.
-- Keep within-agent beat/provider fan-out in server-owned jobs; do not make the
-  LLM micromanage each parallel unit.
+- Keep within-domain beat/provider fan-out in server-owned jobs.
 
-**Acceptance:** image+audio children execute concurrently, survive one worker
-restart, respect budget, and fan into edit/review exactly once.
+**Acceptance:** Visuals and Audio overlap, survive a worker restart, respect
+budget/session locks, and fan into root assembly/critique exactly once.
 
-**Validation:** concurrency/race tests, dispatch lease tests, fingerprint
-conflict tests, and a timed mocked-media smoke showing real overlap.
+**Validation:** concurrency, lease, session-lock, budget-reservation,
+fingerprint-conflict, and timed mocked-media tests.
 
-### PR 18 — Hierarchical run API and observe-first UI projection
+### PR 15 — Session/run API and observe-first UI projection
 
-**Depends on:** PR 17 API contract. Web fixture work may begin earlier.
+**Depends on:** PR 14 API contract. Web fixture work may begin earlier.
 
 **Deliver:**
 
-- Extend run-detail APIs with a compact root/child hierarchy and specialist
-  labels while preserving assets/actions as the source of truth.
-- Project creator-facing stages from specialist outcomes, not a numbered list of
-  primitive tools.
-- Allow inspection/drill-down into specialist actions, jobs, produced assets,
-  and handoffs without exposing internal reasoning traces.
-- Show one creator feedback/approval loop; do not add direct-edit controls.
-- Use TanStack Query for run-tree polling, cache updates, and invalidation.
+- Extend run-detail APIs with the root, persistent domain sessions, finite
+  assignments, reports, and action/job drill-down.
+- Project creator-facing progress from creative work and domain outcomes rather
+  than a numbered primitive-tool pipeline.
+- Show active/waiting/blocked/failed states and root handling of domain questions
+  without exposing reasoning traces, presenting sessions as independent user
+  conversations, or adding a direct domain-question answer mutation.
+- Keep one creator-facing feedback/approval loop and no direct-edit controls.
+- Use TanStack Query for polling, cache updates, and invalidation.
 - Add route/component CSS Modules only; do not grow legacy global styles.
 
-**Acceptance:** users can understand what the orchestrator delegated, which
-specialist is active/waiting, what it produced, and what needs approval on
-desktop and mobile.
+**Acceptance:** users can understand what the creative director delegated,
+which domain is active, what it produced, and which root proposal needs creator
+approval on desktop/mobile.
 
-**Validation:** API projection tests, web unit tests, browser inspection at
-desktop/mobile, behavior-focused Playwright coverage, and E2E inventory update.
+**Validation:** API projection, web unit, browser desktop/mobile, behavior-
+focused Playwright, and E2E inventory updates.
 
-### PR 19 — Enable, delete the flat root surface, and update diagrams
+### PR 16 — Default-on rollout and soak
 
-**Depends on:** PR 18 and green end-to-end parity evidence.
+**Depends on:** PR 15 and green parity/evaluation evidence.
 
 **Deliver:**
 
-- Enable specialist routing by default and remove the temporary flag in the
-  same or immediately following commit.
-- Delete the root model's primitive-tool exposure and obsolete flat-routing
-  prompt/evals; keep the primitive implementations for specialists.
-- Remove fixed stage-restart logic that the graph-scoped feedback path replaced.
-- Update `NORTH_STAR.md`, async-orchestrator research status, tool docs, manual
-  tests, and operator runbooks to the as-built hierarchy.
-- Replace the public sequential pipeline infographic with three views: product
-  architecture, orchestrator runtime, and data/lineage model. Do not market the
-  hierarchy as shipped before this PR.
-- Remove stale tool counts and generate detailed registry documentation from
-  ownership metadata where practical.
+- Enable creative-director/domain routing by default while retaining a
+  time-bounded emergency fallback flag.
+- Define soak duration, success/error/cost thresholds, rollback owner, and
+  monitoring for decisions, assignments, session contention, and exports.
+- Exercise every production entrypoint and Request Changes path through the new
+  default without executing duplicate billable work.
+- Record the explicit cleanup decision after thresholds hold for the soak.
 
-**Acceptance:** all production entrypoints use the root router; the root cannot
-call a primitive media tool; all primitive tools remain reachable through
-exactly one specialist; no fallback flat controller remains.
+**Acceptance:** the new path is default-on, all production entrypoints meet the
+agreed soak thresholds, and rollback is verified without data-shape divergence.
 
-**Validation:** full API tests, required provider-neutral E2E, selected opt-in
-tool smokes, migration status, docs validation, browser visual QA, and production
-deployment smoke.
+**Validation:** production-like API/E2E smoke, monitoring queries, rollback
+rehearsal, and recorded soak evidence.
+
+### PR 17 — Remove the flat root surface and synchronize as-built docs
+
+**Depends on:** PR 16 completed soak and cleanup decision.
+
+**Deliver:**
+
+- Remove the fallback flag and delete primitive media exposure from the root
+  prompt while keeping primitive implementations for domain registries.
+- Remove fixed stage-restart logic replaced by graph-scoped feedback.
+- Update `NORTH_STAR.md`, async-orchestrator research, tool docs, manual tests,
+  and operator runbooks to the as-built architecture.
+- Replace sequential pipeline diagrams with product architecture, runtime/session,
+  and data/lineage views. Do not market the hierarchy as shipped before cutover.
+- Remove stale tool counts and derive detailed registry docs from ownership
+  metadata where practical.
+
+**Acceptance:** every production entrypoint uses the creative-director profile;
+root cannot call leaf media tools; each primitive has exactly one owner; domain
+follow-ups reuse persistent sessions; no flat fallback or stale flag remains.
+
+**Validation:** full API tests, provider-neutral E2E, selected opt-in tool
+smokes, migration status, docs validation, browser QA, and deployment smoke.
 
 ## Required scenario matrix
 
-The roadmap is not complete unless the final eval/test suite covers at least:
-
-| Creator/project state | Expected root decision |
+| Creator/project state | Expected creative-director decision |
 | --- | --- |
-| Fresh idea | Story agent |
-| Visual-first short with brief, no script | Story or image agent depending on whether a shot plan exists |
-| Shot plan without storyboard/keyframe | Image agent |
-| Selected keyframes without clips | Video agent |
-| Clips without audio | Audio or edit agent based on brief requirements |
-| Media ready, no timeline | Edit agent |
-| Timeline ready, not reviewed | Review agent |
-| Reviewed/approved timeline | Deterministic export |
-| “Make this still warmer” | Image agent scoped to the asset |
-| “Remove the logo from this footage” | Video agent scoped to the source asset |
-| “Shorten this narration” | Audio agent unless words/story meaning must change, then Story agent |
-| “Make the opening faster” | Edit agent, with media handoff only if source coverage is insufficient |
-| “Rename the protagonist everywhere” | Story agent first, then graph-scoped image/video/audio/edit follow-ups |
-| Missing keyframe discovered by video | Image handoff through root, then video retry |
-| Cross-domain quality defects | Review result → root delegates each approved repair |
-| User cancels during child media job | Root and child cancel; late result cannot revive them |
-| Two independent repairs | Parallel children, budget reservation, deterministic fan-in |
+| Fresh idea | Use root brief/story/script/shot-planning tools |
+| Visual-first short with sufficient brief | Root plans shots/visual anchors or dispatches Visuals based on graph state |
+| Shot plan without storyboard/keyframes | Dispatch Visuals |
+| Keyframes without clips | Dispatch or continue Visuals |
+| Visuals discovers a missing keyframe for a clip | Self-heal inside Visuals and retry |
+| Clips without required audio | Dispatch Audio |
+| Media ready, no timeline | Root calls `assemble_timeline` |
+| Timeline ready, not reviewed | Root calls `critique_timeline` |
+| Expensive approved repair proposed | Root calls `request_approval` before dispatch |
+| Reviewed/approved timeline | Root calls deterministic `export_video` |
+| “Redo beats 3–5 warmer” | Follow-up assignment in the existing Visuals session |
+| “Remove the logo from this footage” | Visuals, scoped to the source asset |
+| “Shorten this narration” | Audio if delivery/fitting; root story planning if meaning changes |
+| “Make the opening faster” | Root assembly/pacing decision; dispatch only if source coverage changes |
+| “Rename the protagonist everywhere” | Root story decision, then graph-scoped Visuals/Audio follow-ups |
+| Visuals requires an Audio asset | `blocked(PreconditionMiss)` → root dispatches Audio → resumes Visuals |
+| Visuals asks whether realism or style should win | `question` → root answers/resumes; if necessary, root proposes one recommended creator approval |
+| User cancels during domain media work | Root/session assignment cancel; late result is fenced |
+| Two independent repairs | Parallel Visuals/Audio assignments, serialized per session, deterministic fan-in |
 
 ## Merge-conflict plan
 
-- PRs 9–14 each own one role file, prompt, and eval scenario module.
-- PR 2 creates the role-specific registry boundary before specialist PRs start,
-  so they do not all edit `default-registry.ts`.
-- PRs 3–5 own run/action/engine infrastructure sequentially.
-- PR 18 owns API projection and web files after the hierarchy payload stabilizes.
-- PR 19 is the only broad cleanup/documentation synchronization PR.
-- Avoid new route/feature `index.ts` aggregators; use explicit files such as
-  `story-agent.ts`, `image-agent.ts`, `specialist-runtime.ts`, and
-  `run-tree-projection.ts`.
+- PRs 10 and 11 own separate domain prompt, registry, and eval files.
+- PR 3 creates role-specific registry boundaries before domain work so agents do
+  not all edit `default-registry.ts`.
+- PRs 4–6 own action/session/dispatch infrastructure sequentially.
+- PR 12 owns the root prompt/config after domain profiles stabilize.
+- PR 15 owns API projection and web files after the session payload stabilizes.
+- PR 16 owns only rollout/soak; PR 17 is the only broad cleanup and as-built
+  documentation synchronization PR.
+- Avoid new route/feature `index.ts` aggregators; use explicit names such as
+  `root-agent.ts`, `visuals-agent.ts`, `audio-agent.ts`,
+  `domain-session-store.ts`, and `session-run-projection.ts`.
 
 ## Rollout gates
 
-Do not enable specialist routing by default until all are true:
+Do not enable domain routing by default until all are true:
 
-1. Root routing evals meet the agreed pass threshold across repeated samples.
-2. Every specialist has registry-isolation tests and leaf-tool decision evals.
-3. A provider-neutral end-to-end run reaches export through child runs.
-4. Request Changes passes at least one image, video, audio, edit, and upstream
-   multi-domain regeneration scenario.
-5. Parent/child crash recovery, cancellation, approval, and budget tests pass.
-6. The UI accurately projects active/waiting/failed child work.
-7. No primitive tool is exposed to the root or owned by multiple specialists.
-8. No retired schema surface, untyped product JSONB, or direct-edit UI is added.
+1. Gate 0 records a proceed decision and root decision evals meet the agreed
+   repeated-sample threshold.
+2. Visuals and Audio have registry-isolation and leaf-tool decision evals.
+3. A provider-neutral end-to-end run reaches export through persistent sessions.
+4. Request Changes passes visual, audio, pacing, and upstream multi-domain cases.
+5. Assignment crash recovery, serialization, cancellation, approval, and budget
+   tests pass.
+6. Late/superseded assignment results cannot mutate current selections.
+7. The UI accurately projects active/waiting/blocked/failed work, root handling
+   of domain questions, and creator-facing root approvals.
+8. No leaf domain tool is exposed to the root or multiply owned.
+9. Session memory is bounded and demonstrably not a second creative-state store.
+10. No retired schema surface, untyped product JSONB, or direct-edit UI is added.
+11. The default-on path completes its defined soak before the flat path is
+    deleted.
 
 ## Non-goals
 
 - Replacing the immutable asset graph or relational storyboard model.
-- Creating an “agent” wrapper around deterministic provider calls, queues,
-  storage, selection writes, or Remotion rendering.
-- Letting specialists chat directly, delegate recursively, or share unrestricted
-  registries.
-- Passing raw video, image bytes, provider responses, secrets, or full action
-  histories through model context.
-- Building a new workflow engine beside the existing durable orchestrator.
+- Moving creative decisions into deterministic server workflows.
+- Building a new agent loop, workflow engine, or per-domain fork of `driveLoop`.
+- Creating a separate Story, Edit, or Review agent in the first cut.
+- Splitting still-image and motion generation into separate agents in the first
+  cut; Visuals owns their prerequisite chain.
+- Letting domains chat directly, delegate recursively, or receive mid-flight
+  messages.
+- Treating session memory as canonical creative state.
+- Passing raw media, provider responses, secrets, or full action histories into
+  model context.
+- Wrapping providers, queues, storage, selection writes, or rendering in agents.
 - Reintroducing a fixed forward-only pipeline or stage tables.
 - Adding direct content-edit controls to the dashboard.
-- Supporting arbitrary third-party specialist plugins in the first cutover.
+- Supporting arbitrary third-party domain plugins in the first cutover.
 
 ## Definition of done
 
-- The root orchestrator sees only project state, compact child outcomes, six
-  delegation capabilities, deterministic export, optional publishing, and
-  `done`.
-- Each specialist sees only its scoped context and owned tools.
-- Cross-domain needs become typed root-mediated handoffs.
-- Runs, delegations, primitive actions, jobs, assets, dependencies, costs, and
-  selections remain durable and auditable across restarts.
-- Creator feedback produces a costed, graph-scoped specialist plan and
+- The root is demonstrably a creative director plus router, not a router alone.
+- Root retains planning, assembly, critique, approval, export, and completion.
+- Visuals and Audio run the exact shared durable `driveLoop` with restricted
+  registries, prompts, graph context, and persistent project/domain sessions.
+- Inter-agent communication is limited to durable tasks and
+  `done | blocked | question` reports at turn boundaries.
+- The asset graph remains the only canonical creative-state channel.
+- Every root decision, assignment, primitive action, job, asset, edge,
+  selection, cost, and report remains attributable across restarts.
+- Creator feedback reuses the correct session, proposes a graph-scoped plan, and
   regenerates only approved affected assets.
-- Independent specialists can execute concurrently and reconcile safely.
-- The UI presents one understandable orchestrated production and feedback loop,
-  with drill-down for inspection but no direct content mutation.
-- The flat all-tools root prompt, fixed restart boundaries, stale tool counts,
-  and sequential public diagram are removed.
+- Visuals and Audio can run concurrently while each session remains serialized.
+- The UI presents one understandable creative production with inspection but no
+  direct content mutation.
+- The flat all-tools root prompt, fixed restart boundaries, stale counts, and
+  sequential public diagram are removed after cutover.
