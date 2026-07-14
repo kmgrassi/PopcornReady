@@ -3,6 +3,8 @@ import type { VideoBrief } from "@/lib/api/v1/schemas";
 import {
   addProjectPlan as realAddProjectPlan,
   getActiveProjectBrief as realGetActiveProjectBrief,
+  getActiveProjectScriptDraft as realGetActiveProjectScriptDraft,
+  getActiveProjectStoryBlueprint as realGetActiveProjectStoryBlueprint,
 } from "@/lib/api/v1/store";
 import { briefToStoryContext } from "@/lib/v1/generation/prepare";
 import type { ShotPlan } from "@popcorn/shared/types";
@@ -27,6 +29,8 @@ export interface PlanShotsOutput {
 export interface PlanShotsDeps {
   planEdit: typeof realPlanEdit;
   getActiveProjectBrief: typeof realGetActiveProjectBrief;
+  getActiveProjectStoryBlueprint: typeof realGetActiveProjectStoryBlueprint;
+  getActiveProjectScriptDraft: typeof realGetActiveProjectScriptDraft;
   addProjectPlan: typeof realAddProjectPlan;
   buildFootageGroundingContext: typeof buildFootageGroundingContext;
 }
@@ -34,11 +38,51 @@ export interface PlanShotsDeps {
 const defaultDeps: PlanShotsDeps = {
   planEdit: realPlanEdit,
   getActiveProjectBrief: realGetActiveProjectBrief,
+  getActiveProjectStoryBlueprint: realGetActiveProjectStoryBlueprint,
+  getActiveProjectScriptDraft: realGetActiveProjectScriptDraft,
   addProjectPlan: realAddProjectPlan,
   buildFootageGroundingContext,
 };
 
 const DEFAULT_STYLE = "fast-paced social ad";
+
+function narrativeContext(input: {
+  storyBlueprint: Awaited<ReturnType<typeof realGetActiveProjectStoryBlueprint>>;
+  scriptDraft: Awaited<ReturnType<typeof realGetActiveProjectScriptDraft>>;
+}): string | null {
+  const blueprint = input.storyBlueprint;
+  if (!blueprint) return null;
+  const script =
+    input.scriptDraft?.scriptDraft.storyBlueprintId === blueprint.storyBlueprintId
+      ? input.scriptDraft.scriptDraft
+      : null;
+  const lines = [
+    `Premise: ${blueprint.storyBlueprint.premise}`,
+    `Logline: ${blueprint.storyBlueprint.logline}`,
+    `Ending: ${blueprint.storyBlueprint.ending}`,
+    "Acts:",
+    ...blueprint.storyBlueprint.acts.map((act) => `- ${act.title}: ${act.purpose}. ${act.summary}`),
+    "Story scenes:",
+    ...blueprint.storyBlueprint.scenes.map((scene) => `- ${scene.title}: ${scene.summary}`),
+  ];
+  if (script) {
+    lines.push(
+      "Narration and dialogue:",
+      ...script.scenes.map((scene) => {
+        const spoken = [
+          scene.narration,
+          ...scene.dialogue.map((line) =>
+            line.characterName ? `${line.characterName}: ${line.text}` : line.text
+          ),
+        ]
+          .filter((text): text is string => Boolean(text?.trim()))
+          .join(" ");
+        return `- ${scene.title}: ${spoken}`.trim();
+      })
+    );
+  }
+  return lines.join("\n");
+}
 
 const num = { type: "number" } as const;
 const str = { type: "string" } as const;
@@ -167,10 +211,10 @@ export function createPlanShotsTool(
   return {
     name: "plan_shots",
     description:
-      "Plan ordered scenes and beats from the project's brief and persist them as the active plan. Requires a brief first.",
+      "Plan ordered scenes and beats from the project's brief, incorporating the active story blueprint and matching script when present, and persist them as the active plan. Requires a brief first.",
     usage: {
       preconditions: ["An active project brief exists (call create_or_load_brief first)."],
-      produces: ["An ordered list of scenes and beats with stable ids, persisted as the active plan."],
+      produces: ["An ordered list of scenes and beats with stable ids, persisted as the active plan and linked to any narrative assets used."],
       useWhen: [
         "The brief is ready and the story needs to be broken into concrete scenes and beats.",
         "A plan-stage review was rejected and the scenes/beats need revising (pass feedback).",
@@ -202,11 +246,20 @@ export function createPlanShotsTool(
         return briefRequired();
       }
       const { brief } = active;
-      const footageGrounding = await resolved.buildFootageGroundingContext({
-        workspaceId: context.auth.workspaceId,
-        projectId: context.projectId,
-        assetIds: selectedUploadedFootageAssetIds(context.metadata),
-      });
+      const [storyBlueprint, scriptDraft, footageGrounding] = await Promise.all([
+        resolved.getActiveProjectStoryBlueprint(context.projectId),
+        resolved.getActiveProjectScriptDraft(context.projectId),
+        resolved.buildFootageGroundingContext({
+          workspaceId: context.auth.workspaceId,
+          projectId: context.projectId,
+          assetIds: selectedUploadedFootageAssetIds(context.metadata),
+        }),
+      ]);
+      const matchingScript =
+        scriptDraft?.scriptDraft.storyBlueprintId === storyBlueprint?.storyBlueprintId
+          ? scriptDraft
+          : null;
+      const narrativeInputs = Number(Boolean(storyBlueprint)) + Number(Boolean(matchingScript));
 
       const plan = await resolved.planEdit({
         goal: brief.goal,
@@ -214,6 +267,7 @@ export function createPlanShotsTool(
         style: brief.style ?? DEFAULT_STYLE,
         aspectRatio: brief.aspectRatio,
         storyContext: briefToStoryContext(brief),
+        narrativeContext: narrativeContext({ storyBlueprint, scriptDraft: matchingScript }),
         feedback: input.feedback ?? null,
         footageGrounding: footageGrounding.promptText,
       });
@@ -226,7 +280,19 @@ export function createPlanShotsTool(
         plan,
         briefAssetId: active.assetId,
         briefContentHash: active.contentHash,
-        groundingInputs: groundingGraphInputs(footageGrounding, 1),
+        ...(storyBlueprint
+          ? {
+              storyBlueprintAssetId: storyBlueprint.assetId,
+              storyBlueprintContentHash: storyBlueprint.contentHash,
+            }
+          : {}),
+        ...(matchingScript
+          ? {
+              scriptDraftAssetId: matchingScript.assetId,
+              scriptDraftContentHash: matchingScript.contentHash,
+            }
+          : {}),
+        groundingInputs: groundingGraphInputs(footageGrounding, 1 + narrativeInputs),
       });
 
       return {

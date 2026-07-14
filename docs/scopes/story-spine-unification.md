@@ -23,7 +23,8 @@ Three independently-minted structures describe "the scenes/beats of a video":
 
 1. `story_blueprint_acts` / `story_blueprint_scenes` — narrative, derived from the **brief**.
 2. `EditPlan.scenes/beats` (the `plan` asset JSONB, produced by `plan_shots` via
-   `planEdit`) — the shot plan, derived from the **brief**.
+   `planEdit`) — the shot plan, derived from the **brief** and, when present, the
+   active blueprint plus its matching script.
 3. `storyboards` / `storyboard_scenes` / `storyboard_beats` / `storyboard_panels`
    — visual previz, derived from the **plan** (`storyboards.plan_asset_id`).
 
@@ -32,8 +33,12 @@ Three independently-minted structures describe "the scenes/beats of a video":
 selection slot roles), it carries the NORTH_STAR §5 mutable-head/snapshot contract
 (`storyboard_beats_require_snapshot` trigger), and it is the central UI editing
 surface. The blueprint's narrative richness (act `purpose`, character arcs,
-antagonistic forces, premises) currently **dead-ends at `draft_script`** and never
-reaches generation structurally.
+antagonistic forces, premises) now guides `plan_shots` when an active blueprint
+exists, and a script from that same blueprint also guides it; both assets are plan
+provenance inputs. This is prompt guidance plus asset-level provenance, not a
+deterministic narrative-scene/script-line to visual-beat mapping. It keeps
+visual-first short videos possible without a script, but it is still not the target
+single relational spine.
 
 Two legacy edit models, both confusing and both retirement targets:
 

@@ -1999,6 +1999,10 @@ export async function addProjectPlan(input: {
   plan: ShotPlan;
   briefAssetId?: string;
   briefContentHash?: string;
+  storyBlueprintAssetId?: string;
+  storyBlueprintContentHash?: string;
+  scriptDraftAssetId?: string;
+  scriptDraftContentHash?: string;
   groundingInputs?: GraphAssetInput[];
 }): Promise<{ planAssetId: string }> {
   const db = getServiceSupabase();
@@ -2011,6 +2015,32 @@ export async function addProjectPlan(input: {
             role: "brief",
             position: 0,
             ...(input.briefContentHash ? { contentHash: input.briefContentHash } : {}),
+          },
+        ]
+      : []),
+    ...(input.storyBlueprintAssetId
+      ? [
+          {
+            assetId: input.storyBlueprintAssetId,
+            relation: "input" as const,
+            role: "story_blueprint",
+            position: 1,
+            ...(input.storyBlueprintContentHash
+              ? { contentHash: input.storyBlueprintContentHash }
+              : {}),
+          },
+        ]
+      : []),
+    ...(input.scriptDraftAssetId
+      ? [
+          {
+            assetId: input.scriptDraftAssetId,
+            relation: "input" as const,
+            role: "script_draft",
+            position: input.storyBlueprintAssetId ? 2 : 1,
+            ...(input.scriptDraftContentHash
+              ? { contentHash: input.scriptDraftContentHash }
+              : {}),
           },
         ]
       : []),
@@ -2274,16 +2304,25 @@ export async function getActiveProjectStoryBlueprint(
   projectId: string
 ): Promise<ActiveProjectStoryBlueprint | null> {
   const db = getServiceSupabase();
+  const project = (await runQuery(
+    "store.getActiveProjectStoryBlueprint project",
+    db
+      .from("projects")
+      .select("current_story_blueprint_id")
+      .eq("id", projectId)
+      .maybeSingle()
+  )) as { current_story_blueprint_id: string | null } | null;
+  const query = db.from("story_blueprints").select("*").eq("project_id", projectId);
   const data = await runQuery(
     "store.getActiveProjectStoryBlueprint",
-    db
-      .from("story_blueprints")
-      .select("*")
-      .eq("project_id", projectId)
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false })
-      .limit(1)
-      .maybeSingle()
+    project?.current_story_blueprint_id
+      ? query.eq("id", project.current_story_blueprint_id).maybeSingle()
+      : query
+          .neq("status", "superseded")
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
+          .limit(1)
+          .maybeSingle()
   );
   const row = data as StoryBlueprintRow | null;
   if (!row?.asset_id) return null;
