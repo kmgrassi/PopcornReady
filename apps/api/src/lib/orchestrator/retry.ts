@@ -66,6 +66,12 @@ export function withStoreRetry(
   return {
     getOrchestratorRun: (id) => retry(() => store.getOrchestratorRun(id)),
     updateOrchestratorRun: (id, patch) => retry(() => store.updateOrchestratorRun(id, patch)),
+    ...(store.claimOrchestratorRunResume
+      ? {
+          claimOrchestratorRunResume: (id: string) =>
+            retry(() => store.claimOrchestratorRunResume!(id)),
+        }
+      : {}),
     listRunGates: (id) => retry(() => store.listRunGates(id)),
     markGateReached: (id, stage) => retry(() => store.markGateReached(id, stage)),
     listRunActions: (id) => retry(() => store.listRunActions(id)),

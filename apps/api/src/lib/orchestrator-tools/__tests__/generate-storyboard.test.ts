@@ -131,7 +131,7 @@ test("runStoryboardJob persists tiles + storyboard, succeeds the job, and resume
     addStoryboardTiles: async () => [{ beatId: "b1", assetId: "tile_1" }],
     buildStoryboardForPlan: async () => ({ storyboardId: "sb_1", panelCount: 1 }),
     jobs: spy.jobs,
-    resumeOrchestratorRun: async (runId) => {
+    enqueueOrchestratorDispatch: async (runId) => {
       resumedRun = runId;
     },
   });
@@ -150,7 +150,7 @@ test("runStoryboardJob fails the job on error but still resumes the run", async 
       throw new Error("provider boom");
     },
     jobs: spy.jobs,
-    resumeOrchestratorRun: async () => {
+    enqueueOrchestratorDispatch: async () => {
       resumed = true;
     },
   });

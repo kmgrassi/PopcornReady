@@ -1,15 +1,26 @@
 # Orchestrator tool-call test harness
 
+<!-- agent-summary: This manual harness verifies model tool choice, schema-valid input, real handler execution, and database effects. -->
+<!-- agent-summary: The capability catalog and battery registry in code are the source of truth; this document does not hard-code counts. -->
+<!-- agent-summary: Active cases make real model calls and write to a uniquely named throwaway Postgres sandbox. -->
+<!-- agent-summary: The harness is opt-in, development-only, and never mounts in production. -->
+<!-- agent-summary: Every declared tool must have a battery, while unavailable handlers remain explicit pending cases. -->
+<!-- agent-summary: Sandbox teardown refuses non-tool-test workspaces and the startup sweep removes eligible crashed-run leftovers. -->
+<!-- agent-summary: Run the API with ENABLE_TOOL_TEST_HARNESS=1, then use the @popcorn/api test:tools commands below. -->
+
 A **manual** rig for verifying that the agent uses each orchestrator tool
 correctly: given a natural-language instruction, does the model call the right
 tool with **schema-valid input**, and does the real handler's database write
 succeed? Each case runs **end-to-end** against a real model and a real, throwaway
-Postgres sandbox, then tears the sandbox down.
+Postgres sandbox, then tears the sandbox down. Primitive names, ownership, and
+model-adjacent metadata come from
+`orchestrator-tools/capability-catalog.ts`; the harness does not own a second
+tool-name union.
 
-This is the verification rig for the North Star migration: as each
-orchestrator tools gets wired to a live handler, fill in its battery and prove it
-here before relying on it. Today only `plan_shots` and `create_or_load_brief` are
-wired; the other 12 ship as `pending` placeholders.
+This is the verification rig for the North Star migration: as each orchestrator
+tool is wired to a live handler, fill in its battery and prove it here before
+relying on it. The vocabulary and battery registry in code are authoritative;
+`--list` reports which cases are active or pending without a stale prose count.
 
 > Manual + opt-in: cases make real LLM calls and write real rows. The endpoint is
 > dev-flag-gated and never mounts in production.
@@ -95,6 +106,7 @@ tool lacks a battery.
 
 | file | role |
 | --- | --- |
+| `../orchestrator-tools/capability-catalog.ts` | canonical primitive names, ownership, execution, labels, costs, and gates |
 | `types.ts` | battery / case / report types |
 | `assertions.ts` | pure deep-subset matcher (unit tested) |
 | `bridge.ts` | adapts the real `orchestrator-tools` registry to the driver registry |

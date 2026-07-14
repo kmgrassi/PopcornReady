@@ -3,6 +3,7 @@ import {
   getActiveProjectBrief as realGetActiveProjectBrief,
   getActiveProjectPlan as realGetActiveProjectPlan,
 } from "@/lib/api/v1/store";
+import { toolDefinitionMetadata } from "./capability-catalog";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 import { runGenerateAudioJob as realRunGenerateAudioJob } from "./generate-audio-job";
@@ -136,7 +137,7 @@ export function createGenerateAudioTool(
   const resolved = { ...defaultDeps, ...deps };
 
   return {
-    name: "generate_audio",
+    ...toolDefinitionMetadata("generate_audio"),
     description:
       "Generate beat voiceover and a soundtrack from the active shot plan and optional brief narration. Requires a plan first, honors already-selected audio slots, and runs asynchronously. Do not include provider unless the user explicitly asks to override workspace settings.",
     usage: {
@@ -151,7 +152,6 @@ export function createGenerateAudioTool(
     },
     inputSchema: generateAudioInputSchema,
     outputSchema: generateAudioOutputSchema,
-    execution: "async",
     parseInput: parseGenerateAudioInput,
     estimateCost: () => ({
       estimatedCostUsd: 0,

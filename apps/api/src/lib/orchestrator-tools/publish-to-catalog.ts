@@ -5,6 +5,7 @@ import {
 } from "@/lib/api/v1/store";
 import { publishCatalogEntry as realPublishCatalogEntry } from "@/lib/api/v1/catalog";
 import { SYSTEM_PUBLISHER_WORKSPACE_ID } from "@/lib/api/v1/system-identity";
+import { toolDefinitionMetadata } from "./capability-catalog";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 
@@ -122,7 +123,7 @@ export function createPublishToCatalogTool(
   const resolved = { ...defaultDeps, ...deps };
 
   return {
-    name: "publish_to_catalog",
+    ...toolDefinitionMetadata("publish_to_catalog"),
     description:
       "Publish a generated image, character anchor, or story to the shared public catalog so any user can browse and copy it into their own project. The entry is attributed to the platform's system publisher, not the requesting user — use this to fulfill requests like 'create a set of public assets others can grab'.",
     usage: {
@@ -139,7 +140,6 @@ export function createPublishToCatalogTool(
     },
     inputSchema: publishToCatalogInputSchema,
     outputSchema: publishToCatalogOutputSchema,
-    execution: "sync",
     parseInput: parsePublishToCatalogInput,
     estimateCost: () => ({
       estimatedCostUsd: 0,

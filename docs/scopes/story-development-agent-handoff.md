@@ -1,5 +1,29 @@
 # Story Development & Agent Handoff — Scope
 
+<!-- agent-summary: This document is retained as historical context and is not an implementation plan. -->
+<!-- agent-summary: Its fixed stage engine, many standalone leaf agents, and generic AgentHandoff payload are superseded. -->
+<!-- agent-summary: The active task/report and persistent-session contract lives in docs/domain-agent-orchestration-contract.md. -->
+<!-- agent-summary: Canonical creative state belongs in the immutable asset graph and relational story objects, not legacy project columns. -->
+<!-- agent-summary: Do not add the historical story_blueprints, script_drafts, composition, or generation-stage schema sketches from this document. -->
+<!-- agent-summary: Visuals and Audio are the first domain agents; story, script, shot planning, assembly, critique, approval, and export stay with the root. -->
+<!-- agent-summary: The creative-director hierarchy remains conditional on specialist-orchestration Gate 0. -->
+
+> **Status: historical and superseded.** This scope records useful product
+> intent for durable story artifacts and duration-aware planning, but its agent,
+> persistence, and fixed-stage execution proposals predate the asset graph and
+> durable orchestrator. Do not implement them as current architecture.
+
+## Supersession map
+
+| Historical assumption in this document | Current contract |
+| --- | --- |
+| Story, Script, Shot Planner, Storyboard, Media, Editor, and Critic are independent leaf agents | The first domain split is Visuals and Audio. Root story/script/shot planning, assembly, critique, approval, and export remain one coherence boundary; the creative-director form is conditional on Gate 0. |
+| `AgentHandoff` passes resources between stages or agents | Persistent domain sessions receive `DomainTask.v1` and emit one `DomainReport.v1` at a finite-run boundary; graph and relational IDs carry creative state. |
+| A fixed engine sequence advances named generation stages | The existing `driveLoop` selects validated tools and parks/resumes through durable runs, jobs, and gates. Domain profiles reuse it rather than adding another engine. |
+| New `story_blueprints` / `script_drafts`, project current-pointer columns, compositions, or stage-artifact schema | Retired schema surfaces must not return. Use typed immutable assets and first-class relational story rows where partial product structure requires them. |
+| Implicit project snapshots or prose summaries provide the next agent's context | Each turn reads a fresh, authorized graph projection by stable ID; session summaries are continuity only. |
+| Story-level handoff work may proceed as the current product architecture | Use [`domain-agent-orchestration-contract.md`](../domain-agent-orchestration-contract.md) and [`specialist-agent-orchestration-prs.md`](specialist-agent-orchestration-prs.md); root hierarchy work waits for Gate 0. |
+
 ## Objective
 
 Turn a raw creative concept into a durable **story-development chain** before

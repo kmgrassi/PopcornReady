@@ -2,6 +2,7 @@ import { agentApiStore, type AgentApiStore } from "@/lib/agent-api/jobs";
 import {
   getActiveProjectVisualAnchorPlan as realGetActiveProjectVisualAnchorPlan,
 } from "@/lib/api/v1/store";
+import { toolDefinitionMetadata } from "./capability-catalog";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 import { runGenerateAnchorJob as realRunGenerateAnchorJob } from "./generate-anchor-job";
@@ -115,7 +116,7 @@ export function createGenerateAnchorTool(
   const resolved = { ...defaultDeps, ...deps };
 
   return {
-    name: "generate_anchor",
+    ...toolDefinitionMetadata("generate_anchor"),
     description:
       "Generate reusable character and scene anchor images from the active visual-anchor plan. Requires plan_visual_anchors first. Runs asynchronously. Do not include provider unless the user explicitly asks to override workspace settings.",
     usage: {
@@ -132,7 +133,6 @@ export function createGenerateAnchorTool(
     },
     inputSchema: generateAnchorInputSchema,
     outputSchema: generateAnchorOutputSchema,
-    execution: "async",
     parseInput: parseGenerateAnchorInput,
     estimateCost: () => ({
       estimatedCostUsd: 0,

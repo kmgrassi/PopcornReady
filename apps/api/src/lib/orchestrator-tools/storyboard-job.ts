@@ -6,6 +6,7 @@
 // resumes the assets are already written.
 
 import { agentApiStore, type AgentApiStore } from "@/lib/agent-api/jobs";
+import { scheduleOrchestratorResume } from "@/lib/orchestrator/schedule-resume";
 import type { AuthContext } from "@/lib/api/v1/auth";
 import { addStoryboardTiles } from "@/lib/api/v1/store";
 import { buildStoryboardForPlan } from "@/lib/api/v1/storyboards";
@@ -17,12 +18,7 @@ export interface StoryboardJobDeps {
   addStoryboardTiles: typeof addStoryboardTiles;
   buildStoryboardForPlan: typeof buildStoryboardForPlan;
   jobs: Pick<AgentApiStore, "setStep" | "succeed" | "fail">;
-  // Resolved lazily by default to avoid a static engine<->tools import cycle;
-  // injected directly in tests.
-  resumeOrchestratorRun?: (
-    runId: string,
-    deps: { workspaceId: string }
-  ) => Promise<unknown>;
+  enqueueOrchestratorDispatch?: (runId: string, workspaceId: string) => Promise<unknown>;
 }
 
 const defaultDeps: StoryboardJobDeps = {
@@ -46,10 +42,7 @@ async function resume(
   runId: string,
   workspaceId: string
 ): Promise<void> {
-  const fn =
-    deps.resumeOrchestratorRun ??
-    (await import("@/lib/orchestrator/engine")).resumeOrchestratorRun;
-  await fn(runId, { workspaceId });
+  await scheduleOrchestratorResume({ runId, workspaceId, enqueue: deps.enqueueOrchestratorDispatch });
 }
 
 export interface StoryboardJobInput {

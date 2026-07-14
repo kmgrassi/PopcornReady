@@ -18,6 +18,12 @@
 - Follow-up: <TODO / PR / none>
 ```
 
+### 2026-07-14T12:32:20-04:00 — API-20260714-02
+- What helped: Treating the dispatch lease as the single turn owner exposed the inline-completion race clearly.
+- Friction or failure: Inline provider completion could race invocation parking and wake duplicate engine turns.
+- Suggested improvement: Route completion through a lease-fenced durable wake and validate the migration path with concurrency fixtures.
+- Follow-up: Specialist-agent orchestration PRs 4–6 must extend the same lease and tenancy invariants.
+
 ### 2026-07-13T13:20:10-04:00 — AGENT-OPS-001
 - What helped: Existing E2E inventory and repository conventions supplied a useful base.
 - Friction or failure: No alternate-agent CLI is configured, so independent review is documented but not executed in this task.
@@ -59,9 +65,32 @@
 - Friction or failure: Naming a finite domain turn an “assignment” initially encouraged redundant assignment, report, output, queue, approval, job, and cost tables despite existing run/action/runtime records.
 - Suggested improvement: Before adding agent-specific persistence, map every proposed lifecycle concept to the current schema and document the transactional, tenancy, privacy, and retry invariant that prevents reuse.
 - Follow-up: `docs/scopes/specialist-agent-orchestration-prs.md` PRs 4–6, 9–10, and 12.
-
 ### 2026-07-14T12:00:00-04:00 — TYPE-20260714-01
 - What helped: The existing Remotion type definitions made the framework boundary and safe cast removal easy to verify with focused package typechecks.
 - Friction or failure: Removing the renderer prop index signature was not compatible with Remotion's current `Composition` generic constraint, despite looking like a desirable tightening.
 - Suggested improvement: Revisit the renderer prop contract when upgrading Remotion or when its component generics no longer require `Record<string, unknown>`.
 - Follow-up: none
+
+### 2026-07-14T12:27:05-04:00 — ORCH-20260714-02
+- What helped: A focused shared module plus compile-time fixtures made canonical identity reuse, origin/recipient routing, and report/runtime separation reviewable before schema or runtime work.
+- Friction or failure: Tool vocabulary counts had drifted across the North Star, operator harness, and historical implementation scopes, while the isolated worktree initially had no installed dependencies.
+- Suggested improvement: Derive registry documentation and status projections from the code-owned capability catalog after PR 3, and initialize parallel worktrees with the offline package cache before validation.
+- Follow-up: `docs/scopes/specialist-agent-orchestration-prs.md` PR 3.
+
+### 2026-07-14T13:15:32-04:00 — ORCH-20260714-03
+- What helped: Independent plan review caught the legacy regenerate projection fallback and forced recovery translation to stay pure, trusted-project scoped, fail-closed, and outside the flat runtime.
+- Friction or failure: Tool identity was duplicated in one more invocation module than the initial map found, the driver and real flat registries have distinct historical insertion orders, and treating allowlisted hint keys as trusted targets initially left their string values untrusted.
+- Suggested improvement: Keep catalog parity snapshots beside every model/UI projection, require server-authorized identity sets for any model-facing target projection, and initialize stacked worktrees from the offline package cache before implementation begins.
+- Follow-up: `docs/scopes/specialist-agent-orchestration-prs.md` PRs 6–8 own runtime activation of the dormant registry and recovery boundaries.
+
+### 2026-07-14T17:10:00-04:00 — PR782-20260714-01
+- What helped: The unresolved review thread and existing type-test fixtures made the capability mismatch directly reproducible and easy to constrain without runtime changes.
+- Friction or failure: A newly created worktree had no dependencies, so validation required a package install from the lockfile before checks could run.
+- Suggested improvement: Add a standard dependency-bootstrap note or helper for caretaker worktrees.
+- Follow-up: none.
+
+### 2026-07-14T18:20:00-04:00 — PR-CARETAKER-20260714-01
+- What helped: Isolating the PR branch kept unrelated dirty checkout changes out of the conflict resolution; the conflict was limited to the shared feedback log.
+- Friction or failure: Fresh caretaker worktrees do not contain dependencies, so the lockfile install was required before validation.
+- Suggested improvement: Add a standard dependency-bootstrap helper for caretaker worktrees.
+- Follow-up: none.

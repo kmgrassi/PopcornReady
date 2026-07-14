@@ -8,6 +8,7 @@ import { briefToStoryContext } from "@/lib/v1/generation/prepare";
 import type { ShotPlan } from "@popcorn/shared/types";
 import { buildFootageGroundingContext, groundingGraphInputs } from "./footage-grounding";
 import { selectedUploadedFootageAssetIds } from "@/lib/orchestrator/uploaded-footage-selection";
+import { toolDefinitionMetadata } from "./capability-catalog";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 
@@ -165,7 +166,7 @@ export function createPlanShotsTool(
   const resolved = { ...defaultDeps, ...deps };
 
   return {
-    name: "plan_shots",
+    ...toolDefinitionMetadata("plan_shots"),
     description:
       "Plan ordered scenes and beats from the project's brief and persist them as the active plan. Requires a brief first.",
     usage: {
@@ -178,7 +179,6 @@ export function createPlanShotsTool(
     },
     inputSchema: planShotsInputSchema,
     outputSchema: planShotsOutputSchema,
-    execution: "sync",
     parseInput: parsePlanShotsInput,
     estimateCost: () => ({
       estimatedCostUsd: 0,

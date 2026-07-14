@@ -5,6 +5,11 @@ import {
   ToolName,
   TOOL_NAMES,
 } from "./types";
+import {
+  assertDriverToolDefinitionMetadata,
+  driverToolDefinitionMetadata,
+  getToolCapability,
+} from "@/lib/orchestrator-tools/capability-catalog";
 
 export type ToolRegistry = Map<ToolName, ToolDefinition>;
 
@@ -36,71 +41,19 @@ function failedUnimplemented(toolName: ToolName): ToolCallResult {
 }
 
 function defaultDefinition(name: ToolName): ToolDefinition {
+  const metadata = getToolCapability(name);
   return {
-    name,
-    description: toolDescription(name),
+    ...driverToolDefinitionMetadata(name),
+    description: metadata.driverDescription,
     inputSchema: baseObjectSchema,
     outputSchema: {
       type: "object",
       additionalProperties: true,
     },
     requiredResourceIds: ["projectId"],
-    mode: name === "request_approval" ? "approval" : mediaToolNames.has(name) ? "async" : "sync",
     estimateCostUsd: () => undefined,
     execute: async () => failedUnimplemented(name),
   };
-}
-
-const mediaToolNames = new Set<ToolName>([
-  "generate_anchor",
-  "generate_storyboard",
-  "generate_keyframe",
-  "generate_clip",
-  "regenerate_image_asset",
-  "edit_video_asset",
-  "generate_audio",
-  "export_video",
-]);
-
-function toolDescription(name: ToolName): string {
-  switch (name) {
-    case "create_or_load_brief":
-      return "Create a new video brief from the prompt or load the active brief.";
-    case "develop_story_blueprint":
-      return "Develop a structured story blueprint for the project.";
-    case "draft_script":
-      return "Draft narration, dialogue, and scene copy from the story blueprint.";
-    case "plan_shots":
-      return "Plan scenes and beats with stable ids from the brief or script.";
-    case "plan_visual_anchors":
-      return "Identify recurring characters, locations, props, and required visual anchors.";
-    case "generate_anchor":
-      return "Generate a reusable visual anchor asset for a character, location, or prop.";
-    case "generate_storyboard":
-      return "Generate storyboard or previsualization assets for planned beats.";
-    case "generate_keyframe":
-      return "Generate a keyframe image for a beat.";
-    case "generate_clip":
-      return "Generate a motion clip for a beat.";
-    case "regenerate_image_asset":
-      return "Regenerate one existing image asset from a replacement prompt, minting a new immutable version and repointing its active selections.";
-    case "edit_video_asset":
-      return "Edit existing uploaded footage or a generated clip in place conceptually, producing a new video asset linked to the source.";
-    case "generate_audio":
-      return "Generate narration, dialogue, music, or sound assets.";
-    case "fit_audio_to_picture":
-      return "Fit generated audio to a beat window and persist a sync critique.";
-    case "assemble_timeline":
-      return "Assemble available assets into a deterministic timeline.";
-    case "critique_timeline":
-      return "Review the assembled timeline and identify targeted fixes.";
-    case "request_approval":
-      return "Create a user approval gate before an expensive or user-visible stage.";
-    case "export_video":
-      return "Export the current approved timeline to a video artifact.";
-    case "publish_to_catalog":
-      return "Publish a generated image, character, or story to the shared public catalog under the system publisher.";
-  }
 }
 
 export function createToolRegistry(
@@ -110,7 +63,9 @@ export function createToolRegistry(
     TOOL_NAMES.map((name) => {
       const base = defaultDefinition(name);
       const override = overrides[name] ?? {};
-      return [name, { ...base, ...override } satisfies ToolDefinition];
+      const definition = { ...base, ...override } satisfies ToolDefinition;
+      assertDriverToolDefinitionMetadata(definition);
+      return [name, definition];
     })
   );
 }

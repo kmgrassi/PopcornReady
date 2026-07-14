@@ -5,6 +5,7 @@ import {
   type ActiveProjectPlan,
 } from "@/lib/api/v1/store";
 import type { ShotPlan } from "@popcorn/shared/types";
+import { toolDefinitionMetadata } from "./capability-catalog";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 import { runGenerateClipJob as realRunGenerateClipJob } from "./generate-clip-job";
@@ -304,7 +305,7 @@ export function createGenerateClipTool(
   const resolved = { ...defaultDeps, ...deps };
 
   return {
-    name: "generate_clip",
+    ...toolDefinitionMetadata("generate_clip"),
     description:
       "Generate motion video clips for planned beats from their active beat_keyframe first frames. Skips beats that already have active beat_clip selections. Runs asynchronously. Do not include provider or model unless the user explicitly asks to override workspace settings.",
     usage: {
@@ -322,7 +323,6 @@ export function createGenerateClipTool(
     },
     inputSchema: generateClipInputSchema,
     outputSchema: generateClipOutputSchema,
-    execution: "async",
     parseInput: parseGenerateClipInput,
     estimateCost: (input) => ({
       estimatedCostUsd:

@@ -11,6 +11,7 @@ import {
   singleSceneFromBeats,
   type Timeline,
 } from "@popcorn/shared/types";
+import { toolDefinitionMetadata } from "./capability-catalog";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 
@@ -197,7 +198,7 @@ export function createCritiqueTimelineTool(
   const resolved = { ...defaultDeps, ...deps };
 
   return {
-    name: "critique_timeline",
+    ...toolDefinitionMetadata("critique_timeline"),
     description:
       "Review the active assembled timeline graph asset and persist advisory critique notes. Requires assemble_timeline first.",
     usage: {
@@ -214,7 +215,6 @@ export function createCritiqueTimelineTool(
     },
     inputSchema: critiqueTimelineInputSchema,
     outputSchema: critiqueTimelineOutputSchema,
-    execution: "sync",
     parseInput: parseCritiqueTimelineInput,
     estimateCost: () => ({
       estimatedCostUsd: 0,

@@ -1,5 +1,6 @@
 import { agentApiStore, type AgentApiStore } from "@/lib/agent-api/jobs";
 import { getActiveProjectPlan as realGetActiveProjectPlan } from "@/lib/api/v1/store";
+import { toolDefinitionMetadata } from "./capability-catalog";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 import { runStoryboardJob as realRunStoryboardJob } from "./storyboard-job";
@@ -87,7 +88,7 @@ export function createGenerateStoryboardTool(
   const resolved = { ...defaultDeps, ...deps };
 
   return {
-    name: "generate_storyboard",
+    ...toolDefinitionMetadata("generate_storyboard"),
     description:
       "Generate cheap sketch beat_storyboard tiles — one previsualization image per planned beat — and persist them as the project's storyboard. Requires a plan first. Runs asynchronously. Do not use this to satisfy a missing beat_keyframe; beat_keyframe first-frame assets come from generate_keyframe.",
     usage: {
@@ -104,7 +105,6 @@ export function createGenerateStoryboardTool(
     },
     inputSchema: generateStoryboardInputSchema,
     outputSchema: generateStoryboardOutputSchema,
-    execution: "async",
     parseInput: parseGenerateStoryboardInput,
     estimateCost: () => ({
       estimatedCostUsd: 0,

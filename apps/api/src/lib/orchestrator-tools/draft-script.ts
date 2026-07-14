@@ -21,6 +21,7 @@ import {
   type FootageGroundingContext,
 } from "./footage-grounding";
 import { selectedUploadedFootageAssetIds } from "@/lib/orchestrator/uploaded-footage-selection";
+import { toolDefinitionMetadata } from "./capability-catalog";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 
@@ -377,7 +378,7 @@ export function createDraftScriptTool(
   const resolved = { ...defaultDeps, ...deps };
 
   return {
-    name: "draft_script",
+    ...toolDefinitionMetadata("draft_script"),
     description:
       "Draft scene-level narration and dialogue from the active brief and story blueprint, then persist it as the active script draft.",
     usage: {
@@ -395,7 +396,6 @@ export function createDraftScriptTool(
     },
     inputSchema: draftScriptInputSchema,
     outputSchema: draftScriptOutputSchema,
-    execution: "sync",
     parseInput: parseDraftScriptInput,
     estimateCost: () => ({
       estimatedCostUsd: 0,

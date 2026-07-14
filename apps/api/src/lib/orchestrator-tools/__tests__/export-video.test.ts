@@ -251,7 +251,7 @@ test("runExportVideoJob saves the artifact, records an output asset, and resumes
         };
         return { id: "asset_1" } as never;
       },
-      resumeOrchestratorRun: async (runId) => {
+      enqueueOrchestratorDispatch: async (runId) => {
         resumedRun = runId;
       },
     }

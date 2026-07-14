@@ -1,22 +1,7 @@
 import { ApiError } from "@/core/errors";
+import type { ToolName } from "@/lib/orchestrator-tools/capability-catalog";
 
-export type ToolName =
-  | "create_or_load_brief"
-  | "develop_story_blueprint"
-  | "draft_script"
-  | "plan_shots"
-  | "plan_visual_anchors"
-  | "generate_anchor"
-  | "generate_storyboard"
-  | "generate_keyframe"
-  | "generate_clip"
-  | "edit_video_asset"
-  | "generate_audio"
-  | "fit_audio_to_picture"
-  | "assemble_timeline"
-  | "critique_timeline"
-  | "request_approval"
-  | "export_video";
+export type { ToolName } from "@/lib/orchestrator-tools/capability-catalog";
 
 export type ToolErrorKind =
   | "precondition_unmet"
