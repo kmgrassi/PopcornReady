@@ -1,24 +1,12 @@
 import type { AuthContext } from "@/lib/api/v1/auth";
+import type {
+  ToolCapabilityId,
+  ToolCostClass,
+  ToolGateMetadata,
+  ToolName,
+} from "./capability-catalog";
 
-export type ToolName =
-  | "create_or_load_brief"
-  | "develop_story_blueprint"
-  | "draft_script"
-  | "plan_shots"
-  | "plan_visual_anchors"
-  | "generate_anchor"
-  | "generate_storyboard"
-  | "generate_keyframe"
-  | "generate_clip"
-  | "regenerate_image_asset"
-  | "edit_video_asset"
-  | "generate_audio"
-  | "fit_audio_to_picture"
-  | "assemble_timeline"
-  | "critique_timeline"
-  | "request_approval"
-  | "export_video"
-  | "publish_to_catalog";
+export type { ToolName } from "./capability-catalog";
 
 export type ToolInvocationStatus =
   | "requested"
@@ -125,6 +113,12 @@ export interface ToolUsage {
 
 export interface ToolDefinition<TInput = unknown, TOutput = unknown> {
   name: ToolName;
+  capability: ToolCapabilityId;
+  ownerRole: import("@popcorn/shared/domain-agent-contract").AgentRole;
+  label: string;
+  displayOrder: number;
+  costClass: ToolCostClass;
+  gate: ToolGateMetadata;
   description: string;
   /** Optional structured usage guidance, composed onto `description` for the model. */
   usage?: ToolUsage;

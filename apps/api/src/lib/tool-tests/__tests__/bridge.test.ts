@@ -4,6 +4,7 @@ import test from "node:test";
 import type { ToolExecutionContext as DriverContext } from "@/lib/orchestrator";
 import { TOOL_NAMES } from "@/lib/orchestrator";
 import { ToolRegistry } from "@/lib/orchestrator-tools/registry";
+import { toolDefinitionMetadata } from "@/lib/orchestrator-tools/capability-catalog";
 import type {
   ToolDefinition,
   ToolExecutionContext as RealContext,
@@ -14,11 +15,10 @@ function fakeTool(
   capture?: (input: unknown, context: RealContext) => void
 ): ToolDefinition<{ goal: string }, { echoed: string }> {
   return {
-    name: "plan_shots",
+    ...toolDefinitionMetadata("plan_shots"),
     description: "fake plan_shots",
     inputSchema: { type: "object" },
     outputSchema: { type: "object" },
-    execution: "async",
     parseInput: (input) => input as { goal: string },
     execute: (input, context) => {
       capture?.(input, context);
@@ -43,7 +43,7 @@ const driverContext: DriverContext = {
   metadata: { harness: true },
 };
 
-test("only-mode bridges a single tool and maps execution to mode", () => {
+test("only-mode bridges a single tool and maps catalog execution to mode", () => {
   const real = new ToolRegistry();
   real.register(fakeTool());
   const registry = toOrchestratorRegistry(real, { only: "plan_shots" });
@@ -52,7 +52,10 @@ test("only-mode bridges a single tool and maps execution to mode", () => {
   const def = registry.get("plan_shots");
   assert.ok(def);
   assert.equal(def?.name, "plan_shots");
-  assert.equal(def?.mode, "async"); // execution → mode
+  assert.equal(def?.mode, "sync"); // catalog execution → mode
+  assert.equal(def?.ownerRole, "creative_director");
+  assert.equal(def?.capability, "shot_planning");
+  assert.equal(def?.label, "Shot Plan");
 });
 
 test("bridged execute delegates to the real registry and synthesizes auth", async () => {

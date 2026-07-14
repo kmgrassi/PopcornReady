@@ -1,5 +1,6 @@
 import { parseBrief, type VideoBrief } from "@/lib/api/v1/schemas";
 import { addProjectBrief as realAddProjectBrief } from "@/lib/api/v1/store";
+import { toolDefinitionMetadata } from "./capability-catalog";
 import type { ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 
@@ -96,7 +97,7 @@ export function createBriefTool(
   const resolved = { ...defaultDeps, ...deps };
 
   return {
-    name: "create_or_load_brief",
+    ...toolDefinitionMetadata("create_or_load_brief"),
     description:
       "Create the project's video brief from the user's prompt: structured goal, target length, aspect ratio, and optional platform/audience/style. Persists the brief as the project's active brief.",
     usage: {
@@ -111,7 +112,6 @@ export function createBriefTool(
     },
     inputSchema: createBriefInputSchema,
     outputSchema: createBriefOutputSchema,
-    execution: "sync",
     parseInput: parseCreateBriefInput,
     estimateCost: () => ({
       estimatedCostUsd: 0,

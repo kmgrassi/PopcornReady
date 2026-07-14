@@ -41,8 +41,9 @@ apps/
     src/middleware/        auth.ts, errors.ts, request-context.ts
     src/core/             adapter.ts, errors.ts, ids.ts
     src/lib/              backend logic: agent/ agent-api/ generation-run/ generative/
-                           oneshot/ eval/ assets/ edit-graph/ provenance/ store.ts
-                           supabase/ v1/ uploaded-footage.ts
+                           orchestrator/ orchestrator-tools/ tool-tests/ oneshot/ eval/
+                           assets/ edit-graph/ provenance/ store.ts supabase/ v1/
+                           uploaded-footage.ts
 
 packages/   shared workspace libraries (apps import them as `@popcorn/* : workspace:*`)
   shared/    (@popcorn/shared)    core types + data contracts: types.ts,
@@ -74,6 +75,8 @@ Root config: `pnpm-workspace.yaml`, `turbo.json` (task graph), `tsconfig.base.js
 | Generation pipeline / jobs | `apps/api/src/lib/generation-run/`, `generative/`, `oneshot/` |
 | Core types & data contracts | `packages/shared/src/types.ts`, `packages/shared/src/assets/` |
 | Domain-agent task/report contract | `packages/shared/src/domain-agent-contract.ts`, `docs/domain-agent-orchestration-contract.md` |
+| Orchestrator primitive catalog / dormant role registries | `apps/api/src/lib/orchestrator-tools/capability-catalog.ts`, `root-registry.ts`, `visuals-registry.ts`, `audio-registry.ts` |
+| Domain-safe recovery projection | `apps/api/src/lib/orchestrator/domain-recovery-projection.ts` |
 | DB schema / migrations | `supabase/migrations/` |
 | Styling conventions | `AGENTS.md` (CSS Modules + token layer) |
 | Identity / RLS model | `docs/supabase-identity-and-rls.md` |

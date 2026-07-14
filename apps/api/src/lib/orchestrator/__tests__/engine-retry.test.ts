@@ -15,6 +15,7 @@ import {
 import type { OrchestratorModel } from "../model";
 import type { ToolCallResult, ToolName } from "../types";
 import type { ToolRegistry } from "../registry";
+import { driverToolDefinitionMetadata } from "@/lib/orchestrator-tools/capability-catalog";
 
 // A store that throws on the first `listRunActions` call (a transient read blip),
 // then behaves normally. Without step-level retry this would fail the whole run.
@@ -63,12 +64,11 @@ function fakeRegistry(): ToolRegistry {
   const ok: ToolCallResult = { status: "succeeded", resourceIds: ["asset_plan"] };
   const map: ToolRegistry = new Map();
   map.set("plan_shots" as ToolName, {
-    name: "plan_shots" as ToolName,
+    ...driverToolDefinitionMetadata("plan_shots"),
     description: "",
     inputSchema: {},
     outputSchema: {},
     requiredResourceIds: [],
-    mode: "sync",
     estimateCostUsd: () => undefined,
     execute: async () => ok,
   });

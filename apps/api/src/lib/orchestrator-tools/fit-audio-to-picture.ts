@@ -4,6 +4,7 @@ import {
   type AudioFitRequest,
   type AudioFitResponse,
 } from "@/lib/api/v1/audio-fit";
+import { toolDefinitionMetadata } from "./capability-catalog";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 
@@ -79,7 +80,7 @@ export function createFitAudioToPictureTool(
   const resolved = { ...defaultDeps, ...deps };
 
   return {
-    name: "fit_audio_to_picture",
+    ...toolDefinitionMetadata("fit_audio_to_picture"),
     description:
       "Fit a generated audio segment to a beat window, persist a sync critique, and flag segments that need review.",
     usage: {
@@ -96,7 +97,6 @@ export function createFitAudioToPictureTool(
     },
     inputSchema: fitAudioToPictureInputSchema,
     outputSchema: fitAudioToPictureOutputSchema,
-    execution: "sync",
     parseInput: parseFitAudioToPictureInput,
     estimateCost: () => ({
       estimatedCostUsd: 0,

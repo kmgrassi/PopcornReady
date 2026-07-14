@@ -15,48 +15,13 @@ import {
   type OrchestratorRunGate,
   type RunActionSummary,
 } from "@/lib/api/v1/orchestrator-store";
+import {
+  getToolCapability,
+  isToolName,
+} from "@/lib/orchestrator-tools/capability-catalog";
 
 const BOARD_FEEDBACK_TOOL = "board_feedback";
 const AFTER_GATE_PREFIX = "after:";
-const TOOL_ORDER: Record<string, number> = {
-  create_or_load_brief: 0,
-  develop_story_blueprint: 1,
-  draft_script: 2,
-  plan_shots: 3,
-  plan_visual_anchors: 4,
-  generate_anchor: 5,
-  generate_storyboard: 6,
-  generate_keyframe: 7,
-  generate_clip: 8,
-  edit_video_asset: 9,
-  generate_audio: 10,
-  fit_audio_to_picture: 11,
-  assemble_timeline: 12,
-  critique_timeline: 13,
-  request_approval: 14,
-  export_video: 15,
-  publish_to_catalog: 16,
-};
-
-const TOOL_LABELS: Record<string, string> = {
-  create_or_load_brief: "Concept",
-  develop_story_blueprint: "Story Structure",
-  draft_script: "Script",
-  plan_shots: "Shot Plan",
-  plan_visual_anchors: "Continuity Plan",
-  generate_anchor: "Anchor Images",
-  generate_storyboard: "Storyboard",
-  generate_keyframe: "Keyframes",
-  generate_clip: "Clips",
-  edit_video_asset: "Video Edits",
-  generate_audio: "Audio",
-  fit_audio_to_picture: "Audio Sync",
-  assemble_timeline: "Timeline",
-  critique_timeline: "Quality Review",
-  request_approval: "Approval",
-  export_video: "Final Render",
-  publish_to_catalog: "Publish",
-};
 
 export interface GenerationRunDetail {
   run: GenerationRun;
@@ -250,12 +215,18 @@ function toolStageId(runId: string, tool: string): string {
   return `${runId}:tool:${tool}`;
 }
 
-function toolOrder(tool: string): number {
-  return TOOL_ORDER[tool] ?? 100 + GENERATION_STAGE_ORDER[toolStage(tool)];
+export function toolOrder(tool: string): number {
+  const catalogOrder = isToolName(tool)
+    ? getToolCapability(tool).runProjection.order
+    : null;
+  return catalogOrder ?? 100 + GENERATION_STAGE_ORDER[toolStage(tool)];
 }
 
-function toolLabel(tool: string): string {
-  return TOOL_LABELS[tool] ?? GENERATION_STAGE_LABELS[toolStage(tool)];
+export function toolLabel(tool: string): string {
+  const catalogLabel = isToolName(tool)
+    ? getToolCapability(tool).runProjection.label
+    : null;
+  return catalogLabel ?? GENERATION_STAGE_LABELS[toolStage(tool)];
 }
 
 function toErrorSummary(error: Record<string, unknown> | undefined) {

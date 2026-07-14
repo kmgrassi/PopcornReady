@@ -1,25 +1,16 @@
-export const TOOL_NAMES = [
-  "create_or_load_brief",
-  "develop_story_blueprint",
-  "draft_script",
-  "plan_shots",
-  "plan_visual_anchors",
-  "generate_anchor",
-  "generate_storyboard",
-  "generate_keyframe",
-  "generate_clip",
-  "regenerate_image_asset",
-  "edit_video_asset",
-  "generate_audio",
-  "fit_audio_to_picture",
-  "assemble_timeline",
-  "critique_timeline",
-  "request_approval",
-  "export_video",
-  "publish_to_catalog",
-] as const;
+import type {
+  ToolCapabilityId,
+  ToolCostClass,
+  ToolGateMetadata,
+  ToolName,
+} from "@/lib/orchestrator-tools/capability-catalog";
 
-export type ToolName = (typeof TOOL_NAMES)[number];
+export {
+  TOOL_NAMES,
+  getToolCapability,
+  isToolName,
+} from "@/lib/orchestrator-tools/capability-catalog";
+export type { ToolName } from "@/lib/orchestrator-tools/capability-catalog";
 
 export type ToolInvocationStatus =
   | "requested"
@@ -88,6 +79,12 @@ export type ToolCallResult =
 
 export interface ToolDefinition {
   name: ToolName;
+  capability: ToolCapabilityId;
+  ownerRole: import("@popcorn/shared/domain-agent-contract").AgentRole;
+  label: string;
+  displayOrder: number;
+  costClass: ToolCostClass;
+  gate: ToolGateMetadata;
   description: string;
   inputSchema: Record<string, unknown>;
   outputSchema: Record<string, unknown>;

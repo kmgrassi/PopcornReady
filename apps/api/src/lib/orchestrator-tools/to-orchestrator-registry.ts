@@ -75,6 +75,12 @@ function bridgeTool(real: RealToolRegistry, name: ToolName): OrchestratorToolDef
   const definition = real.get(name);
   return {
     name,
+    capability: definition.capability,
+    ownerRole: definition.ownerRole,
+    label: definition.label,
+    displayOrder: definition.displayOrder,
+    costClass: definition.costClass,
+    gate: definition.gate,
     description: composeToolDescription(definition.description, definition.usage),
     inputSchema: definition.inputSchema,
     outputSchema: definition.outputSchema,
@@ -96,7 +102,7 @@ export interface ToOrchestratorRegistryOptions {
   /**
    * Also fill the rest of the vocabulary with declared driver stubs. Off by
    * default: the engine should only offer tools that are actually wired. The
-   * harness turns this on to test the model's tool *selection* across all 14.
+   * harness turns this on to test model tool selection across the vocabulary.
    */
   includeStubs?: boolean;
 }

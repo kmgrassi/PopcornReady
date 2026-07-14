@@ -65,3 +65,9 @@
 - Friction or failure: Tool vocabulary counts had drifted across the North Star, operator harness, and historical implementation scopes, while the isolated worktree initially had no installed dependencies.
 - Suggested improvement: Derive registry documentation and status projections from the code-owned capability catalog after PR 3, and initialize parallel worktrees with the offline package cache before validation.
 - Follow-up: `docs/scopes/specialist-agent-orchestration-prs.md` PR 3.
+
+### 2026-07-14T13:15:32-04:00 — ORCH-20260714-03
+- What helped: Independent plan review caught the legacy regenerate projection fallback and forced recovery translation to stay pure, trusted-project scoped, fail-closed, and outside the flat runtime.
+- Friction or failure: Tool identity was duplicated in one more invocation module than the initial map found, the driver and real flat registries have distinct historical insertion orders, and treating allowlisted hint keys as trusted targets initially left their string values untrusted.
+- Suggested improvement: Keep catalog parity snapshots beside every model/UI projection, require server-authorized identity sets for any model-facing target projection, and initialize stacked worktrees from the offline package cache before implementation begins.
+- Follow-up: `docs/scopes/specialist-agent-orchestration-prs.md` PRs 6–8 own runtime activation of the dormant registry and recovery boundaries.
