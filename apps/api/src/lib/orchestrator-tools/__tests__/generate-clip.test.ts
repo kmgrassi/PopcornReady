@@ -273,7 +273,7 @@ test("runGenerateClipJob generates clips with keyframe graph inputs, selects the
         selected.push({ assetId: input.assetId, beatId: input.beatId });
         return {} as never;
       },
-      resumeOrchestratorRun: async (runId) => {
+      enqueueOrchestratorDispatch: async (runId) => {
         resumedRun = runId;
       },
     }
