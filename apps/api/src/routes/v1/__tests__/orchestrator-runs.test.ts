@@ -9,10 +9,14 @@ import type {
 } from "@/lib/api/v1/orchestrator-store";
 import { projectRunDetailFromParts } from "../orchestrator-run-projections.js";
 import {
+  boardRevisionBillingUserId,
   boardRevisionGateIdsToReset,
+  boardRevisionRunError,
   boardRevisionRequiresRunResume,
   boardRevisionResumePatch,
+  isDirectImageTileRevision,
   parseBoardRevisionTarget,
+  preflightDirectImageTileRevision,
   runFailedForInsufficientCredits,
   stopAfterTools,
 } from "../orchestrator-runs";
@@ -293,6 +297,100 @@ test("parseBoardRevisionTarget rejects unsupported asset target uses", () => {
       return true;
     }
   );
+});
+
+test("routes image-backed tile revisions to immutable image regeneration", () => {
+  assert.equal(
+    isDirectImageTileRevision({ scope: "tile", runId: "run_1", assetId: "asset_1" }, { kind: "image" }),
+    true
+  );
+  assert.equal(
+    isDirectImageTileRevision({ scope: "asset", runId: "run_1", assetId: "asset_1" }, { kind: "image" }),
+    false
+  );
+  assert.equal(
+    isDirectImageTileRevision({ scope: "tile", runId: "run_1", assetId: "asset_1" }, { kind: "video" }),
+    false
+  );
+});
+
+test("direct image revision billing skips local actors", () => {
+  assert.equal(
+    boardRevisionBillingUserId({
+      actor: { id: "local_dev", type: "local" },
+      isLocal: true,
+    }),
+    null
+  );
+  assert.equal(
+    boardRevisionBillingUserId({
+      actor: { id: "user_1", type: "user" },
+      isLocal: false,
+    }),
+    "user_1"
+  );
+});
+
+test("direct image revision preflight enforces run budgets before generating", async () => {
+  let budgetCalls = 0;
+  let creditCalls = 0;
+  await assert.rejects(
+    () =>
+      preflightDirectImageTileRevision({
+        auth: { actor: { id: "user_1", type: "user" }, isLocal: false },
+        runId: "run_1",
+        projectId: "project_1",
+        estimatedCostUsd: 0.25,
+        assertRunBudgetAllowsFn: async () => {
+          budgetCalls += 1;
+          throw new Error("Run budget exceeded: 1.25 exceeds 1.");
+        },
+        getCreditBalanceFn: async () => {
+          creditCalls += 1;
+          return 0;
+        },
+      }),
+    /Run budget exceeded: 1.25 exceeds 1\./
+  );
+  assert.equal(budgetCalls, 1);
+  assert.equal(creditCalls, 0);
+});
+
+test("direct image revision preflight skips credit checks for local actors", async () => {
+  let creditCalls = 0;
+  const billingUserId = await preflightDirectImageTileRevision({
+    auth: { actor: { id: "local_dev", type: "local" }, isLocal: true },
+    runId: "run_1",
+    projectId: "project_1",
+    estimatedCostUsd: 0.25,
+    assertRunBudgetAllowsFn: async () => {},
+    getCreditBalanceFn: async () => {
+      creditCalls += 1;
+      return 0;
+    },
+  });
+  assert.equal(billingUserId, null);
+  assert.equal(creditCalls, 0);
+});
+
+test("board revision run errors preserve insufficient-credit and budget failures", () => {
+  assert.deepEqual(
+    boardRevisionRunError(
+      new ApiError(
+        "insufficient_credits",
+        "Out of credits. Buy credits or add your own provider API keys to keep generating."
+      )
+    ),
+    {
+      kind: "insufficient_credits",
+      message:
+        "Out of credits. Buy credits or add your own provider API keys to keep generating.",
+    }
+  );
+  assert.deepEqual(boardRevisionRunError(new Error("Run budget exceeded: 1.25 exceeds 1.")), {
+    kind: "budget_exceeded",
+    message: "Run budget exceeded: 1.25 exceeds 1.",
+  });
 });
 
 test("projects a regenerated stage from the latest action instead of stale failures", () => {

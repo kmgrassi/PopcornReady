@@ -19,6 +19,7 @@ import { ApiError } from "@/core/errors";
 import { providerFor } from "@/lib/generative/providers";
 import { writeAssetObject } from "@/lib/storage/asset-write";
 import { createLogger, type LogFields, type Logger } from "@/lib/v1/logger";
+import { noteBillableGeneration, type KeyProvider } from "@/lib/provider-keys/resolve";
 import { sha256Hex } from "./asset-graph";
 import { GeneratedAssetProvenance } from "./provenance";
 import {
@@ -37,6 +38,8 @@ const DEFAULT_IMAGE_PROVIDER = "openai";
 export interface RegenerateImageAssetArgs {
   workspaceId: string;
   assetId: string;
+  /** Attach the immutable regeneration action to a run when it was requested from run review. */
+  orchestratorRunId?: string;
   /** Caller-supplied prompt; wins over the asset's saved prompt when present. */
   prompt?: string | null;
   /** Caller-supplied provider/model; wins over the asset's saved provenance. */
@@ -198,6 +201,12 @@ export async function regenerateImageAsset(
       { assetId, provider, model: model ?? null },
       () => generateImage({ provider, prompt, ...(model ? { model } : {}) })
     );
+    // The normal generated-assets adapter records this after provider calls.
+    // Image regeneration calls providers directly, so it must do the same for
+    // run-scoped credit accounting to observe platform-key spend.
+    if (result.costUsd) {
+      noteBillableGeneration(result.provider as KeyProvider, result.costUsd);
+    }
 
     // Fresh filename per regenerate so the managed storage key changes and CDN
     // caches can't serve the old (or missing) object.
@@ -262,6 +271,7 @@ export async function regenerateImageAsset(
           contentHash: sha256Hex(result.bytes),
           ...(asset.durationSec != null ? { durationSec: asset.durationSec } : {}),
           provenance,
+          ...(args.orchestratorRunId ? { orchestratorRunId: args.orchestratorRunId } : {}),
         })
     );
 

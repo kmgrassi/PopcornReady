@@ -285,7 +285,14 @@ test("threads board feedback target context into the next model turn", async () 
   });
   const { model, calls } = scriptedModel([{ type: "done" }]);
 
-  await runOrchestratorToCompletion("run1", deps(store, model, fakeRegistry({})));
+  const run = await runOrchestratorToCompletion("run1", deps(store, model, fakeRegistry({})));
+
+  assert.equal(run.status, "failed");
+  assert.deepEqual(run.error, {
+    kind: "revision_not_applied",
+    message: "The requested asset revision completed without producing a downstream action.",
+    recoverable: false,
+  });
 
   assert.deepEqual(calls[0], [
     {
@@ -299,6 +306,63 @@ test("threads board feedback target context into the next model turn", async () 
       },
     },
   ]);
+});
+
+test("allows a targeted revision to finish after a new downstream action", async () => {
+  const store = new FakeStore(runFixture());
+  store.actions.push({
+    id: "feedback_1",
+    tool: "board_feedback",
+    status: "applied",
+    params: { target: { scope: "tile", assetId: "asset_1" } },
+    outputAssetIds: [],
+    jobIds: [],
+    createdAt: "t1",
+  });
+  const { model } = scriptedModel([
+    { type: "tool_call", toolName: "generate_keyframe" },
+    { type: "done" },
+  ]);
+  const run = await runOrchestratorToCompletion(
+    "run1",
+    deps(store, model, fakeRegistry({ generate_keyframe: () => ok(["replacement_asset"]) }))
+  );
+
+  assert.equal(run.status, "succeeded");
+  assert.deepEqual(store.actions.map((action) => action.tool), [
+    "board_feedback",
+    "generate_keyframe",
+  ]);
+});
+
+test("does not treat unrelated planning as a completed targeted revision", async () => {
+  const store = new FakeStore(runFixture());
+  store.actions.push(
+    {
+      id: "feedback_1",
+      tool: "board_feedback",
+      status: "applied",
+      params: { target: { scope: "tile", assetId: "asset_1" } },
+      outputAssetIds: [],
+      jobIds: [],
+      createdAt: "t1",
+    },
+    {
+      id: "plan_1",
+      tool: "plan_shots",
+      status: "applied",
+      params: {},
+      outputAssetIds: ["plan_asset"],
+      jobIds: [],
+      createdAt: "t2",
+    }
+  );
+  const { model } = scriptedModel([{ type: "done" }]);
+
+  const run = await runOrchestratorToCompletion("run1", deps(store, model, fakeRegistry({})));
+
+  assert.equal(run.status, "failed");
+  assert.equal(run.error?.kind, "revision_not_applied");
 });
 
 test("threads a failed action's recovery guidance into the next model turn", async () => {
