@@ -2324,7 +2324,26 @@ export async function getActiveProjectStoryBlueprint(
           .limit(1)
           .maybeSingle()
   );
-  const row = data as StoryBlueprintRow | null;
+  let row = data as StoryBlueprintRow | null;
+  // Storyboard creation currently uses the same project pointer as a narrative
+  // blueprint, but its container has no snapshot asset. Do not let that UI
+  // container hide the latest usable narrative blueprint from replanning.
+  if (!row?.asset_id) {
+    const fallback = await runQuery(
+      "store.getActiveProjectStoryBlueprint fallback",
+      db
+        .from("story_blueprints")
+        .select("*")
+        .eq("project_id", projectId)
+        .neq("status", "superseded")
+        .not("asset_id", "is", null)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    );
+    row = fallback as StoryBlueprintRow | null;
+  }
   if (!row?.asset_id) return null;
   const asset = await dataAssetById(db, row.asset_id);
   return {
