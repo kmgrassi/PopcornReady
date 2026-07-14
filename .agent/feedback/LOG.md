@@ -29,3 +29,21 @@
 - Friction or failure: `pnpm --` forwarding and partially staged markdown made the first tooling cut validate the wrong content.
 - Suggested improvement: Add a lightweight script-level regression harness for agent tooling so review-fix cases do not rely on ad hoc shell probes.
 - Follow-up: none.
+
+### 2026-07-14 — ARCH-20260714-01
+- What helped: The new task router, isolated worktree, existing durability research, and independent checkpoints made the architecture dependencies explicit.
+- Friction or failure: Tool ownership and counts are duplicated across types, prompts, documentation, and UI projections, making the current surface easy to misstate.
+- Suggested improvement: Establish one canonical capability catalog and derive specialist registries, labels, gates, and detailed documentation from it.
+- Follow-up: `docs/scopes/specialist-agent-orchestration-prs.md` PRs 1–2.
+
+### 2026-07-14 — ARCH-20260714-02
+- What helped: Comparing the proposal to the concrete `driveLoop` injection seams separated reusable runtime mechanics from agent-role configuration.
+- Friction or failure: “Persistent child agent” initially blurred a durable session identity with a finite terminal run and hid serialization/stale-result risks.
+- Suggested improvement: Name session, assignment, run, message, and graph-state boundaries explicitly in every multi-agent architecture scope.
+- Follow-up: `docs/scopes/specialist-agent-orchestration-prs.md` PRs 4–8.
+
+### 2026-07-14 — ARCH-20260714-03
+- What helped: Treating standalone creation as a second entry mode into the same domain runtime exposed reusable session, provenance, and output contracts instead of creating three new generator silos.
+- Friction or failure: “Run a sub-agent independently” initially left project ownership, approval, report recipient, shared-session contention, and selection movement underspecified.
+- Suggested improvement: For every new agent entrypoint, require an origin/recipient matrix plus explicit queue, cost-gate, output-lineage, and selection semantics before designing routes or UI.
+- Follow-up: `docs/scopes/specialist-agent-orchestration-prs.md` PRs 4–13.
