@@ -6,7 +6,8 @@
 <!-- agent-summary: Inter-agent communication occurs only at durable turn boundaries through done, blocked, or question reports. -->
 <!-- agent-summary: The immutable asset graph is the only canonical creative-state channel; tasks and reports carry intent and stable IDs. -->
 <!-- agent-summary: Creator-direct image, video, and soundtrack work uses typed project APIs and a calm agent-directed Asset Studio UI. -->
-<!-- agent-summary: Actions record trusted origin, session, assignment, run, job, and asset lineage from the first implementation slice. -->
+<!-- agent-summary: One domain-specific agent_sessions table plus one general action_assets relation extend the existing runtime instead of duplicating it. -->
+<!-- agent-summary: Each finite domain assignment remains an orchestrator run, and its typed terminal report is a unique action. -->
 <!-- agent-summary: Nineteen ordered PRs cover evaluation, contracts, durability, agents, standalone creation, hierarchy, rollout, and cleanup. -->
 
 > **Status:** Proposed implementation scope. This document does not describe
@@ -201,11 +202,12 @@ As of 2026-07-14, the production orchestrator is one durable all-tools agent:
   one root prompt and the default all-tools registry.
 - The root model still receives `inputSummary`, compact prior actions, and tool
   schemas rather than a stable-ID project-state projection.
-- `orchestrator_runs` has no agent role, persistent domain session, assignment,
-  parent/root link, typed inter-agent report, or domain wait state.
+- `orchestrator_runs` already supplies the finite durable run identity needed
+  for a domain assignment, but has no agent role, persistent domain session,
+  task kind/spec, trusted origin, parent/continuation link, or domain wait state.
 - `actions` links invocations to one run, but action append is not idempotently
   retryable and does not attribute a decision through root action, domain
-  session, assignment, job, and produced assets.
+  session, finite child run, job, and produced assets.
 - The leased `orchestrator_dispatches` queue provides the detached execution
   foundation that domain assignment runs should reuse.
 - The current vocabulary has 18 registered tool names. Other documentation and
@@ -216,6 +218,87 @@ As of 2026-07-14, the production orchestrator is one durable all-tools agent:
   cost ledger.
 - Request Changes still relies partly on fixed stage boundaries rather than
   graph-scoped creative-director decisions.
+
+### Data-model reuse decision
+
+Do not create a parallel persistence stack for domain work. The current schema
+already owns nearly every finite lifecycle or provenance concept the hierarchy
+needs:
+
+| Need | Existing source to extend or reuse |
+| --- | --- |
+| Finite domain assignment | `orchestrator_runs` |
+| Primitive invocation and terminal domain report | `actions` |
+| Worker queue, lease, wake, retry | `orchestrator_dispatches` |
+| Creator/root approval | `orchestrator_run_gates` plus `actions.proposal` |
+| API retry protection | `idempotency` |
+| Provider/model work | `jobs` and the generated-assets service |
+| Cost and credits | `model_call_costs` plus the credit ledger |
+| Outputs and provenance | `assets`, `assets.created_by_action_id`, `asset_edges`, plus one general `action_assets` relation |
+| Active project choices and optimistic concurrency | `selections` |
+| Optional unsent UI form draft | `studio_drafts`, never authoritative agent state |
+
+The only new **domain-specific** table is `agent_sessions`: the permanent
+project/domain identity, compact continuity summary/version, atomic sequence
+allocator, active-run lock boundary, and durable claim generation with a unique
+`(project_id, domain)` key. A finite assignment is an ordinary
+`orchestrator_runs` row linked to that session. Existing root runs use the same
+table with their own role and no domain-session link.
+
+Extend `orchestrator_runs` rather than adding `domain_assignments`. The exact
+column names land in PR 4, but the relational/queryable concepts are:
+
+- agent role and optional `agent_session_id`;
+- monotonic sequence unique within a session;
+- task kind plus schema-marked `DomainTask.v1` control/audit payload;
+- trusted origin kind and either root parent/action causation or authenticated
+  creator-direct causation;
+- parent root and predecessor/continuation run links; and
+- any additional run states required for explicit supersession or domain waits.
+
+Do not duplicate session, assignment, role, or origin foreign keys onto every
+action. `actions.orchestrator_run_id` already joins every child invocation to
+the finite run, which joins to its session and trusted origin. Add a
+`parent_action_id` only if a concrete nested-action query cannot be answered by
+that run link; it is not a first-cut provenance requirement.
+
+Emit `DomainReport.v1` as one final schema-marked action with tool
+`domain_report`. Its params contain `done | blocked | question`, evidence, and
+fingerprint. A partial unique index on `actions(orchestrator_run_id)` where
+`tool = 'domain_report'` enforces one report per finite domain run. Root
+acknowledgement compare-and-sets the existing delegation action and wakes its
+parent dispatch; creator-direct completion has no parent wake.
+
+The report action is a retrieval/control record, not the provenance spine.
+Output assets remain immutable, point to their primitive creating action, and
+carry typed input edges. Existing `input_asset_ids`/`output_asset_ids` arrays
+lack foreign keys and cannot express a per-action role/ordinal safely. Add one
+general `action_assets` table with project, action, asset, `input | output`
+direction, role, and ordinal; enforce composite same-project foreign keys and
+unique action/direction/ordinal. Backfill or dual-write the legacy arrays during
+an explicit compatibility period, assert agreement, then let all tools—not only
+domain agents—use the relation. Do not add `domain_assignment_outputs`.
+
+The existing `POST /projects/:projectId/generated-assets` service already
+validates and executes image, video, and audio provider jobs, records actions
+and costs, and writes graph assets. Visuals and Audio should call its internal
+service through agent-owned tool wrappers rather than fork provider execution.
+Its public provider-heavy request shape is not the Asset Studio contract.
+
+One asset-model correction is required: current generic generated images are
+coerced to `anchor` or `keyframe`, which falsely gives a standalone image a
+production-specific meaning. PR 10 adds a generic graph `image` kind and
+updates the enum, kind/media constraint, ref trigger, shared types, mappings,
+embeddings, and projections. Generated standalone video continues to use
+`clip` (or `composite` plus `render` when assembled), and soundtrack uses
+`audio_track`.
+
+Reuse requires privacy hardening. Raw `orchestrator_runs` and `actions` rows are
+currently publicly readable for public projects, but domain task specs, reports,
+creator questions, actor/request metadata, and approval material are not public
+project content. PR 4 removes public access to those raw control records and
+provides explicit sanitized public projections for any progress fields the
+public project experience still needs.
 
 ### Related scopes to reuse, not fork
 
@@ -249,7 +332,7 @@ metadata rather than prompt-only convention.
 | Creative director | `create_or_load_brief`, `develop_story_blueprint`, `draft_script`, `plan_shots`, `plan_visual_anchors`, `assemble_timeline`, `critique_timeline`, `request_approval`, `export_video`, `delegate_visuals`, `delegate_audio`, PR 16's batched `delegate_domains`, optional `publish_to_catalog`, and model `done` |
 | Visuals | `generate_anchor`, `generate_storyboard`, `generate_keyframe`, `generate_clip`, `generate_image_asset`, `generate_video_asset`, `regenerate_image_asset`, `edit_video_asset`, and domain `done` / report outcomes |
 | Audio | `generate_audio`, `fit_audio_to_picture`, and domain `done` / report outcomes |
-| Runtime-owned, not model-facing | Session/assignment claim, wait/resume, report acknowledgement, retry, cancellation, authorization, cost settlement, gate persistence |
+| Runtime-owned, not model-facing | Session/run claim, wait/resume, report acknowledgement, retry, cancellation, authorization, cost settlement, gate persistence |
 
 The exact root tool count is not a design target. The reliability hypothesis is
 that root generation choices collapse into a small number of domain dispatches
@@ -315,7 +398,7 @@ It follows this two-phase lifecycle:
 
 1. create a server-validated proposal/quote without billable generation;
 2. explicitly confirm the proposal or approved maximum; and
-3. idempotently enqueue the assignment.
+3. idempotently enqueue the finite domain run.
 
 The idempotency key is bound to project, actor, request digest, and approval
 token. Reusing it with changed input is rejected. Direct questions and blocked
@@ -324,20 +407,22 @@ cannot resume changed work.
 
 Standalone generation must be semantically genuine. Do not fabricate a dummy
 storyboard, beat, timeline slot, or retired legacy row just to satisfy a
-production-shaped primitive. Visuals gains graph-backed generic image and video
-asset primitives where the current storyboard/keyframe/clip tools cannot
-represent the request. Audio gains a freeform soundtrack mode. These outputs
-are immutable graph assets with typed input/output edges.
+production-shaped primitive. Visuals exposes graph-backed generic image and
+video agent tools over the existing generated-assets execution service where
+the storyboard/keyframe/clip tools cannot represent the request. Audio exposes
+a freeform soundtrack mode over the same service. These outputs are immutable
+graph assets with typed input edges and primitive creating actions.
 
-Untargeted results enter the project's asset pool and are recorded through
-relational assignment-output rows with output role and ordinal. They do not
-silently move a production selection. Only an explicitly targeted, pinned, and
-transactionally revalidated request may append a selection; “Use in project”
-uses the existing explicit selection carveout and reconciliation rules. Before
-PR 15's graph-rerun integration, the direct path is restricted to unconsumed
-standalone outputs and empty/no-downstream-consumer selection targets. Once an
-asset is selected or consumed by production work, changing or replacing it must
-handoff to the graph-scoped Request Changes path.
+Untargeted results enter the project's asset pool and the terminal report
+action records their ordered IDs; intrinsic output meaning stays on
+`assets.role`. They do not silently move a production selection. Only an
+explicitly targeted, pinned, and transactionally revalidated request may append
+a selection; “Use in project” uses the existing explicit selection carveout and
+reconciliation rules. Before PR 15's graph-rerun integration, the direct path
+is restricted to unconsumed standalone outputs and
+empty/no-downstream-consumer selection targets. Once an asset is selected or
+consumed by production work, changing or replacing it must hand off to the
+graph-scoped Request Changes path.
 
 The UI is one calm, outcome-oriented **Asset Studio**, not three toy generators
 or cards exposing internal sub-agent names. It uses one Image / Video /
@@ -386,18 +471,19 @@ There is no synthetic root run or root action for direct work. The task includes
 - `responseRecipient` — creative director for root-origin work or authenticated
   creator conversation for creator-direct work.
 
-The task is typed control/audit data, so schema-marked JSONB is appropriate.
-Stable creator-facing storyboards, beats, panels, timelines, approvals, and
-creative state remain relational and graph-backed.
+The task is typed control/audit data, so schema-marked JSONB on the finite
+`orchestrator_runs` row is appropriate. Stable creator-facing storyboards,
+beats, panels, timelines, approvals, and creative state remain relational and
+graph-backed.
 
 ### Up: `DomainReport.v1`
 
 A domain turn emits exactly one agent-authored outcome:
 
-- `done` — includes relationally indexed output asset IDs/roles/ordinals,
-  explicitly changed selection roles, acceptance evidence, and a compact
-  session summary. Creator-direct completion returns to its API/UI caller and
-  never wakes a root run;
+- `done` — includes ordered output asset IDs, intrinsic asset roles, explicitly
+  changed selection roles, acceptance evidence, and a compact session summary.
+  Creator-direct completion returns to its API/UI caller and never wakes a root
+  run;
 - `blocked` — carries a domain-safe projection of the existing
   `PreconditionMiss` shape plus the required domain, stable targets, and why the
   current domain cannot satisfy it. Raw sibling primitive names in
@@ -412,16 +498,17 @@ assignment states, not additional agent-to-agent report vocabulary. A missing
 tool/graph prerequisite is `blocked`; a creative judgment outside domain
 authority is `question`.
 
-Every task and report has a durable sequence number, idempotency key, persisted
-acknowledgement, and origin-specific completion recipient. A root-origin report
-wakes its parent exactly once. A creator-direct report never wakes a root or
-finalizes a delegation action. Root-origin questions go to the creative
-director, which answers from current project constraints or uses its existing
-recommended approval path. Creator-direct questions go to the creator-facing
-conversation. A fingerprinted, one-use answer creates the next assignment turn
-in the same session. It may spend only within the already approved ceiling; a
-materially changed or more expensive successor requires a new proposal.
-Same-domain prerequisites self-heal before either origin receives an escalation.
+Every finite run has a durable session sequence and idempotency scope. Its
+terminal report action is uniquely persisted. For root-origin work, an atomic
+compare-and-set applies the existing delegation action and wakes the parent
+dispatch exactly once. A creator-direct report never wakes a root or finalizes
+a delegation action. Root-origin questions go to the creative director, which
+answers from current project constraints or uses its existing recommended
+approval path. Creator-direct questions go to the creator-facing conversation.
+A fingerprinted, one-use answer creates the next finite run in the same
+session. It may spend only within the already approved ceiling; a materially
+changed or more expensive successor requires a new proposal. Same-domain
+prerequisites self-heal before either origin receives an escalation.
 
 For a creator-direct `blocked` report, the UI may offer only explicit, validated
 actions: attach an authorized project asset that satisfies the typed dependency,
@@ -446,86 +533,107 @@ asset/action IDs and must not preserve stale copied project snapshots.
 
 ## Durable session and run model
 
-A persistent session is an identity and continuity boundary; an assignment run
-is a finite, replayable execution of `driveLoop`.
+A persistent session is an identity and continuity boundary; the existing
+orchestrator run is the finite, replayable assignment execution of `driveLoop`.
+Do not add another finite-work identity.
 
-The persistence identities are deliberately distinct:
+The persistence identities are deliberately distinct but minimal:
 
-- `agent_session_id` identifies the permanent project/domain continuity record;
-  there is exactly one for each `(project_id, domain)` for the project's lifetime.
-- `domain_assignment_id` identifies one root-to-domain or creator-to-domain
-  turn. The row contains
-  `DomainTask.v1`, sequence, status, correlation/continuation IDs, and pins.
-- `orchestrator_run.id` identifies the one finite `driveLoop` run for that
-  assignment. Async parking/resumption and infrastructure retries reuse it.
-- `DomainReport.v1` is the single acknowledged result keyed to the assignment.
-  A `blocked` or `question` successor is a new assignment and run in the same
-  session.
+- `agent_sessions.id` identifies the permanent project/domain continuity record;
+  there is exactly one for each `(project_id, domain)` for the project's
+  lifetime. The row owns atomic next-sequence allocation, active-run ownership,
+  and summary-through-sequence/version state.
+- `orchestrator_runs.id` identifies one root-to-domain or creator-to-domain
+  assignment turn. It contains the typed task, session sequence, trusted origin,
+  parent/continuation links, and ordinary finite run lifecycle.
+- `actions.id` identifies every primitive invocation and the one terminal
+  `domain_report` action. `jobs.action_id`, `assets.created_by_action_id`, and
+  general `action_assets` rows provide enforced reverse attribution.
+- `orchestrator_dispatches.id` remains the leased execution record for that
+  finite run.
 
-There is no separate free-form “message” persistence entity in the first cut;
-task and report are the two typed turn-boundary records.
+There is no `domain_assignments`, `domain_reports`, or free-form message table
+in the first cut. The task lives on the finite run; the report is its terminal
+action.
 
 ```text
-trusted origin (creative-director action OR creator-direct request)
-  -> domain agent_session (project_id + domain, persistent)
-      -> domain_assignment N (contains DomainTask.v1)
-          -> child orchestrator_run (finite driveLoop invocation)
-              -> primitive actions
-                  -> async jobs
-                  -> immutable assets + typed edges
-          -> relational assignment outputs + DomainReport.v1 N
-      -> compact session context for assignment N+1
-  -> origin-specific completion recipient
-      -> root wakes exactly once OR creator-direct API/UI updates
+trusted origin (creative-director action OR creator-direct request metadata)
+  -> agent_sessions (project_id + domain, persistent)
+      -> orchestrator_runs N (finite assignment + DomainTask.v1)
+          -> primitive actions
+              -> async jobs
+              -> immutable assets + typed edges
+          -> unique domain_report action (DomainReport.v1)
+              -> action_assets (ordered output roles)
+      -> compact session context for run N+1
+  -> origin-specific completion
+      -> apply delegation + wake root OR update creator-direct API/UI
 ```
 
-Do not reopen a terminal child run to simulate persistence. Introduce an
-explicit session identity and link ordinary finite runs/assignments to it. One
-persistent session exists per `(project_id, domain)` in the initial design;
-every assignment has a monotonically increasing sequence and at most one active
-claim.
+Do not reopen a terminal child run to simulate persistence. One persistent
+session exists per `(project_id, domain)`; every linked run receives its sequence
+from the session row, never `max(sequence) + 1`. Multiple runs may be queued, but
+only one confirmed finite run per session may hold active ownership. An
+unconfirmed quote run does not occupy the session execution slot.
 
 Required invariants:
 
-1. A domain assignment is created idempotently from exactly one trusted origin
-   before domain execution begins. Root-origin work also creates its delegation
-   action atomically.
-2. Every domain run links to one session and assignment plus either the
-   originating root run/action or the authenticated creator-direct request,
-   never both and never neither.
-3. Origin, session, assignment, child run, inputs, and outputs always share
-   project/workspace authorization.
+1. A finite domain run is created idempotently from exactly one trusted origin
+   before execution begins. Root-origin work also creates its delegation action
+   atomically.
+2. Every domain run links to one session plus either the originating root
+   run/action or authenticated creator-direct causation, never both and never
+   neither. The run itself is the assignment.
+3. Origin, session, run, parent run/action, actions, jobs, `action_assets`, and
+   assets always share project/workspace authorization. Composite same-project
+   foreign keys or equivalent triggers enforce every new link. A dispatch's
+   workspace is derived server-side and must match its run project's workspace.
+   A domain run's role matches its session domain, root-origin action belongs
+   to the declared parent run, and hierarchy depth never exceeds two.
 4. A domain registry cannot contain dispatch, root coherence, or sibling tools.
-5. Every primitive call is checked against the assignment's stable targets; a
+5. Every primitive call is checked against the task's stable targets; a
    restricted registry alone is not authorization for the whole project.
-6. Assignments in one persistent session are serialized across both origins
-   from the first dispatch implementation. Queued state and explicit
-   supersession are visible. A creator-direct request cannot supersede or
-   invalidate a root-origin assignment's pins; the safe default is queueing.
-7. A domain report is persisted and acknowledged exactly once. It wakes the
-   waiting root exactly once only for root-origin work and updates only the
-   creator-direct recipient for direct work.
-8. A late completion from assignment N cannot mutate active selections or
-   revive work after assignment N+1 supersedes it.
-9. Costs are charged once and aggregated across the root run family without
-   copying charges.
-10. Root cancellation cascades to active assignments and cancellable jobs; late
-    callbacks are fenced.
-11. Root-origin approval is rooted in the creative-director run. Creator-direct
-    work uses a runtime-owned, two-phase proposal gate bound to its actor,
-    request digest, budget ceiling, and idempotency key. Domain agents cannot
-    create independent gates.
+6. Runs in one persistent session are serialized across both origins. A new
+   atomic database claim selects the earliest eligible sequence while locking
+   and reserving the session, retains active ownership across media/job waits,
+   and clears it only on terminal completion, cancellation, or supersession.
+   Queued state is visible; creator-direct work cannot supersede or invalidate
+   a root-origin run's pins.
+7. A partial unique index permits exactly one `domain_report` action per finite
+   domain run. One idempotent transaction inserts the report/action-assets,
+   terminalizes the child, advances the guarded session summary, clears active
+   ownership, compare-and-sets the root delegation when applicable, and wakes
+   the parent exactly once. Direct completion has no parent wake.
+8. A late completion from sequence N cannot mutate active selections or revive
+   work after sequence N+1 supersedes it.
+9. Costs remain in existing model/provider cost and credit records, are charged
+   once, and aggregate across a root run family without copying charges.
+10. Sessions are permanent continuity identities and are never canceled. Root
+    cancellation cascades only through its parent/child run links; a
+    creator-direct cancellation affects only that run and its continuations.
+    Both cancel their causally linked jobs. Provider callbacks verify the
+    durable session claim generation copied onto the job, active run, current
+    pins, and terminal/supersession state before applying outputs.
+11. Root-origin approval uses the existing root run gate. Creator-direct work
+    creates its finite run and proposal action without enqueueing provider work,
+    then reuses an extended run gate bound to actor, request digest, budget
+    ceiling, and one-use token before the existing dispatch is enqueued.
 12. Assets remain immutable; changes mint versions and append selections.
 13. Session compaction preserves control continuity and stable IDs without
-    becoming a second creative-state store.
-14. Existing action, edge, selection, job, and asset provenance remains visible
-    even though the root consumes a compact report.
-15. `domain_assignment_outputs` is an indexed retrieval relationship, not a
-    substitute for provenance. Typed input/output asset edges, output
-    roles/ordinals, actions, jobs, and immutable lineage remain authoritative.
+    becoming a second creative-state store. `summary_through_sequence` or an
+    equivalent version CAS prevents an older run from overwriting newer context.
+14. Existing action, edge, selection, job, cost, and asset provenance remains
+    visible even though the root consumes a compact report.
+15. General `action_assets` rows own per-action input/output direction, role,
+    and ordinal; `assets.created_by_action_id` and typed asset edges retain
+    immutable creation/dependency provenance. Legacy UUID arrays agree during
+    compatibility and never become a second source of truth.
 16. Untargeted creator-direct outputs never move active selections. Targeted
     selection movement requires explicit intent, pinned current state, and one
     transactional revalidation.
+17. Raw task specs, reports, questions, actor/request metadata, and approval
+    material are owner/service-only. Public projects receive only sanitized
+    progress/media projections, never raw control rows.
 
 ## PR dependency map
 
@@ -534,7 +642,7 @@ flowchart TD
   P1["PR 1 — Decision-eval gate"]
   P2["PR 2 — Architecture contract"]
   P2 --> P3["PR 3 — Tool ownership"]
-  P2 --> P4["PR 4 — Session/provenance schema"]
+  P2 --> P4["PR 4 — Session + run extensions"]
   P4 --> P5["PR 5 — Idempotent provenance wiring"]
   P3 --> P6["PR 6 — Turn-boundary dispatch"]
   P5 --> P6
@@ -565,7 +673,7 @@ parallel after PR 9. PRs 12–13 form the standalone product track and do not
 depend on a Gate 0 proceed decision. PR 14 may proceed in parallel with that
 track only if Gate 0 says proceed. PR 17 is predominantly an extension of the
 root run projection; Asset Studio does not wait for it because PR 12 owns its
-stable session/assignment/status/output API.
+stable session/run/status/output API.
 
 ### Requirements for every implementation PR
 
@@ -618,6 +726,10 @@ and does not require the hierarchy result to be “proceed.”
   approved architecture when Gate 0 is deferred.
 - Define `AgentRole`, `DomainTask.v1`, `DomainReport.v1`, report payloads, and
   runtime assignment states in a focused shared module.
+- Define the domain assignment identifier as the finite
+  `orchestrator_runs.id`, the result identifier as its unique terminal
+  `actions.id`, and the public API identifiers as `sessionId` plus `runId`.
+  Prohibit redundant domain-assignment/report identifiers and tables.
 - Define the trusted `creative_director | creator_direct` origin union, direct
   task kinds, shared-session rule, origin-specific report recipients, and
   project-scoped standalone UI/API interaction contract.
@@ -655,33 +767,61 @@ and fail on unowned, multiply owned, or cross-domain tools.
 
 **Validation:** registry unit tests and tool-test bridge tests.
 
-### PR 4 — Persistent session, assignment, and provenance schema
+### PR 4 — Persistent session and finite-run extension schema
 
 **Depends on:** PR 2. Can proceed in parallel with PR 3.
 
 **Deliver:**
 
-- Add a persistent project/domain session identity with a uniqueness constraint
-  for `(project_id, domain)`.
-- Add finite domain assignments with monotonic sequence, continuation,
-  correlation, current pins, actor identity, response recipient, completion
-  behavior, and origin-specific nullable causation. Enforce exactly one trusted
-  origin: root run/action or authenticated creator-direct request.
-- Link finite assignment runs and actions to `agent_session_id` and assignment;
-  add `parent_action_id` where a primitive emits valuable leaf actions.
-- Add a relational `domain_assignment_outputs` retrieval/index surface with
-  output role and ordinal. Require typed input/output asset edges and immutable
-  lineage; do not treat the join row or loose JSONB as provenance.
-- Persist schema-marked domain reports and compact session summaries.
-- Add constraints for same-project ownership, one active assignment claim,
-  maximum depth, and no self-parenting.
-- Extend RLS through existing project/workspace ownership helpers.
-- Keep dispatch rows one-per-finite-run so assignments reuse the leased queue.
+- Add the one new domain-specific table, `agent_sessions`, with project, domain,
+  atomic next sequence, active run, durable claim generation, schema-marked compact summary,
+  summary-through-sequence/version, timestamps, and a unique
+  `(project_id, domain)` identity.
+- Extend `orchestrator_runs` so a finite run can carry agent role, optional
+  session, monotonic session sequence, task kind, schema-marked `DomainTask.v1`,
+  parent/root-action/continuation links, pins, trusted origin causation,
+  queryable wait reason, and supersession timestamp. Keep the existing run
+  status transport-oriented: `succeeded` means a terminal report was persisted;
+  `done | blocked | question` remains report outcome. Add immutable-field guards
+  and do not add a separate assignment table.
+- Enforce exactly one trusted origin for a domain run: root run/action or
+  authenticated creator-direct actor/request metadata. Derive its completion
+  recipient from that origin.
+- Add a partial unique index permitting one `domain_report` action per finite
+  domain run. Keep `DomainReport.v1` in that action's schema-marked params and
+  mirror legacy result arrays only during compatibility. Allow the report only
+  on a domain-role run and make its params, output links/arrays, and fingerprint
+  immutable once inserted.
+- Add the general `action_assets` relation with project, action, asset,
+  direction, role, and ordinal; composite same-project foreign keys; ordering
+  uniqueness; RLS; and an explicit backfill/dual-write/assert/cutover plan for
+  action UUID arrays.
+- Add nullable `jobs.action_id` with an enforced same-project relation plus a
+  nullable domain-session claim generation for callback fencing. PR 5
+  preallocates the canonical action and supplies the active generation before
+  the existing generated-assets service creates its provider job.
+- Add composite same-project constraints for session, parent run/action,
+  continuation, action/job, asset creator action, and any new asset references.
+  Derive `orchestrator_dispatches.workspace_id` from its run and reject any
+  dispatch/run/project workspace mismatch. Add maximum-depth and
+  no-self-parenting checks. Enforce origin XOR, role/domain agreement,
+  parent-action ownership, same-session terminal continuation, and one-use
+  question/block successor rules with constraints/triggers.
+- Extend RLS through existing project/workspace ownership helpers. Make sessions
+  and raw runs, task specs, report/actions, jobs, actor/request metadata, and gate
+  material owner/service-only; replace current public-row access with sanitized
+  public progress/media projections where needed.
+- Keep dispatch, gate, job, cost, idempotency, asset, edge, and selection tables
+  unchanged except for focused columns/constraints needed by this contract.
+- Explicitly do not add `domain_assignments`, `domain_reports`,
+  `domain_assignment_outputs`, or a second queue/approval/job/cost table.
 
-**Acceptance:** DB tests create/reuse one Visuals session for root and direct
-assignments, enforce exactly one trusted origin, link outputs by role/ordinal,
-reject invalid or cross-project relationships, and preserve separate run
-histories without requiring a synthetic root.
+**Acceptance:** DB tests create/reuse one Visuals session, allocate concurrent
+root/direct sequences without collision, enforce active ownership, immutable
+identity, one trusted origin, valid parent/continuation links, one terminal
+immutable report action, general action/job/asset attribution, public denial of
+  raw control data, and cross-project/cross-workspace rejection without a
+  synthetic root or duplicate domain tables.
 
 **Validation:** local Supabase migration check, migration/RLS/tenancy tests, and
 no migration-history rewrite.
@@ -695,19 +835,32 @@ no migration-history rewrite.
 - Preallocate stable action/tool-call IDs before mutating tools execute.
 - Make invocation creation idempotently retryable within a run.
 - Record `running` before external work launches, then patch lifecycle fields.
-- Extend store queries for session lookup/create, assignment enqueue/claim,
-  history reads, report acknowledgement, origin-specific completion, and
-  root-family projection.
-- Pass the canonical root/session/assignment/run/action provenance context into
+- Upgrade the existing idempotency table/helper from find-then-save to an atomic
+  reservation/consume transaction suitable for multiple API instances; bind
+  project, actor, request digest, and operation scope without adding a new table.
+- Add a compare-and-set job claim before provider execution. Pass the
+  preallocated canonical action ID into the existing generated-assets service
+  and persist it through `jobs.action_id` so retries cannot launch duplicate
+  provider work or unrelated leaf actions.
+- Extend store queries for session lookup/create, finite-run enqueue/claim,
+  role-aware history reads, unique report append, origin-specific completion,
+  and root-family projection.
+- Pass the canonical root/session/run/action provenance context into
   primitive, job, asset, edge, and selection paths instead of minting unrelated
   wrapper identities.
+- Derive action role/session/origin through `actions.orchestrator_run_id`; do not
+  stamp redundant domain assignment columns onto actions.
+- Same-project validate every task/report `input_asset_ids` and
+  `output_asset_ids` write while preserving intrinsic asset roles and typed
+  asset edges.
 - Include invocation recording in bounded store retry without duplicate action
   rows, and preserve immutable decision fields and append-only audit behavior.
 
-**Acceptance:** crash/retry tests prove one logical invocation creates one
-action, session claims are stable, direct completion never wakes a root, and
-every generated asset can be traced back to its trusted origin before dispatch
-is enabled.
+**Acceptance:** concurrent request/job crash-retry tests prove one logical
+invocation creates one action and one provider launch, session claims are
+stable, one immutable report action closes one domain run, direct completion
+never wakes a root, and every generated asset can be traced through its
+primitive action and finite run to the trusted origin.
 
 **Validation:** API store, concurrency, engine retry, provenance integration,
 and action immutability tests.
@@ -718,43 +871,57 @@ and action immutability tests.
 
 **Deliver:**
 
-- Implement one internal assignment service plus root-only `delegate_visuals`
+- Implement one internal domain-run service plus root-only `delegate_visuals`
   and `delegate_audio` adapters. The service accepts only server-derived trusted
   origin/scope; public creator-direct routes arrive in PR 12.
-- Create the assignment, finite run, origin-specific completion recipient, and
-  dispatch enqueue atomically and idempotently.
+- In one database transaction, reserve the idempotency key, allocate the next
+  session sequence, create the task-bearing finite run and root delegation
+  action where applicable, persist any required gate, and enqueue the existing
+  dispatch row. A replay returns those same identities.
 - Add a domain-wait state distinct from media-job and approval waits.
-- Persist exactly one `done | blocked | question` report per completed domain
-  turn, acknowledge it, and apply origin-specific completion: finalize/wake a
-  root delegation once or update creator-direct state without touching a root.
-- Resume a questioned/blocked session through a later sequenced assignment,
+- Finalize a domain turn in one idempotent transaction: insert the immutable
+  `done | blocked | question` report action and `action_assets`, terminalize the
+  child, compare-and-set the session summary/version, clear active ownership,
+  apply the root delegation when applicable, and wake its parent dispatch once.
+  Creator-direct completion has no parent mutation or wake.
+- Resume a questioned/blocked session through a later sequenced finite run,
   never an out-of-band message.
 - Define continuation semantics explicitly: `blocked`/`question` closes the
-  current finite assignment, and the root response creates a successor with
-  `continues_assignment_id`, `correlation_id`, current pins, and a new sequence.
+  current finite run, and the answer creates a successor with
+  `continues_run_id`, current pins, and a new session sequence.
 - Add attempt/cycle limits so two domains cannot bounce the same unmet
   requirement indefinitely.
-- Atomically serialize one active turn per session across origins, expose queued
-  state, deduplicate task/report writes, and claim/wake the root exactly once
-  only when the origin requires it.
+- Extend the existing dispatch claim transaction to select the earliest
+  eligible confirmed sequence, lock/reserve the `agent_sessions` row, serialize
+  one active finite run per session across origins, and expose queued state. An
+  unconfirmed quote does not occupy this slot, while an active run retains
+  ownership across media-job waits.
+- Increment a durable session claim generation when active ownership changes
+  and copy it onto every provider job. Worker-owned starts and transitions must
+  also prove the current dispatch lease; async callbacks, report finalization,
+  and selection writes compare-and-set the durable claim generation, active
+  run, current pins, and terminal state so a reclaimed worker cannot commit
+  late even after its transient dispatch lease expires.
 - Define safe queue/supersession policy: creator-direct work cannot invalidate
-  an orchestrated assignment's pins; joins remain isolated by origin and
-  assignment; stale completions are fenced.
+  an orchestrated run's pins; joins remain isolated by origin and child run;
+  stale completions are fenced.
 - Fence cancellation, inline completion, reclaimed dispatches, duplicate
   callbacks, supersession, and late reports before any domain can run live.
-- Enforce depth, per-root assignment, report, continuation, and turn limits.
+- Enforce depth, per-root child-run, report, continuation, and turn limits.
 - Keep this PR at the durable transport boundary: use a fake domain report
   producer in lifecycle tests. Production `driveLoop` report emission lands in
   PR 8, so no domain profile can be enabled here.
 
-**Acceptance:** a transport test executes root → persistent session assignment
-→ fake report producer → report → root resume across processes, then sends
-follow-up feedback through the same session without duplication.
+**Acceptance:** a transport test executes root → persistent session → child
+orchestrator run → fake terminal report action → root resume across processes,
+then sends follow-up feedback through a successor run without duplication.
+Concurrent creation, reclaimed-lease, media-wait, callback, and report/wake
+races preserve one sequence owner, one report, and one parent wake.
 
 **Validation:** engine, task/report transport, recovery-worker, dispatch-lease, race,
 cancellation, and idempotency tests.
 
-### PR 7 — Fresh graph context, assignment scope, and session compaction
+### PR 7 — Fresh graph context, task scope, and session compaction
 
 **Depends on:** PRs 3 and 4. Can proceed in parallel with PRs 5–6 after the
 schema contract is stable.
@@ -764,8 +931,8 @@ schema contract is stable.
 - Build a typed root projection containing active assets/selections, relational
   story objects, domain status, approvals, graph stale candidates, and pins.
 - Build role-filtered domain projections from the current graph at the start of
-  every assignment turn.
-- Mark assignment origin and active selection status in domain context. Direct
+  every finite domain turn.
+- Mark run origin and active selection status in domain context. Direct
   pool experiments may remain discoverable graph assets but must not be framed
   as root-approved creative truth or active production requirements unless they
   are explicitly selected/targeted.
@@ -773,7 +940,7 @@ schema contract is stable.
   memory as canonical state.
 - Make target scope explicit for project, storyboard, scene, beat, panel, asset,
   lineage, timeline item, or export requests.
-- Reject primitive inputs outside the assignment's stable targets.
+- Reject primitive inputs outside the run task's stable targets.
 - Enforce allowed-target and authorized graph-closure checks server-side for
   every selection append, edge, and minted asset—not only in prompts or parsed
   tool inputs. Narrow project-wide primitives before a domain can call them.
@@ -821,27 +988,37 @@ typed report without a forked runtime.
 **Validation:** model, engine, registry-isolation, report-contract, decision-eval,
 and opt-in real-provider routing tests.
 
-### PR 9 — Budget, approval, cancellation, and recovery across assignments
+### PR 9 — Budget, approval, cancellation, and recovery across finite runs
 
 **Depends on:** PR 8.
 
 **Deliver:**
 
-- Allocate assignment budgets from the root ceiling and settle actual spend
-  exactly once.
-- Add the runtime-owned creator-direct proposal/confirmation gate. Bind approval
-  to actor, project, request digest, approved maximum, and one-use token before
-  billable dispatch.
-- Reconcile async provider and model-call costs in one root-family ledger.
+- Reserve child-run budget atomically against the root/direct ceiling before
+  billable work starts and settle actual spend exactly once through existing
+  cost and credit records. Key reservation and settlement to existing stable
+  run/action/job identities so concurrent fan-out cannot overspend.
+- Extend `orchestrator_run_gates` for the runtime-owned creator-direct
+  proposal/confirmation gate. Create the finite run and proposed action first,
+  but do not enqueue its dispatch until the gate records kind, subject proposal
+  action, actor, project, request digest, approved maximum, expiry, and a hashed
+  one-use token consumed with compare-and-set.
+- Reconcile existing job/provider and `model_call_costs` records into one
+  root-family projection; do not create an assignment cost ledger. Keep
+  `orchestrator_runs.spent_usd` as own-run spend and compute tree totals from
+  descendant cost rows so charges are never copied or double-counted.
 - Keep `request_approval` as a root-only creative-director tool while the
   runtime persists/enforces root and creator-direct gates with distinct actors
   and recipients.
-- Cascade root/session cancellation to active assignments and cancellable jobs;
-  ignore late completion after cancellation or supersession.
-- Define retry/re-dispatch policy for recoverable assignment failure and
-  terminal policy for non-recoverable failure.
+- Keep sessions permanent and non-cancelable. Cascade root cancellation only to
+  causally linked child runs/jobs; cancel a creator-direct run only with its
+  continuations/jobs. Ignore late completion after cancellation or
+  supersession.
+- Define retry/re-dispatch policy for recoverable finite-run failure and
+  terminal policy for non-recoverable failure. Gate consumption, budget
+  reservation, dispatch enqueue, and idempotency consume share one transaction.
 - Extend recovery sweeps to domain waits, unacknowledged reports, active claims,
-  and parent wake-up.
+  existing dispatch leases, unique terminal report actions, and parent wake-up.
 
 **Acceptance:** tests cover insufficient credits, budget exhaustion, root and
 direct approval/rejection, changed-input idempotency-key reuse, cancellation,
@@ -864,10 +1041,21 @@ No domain agent may be enabled against live provider work before this PR.
 - Scope Visuals to generated anchors, storyboards, keyframes, clips, immutable
   image regeneration, and content-aware video edits; visual-anchor planning
   remains with the creative director.
-- Add graph-backed `generate_image_asset` and `generate_video_asset` primitives
-  for genuine standalone outcomes that have no storyboard/beat prerequisite.
-  Keep `video_create` and `video_edit` distinct; edit requires an authorized,
-  pinned source asset.
+- Add agent-facing `generate_image_asset` and `generate_video_asset` tool
+  wrappers over the existing generated-assets request/job/storage/action/cost
+  service for genuine standalone outcomes with no storyboard/beat prerequisite.
+  The wrappers derive provider settings server-side. Keep `video_create` and
+  `video_edit` distinct; edit requires an authorized, pinned source asset.
+- Add the generic graph `image` kind end to end with an additive enum migration,
+  kind/media constraint and reference-trigger updates, shared `GraphAssetKind`
+  and embedding support, storage mappings, generated-asset projections,
+  catalog/search/regeneration support, and migration/API tests. Preserve
+  explicit production mappings such as `anchor`, `beat_keyframe`,
+  `beat_storyboard`, `scene_storyboard`, and `act_mockup`; only a genuinely
+  standalone still defaults to `image`. Do not enable standalone image work
+  before this migration lands.
+- Continue to use `clip` for a generated video segment and `composite` plus
+  `render` for an assembled standalone video.
 - Narrow project-wide primitives with explicit beat, panel, anchor, source
   asset, or lineage targets.
 - Keep storyboard → keyframe → clip prerequisite recovery inside the session.
@@ -877,7 +1065,7 @@ No domain agent may be enabled against live provider work before this PR.
 - Return `blocked` for missing root-owned visual-anchor plans or required Audio
   work, and `question` when the visual change requires story, pacing, or
   approval judgment. Route the report to the origin-specific recipient.
-- Prove root-origin and creator-direct image/video assignments reuse the same
+- Prove root-origin and creator-direct image/video runs reuse the same
   serialized Visuals session without contaminating pins or origin joins.
 
 **Acceptance:** first-pass production visuals, standalone image/video assets,
@@ -899,7 +1087,9 @@ graph/selection assertions, follow-up-session tests, and opt-in media smoke.
 - Scope Audio to narration, dialogue, music, sound generation, and fitting audio
   to picture.
 - Add `soundtrack_create` and freeform `audio_create` modes that can generate a
-  graph-backed standalone asset without a timeline slot or fabricated plan.
+  graph-backed `audio_track` without a timeline slot or fabricated plan. Reuse
+  the existing generated-assets audio job/provider/storage/action/cost service
+  beneath the Audio tool wrapper.
 - Add explicit narration, dialogue, music, beat, asset, or timeline-slot targets
   where current tools accept only project-wide intent.
 - Preserve typed mix/alignment metadata, active selections, timing constraints,
@@ -923,7 +1113,7 @@ asset-edge/selection assertions, follow-up-session tests, and opt-in audio smoke
 **Depends on:** PRs 10 and 11. This is part of the standalone track and does
 not require Gate 0 to say proceed.
 
-**Owns:** a focused protected route such as `domain-agent-assignments.ts`, its
+**Owns:** a focused protected route such as `agent-creations.ts`, its
 smallest protected mount, shared request/response types, and web client/query
 primitives. It does not add a broad route `index.ts`.
 
@@ -931,7 +1121,7 @@ primitives. It does not add a broad route `index.ts`.
 
 - Add project-scoped, authenticated endpoints to propose and quote a typed
   Image, Video, Video Edit, Soundtrack, or Audio request; explicitly confirm it;
-  and idempotently enqueue it through PR 6's single internal assignment service.
+  and idempotently enqueue it through PR 6's single internal domain-run service.
 - Use a discriminated server-validated request shape. The server maps product
   kind to Visuals/Audio, derives `taskKind`, trusted creator-direct origin,
   authorized targets/closure, and allowed output kinds. It never infers edit
@@ -940,12 +1130,12 @@ primitives. It does not add a broad route `index.ts`.
   ownership and current fingerprints for every reference or target.
 - Bind proposal confirmation and idempotency to project, actor, request digest,
   approved maximum, and one-use approval token. Return `202` with stable
-  session, assignment, and run IDs only after confirmation.
-- Add stable session/assignment/status/report/output/provenance reads sufficient
+  session and finite run IDs only after confirmation.
+- Add stable session/run/status/report/output/provenance reads sufficient
   for Asset Studio; do not make PR 13 depend on the later root-tree projection.
 - Add fingerprinted, one-use creator-direct question answers, validated blocked
   dependency attachment/escalation, cancel, and direct follow-up Request Changes
-  operations. Every answer/follow-up creates a successor assignment in the same
+  operations. Every answer/follow-up creates a successor run in the same
   session; only creator-direct questions are answerable by these routes. Before
   PR 15, follow-ups are limited to unselected, unconsumed standalone outputs;
   return a typed production-change handoff for anything with downstream use.
@@ -981,7 +1171,7 @@ small launch points from authenticated product surfaces.
   destination-project choice/creation, one intent prompt, optional references
   and bounded creative constraints, a cost proposal, and one primary action.
 - Label outcomes in creator language; do not expose internal agent names, raw
-  provider/model/seed controls, tool names, or a raw assignment editor.
+  provider/model/seed controls, tool names, or a raw domain-task editor.
 - Require explicit proposal confirmation before launch. Show cost/credit impact
   and allow rejection or revision without dispatching billable work.
 - Transition into an observe-first session view with skeleton/loading states,
@@ -1030,7 +1220,7 @@ parallel with PRs 12–13 because all three reuse the same stable domain contrac
   constraints, visual-anchor planning, assembly, critique, approval, blast
   radius, and completion.
 - Feed the root current graph state, compact origin-filtered domain reports,
-  unresolved questions, active/queued assignments, costs, gates, and pins.
+  unresolved questions, active/queued child runs, costs, gates, and pins.
 - Make the root choose between its coherence tools and domain dispatch, never a
   leaf media/provider tool.
 - Support fresh projects, partial projects, resumes, multi-domain requests,
@@ -1044,7 +1234,7 @@ root tool/domain/done across the scenario matrix; the registry cannot name a
 leaf Visuals or Audio tool, and creator-direct history does not masquerade as
 root-approved project truth.
 
-**Validation:** creative-director/routing evals, end-to-end fake assignments,
+**Validation:** creative-director/routing evals, end-to-end fake child runs,
 entry-route tests, concurrent-origin fixtures, and a mocked-provider API smoke.
 
 ### PR 15 — Request Changes and graph-scoped selective regeneration
@@ -1066,7 +1256,7 @@ and unlocks direct changes/reselection after an output has production consumers.
 - Replace fixed restart-stage boundaries with `downstream_assets()` candidates
   plus creative-director semantic pruning.
 - Reuse the appropriate persistent domain session for follow-up feedback such
-  as “redo beats 3–5 warmer,” while preserving origin/assignment isolation.
+  as “redo beats 3–5 warmer,” while preserving origin/run isolation.
 - Propose a costed root work plan before expensive/fan-out revisions.
 - Preserve unaffected assets/selections and fence work with current
   fingerprints.
@@ -1089,13 +1279,13 @@ candidate/pruning evals, origin-isolation, and persistent-session follow-up test
 **Deliver:**
 
 - Add one root-only batched `delegate_domains` capability. A single model tool
-  call atomically creates independent Visuals/Audio assignments and parks the
+  call atomically creates independent Visuals/Audio child runs and parks the
   root on their durable join; separate parking delegate calls cannot implement
   fan-out because the first would stop the current root turn.
-- Reuse PR 6's one-active-assignment session guarantee while allowing different
+- Reuse PR 6's one-active-run session guarantee while allowing different
   domain sessions to run in parallel. Creator-direct work in the same domain is
   visibly queued and cannot join, supersede, or invalidate root-origin work.
-- Reserve budget so concurrent assignments cannot exceed the root ceiling.
+- Reserve budget so concurrent child runs cannot exceed the root ceiling.
 - Resume only when required reports arrive; keep optional/failed branches
   explicit.
 - Reconcile immutable assets/selections using fingerprints so late results
@@ -1117,7 +1307,7 @@ replacing it; web fixture work may begin earlier.
 **Deliver:**
 
 - Extend run-detail APIs with the root tree, persistent domain sessions, finite
-  assignments, reports, and action/job drill-down.
+  child runs, terminal report actions, and primitive action/job drill-down.
 - Project creator-facing progress from creative work and domain outcomes rather
   than a numbered primitive-tool pipeline.
 - Show active/queued/waiting/blocked/failed states and root handling of
@@ -1125,13 +1315,13 @@ replacing it; web fixture work may begin earlier.
   internal sessions as unrelated user conversations.
 - Keep the production page's one creator-facing root feedback/approval loop and
   no direct-edit controls; creator-direct question mutations remain confined to
-  Asset Studio and creator-direct assignment authorization.
+  Asset Studio and creator-direct run authorization.
 - Use TanStack Query for polling, cache updates, and invalidation.
 - Add route/component CSS Modules only; do not grow legacy global styles.
 
 **Acceptance:** users can understand what the creative director delegated,
 which domain is active or queued, what it produced, and which root proposal
-needs creator approval on desktop/mobile, while standalone assignments retain
+needs creator approval on desktop/mobile, while standalone runs retain
 their correct direct recipient.
 
 **Validation:** API projection, origin-recipient, web unit, browser
@@ -1148,7 +1338,7 @@ production surface understands shared domain-session contention.
   time-bounded emergency fallback flag. Do not couple the independently managed
   Asset Studio flag to this root-cutover flag.
 - Define soak duration, success/error/cost thresholds, rollback owner, and
-  monitoring for decisions, assignments, cross-origin session contention, and
+  monitoring for decisions, child runs, cross-origin session contention, and
   exports.
 - Exercise every production entrypoint and Request Changes path through the new
   default without executing duplicate billable work.
@@ -1169,7 +1359,7 @@ monitoring queries, rollback rehearsal, and recorded soak evidence.
 
 - Remove the fallback flag and delete primitive media exposure from the root
   prompt while keeping primitive implementations for domain registries and
-  creator-direct assignments.
+  creator-direct runs.
 - Remove fixed stage-restart logic replaced by graph-scoped feedback.
 - Update `NORTH_STAR.md`, async-orchestrator research, tool docs, manual tests,
   and operator runbooks to the as-built architecture and both entry modes.
@@ -1200,7 +1390,7 @@ browser QA, and deployment smoke.
 | Direct question | Address the creator conversation; fingerprinted answer creates a successor in the same session |
 | Direct cross-domain block | Offer validated dependency attachment or explicit full-production handoff; do not auto-start it |
 | Direct follow-up (“warmer”) | Same-session successor while the output is unconsumed; otherwise graph-scoped production Request Changes after PR 15 |
-| Direct output completes | Add to project asset pool with output role/ordinal and lineage; do not move a selection unless explicitly targeted and revalidated |
+| Direct output completes | Add to project asset pool; terminal report action lists ordered IDs and assets retain role/lineage; do not move a selection unless explicitly targeted and revalidated |
 | Later full production uses a direct asset | Root observes the existing graph asset and may explicitly select/reuse it; session continuity remains shared |
 | Root and direct request target one domain | Serialize visibly; direct work cannot supersede or invalidate root pins or join state |
 | Fresh idea | Use root brief/story/script/shot-planning tools |
@@ -1213,22 +1403,24 @@ browser QA, and deployment smoke.
 | Timeline ready, not reviewed | Root calls `critique_timeline` |
 | Expensive approved repair proposed | Root calls `request_approval` before dispatch |
 | Reviewed/approved timeline | Root calls deterministic `export_video` |
-| “Redo beats 3–5 warmer” | Follow-up assignment in the existing Visuals session |
+| “Redo beats 3–5 warmer” | Successor run in the existing Visuals session |
 | “Remove the logo from this footage” | Visuals, scoped to the source asset |
 | “Shorten this narration” | Audio if delivery/fitting; root story planning if meaning changes |
 | “Make the opening faster” | Root assembly/pacing decision; dispatch only if source coverage changes |
 | “Rename the protagonist everywhere” | Root story decision, then graph-scoped Visuals/Audio follow-ups |
 | Visuals requires an Audio asset | `blocked(PreconditionMiss)` → root dispatches Audio → resumes Visuals |
 | Visuals asks whether realism or style should win | `question` → root answers/resumes; if necessary, root proposes one recommended creator approval |
-| User cancels during domain media work | Root/session assignment cancel; late result is fenced |
-| Two independent repairs | Parallel Visuals/Audio assignments, serialized per session, deterministic fan-in |
+| User cancels during domain media work | Root/session child-run cancel; late result is fenced |
+| Two independent repairs | Parallel Visuals/Audio child runs, serialized per session, deterministic fan-in |
 
 ## Merge-conflict plan
 
 - PRs 10 and 11 own separate domain prompt, registry, and eval files.
 - PR 3 creates role-specific registry boundaries before domain work so agents do
   not all edit `default-registry.ts`.
-- PRs 4–6 own action/session/dispatch infrastructure sequentially.
+- PR 4 alone owns the `agent_sessions` table, general `action_assets` relation,
+  run/job extensions, and their constraints. PRs 5–6 own store/lifecycle logic
+  sequentially; PR 10 alone owns the generic-image enum and mappings.
 - PR 12 owns one explicit creator-direct API route group and shared projection;
   PR 13 owns standalone web route/components in distinct files.
 - PR 14 owns the root prompt/config after domain profiles stabilize.
@@ -1238,7 +1430,7 @@ browser QA, and deployment smoke.
   documentation synchronization PR.
 - Avoid new route/feature `index.ts` aggregators; use explicit names such as
   `root-agent.ts`, `visuals-agent.ts`, `audio-agent.ts`,
-  `domain-session-store.ts`, `domain-agent-assignments.ts`,
+  `domain-session-store.ts`, `agent-creations.ts`,
   `standalone-agent-creation.ts`, and `session-run-projection.ts`.
 
 ## Rollout gates
@@ -1253,16 +1445,21 @@ creative-director routing by default until all are true:
 2. Visuals and Audio have registry-isolation and leaf-tool decision evals.
 3. A provider-neutral end-to-end run reaches export through persistent sessions.
 4. Request Changes passes visual, audio, pacing, and upstream multi-domain cases.
-5. Assignment crash recovery, serialization, cancellation, approval, and budget
+5. Finite-run crash recovery, serialization, cancellation, approval, and budget
    tests pass.
-6. Late/superseded assignment results cannot mutate current selections.
+6. Late/superseded child-run results cannot mutate current selections.
 7. The production UI accurately projects active/queued/waiting/blocked/failed
    work, root handling of root-origin domain questions, and creator-facing root
    approvals. Asset Studio separately handles only creator-direct recipients.
 8. No leaf domain tool is exposed to the root or multiply owned.
 9. Session memory is bounded and demonstrably not a second creative-state store.
-10. No retired schema surface, untyped product JSONB, or direct-edit UI is added.
-11. The default-on path completes its defined soak before the flat path is
+10. Atomic idempotency, provider-job claim, durable session-generation fencing,
+    worker lease fencing, immutable report finalization, and exactly-once
+    parent wake pass concurrent tests.
+11. Raw tasks, reports, questions, jobs, gates, and actor/request metadata are
+    not readable through public-project policies.
+12. No retired schema surface, untyped product JSONB, or direct-edit UI is added.
+13. The default-on path completes its defined soak before the flat path is
     deleted.
 
 ## Non-goals
@@ -1290,8 +1487,11 @@ creative-director routing by default until all are true:
   prompt-to-URL endpoint.
 - Fabricating dummy storyboards, beats, timeline slots, or retired legacy data
   to make standalone generation fit a production primitive.
-- Treating relational assignment-output rows as a replacement for typed asset
-  edges, actions, jobs, and immutable provenance.
+- Adding domain-specific assignment, report, output, dispatch, gate, job, or
+  cost tables when the existing finite-run/action/runtime records own the same
+  lifecycle.
+- Treating legacy action UUID arrays as an integrity-enforced replacement for
+  the general `action_assets` relation.
 
 ## Definition of done
 
@@ -1302,14 +1502,18 @@ creative-director routing by default until all are true:
 - A creator can independently request, inspect, revise, and reuse an Image,
   Video, or Soundtrack through a typed project API and Asset Studio without
   starting a full production.
-- Root-origin and creator-direct assignments reuse the same serialized
+- Root-origin and creator-direct finite runs reuse the same serialized
   project/domain session while preserving trusted origin, pins, recipients,
   joins, approvals, and completion behavior.
 - Inter-agent communication is limited to durable tasks and
   `done | blocked | question` reports at turn boundaries.
 - The asset graph remains the only canonical creative-state channel.
-- Every root decision, assignment, primitive action, job, asset, edge,
+- Every root decision, finite domain run, primitive action, job, asset, edge,
   selection, cost, and report remains attributable across restarts.
+- `agent_sessions` is the only domain-specific table; existing runs, actions,
+  dispatches, gates, idempotency, jobs, costs, and graph tables retain their
+  lifecycle authority, with general `action_assets` closing the attribution
+  gap for every tool.
 - Creator feedback reuses the correct session, proposes a graph-scoped plan, and
   regenerates only approved affected assets.
 - Visuals and Audio can run concurrently while each session remains serialized.
