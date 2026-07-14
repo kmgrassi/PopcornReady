@@ -210,9 +210,9 @@ As of 2026-07-14, the production orchestrator is one durable all-tools agent:
   session, finite child run, job, and produced assets.
 - The leased `orchestrator_dispatches` queue provides the detached execution
   foundation that domain assignment runs should reuse.
-- The current vocabulary has 18 registered tool names. Other documentation and
-  UI projections contain older hand-maintained counts, so authoritative prose
-  should stop treating a count as a contract.
+- The current vocabulary is defined by the code-owned registry. Documentation
+  and UI projections contain older hand-maintained counts, so authoritative
+  prose must not treat a count as a contract.
 - Run projections assume one flat history and impose a static tool order.
 - `spent_usd` and model/provider cost records do not yet form one complete async
   cost ledger.

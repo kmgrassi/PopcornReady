@@ -1,14 +1,11 @@
-# Orchestrator tool handlers — sculpting the 10 unwired stages into parallel PRs
+# Orchestrator tool handlers — sculpting unwired stages into parallel PRs
 
 Sculpts the **remaining pipeline stages into one buildable PR per tool**. The
 orchestrator engine is done ([`orchestrator-cutover-prs.md`](orchestrator-cutover-prs.md)
-PR 1 + PR 2) and **4 of 14 tools are wired** in
-[`apps/api/src/lib/orchestrator-tools/default-registry.ts`](../../apps/api/src/lib/orchestrator-tools/default-registry.ts):
-`create_or_load_brief`, `plan_shots`, `plan_visual_anchors`, `generate_storyboard`.
-The other **10 tools exist only as stubs** — declared in the orchestrator
-vocabulary (`TOOL_NAMES`) but never registered with a live handler, so their stub
-`execute` returns `failedUnimplemented`. This doc is the **PR 3.x track** from the
-cutover roadmap, exploded into independent, parallelizable scopes.
+PR 1 + PR 2). The executable registry and harness batteries are the source of
+truth for which capabilities are wired or pending; this historical breakdown
+does not preserve a count that will drift. This doc is the **PR 3.x track** from
+the cutover roadmap, exploded into independent, parallelizable scopes.
 
 > **This is a proposed breakdown — edit freely.** There are no production users
 > and no backwards-compat constraint (per [`CLAUDE.md`](../../CLAUDE.md) "No
@@ -339,7 +336,7 @@ Then the PR:
 
 ## Definition of done
 
-- All 10 tools are registered in `default-registry.ts` — no tool resolves to the
+- Every declared tool is registered in `default-registry.ts` — no tool resolves to the
   `failedUnimplemented` stub anymore. The two story-writing tools persist to their
   relational `story_blueprints`/`script_drafts` tables (shared with the
   [story-development-agent-handoff](story-development-agent-handoff.md) scope), not

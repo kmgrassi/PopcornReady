@@ -6,7 +6,7 @@
 > have shipped against the asset graph; what's left is retiring the legacy Next
 > monolith, feeding graph stale candidates into the agent's rerun decision path, and
 > closing the feedback loop (§7 P3). New work (human or agent) should align to it;
-> any deviation should be a conscious, documented decision. Last updated 2026-06-22
+> any deviation should be a conscious, documented decision. Last updated 2026-07-14
 > (status pass; original design 2026-06-08).
 
 ## Implementation status (2026-06-22)
@@ -27,7 +27,7 @@ since landed. Map below (details inline per section). **§3 describes the model 
   (`supabase/migrations/20260610130000_storyboard_relational_model.sql`).
 - ✅ **Orchestrator + tools (§6; §7 P2)** — a durable, gated, autonomous-by-default
   run loop (`apps/api/src/lib/orchestrator/engine.ts`; `orchestrator_runs` /
-  `orchestrator_run_gates` tables) drives a 15-tool registry
+  `orchestrator_run_gates` tables) drives the registered tool surface
   (`apps/api/src/lib/orchestrator-tools/default-registry.ts`). **Pending:** restart
   / rerun decisions still need to consume `downstream_assets()` stale candidates
   instead of relying on the fixed stage restart path.
@@ -187,7 +187,7 @@ notes what superseded it.
 - The old agent surface (`planEdit`, `critiquePlan`, `critique`, `revise`, …) only
   edited a **single timeline forward** via `Patch`es keyed by `segmentId`, with
   **no op to regenerate an asset, change a beat, or swap a reference**, and **no
-  orchestrator.** → *Replaced by* the orchestrator + 15-tool registry (§6) and the
+  orchestrator.** → *Replaced by* the orchestrator + registered tool surface (§6) and the
   `regenerate_asset_version` RPC.
 - There were **two drifted pipelines** and **two `GenerationRun` definitions** (the
   sync one-shot route and the async job stack). → *Replaced by* one orchestrator
@@ -318,15 +318,12 @@ historical — do not build on them.
 
 Realized as the orchestrator tool registry
 (`apps/api/src/lib/orchestrator-tools/default-registry.ts`), driven by the run
-loop in `apps/api/src/lib/orchestrator/engine.ts`. The 16 registered tools:
-`create_or_load_brief` · `develop_story_blueprint` · `draft_script` · `plan_shots` ·
-`plan_visual_anchors` · `generate_anchor` · `generate_audio` ·
-`generate_storyboard` · `generate_keyframe` · `generate_clip` ·
-`fit_audio_to_picture` ·
-`assemble_timeline` · `critique_timeline` · `export_video` · `request_approval` ·
-`publish_to_catalog`. Image regeneration is the `regenerate_asset_version` RPC
-(new immutable version + repoint); broader `regenerate *` coverage across kinds is
-still filling in.
+loop in `apps/api/src/lib/orchestrator/engine.ts`. The executable registry is the
+source of truth for the currently registered vocabulary; documentation must not
+freeze a hand-maintained count. Its capabilities cover planning, media
+generation and revision, assembly, critique, approval, export, and optional
+publication. Image regeneration uses immutable versioning; broader regeneration
+coverage across kinds is still filling in.
 
 Each tool is **granular, idempotent, and records its inputs** (as an `action`) so
 the graph stays accurate. Each tool also **validates its pre/postconditions and
