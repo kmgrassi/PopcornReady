@@ -116,11 +116,14 @@ a discriminated product request, authenticates the project/actor, validates
 references, and derives domain, task kind, targets, graph closure, output scope,
 origin, and recipient on the server.
 
-Output capability is domain-bound in the type union: Visuals may authorize
-image, anchor, keyframe, clip, composite, or render outputs; Audio may authorize
-only `audio_track`. A task cannot list a sibling domain's output as required or
-allowed. Creator-direct tasks require the confirmed approval context rather
-than relying only on prose or a separate optional field.
+Output capability is domain- and task-kind-bound in the type union: production
+Visuals tasks may authorize image, anchor, keyframe, clip, composite, or render
+outputs, while creator-direct `image_create` authorizes only `image`,
+`video_create` authorizes `clip`, `composite`, or `render`, and `video_edit`
+authorizes only `clip`. Audio may authorize only `audio_track`. A task cannot
+list a sibling domain's output as required or allowed. Creator-direct tasks
+require the confirmed approval context rather than relying only on prose or a
+separate optional field.
 
 Direct task kinds are fixed at the product boundary:
 
