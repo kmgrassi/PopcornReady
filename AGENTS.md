@@ -1,7 +1,30 @@
-# Popcorn Ready — agent guide
+# Popcorn Ready — agent router
 
-Start with `CLAUDE.md` for product direction and repository conventions. This
-file calls out conventions that matter for parallel agent work.
+<!-- agent-summary: Start every task with AGENT_WORKFLOW.md and this routing table. -->
+<!-- agent-summary: Read only the documents that govern the task, then keep those documents current. -->
+<!-- agent-summary: New or substantially rewritten system documents start with seven greppable summary lines. -->
+<!-- agent-summary: Run the affected application path and targeted tests before handoff. -->
+<!-- agent-summary: Commit the worksheet, feedback entry, and documentation with implementation work. -->
+<!-- agent-summary: Use an independent reviewer at research, plan, implementation, and wrap-up checkpoints. -->
+<!-- agent-summary: Detailed repository conventions remain below and are mandatory. -->
+
+Read [`AGENT_WORKFLOW.md`](AGENT_WORKFLOW.md) first. Then use this router; `CLAUDE.md` remains the product and repository-conventions source of truth.
+
+## Task router
+
+| Task | Read first | Required validation / update |
+| --- | --- | --- |
+| Any code or documentation change | `CLAUDE.md`, `docs/repository-structure.md`, `AGENT_WORKFLOW.md` | Worksheet, targeted test, `pnpm agent:validate` |
+| UI, routes, CSS | `apps/web/PRODUCT.md`, `apps/web/DESIGN.md`, `docs/ui-interaction-model.md` | Run web app, inspect browser, relevant Playwright test; use the Impeccable skill |
+| API, auth, Supabase, migrations | `docs/supabase-identity-and-rls.md`, relevant `docs/scopes/*` | API test or smoke; local Supabase check when persistence/auth changes |
+| Generation, tools, orchestration | `docs/NORTH_STAR.md`, relevant orchestrator scope, `apps/api/src/lib/tool-tests/README.md` | Unit tests plus opt-in tool smoke when changing live tool behavior |
+| E2E or manual testing | `docs/testing/e2e-test-inventory-and-gaps.md`, `apps/web/e2e/README.md` | Update inventory and add a behavior-focused test or documented gap |
+| Performance / visual behavior | `docs/agent-system/performance-and-visual-regression.md` | Capture before/after evidence when relevant |
+| Agent process, tools, reviews | `docs/agent-system/README.md` | Update the owning system doc and feedback log |
+
+## Documentation contract
+
+System documentation is self-healing: when behavior, ownership, commands, constraints, or coverage changes, update the authoritative document in the same commit. New or substantially rewritten system documents begin with a title and seven `agent-summary` lines so agents can find the right document with `rg`. Legacy documents are migrated when they are materially touched.
 
 ## Code Review Attribution
 
