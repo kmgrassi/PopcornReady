@@ -328,13 +328,15 @@ export async function listRecoverableOrchestratorRuns(): Promise<RecoverableOrch
     }));
 }
 
-export async function enqueueOrchestratorDispatch(runId: string, workspaceId: string): Promise<void> {
+export async function enqueueOrchestratorDispatch(
+  runId: string,
+  _workspaceId?: string
+): Promise<void> {
   const db = getServiceSupabase();
   await runQuery(
     "store.enqueueOrchestratorDispatch",
     db.rpc("wake_orchestrator_dispatch", {
       p_orchestrator_run_id: runId,
-      p_workspace_id: workspaceId,
     })
   );
 }
