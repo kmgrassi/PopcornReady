@@ -29,3 +29,9 @@
 - Friction or failure: `pnpm --` forwarding and partially staged markdown made the first tooling cut validate the wrong content.
 - Suggested improvement: Add a lightweight script-level regression harness for agent tooling so review-fix cases do not rely on ad hoc shell probes.
 - Follow-up: none.
+
+### 2026-07-14 — ARCH-20260714-01
+- What helped: The new task router, isolated worktree, existing durability research, and independent checkpoints made the architecture dependencies explicit.
+- Friction or failure: Tool ownership and counts are duplicated across types, prompts, documentation, and UI projections, making the current surface easy to misstate.
+- Suggested improvement: Establish one canonical capability catalog and derive specialist registries, labels, gates, and detailed documentation from it.
+- Follow-up: `docs/scopes/specialist-agent-orchestration-prs.md` PRs 1–2.
