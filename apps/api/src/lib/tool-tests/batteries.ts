@@ -21,6 +21,7 @@ import { generateStoryboardBattery } from "./specs/generate-storyboard";
 import { planShotsBattery } from "./specs/plan-shots";
 import { planVisualAnchorsBattery } from "./specs/plan-visual-anchors";
 import { publishToCatalogBattery } from "./specs/publish-to-catalog";
+import { regenerateImageAssetBattery } from "./specs/regenerate-image-asset";
 import { requestApprovalBattery } from "./specs/request-approval";
 
 const ALL_BATTERIES: ToolBattery[] = [
@@ -33,6 +34,7 @@ const ALL_BATTERIES: ToolBattery[] = [
   generateStoryboardBattery,
   generateKeyframeBattery,
   generateClipBattery,
+  regenerateImageAssetBattery,
   editVideoAssetBattery,
   generateAudioBattery,
   fitAudioToPictureBattery,

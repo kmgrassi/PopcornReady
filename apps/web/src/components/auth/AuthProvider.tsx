@@ -6,7 +6,11 @@ import {
   useMemo,
   useState,
 } from "react";
-import type { Session, User } from "@supabase/supabase-js";
+import {
+  isAuthRetryableFetchError,
+  type Session,
+  type User,
+} from "@supabase/supabase-js";
 import { v1Api } from "../../lib/api-client";
 import {
   clearAllSupabaseAuthStorage,
@@ -74,8 +78,16 @@ function isAnonymousUser(user: User | null): boolean {
 async function verifiedSessionUser(session: Session | null): Promise<User | null> {
   if (!session) return null;
   const { data, error } = await getSupabaseClient().auth.getUser();
-  if (error || !data.user) {
-    throw error || new Error("Invalid or expired session.");
+  if (error) {
+    // Only a definitive rejection from the auth server means the stored
+    // session is invalid. Transient failures (network loss, 5xx/timeouts)
+    // must not sign the user out — fall back to the locally stored session
+    // user; the API still verifies the token on every request.
+    if (isAuthRetryableFetchError(error)) return session.user;
+    throw error;
+  }
+  if (!data.user) {
+    throw new Error("Invalid or expired session.");
   }
   return data.user;
 }

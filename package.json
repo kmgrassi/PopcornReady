@@ -24,7 +24,13 @@
     "db:local:reset": "supabase db reset",
     "db:local:status": "supabase status",
     "db:local:test:e2e": "AUTH_MODE=supabase POPCORN_E2E_AUTH_MODE=supabase node scripts/with-local-supabase-env.mjs pnpm --filter @popcorn/web test:e2e",
-    "prod:storyboard": "node scripts/start-storyboard-from-prompt.mjs"
+    "prod:storyboard": "node scripts/start-storyboard-from-prompt.mjs",
+    "agent:lint": "node scripts/agent-lint.mjs",
+    "agent:lint:fix": "node scripts/agent-lint.mjs --fix",
+    "agent:hooks:install": "node scripts/install-agent-hooks.mjs",
+    "agent:validate": "node scripts/agent-validate.mjs",
+    "agent:review": "bash scripts/agent-review.sh",
+    "agent:sweep": "node scripts/agent-sweep.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.19.41",

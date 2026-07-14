@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+set -eu
+
+pnpm agent:lint -- --staged --fix
