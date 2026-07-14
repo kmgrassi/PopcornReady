@@ -59,3 +59,9 @@
 - Friction or failure: Naming a finite domain turn an “assignment” initially encouraged redundant assignment, report, output, queue, approval, job, and cost tables despite existing run/action/runtime records.
 - Suggested improvement: Before adding agent-specific persistence, map every proposed lifecycle concept to the current schema and document the transactional, tenancy, privacy, and retry invariant that prevents reuse.
 - Follow-up: `docs/scopes/specialist-agent-orchestration-prs.md` PRs 4–6, 9–10, and 12.
+
+### 2026-07-14T12:27:05-04:00 — ORCH-20260714-02
+- What helped: A focused shared module plus compile-time fixtures made canonical identity reuse, origin/recipient routing, and report/runtime separation reviewable before schema or runtime work.
+- Friction or failure: Tool vocabulary counts had drifted across the North Star, operator harness, and historical implementation scopes, while the isolated worktree initially had no installed dependencies.
+- Suggested improvement: Derive registry documentation and status projections from the code-owned capability catalog after PR 3, and initialize parallel worktrees with the offline package cache before validation.
+- Follow-up: `docs/scopes/specialist-agent-orchestration-prs.md` PR 3.

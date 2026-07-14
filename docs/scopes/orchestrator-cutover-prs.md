@@ -39,10 +39,10 @@ in the relational `orchestrator_run_gates` table that already exists.
   completion, park on async jobs + approval gates, and resume. The relational
   run model (`lib/api/v1/orchestrator-store.ts`) covers `orchestrator_runs`,
   `orchestrator_run_gates`, and `actions`.
-- **PR 3.x 🟡 — 3 of ~13 tools wired** in
-  `lib/orchestrator-tools/default-registry.ts`: `create_or_load_brief`,
-  `plan_shots`, `generate_storyboard`. The rest exist only as `pending`
-  batteries. No media tools (keyframe/clip/audio/export) are wired yet.
+- **PR 3.x 🟡 — partial tool wiring** in
+  `lib/orchestrator-tools/default-registry.ts`. The registry and harness battery
+  list are the source of truth for active versus pending capabilities; do not
+  preserve a count in this status prose.
 - **PR 4 ❌** — no live orchestrator route exists; only the dev-only harness
   endpoint (`routes/v1/dev-tool-tests.ts`). The generate button still hits V1.
 - **PR 5 ❌** — blocked on PR 4 parity. Deletion is additionally blocked by

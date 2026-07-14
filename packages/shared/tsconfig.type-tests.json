@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "."
+  },
+  "include": ["src/domain-agent-contract.ts", "type-tests/domain-agent-contract.ts"]
+}

@@ -73,6 +73,7 @@ Root config: `pnpm-workspace.yaml`, `turbo.json` (task graph), `tsconfig.base.js
 | The agent (LLM) functions | `packages/agent/src/` (+ `apps/api/src/lib/agent*`) |
 | Generation pipeline / jobs | `apps/api/src/lib/generation-run/`, `generative/`, `oneshot/` |
 | Core types & data contracts | `packages/shared/src/types.ts`, `packages/shared/src/assets/` |
+| Domain-agent task/report contract | `packages/shared/src/domain-agent-contract.ts`, `docs/domain-agent-orchestration-contract.md` |
 | DB schema / migrations | `supabase/migrations/` |
 | Styling conventions | `AGENTS.md` (CSS Modules + token layer) |
 | Identity / RLS model | `docs/supabase-identity-and-rls.md` |
