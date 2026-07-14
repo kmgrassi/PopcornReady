@@ -381,7 +381,7 @@ test("runGenerateKeyframeJob generates missing beat keyframes, selects slots, an
         selected.push({ beatId: input.beatId, assetId: input.assetId });
         return asset(input.assetId, "beat_keyframe");
       },
-      resumeOrchestratorRun: async (runId) => {
+      enqueueOrchestratorDispatch: async (runId) => {
         resumedRun = runId;
       },
     }

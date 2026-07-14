@@ -219,7 +219,7 @@ test("runGenerateAnchorJob generates character and scene anchors, stamps graph m
         });
         return {} as never;
       },
-      resumeOrchestratorRun: async (runId) => {
+      enqueueOrchestratorDispatch: async (runId) => {
         resumedRun = runId;
       },
     }

@@ -231,7 +231,7 @@ test("runGenerateAudioJob generates missing voiceover and soundtrack, stamps gra
         });
         return {} as never;
       },
-      resumeOrchestratorRun: async (runId) => {
+      enqueueOrchestratorDispatch: async (runId) => {
         resumedRun = runId;
       },
     }

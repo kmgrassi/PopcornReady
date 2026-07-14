@@ -1,4 +1,5 @@
 import { agentApiStore, type AgentApiStore } from "@/lib/agent-api/jobs";
+import { scheduleOrchestratorResume } from "@/lib/orchestrator/schedule-resume";
 import {
   runExportJob as realRunExportJob,
   type ExportOptions,
@@ -12,10 +13,7 @@ export interface ExportVideoJobDeps {
   saveArtifact: AgentApiStore["saveArtifact"];
   addExportVideoAsset: typeof realAddExportVideoAsset;
   jobs: Pick<AgentApiStore, "setStep" | "succeed" | "fail">;
-  resumeOrchestratorRun?: (
-    runId: string,
-    deps: { workspaceId: string }
-  ) => Promise<unknown>;
+  enqueueOrchestratorDispatch?: (runId: string, workspaceId: string) => Promise<unknown>;
 }
 
 const defaultDeps: ExportVideoJobDeps = {
@@ -30,10 +28,7 @@ async function resume(
   runId: string,
   workspaceId: string
 ): Promise<void> {
-  const fn =
-    deps.resumeOrchestratorRun ??
-    (await import("@/lib/orchestrator/engine")).resumeOrchestratorRun;
-  await fn(runId, { workspaceId });
+  await scheduleOrchestratorResume({ runId, workspaceId, enqueue: deps.enqueueOrchestratorDispatch });
 }
 
 export interface ExportVideoJobInput {

@@ -58,6 +58,18 @@ Acceptance criteria (met):
    history fed to the model stays bounded (separate from durability, same file of
    concerns).
 
+## Async completion ordering (2026-07-14)
+
+An inline async worker can finish after its tool returns `accepted` but before the
+engine has recorded the invocation and parked the run. Completion callbacks now
+wake the durable dispatch queue instead of entering the engine directly. The
+leased recovery worker is therefore the sole production owner of a run turn:
+it parks first, checks whether the job is already terminal, and finalizes its
+action before requesting another model turn. An atomic `waiting → running` claim
+protects parked-run recovery, while claimed recovery work drives queued/running
+runs through the normal entrypoint. This prevents completion callbacks and the
+recovery worker from concurrently observing incomplete lifecycle state.
+
 ## Non-goals
 
 - Changing the loop's shape, the one-tool-per-turn decision model, or the

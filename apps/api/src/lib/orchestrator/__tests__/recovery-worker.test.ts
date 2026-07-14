@@ -28,8 +28,11 @@ test("worker processes only atomically claimed dispatches", async () => {
     claim: async () => [
       { dispatchId: "dispatch-queued", runId: "run-queued", workspaceId: "workspace-1", leaseToken: "lease-1" },
       { dispatchId: "dispatch-running", runId: "run-running", workspaceId: "workspace-1", leaseToken: "lease-2" },
+      { dispatchId: "dispatch-waiting", runId: "run-waiting", workspaceId: "workspace-1", leaseToken: "lease-3" },
     ],
-    getRun: async (id) => run(id === "run-queued" ? "queued" : "running"),
+    getRun: async (id) => run(
+      id === "run-queued" ? "queued" : id === "run-waiting" ? "waiting" : "running"
+    ),
     listGates: async () => [],
     release: async (input) => { released.push({ completed: input.completed }); },
     run: async (id) => {
@@ -42,10 +45,10 @@ test("worker processes only atomically claimed dispatches", async () => {
     },
     logger: { debug() {}, info() {}, warn() {}, error() {}, child() { return this; } },
   });
-  assert.equal(recovered, 2);
-  assert.deepEqual(started, ["run-queued"]);
-  assert.deepEqual(resumed, ["run-running"]);
-  assert.deepEqual(released, [{ completed: false }, { completed: false }]);
+  assert.equal(recovered, 3);
+  assert.deepEqual(started, ["run-queued", "run-running"]);
+  assert.deepEqual(resumed, ["run-waiting"]);
+  assert.deepEqual(released, [{ completed: false }, { completed: false }, { completed: false }]);
 });
 
 test("recovery is enabled by default and has a safe lower interval bound", () => {
