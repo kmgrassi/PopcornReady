@@ -2,6 +2,9 @@ import React from "react";
 import { AbsoluteFill, Audio, Img, OffthreadVideo, Sequence } from "remotion";
 import { Clip, RenderPlan, Timeline } from "@popcorn/shared/types";
 
+// Remotion's Composition and Player APIs require component props to satisfy
+// Record<string, unknown>, so retain that framework boundary while keeping the
+// named composition fields below explicit.
 export interface VideoProps extends Record<string, unknown> {
   timeline: Timeline | null;
   renderPlan?: RenderPlan | null;

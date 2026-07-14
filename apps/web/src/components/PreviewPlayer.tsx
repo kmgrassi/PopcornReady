@@ -1,4 +1,3 @@
-import React from "react";
 import { Player } from "@remotion/player";
 import { VideoComposition } from "@popcorn/renderer/VideoComposition";
 import { createRenderPlanFromTimeline } from "@popcorn/timeline/render-plan";
@@ -45,7 +44,7 @@ export function PreviewPlayer({
   return (
     <div className="player-wrap">
       <Player
-        component={VideoComposition as React.FC}
+        component={VideoComposition}
         inputProps={{
           timeline,
           renderPlan,

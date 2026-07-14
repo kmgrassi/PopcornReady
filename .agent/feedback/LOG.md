@@ -59,3 +59,9 @@
 - Friction or failure: Naming a finite domain turn an “assignment” initially encouraged redundant assignment, report, output, queue, approval, job, and cost tables despite existing run/action/runtime records.
 - Suggested improvement: Before adding agent-specific persistence, map every proposed lifecycle concept to the current schema and document the transactional, tenancy, privacy, and retry invariant that prevents reuse.
 - Follow-up: `docs/scopes/specialist-agent-orchestration-prs.md` PRs 4–6, 9–10, and 12.
+
+### 2026-07-14T12:00:00-04:00 — TYPE-20260714-01
+- What helped: The existing Remotion type definitions made the framework boundary and safe cast removal easy to verify with focused package typechecks.
+- Friction or failure: Removing the renderer prop index signature was not compatible with Remotion's current `Composition` generic constraint, despite looking like a desirable tightening.
+- Suggested improvement: Revisit the renderer prop contract when upgrading Remotion or when its component generics no longer require `Record<string, unknown>`.
+- Follow-up: none
