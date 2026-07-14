@@ -45,6 +45,11 @@ export type VisualsTaskKind =
   | Extract<CreatorDirectTaskKind, "image_create" | "video_create" | "video_edit">
   | VisualsProductionTaskKind;
 
+export type CreatorDirectVisualTaskKind = Extract<
+  CreatorDirectTaskKind,
+  "image_create" | "video_create" | "video_edit"
+>;
+
 export type AudioTaskKind =
   | Extract<CreatorDirectTaskKind, "soundtrack_create" | "audio_create">
   | AudioProductionTaskKind;
@@ -107,6 +112,14 @@ export type VisualsOutputKind =
   | "clip"
   | "composite"
   | "render";
+
+type CreatorDirectVisualOutputKinds<
+  TaskKind extends CreatorDirectVisualTaskKind,
+> = TaskKind extends "image_create"
+  ? Extract<VisualsOutputKind, "image">
+  : TaskKind extends "video_create"
+    ? Extract<VisualsOutputKind, "clip" | "composite" | "render">
+    : Extract<VisualsOutputKind, "clip">;
 
 export type AudioOutputKind = "audio_track";
 export type DomainOutputKind = VisualsOutputKind | AudioOutputKind;
@@ -211,8 +224,20 @@ export type DomainTaskV1 =
       CreativeDirectorTaskRoute)
   | (DomainTaskBase<
         "visuals",
-        Extract<CreatorDirectTaskKind, "image_create" | "video_create" | "video_edit">,
-        VisualsOutputKind
+        "image_create",
+        CreatorDirectVisualOutputKinds<"image_create">
+      > &
+      CreatorDirectTaskRoute)
+  | (DomainTaskBase<
+        "visuals",
+        "video_create",
+        CreatorDirectVisualOutputKinds<"video_create">
+      > &
+      CreatorDirectTaskRoute)
+  | (DomainTaskBase<
+        "visuals",
+        "video_edit",
+        CreatorDirectVisualOutputKinds<"video_edit">
       > &
       CreatorDirectTaskRoute)
   | (DomainTaskBase<

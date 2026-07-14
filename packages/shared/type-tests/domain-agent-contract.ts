@@ -35,6 +35,24 @@ type RootTask = Extract<
 type _VisualsDirectKindsAreBounded = Assert<
   Equal<VisualsDirectTask["taskKind"], "image_create" | "video_create" | "video_edit">
 >;
+type _ImageCreateOnlyAuthorizesImages = Assert<
+  Equal<
+    Extract<VisualsDirectTask, { taskKind: "image_create" }>["allowedOutputKinds"][number],
+    "image"
+  >
+>;
+type _VideoCreateDoesNotAuthorizeImages = Assert<
+  Equal<
+    Extract<VisualsDirectTask, { taskKind: "video_create" }>["allowedOutputKinds"][number],
+    "clip" | "composite" | "render"
+  >
+>;
+type _VideoEditOnlyAuthorizesClips = Assert<
+  Equal<
+    Extract<VisualsDirectTask, { taskKind: "video_edit" }>["allowedOutputKinds"][number],
+    "clip"
+  >
+>;
 type _AudioDirectKindsAreBounded = Assert<
   Equal<AudioDirectTask["taskKind"], "soundtrack_create" | "audio_create">
 >;
