@@ -45,6 +45,11 @@ import {
   type GraphAssetInput,
 } from "./asset-graph";
 import {
+  assetMediaUrlsForRow,
+  type AssetMediaUrlRow,
+  type AssetMediaUrls,
+} from "./asset-media-urls";
+import {
   CONTENT_SCHEMA_KEY,
   inputIds,
   markedContent,
@@ -204,6 +209,8 @@ export type {
   WorkspaceGenerationRunSummary,
   WorkspaceOutputSummary,
 };
+export { assetMediaUrlsForRow };
+export type { AssetMediaUrlRow, AssetMediaUrls };
 
 // ---------------------------------------------------------------------------
 // Service-role Supabase client
@@ -5717,79 +5724,8 @@ export interface WorkspaceAssetSummary {
   updatedAt: string;
 }
 
-export interface AssetMediaUrls {
-  url: string | null;
-  thumbnailUrl?: string | null;
-  expiresAt: string;
-}
-
-export interface AssetMediaUrlRow {
-  media: AssetMedia;
-  kind: GraphAssetKind;
-  status: "ready" | "pending";
-  remote_url: string | null;
-  storage_key: string | null;
-  storage_bucket?: string | null;
-  visibility?: "public" | "private" | null;
-  context?: AssetContextEnvelope | null;
-}
-
 interface WorkspaceAssetJoinRow extends AssetRow {
   projects?: { name: string; status: "active" | "deleted" };
-}
-
-const MEDIA_URL_EXPIRES_IN_SEC = 60 * 60;
-
-function mediaUrlExpiresAt(now: () => Date = () => new Date()): string {
-  return new Date(now().getTime() + MEDIA_URL_EXPIRES_IN_SEC * 1000).toISOString();
-}
-
-export async function assetMediaUrlsForRow(
-  row: AssetMediaUrlRow,
-  opts: { now?: () => Date } = {}
-): Promise<AssetMediaUrls> {
-  let url: string | null = null;
-  if (row.status === "ready" && row.media !== "data") {
-    try {
-      url = (await resolveAssetUrl(row, { privateTtlSec: MEDIA_URL_EXPIRES_IN_SEC })) ?? null;
-    } catch {
-      url = remoteAssetUrlForDelivery(row.remote_url) ?? null;
-    }
-  }
-  const thumbnail = row.context?.context?.renditions?.thumbnail;
-  const thumbnailUrl = thumbnail
-    ? await resolveRenditionUrl(row, thumbnail.storageKey, thumbnail.storageBucket)
-    : assetMediaToKind(row.media, row.kind) === "image"
-      ? url
-      : null;
-
-  return {
-    url,
-    thumbnailUrl,
-    expiresAt: mediaUrlExpiresAt(opts.now),
-  };
-}
-
-async function resolveRenditionUrl(
-  row: AssetMediaUrlRow,
-  storageKey: string,
-  storageBucket?: string | null
-): Promise<string | null> {
-  try {
-    return (
-      (await resolveAssetUrl(
-        {
-          remote_url: null,
-          storage_key: storageKey,
-          storage_bucket: storageBucket ?? row.storage_bucket,
-          visibility: row.visibility,
-        },
-        { privateTtlSec: MEDIA_URL_EXPIRES_IN_SEC }
-      )) ?? null
-    );
-  } catch {
-    return null;
-  }
 }
 
 export async function getAssetMediaUrls(
