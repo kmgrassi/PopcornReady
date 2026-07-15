@@ -5,7 +5,7 @@
 // inline today (fire-and-forget from the tool's execute), so by the time the run
 // resumes the assets are already written.
 
-import { agentApiStore, type AgentApiStore } from "@/lib/agent-api/jobs";
+import { createDurableOrchestratorJobWriter, startDurableJobHeartbeat, type OrchestratorJobWriter } from "@/lib/orchestrator/job-gateway";
 import { scheduleOrchestratorResume } from "@/lib/orchestrator/schedule-resume";
 import type { AuthContext } from "@/lib/api/v1/auth";
 import { addStoryboardTiles } from "@/lib/api/v1/store";
@@ -17,7 +17,7 @@ export interface StoryboardJobDeps {
   generateStoryboardTilesForPlan: typeof generateStoryboardTilesForPlan;
   addStoryboardTiles: typeof addStoryboardTiles;
   buildStoryboardForPlan: typeof buildStoryboardForPlan;
-  jobs: Pick<AgentApiStore, "setStep" | "succeed" | "fail">;
+  jobs?: Pick<OrchestratorJobWriter, "setStep" | "succeed" | "fail"> & Partial<Pick<OrchestratorJobWriter, "reportProgress">>;
   enqueueOrchestratorDispatch?: (runId: string, workspaceId: string) => Promise<unknown>;
 }
 
@@ -25,7 +25,6 @@ const defaultDeps: StoryboardJobDeps = {
   generateStoryboardTilesForPlan,
   addStoryboardTiles,
   buildStoryboardForPlan,
-  jobs: agentApiStore,
 };
 
 function localAuth(workspaceId: string): AuthContext {
@@ -61,8 +60,10 @@ export async function runStoryboardJob(
   deps: Partial<StoryboardJobDeps> = {}
 ): Promise<void> {
   const d = { ...defaultDeps, ...deps };
+  const jobs = d.jobs ?? createDurableOrchestratorJobWriter(input.workspaceId, input.projectId);
+  const stopHeartbeat = startDurableJobHeartbeat(jobs, input.jobId);
   try {
-    await d.jobs.setStep(input.jobId, "generating_assets");
+    await jobs.setStep(input.jobId, "generating_assets");
 
     const tiles = await d.generateStoryboardTilesForPlan({
       workspaceId: input.workspaceId,
@@ -88,17 +89,18 @@ export async function runStoryboardJob(
       tileAssetByBeatId,
     });
 
-    await d.jobs.succeed(input.jobId, {
+    await jobs.succeed(input.jobId, {
       assetIds: persisted.map((tile) => tile.assetId),
       storyboardId,
     });
   } catch (err) {
-    await d.jobs.fail(input.jobId, {
+    await jobs.fail(input.jobId, {
       code: "job_failed",
       message: err instanceof Error ? err.message : String(err),
       requestId: "",
     });
   } finally {
+    stopHeartbeat();
     // Completion-driven resume; best-effort so a synthetic/absent run (e.g. the
     // test harness, which uses an in-memory run id) can't crash the worker.
     if (input.orchestratorRunId) {

@@ -1,5 +1,13 @@
 # Jobs And Processing Scope
 
+<!-- agent-summary: Long-running API and orchestrator work is represented by durable jobs. -->
+<!-- agent-summary: Production jobs persist in Supabase public.jobs, including progress JSONB. -->
+<!-- agent-summary: heartbeatAt records worker liveness while lastProgressAt records meaningful advancement. -->
+<!-- agent-summary: Async generation workers report current items and completed/total counts where practical. -->
+<!-- agent-summary: Orchestrator actions reference durable job IDs and reconcile terminal state after restart. -->
+<!-- agent-summary: Structured logs correlate workspace, project, run, action, job, item, and provider. -->
+<!-- agent-summary: Polling remains the client transport; durable telemetry distinguishes slow work from stalls. -->
+
 ## Objective
 
 Move long-running work out of synchronous request handlers so upload ingest,
@@ -31,6 +39,15 @@ interface JobProgress {
   currentStep?: string;
   percent?: number;
   message?: string;
+  provider?: string;
+  startedAt?: string;
+  heartbeatAt?: string;
+  lastProgressAt?: string;
+  completedItems?: number;
+  totalItems?: number;
+  currentItem?: { id?: string; label: string; index?: number };
+  attempt?: number;
+  nextRetryAt?: string;
 }
 ```
 
@@ -45,14 +62,40 @@ interface JobProgress {
 
 ## V1 Execution Model
 
-For v1, jobs run locally inside the Express API process. This keeps development
-and operation simple while the app is still early.
+For v1, workers run inside the Express API process, while production job state
+is durable in Supabase `public.jobs`. This preserves polling and recovery across
+API restarts without requiring a separate worker service yet.
 
-- Job creation endpoints persist a JSON job record and return `202 Accepted`.
+- Job creation endpoints persist a Supabase job row and return `202 Accepted`.
 - The API process can execute the job immediately after creation or through a
   lightweight in-process queue.
-- Job state is persisted under the local `.local/dev-db/jobs/` directory in
-  `AUTH_MODE=local`.
+- Async orchestrator tools use the same durable store as their action/job
+  references. The process-local `AgentApiStore` remains only for legacy
+  compatibility surfaces and is not the production orchestrator job source.
+- Each recoverable orchestrator job stores a typed, versioned execution
+  envelope and recovery lease inside `jobs.progress`. The dispatcher-owned run
+  lease is the outer single-owner boundary. Stale queued jobs can be reclaimed
+  and replayed after an API-process crash. Stale running jobs are terminalized
+  with a typed recoverable failure rather than replaying a possibly in-flight,
+  billable provider request.
+- In-process workers refresh the durable heartbeat every 30 seconds while a
+  provider call is outstanding. Recovery claims expire, so another dispatcher
+  can reclaim work if the recovering process also exits.
+- Non-null idempotency keys are database-unique by workspace, project, and job
+  type. Creation uses an atomic insert-or-read path rather than a paginated
+  list-before-insert check.
+- Browser clients have no direct RLS access to `public.jobs`; safe creator and
+  operator projections come through the authenticated polling API. Execution
+  envelopes and lease fields remain service-only control data. Active progress
+  updates use a service-only SQL function that atomically JSONB-merges patches,
+  rejects terminal jobs, and fences recovery writes by lease owner.
+- Workers refresh `heartbeatAt` on operational writes. They update
+  `lastProgressAt` only when an item finishes or another meaningful outcome is
+  persisted, so recovery sweeps cannot masquerade as creative progress.
+- Anchor, keyframe, and clip workers currently emit per-item lifecycle logs.
+  Audio, storyboard, edit, and export emit durable heartbeats plus shared resume
+  success/failure logs, but matching per-item lifecycle log depth remains a
+  follow-up observability gap.
 - Generation and export should still be modeled as jobs even when execution is
   local, so the API contract does not change if a separate worker is introduced
   later.

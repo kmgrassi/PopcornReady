@@ -35,6 +35,7 @@ const KEYED_VALUE_PATTERNS: RegExp[] = [
   /(xi[-_]?api[-_]?key\s*[:=]\s*["']?)([^"'\s,}]+)/gi,
   /(api[-_]?key\s*[:=]\s*["']?)([^"'\s,}]+)/gi,
   /("?(?:api[_-]?key|access[_-]?token|secret|password)"?\s*:\s*["'])([^"']+)/gi,
+  /([?&](?:token|access_token|api_key|key|signature|sig|credential)=)([^&#\s]+)/gi,
 ];
 
 function scrub(message: string): string {

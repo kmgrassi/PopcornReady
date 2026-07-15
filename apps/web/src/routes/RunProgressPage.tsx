@@ -190,6 +190,7 @@ function RunProgress({
       run={payload.run}
       stages={payload.stages}
       stageItems={payload.stageItems}
+      operatorDiagnostics={payload.operatorDiagnostics}
       studioReturnPath={studioReturnPath}
       headerSlot={<AnonymousUpgradeBanner />}
       onBoardRevisionSuccess={async () => {

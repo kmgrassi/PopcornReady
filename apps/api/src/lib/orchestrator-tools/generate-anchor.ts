@@ -1,4 +1,7 @@
-import { agentApiStore, type AgentApiStore } from "@/lib/agent-api/jobs";
+import {
+  createDurableOrchestratorJobCreator,
+  type OrchestratorJobCreator,
+} from "@/lib/orchestrator/job-gateway";
 import {
   getActiveProjectVisualAnchorPlan as realGetActiveProjectVisualAnchorPlan,
 } from "@/lib/api/v1/store";
@@ -20,13 +23,13 @@ export interface GenerateAnchorOutput {
 
 export interface GenerateAnchorDeps {
   getActiveProjectVisualAnchorPlan: typeof realGetActiveProjectVisualAnchorPlan;
-  createJob: AgentApiStore["createOrGetJob"];
+  createJob: OrchestratorJobCreator["createJob"];
   runGenerateAnchorJob: typeof realRunGenerateAnchorJob;
 }
 
 const defaultDeps: GenerateAnchorDeps = {
   getActiveProjectVisualAnchorPlan: realGetActiveProjectVisualAnchorPlan,
-  createJob: (input) => agentApiStore.createOrGetJob(input),
+  createJob: createDurableOrchestratorJobCreator().createJob,
   runGenerateAnchorJob: realRunGenerateAnchorJob,
 };
 
@@ -155,8 +158,22 @@ export function createGenerateAnchorTool(
       if (!active) return visualAnchorPlanRequired();
 
       const { job } = await resolved.createJob({
+        workspaceId: context.auth.workspaceId,
         type: "asset_generation",
         projectId: context.projectId,
+        execution: {
+          schemaVersion: "orchestrator_job_execution.v1",
+          kind: "generate_anchor",
+          input: {
+            workspaceId: context.auth.workspaceId,
+            projectId: context.projectId,
+            ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
+            visualAnchorPlan: active.visualAnchorPlan,
+            visualAnchorPlanAssetId: active.assetId,
+            visualAnchorPlanContentHash: active.contentHash,
+            ...(input.provider ? { provider: input.provider } : {}),
+          },
+        },
       });
 
       void resolved.runGenerateAnchorJob({

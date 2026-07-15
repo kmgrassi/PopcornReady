@@ -24,7 +24,7 @@ import {
 } from "@/lib/api/v1/orchestrator-store";
 import { createDefaultToolRegistry } from "@/lib/orchestrator-tools/default-registry";
 import { toOrchestratorRegistry } from "@/lib/orchestrator-tools/to-orchestrator-registry";
-import { agentApiStore } from "@/lib/agent-api/jobs";
+import { recoverDurableOrchestratorJob } from "./job-recovery";
 import { orchestratorModel, type OrchestratorModel } from "./model";
 import { executeRegisteredTool, type ToolRegistry } from "./registry";
 import { withStoreRetry, type RetryOptions } from "./retry";
@@ -91,7 +91,8 @@ export interface OrchestratorEngineStore {
 
 export interface JobStatusReader {
   getJob(
-    jobId: string
+    jobId: string,
+    projectId?: string
   ): Promise<{ status: string; result?: unknown } | null | undefined>;
 }
 
@@ -204,7 +205,16 @@ function resolved(deps: EngineDeps) {
     store: withStoreRetry(deps.store ?? defaultEngineStore(), deps.retry),
     model: deps.model ?? orchestratorModel,
     registry: deps.registry ?? defaultRegistry(),
-    jobs: deps.jobs ?? { getJob: (id: string) => agentApiStore.getJob(id) },
+    jobs: deps.jobs ?? {
+      getJob: (id: string, projectId?: string) =>
+        projectId
+          ? recoverDurableOrchestratorJob({
+              workspaceId: deps.workspaceId,
+              projectId,
+              jobId: id,
+            })
+          : Promise.resolve(null),
+    },
     maxTurns: deps.maxTurns ?? DEFAULT_MAX_TURNS,
     modelTurnTimeoutMs: deps.modelTurnTimeoutMs ?? DEFAULT_MODEL_TURN_TIMEOUT_MS,
     resolveOwnerUserId: deps.resolveOwnerUserId ?? getWorkspaceOwnerUserId,
@@ -311,8 +321,25 @@ async function reconcileInFlightJob(
   const parkingJobId = parkingAction?.jobIds.at(-1);
 
   if (parkingAction && parkingJobId) {
-    const job = await r.jobs.getJob(parkingJobId);
-    if (!job) return park(run, r); // unknown job — leave parked for the sweeper
+    const job = await r.jobs.getJob(parkingJobId, run.projectId);
+    if (!job) {
+      logger.warn("orchestrator_job.reconcile_missing", {
+        workspaceId: r.workspaceId,
+        projectId: run.projectId,
+        runId: run.id,
+        jobId: parkingJobId,
+        actionId: parkingAction.id,
+      });
+      return park(run, r); // unknown job — leave parked for the sweeper
+    }
+    logger.info("orchestrator_job.reconciled", {
+      workspaceId: r.workspaceId,
+      projectId: run.projectId,
+      runId: run.id,
+      jobId: parkingJobId,
+      actionId: parkingAction.id,
+      jobStatus: job.status,
+    });
     if (job.status === "failed" || job.status === "canceled") {
       await r.store.markInvocation(parkingAction.id, {
         status: "failed",
@@ -712,7 +739,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       // recorded and the run has reached `waiting`. Reconcile its terminal state
       // after parking so the successful storyboard assets are visible before the
       // next model turn chooses keyframes or clips.
-      const job = await r.jobs.getJob(result.jobId);
+      const job = await r.jobs.getJob(result.jobId, run.projectId);
       if (job?.status === "succeeded" || job?.status === "failed" || job?.status === "canceled") {
         return resumeRun(parked, r);
       }

@@ -535,6 +535,22 @@ test("stays parked when the resume job is not yet terminal", async () => {
   assert.equal(stillParked.status, "waiting");
 });
 
+test("keeps a run parked when a legacy action references an unknown job id", async () => {
+  const store = new FakeStore(runFixture());
+  const { model } = scriptedModel([{ type: "tool_call", toolName: "generate_keyframe" }]);
+  const registry = fakeRegistry({
+    generate_keyframe: () => ({ status: "accepted", jobId: "legacy_job", resumesWhen: "job_terminal" }),
+  });
+  await runOrchestratorToCompletion("run1", deps(store, model, registry));
+
+  const stillParked = await resumeOrchestratorRun(
+    "run1",
+    deps(store, model, registry, { jobs: { getJob: async () => null } })
+  );
+  assert.equal(stillParked.status, "waiting");
+  assert.equal(store.actions[0].status, "running");
+});
+
 test("parks on an approval gate and persists preview artifacts on the action", async () => {
   const store = new FakeStore(runFixture());
   const { model } = scriptedModel([

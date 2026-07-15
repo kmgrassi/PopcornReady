@@ -1,4 +1,4 @@
-import { agentApiStore, type AgentApiStore } from "@/lib/agent-api/jobs";
+import { createDurableOrchestratorJobWriter, startDurableJobHeartbeat, type OrchestratorJobWriter } from "@/lib/orchestrator/job-gateway";
 import { scheduleOrchestratorResume } from "@/lib/orchestrator/schedule-resume";
 import type { AuthContext } from "@/lib/api/v1/auth";
 import { createGeneratedAsset as realCreateGeneratedAsset } from "@/lib/api/v1/generated-assets";
@@ -17,7 +17,7 @@ export interface GenerateAudioJobDeps {
   createGeneratedAsset: typeof realCreateGeneratedAsset;
   getActiveProjectScopedAsset: typeof realGetActiveProjectScopedAsset;
   selectGeneratedAudioAsset: typeof realSelectGeneratedAudioAsset;
-  jobs: Pick<AgentApiStore, "setStep" | "succeed" | "fail">;
+  jobs?: Pick<OrchestratorJobWriter, "setStep" | "succeed" | "fail"> & Partial<Pick<OrchestratorJobWriter, "reportProgress">>;
   enqueueOrchestratorDispatch?: (runId: string, workspaceId: string) => Promise<unknown>;
 }
 
@@ -25,7 +25,6 @@ const defaultDeps: GenerateAudioJobDeps = {
   createGeneratedAsset: realCreateGeneratedAsset,
   getActiveProjectScopedAsset: realGetActiveProjectScopedAsset,
   selectGeneratedAudioAsset: realSelectGeneratedAudioAsset,
-  jobs: agentApiStore,
 };
 
 function localAuth(workspaceId: string): AuthContext {
@@ -164,8 +163,10 @@ export async function runGenerateAudioJob(
   deps: Partial<GenerateAudioJobDeps> = {}
 ): Promise<void> {
   const d = { ...defaultDeps, ...deps };
+  const jobs = d.jobs ?? createDurableOrchestratorJobWriter(input.workspaceId, input.projectId);
+  const stopHeartbeat = startDurableJobHeartbeat(jobs, input.jobId);
   try {
-    await d.jobs.setStep(input.jobId, "generating_assets");
+    await jobs.setStep(input.jobId, "generating_assets");
     const auth = localAuth(input.workspaceId);
     const assetIds: string[] = [];
     const graphInputs = graphInputsForPlan(input);
@@ -261,14 +262,15 @@ export async function runGenerateAudioJob(
       }
     }
 
-    await d.jobs.succeed(input.jobId, { assetIds });
+    await jobs.succeed(input.jobId, { assetIds });
   } catch (err) {
-    await d.jobs.fail(input.jobId, {
+    await jobs.fail(input.jobId, {
       code: "job_failed",
       message: err instanceof Error ? err.message : String(err),
       requestId: "",
     });
   } finally {
+    stopHeartbeat();
     if (input.orchestratorRunId) {
       try {
         await resume(d, input.orchestratorRunId, input.workspaceId);

@@ -1,4 +1,7 @@
-import { agentApiStore, type AgentApiStore } from "@/lib/agent-api/jobs";
+import {
+  createDurableOrchestratorJobCreator,
+  type OrchestratorJobCreator,
+} from "@/lib/orchestrator/job-gateway";
 import {
   getActiveProjectBrief as realGetActiveProjectBrief,
   getActiveProjectPlan as realGetActiveProjectPlan,
@@ -24,14 +27,14 @@ export interface GenerateAudioOutput {
 export interface GenerateAudioDeps {
   getActiveProjectPlan: typeof realGetActiveProjectPlan;
   getActiveProjectBrief: typeof realGetActiveProjectBrief;
-  createJob: AgentApiStore["createOrGetJob"];
+  createJob: OrchestratorJobCreator["createJob"];
   runGenerateAudioJob: typeof realRunGenerateAudioJob;
 }
 
 const defaultDeps: GenerateAudioDeps = {
   getActiveProjectPlan: realGetActiveProjectPlan,
   getActiveProjectBrief: realGetActiveProjectBrief,
-  createJob: (input) => agentApiStore.createOrGetJob(input),
+  createJob: createDurableOrchestratorJobCreator().createJob,
   runGenerateAudioJob: realRunGenerateAudioJob,
 };
 
@@ -176,8 +179,27 @@ export function createGenerateAudioTool(
 
       const activeBrief = await resolved.getActiveProjectBrief(context.projectId);
       const { job } = await resolved.createJob({
+        workspaceId: context.auth.workspaceId,
         type: "asset_generation",
         projectId: context.projectId,
+        execution: {
+          schemaVersion: "orchestrator_job_execution.v1",
+          kind: "generate_audio",
+          input: {
+            workspaceId: context.auth.workspaceId,
+            projectId: context.projectId,
+            ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
+            plan: activePlan.plan,
+            planAssetId: activePlan.assetId,
+            planContentHash: activePlan.contentHash,
+            ...(activeBrief?.brief ? { brief: activeBrief.brief } : {}),
+            ...(activeBrief?.assetId ? { briefAssetId: activeBrief.assetId } : {}),
+            ...(activeBrief?.contentHash ? { briefContentHash: activeBrief.contentHash } : {}),
+            ...(input.provider ? { provider: input.provider } : {}),
+            ...(input.voiceId ? { voiceId: input.voiceId } : {}),
+            ...(input.feedback ? { feedback: input.feedback } : {}),
+          },
+        },
       });
 
       void resolved.runGenerateAudioJob({

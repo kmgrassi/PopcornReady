@@ -28,7 +28,9 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   routes, compatibility redirects, and not-found behavior.
 - `run-progress.spec.ts` and `run-progress-actions.spec.ts` cover run progress,
   approval/rejection/cancel actions, failed/succeeded states, and recovery hints
-  with mocked browser API fixtures.
+  with mocked browser API fixtures, including truthful grouped-tool progress,
+  between-action copy, job item/provider activity, and progressive local-admin
+  diagnostics.
 - `specs/library-collections.spec.ts` covers Library pagination, filters, media
   viewer, visibility mutation behavior, and watch links with mocked fixtures.
 - `storyboard-editor.spec.ts` verifies the dedicated storyboard route renders
@@ -256,6 +258,17 @@ Covered:
   of being collapsed by inline width styles.
 - A production-shaped storyboard-only terminal result never renders video-ready
   completion copy.
+- A grouped stage stays indeterminate when a completed sibling tool reports
+  `100%` while another tool is still running.
+- Between explicit jobs, the creator sees `Choosing the next step` instead of a
+  stale completed-stage label; active job fixtures surface safe item counts,
+  provider labels, and slow-work copy without job identifiers.
+- A first long provider call with no meaningful progress timestamp never turns
+  a recovery-sweeper `updatedAt` write into a false `Last activity 0:00 ago`;
+  the UI waits explicitly for the first meaningful progress update.
+- Server-authorized local owner mode (development/test only) progressively
+  reveals operator job diagnostics inside a collapsed disclosure; hosted
+  disclosure requires the current workspace membership to be owner/admin.
 
 Remaining gaps:
 

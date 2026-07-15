@@ -2,6 +2,8 @@ import { createHash } from "crypto";
 import { Router } from "express";
 import { mutation, route } from "@/core/adapter";
 import { ApiError } from "@/core/errors";
+import type { AuthContext } from "@/lib/api/v1/auth";
+import type { HandlerCtx } from "@/lib/api/v1/handler";
 import { runIdempotent } from "@/lib/api/v1/idempotency";
 import {
   clearProjectSelections,
@@ -27,7 +29,10 @@ import {
   createBriefVersion,
   getActiveProjectBrief,
   getAsset,
+  getJob,
   getProject,
+  getWorkspaceRole,
+  isWorkspaceAdminRole,
   recordProjectActivity,
 } from "@/lib/api/v1/store";
 import { startPosterGenerationInBackground } from "@/lib/api/v1/poster-background";
@@ -39,6 +44,7 @@ import {
   type GateableGenerationStageType,
   type BoardRevisionTarget,
   type GenerationStageType,
+  type Job,
 } from "@popcorn/shared/v1/types";
 import {
   projectRun,
@@ -99,6 +105,35 @@ export function boardRevisionGateIdsToReset(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export interface OperatorDiagnosticsAuthorizationDeps {
+  getWorkspaceRole: typeof getWorkspaceRole;
+  nodeEnv: string | undefined;
+}
+
+export async function canViewOperatorDiagnostics(
+  auth: AuthContext,
+  deps: Partial<OperatorDiagnosticsAuthorizationDeps> = {}
+): Promise<boolean> {
+  const nodeEnv = deps.nodeEnv ?? process.env.NODE_ENV;
+  if (auth.isLocal) {
+    // The deterministic local identity is the development workspace owner.
+    // Never let a production AUTH_MODE misconfiguration disclose diagnostics.
+    return nodeEnv !== "production";
+  }
+  if (auth.actor.type !== "user" || auth.actor.isAnonymous) return false;
+  try {
+    const role = await (deps.getWorkspaceRole ?? getWorkspaceRole)(
+      auth.workspaceId,
+      auth.actor.id
+    );
+    return isWorkspaceAdminRole(role);
+  } catch {
+    // Diagnostics are additive. Membership lookup failure must fail closed
+    // without making creator-safe generation status unavailable.
+    return false;
+  }
 }
 
 function requireParam(params: Record<string, string | undefined>, name: string): string {
@@ -477,10 +512,41 @@ async function requireReadyVisualAssets(input: {
   }
 }
 
+export type GenerationJobLoader = (
+  workspaceId: string,
+  projectId: string,
+  jobId: string
+) => Promise<Job>;
+
+export async function loadRunJobsForProjection(input: {
+  workspaceId: string;
+  projectId: string;
+  actions: RunActionSummary[];
+  loadJob?: GenerationJobLoader;
+}): Promise<Map<string, Job>> {
+  const jobs = new Map<string, Job>();
+  const jobIds = [...new Set(input.actions.flatMap((action) => action.jobIds))];
+  const loadJob = input.loadJob ?? getJob;
+  await Promise.all(
+    jobIds.map(async (jobId) => {
+      try {
+        const job = await loadJob(input.workspaceId, input.projectId, jobId);
+        jobs.set(jobId, job);
+      } catch (error) {
+        if (!(error instanceof ApiError) || error.code !== "not_found") throw error;
+        // Runs created before durable orchestrator jobs may reference a legacy
+        // process-local id. Keep their detail pollable while omitting telemetry.
+      }
+    })
+  );
+  return jobs;
+}
+
 async function assembleRunDetail(
   runId: string,
   workspaceId: string,
-  projectId: string
+  projectId: string,
+  includeOperatorDiagnostics = false
 ): Promise<GenerationRunDetail> {
   const [run, gates, actions] = await Promise.all([
     getOrchestratorRun(runId),
@@ -490,12 +556,45 @@ async function assembleRunDetail(
   if (run.projectId !== projectId) {
     throw new ApiError("not_found", `Generation run not found: ${runId}`);
   }
-  const assetPrompts = await loadRunAssetMetadata(
-    workspaceId,
-    projectId,
-    actions
-  );
-  return projectRunDetailFromParts(run, gates, actions, assetPrompts);
+  const [assetPrompts, jobs] = await Promise.all([
+    loadRunAssetMetadata(workspaceId, projectId, actions),
+    loadRunJobsForProjection({ workspaceId, projectId, actions }),
+  ]);
+  return projectRunDetailFromParts(run, gates, actions, assetPrompts, {
+    jobs,
+    includeOperatorDiagnostics,
+  });
+}
+
+export interface GenerationRunDetailRouteDeps {
+  requireProjectAccess: typeof requireProjectAccess;
+  recordProjectActivity: typeof recordProjectActivity;
+  canViewOperatorDiagnostics: typeof canViewOperatorDiagnostics;
+  assembleRunDetail: typeof assembleRunDetail;
+}
+
+export async function generationRunDetailRoute(
+  ctx: Pick<HandlerCtx, "auth">,
+  params: Record<string, string | undefined>,
+  deps: Partial<GenerationRunDetailRouteDeps> = {}
+) {
+  const projectId = requireParam(params, "projectId");
+  const runId = requireParam(params, "runId");
+  await (deps.requireProjectAccess ?? requireProjectAccess)(ctx.auth.workspaceId, projectId);
+  await (deps.recordProjectActivity ?? recordProjectActivity)(ctx.auth.workspaceId, projectId);
+  const includeOperatorDiagnostics = await (
+    deps.canViewOperatorDiagnostics ?? canViewOperatorDiagnostics
+  )(ctx.auth);
+  return {
+    status: 200,
+    body: await (deps.assembleRunDetail ?? assembleRunDetail)(
+      runId,
+      ctx.auth.workspaceId,
+      projectId,
+      includeOperatorDiagnostics
+    ),
+    headers: NO_STORE_HEADERS,
+  };
 }
 
 async function loadRunAssetMetadata(
@@ -712,17 +811,7 @@ orchestratorRunsRouter.get(
 
 orchestratorRunsRouter.get(
   "/projects/:projectId/generation-runs/:runId",
-  route(async ({ auth }, params) => {
-    const projectId = requireParam(params, "projectId");
-    const runId = requireParam(params, "runId");
-    await requireProjectAccess(auth.workspaceId, projectId);
-    await recordProjectActivity(auth.workspaceId, projectId);
-    return {
-      status: 200,
-      body: await assembleRunDetail(runId, auth.workspaceId, projectId),
-      headers: NO_STORE_HEADERS,
-    };
-  })
+  route((ctx, params) => generationRunDetailRoute(ctx, params))
 );
 
 orchestratorRunsRouter.post(

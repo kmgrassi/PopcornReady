@@ -459,6 +459,19 @@ export interface JobProgress {
   stepStartedAt?: string;
   percent?: number;
   message?: string;
+  provider?: string;
+  startedAt?: string;
+  heartbeatAt?: string;
+  lastProgressAt?: string;
+  completedItems?: number;
+  totalItems?: number;
+  currentItem?: {
+    id?: string;
+    label: string;
+    index?: number;
+  };
+  attempt?: number;
+  nextRetryAt?: string;
 }
 
 export interface JobError {
@@ -667,12 +680,42 @@ export interface GenerationRun {
   currentStageType?: GenerationStageType;
   progressPercent?: number;
   message?: string;
+  lastProgressAt?: string;
   createdAt: string;
   updatedAt: string;
   startedAt?: string;
   completedAt?: string;
   error?: GenerationErrorSummary;
   judgment?: GenerationJudgmentSummary;
+}
+
+export type GenerationActivityAttentionState =
+  | "normal"
+  | "slow"
+  | "possibly_stalled";
+
+export interface GenerationJobActivity {
+  status: JobStatus;
+  currentStep?: string;
+  providerLabel?: string;
+  startedAt?: string;
+  heartbeatAt?: string;
+  lastProgressAt?: string;
+  completedItems?: number;
+  totalItems?: number;
+  currentItemLabel?: string;
+  attentionState: GenerationActivityAttentionState;
+}
+
+export interface GenerationJobDiagnostics extends GenerationJobActivity {
+  jobId: string;
+  actionId: string;
+  runId: string;
+  message?: string;
+  provider?: string;
+  attempt?: number;
+  nextRetryAt?: string;
+  updatedAt: string;
 }
 
 export interface GenerationStage {
@@ -693,6 +736,7 @@ export interface GenerationStage {
   artifactIds: string[];
   createdAt: string;
   updatedAt: string;
+  jobActivities?: GenerationJobActivity[];
   error?: GenerationErrorSummary;
   judgment?: GenerationJudgmentSummary;
 }

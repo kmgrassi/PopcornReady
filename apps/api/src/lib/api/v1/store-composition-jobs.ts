@@ -6,7 +6,7 @@ import {
   type JobType,
   SCHEMA as CONTRACT_SCHEMA,
 } from "@popcorn/shared/v1/types";
-import { runQuery } from "../../supabase/db-errors";
+import { databaseError, runQuery } from "../../supabase/db-errors";
 import { notFound } from "./errors";
 import type { GraphAssetInput } from "./asset-graph";
 import { paginate, type PageResult } from "./pagination";
@@ -236,6 +236,8 @@ export async function createJobWithDeps(
     requestId?: string;
     payload?: unknown;
     result?: unknown;
+    idempotencyKey?: string;
+    progress?: Job["progress"];
   }
 ): Promise<Job> {
   await deps.getProject(input.workspaceId, input.projectId);
@@ -248,13 +250,14 @@ export async function createJobWithDeps(
     requestId: input.requestId,
     type: input.type,
     status: input.status ?? "queued",
-    progress: {
+    progress: input.progress ?? {
       percent: input.status === "succeeded" ? 100 : 0,
       currentStep: input.status === "succeeded" ? "completed" : "queued",
     },
     input: input.payload ?? null,
     result: input.result ?? null,
     error: null,
+    idempotencyKey: input.idempotencyKey,
     createdAt: now,
     updatedAt: now,
   };
@@ -263,6 +266,58 @@ export async function createJobWithDeps(
   void _omit;
   const data = await runQuery("store.createJob", db.from("jobs").insert(row).select("*").single());
   return mapJob(data as JobRow);
+}
+
+export async function createOrGetJobWithDeps(
+  deps: CompositionJobsStoreDeps,
+  input: Parameters<typeof createJobWithDeps>[1]
+): Promise<{ job: Job; created: boolean }> {
+  if (!input.idempotencyKey) {
+    return { job: await createJobWithDeps(deps, input), created: true };
+  }
+  await deps.getProject(input.workspaceId, input.projectId);
+  const now = new Date().toISOString();
+  const candidate: Job = {
+    id: "",
+    schemaVersion: CONTRACT_SCHEMA.job,
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    requestId: input.requestId,
+    type: input.type,
+    status: input.status ?? "queued",
+    progress: input.progress ?? { percent: 0, currentStep: "queued" },
+    input: input.payload ?? null,
+    result: input.result ?? null,
+    error: null,
+    idempotencyKey: input.idempotencyKey,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const { id: _omit, ...row } = jobToRow(candidate);
+  void _omit;
+  const db = deps.getDb();
+  const { data, error } = await db
+    .from("jobs")
+    .upsert(row, {
+      onConflict: "workspace_id,project_id,type,idempotency_key",
+      ignoreDuplicates: true,
+    })
+    .select("*")
+    .maybeSingle();
+  if (error) throw databaseError("store.createOrGetJob upsert", error);
+  if (data) return { job: mapJob(data as JobRow), created: true };
+  const existing = await runQuery(
+    "store.createOrGetJob existing",
+    db
+      .from("jobs")
+      .select("*")
+      .eq("workspace_id", input.workspaceId)
+      .eq("project_id", input.projectId)
+      .eq("type", input.type)
+      .eq("idempotency_key", input.idempotencyKey)
+      .single()
+  );
+  return { job: mapJob(existing as JobRow), created: false };
 }
 
 export async function updateJobWithDeps(
@@ -293,6 +348,63 @@ export async function updateJobWithDeps(
   );
   if (!data) throw notFound(`Job not found: ${jobId}`);
   return mapJob(data as JobRow);
+}
+
+export async function updateActiveJobWithDeps(
+  deps: CompositionJobsStoreDeps,
+  workspaceId: string,
+  projectId: string,
+  jobId: string,
+  patch: Partial<Pick<Job, "status" | "progress" | "result" | "error">>,
+  recoveryLeaseOwnerId?: string
+): Promise<Job | null> {
+  await deps.getProject(workspaceId, projectId);
+  const db = deps.getDb();
+  const data = await runQuery(
+    "store.updateActiveJob",
+    db.rpc("update_active_job", {
+      p_workspace_id: workspaceId,
+      p_project_id: projectId,
+      p_job_id: jobId,
+      p_progress_patch: patch.progress ?? {},
+      p_status: patch.status ?? null,
+      p_result: patch.result ?? null,
+      p_error: patch.error ?? null,
+      p_recovery_lease_owner_id: recoveryLeaseOwnerId ?? null,
+    })
+  );
+  const row = Array.isArray(data) ? data[0] : data;
+  return row ? mapJob(row as JobRow) : null;
+}
+
+export async function claimJobRecoveryWithDeps(
+  deps: CompositionJobsStoreDeps,
+  input: {
+    workspaceId: string;
+    projectId: string;
+    job: Job;
+    ownerId: string;
+    claimedAt: string;
+    expiresAt: string;
+    staleBefore: string;
+  }
+): Promise<Job | null> {
+  await deps.getProject(input.workspaceId, input.projectId);
+  const db = deps.getDb();
+  const data = await runQuery(
+    "store.claimJobRecovery",
+    db.rpc("claim_job_recovery", {
+      p_workspace_id: input.workspaceId,
+      p_project_id: input.projectId,
+      p_job_id: input.job.id,
+      p_owner_id: input.ownerId,
+      p_claimed_at: input.claimedAt,
+      p_expires_at: input.expiresAt,
+      p_stale_before: input.staleBefore,
+    })
+  );
+  const row = Array.isArray(data) ? data[0] : data;
+  return row ? mapJob(row as JobRow) : null;
 }
 
 export async function getJobWithDeps(

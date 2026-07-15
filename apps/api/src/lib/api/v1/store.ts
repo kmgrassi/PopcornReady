@@ -140,6 +140,7 @@ import {
 } from "./workspace-dashboard";
 import {
   createJobWithDeps,
+  createOrGetJobWithDeps,
   findIdempotencyRecordWithDeps,
   getCompositionPlanWithDeps,
   getJobWithDeps,
@@ -148,6 +149,8 @@ import {
   saveCompositionPlanWithDeps,
   saveIdempotencyRecordWithDeps,
   updateJobWithDeps,
+  updateActiveJobWithDeps,
+  claimJobRecoveryWithDeps,
   type CompositionJobsStoreDeps,
   type InsertDataAssetInput,
 } from "./store-composition-jobs";
@@ -6342,8 +6345,16 @@ export function createJob(input: {
   requestId?: string;
   payload?: unknown;
   result?: unknown;
+  idempotencyKey?: string;
+  progress?: Job["progress"];
 }): Promise<Job> {
   return createJobWithDeps(compositionJobsDeps, input);
+}
+
+export function createOrGetJob(
+  input: Parameters<typeof createOrGetJobWithDeps>[1]
+): ReturnType<typeof createOrGetJobWithDeps> {
+  return createOrGetJobWithDeps(compositionJobsDeps, input);
 }
 
 export function updateJob(
@@ -6353,6 +6364,29 @@ export function updateJob(
   patch: Partial<Pick<Job, "status" | "progress" | "result" | "error">>
 ): Promise<Job> {
   return updateJobWithDeps(compositionJobsDeps, workspaceId, projectId, jobId, patch);
+}
+
+export function updateActiveJob(
+  workspaceId: string,
+  projectId: string,
+  jobId: string,
+  patch: Partial<Pick<Job, "status" | "progress" | "result" | "error">>,
+  recoveryLeaseOwnerId?: string
+): Promise<Job | null> {
+  return updateActiveJobWithDeps(
+    compositionJobsDeps,
+    workspaceId,
+    projectId,
+    jobId,
+    patch,
+    recoveryLeaseOwnerId
+  );
+}
+
+export function claimJobRecovery(
+  input: Parameters<typeof claimJobRecoveryWithDeps>[1]
+): ReturnType<typeof claimJobRecoveryWithDeps> {
+  return claimJobRecoveryWithDeps(compositionJobsDeps, input);
 }
 
 export function getJob(

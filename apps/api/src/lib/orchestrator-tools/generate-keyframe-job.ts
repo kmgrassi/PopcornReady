@@ -1,4 +1,4 @@
-import { agentApiStore, type AgentApiStore } from "@/lib/agent-api/jobs";
+import { createDurableOrchestratorJobWriter, startDurableJobHeartbeat, type OrchestratorJobWriter } from "@/lib/orchestrator/job-gateway";
 import { scheduleOrchestratorResume } from "@/lib/orchestrator/schedule-resume";
 import type { AuthContext } from "@/lib/api/v1/auth";
 import { generateBeatKeyframe as realGenerateBeatKeyframe } from "@/lib/api/v1/beats";
@@ -17,6 +17,7 @@ import type { Beat, ShotPlan } from "@popcorn/shared/types";
 import { planBeats } from "@popcorn/shared/types";
 import type { ProjectStoryboard } from "@popcorn/shared/v1/types";
 import { createLogger } from "@/lib/v1/logger";
+import { redactError } from "@/lib/v1/redact";
 
 type KeyframeImageProvider = "openai" | "ideogram" | "gemini" | "xai" | "mock";
 
@@ -26,7 +27,8 @@ export interface GenerateKeyframeJobDeps {
   getAsset: typeof realGetAsset;
   generateBeatKeyframe: typeof realGenerateBeatKeyframe;
   selectGeneratedBeatKeyframeAsset: typeof realSelectGeneratedBeatKeyframeAsset;
-  jobs: Pick<AgentApiStore, "setStep" | "succeed" | "fail">;
+  jobs?: Pick<OrchestratorJobWriter, "setStep" | "succeed" | "fail"> &
+    Partial<Pick<OrchestratorJobWriter, "reportProgress">>;
   enqueueOrchestratorDispatch?: (runId: string, workspaceId: string) => Promise<unknown>;
 }
 
@@ -36,7 +38,6 @@ const defaultDeps: GenerateKeyframeJobDeps = {
   getAsset: realGetAsset,
   generateBeatKeyframe: realGenerateBeatKeyframe,
   selectGeneratedBeatKeyframeAsset: realSelectGeneratedBeatKeyframeAsset,
-  jobs: agentApiStore,
 };
 const logger = createLogger();
 
@@ -156,6 +157,8 @@ export async function runGenerateKeyframeJob(
   deps: Partial<GenerateKeyframeJobDeps> = {}
 ): Promise<void> {
   const d = { ...defaultDeps, ...deps };
+  const jobs = d.jobs ?? createDurableOrchestratorJobWriter(input.workspaceId, input.projectId);
+  const stopHeartbeat = startDurableJobHeartbeat(jobs, input.jobId);
   const jobLogger = logger.child({
     workspaceId: input.workspaceId,
     projectId: input.projectId,
@@ -163,13 +166,18 @@ export async function runGenerateKeyframeJob(
     jobId: input.jobId,
   });
   try {
-    await d.jobs.setStep(input.jobId, "generating_assets");
     const auth = localAuth(input.workspaceId);
     const activeVisualAnchors = await d.getActiveProjectVisualAnchorPlan(input.projectId);
     const tileByBeat = storyboardTileByPlanBeat(input.plan, input.storyboard);
     const generatedAssetIds: string[] = [];
     const skippedAssetIds: string[] = [];
     const beats = planBeats(input.plan);
+    await jobs.setStep(input.jobId, "generating_assets", {
+      completedItems: 0,
+      totalItems: beats.length,
+      provider: input.provider,
+      percent: beats.length === 0 ? 100 : 0,
+    });
     jobLogger.info("generate_keyframe_job.started", {
       planAssetId: input.planAssetId,
       storyboardId: input.storyboard.id,
@@ -181,6 +189,10 @@ export async function runGenerateKeyframeJob(
     for (let index = 0; index < beats.length; index += 1) {
       const beat = beats[index];
       const beatId = beat.id ?? beat.name;
+      await jobs.reportProgress?.(input.jobId, {
+        currentItem: { id: beatId, label: beat.name, index: index + 1 },
+        message: `Generating keyframe ${index + 1} of ${beats.length}`,
+      });
       const existing = await d.getActiveProjectScopedAsset({
         workspaceId: input.workspaceId,
         projectId: input.projectId,
@@ -194,6 +206,12 @@ export async function runGenerateKeyframeJob(
           existingStatus: existing.status,
         });
         skippedAssetIds.push(existing.id);
+        await jobs.reportProgress?.(input.jobId, {
+          completedItems: index + 1,
+          totalItems: beats.length,
+          percent: Math.round(((index + 1) / beats.length) * 100),
+          lastProgressAt: new Date().toISOString(),
+        });
         continue;
       }
 
@@ -301,10 +319,11 @@ export async function runGenerateKeyframeJob(
             assetId,
           });
         } catch (err) {
+          const safeError = redactError(err, { defaultCode: "selection_failed" });
           jobLogger.error("generate_keyframe_job.selection_failed", {
             beatId,
             assetId,
-            error: { message: err instanceof Error ? err.message : String(err) },
+            error: safeError,
           });
           throw err;
         }
@@ -315,23 +334,31 @@ export async function runGenerateKeyframeJob(
         });
         generatedAssetIds.push(assetId);
       }
+      await jobs.reportProgress?.(input.jobId, {
+        completedItems: index + 1,
+        totalItems: beats.length,
+        percent: Math.round(((index + 1) / beats.length) * 100),
+        lastProgressAt: new Date().toISOString(),
+      });
     }
 
-    await d.jobs.succeed(input.jobId, { assetIds: generatedAssetIds, skippedAssetIds });
+    await jobs.succeed(input.jobId, { assetIds: generatedAssetIds, skippedAssetIds });
     jobLogger.info("generate_keyframe_job.succeeded", {
       generatedAssetIds,
       skippedAssetIds,
     });
   } catch (err) {
+    const safeError = redactError(err, { defaultCode: "job_failed" });
     jobLogger.error("generate_keyframe_job.failed", {
-      error: { message: err instanceof Error ? err.message : String(err) },
+      error: safeError,
     });
-    await d.jobs.fail(input.jobId, {
-      code: "job_failed",
-      message: err instanceof Error ? err.message : String(err),
+    await jobs.fail(input.jobId, {
+      code: safeError.code,
+      message: safeError.message,
       requestId: "",
     });
   } finally {
+    stopHeartbeat();
     if (input.orchestratorRunId) {
       try {
         await resume(d, input.orchestratorRunId, input.workspaceId);
