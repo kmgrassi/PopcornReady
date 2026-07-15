@@ -65,6 +65,11 @@
 - Friction or failure: Naming a finite domain turn an “assignment” initially encouraged redundant assignment, report, output, queue, approval, job, and cost tables despite existing run/action/runtime records.
 - Suggested improvement: Before adding agent-specific persistence, map every proposed lifecycle concept to the current schema and document the transactional, tenancy, privacy, and retry invariant that prevents reuse.
 - Follow-up: `docs/scopes/specialist-agent-orchestration-prs.md` PRs 4–6, 9–10, and 12.
+### 2026-07-14T12:00:00-04:00 — TYPE-20260714-01
+- What helped: The existing Remotion type definitions made the framework boundary and safe cast removal easy to verify with focused package typechecks.
+- Friction or failure: Removing the renderer prop index signature was not compatible with Remotion's current `Composition` generic constraint, despite looking like a desirable tightening.
+- Suggested improvement: Revisit the renderer prop contract when upgrading Remotion or when its component generics no longer require `Record<string, unknown>`.
+- Follow-up: none
 
 ### 2026-07-14T12:27:05-04:00 — ORCH-20260714-02
 - What helped: A focused shared module plus compile-time fixtures made canonical identity reuse, origin/recipient routing, and report/runtime separation reviewable before schema or runtime work.
@@ -82,4 +87,16 @@
 - What helped: The unresolved review thread and existing type-test fixtures made the capability mismatch directly reproducible and easy to constrain without runtime changes.
 - Friction or failure: A newly created worktree had no dependencies, so validation required a package install from the lockfile before checks could run.
 - Suggested improvement: Add a standard dependency-bootstrap note or helper for caretaker worktrees.
+- Follow-up: none.
+
+### 2026-07-14T18:20:00-04:00 — PR-CARETAKER-20260714-01
+- What helped: Isolating the PR branch kept unrelated dirty checkout changes out of the conflict resolution; the conflict was limited to the shared feedback log.
+- Friction or failure: Fresh caretaker worktrees do not contain dependencies, so the lockfile install was required before validation.
+- Suggested improvement: Add a standard dependency-bootstrap helper for caretaker worktrees.
+- Follow-up: none.
+
+### 2026-07-14T18:32:00-04:00 — PR-CARETAKER-20260714-01
+- What helped: Rechecking branch protection after successful checks made the remaining merge blocker explicit.
+- Friction or failure: `mergeable=true` does not imply mergeable under branch protection; `main` still requires one approving review.
+- Suggested improvement: Include `mergeStateStatus` and required-review state in caretaker merge gates.
 - Follow-up: none.
