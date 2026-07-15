@@ -106,3 +106,9 @@
 - Friction or failure: The browser viewport capability needed a temporary CDP fallback, the auth-route pass ended the guest session, and the full API suite contains three unrelated merged-main failures.
 - Suggested improvement: Add a repeatable read-only hosted smoke that records commit, route health, mobile overflow, and existing-run projection without depending on a transient browser session.
 - Follow-up: Add a direct worker-completion wake assertion for `edit-video-asset-job.ts`; separately triage the three unrelated main-suite failures.
+
+### 2026-07-15T15:10:00-04:00 — WEB-20260715-01
+- What helped: The production failure shape and independent contract reviews exposed false midpoint progress, non-linear recovery, and incomplete-video success as one coherent UX problem.
+- Friction or failure: Workspace summaries lack action evidence, and action timestamps record lifecycle changes rather than true worker heartbeats.
+- Suggested improvement: Define terminal artifact invariants and evidence available per projection before designing progress copy.
+- Follow-up: Consider real worker heartbeat data only if operators need provider-stall detection beyond last recorded activity.

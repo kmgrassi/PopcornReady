@@ -71,6 +71,7 @@ export interface RunActionSummary {
   jobIds: string[];
   error?: Record<string, unknown>;
   createdAt: string;
+  updatedAt?: string;
   /** Set when the action was superseded by a restart-from-stage. */
   supersededAt?: string | null;
 }
@@ -135,6 +136,7 @@ interface RunActionRow {
   job_ids: string[] | null;
   error: Record<string, unknown> | null;
   created_at: string;
+  updated_at: string;
   superseded_at?: string | null;
 }
 
@@ -182,6 +184,7 @@ function mapRunAction(row: RunActionRow): RunActionSummary {
     outputAssetIds: row.output_asset_ids ?? [],
     jobIds: row.job_ids ?? [],
     createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
     supersededAt: row.superseded_at ?? null,
   };
   const error = unmarkedJson(row.error);

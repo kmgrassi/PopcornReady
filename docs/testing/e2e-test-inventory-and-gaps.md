@@ -250,6 +250,10 @@ Covered:
 - Review notes clear on success.
 - Loading state shows stored recovery hint.
 - Targeted generated-asset feedback modal opens and posts the revision action.
+- Unknown active progress is indeterminate without `aria-valuenow` or synthetic
+  `0%`/`50%`; recovery keeps an earlier failed tool visible.
+- A production-shaped storyboard-only terminal result never renders video-ready
+  completion copy.
 
 Remaining gaps:
 
@@ -293,6 +297,8 @@ Remaining gaps:
 - Direct scene/beat editing is not the current storyboard UX; changes should be
   exercised through object-scoped Request Changes flows.
 - Watch page video playback/fallback behavior has limited coverage.
+- The direct Watch no-output state is covered and remains on the Watch URL with
+  an explanation instead of redirecting away.
 
 ### 6. Evals And Admin
 

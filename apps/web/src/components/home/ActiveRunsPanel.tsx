@@ -30,12 +30,12 @@ export function ActiveRunsPanel({
 
       <ul className={styles.list}>
         {runs.map((run) => {
-          const pct = Math.max(
-            0,
-            Math.min(100, Math.round(run.progressPercent ?? 0)),
-          );
+          const pct = run.progressPercent == null
+            ? null
+            : Math.max(0, Math.min(100, Math.round(run.progressPercent)));
           const needsReview = Boolean(run.reviewGate);
           const failed = run.status === "failed";
+          const indeterminate = pct === null && run.status === "running";
           return (
             <li key={run.runId}>
               <Link
@@ -78,11 +78,13 @@ export function ActiveRunsPanel({
                 <div className={styles.progress}>
                   <span className={styles.track} aria-hidden="true">
                     <span
-                      className={`${styles.fill} ${needsReview ? styles.fillPaused : ""} ${failed ? styles.fillFailed : ""}`}
-                      style={{ width: `${pct}%` }}
+                      className={`${styles.fill} ${indeterminate ? styles.fillIndeterminate : ""} ${needsReview ? styles.fillPaused : ""} ${failed ? styles.fillFailed : ""}`}
+                      style={pct === null ? { width: failed ? "100%" : "0%" } : { width: `${pct}%` }}
                     />
                   </span>
-                  <span className={styles.pct}>{pct}%</span>
+                  <span className={styles.pct}>
+                    {pct === null ? (indeterminate ? "Working" : "Ended") : `${pct}%`}
+                  </span>
                 </div>
               </Link>
             </li>

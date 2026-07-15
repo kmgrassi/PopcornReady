@@ -94,7 +94,7 @@ test("board feedback clears terminal state and reached gates before resuming a c
   );
 });
 
-test("does not surface a storyboard-only orchestrator success as a ready video", () => {
+test("makes an unexpected terminal success without video a terminal partial failure", () => {
   const payload = projectRunDetailFromParts(
     runFixture(),
     [],
@@ -105,9 +105,10 @@ test("does not surface a storyboard-only orchestrator success as a ready video",
     ]
   );
 
-  assert.equal(payload.run.status, "running");
+  assert.equal(payload.run.status, "failed");
   assert.equal(payload.run.currentStageType, "storyboard");
-  assert.match(payload.run.message ?? "", /no video export is ready/i);
+  assert.equal(payload.run.error?.code, "missing_video_output");
+  assert.match(payload.run.message ?? "", /no playable video was created/i);
   assert.equal(payload.resultArtifacts?.length, 0);
 });
 
@@ -124,7 +125,10 @@ test("surfaces orchestrator success as ready once export_video produced output",
     [
       actionFixture("assemble_timeline", { outputAssetIds: ["timeline_1"] }),
       actionFixture("export_video", { outputAssetIds: ["export_asset_1"] }),
-    ]
+    ],
+    new Map([
+      ["export_asset_1", { status: "ready", kind: "video", hasPlayableSource: true }],
+    ])
   );
 
   assert.equal(payload.run.status, "succeeded");
@@ -139,6 +143,93 @@ test("surfaces orchestrator success as ready once export_video produced output",
       stageId: "run_1:export",
     },
   ]);
+});
+
+test("playable export wins over an after-export stop gate", () => {
+  const payload = projectRunDetailFromParts(
+    runFixture(),
+    [gateFixture("after:export_video")],
+    [actionFixture("export_video", { outputAssetIds: ["export_asset_1"] })],
+    new Map([
+      ["export_asset_1", { status: "ready", kind: "video", hasPlayableSource: true }],
+    ])
+  );
+
+  assert.equal(payload.run.status, "succeeded");
+  assert.equal(payload.run.completionKind, "video");
+  assert.match(payload.run.message ?? "", /video export is ready/i);
+});
+
+test("rejects applied exports whose output is missing or not playable", () => {
+  for (const asset of [
+    undefined,
+    { status: "pending", kind: "video", hasPlayableSource: true },
+    { status: "ready", kind: "image", hasPlayableSource: true },
+    { status: "ready", kind: "video", hasPlayableSource: false },
+  ]) {
+    const assets = asset ? new Map([["export_asset_1", asset]]) : new Map();
+    const payload = projectRunDetailFromParts(
+      runFixture(),
+      [],
+      [actionFixture("export_video", { outputAssetIds: ["export_asset_1"] })],
+      assets
+    );
+    assert.equal(payload.run.status, "failed");
+    assert.equal(payload.run.error?.code, "missing_video_output");
+  }
+});
+
+test("active work has unknown progress and reports provider waits and recovery", () => {
+  const waiting = projectRunDetailFromParts(
+    runFixture({ status: "waiting" }),
+    [],
+    [actionFixture("generate_anchor", { status: "running", jobIds: ["job_1"] })]
+  );
+  assert.equal(waiting.run.progressPercent, undefined);
+  assert.equal(waiting.run.activityState, "waiting_on_job");
+  assert.equal(waiting.run.currentToolName, "generate_anchor");
+
+  const recovering = projectRunDetailFromParts(
+    runFixture({ status: "running" }),
+    [],
+    [
+      actionFixture("generate_clip", {
+        status: "failed",
+        error: { recoverable: true },
+        createdAt: "2026-06-15T00:00:01.000Z",
+      }),
+      actionFixture("generate_storyboard", {
+        status: "running",
+        createdAt: "2026-06-15T00:00:02.000Z",
+      }),
+    ]
+  );
+  assert.equal(recovering.run.activityState, "recovering");
+  assert.equal(recovering.run.currentToolName, "generate_storyboard");
+  assert.equal(recovering.stages.find((stage) => stage.toolName === "generate_clip")?.status, "failed");
+
+  const recovered = projectRunDetailFromParts(
+    runFixture({ status: "running" }),
+    [],
+    [
+      actionFixture("generate_clip", {
+        id: "clip_failed",
+        status: "failed",
+        error: { recoverable: true },
+        createdAt: "2026-06-15T00:00:01.000Z",
+      }),
+      actionFixture("generate_clip", {
+        id: "clip_recovered",
+        status: "applied",
+        createdAt: "2026-06-15T00:00:02.000Z",
+      }),
+      actionFixture("export_video", {
+        status: "running",
+        createdAt: "2026-06-15T00:00:03.000Z",
+      }),
+    ]
+  );
+  assert.equal(recovered.run.activityState, "working");
 });
 
 test("surfaces stop-after orchestrator success as complete without a final export", () => {
@@ -158,6 +249,19 @@ test("surfaces stop-after orchestrator success as complete without a final expor
   assert.deepEqual(payload.run.reviewGates, []);
   assert.equal(payload.run.currentStageType, "ready");
   assert.match(payload.run.message ?? "", /storyboard assets are ready/i);
+});
+
+test("does not claim storyboard assets for an intentional early stop", () => {
+  const payload = projectRunDetailFromParts(
+    runFixture(),
+    [gateFixture("after:create_or_load_brief")],
+    [actionFixture("create_or_load_brief", { outputAssetIds: ["brief_asset"] })]
+  );
+
+  assert.equal(payload.run.status, "succeeded");
+  assert.equal(payload.run.completionKind, undefined);
+  assert.match(payload.run.message ?? "", /no playable video/i);
+  assert.doesNotMatch(payload.run.message ?? "", /storyboard/i);
 });
 
 test("keeps board feedback actions out of generation progress projections", () => {

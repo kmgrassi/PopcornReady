@@ -296,22 +296,28 @@ export function ProjectDetailPage() {
           >
             Runs
           </ButtonLink>
-          <ButtonLink
-            variant="secondary"
-            to={`/projects/${encodeURIComponent(projectId)}/watch`}
-            aria-disabled={watchDisabled}
-            title={watchTitle}
-          >
-            Outputs
-          </ButtonLink>
-          <ButtonLink
-            variant="primary"
-            to={`/projects/${encodeURIComponent(projectId)}/watch`}
-            aria-disabled={watchDisabled}
-            title={watchTitle}
-          >
-            Watch
-          </ButtonLink>
+          {hasPlayableOutput ? (
+            <>
+              <ButtonLink variant="secondary" to={`/projects/${encodeURIComponent(projectId)}/watch`}>
+                Outputs
+              </ButtonLink>
+              <ButtonLink variant="primary" to={`/projects/${encodeURIComponent(projectId)}/watch`}>
+                Watch
+              </ButtonLink>
+            </>
+          ) : outputsQuery.error ? (
+            <p className={styles.outputUnavailable} role="alert">
+              Unable to check video outputs right now. Open Runs to inspect the latest generation state.
+            </p>
+          ) : (
+            <p className={styles.outputUnavailable} role="status" title={watchTitle}>
+              {outputsQuery.loading
+                ? "Checking for a playable video…"
+                : storyboard
+                  ? "No playable video yet. The storyboard remains available in this workspace."
+                  : "No playable video yet. Continue the run or create a storyboard first."}
+            </p>
+          )}
         </>
       }
       storyboardPreview={{

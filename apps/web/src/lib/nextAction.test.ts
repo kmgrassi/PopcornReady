@@ -62,3 +62,25 @@ test("deriveNextAction does not call unknown failed stages preparing", () => {
     "Cookie launch stopped. Open the run to see what failed and retry from the failed stage.",
   );
 });
+
+test("deriveNextAction does not invent a percentage for active work", () => {
+  const action = deriveNextAction(
+    summary({
+      counts: { projects: 1, activeRuns: 1, outputs: 0 },
+      activeRuns: [
+        {
+          runId: "run-active",
+          projectId: "project-1",
+          projectName: "Cookie launch",
+          status: "running",
+          currentStageType: "asset_generation",
+          updatedAt: "2026-07-09T15:00:00.000Z",
+        },
+      ],
+    }),
+  );
+
+  assert.equal(action.type, "watch_run");
+  assert.doesNotMatch(action.body, /0%|50%/);
+  assert.match(action.body, /Progress will update/);
+});

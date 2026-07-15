@@ -208,4 +208,86 @@ test.describe("run progress actions", () => {
     releaseRunRequest();
     await expect(page.getByText("Quality review is running.")).toBeVisible();
   });
+
+  test("unknown progress is indeterminate and recovery keeps failed work visible", async ({ page }) => {
+    const active = makeRunDetail("run-indeterminate", {
+      status: "running",
+      currentStageType: "storyboard",
+      currentToolName: "generate_storyboard",
+      activityState: "recovering",
+      progressPercent: null,
+      message: "Generating storyboard frames after a clip prerequisite failed.",
+    });
+    active.stages.push({
+      ...active.stages[0],
+      stageId: "failed-clip",
+      type: "asset_generation",
+      toolName: "generate_clip",
+      label: "Generate clips",
+      order: 50,
+      status: "failed",
+      progressPercent: undefined,
+      error: { code: "precondition_unmet", message: "No keyframe was selected.", retryable: true },
+    });
+    await installRunProgressRoutes(page, { detail: active });
+
+    await page.goto(`/projects/${e2eProjectId}/runs/${active.run.runId}`);
+
+    const overall = page.getByRole("progressbar", {
+      name: "Generation in progress; percentage unavailable",
+    });
+    await expect(overall).toBeVisible();
+    await expect(overall).not.toHaveAttribute("aria-valuenow");
+    await expect(page.getByText(/50%|0%/)).toHaveCount(0);
+    await expect(page.getByText("Recovering", { exact: true }).first()).toBeVisible();
+    const visibleRail = page
+      .getByRole("complementary", { name: "Stage rail" })
+      .filter({ visible: true });
+    await expect(visibleRail.getByText("Generate clips")).toBeVisible();
+    await expect(visibleRail.getByText("Failed", { exact: true })).toHaveCount(2);
+  });
+
+  test("production-shaped storyboard-only terminal result never claims video completion", async ({ page }) => {
+    const partial = makeRunDetail("run-storyboard-only", {
+      status: "failed",
+      currentStageType: "storyboard",
+      progressPercent: null,
+      message: "Storyboard ready; no video was created.",
+      error: {
+        code: "missing_video_output",
+        message: "Storyboard ready; no video was created.",
+        retryable: true,
+      },
+      completedAt: "2026-06-16T14:10:00.000Z",
+    });
+    await installRunProgressRoutes(page, { detail: partial });
+
+    await page.goto(`/projects/${e2eProjectId}/runs/${partial.run.runId}`);
+
+    await expect(page.getByText("Run ended without a playable video")).toBeVisible();
+    await expect(page.getByText(/Your video is (complete|ready)/i)).toHaveCount(0);
+    await expect(
+      page.getByRole("progressbar", {
+        name: "Generation in progress; percentage unavailable",
+      }),
+    ).toHaveCount(0);
+  });
+
+  test("succeeded legacy payload without completion evidence does not claim video ready", async ({ page }) => {
+    const ended = makeRunDetail("run-ended-unknown", {
+      status: "succeeded",
+      completionKind: null,
+      currentStageType: "ready",
+      progressPercent: null,
+      message: "Run ended.",
+      completedAt: "2026-06-16T14:10:00.000Z",
+    });
+    await installRunProgressRoutes(page, { detail: ended });
+
+    await page.goto(`/projects/${e2eProjectId}/runs/${ended.run.runId}`);
+
+    await expect(page.getByText("Run ended without a playable video")).toBeVisible();
+    await expect(page.getByText(/Your video is (complete|ready)/i)).toHaveCount(0);
+    await expect(page.getByText(/Storyboard ready/i)).toHaveCount(0);
+  });
 });

@@ -30,12 +30,14 @@ function mapOrchestratorSummary(run: OrchestratorRun): GenerationRun {
     runId: run.id,
     projectId: run.projectId,
     status,
-    progressPercent: status === "succeeded" ? 100 : status === "queued" ? 0 : 50,
+    progressPercent: status === "queued" ? 0 : undefined,
     message:
       run.status === "waiting"
-        ? "Generation is waiting for a job or approval gate."
+        ? "Generation is waiting for its next activity."
         : run.status === "running"
           ? "The orchestrator is running."
+          : run.status === "succeeded"
+            ? "Run ended. Open it to verify available outputs."
           : undefined,
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,

@@ -148,6 +148,16 @@
   transition: width var(--transition);
 }
 
+.fillIndeterminate {
+  width: 36%;
+  animation: progressSweep 1.6s ease-in-out infinite;
+}
+
+@keyframes progressSweep {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(285%); }
+}
+
 .fillPaused {
   background: var(--cta);
 }
@@ -220,6 +230,12 @@
   .run,
   .fill {
     transition: none;
+  }
+
+  .fillIndeterminate {
+    width: 100%;
+    opacity: 0.55;
+    animation: none;
   }
 }
 

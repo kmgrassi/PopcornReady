@@ -117,6 +117,13 @@ Purpose: verify long-running generation states and user-controlled gates.
   the revision is dispatched for the agent to process.
 - Verify malformed, missing, or unauthorized run URLs show useful error states
   with navigation back to a stable surface.
+- During unknown provider work, verify the indicator is indeterminate and no
+  `0%`, `50%`, fixed stage ordinal, or guessed next stage appears. Confirm
+  elapsed time and last activity remain readable with reduced motion enabled.
+- Seed a failed clip followed by active storyboard recovery. The clip must stay
+  visibly failed while the current work is labeled Recovering.
+- Verify storyboard-only completion says no video was created; only a ready,
+  playable export may say Video ready.
 
 ## Project Detail, Storyboard, And Watch
 
@@ -138,6 +145,8 @@ surfaces.
   as a storyboard-generation gap.
 - Open `/storyboard` and confirm it redirects to `/library/projects`.
 - Open `/projects/:projectId/watch`.
+- For a project without playable output, verify Outputs/Watch are replaced by a
+  visible reason and the direct Watch URL renders the same no-output state.
 - For a project with playable output, verify video controls and metadata.
 - For a project without playable output, verify it redirects to
   `/projects/:projectId#runs`.

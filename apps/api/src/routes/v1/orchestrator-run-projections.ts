@@ -39,6 +39,9 @@ export interface GenerationRunDetail {
 export interface RunAssetPrompt {
   prompt?: string;
   description?: string;
+  status?: string;
+  kind?: string;
+  hasPlayableSource?: boolean;
 }
 
 function generationActions(actions: RunActionSummary[]): RunActionSummary[] {
@@ -138,12 +141,18 @@ function runStatus(status: OrchestratorRun["status"]): GenerationRunStatus {
   return status;
 }
 
-function hasFinishedVideo(actions: RunActionSummary[]): boolean {
+function hasFinishedVideo(
+  actions: RunActionSummary[],
+  assets: ReadonlyMap<string, RunAssetPrompt>
+): boolean {
   return generationActions(actions).some(
     (action) =>
       action.tool === "export_video" &&
       action.status === "applied" &&
-      action.outputAssetIds.length > 0
+      action.outputAssetIds.some((assetId) => {
+        const asset = assets.get(assetId);
+        return asset?.status === "ready" && asset.kind === "video" && asset.hasPlayableSource;
+      })
   );
 }
 
@@ -153,25 +162,35 @@ function hasReachedAfterGate(gates: OrchestratorRunGate[]): boolean {
   );
 }
 
+function hasReachedStoryboardAfterGate(gates: OrchestratorRunGate[]): boolean {
+  return gates.some((gate) => {
+    if (!gate.stage.startsWith(AFTER_GATE_PREFIX) || gate.status !== "reached") return false;
+    const stage = toolStage(gate.stage);
+    return stage === "storyboard" || stage === "asset_generation";
+  });
+}
+
 function completionKind(
   run: OrchestratorRun,
   gates: OrchestratorRunGate[],
-  actions: RunActionSummary[]
+  actions: RunActionSummary[],
+  assets: ReadonlyMap<string, RunAssetPrompt>
 ): GenerationRun["completionKind"] {
   if (run.status !== "succeeded") return undefined;
-  if (hasReachedAfterGate(gates)) return "storyboard_assets";
-  if (hasFinishedVideo(actions)) return "video";
+  if (hasFinishedVideo(actions, assets)) return "video";
+  if (hasReachedStoryboardAfterGate(gates)) return "storyboard_assets";
   return undefined;
 }
 
 function projectedRunStatus(
   run: OrchestratorRun,
   actions: RunActionSummary[],
-  gates: OrchestratorRunGate[]
+  gates: OrchestratorRunGate[],
+  assets: ReadonlyMap<string, RunAssetPrompt>
 ): GenerationRunStatus {
   if (run.status !== "succeeded") return runStatus(run.status);
-  if (hasReachedAfterGate(gates)) return "succeeded";
-  return hasFinishedVideo(actions) ? "succeeded" : "running";
+  if (hasFinishedVideo(actions, assets)) return "succeeded";
+  return hasReachedAfterGate(gates) ? "succeeded" : "failed";
 }
 
 function actionStatus(status: string): GenerationRunStatus {
@@ -184,7 +203,8 @@ function actionStatus(status: string): GenerationRunStatus {
 function runMessage(
   run: OrchestratorRun,
   actions: RunActionSummary[],
-  gates: OrchestratorRunGate[]
+  gates: OrchestratorRunGate[],
+  assets: ReadonlyMap<string, RunAssetPrompt>
 ): string {
   switch (run.status) {
     case "queued":
@@ -194,12 +214,10 @@ function runMessage(
     case "waiting":
       return "Generation is waiting for a job or approval gate.";
     case "succeeded":
-      if (hasReachedAfterGate(gates)) {
-        return "Storyboard assets are ready.";
-      }
-      return hasFinishedVideo(actions)
-        ? "Generation completed."
-        : "The orchestrator completed the currently available tools, but no video export is ready yet.";
+      if (hasFinishedVideo(actions, assets)) return "Video export is ready.";
+      return hasReachedStoryboardAfterGate(gates)
+        ? "Storyboard assets are ready."
+        : "Run ended; no playable video was created.";
     case "failed":
       return "Generation failed.";
     case "canceled":
@@ -241,10 +259,11 @@ function toErrorSummary(error: Record<string, unknown> | undefined) {
 export function projectRun(
   run: OrchestratorRun,
   gates: OrchestratorRunGate[],
-  actions: RunActionSummary[] = []
+  actions: RunActionSummary[] = [],
+  assets: ReadonlyMap<string, RunAssetPrompt> = new Map()
 ): GenerationRun {
   const reviewGates = gates.filter((gate) => !gate.stage.startsWith(AFTER_GATE_PREFIX));
-  const status = projectedRunStatus(run, actions, gates);
+  const status = projectedRunStatus(run, actions, gates, assets);
   const reachedGate = reviewGates.find((gate) => gate.status === "reached");
   const reviewGate = reachedGate
     ? {
@@ -259,6 +278,25 @@ export function projectRun(
     .reverse()
     .find((action) => action.status === "running");
   const latestAction = [...projectedActions].reverse()[0];
+  const latestByTool = new Map<string, RunActionSummary>();
+  for (const action of projectedActions) latestByTool.set(action.tool, action);
+  const latestRecoverableFailure = [...latestByTool.values()].find(
+    (action) => action.status === "failed" && action.error?.recoverable === true
+  );
+  const recovering = Boolean(
+    status === "running" &&
+      latestRunningAction &&
+      latestRecoverableFailure &&
+      new Date(latestRunningAction.createdAt).getTime() >
+        new Date(latestRecoverableFailure.createdAt).getTime()
+  );
+  const activityState = reviewGate || status !== "running"
+    ? undefined
+    : recovering
+      ? "recovering" as const
+      : run.status === "waiting" && latestAction?.jobIds.length
+        ? "waiting_on_job" as const
+        : "working" as const;
   const currentStageType =
     status === "succeeded"
       ? "ready"
@@ -273,17 +311,28 @@ export function projectRun(
     runId: run.id,
     projectId: run.projectId,
     status,
-    completionKind: completionKind(run, gates, actions),
+    completionKind: completionKind(run, gates, actions, assets),
+    activityState,
+    currentToolName: latestRunningAction?.tool,
     reviewGates: reviewGates.map((gate) => toolStage(gate.stage) as GateableGenerationStageType),
     reviewGate,
     currentStageType,
-    progressPercent: status === "succeeded" ? 100 : run.status === "queued" ? 0 : 50,
-    message: runMessage(run, actions, gates),
+    progressPercent: status === "succeeded" ? 100 : run.status === "queued" ? 0 : undefined,
+    message: runMessage(run, actions, gates, assets),
     createdAt: run.createdAt,
-    updatedAt: run.updatedAt,
+    updatedAt: [run.updatedAt, ...projectedActions.map((action) => action.updatedAt ?? action.createdAt), ...gates.map((gate) => gate.updatedAt)]
+      .sort()
+      .at(-1) ?? run.updatedAt,
     startedAt: run.startedAt,
     completedAt: run.completedAt,
-    error: toErrorSummary(run.error),
+    error:
+      status === "failed" && run.status === "succeeded"
+        ? {
+            code: "missing_video_output",
+            message: "Run ended; no playable video was created.",
+            retryable: true,
+          }
+        : toErrorSummary(run.error),
   };
 }
 
@@ -338,15 +387,20 @@ function projectStages(run: OrchestratorRun, actions: RunActionSummary[]): Gener
         label: toolLabel(tool),
         order: toolOrder(tool),
         status,
-        progressPercent: status === "succeeded" ? 100 : status === "running" ? 50 : 0,
-        message: statusAction ? `${statusAction.tool} ${statusAction.status}.` : undefined,
-        startedAt: stageActions[0]?.createdAt,
+        progressPercent: status === "succeeded" ? 100 : status === "queued" ? 0 : undefined,
+        message: statusAction ? `${toolLabel(statusAction.tool)} ${statusAction.status}.` : undefined,
+        startedAt:
+          status === "running" && latest?.status === "running"
+            ? latest.createdAt
+            : stageActions[0]?.createdAt,
         completedAt:
-          status === "succeeded" || status === "failed" ? statusAction?.createdAt : undefined,
+          status === "succeeded" || status === "failed"
+            ? statusAction?.updatedAt ?? statusAction?.createdAt
+            : undefined,
         jobIds: stageActions.flatMap((action) => action.jobIds),
         artifactIds: stageActions.flatMap((action) => action.outputAssetIds),
         createdAt: stageActions[0]?.createdAt ?? run.createdAt,
-        updatedAt: latest?.createdAt ?? run.updatedAt,
+        updatedAt: latest?.updatedAt ?? latest?.createdAt ?? run.updatedAt,
         error: latestFailed ? toErrorSummary(latestFailed.error) : undefined,
       };
     })
@@ -388,7 +442,7 @@ function projectStageItems(
         assetId,
         artifactId: assetId,
         createdAt: action.createdAt,
-        updatedAt: action.createdAt,
+        updatedAt: action.updatedAt ?? action.createdAt,
       };
     });
   });
@@ -401,7 +455,7 @@ export function projectRunDetailFromParts(
   assetPrompts: ReadonlyMap<string, RunAssetPrompt> = new Map()
 ): GenerationRunDetail {
   return {
-    run: projectRun(run, gates, actions),
+    run: projectRun(run, gates, actions, assetPrompts),
     stages: projectStages(run, actions),
     stageItems: projectStageItems(run, actions, assetPrompts),
     resultArtifacts: projectResultArtifacts(run, actions),

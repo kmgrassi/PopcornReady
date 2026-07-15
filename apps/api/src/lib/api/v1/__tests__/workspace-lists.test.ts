@@ -98,8 +98,12 @@ test("listWorkspaceGenerationRuns aggregates runs across projects with project n
   // Newest-first.
   assert.equal(items[0].runId, "r2");
   assert.equal(items[0].projectName, "Beta");
+  assert.equal(items[0].progressPercent, undefined);
   assert.equal(items[1].runId, "r1");
   assert.equal(items[1].projectName, "Alpha");
+  assert.equal(items[1].status, "succeeded");
+  assert.equal(items[1].progressPercent, undefined);
+  assert.equal(items[1].completionKind, undefined);
   // No internal pagination key leaks onto the wire shape.
   assert.ok(!("id" in items[0]));
 });
@@ -335,4 +339,5 @@ test("getWorkspaceDashboardSummary maps waiting orchestrator runs as active runs
 
   assert.equal(summary.activeRuns.length, 1);
   assert.equal(summary.activeRuns[0].status, "running");
+  assert.equal(summary.activeRuns[0].progressPercent, undefined);
 });

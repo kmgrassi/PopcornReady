@@ -16,10 +16,6 @@ export function ProjectWatchPage() {
         : null;
 
   if (!projectId) return <Navigate to="/library/projects" replace />;
-  if (!watchQuery.isLoading && !error && !media) {
-    return <Navigate to={`/projects/${encodeURIComponent(projectId)}#runs`} replace />;
-  }
-
   return (
     <main className={styles.shell}>
       <header className={styles.header}>
@@ -35,8 +31,10 @@ export function ProjectWatchPage() {
                 ? ` - ${formatDuration(media.durationSec)}`
                 : ""}
             </p>
-          ) : (
+          ) : watchQuery.isLoading ? (
             <p>Loading the selected render.</p>
+          ) : (
+            <p>No playable video is available for this project.</p>
           )}
         </div>
         <ButtonLink
@@ -60,6 +58,15 @@ export function ProjectWatchPage() {
           <div className={styles.placeholder}>
             <strong>Unable to load this render.</strong>
             <span>{error.message}</span>
+          </div>
+        </section>
+      ) : null}
+
+      {!watchQuery.isLoading && !error && !media ? (
+        <section className={styles.panel} aria-label="No video output">
+          <div className={styles.placeholder} role="status">
+            <strong>No playable video is available.</strong>
+            <span>Open the workspace to review available assets or continue the run.</span>
           </div>
         </section>
       ) : null}
