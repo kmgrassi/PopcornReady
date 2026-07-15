@@ -1,6 +1,14 @@
 # End-to-End Test Inventory And Gaps
 
-Date: 2026-06-26
+<!-- agent-summary: Inventory of active browser and end-to-end coverage for the split web and API applications. -->
+<!-- agent-summary: Production-safe checks must avoid provider spend, persistent creation, and mutation controls unless explicitly approved. -->
+<!-- agent-summary: Hosted verification records the deployed commit and separates browser evidence from automated-only guarantees. -->
+<!-- agent-summary: The production tool-test harness must remain unavailable even though local opt-in batteries exist. -->
+<!-- agent-summary: Specialist role registries and recovery projections remain dormant until their owning activation PRs. -->
+<!-- agent-summary: Async dispatch races require local Supabase concurrency coverage when no safe live completion is available. -->
+<!-- agent-summary: Keep remaining gaps concrete, behavior-focused, and tied to the smallest useful next test. -->
+
+Date: 2026-07-14
 
 This inventory covers the active split app described in `CLAUDE.md`: the Vite
 React SPA in `apps/web` and the Express API in `apps/api`. New end-to-end work
@@ -37,6 +45,63 @@ pnpm test:e2e:local-db
 
 That command runs Playwright against local Supabase/Postgres with
 `DB_BACKEND=supabase`.
+
+## Production Verification: Specialist Foundations (2026-07-14)
+
+The detailed production-safe pass after GitHub PRs 782, 783, and 784 merged ran
+on their merge snapshot `08feca51cdadd302f6e5590a222b2ce9e1157d3b`. After
+`main` advanced, health, landing, and authenticated dashboard smoke were
+refreshed on deployed head `eb2245d670422db56faa0fdb0fe8034d28779a8a`, which
+contains that specialist snapshot. The browser covered the landing, login,
+signup, not-found, dashboard, Library projects, Activity, project-creation
+entry, and an existing failed-run detail surface. No mutation control or
+billable action was submitted; loading the existing run did perform the route's
+normal project-activity recording.
+
+Observed results:
+
+- `/api/v1/health` returned `200`, `status: "ok"`, `authMode: "supabase"`, and
+  current deployed commit `eb2245d670422db56faa0fdb0fe8034d28779a8a` through
+  the production browser context.
+- `/api/v1/dev/tool-tests` did not expose batteries. A signed-out read fell
+  through to the production auth guard with `403 Missing credentials`; the
+  dev-only harness never returned `200`.
+- Public and authenticated read surfaces rendered without console warnings or
+  unexpected 4xx/5xx responses. Login and signup submissions stayed disabled
+  while their required fields were empty, and the unknown route rendered the
+  Vite not-found placeholder.
+- The existing failed run retained its status, 50% progress, readable failure,
+  completed storyboard assets, restart controls, and familiar stage labels. A
+  390-by-844 mobile emulation showed no document-level horizontal overflow on
+  the dashboard or run-detail route.
+- Contract type checks, the catalog/registry/recovery/projection suite (27/27),
+  async-resume unit suite (34/34 with the database integration case skipped in
+  the default environment), and the separately enabled local-Supabase dispatch
+  integration test (1/1) passed.
+- The hosted `Apply Supabase migrations` workflow succeeded for PR 783's merge
+  commit `30601df2`, including the lease-safe dispatch-wake migration.
+- Current-head Railway verification and Web E2E workflows succeeded for
+  `eb2245d6` after the branch advanced.
+
+Limits and remaining gaps:
+
+- PR 782 intentionally has no runtime or UI path. Its origin, recipient,
+  identifier, task, report, and state guarantees are compile-time contracts.
+- PR 784 keeps the flat production registry active. The root, Visuals, and Audio
+  registries plus cross-domain recovery projection are dormant and cannot be
+  claimed as production specialist-agent behavior yet.
+- No already-running production job completed during the safe observation
+  window. PR 783's exact live completion race was therefore verified by unit and
+  local-Supabase concurrency tests, not by starting billable production work.
+- Add a focused worker-completion test proving `edit-video-asset-job.ts` wakes
+  the durable orchestrator dispatch. The other changed async worker families
+  already assert their enqueue/resume handoff directly.
+- The full API suite is currently red on merged `main` for three unrelated
+  baseline failures: two guest-retention tests reference stale pre-renumbering
+  migration filenames (`...120000...` and `...150000...`) while the checkout
+  contains `...120100...` and `...150100...`, and the public-project UUID-shape
+  assertion fails. These tests and source files were outside PRs 782-784; the
+  affected specialist suites remain green.
 
 ## Development Data Modes
 
