@@ -79,7 +79,13 @@ export function ActiveRunsPanel({
                   <span className={styles.track} aria-hidden="true">
                     <span
                       className={`${styles.fill} ${indeterminate ? styles.fillIndeterminate : ""} ${needsReview ? styles.fillPaused : ""} ${failed ? styles.fillFailed : ""}`}
-                      style={pct === null ? { width: failed ? "100%" : "0%" } : { width: `${pct}%` }}
+                      style={
+                        pct === null
+                          ? indeterminate
+                            ? undefined
+                            : { width: failed ? "100%" : "0%" }
+                          : { width: `${pct}%` }
+                      }
                     />
                   </span>
                   <span className={styles.pct}>

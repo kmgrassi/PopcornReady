@@ -252,6 +252,8 @@ Covered:
 - Targeted generated-asset feedback modal opens and posts the revision action.
 - Unknown active progress is indeterminate without `aria-valuenow` or synthetic
   `0%`/`50%`; recovery keeps an earlier failed tool visible.
+- Home dashboard unknown progress retains a visible indeterminate fill instead
+  of being collapsed by inline width styles.
 - A production-shaped storyboard-only terminal result never renders video-ready
   completion copy.
 

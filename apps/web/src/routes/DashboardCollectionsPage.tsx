@@ -323,10 +323,7 @@ export function RunsPage() {
                 >
                   <span style={run.progressPercent == null ? (run.status === "running" ? undefined : { width: "0%" }) : { width: `${Math.max(0, Math.min(100, run.progressPercent))}%` }} />
                 </div>
-                <StatusChip
-                  status={run.status}
-                  label={run.status === "succeeded" && !run.completionKind ? "Run ended" : undefined}
-                />
+                <StatusChip status={run.status} />
               </Link>
             ))}
           </div>

@@ -37,8 +37,8 @@ function mapOrchestratorSummary(run: OrchestratorRun): GenerationRun {
         : run.status === "running"
           ? "The orchestrator is running."
           : run.status === "succeeded"
-            ? "Run ended. Open it to verify available outputs."
-          : undefined,
+            ? "Run succeeded. Open it to verify available outputs."
+            : undefined,
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
     startedAt: run.startedAt,

@@ -104,6 +104,8 @@ test("listWorkspaceGenerationRuns aggregates runs across projects with project n
   assert.equal(items[1].status, "succeeded");
   assert.equal(items[1].progressPercent, undefined);
   assert.equal(items[1].completionKind, undefined);
+  assert.match(items[1].message ?? "", /Run succeeded/);
+  assert.doesNotMatch(items[1].message ?? "", /Run ended|Video ready/);
   // No internal pagination key leaks onto the wire shape.
   assert.ok(!("id" in items[0]));
 });
