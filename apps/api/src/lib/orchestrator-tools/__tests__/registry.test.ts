@@ -11,6 +11,7 @@ import { createDefaultToolRegistry } from "../default-registry";
 import {
   createPlanShotsTool,
   persistedShotPlanSchema,
+  type PlanShotsDeps,
   type PlanShotsOutput,
 } from "../plan-shots";
 import { ToolRegistry } from "../registry";
@@ -122,6 +123,8 @@ function planShotsDeps(over: Partial<Parameters<typeof createPlanShotsTool>[0]> 
   return {
     planEdit: async () => samplePlan,
     getActiveProjectBrief: async () => activeBrief,
+    getActiveProjectStoryBlueprint: async () => null,
+    getActiveProjectScriptDraft: async () => null,
     addProjectPlan: async () => ({ planAssetId: "plan_asset_1" }),
     buildFootageGroundingContext: async () => ({ excerpts: [], promptText: null }),
     ...over,
@@ -251,6 +254,7 @@ test("plan_shots derives the plan from the brief and persists it with brief prov
     | {
         goal: string;
         aspectRatio: string;
+        narrativeContext?: string | null;
         storyContext?: {
           audience?: string;
           platform?: string;
@@ -269,6 +273,8 @@ test("plan_shots derives the plan from the brief and persists it with brief prov
         plan: ShotPlan;
         briefAssetId?: string;
         briefContentHash?: string;
+        storyBlueprintAssetId?: string;
+        scriptDraftAssetId?: string;
         groundingInputs?: { assetId: string; role?: string; contentHash?: string }[];
       }
     | undefined;
@@ -315,6 +321,9 @@ test("plan_shots derives the plan from the brief and persists it with brief prov
   // the active brief is recorded as the plan's input (provenance / stale graph)
   assert.equal(planInput?.briefAssetId, "brief_asset_1");
   assert.equal(planInput?.briefContentHash, "brief_hash_1");
+  assert.equal(planEditInput?.narrativeContext, null);
+  assert.equal(planInput?.storyBlueprintAssetId, undefined);
+  assert.equal(planInput?.scriptDraftAssetId, undefined);
   assert.deepEqual(planInput?.groundingInputs, []);
 
   assert.equal(result.status, "succeeded");
@@ -323,6 +332,97 @@ test("plan_shots derives the plan from the brief and persists it with brief prov
     assert.equal(result.output?.planAssetId, "plan_asset_1");
     assert.equal(result.output?.plan.aspectRatio, "16:9");
   }
+});
+
+test("plan_shots incorporates and records a matching story blueprint and script", async () => {
+  let planEditInput: { narrativeContext?: string | null } | undefined;
+  let planInput:
+    | {
+        storyBlueprintAssetId?: string;
+        storyBlueprintContentHash?: string;
+        scriptDraftAssetId?: string;
+        scriptDraftContentHash?: string;
+        groundingInputs?: { position?: number }[];
+      }
+    | undefined;
+  const storyBlueprint = {
+    storyBlueprintId: "blueprint_1",
+    assetId: "blueprint_asset_1",
+    contentHash: "blueprint_hash_1",
+    storyBlueprint: {
+      premise: "A puppy learns a new trick.",
+      logline: "A small leap becomes a big win.",
+      ending: "The puppy lands the trick.",
+      acts: [{ id: "act_1", title: "Try", purpose: "Set up", summary: "The first attempt fails.", targetDurationSec: 5 }],
+      scenes: [{ id: "scene_1", title: "Backyard", summary: "The puppy practices.", actId: "act_1", targetDurationSec: 5 }],
+    },
+  } as unknown as Awaited<ReturnType<PlanShotsDeps["getActiveProjectStoryBlueprint"]>>;
+  const scriptDraft = {
+    scriptDraftId: "script_1",
+    assetId: "script_asset_1",
+    contentHash: "script_hash_1",
+    scriptDraft: {
+      storyBlueprintId: "blueprint_1",
+      scenes: [{ title: "Backyard", narration: "One more try.", dialogue: [{ characterName: "Maya", text: "You can do it." }] }],
+    },
+  } as unknown as Awaited<ReturnType<PlanShotsDeps["getActiveProjectScriptDraft"]>>;
+  const registry = createDefaultToolRegistry({
+    planShots: planShotsDeps({
+      getActiveProjectStoryBlueprint: async () => storyBlueprint,
+      getActiveProjectScriptDraft: async () => scriptDraft,
+      planEdit: async (input) => {
+        planEditInput = input;
+        return samplePlan;
+      },
+      addProjectPlan: async (input) => {
+        planInput = input;
+        return { planAssetId: "plan_asset_1" };
+      },
+    }),
+  });
+
+  const result = await registry.execute("plan_shots", {}, { auth, projectId: "proj_1" });
+
+  assert.match(planEditInput?.narrativeContext ?? "", /A small leap becomes a big win/);
+  assert.match(planEditInput?.narrativeContext ?? "", /One more try/);
+  assert.match(planEditInput?.narrativeContext ?? "", /Maya: You can do it/);
+  assert.equal(planInput?.storyBlueprintAssetId, "blueprint_asset_1");
+  assert.equal(planInput?.storyBlueprintContentHash, "blueprint_hash_1");
+  assert.equal(planInput?.scriptDraftAssetId, "script_asset_1");
+  assert.equal(planInput?.scriptDraftContentHash, "script_hash_1");
+  assert.deepEqual(planInput?.groundingInputs, []);
+  assert.equal(result.status, "succeeded");
+});
+
+test("plan_shots ignores a script from an older blueprint", async () => {
+  let planEditInput: { narrativeContext?: string | null } | undefined;
+  let planInput: { scriptDraftAssetId?: string } | undefined;
+  const storyBlueprint = {
+    storyBlueprintId: "blueprint_current",
+    assetId: "blueprint_asset_1",
+    contentHash: "blueprint_hash_1",
+    storyBlueprint: {
+      premise: "Current premise.", logline: "Current logline.", ending: "Current ending.", acts: [], scenes: [],
+    },
+  } as unknown as Awaited<ReturnType<PlanShotsDeps["getActiveProjectStoryBlueprint"]>>;
+  const olderScript = {
+    scriptDraftId: "script_old", assetId: "script_asset_old", contentHash: "script_hash_old",
+    scriptDraft: { storyBlueprintId: "blueprint_old", scenes: [{ title: "Old scene", narration: "Do not use this.", dialogue: [] }] },
+  } as unknown as Awaited<ReturnType<PlanShotsDeps["getActiveProjectScriptDraft"]>>;
+  const registry = createDefaultToolRegistry({
+    planShots: planShotsDeps({
+      getActiveProjectStoryBlueprint: async () => storyBlueprint,
+      getActiveProjectScriptDraft: async () => olderScript,
+      planEdit: async (input) => { planEditInput = input; return samplePlan; },
+      addProjectPlan: async (input) => { planInput = input; return { planAssetId: "plan_asset_1" }; },
+    }),
+  });
+
+  await registry.execute("plan_shots", {}, { auth, projectId: "proj_1" });
+
+  assert.match(planEditInput?.narrativeContext ?? "", /Current logline/);
+  assert.doesNotMatch(planEditInput?.narrativeContext ?? "", /Do not use this/);
+  assert.equal(planInput?.scriptDraftAssetId, undefined);
 });
 
 test("plan_shots forwards transcript and moment grounding into the planner prompt", async () => {

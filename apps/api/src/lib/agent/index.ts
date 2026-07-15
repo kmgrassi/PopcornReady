@@ -95,6 +95,8 @@ export async function planEdit(input: {
   style: string;
   aspectRatio: string;
   storyContext?: StoryContext | null;
+  /** Optional story development that should guide, but not block, visual planning. */
+  narrativeContext?: string | null;
   feedback?: string | null;
   footageGrounding?: string | null;
 }): Promise<ShotPlan> {
@@ -122,6 +124,7 @@ Style: ${input.style}
 Aspect ratio: ${input.aspectRatio}
 Story context:
 ${storyContextForPrompt(input.storyContext)}
+${input.narrativeContext?.trim() ? `\nNarrative development to preserve in the shot plan:\n${input.narrativeContext.trim()}\n` : ""}
 ${input.footageGrounding?.trim() ? `\n${input.footageGrounding.trim()}\n` : ""}
 ${feedback}
 
