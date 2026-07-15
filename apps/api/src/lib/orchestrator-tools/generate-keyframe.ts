@@ -1,4 +1,7 @@
-import { agentApiStore, type AgentApiStore } from "@/lib/agent-api/jobs";
+import {
+  createDurableOrchestratorJobCreator,
+  type OrchestratorJobCreator,
+} from "@/lib/orchestrator/job-gateway";
 import {
   getActiveProjectPlan as realGetActiveProjectPlan,
   getProjectStoryboard as realGetProjectStoryboard,
@@ -23,14 +26,14 @@ export interface GenerateKeyframeOutput {
 export interface GenerateKeyframeDeps {
   getActiveProjectPlan: typeof realGetActiveProjectPlan;
   getProjectStoryboard: typeof realGetProjectStoryboard;
-  createJob: AgentApiStore["createOrGetJob"];
+  createJob: OrchestratorJobCreator["createJob"];
   runGenerateKeyframeJob: typeof realRunGenerateKeyframeJob;
 }
 
 const defaultDeps: GenerateKeyframeDeps = {
   getActiveProjectPlan: realGetActiveProjectPlan,
   getProjectStoryboard: realGetProjectStoryboard,
-  createJob: (input) => agentApiStore.createOrGetJob(input),
+  createJob: createDurableOrchestratorJobCreator().createJob,
   runGenerateKeyframeJob: realRunGenerateKeyframeJob,
 };
 const logger = createLogger();
@@ -218,8 +221,23 @@ export function createGenerateKeyframeTool(
       }
 
       const { job } = await resolved.createJob({
+        workspaceId: context.auth.workspaceId,
         type: "asset_generation",
         projectId: context.projectId,
+        execution: {
+          schemaVersion: "orchestrator_job_execution.v1",
+          kind: "generate_keyframe",
+          input: {
+            workspaceId: context.auth.workspaceId,
+            projectId: context.projectId,
+            ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
+            plan: active.plan,
+            planAssetId: active.assetId,
+            planContentHash: active.contentHash,
+            storyboard,
+            ...(input.provider ? { provider: input.provider } : {}),
+          },
+        },
       });
       logger.info("generate_keyframe.accepted", {
         workspaceId: context.auth.workspaceId,

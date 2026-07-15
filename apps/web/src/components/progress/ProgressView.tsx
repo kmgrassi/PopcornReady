@@ -5,6 +5,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import {
   GENERATION_STAGE_LABELS,
   type GenerationRun,
+  type GenerationJobDiagnostics,
   type GenerationStage,
   type GenerationStageType,
   type GenerationStageItem,
@@ -64,6 +65,8 @@ interface ProgressViewProps {
   headerSlot?: ReactNode;
   /** Optional list of other demo runs to link to from the header. */
   alternateRuns?: { runId: string; label: string }[];
+  /** Present only for operators; the API also omits this projection for creators. */
+  operatorDiagnostics?: GenerationJobDiagnostics[];
 }
 
 function isTerminal(status: GenerationRun["status"]): boolean {
@@ -114,8 +117,9 @@ function currentRunStage(
     [...stages]
       .filter((stage) => stage.status === "running")
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ??
-    stages.find((stage) => stage.status === "failed") ??
-    stages.find((stage) => stage.status === "queued")
+    (run.status === "failed"
+      ? stages.find((stage) => stage.status === "failed")
+      : undefined)
   );
 }
 
@@ -240,10 +244,12 @@ function workspaceReturnLabel({
 function mobileProgressSentence({
   run,
   currentStageDisplay,
+  hasExplicitAction,
 }: {
   run: GenerationRun;
   currentStageDisplay: string;
   progress: ReturnType<typeof progressSummary>;
+  hasExplicitAction: boolean;
 }): string {
   if (run.reviewGate) {
     return `${currentStageDisplay} is ready for review.`;
@@ -254,6 +260,7 @@ function mobileProgressSentence({
   }
 
   if (run.status === "running") {
+    if (!hasExplicitAction) return "Choosing the next step.";
     if (run.activityState === "waiting_on_job") return `${currentStageDisplay} is waiting on a provider.`;
     if (run.activityState === "recovering") return `Recovering with ${currentStageDisplay}.`;
     return `${currentStageDisplay} is in progress.`;
@@ -408,6 +415,7 @@ export function ProgressView({
   onBoardRevisionSuccess,
   headerSlot,
   alternateRuns,
+  operatorDiagnostics,
 }: ProgressViewProps) {
   const [detail, setDetail] = useState({ run, stages, stageItems });
   const [projectStoryboard, setProjectStoryboard] = useState<ProjectStoryboard | null>(null);
@@ -495,13 +503,22 @@ export function ProgressView({
   const setFeedbackNote = reviewActions?.onFeedbackNoteChange ?? setFallbackFeedbackNote;
   const progress = progressSummary(detail.run, detail.stages);
   const elapsed = useElapsedTime(detail.run.startedAt, detail.run.completedAt);
-  const sinceLastActivity = useElapsedTime(detail.run.updatedAt, detail.run.completedAt);
+  // Only durable progress counts as creator-visible activity. `updatedAt` can
+  // move when a recovery sweeper touches the run without any provider output.
+  const sinceLastActivity = useElapsedTime(
+    detail.run.lastProgressAt,
+    detail.run.completedAt,
+  );
   const nextType = nextStageType(detail.run, detail.stages);
   const nextStageLabel = nextType ? reviewStageLabel(nextType) : null;
   const lastCompletedStageLabel = lastCompletedPipelineStage(detail.stages);
   const activeStage = currentRunStage(detail.run, detail.stages);
+  const hasExplicitAction = Boolean(detail.run.reviewGate || activeStage);
+  const choosingNextStep = detail.run.status === "running" && !hasExplicitAction;
   const currentStageLabel = detail.run.reviewGate
     ? reviewStageLabel(detail.run.reviewGate.stageType)
+    : choosingNextStep
+      ? "Choosing the next step"
     : activeStage?.label
       ? activeStage.label
     : detail.run.currentStageType
@@ -592,6 +609,7 @@ export function ProgressView({
     run: detail.run,
     currentStageDisplay,
     progress,
+    hasExplicitAction,
   });
 
   const progressContext = [
@@ -599,7 +617,7 @@ export function ProgressView({
     nextStageLabel ? `Next: ${nextStageLabel}` : null,
   ].filter((item): item is string => Boolean(item));
   const progressDetails = [
-    detail.run.message,
+    choosingNextStep ? null : detail.run.message,
     ...progressContext,
   ].filter((item): item is string => Boolean(item));
 
@@ -622,7 +640,9 @@ export function ProgressView({
                   ? "Waiting on a provider"
                   : detail.run.activityState === "recovering"
                     ? "Recovering from an earlier failed step"
-                    : "Working in the background"}
+                    : choosingNextStep
+                      ? "Choosing the next step"
+                      : "Working in the background"}
             </span>
           </div>
         ) : null}
@@ -654,21 +674,54 @@ export function ProgressView({
           {elapsed !== null ? `Elapsed ${formatElapsed(elapsed)}. ` : ""}
           {sinceLastActivity !== null
             ? `Last activity ${formatElapsed(sinceLastActivity)} ago.`
-            : `Updated ${formatDateTime(detail.run.updatedAt)}.`}
+            : detail.run.status === "running"
+              ? "Waiting for the first meaningful progress update."
+              : "No meaningful progress timestamp was recorded."}
         </p>
-        <div className={styles.diagnostics}>
-          <span className={styles.runIdLabel}>Run ID</span>
-          <code className={styles.runId} title={detail.run.runId}>
-            {shortId(detail.run.runId)}
-          </code>
-          <button
-            type="button"
-            className={styles.copyButton}
-            onClick={() => void navigator.clipboard?.writeText(detail.run.runId)}
-          >
-            Copy
-          </button>
-        </div>
+        {operatorDiagnostics ? (
+          <details className={styles.operatorDiagnostics}>
+            <summary>Operator diagnostics</summary>
+            <div className={styles.operatorDiagnosticsBody}>
+              <div className={styles.diagnostics}>
+                <span className={styles.runIdLabel}>Run ID</span>
+                <code className={styles.runId} title={detail.run.runId}>
+                  {shortId(detail.run.runId)}
+                </code>
+                <button
+                  type="button"
+                  className={styles.copyButton}
+                  onClick={() => void navigator.clipboard?.writeText(detail.run.runId)}
+                >
+                  Copy
+                </button>
+              </div>
+              {operatorDiagnostics.length > 0 ? (
+                <ol className={styles.operatorJobList}>
+                  {operatorDiagnostics.map((job) => (
+                    <li className={styles.operatorJob} key={job.jobId}>
+                      <div className={styles.operatorJobHeading}>
+                        <strong>{job.currentStep ?? "Background job"}</strong>
+                        <span>{job.status}</span>
+                      </div>
+                      <dl className={styles.operatorJobFacts}>
+                        <div><dt>Job</dt><dd><code>{shortId(job.jobId)}</code></dd></div>
+                        <div><dt>Action</dt><dd><code>{shortId(job.actionId)}</code></dd></div>
+                        {job.provider ? <div><dt>Provider</dt><dd>{job.provider}</dd></div> : null}
+                        {job.attempt != null ? <div><dt>Attempt</dt><dd>{job.attempt}</dd></div> : null}
+                        <div><dt>Updated</dt><dd>{formatDateTime(job.updatedAt)}</dd></div>
+                        {job.lastProgressAt ? <div><dt>Progress</dt><dd>{formatDateTime(job.lastProgressAt)}</dd></div> : null}
+                        {job.heartbeatAt ? <div><dt>Heartbeat</dt><dd>{formatDateTime(job.heartbeatAt)}</dd></div> : null}
+                        {job.nextRetryAt ? <div><dt>Next retry</dt><dd>{formatDateTime(job.nextRetryAt)}</dd></div> : null}
+                      </dl>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className={styles.operatorEmpty}>No job diagnostics reported yet.</p>
+              )}
+            </div>
+          </details>
+        ) : null}
       </>
     );
   }

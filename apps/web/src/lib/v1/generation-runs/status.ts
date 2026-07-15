@@ -12,6 +12,7 @@
 import {
   GenerationRun,
   GenerationRunStatus,
+  GenerationJobDiagnostics,
   GenerationStage,
   GenerationStageItem,
 } from "@popcorn/shared/v1/types";
@@ -40,6 +41,7 @@ export interface GenerationRunDetail {
   stages: GenerationStage[];
   stageItems: GenerationStageItem[];
   resultArtifacts?: GenerationRunResultArtifact[];
+  operatorDiagnostics?: GenerationJobDiagnostics[];
 }
 
 export interface GenerationRunResultArtifact {

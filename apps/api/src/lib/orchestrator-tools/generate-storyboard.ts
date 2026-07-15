@@ -1,4 +1,7 @@
-import { agentApiStore, type AgentApiStore } from "@/lib/agent-api/jobs";
+import {
+  createDurableOrchestratorJobCreator,
+  type OrchestratorJobCreator,
+} from "@/lib/orchestrator/job-gateway";
 import { getActiveProjectPlan as realGetActiveProjectPlan } from "@/lib/api/v1/store";
 import { toolDefinitionMetadata } from "./capability-catalog";
 import type { ToolCallResult, ToolDefinition } from "./types";
@@ -20,13 +23,13 @@ export interface GenerateStoryboardOutput {
 
 export interface GenerateStoryboardDeps {
   getActiveProjectPlan: typeof realGetActiveProjectPlan;
-  createJob: AgentApiStore["createOrGetJob"];
+  createJob: OrchestratorJobCreator["createJob"];
   runStoryboardJob: typeof realRunStoryboardJob;
 }
 
 const defaultDeps: GenerateStoryboardDeps = {
   getActiveProjectPlan: realGetActiveProjectPlan,
-  createJob: (input) => agentApiStore.createOrGetJob(input),
+  createJob: createDurableOrchestratorJobCreator().createJob,
   runStoryboardJob: realRunStoryboardJob,
 };
 
@@ -129,8 +132,21 @@ export function createGenerateStoryboardTool(
       }
 
       const { job } = await resolved.createJob({
+        workspaceId: context.auth.workspaceId,
         type: "asset_generation",
         projectId: context.projectId,
+        execution: {
+          schemaVersion: "orchestrator_job_execution.v1",
+          kind: "generate_storyboard",
+          input: {
+            workspaceId: context.auth.workspaceId,
+            projectId: context.projectId,
+            ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
+            plan: active.plan,
+            planAssetId: active.assetId,
+            planContentHash: active.contentHash,
+          },
+        },
       });
 
       // Fire-and-forget: the worker writes the tiles + storyboard, marks the job

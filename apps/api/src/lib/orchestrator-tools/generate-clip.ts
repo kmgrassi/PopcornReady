@@ -1,4 +1,7 @@
-import { agentApiStore, type AgentApiStore } from "@/lib/agent-api/jobs";
+import {
+  createDurableOrchestratorJobCreator,
+  type OrchestratorJobCreator,
+} from "@/lib/orchestrator/job-gateway";
 import {
   getActiveProjectScopedAsset as realGetActiveProjectScopedAsset,
   getActiveProjectPlan as realGetActiveProjectPlan,
@@ -51,14 +54,14 @@ export interface GenerateClipJobBeat {
 export interface GenerateClipDeps {
   getActiveProjectPlan: typeof realGetActiveProjectPlan;
   getActiveProjectScopedAsset: typeof realGetActiveProjectScopedAsset;
-  createJob: AgentApiStore["createOrGetJob"];
+  createJob: OrchestratorJobCreator["createJob"];
   runGenerateClipJob: typeof realRunGenerateClipJob;
 }
 
 const defaultDeps: GenerateClipDeps = {
   getActiveProjectPlan: realGetActiveProjectPlan,
   getActiveProjectScopedAsset: realGetActiveProjectScopedAsset,
-  createJob: (input) => agentApiStore.createOrGetJob(input),
+  createJob: createDurableOrchestratorJobCreator().createJob,
   runGenerateClipJob: realRunGenerateClipJob,
 };
 const logger = createLogger();
@@ -443,8 +446,22 @@ export function createGenerateClipTool(
       }
 
       const { job } = await resolved.createJob({
+        workspaceId: context.auth.workspaceId,
         type: "asset_generation",
         projectId: context.projectId,
+        execution: {
+          schemaVersion: "orchestrator_job_execution.v1",
+          kind: "generate_clip",
+          input: {
+            workspaceId: context.auth.workspaceId,
+            projectId: context.projectId,
+            ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
+            beats: jobBeats,
+            skippedBeatIds,
+            ...(input.provider ? { provider: input.provider } : {}),
+            ...(input.model ? { model: input.model } : {}),
+          },
+        },
       });
       logger.info("generate_clip.accepted", {
         workspaceId: context.auth.workspaceId,

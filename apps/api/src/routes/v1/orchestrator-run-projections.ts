@@ -2,6 +2,9 @@ import {
   GENERATION_STAGE_LABELS,
   GENERATION_STAGE_ORDER,
   type GateableGenerationStageType,
+  type GenerationActivityAttentionState,
+  type GenerationJobActivity,
+  type GenerationJobDiagnostics,
   type GenerationRun,
   type GenerationRunStatus,
   type GenerationStage,
@@ -9,6 +12,7 @@ import {
   type GenerationStageItemKind,
   type GenerationStageItemPurpose,
   type GenerationStageType,
+  type Job,
 } from "@popcorn/shared/v1/types";
 import {
   type OrchestratorRun,
@@ -19,6 +23,7 @@ import {
   getToolCapability,
   isToolName,
 } from "@/lib/orchestrator-tools/capability-catalog";
+import { redactMessage } from "@/lib/v1/redact";
 
 const BOARD_FEEDBACK_TOOL = "board_feedback";
 const AFTER_GATE_PREFIX = "after:";
@@ -34,7 +39,25 @@ export interface GenerationRunDetail {
     assetId?: string;
     stageId: string;
   }>;
+  operatorDiagnostics?: GenerationJobDiagnostics[];
 }
+
+export interface GenerationAttentionPolicy {
+  slowAfterMs: number;
+  possiblyStalledAfterMs: number;
+}
+
+export interface GenerationProjectionOptions {
+  jobs?: ReadonlyMap<string, Job>;
+  includeOperatorDiagnostics?: boolean;
+  now?: () => Date;
+  attentionPolicy?: GenerationAttentionPolicy;
+}
+
+export const DEFAULT_GENERATION_ATTENTION_POLICY: GenerationAttentionPolicy = {
+  slowAfterMs: 2 * 60 * 1000,
+  possiblyStalledAfterMs: 10 * 60 * 1000,
+};
 
 export interface RunAssetPrompt {
   prompt?: string;
@@ -256,11 +279,101 @@ function toErrorSummary(error: Record<string, unknown> | undefined) {
   };
 }
 
+function timestampMs(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : undefined;
+}
+
+function latestTimestamp(values: Array<string | undefined>): string | undefined {
+  return values.reduce<string | undefined>((latest, value) => {
+    const valueMs = timestampMs(value);
+    if (valueMs === undefined) return latest;
+    const latestMs = timestampMs(latest);
+    return latestMs === undefined || valueMs > latestMs ? value : latest;
+  }, undefined);
+}
+
+function providerLabel(provider: string | undefined): string | undefined {
+  if (!provider) return undefined;
+  return ({
+    openai: "OpenAI",
+    gemini: "Google Gemini",
+    runway: "Runway",
+    ltx: "LTX",
+    kling: "Kling",
+    seedance: "Seedance",
+    xai: "xAI",
+    ideogram: "Ideogram",
+    elevenlabs: "ElevenLabs",
+    nanobanano: "Google Gemini",
+    nvidia_api_catalog: "NVIDIA",
+    mock: "Preview provider",
+  } as Record<string, string>)[provider.toLowerCase()];
+}
+
+export function generationJobAttentionState(
+  job: Job,
+  options: Pick<GenerationProjectionOptions, "now" | "attentionPolicy"> = {}
+): GenerationActivityAttentionState {
+  if (job.status !== "queued" && job.status !== "running") return "normal";
+  const policy = options.attentionPolicy ?? DEFAULT_GENERATION_ATTENTION_POLICY;
+  const reference = latestTimestamp([
+    job.progress.lastProgressAt,
+    job.progress.startedAt,
+    job.createdAt,
+  ]);
+  const referenceMs = timestampMs(reference);
+  if (referenceMs === undefined) return "normal";
+  const ageMs = Math.max(0, (options.now ?? (() => new Date()))().getTime() - referenceMs);
+  if (ageMs >= policy.possiblyStalledAfterMs) return "possibly_stalled";
+  if (ageMs >= policy.slowAfterMs) return "slow";
+  return "normal";
+}
+
+export function projectGenerationJobActivity(
+  job: Job,
+  options: Pick<GenerationProjectionOptions, "now" | "attentionPolicy"> = {}
+): GenerationJobActivity {
+  return {
+    status: job.status,
+    currentStep: job.progress.currentStep,
+    providerLabel: providerLabel(job.progress.provider),
+    startedAt: job.progress.startedAt,
+    heartbeatAt: job.progress.heartbeatAt,
+    lastProgressAt: job.progress.lastProgressAt,
+    completedItems: job.progress.completedItems,
+    totalItems: job.progress.totalItems,
+    currentItemLabel: job.progress.currentItem?.label,
+    attentionState: generationJobAttentionState(job, options),
+  };
+}
+
+function projectJobDiagnostics(
+  runId: string,
+  action: RunActionSummary,
+  job: Job,
+  options: Pick<GenerationProjectionOptions, "now" | "attentionPolicy">
+): GenerationJobDiagnostics {
+  return {
+    ...projectGenerationJobActivity(job, options),
+    jobId: job.id,
+    actionId: action.id,
+    runId,
+    message: job.progress.message ? redactMessage(job.progress.message) : undefined,
+    provider: job.progress.provider,
+    attempt: job.progress.attempt,
+    nextRetryAt: job.progress.nextRetryAt,
+    updatedAt: job.updatedAt,
+  };
+}
+
 export function projectRun(
   run: OrchestratorRun,
   gates: OrchestratorRunGate[],
   actions: RunActionSummary[] = [],
-  assets: ReadonlyMap<string, RunAssetPrompt> = new Map()
+  assets: ReadonlyMap<string, RunAssetPrompt> = new Map(),
+  jobs: ReadonlyMap<string, Job> = new Map()
 ): GenerationRun {
   const reviewGates = gates.filter((gate) => !gate.stage.startsWith(AFTER_GATE_PREFIX));
   const status = projectedRunStatus(run, actions, gates, assets);
@@ -306,6 +419,9 @@ export function projectRun(
           : latestAction
             ? toolStage(latestAction.tool)
             : undefined);
+  const lastProgressAt = latestTimestamp(
+    [...jobs.values()].map((job) => job.progress.lastProgressAt)
+  );
 
   return {
     runId: run.id,
@@ -319,6 +435,7 @@ export function projectRun(
     currentStageType,
     progressPercent: status === "succeeded" ? 100 : run.status === "queued" ? 0 : undefined,
     message: runMessage(run, actions, gates, assets),
+    lastProgressAt,
     createdAt: run.createdAt,
     updatedAt: [run.updatedAt, ...projectedActions.map((action) => action.updatedAt ?? action.createdAt), ...gates.map((gate) => gate.updatedAt)]
       .sort()
@@ -353,7 +470,11 @@ function projectResultArtifacts(
     );
 }
 
-function projectStages(run: OrchestratorRun, actions: RunActionSummary[]): GenerationStage[] {
+function projectStages(
+  run: OrchestratorRun,
+  actions: RunActionSummary[],
+  options: GenerationProjectionOptions
+): GenerationStage[] {
   const grouped = new Map<string, RunActionSummary[]>();
   for (const action of generationActions(actions)) {
     grouped.set(action.tool, [...(grouped.get(action.tool) ?? []), action]);
@@ -379,6 +500,10 @@ function projectStages(run: OrchestratorRun, actions: RunActionSummary[]): Gener
           ? actionStatus(latest.status)
           : "queued";
       const statusAction = latestFailed ?? latest;
+      const jobActivities = [...new Set(stageActions.flatMap((action) => action.jobIds))]
+        .map((jobId) => options.jobs?.get(jobId))
+        .filter((job): job is Job => Boolean(job))
+        .map((job) => projectGenerationJobActivity(job, options));
       return {
         stageId: toolStageId(run.id, tool),
         runId: run.id,
@@ -401,6 +526,7 @@ function projectStages(run: OrchestratorRun, actions: RunActionSummary[]): Gener
         artifactIds: stageActions.flatMap((action) => action.outputAssetIds),
         createdAt: stageActions[0]?.createdAt ?? run.createdAt,
         updatedAt: latest?.updatedAt ?? latest?.createdAt ?? run.updatedAt,
+        ...(jobActivities.length > 0 ? { jobActivities } : {}),
         error: latestFailed ? toErrorSummary(latestFailed.error) : undefined,
       };
     })
@@ -452,12 +578,25 @@ export function projectRunDetailFromParts(
   run: OrchestratorRun,
   gates: OrchestratorRunGate[],
   actions: RunActionSummary[],
-  assetPrompts: ReadonlyMap<string, RunAssetPrompt> = new Map()
+  assetPrompts: ReadonlyMap<string, RunAssetPrompt> = new Map(),
+  options: GenerationProjectionOptions = {}
 ): GenerationRunDetail {
+  const jobs = options.jobs ?? new Map();
+  const operatorDiagnostics = options.includeOperatorDiagnostics
+    ? generationActions(actions).flatMap((action) =>
+        action.jobIds.flatMap((jobId) => {
+          const job = jobs.get(jobId);
+          return job ? [projectJobDiagnostics(run.id, action, job, options)] : [];
+        })
+      )
+    : undefined;
   return {
-    run: projectRun(run, gates, actions, assetPrompts),
-    stages: projectStages(run, actions),
+    run: projectRun(run, gates, actions, assetPrompts, jobs),
+    stages: projectStages(run, actions, { ...options, jobs }),
     stageItems: projectStageItems(run, actions, assetPrompts),
     resultArtifacts: projectResultArtifacts(run, actions),
+    ...(operatorDiagnostics && operatorDiagnostics.length > 0
+      ? { operatorDiagnostics }
+      : {}),
   };
 }

@@ -35,6 +35,7 @@ interface MockRunOptions {
     message: string;
     retryable?: boolean;
   };
+  operatorDiagnostics?: Array<Record<string, unknown>>;
 }
 
 test.beforeEach(async ({ page }) => {
@@ -177,7 +178,7 @@ test("polls an active run, cancels it, and clears the recovery hint @mobile", as
     .toBeNull();
 });
 
-test("shows in-progress rail state when active stage rows have not caught up @mobile", async ({ page }) => {
+test("shows choosing-next-step state when no action is explicitly running @mobile", async ({ page }) => {
   const detail = runDetail({
     status: "running",
     stageType: "asset_generation",
@@ -202,11 +203,155 @@ test("shows in-progress rail state when active stage rows have not caught up @mo
 
   await page.goto(runPath);
 
+  const statusPanel = page.getByLabel("Current run status");
+  await expect(statusPanel.getByText("Choosing the next step.", { exact: true })).toBeVisible();
+  await expect(statusPanel.getByText("Generating shot candidates.", { exact: true })).toHaveCount(0);
   const rail = await getVisibleStageRail(page);
-  await expect(rail.getByText("In progress")).toBeVisible();
-  await expect(rail.getByText("Generating shot candidates.")).toBeVisible();
-  await expect(rail.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "46");
+  await expect(rail.getByText("In progress")).toHaveCount(0);
+  await expect(rail.getByRole("progressbar")).toHaveCount(0);
   await expect(rail.getByText("Shots")).toBeVisible();
+});
+
+test("keeps grouped progress indeterminate and shows truthful job activity @mobile", async ({ page }) => {
+  const detail = runDetail({
+    status: "running",
+    stageType: "asset_generation",
+    progressPercent: 72,
+    message: "Generating shots.",
+  });
+  const assetStage = detail.stages.find((stage) => stage.type === "asset_generation")!;
+  detail.stages = [
+    ...detail.stages.filter((stage) => stage.type !== "asset_generation"),
+    {
+      ...assetStage,
+      stageId: "stage-generate-anchor",
+      toolName: "generate_anchor",
+      label: "Generate anchor images",
+      status: "succeeded",
+      progressPercent: 100,
+      completedAt: now,
+    },
+    {
+      ...assetStage,
+      stageId: "stage-generate-keyframe",
+      toolName: "generate_keyframe",
+      label: "Generate keyframes",
+      status: "running",
+      progressPercent: undefined,
+      message: "Generating the next keyframe.",
+      jobActivities: [
+        {
+          status: "running",
+          currentStep: "generate_keyframe",
+          providerLabel: "OpenAI",
+          completedItems: 3,
+          totalItems: 6,
+          currentItemLabel: "Rooftop reveal",
+          startedAt: now,
+          heartbeatAt: now,
+          lastProgressAt: now,
+          attentionState: "slow",
+        },
+      ],
+    },
+  ];
+
+  await page.route(`**${apiRunPath}`, async (route) => {
+    await route.fulfill({ json: detail });
+  });
+  await page.goto(runPath);
+
+  const rail = await getVisibleStageRail(page);
+  const shots = rail.locator("li").filter({ hasText: "Shots" }).first();
+  await expect(shots.getByText("In progress")).toBeVisible();
+  await expect(shots.getByRole("progressbar")).not.toHaveAttribute("aria-valuenow", /.+/);
+  await expect(shots.getByRole("progressbar")).toHaveAttribute(
+    "aria-label",
+    "Shots in progress; percentage unavailable",
+  );
+  await expect(
+    shots.getByText(
+      "This is taking longer than usual. Popcorn Ready is still waiting for an update.",
+    ),
+  ).toBeVisible();
+  await expect(shots.getByText("3 of 6 complete · Rooftop reveal · OpenAI")).toBeVisible();
+  await expect(shots.getByText(/job-/)).toHaveCount(0);
+});
+
+test("does not turn sweeper updates into false creator activity @mobile", async ({ page }) => {
+  const detail = runDetail({
+    status: "running",
+    stageType: "asset_generation",
+    progressPercent: undefined,
+    message: "Waiting for the image provider.",
+  });
+  const assetStage = detail.stages.find((stage) => stage.type === "asset_generation")!;
+  detail.run.updatedAt = new Date().toISOString();
+  detail.run.lastProgressAt = undefined;
+  assetStage.progressPercent = undefined;
+  assetStage.jobActivities = [
+    {
+      status: "running",
+      currentStep: "generate_anchor",
+      providerLabel: "OpenAI",
+      startedAt: now,
+      heartbeatAt: new Date().toISOString(),
+      attentionState: "slow",
+    },
+  ];
+
+  await page.route(`**${apiRunPath}`, async (route) => {
+    await route.fulfill({ json: detail });
+  });
+  await page.goto(runPath);
+
+  const rail = await getVisibleStageRail(page);
+  await expect(rail.getByText("Waiting for the first meaningful progress update.")).toBeVisible();
+  await expect(rail.getByText(/Last activity/)).toHaveCount(0);
+  await expect(rail.getByText(/Updated .* ago/)).toHaveCount(0);
+  await expect(
+    rail.getByText(
+      "This is taking longer than usual. Popcorn Ready is still waiting for an update.",
+    ),
+  ).toBeVisible();
+  await expect(rail.getByText("OpenAI", { exact: true })).toBeVisible();
+});
+
+test("reveals server-authorized operator diagnostics progressively @mobile", async ({ page }) => {
+  const detail = runDetail({
+    status: "running",
+    stageType: "asset_generation",
+    operatorDiagnostics: [
+      {
+        jobId: "job-operator-123456789",
+        actionId: "action-operator-123456789",
+        runId,
+        status: "running",
+        currentStep: "generate_keyframe",
+        providerLabel: "OpenAI",
+        provider: "openai",
+        attempt: 2,
+        startedAt: now,
+        heartbeatAt: now,
+        lastProgressAt: now,
+        updatedAt: now,
+        attentionState: "possibly_stalled",
+      },
+    ],
+  });
+  await page.route(`**${apiRunPath}`, async (route) => {
+    await route.fulfill({ json: detail });
+  });
+  await page.goto(runPath);
+
+  const rail = await getVisibleStageRail(page);
+  const diagnostics = rail.getByText("Operator diagnostics", { exact: true });
+  await expect(diagnostics).toBeVisible();
+  await expect(rail.getByText("generate_keyframe", { exact: true })).not.toBeVisible();
+  await diagnostics.click();
+  await expect(rail.getByText("generate_keyframe", { exact: true })).toBeVisible();
+  await expect(rail.getByText("openai", { exact: true })).toBeVisible();
+  await expect(rail.getByText("2", { exact: true })).toBeVisible();
 });
 
 test("opens generated asset feedback in a modal and posts the targeted revision @mobile", async ({ page }) => {
@@ -543,6 +688,7 @@ function runDetail(options: MockRunOptions = {}) {
             },
           ]
         : []),
+    operatorDiagnostics: options.operatorDiagnostics,
   };
 }
 

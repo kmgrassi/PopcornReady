@@ -1,5 +1,8 @@
 import { createHash } from "node:crypto";
-import { agentApiStore, type AgentApiStore } from "@/lib/agent-api/jobs";
+import {
+  createDurableOrchestratorJobCreator,
+  type OrchestratorJobCreator,
+} from "@/lib/orchestrator/job-gateway";
 import {
   getAsset as realGetAsset,
   type V1Asset,
@@ -38,13 +41,13 @@ export interface EditVideoAssetOutput {
 
 export interface EditVideoAssetDeps {
   getAsset: typeof realGetAsset;
-  createJob: AgentApiStore["createOrGetJob"];
+  createJob: OrchestratorJobCreator["createJob"];
   runEditVideoAssetJob: typeof realRunEditVideoAssetJob;
 }
 
 const defaultDeps: EditVideoAssetDeps = {
   getAsset: realGetAsset,
-  createJob: (input) => agentApiStore.createOrGetJob(input),
+  createJob: createDurableOrchestratorJobCreator().createJob,
   runEditVideoAssetJob: realRunEditVideoAssetJob,
 };
 
@@ -204,7 +207,7 @@ function idempotencyKey(input: EditVideoAssetInput, source: V1Asset): string {
 }
 
 function terminalJobResult(
-  job: Awaited<ReturnType<AgentApiStore["createOrGetJob"]>>["job"]
+  job: Awaited<ReturnType<OrchestratorJobCreator["createJob"]>>["job"]
 ): ToolCallResult<EditVideoAssetOutput> | null {
   if (job.status === "succeeded") {
     const output = (job.result ?? {}) as EditVideoAssetOutput;
@@ -300,9 +303,25 @@ export function createEditVideoAssetTool(
       }
 
       const { job, created } = await resolved.createJob({
+        workspaceId: context.auth.workspaceId,
         type: "asset_generation",
         projectId: context.projectId,
         idempotencyKey: idempotencyKey(input, source),
+        execution: {
+          schemaVersion: "orchestrator_job_execution.v1",
+          kind: "edit_video_asset",
+          input: {
+            workspaceId: context.auth.workspaceId,
+            projectId: context.projectId,
+            sourceAssetId: source.id,
+            ...(source.contentHash ? { sourceContentHash: source.contentHash } : {}),
+            instruction: input.instruction,
+            ...(input.beatId ? { beatId: input.beatId } : {}),
+            ...(input.provider ? { provider: input.provider } : {}),
+            ...(input.model ? { model: input.model } : {}),
+            ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
+          },
+        },
       });
       logger.info("edit_video_asset.accepted", {
         workspaceId: context.auth.workspaceId,

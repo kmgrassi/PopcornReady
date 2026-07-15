@@ -1,4 +1,4 @@
-import { agentApiStore, type AgentApiStore } from "@/lib/agent-api/jobs";
+import { createDurableOrchestratorJobWriter, startDurableJobHeartbeat, type OrchestratorJobWriter } from "@/lib/orchestrator/job-gateway";
 import { scheduleOrchestratorResume } from "@/lib/orchestrator/schedule-resume";
 import type { AuthContext } from "@/lib/api/v1/auth";
 import { createGeneratedAsset as realCreateGeneratedAsset } from "@/lib/api/v1/generated-assets";
@@ -24,7 +24,8 @@ export interface GenerateClipJobDeps {
   createGeneratedAsset: typeof realCreateGeneratedAsset;
   getActiveProjectScopedAsset: typeof realGetActiveProjectScopedAsset;
   selectGeneratedBeatClipAsset: typeof realSelectGeneratedBeatClipAsset;
-  jobs: Pick<AgentApiStore, "setStep" | "succeed" | "fail">;
+  jobs?: Pick<OrchestratorJobWriter, "setStep" | "succeed" | "fail"> &
+    Partial<Pick<OrchestratorJobWriter, "reportProgress">>;
   enqueueOrchestratorDispatch?: (runId: string, workspaceId: string) => Promise<unknown>;
 }
 
@@ -32,7 +33,6 @@ const defaultDeps: GenerateClipJobDeps = {
   createGeneratedAsset: realCreateGeneratedAsset,
   getActiveProjectScopedAsset: realGetActiveProjectScopedAsset,
   selectGeneratedBeatClipAsset: realSelectGeneratedBeatClipAsset,
-  jobs: agentApiStore,
 };
 
 function localAuth(workspaceId: string): AuthContext {
@@ -137,12 +137,25 @@ export async function runGenerateClipJob(
   deps: Partial<GenerateClipJobDeps> = {}
 ): Promise<void> {
   const d = { ...defaultDeps, ...deps };
+  const jobs = d.jobs ?? createDurableOrchestratorJobWriter(input.workspaceId, input.projectId);
+  const stopHeartbeat = startDurableJobHeartbeat(jobs, input.jobId);
   try {
-    await d.jobs.setStep(input.jobId, "generating_assets");
+    const totalItems = input.beats.length;
+    await jobs.setStep(input.jobId, "generating_assets", {
+      completedItems: 0,
+      totalItems,
+      provider: input.provider,
+      percent: totalItems === 0 ? 100 : 0,
+    });
     const auth = localAuth(input.workspaceId);
     const generatedAssetIds: string[] = [];
 
-    for (const beat of input.beats) {
+    for (let index = 0; index < input.beats.length; index += 1) {
+      const beat = input.beats[index];
+      await jobs.reportProgress?.(input.jobId, {
+        currentItem: { id: beat.beatId, label: `Clip ${index + 1}`, index: index + 1 },
+        message: `Generating clip ${index + 1} of ${totalItems}`,
+      });
       const assetIds = await generateClipForBeat({
         deps: d,
         auth,
@@ -156,19 +169,27 @@ export async function runGenerateClipJob(
         throw new Error(`Clip generation returned no assets for ${beat.beatId}.`);
       }
       generatedAssetIds.push(...assetIds);
+      const completedItems = index + 1;
+      await jobs.reportProgress?.(input.jobId, {
+        completedItems,
+        totalItems,
+        percent: totalItems === 0 ? 100 : Math.round((completedItems / totalItems) * 100),
+        lastProgressAt: new Date().toISOString(),
+      });
     }
 
-    await d.jobs.succeed(input.jobId, {
+    await jobs.succeed(input.jobId, {
       assetIds: generatedAssetIds,
       skippedBeatIds: input.skippedBeatIds ?? [],
     });
   } catch (err) {
-    await d.jobs.fail(input.jobId, {
+    await jobs.fail(input.jobId, {
       code: "job_failed",
       message: err instanceof Error ? err.message : String(err),
       requestId: "",
     });
   } finally {
+    stopHeartbeat();
     if (input.orchestratorRunId) {
       try {
         await resume(d, input.orchestratorRunId, input.workspaceId);

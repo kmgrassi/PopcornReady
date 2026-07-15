@@ -1,4 +1,5 @@
 import { agentApiStore, type AgentApiStore } from "@/lib/agent-api/jobs";
+import { createDurableOrchestratorJobWriter, startDurableJobHeartbeat, type OrchestratorJobWriter } from "@/lib/orchestrator/job-gateway";
 import { scheduleOrchestratorResume } from "@/lib/orchestrator/schedule-resume";
 import {
   runExportJob as realRunExportJob,
@@ -12,7 +13,7 @@ export interface ExportVideoJobDeps {
   runExportJob: typeof realRunExportJob;
   saveArtifact: AgentApiStore["saveArtifact"];
   addExportVideoAsset: typeof realAddExportVideoAsset;
-  jobs: Pick<AgentApiStore, "setStep" | "succeed" | "fail">;
+  jobs?: Pick<OrchestratorJobWriter, "setStep" | "succeed" | "fail"> & Partial<Pick<OrchestratorJobWriter, "reportProgress">>;
   enqueueOrchestratorDispatch?: (runId: string, workspaceId: string) => Promise<unknown>;
 }
 
@@ -20,7 +21,6 @@ const defaultDeps: ExportVideoJobDeps = {
   runExportJob: realRunExportJob,
   saveArtifact: (artifact) => agentApiStore.saveArtifact(artifact),
   addExportVideoAsset: realAddExportVideoAsset,
-  jobs: agentApiStore,
 };
 
 async function resume(
@@ -47,8 +47,10 @@ export async function runExportVideoJob(
   deps: Partial<ExportVideoJobDeps> = {}
 ): Promise<void> {
   const d = { ...defaultDeps, ...deps };
+  const jobs = d.jobs ?? createDurableOrchestratorJobWriter(input.workspaceId, input.projectId);
+  const stopHeartbeat = startDurableJobHeartbeat(jobs, input.jobId);
   try {
-    await d.jobs.setStep(input.jobId, "rendering_export");
+    await jobs.setStep(input.jobId, "rendering_export");
 
     const { artifact } = d.runExportJob({
       project: input.project,
@@ -66,19 +68,20 @@ export async function runExportVideoJob(
       ...(input.orchestratorRunId ? { orchestratorRunId: input.orchestratorRunId } : {}),
     });
 
-    await d.jobs.succeed(input.jobId, {
+    await jobs.succeed(input.jobId, {
       artifactId: savedArtifact.id,
       assetIds: [asset.id],
       timelineId: input.timelineId,
       status: savedArtifact.status,
     });
   } catch (err) {
-    await d.jobs.fail(input.jobId, {
+    await jobs.fail(input.jobId, {
       code: "job_failed",
       message: err instanceof Error ? err.message : String(err),
       requestId: "",
     });
   } finally {
+    stopHeartbeat();
     if (input.orchestratorRunId) {
       try {
         await resume(d, input.orchestratorRunId, input.workspaceId);

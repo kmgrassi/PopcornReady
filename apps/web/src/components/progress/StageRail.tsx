@@ -2,6 +2,7 @@
 
 import { Link } from "react-router-dom";
 import {
+  type GenerationJobActivity,
   type GenerationRunStatus,
   type GenerationStage,
   type GenerationStageType,
@@ -194,12 +195,41 @@ function groupLinkComplete(
   return toolNames.every((toolName) => stagesByTool.get(toolName)?.status === "succeeded");
 }
 
+function currentGroupActivity(stages: GenerationStage[]): GenerationJobActivity | undefined {
+  const activities = stages.flatMap((stage) => stage.jobActivities ?? []);
+  return (
+    activities.find((activity) => activity.status === "running") ??
+    activities.find((activity) => activity.status === "queued") ??
+    [...activities].sort((a, b) =>
+      (b.lastProgressAt ?? b.heartbeatAt ?? b.startedAt ?? "").localeCompare(
+        a.lastProgressAt ?? a.heartbeatAt ?? a.startedAt ?? "",
+      ),
+    )[0]
+  );
+}
+
+function activityHeadline(activity: GenerationJobActivity): string | null {
+  if (activity.attentionState === "possibly_stalled") {
+    return "This step may be stuck. Popcorn Ready is still checking for updates.";
+  }
+  if (activity.attentionState === "slow") {
+    return "This is taking longer than usual. Popcorn Ready is still waiting for an update.";
+  }
+  return null;
+}
+
+function activityDetails(activity: GenerationJobActivity): string[] {
+  const details: string[] = [];
+  if (activity.totalItems != null && activity.totalItems > 0) {
+    details.push(`${activity.completedItems ?? 0} of ${activity.totalItems} complete`);
+  }
+  if (activity.currentItemLabel) details.push(activity.currentItemLabel);
+  if (activity.providerLabel) details.push(activity.providerLabel);
+  return details;
+}
+
 export function StageRail({
   stages,
-  runStatus,
-  currentStageType,
-  runProgressPercent,
-  runMessage,
   reviewGate,
   stopAction,
   restartAction,
@@ -217,11 +247,6 @@ export function StageRail({
   });
 
   const fallbackCounts = new Map<GenerationStageType, number>();
-  let inferredRunningShown = false;
-  const hasExplicitRunningStage = stages.some((stage) => stage.status === "running");
-  const inferCurrentStage =
-    runStatus === "running" && !reviewGate && !hasExplicitRunningStage && currentStageType;
-
   return (
     <ol className={styles.stageRail} aria-label="Generation stages">
       {PIPELINE_GROUPS.map((visibleStage, idx) => {
@@ -241,27 +266,24 @@ export function StageRail({
         }
         const stage = latestStage(groupStages);
         const baseStatus = groupedStatus(groupStages);
-        const inferredRunning = Boolean(
-          inferCurrentStage &&
-            (visibleStage.activeTypes ?? [visibleStage.type]).includes(inferCurrentStage) &&
-            !inferredRunningShown &&
-            baseStatus === "queued",
-        );
-        if (groupStages.length === 0 && !inferredRunning && !showUpcomingStages) return null;
-        if (inferredRunning) inferredRunningShown = true;
+        if (groupStages.length === 0 && !showUpcomingStages) return null;
         const isLast = idx === PIPELINE_GROUPS.length - 1;
         const runningStage = groupStages.find((candidate) => candidate.status === "running");
         const failedStage = groupStages.find((candidate) => candidate.status === "failed");
         const isRecovering = Boolean(runningStage && failedStage);
-        const status = inferredRunning ? "running" : baseStatus;
-        const progressPercent = inferredRunning
-          ? runProgressPercent
-          : runningStage?.progressPercent ?? stage?.progressPercent;
+        const status = baseStatus;
+        // A completed sibling tool can legitimately report 100 while another
+        // tool in the visible group is still running. Only the running tool is
+        // allowed to drive an active group's percentage.
+        const progressPercent = runningStage?.progressPercent;
         const message = humanizeStageMessage(
           failedStage?.error?.message ??
-            (inferredRunning ? runMessage : runningStage?.message) ??
+            runningStage?.message ??
             visibleStage.description
         );
+        const activity = currentGroupActivity(groupStages);
+        const activityAttention = activity ? activityHeadline(activity) : null;
+        const activityMeta = activity ? activityDetails(activity) : [];
         const awaitingReview = groupStages.some((candidate) => reviewGate?.stageId === candidate.stageId);
         const statusKey = awaitingReview ? "review" : status;
         const showStopAction = status === "running" && !awaitingReview && Boolean(stopAction);
@@ -314,6 +336,16 @@ export function StageRail({
               ) : (
                 <p className={styles.stageMessage}>{message}</p>
               )}
+              {status === "running" && activity && (activityAttention || activityMeta.length > 0) ? (
+                <div className={styles.stageActivity} role="status">
+                  {activityAttention ? (
+                    <strong className={styles.stageActivityAttention}>{activityAttention}</strong>
+                  ) : null}
+                  {activityMeta.length > 0 ? (
+                    <span className={styles.stageActivityMeta}>{activityMeta.join(" · ")}</span>
+                  ) : null}
+                </div>
+              ) : null}
               {status === "running" ? (
                 <div
                   className={`${styles.stageProgress} ${progressPercent == null ? styles.stageProgressIndeterminate : ""}`}

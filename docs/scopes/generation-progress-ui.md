@@ -192,8 +192,15 @@ state.
 - Active detail responses may expose `activityState` (`working`,
   `waiting_on_job`, or `recovering`) and `currentToolName`. Tool identifiers are
   always rendered through human-facing capability labels.
-- Elapsed time and last activity may tick in the browser. Action timestamps are
-  lifecycle activity, not a worker heartbeat or an ETA.
+- Elapsed time may tick in the browser. "Last activity" is shown only from a
+  worker's meaningful-progress timestamp; polling, reconciliation, and lease
+  heartbeats must not make an idle provider call look newly active.
+- Creator responses may include allowlisted activity such as provider labels,
+  current item labels, and completed/total counts. Internal job identifiers,
+  raw worker messages, exception text, and retry details belong only in the
+  server-gated operator projection.
+- A running job can be described as slow or possibly stalled after conservative
+  thresholds, but elapsed time alone never changes its terminal status.
 - Recovery does not erase history: a failed tool remains failed while a later
   running tool is highlighted as recovery work.
 - `completionKind: video` requires an applied export whose referenced asset is
@@ -317,7 +324,16 @@ Acceptance criteria:
 
 - Logs include request ID, project ID, run ID, stage ID, job ID, and provider.
 - Provider errors are redacted before being stored or returned to the browser.
-- Slow stages can be identified from timestamps.
+- Meaningful progress and worker heartbeat timestamps remain distinct, so a
+  healthy lease does not hide a provider call that has stopped advancing.
+- Creator-safe status omits internal IDs and raw diagnostic messages; expanded
+  operator diagnostics are returned only after server-side authorization. In
+  hosted auth, authorization comes from the caller's current canonical
+  `workspace_members` owner/admin role rather than token `app_metadata`; lookup
+  failures fail closed. The deterministic local owner may inspect diagnostics
+  only in non-production development/test mode.
+- Slow stages can be identified from timestamps without presenting elapsed time
+  as proof of failure.
 - Basic metrics can be added later without changing the run API.
 
 ## Open Decisions

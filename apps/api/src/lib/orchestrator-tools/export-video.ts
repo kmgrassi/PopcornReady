@@ -1,4 +1,7 @@
-import { agentApiStore, type AgentApiStore } from "@/lib/agent-api/jobs";
+import {
+  createDurableOrchestratorJobCreator,
+  type OrchestratorJobCreator,
+} from "@/lib/orchestrator/job-gateway";
 import type { ExportOptions } from "@/lib/agent-api/workers";
 import { getStore, type V1Store } from "@/lib/v1/store";
 import { assetToClip } from "@/lib/v1/generation/prepare";
@@ -33,13 +36,13 @@ export interface ExportVideoDeps {
     workspaceId: string,
     projectId: string
   ) => Promise<ActiveProjectTimeline | null>;
-  createJob: AgentApiStore["createOrGetJob"];
+  createJob: OrchestratorJobCreator["createJob"];
   runExportVideoJob: typeof realRunExportVideoJob;
 }
 
 const defaultDeps: ExportVideoDeps = {
   getActiveProjectTimeline: getActiveProjectTimelineFromStore,
-  createJob: (input) => agentApiStore.createOrGetJob(input),
+  createJob: createDurableOrchestratorJobCreator().createJob,
   runExportVideoJob: realRunExportVideoJob,
 };
 
@@ -228,8 +231,22 @@ export function createExportVideoTool(
       if (!active) return timelineRequired();
 
       const { job } = await resolved.createJob({
+        workspaceId: context.auth.workspaceId,
         type: "export",
         projectId: context.projectId,
+        execution: {
+          schemaVersion: "orchestrator_job_execution.v1",
+          kind: "export_video",
+          input: {
+            workspaceId: context.auth.workspaceId,
+            projectId: context.projectId,
+            ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
+            timelineId: active.timeline.id,
+            timelineContentHash: active.timelineContentHash,
+            project: active.project,
+            options: input,
+          },
+        },
       });
 
       void resolved.runExportVideoJob({

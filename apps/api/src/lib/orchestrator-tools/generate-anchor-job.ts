@@ -1,5 +1,11 @@
-import { agentApiStore, type AgentApiStore } from "@/lib/agent-api/jobs";
 import { scheduleOrchestratorResume } from "@/lib/orchestrator/schedule-resume";
+import {
+  createDurableOrchestratorJobWriter,
+  startDurableJobHeartbeat,
+  type OrchestratorJobWriter,
+} from "@/lib/orchestrator/job-gateway";
+import { createLogger, type Logger } from "@/lib/v1/logger";
+import { redactError } from "@/lib/v1/redact";
 import type { AuthContext } from "@/lib/api/v1/auth";
 import { createGeneratedAsset as realCreateGeneratedAsset } from "@/lib/api/v1/generated-assets";
 import { generateCharacterAnchor as realGenerateCharacterAnchor } from "@/lib/api/v1/character-anchors";
@@ -16,7 +22,9 @@ export interface GenerateAnchorJobDeps {
   generateCharacterAnchor: typeof realGenerateCharacterAnchor;
   createGeneratedAsset: typeof realCreateGeneratedAsset;
   selectGeneratedAnchorAsset: typeof realSelectGeneratedAnchorAsset;
-  jobs: Pick<AgentApiStore, "setStep" | "succeed" | "fail">;
+  jobs?: Pick<OrchestratorJobWriter, "setStep" | "succeed" | "fail"> &
+    Partial<Pick<OrchestratorJobWriter, "reportProgress">>;
+  logger: Logger;
   enqueueOrchestratorDispatch?: (runId: string, workspaceId: string) => Promise<unknown>;
 }
 
@@ -24,7 +32,7 @@ const defaultDeps: GenerateAnchorJobDeps = {
   generateCharacterAnchor: realGenerateCharacterAnchor,
   createGeneratedAsset: realCreateGeneratedAsset,
   selectGeneratedAnchorAsset: realSelectGeneratedAnchorAsset,
-  jobs: agentApiStore,
+  logger: createLogger(),
 };
 
 function localAuth(workspaceId: string): AuthContext {
@@ -160,14 +168,44 @@ export async function runGenerateAnchorJob(
   deps: Partial<GenerateAnchorJobDeps> = {}
 ): Promise<void> {
   const d = { ...defaultDeps, ...deps };
+  const jobs = d.jobs ?? createDurableOrchestratorJobWriter(input.workspaceId, input.projectId);
+  const stopHeartbeat = startDurableJobHeartbeat(jobs, input.jobId);
+  const logger = d.logger.child({
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    runId: input.orchestratorRunId,
+    jobId: input.jobId,
+    jobType: "asset_generation",
+  });
+  const startedAt = Date.now();
   try {
-    await d.jobs.setStep(input.jobId, "generating_assets");
+    const totalItems = input.visualAnchorPlan.anchors.length;
+    await jobs.setStep(input.jobId, "generating_assets", {
+      completedItems: 0,
+      totalItems,
+      percent: totalItems === 0 ? 100 : 0,
+      provider: input.provider,
+      message: totalItems === 1 ? "Generating 1 visual anchor" : `Generating ${totalItems} visual anchors`,
+    });
+    logger.info("orchestrator_job.started", { totalItems, provider: input.provider });
     const auth = localAuth(input.workspaceId);
     const generatedAssetIds: string[] = [];
 
-    for (const anchor of input.visualAnchorPlan.anchors) {
+    for (let index = 0; index < input.visualAnchorPlan.anchors.length; index += 1) {
+      const anchor = input.visualAnchorPlan.anchors[index];
       const role = anchor.kind === "character" ? "character_anchor" : "scene_anchor";
       const provider = providerForAnchor(anchor, input.provider);
+      await jobs.reportProgress?.(input.jobId, {
+        provider,
+        currentItem: { id: anchor.id, label: anchor.label, index: index + 1 },
+        message: `Generating anchor ${index + 1} of ${totalItems}: ${anchor.label}`,
+      });
+      logger.info("orchestrator_job.item_started", {
+        itemId: anchor.id,
+        itemIndex: index + 1,
+        totalItems,
+        provider,
+      });
       const graphInputs: GraphAssetInput[] = [
         {
           assetId: input.visualAnchorPlanAssetId,
@@ -202,20 +240,51 @@ export async function runGenerateAnchorJob(
         });
         generatedAssetIds.push(assetId);
       }
+      const completedItems = index + 1;
+      await jobs.reportProgress?.(input.jobId, {
+        completedItems,
+        totalItems,
+        percent: totalItems === 0 ? 100 : Math.round((completedItems / totalItems) * 100),
+        lastProgressAt: new Date().toISOString(),
+        currentItem: { id: anchor.id, label: anchor.label, index: completedItems },
+        message: `Generated anchor ${completedItems} of ${totalItems}`,
+      });
+      logger.info("orchestrator_job.item_completed", {
+        itemId: anchor.id,
+        itemIndex: completedItems,
+        totalItems,
+        outputAssetIds: assetIds,
+      });
     }
 
-    await d.jobs.succeed(input.jobId, { assetIds: generatedAssetIds });
+    await jobs.succeed(input.jobId, { assetIds: generatedAssetIds });
+    logger.info("orchestrator_job.succeeded", {
+      durationMs: Date.now() - startedAt,
+      totalItems: input.visualAnchorPlan.anchors.length,
+      outputAssetIds: generatedAssetIds,
+    });
   } catch (err) {
-    await d.jobs.fail(input.jobId, {
-      code: "job_failed",
-      message: err instanceof Error ? err.message : String(err),
-      requestId: "",
+    const safeError = redactError(err, { defaultCode: "job_failed" });
+    await jobs.fail(input.jobId, {
+      code: safeError.code,
+      message: safeError.message,
+    });
+    logger.error("orchestrator_job.failed", {
+      durationMs: Date.now() - startedAt,
+      error: safeError,
     });
   } finally {
+    stopHeartbeat();
     if (input.orchestratorRunId) {
       try {
+        logger.info("orchestrator_resume.enqueue_started");
         await resume(d, input.orchestratorRunId, input.workspaceId);
-      } catch {
+        logger.info("orchestrator_resume.enqueued");
+      } catch (error) {
+        const safeError = redactError(error, { defaultCode: "resume_enqueue_failed" });
+        logger.error("orchestrator_resume.enqueue_failed", {
+          error: safeError,
+        });
         // best-effort: durable run sweepers can resume a parked run later.
       }
     }
