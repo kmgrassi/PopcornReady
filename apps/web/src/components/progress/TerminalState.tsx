@@ -19,20 +19,27 @@ export function TerminalState({ run, creditRecovery }: TerminalStateProps) {
 
   if (run.status === "succeeded") {
     const storyboardAssetsReady = run.completionKind === "storyboard_assets";
+    const videoReady = run.completionKind === "video";
 
     return (
       <div className="terminal-state terminal-succeeded" role="status">
         <div className="terminal-state-head">
           <span className="terminal-state-glyph" aria-hidden>✓</span>
           <span className="terminal-state-heading">
-            {storyboardAssetsReady ? "Storyboard assets are ready" : "Your video is ready"}
+            {videoReady
+              ? "Your video is ready"
+              : storyboardAssetsReady
+                ? "Storyboard assets are ready"
+                : "Run ended without a playable video"}
           </span>
         </div>
         <p className="terminal-state-message">
           {run.message ??
-            (storyboardAssetsReady
+            (videoReady
+              ? "Generation finished. The final preview is available below."
+              : storyboardAssetsReady
               ? "Generation stopped after creating the storyboard and keyframe images."
-              : "Generation finished. The final preview is available below.")}
+              : "The run ended, but no verified playable video output was reported.")}
         </p>
         {elapsed !== null ? (
           <p className="terminal-state-meta">
@@ -44,11 +51,14 @@ export function TerminalState({ run, creditRecovery }: TerminalStateProps) {
   }
 
   if (run.status === "failed") {
+    const missingVideo = run.error?.code === "missing_video_output";
     return (
       <div className="terminal-state terminal-failed" role="alert">
         <div className="terminal-state-head">
           <span className="terminal-state-glyph" aria-hidden>!</span>
-          <span className="terminal-state-heading">Generation failed</span>
+          <span className="terminal-state-heading">
+            {missingVideo ? "Run ended without a playable video" : "Generation failed"}
+          </span>
         </div>
         <p className="terminal-state-message">
           {run.error?.message ??

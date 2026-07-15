@@ -82,6 +82,24 @@
   background: var(--accent);
 }
 
+.progressIndeterminate span {
+  width: 36%;
+  animation: progressSweep 1.6s ease-in-out infinite;
+}
+
+@keyframes progressSweep {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(285%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progressIndeterminate span {
+    width: 100%;
+    opacity: 0.55;
+    animation: none;
+  }
+}
+
 /* Status chips */
 .chip {
   display: inline-flex;

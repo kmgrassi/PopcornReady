@@ -9,6 +9,7 @@ import {
 } from "@popcorn/shared/v1/types";
 import { humanizeStageMessage } from "../../lib/stage-message";
 import { JudgmentBadge } from "../evals/JudgmentBadge";
+import { formatElapsed, useElapsedTime } from "./useElapsedTime";
 import styles from "./ProgressView.module.css";
 
 interface StageRailProps {
@@ -157,10 +158,18 @@ function statusPriority(status: GenerationRunStatus): number {
 
 function groupedStatus(stages: GenerationStage[]): GenerationRunStatus {
   if (stages.length === 0) return "queued";
+  if (stages.some((stage) => stage.status === "running")) return "running";
   return stages.reduce<GenerationRunStatus>(
     (current, stage) =>
       statusPriority(stage.status) > statusPriority(current) ? stage.status : current,
     "queued",
+  );
+}
+
+function StageDuration({ startedAt }: { startedAt?: string }) {
+  const elapsed = useElapsedTime(startedAt, undefined);
+  return elapsed === null ? null : (
+    <span className={styles.stageDuration}>Active for {formatElapsed(elapsed)}</span>
   );
 }
 
@@ -243,6 +252,7 @@ export function StageRail({
         const isLast = idx === PIPELINE_GROUPS.length - 1;
         const runningStage = groupStages.find((candidate) => candidate.status === "running");
         const failedStage = groupStages.find((candidate) => candidate.status === "failed");
+        const isRecovering = Boolean(runningStage && failedStage);
         const status = inferredRunning ? "running" : baseStatus;
         const progressPercent = inferredRunning
           ? runProgressPercent
@@ -290,7 +300,11 @@ export function StageRail({
                 )}
                 {showStatus ? (
                   <span className={`${styles.stageStatusPill} ${styles[`stageStatus_${statusKey}`]}`}>
-                    {stage?.reviewedAt ? "Complete" : STATUS_LABEL[statusKey]}
+                    {stage?.reviewedAt
+                      ? "Complete"
+                      : isRecovering
+                        ? "Recovering"
+                        : STATUS_LABEL[statusKey]}
                   </span>
                 ) : null}
                 <JudgmentBadge judgment={stage?.judgment} compact />
@@ -300,20 +314,26 @@ export function StageRail({
               ) : (
                 <p className={styles.stageMessage}>{message}</p>
               )}
-              {status === "running" && progressPercent != null ? (
+              {status === "running" ? (
                 <div
-                  className={styles.stageProgress}
+                  className={`${styles.stageProgress} ${progressPercent == null ? styles.stageProgressIndeterminate : ""}`}
                   role="progressbar"
-                  aria-valuenow={progressPercent}
+                  aria-valuenow={progressPercent ?? undefined}
                   aria-valuemin={0}
                   aria-valuemax={100}
+                  aria-label={
+                    progressPercent == null
+                      ? `${visibleStage.label} in progress; percentage unavailable`
+                      : `${visibleStage.label} ${progressPercent}% complete`
+                  }
                 >
                   <div
                     className={styles.stageProgressFill}
-                    style={{ width: `${Math.max(2, Math.min(100, progressPercent))}%` }}
+                    style={progressPercent == null ? undefined : { width: `${Math.max(2, Math.min(100, progressPercent))}%` }}
                   />
                 </div>
               ) : null}
+              {runningStage ? <StageDuration startedAt={runningStage.startedAt} /> : null}
               {groupStages.length > 0 ? (
                 <details
                   className={styles.stageToolDetails}

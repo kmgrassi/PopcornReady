@@ -581,6 +581,11 @@ export type GenerationJob = Job<GenerationJobInput, GenerationJobResult>;
 
 export type GenerationRunStatus = JobStatus;
 
+export type GenerationRunActivityState =
+  | "working"
+  | "waiting_on_job"
+  | "recovering";
+
 // Ordered stage types a run can move through. Individual runs may skip stages
 // they do not need (e.g. a prompt-only run with no uploaded assets).
 export type GenerationStageType =
@@ -654,6 +659,8 @@ export interface GenerationRun {
   briefVersionId?: string;
   status: GenerationRunStatus;
   completionKind?: "video" | "storyboard_assets";
+  activityState?: GenerationRunActivityState;
+  currentToolName?: string;
   reviewGates?: GateableGenerationStageType[];
   reviewGate?: RunReviewGate | null;
   reviewFeedback?: string | null;

@@ -4,7 +4,6 @@ import { Link } from "react-router-dom";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   GENERATION_STAGE_LABELS,
-  GENERATION_STAGE_ORDER,
   type GenerationRun,
   type GenerationStage,
   type GenerationStageType,
@@ -30,6 +29,7 @@ import {
 } from "./StoryboardBoard";
 import { TerminalState } from "./TerminalState";
 import { ReviewGatePanel } from "./ReviewGatePanel";
+import { formatElapsed, useElapsedTime } from "./useElapsedTime";
 import styles from "./ProgressView.module.css";
 
 interface ProgressViewProps {
@@ -70,12 +70,6 @@ function isTerminal(status: GenerationRun["status"]): boolean {
   return status === "succeeded" || status === "failed" || status === "canceled";
 }
 
-const VISIBLE_STAGE_COUNT = 8;
-
-const ORDERED_STAGE_TYPES = Object.entries(GENERATION_STAGE_ORDER)
-  .sort(([, a], [, b]) => a - b)
-  .map(([type]) => type as GenerationStageType);
-
 const REVIEW_STAGE_LABELS: Record<GenerationStageType, string> = {
   brief_intake: "Concept",
   creative_plan: "Brief",
@@ -88,18 +82,6 @@ const REVIEW_STAGE_LABELS: Record<GenerationStageType, string> = {
   ready: "Ready",
 };
 
-const VISIBLE_STAGE_INDEX: Record<GenerationStageType, number> = {
-  brief_intake: 1,
-  creative_plan: 3,
-  storyboard: 4,
-  asset_generation: 5,
-  audio_generation: 6,
-  timeline_assembly: 7,
-  quality_review: 8,
-  export: 8,
-  ready: 8,
-};
-
 function shortId(id: string): string {
   if (id.length <= 18) return id;
   return `${id.slice(0, 8)}...${id.slice(-6)}`;
@@ -110,24 +92,13 @@ function reviewStageLabel(stageType: GenerationStageType): string {
 }
 
 function progressSummary(run: GenerationRun, stages: GenerationStage[]) {
-  const activeStage =
-    stages.find((stage) => run.reviewGate?.stageId === stage.stageId) ??
-    stages.find((stage) => stage.status === "running") ??
-    stages.find((stage) => stage.status === "failed") ??
-    stages.find((stage) => stage.status === "queued");
-  const type = activeStage?.type ?? run.currentStageType ?? "ready";
-  const currentStage = VISIBLE_STAGE_INDEX[type] ?? VISIBLE_STAGE_COUNT;
   const completed = stages.filter((stage) => stage.status === "succeeded").length;
-  const fallbackPercent =
-    stages.length > 0 ? Math.round((completed / stages.length) * 100) : 0;
-  const percent = Math.max(
-    0,
-    Math.min(100, Math.round(run.progressPercent ?? fallbackPercent)),
-  );
-
   return {
-    currentStage: Math.min(VISIBLE_STAGE_COUNT, currentStage),
-    percent,
+    completed,
+    percent:
+      run.progressPercent == null
+        ? undefined
+        : Math.max(0, Math.min(100, Math.round(run.progressPercent))),
   };
 }
 
@@ -137,7 +108,12 @@ function currentRunStage(
 ): GenerationStage | undefined {
   return (
     stages.find((stage) => run.reviewGate?.stageId === stage.stageId) ??
-    stages.find((stage) => stage.status === "running") ??
+    stages.find(
+      (stage) => stage.toolName === run.currentToolName && stage.status === "running",
+    ) ??
+    [...stages]
+      .filter((stage) => stage.status === "running")
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ??
     stages.find((stage) => stage.status === "failed") ??
     stages.find((stage) => stage.status === "queued")
   );
@@ -157,23 +133,13 @@ function nextQueuedStage(
   );
 }
 
-function nextStageType(
-  run: GenerationRun,
-  stages: GenerationStage[],
-): GenerationStageType | undefined {
+function nextStageType(run: GenerationRun, stages: GenerationStage[]): GenerationStageType | undefined {
   if (isTerminal(run.status)) return undefined;
 
   const queued = nextQueuedStage(run, stages);
   if (queued) return queued.type;
 
-  const currentType =
-    run.reviewGate?.stageType ?? currentRunStage(run, stages)?.type ?? run.currentStageType;
-  if (!currentType) return undefined;
-
-  const currentOrder = GENERATION_STAGE_ORDER[currentType];
-  return ORDERED_STAGE_TYPES.find(
-    (type) => GENERATION_STAGE_ORDER[type] > currentOrder,
-  );
+  return undefined;
 }
 
 function lastCompletedPipelineStage(stages: GenerationStage[]): string | null {
@@ -242,9 +208,17 @@ function planMetaItems(brief: VideoBriefInput): string[] {
 function headerStatus(run: GenerationRun): string {
   if (run.reviewGate) return "Ready for your approval";
   if (run.status === "queued") return "Waiting to start";
-  if (run.status === "running") return "Producing";
-  if (run.status === "succeeded") return "Complete";
-  if (run.status === "failed") return "Failed";
+  if (run.status === "running") {
+    if (run.activityState === "waiting_on_job") return "Waiting on provider";
+    if (run.activityState === "recovering") return "Recovering";
+    return "Producing";
+  }
+  if (run.status === "succeeded") {
+    return run.completionKind === "video" ? "Video ready" : "Partial result";
+  }
+  if (run.status === "failed") {
+    return run.error?.code === "missing_video_output" ? "Partial result" : "Failed";
+  }
   return "Canceled";
 }
 
@@ -266,7 +240,6 @@ function workspaceReturnLabel({
 function mobileProgressSentence({
   run,
   currentStageDisplay,
-  progress,
 }: {
   run: GenerationRun;
   currentStageDisplay: string;
@@ -281,14 +254,23 @@ function mobileProgressSentence({
   }
 
   if (run.status === "running") {
-    return `${currentStageDisplay} is in progress - stage ${progress.currentStage} of ${VISIBLE_STAGE_COUNT}.`;
+    if (run.activityState === "waiting_on_job") return `${currentStageDisplay} is waiting on a provider.`;
+    if (run.activityState === "recovering") return `Recovering with ${currentStageDisplay}.`;
+    return `${currentStageDisplay} is in progress.`;
   }
 
   if (run.status === "succeeded") {
-    return "Your video is complete.";
+    if (run.completionKind === "video") return "Your video is ready.";
+    if (run.completionKind === "storyboard_assets") {
+      return "Storyboard ready; no video was created.";
+    }
+    return "Run ended; no playable video was created.";
   }
 
   if (run.status === "failed") {
+    if (run.error?.code === "missing_video_output") {
+      return "Run ended; no playable video was created.";
+    }
     return `${currentStageDisplay} needs attention.`;
   }
 
@@ -512,6 +494,8 @@ export function ProgressView({
   const feedbackNote = reviewActions?.feedbackNote ?? fallbackFeedbackNote;
   const setFeedbackNote = reviewActions?.onFeedbackNoteChange ?? setFallbackFeedbackNote;
   const progress = progressSummary(detail.run, detail.stages);
+  const elapsed = useElapsedTime(detail.run.startedAt, detail.run.completedAt);
+  const sinceLastActivity = useElapsedTime(detail.run.updatedAt, detail.run.completedAt);
   const nextType = nextStageType(detail.run, detail.stages);
   const nextStageLabel = nextType ? reviewStageLabel(nextType) : null;
   const lastCompletedStageLabel = lastCompletedPipelineStage(detail.stages);
@@ -634,7 +618,11 @@ export function ProgressView({
             <span>
               {cancelAction?.pending
                 ? "Stopping after the current step..."
-                : "Working in the background"}
+                : detail.run.activityState === "waiting_on_job"
+                  ? "Waiting on a provider"
+                  : detail.run.activityState === "recovering"
+                    ? "Recovering from an earlier failed step"
+                    : "Working in the background"}
             </span>
           </div>
         ) : null}
@@ -663,8 +651,10 @@ export function ProgressView({
           </p>
         ) : null}
         <p className={styles.sidePanelMeta}>
-          Started {formatDateTime(detail.run.startedAt)}. Updated{" "}
-          {formatDateTime(detail.run.updatedAt)}.
+          {elapsed !== null ? `Elapsed ${formatElapsed(elapsed)}. ` : ""}
+          {sinceLastActivity !== null
+            ? `Last activity ${formatElapsed(sinceLastActivity)} ago.`
+            : `Updated ${formatDateTime(detail.run.updatedAt)}.`}
         </p>
         <div className={styles.diagnostics}>
           <span className={styles.runIdLabel}>Run ID</span>
@@ -761,24 +751,32 @@ export function ProgressView({
               ) : null}
               <div>
                 <span className={styles.statusLabel}>Progress</span>
-                <strong>
-                  Stage {progress.currentStage} of {VISIBLE_STAGE_COUNT}
-                </strong>
+                <strong>{progress.completed} tool steps complete</strong>
               </div>
             </div>
-            <div
-              className={styles.headerMeter}
-              role="progressbar"
-              aria-valuenow={progress.percent}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label={`${progress.percent}% complete`}
-            >
+            {progress.percent == null && detail.run.status === "running" ? (
               <div
-                className={styles.headerMeterFill}
-                style={{ width: `${Math.max(2, progress.percent)}%` }}
-              />
-            </div>
+                className={`${styles.headerMeter} ${styles.headerMeterIndeterminate}`}
+                role="progressbar"
+                aria-label="Generation in progress; percentage unavailable"
+              >
+                <div className={styles.headerMeterFill} />
+              </div>
+            ) : progress.percent != null ? (
+              <div
+                className={styles.headerMeter}
+                role="progressbar"
+                aria-valuenow={progress.percent}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label={`${progress.percent}% complete`}
+              >
+                <div
+                  className={styles.headerMeterFill}
+                  style={{ width: `${Math.max(2, progress.percent)}%` }}
+                />
+              </div>
+            ) : null}
           </div>
           <Link
             className={styles.secondaryButton}

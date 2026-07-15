@@ -152,7 +152,9 @@ test("polls an active run, cancels it, and clears the recovery hint @mobile", as
   await page.goto(runPath);
 
   await expect(page.getByRole("heading", { name: "Stop here or keep producing" })).toHaveCount(0);
-  const overallProgress = page.getByRole("progressbar", { name: /complete/ });
+  const overallProgress = page
+    .getByLabel("Current run status")
+    .getByRole("progressbar");
   await expect(overallProgress).toBeVisible();
   await expect
     .poll(() => overallProgress.getAttribute("aria-valuenow"))

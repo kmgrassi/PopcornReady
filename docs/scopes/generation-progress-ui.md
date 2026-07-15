@@ -185,6 +185,27 @@ state.
   cancel controls when available.
 - Reloading with a known `runId` restores the same progress view.
 
+### Trustworthy progress and completion contract
+
+- Unknown provider progress is indeterminate. Clients must not replace a missing
+  percentage with `0%`, `50%`, a stage ordinal, or a guessed next stage.
+- Active detail responses may expose `activityState` (`working`,
+  `waiting_on_job`, or `recovering`) and `currentToolName`. Tool identifiers are
+  always rendered through human-facing capability labels.
+- Elapsed time and last activity may tick in the browser. Action timestamps are
+  lifecycle activity, not a worker heartbeat or an ETA.
+- Recovery does not erase history: a failed tool remains failed while a later
+  running tool is highlighted as recovery work.
+- `completionKind: video` requires an applied export whose referenced asset is
+  ready, video-shaped, and has a playable storage or remote source.
+- An intentional stop-after gate may end as `succeeded` with
+  `completionKind: storyboard_assets`. A terminal orchestrator success with
+  neither that gate nor a playable export projects as terminal `failed` with
+  `missing_video_output`; it must not poll forever or claim the video is ready.
+- Project Outputs/Watch actions exist only for playable media. When absent, the
+  project and direct Watch route explain that storyboard assets may exist but no
+  playable video was created.
+
 ## Proposed PR Sequence
 
 ### PR 1: Add Generation Run Scope And Types

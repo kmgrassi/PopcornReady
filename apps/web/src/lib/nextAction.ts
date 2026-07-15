@@ -85,7 +85,10 @@ export function deriveNextAction(
       type: "watch_run",
       run: activeRun,
       title: "Watch this generation",
-      body: `${activeRun.projectName} is ${formatStage(activeRun.currentStageType).toLowerCase()} at ${activeRun.progressPercent ?? 0}% complete.`,
+      body:
+        activeRun.progressPercent == null
+          ? `${activeRun.projectName} is ${formatStage(activeRun.currentStageType).toLowerCase()}. Progress will update when measurable work completes.`
+          : `${activeRun.projectName} is ${formatStage(activeRun.currentStageType).toLowerCase()} at ${activeRun.progressPercent}% complete.`,
       ctaLabel: "Open progress",
       to: runPath(activeRun),
     };

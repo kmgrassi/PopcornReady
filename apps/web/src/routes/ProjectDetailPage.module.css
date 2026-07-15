@@ -35,6 +35,14 @@
   justify-content: flex-end;
 }
 
+.outputUnavailable {
+  max-width: 30ch;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--line-body);
+}
+
 .changeSentNotice {
   margin: 0;
   padding: var(--space-3) var(--space-4);

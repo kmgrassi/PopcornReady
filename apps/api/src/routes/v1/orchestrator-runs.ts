@@ -45,6 +45,7 @@ import {
   projectRunDetailFromParts,
   toolStage,
   type GenerationRunDetail,
+  type RunAssetPrompt,
 } from "./orchestrator-run-projections.js";
 
 const NO_STORE_HEADERS = { "Cache-Control": "no-store" };
@@ -489,26 +490,42 @@ async function assembleRunDetail(
   if (run.projectId !== projectId) {
     throw new ApiError("not_found", `Generation run not found: ${runId}`);
   }
-  const outputAssetIds = [...new Set(actions.flatMap((action) => action.outputAssetIds))];
-  const assetPrompts = new Map<string, { prompt?: string; description?: string }>();
+  const assetPrompts = await loadRunAssetMetadata(
+    workspaceId,
+    projectId,
+    actions
+  );
+  return projectRunDetailFromParts(run, gates, actions, assetPrompts);
+}
+
+async function loadRunAssetMetadata(
+  workspaceId: string,
+  projectId: string,
+  actions: RunActionSummary[]
+): Promise<Map<string, RunAssetPrompt>> {
+  const outputAssetIds = [
+    ...new Set(actions.flatMap((action) => action.outputAssetIds)),
+  ];
+  const assetPrompts = new Map<string, RunAssetPrompt>();
   await Promise.all(
     outputAssetIds.map(async (assetId) => {
       try {
         const asset = await getAsset(workspaceId, projectId, assetId);
         const prompt = asset.provenance?.prompt?.trim();
         const description = asset.description?.trim();
-        if (prompt || description) {
-          assetPrompts.set(assetId, {
+        assetPrompts.set(assetId, {
             ...(prompt ? { prompt } : {}),
             ...(description ? { description } : {}),
+            status: asset.status,
+            kind: asset.kind,
+            hasPlayableSource: Boolean(asset.remoteUrl || asset.storageKey),
           });
-        }
       } catch (err) {
         if (!(err instanceof ApiError) || err.code !== "not_found") throw err;
       }
     })
   );
-  return projectRunDetailFromParts(run, gates, actions, assetPrompts);
+  return assetPrompts;
 }
 
 async function requireProjectRun(runId: string, projectId: string): Promise<OrchestratorRun> {
@@ -676,9 +693,18 @@ orchestratorRunsRouter.get(
     await recordProjectActivity(auth.workspaceId, projectId);
     const runs = await listOrchestratorRunsForProject(projectId);
     const bodies = await Promise.all(
-      runs.map(async (run) =>
-        projectRun(run, await listRunGates(run.id), await listRunActions(run.id))
-      )
+      runs.map(async (run) => {
+        const [gates, actions] = await Promise.all([
+          listRunGates(run.id),
+          listRunActions(run.id),
+        ]);
+        const assets = await loadRunAssetMetadata(
+          auth.workspaceId,
+          projectId,
+          actions
+        );
+        return projectRun(run, gates, actions, assets);
+      })
     );
     return { status: 200, body: { runs: bodies }, headers: NO_STORE_HEADERS };
   })

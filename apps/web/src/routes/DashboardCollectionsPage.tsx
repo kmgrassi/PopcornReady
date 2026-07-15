@@ -101,8 +101,14 @@ function statusDotClass(status: string) {
   return styles.statusDotNeutral;
 }
 
-function StatusChip({ status }: { status: GenerationRunStatus | WorkspaceAsset["status"] }) {
-  return <span className={`${styles.chip} ${statusChipClass(status)}`}>{titleCase(status)}</span>;
+function StatusChip({
+  status,
+  label,
+}: {
+  status: GenerationRunStatus | WorkspaceAsset["status"];
+  label?: string;
+}) {
+  return <span className={`${styles.chip} ${statusChipClass(status)}`}>{label ?? titleCase(status)}</span>;
 }
 
 function assetViewerItem(asset: WorkspaceAsset): MediaViewerItem {
@@ -307,8 +313,15 @@ export function RunsPage() {
                   <span className={styles.rowTitle}>{run.projectName}</span>
                   <span className={styles.rowSub}>{run.currentStageType ? titleCase(run.currentStageType) : "Preparing"} - updated {formatDate(run.updatedAt)}</span>
                 </div>
-                <div className={styles.progress} aria-label={`${run.progressPercent ?? 0}% complete`}>
-                  <span style={{ width: `${Math.max(0, Math.min(100, run.progressPercent ?? 0))}%` }} />
+                <div
+                  className={`${styles.progress} ${run.progressPercent == null && run.status === "running" ? styles.progressIndeterminate : ""}`}
+                  role={run.status === "running" || run.progressPercent != null ? "progressbar" : undefined}
+                  aria-valuenow={run.progressPercent ?? undefined}
+                  aria-valuemin={run.progressPercent != null ? 0 : undefined}
+                  aria-valuemax={run.progressPercent != null ? 100 : undefined}
+                  aria-label={run.progressPercent == null && run.status === "running" ? "Generation in progress; percentage unavailable" : run.progressPercent != null ? `${run.progressPercent}% complete` : undefined}
+                >
+                  <span style={run.progressPercent == null ? (run.status === "running" ? undefined : { width: "0%" }) : { width: `${Math.max(0, Math.min(100, run.progressPercent))}%` }} />
                 </div>
                 <StatusChip status={run.status} />
               </Link>

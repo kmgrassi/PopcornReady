@@ -119,7 +119,11 @@ export function ProjectStagePanel({
       </div>
 
       <div id={stagePanelBodyId} className={styles.stageCollapsible} hidden={!stageExpanded}>
-        {activeLoading ? <div className={styles.placeholder}>Loading stage...</div> : null}
+        {activeLoading ? (
+          <div className={styles.stageSkeleton} aria-busy="true" aria-label="Loading generation stage">
+            <span /><span /><span />
+          </div>
+        ) : null}
         {!activeLoading && activeError ? (
           <ErrorState
             title="Unable to load stage"
@@ -152,7 +156,17 @@ export function ProjectStagePanel({
               </div>
               <div>
                 <dt>Next</dt>
-                <dd>{nextStage ? titleCase(nextStage.type) : run.status === "succeeded" ? "Complete" : "Pending"}</dd>
+                <dd>
+                  {nextStage
+                    ? titleCase(nextStage.type)
+                    : run.status === "succeeded"
+                      ? run.completionKind === "video"
+                        ? "Video ready"
+                        : run.completionKind === "storyboard_assets"
+                          ? "Storyboard ready"
+                          : "Run ended"
+                      : "Pending"}
+                </dd>
               </div>
               <div>
                 <dt>Updated</dt>

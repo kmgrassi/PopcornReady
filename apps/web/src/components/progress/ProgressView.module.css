@@ -199,6 +199,29 @@
   transition: width 320ms ease;
 }
 
+.headerMeterIndeterminate .headerMeterFill {
+  width: 38%;
+  animation: meterSweep 1.6s ease-in-out infinite;
+}
+
+.stageProgressIndeterminate .stageProgressFill {
+  width: 38%;
+  animation: meterSweep 1.6s ease-in-out infinite;
+}
+
+.stageDuration {
+  display: block;
+  margin-top: var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes meterSweep {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(270%); }
+}
+
 .altRuns {
   color: var(--muted);
   font-size: var(--text-sm);
@@ -982,6 +1005,16 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .headerMeterIndeterminate .headerMeterFill {
+    width: 100%;
+    opacity: 0.55;
+    animation: none;
+  }
+  .stageProgressIndeterminate .stageProgressFill {
+    width: 100%;
+    opacity: 0.55;
+    animation: none;
+  }
   .headerMeterFill,
   .stageProgressFill,
   .mobilePipelineDetails summary span:last-child {

@@ -331,8 +331,9 @@ Runs:
 - Runs are not a Library tab anymore. Verify recent project runs through the
   project detail `Run pipeline` panel and direct
   `/projects/:projectId/runs/:runId` routes.
-- Verify progress bars clamp to 0-100 and status chips match state on project
-  detail and run progress.
+- Verify known progress bars clamp to 0-100. Unknown progress must be
+  indeterminate with no synthetic percent, and status chips must distinguish
+  waiting, recovering, approval, failure, partial result, and video ready.
 - Confirm empty, loading, and API error states for project-scoped runs.
 
 Assets:
@@ -353,6 +354,8 @@ Outputs:
   `/projects/:projectId/watch`.
 - For a playable output, verify filename, duration, poster, and video controls.
 - Verify missing playback URLs fall back to thumbnails or placeholders.
+- With no playable output, verify project actions explain why Outputs/Watch are
+  unavailable and the direct Watch route does not redirect away.
 
 ### 7. Landing Quick-Start Generation
 

@@ -35,7 +35,10 @@ export function makeRunDetail(
     status?: GenerationRunStatus;
     reviewGate?: RunReviewGate | null;
     currentStageType?: GenerationStageType;
-    progressPercent?: number;
+    progressPercent?: number | null;
+    completionKind?: GenerationRun["completionKind"] | null;
+    activityState?: GenerationRun["activityState"];
+    currentToolName?: string;
     message?: string;
     error?: GenerationRun["error"];
     completedAt?: string;
@@ -47,10 +50,19 @@ export function makeRunDetail(
     runId,
     projectId: e2eProjectId,
     status,
+    completionKind:
+      options.completionKind === null
+        ? undefined
+        : options.completionKind ?? (status === "succeeded" ? "video" : undefined),
+    activityState: options.activityState,
+    currentToolName: options.currentToolName,
     reviewGates: options.reviewGate ? [options.reviewGate.stageType] : [],
     reviewGate: options.reviewGate ?? null,
     currentStageType,
-    progressPercent: options.progressPercent ?? progressForStatus(status),
+    progressPercent:
+      options.progressPercent === null
+        ? undefined
+        : options.progressPercent ?? progressForStatus(status),
     message: options.message ?? messageForStatus(status),
     createdAt: now,
     updatedAt: now,
