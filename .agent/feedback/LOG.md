@@ -100,3 +100,9 @@
 - Friction or failure: `mergeable=true` does not imply mergeable under branch protection; `main` still requires one approving review.
 - Suggested improvement: Include `mergeStateStatus` and required-review state in caretaker merge gates.
 - Follow-up: none.
+
+### 2026-07-14T22:54:34-04:00 — QA-20260714-01
+- What helped: The manual browser guides, deployed commit in the health response, an existing guest fixture, and independent safety review made it possible to test production without provider spend.
+- Friction or failure: The browser viewport capability needed a temporary CDP fallback, the auth-route pass ended the guest session, and the full API suite contains three unrelated merged-main failures.
+- Suggested improvement: Add a repeatable read-only hosted smoke that records commit, route health, mobile overflow, and existing-run projection without depending on a transient browser session.
+- Follow-up: Add a direct worker-completion wake assertion for `edit-video-asset-job.ts`; separately triage the three unrelated main-suite failures.
