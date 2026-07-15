@@ -386,38 +386,25 @@ export async function claimJobRecoveryWithDeps(
     ownerId: string;
     claimedAt: string;
     expiresAt: string;
+    staleBefore: string;
   }
 ): Promise<Job | null> {
   await deps.getProject(input.workspaceId, input.projectId);
-  const progress = input.job.progress as Job["progress"] & Record<string, unknown>;
   const db = deps.getDb();
   const data = await runQuery(
     "store.claimJobRecovery",
-    db
-      .from("jobs")
-      .update({
-        status: "running",
-        progress: {
-          ...progress,
-          heartbeatAt: input.claimedAt,
-          attempt: (progress.attempt as number | undefined ?? 0) + 1,
-          recoveryLease: {
-            ownerId: input.ownerId,
-            claimedAt: input.claimedAt,
-            expiresAt: input.expiresAt,
-          },
-        },
-        updated_at: input.claimedAt,
-      })
-      .eq("id", input.job.id)
-      .eq("project_id", input.projectId)
-      .eq("workspace_id", input.workspaceId)
-      .eq("updated_at", input.job.updatedAt)
-      .in("status", ["queued", "running"])
-      .select("*")
-      .maybeSingle()
+    db.rpc("claim_job_recovery", {
+      p_workspace_id: input.workspaceId,
+      p_project_id: input.projectId,
+      p_job_id: input.job.id,
+      p_owner_id: input.ownerId,
+      p_claimed_at: input.claimedAt,
+      p_expires_at: input.expiresAt,
+      p_stale_before: input.staleBefore,
+    })
   );
-  return data ? mapJob(data as JobRow) : null;
+  const row = Array.isArray(data) ? data[0] : data;
+  return row ? mapJob(row as JobRow) : null;
 }
 
 export async function getJobWithDeps(

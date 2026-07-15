@@ -179,7 +179,7 @@ test("raw provider and retry diagnostics require the explicit operator projectio
   const job = jobFixture({
     progress: {
       ...jobFixture().progress,
-      message: "Provider failed with api_key=sk-1234567890abcdefghijkl",
+      message: "Provider failed with api_key=definitely-not-a-real-provider-key",
     },
   });
   const creator = projectRunDetailFromParts(

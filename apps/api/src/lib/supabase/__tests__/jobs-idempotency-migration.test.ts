@@ -33,4 +33,9 @@ test("durable job idempotency is tenant-scoped and enforced atomically", () => {
   assert.match(migration, /j\.status in \('queued', 'running'\)/);
   assert.match(migration, /j\.progress #>> '\{recoveryLease,ownerId\}' = p_recovery_lease_owner_id/);
   assert.match(migration, /grant execute on function public\.update_active_job[\s\S]*?to service_role/);
+  assert.match(migration, /create or replace function public\.claim_job_recovery/);
+  assert.match(migration, /j\.updated_at <= p_stale_before/);
+  assert.match(migration, /grant execute on function public\.claim_job_recovery[\s\S]*?to service_role/);
+  assert.doesNotMatch(store, /\.eq\("updated_at", input\.job\.updatedAt\)/);
+  assert.match(store, /db\.rpc\("claim_job_recovery"/);
 });

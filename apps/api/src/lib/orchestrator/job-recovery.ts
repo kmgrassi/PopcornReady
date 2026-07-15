@@ -130,6 +130,7 @@ export async function recoverDurableOrchestratorJob(input: {
     ownerId,
     claimedAt: now.toISOString(),
     expiresAt: new Date(now.getTime() + RECOVERY_LEASE_MS).toISOString(),
+    staleBefore: new Date(now.getTime() - STALE_HEARTBEAT_MS).toISOString(),
   });
   if (!claimed) return d.getJob(input.workspaceId, input.projectId, input.jobId);
   logger.warn("orchestrator_job.recovery_claimed", {

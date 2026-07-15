@@ -52,6 +52,7 @@ test("queued durable jobs claim a recovery lease and replay their typed executio
       ownerId: () => "recovery-test",
       getJob: async () => job,
       claimJobRecovery: async (claim) => {
+        assert.equal(claim.staleBefore, "2026-07-15T11:58:30.000Z");
         const patch = {
           status: "running" as const,
           progress: {
@@ -173,6 +174,7 @@ test("stale running provider work is terminalized without replay", async () => {
     {
       getJob: async () => job,
       claimJobRecovery: async (claim) => {
+        assert.equal(claim.staleBefore, "2026-07-15T11:58:30.000Z");
         job = {
           ...job,
           progress: {

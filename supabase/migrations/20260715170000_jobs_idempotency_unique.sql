@@ -69,3 +69,46 @@ revoke all on function public.update_active_job(uuid, uuid, uuid, jsonb, public.
   from public, anon, authenticated;
 grant execute on function public.update_active_job(uuid, uuid, uuid, jsonb, public.job_status, jsonb, jsonb, text)
   to service_role;
+
+-- Recovery claims re-check staleness against the database timestamp instead of
+-- round-tripping updated_at through JavaScript, which truncates PostgreSQL's
+-- microseconds. This keeps the claim atomic without a lossy timestamp CAS.
+create or replace function public.claim_job_recovery(
+  p_workspace_id uuid,
+  p_project_id uuid,
+  p_job_id uuid,
+  p_owner_id text,
+  p_claimed_at timestamptz,
+  p_expires_at timestamptz,
+  p_stale_before timestamptz
+)
+returns setof public.jobs
+language sql
+security definer
+set search_path = public
+as $$
+  update public.jobs j
+  set
+    status = 'running',
+    progress = j.progress || jsonb_build_object(
+      'heartbeatAt', p_claimed_at,
+      'attempt', coalesce((j.progress->>'attempt')::integer, 0) + 1,
+      'recoveryLease', jsonb_build_object(
+        'ownerId', p_owner_id,
+        'claimedAt', p_claimed_at,
+        'expiresAt', p_expires_at
+      )
+    ),
+    updated_at = p_claimed_at
+  where j.id = p_job_id
+    and j.workspace_id = p_workspace_id
+    and j.project_id = p_project_id
+    and j.status in ('queued', 'running')
+    and j.updated_at <= p_stale_before
+  returning j.*;
+$$;
+
+revoke all on function public.claim_job_recovery(uuid, uuid, uuid, text, timestamptz, timestamptz, timestamptz)
+  from public, anon, authenticated;
+grant execute on function public.claim_job_recovery(uuid, uuid, uuid, text, timestamptz, timestamptz, timestamptz)
+  to service_role;
