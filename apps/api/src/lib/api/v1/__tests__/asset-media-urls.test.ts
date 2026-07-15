@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { assetMediaUrlsForRow } from "../store";
+import { assetMediaUrlsForRow } from "../asset-media-urls";
 
 const fixedNow = () => new Date("2026-06-11T12:00:00.000Z");
 
