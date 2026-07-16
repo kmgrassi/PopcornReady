@@ -112,3 +112,9 @@
 - Friction or failure: Workspace summaries lack action evidence, and action timestamps record lifecycle changes rather than true worker heartbeats.
 - Suggested improvement: Define terminal artifact invariants and evidence available per projection before designing progress copy.
 - Follow-up: Consider real worker heartbeat data only if operators need provider-stall detection beyond last recorded activity.
+
+### 2026-07-16T08:50:00-04:00 — API-20260716-02
+- What helped: The PR 4 spec's explicit "do not add" list plus the running local 555xx stack made it possible to prove every invariant (origin XOR, sequence allocation, report uniqueness) against a real replayed migration history before opening the PR.
+- Friction or failure: The TS contract uses `schemaVersion` while persisted JSONB checks require the repo's `schema_version` marker, and `ALTER TYPE ADD VALUE` cannot be consumed in the same migration transaction — both surfaced only at apply time.
+- Suggested improvement: Document the persisted-JSONB `schema_version` marker convention and the enum-migration split rule next to the asset-graph JSONB rule in CLAUDE.md/AGENTS.md.
+- Follow-up: PR 5 executes the documented action_assets dual-write/backfill/assert plan and must clear `wait_reason`/set `superseded_at` per the new constraints.

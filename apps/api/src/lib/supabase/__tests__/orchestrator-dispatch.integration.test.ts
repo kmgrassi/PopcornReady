@@ -168,27 +168,30 @@ integrationTest(
       assert.equal(requeued.lease_token, null);
       assert.equal(requeued.pending_wake_at, null);
 
+      // Since specialist-agents PR 4, workspace identity is derived from the
+      // run at the table boundary: the drifting write itself is rejected, so a
+      // mismatched dispatch row can no longer exist for the wake RPC to catch.
       const { error: driftError } = await service
         .from("orchestrator_dispatches")
         .update({ workspace_id: otherWorkspaceId })
         .eq("id", claim.dispatch_id);
-      assertNoError(driftError, "create workspace-drift fixture");
+      assert.ok(driftError, "direct workspace drift must be rejected at the table boundary");
+      assert.equal(driftError.code, "23514");
 
-      const { error: driftWakeError } = await service.rpc("wake_orchestrator_dispatch", {
-        p_orchestrator_run_id: runId,
-      });
-      assert.ok(driftWakeError, "workspace drift must be rejected");
-      assert.equal(driftWakeError.code, "23514");
-
-      const { data: drifted, error: driftedError } = await service
+      const { data: undrifted, error: undriftedError } = await service
         .from("orchestrator_dispatches")
         .select("workspace_id,status")
         .eq("id", claim.dispatch_id)
         .single();
-      assertNoError(driftedError, "read rejected drift fixture");
-      assert.ok(drifted);
-      assert.equal(drifted.workspace_id, otherWorkspaceId);
-      assert.equal(drifted.status, "queued");
+      assertNoError(undriftedError, "read dispatch after rejected drift");
+      assert.ok(undrifted);
+      assert.equal(undrifted.workspace_id, workspaceId);
+      assert.equal(undrifted.status, "queued");
+
+      const { error: consistentWakeError } = await service.rpc("wake_orchestrator_dispatch", {
+        p_orchestrator_run_id: runId,
+      });
+      assertNoError(consistentWakeError, "wake still succeeds for the consistent dispatch");
     } finally {
       if (authUserId) await service.auth.admin.deleteUser(authUserId);
       await service.from("workspaces").delete().in("id", [workspaceId, otherWorkspaceId]);

@@ -161,6 +161,10 @@ function toolItemPurpose(tool: string): GenerationStageItemPurpose {
 
 function runStatus(status: OrchestratorRun["status"]): GenerationRunStatus {
   if (status === "waiting") return "running";
+  // Domain finite-run transport states (specialist-agents PR 4): the legacy
+  // projection collapses them onto their nearest terminal legacy status.
+  if (status === "timed_out") return "failed";
+  if (status === "superseded") return "canceled";
   return status;
 }
 
@@ -245,6 +249,10 @@ function runMessage(
       return "Generation failed.";
     case "canceled":
       return "Generation was canceled.";
+    case "timed_out":
+      return "Generation timed out.";
+    case "superseded":
+      return "Generation was superseded by a newer run.";
   }
 }
 
