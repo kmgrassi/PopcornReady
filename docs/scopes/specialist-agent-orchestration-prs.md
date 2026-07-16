@@ -167,13 +167,31 @@ Future domain agents are possible, but a new domain must be justified by a
 cohesive tool cluster and decision-eval evidence. The design does not target a
 particular number of dispatch tools.
 
-## Decision Gate 0 — prove the root hierarchy is worth activating
+## Decision Gate 0 — resolved: proceed with the root hierarchy
 
-The root hierarchy is an adoption option, not an assumption that more agents
-are automatically better. Standalone image, video, and soundtrack creation is
-an explicit product requirement and does not depend on the hierarchy winning
-the comparison. Before activating the root cutover, expand the existing
-orchestrator decision evals and establish a repeated-sample baseline for:
+> **Decision recorded 2026-07-16: PROCEED.** The creative-director hierarchy is
+> adopted on engineering and product grounds rather than on a measured
+> decision-quality comparison:
+>
+> - **Modularity:** each agent carries a small role-scoped prompt and registry,
+>   which is easier to program, test, and debug than one all-tools decision
+>   surface.
+> - **Observability:** creators cannot currently see what background generation
+>   is doing. Persistent domain sessions plus typed `done | blocked | question`
+>   reports give the observe-first UI
+>   ([`ui-interaction-model.md`](../ui-interaction-model.md), PR 17) a real
+>   hierarchy to narrate — which agent is working, on what, and what was handed
+>   off.
+> - Both architectures are judged capable of routing correctly; raw capability
+>   was not the deciding question.
+>
+> Consequences: PR 14 depends only on PRs 10–11 and no longer waits on a
+> billable baseline study. The "defer" branch of this gate is retired.
+
+The decision-eval harness remains required — repurposed from adoption gate to
+**non-inferiority regression bar**. Before PR 18 enables creative-director
+routing by default, the hierarchy surface must route **at least as well as**
+the flat root on the same paired repeated-sample scenario matrix, covering:
 
 - wrong next-tool or premature-done decisions;
 - performance as project history and available tools grow;
@@ -182,12 +200,10 @@ orchestrator decision evals and establish a repeated-sample baseline for:
 - unnecessary turns and repeated failed calls; and
 - selective-regeneration decisions with stable graph IDs.
 
-Agree on a material-improvement threshold before running the comparison. PRs
-2–13 establish the shared domain runtime and independently requested Asset
-Studio even if the flat root is not measurably suffering. A defer decision
-blocks PR 14 and hierarchy-specific PRs while leaving the standalone product
-path usable. Do not run both root architectures against live billable providers
-for comparison; compare decisions with fixtures or mocked execution.
+PRs 2–13 establish the shared domain runtime and independently requested Asset
+Studio on their own product merits. Do not run both root architectures against
+live billable providers for comparison; compare decisions with fixtures or
+mocked execution.
 
 ## Current baseline
 
@@ -639,7 +655,7 @@ Required invariants:
 
 ```mermaid
 flowchart TD
-  P1["PR 1 — Decision-eval gate"]
+  P1["PR 1 — Decision-eval regression bar"]
   P2["PR 2 — Architecture contract"]
   P2 --> P3["PR 3 — Tool ownership"]
   P2 --> P4["PR 4 — Session + run extensions"]
@@ -658,20 +674,22 @@ flowchart TD
   P12 --> P13["PR 13 — Asset Studio UI"]
   P10 --> P14["PR 14 — Creative director"]
   P11 --> P14
-  P1 --> P14
   P12 --> P15["PR 15 — Request Changes"]
   P14 --> P15
   P15 --> P16["PR 16 — Parallel dispatch"]
   P16 --> P17["PR 17 — Hierarchical projection"]
   P13 --> P18["PR 18 — Root rollout"]
   P17 --> P18
+  P1 --> P18
   P18 --> P19["PR 19 — Cleanup"]
 ```
 
 PRs 10 and 11 intentionally own distinct domain files and can proceed in
-parallel after PR 9. PRs 12–13 form the standalone product track and do not
-depend on a Gate 0 proceed decision. PR 14 may proceed in parallel with that
-track only if Gate 0 says proceed. PR 17 is predominantly an extension of the
+parallel after PR 9. PRs 12–13 form the standalone product track and were never
+contingent on Gate 0. Gate 0 recorded "proceed" (2026-07-16), so PR 14 depends
+only on PRs 10–11 and may proceed in parallel with that track; PR 1's eval work
+gates the PR 18 default-on rollout as the non-inferiority regression bar, not
+PR 14. PR 17 is predominantly an extension of the
 root run projection; Asset Studio does not wait for it because PR 12 owns its
 stable session/run/status/output API.
 
@@ -699,13 +717,15 @@ CSS Modules for new UI styling.
   unnecessary-turn, and recovery baselines.
 - Add fixture-only simulations of the proposed creative-director/domain
   decision surface; never duplicate live billable generation.
-- Record the agreed threshold and an explicit proceed/defer decision for the
-  root hierarchy. Record standalone domain creation as a separate required
-  product track rather than making it contingent on the eval result.
+- Record the agreed non-inferiority threshold for the PR 18 cutover bar. The
+  proceed decision itself was recorded 2026-07-16 on design grounds (see
+  Decision Gate 0); this PR's record captures the regression threshold and
+  baseline, not an adoption verdict. Record standalone domain creation as a
+  separate required product track rather than making it contingent on the eval
+  result.
 
-**Acceptance:** the team can state which failure mode the hierarchy addresses
-and what improvement justifies root cutover. A defer decision blocks PR 14 and
-hierarchy-specific successors but does not block PRs 2–13.
+**Acceptance:** the team can state which failure modes the regression bar
+protects against and what non-inferiority result clears the PR 18 cutover.
 
 **Validation:** deterministic eval unit tests plus repeated opt-in real-model
 decision reports.
@@ -1210,7 +1230,8 @@ providers, and E2E inventory updates.
 
 ### PR 14 — Creative-director profile and root tool surface
 
-**Depends on:** PRs 10 and 11 **and Gate 0 recording “proceed.”** It may run in
+**Depends on:** PRs 10 and 11. Gate 0 recorded "proceed" on 2026-07-16 (see
+Decision Gate 0), so no baseline study blocks this PR. It may run in
 parallel with PRs 12–13 because all three reuse the same stable domain contracts.
 
 **Deliver:**
@@ -1446,8 +1467,9 @@ and gates. Do not enable billable standalone creation until PRs 2–13 meet thei
 security, proposal, provenance, UX, and media-smoke acceptance. Do not enable
 creative-director routing by default until all are true:
 
-1. Gate 0 records a proceed decision and root decision evals meet the agreed
-   repeated-sample threshold.
+1. Gate 0 recorded "proceed" (2026-07-16); root decision evals meet the agreed
+   non-inferiority bar against the flat root on the paired repeated-sample
+   matrix.
 2. Visuals and Audio have registry-isolation and leaf-tool decision evals.
 3. A provider-neutral end-to-end run reaches export through persistent sessions.
 4. Request Changes passes visual, audio, pacing, and upstream multi-domain cases.
