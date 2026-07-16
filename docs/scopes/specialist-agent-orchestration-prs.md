@@ -655,7 +655,7 @@ Required invariants:
 
 ```mermaid
 flowchart TD
-  P1["PR 1 — Decision-eval gate"]
+  P1["PR 1 — Decision-eval regression bar"]
   P2["PR 2 — Architecture contract"]
   P2 --> P3["PR 3 — Tool ownership"]
   P2 --> P4["PR 4 — Session + run extensions"]
@@ -674,20 +674,22 @@ flowchart TD
   P12 --> P13["PR 13 — Asset Studio UI"]
   P10 --> P14["PR 14 — Creative director"]
   P11 --> P14
-  P1 --> P14
   P12 --> P15["PR 15 — Request Changes"]
   P14 --> P15
   P15 --> P16["PR 16 — Parallel dispatch"]
   P16 --> P17["PR 17 — Hierarchical projection"]
   P13 --> P18["PR 18 — Root rollout"]
   P17 --> P18
+  P1 --> P18
   P18 --> P19["PR 19 — Cleanup"]
 ```
 
 PRs 10 and 11 intentionally own distinct domain files and can proceed in
-parallel after PR 9. PRs 12–13 form the standalone product track and do not
-depend on a Gate 0 proceed decision. PR 14 may proceed in parallel with that
-track only if Gate 0 says proceed. PR 17 is predominantly an extension of the
+parallel after PR 9. PRs 12–13 form the standalone product track and were never
+contingent on Gate 0. Gate 0 recorded "proceed" (2026-07-16), so PR 14 depends
+only on PRs 10–11 and may proceed in parallel with that track; PR 1's eval work
+gates the PR 18 default-on rollout as the non-inferiority regression bar, not
+PR 14. PR 17 is predominantly an extension of the
 root run projection; Asset Studio does not wait for it because PR 12 owns its
 stable session/run/status/output API.
 
