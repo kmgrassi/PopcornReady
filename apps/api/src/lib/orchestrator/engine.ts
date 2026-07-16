@@ -10,6 +10,7 @@
 // unit-testable with fakes — no DB, no network.
 
 import { createAction, updateAction } from "@/lib/api/v1/store";
+import { randomUUID } from "node:crypto";
 import {
   getOrchestratorRun,
   claimOrchestratorRunResume,
@@ -57,6 +58,8 @@ const AFTER_GATE_PREFIX = "after:";
 const logger = createLogger();
 
 export interface InvocationRecord {
+  /** Reserved before a mutating tool executes; also becomes context.toolCallId. */
+  actionId: string;
   projectId: string;
   orchestratorRunId: string;
   tool: string;
@@ -86,7 +89,8 @@ export interface OrchestratorEngineStore {
   markInvocation(
     actionId: string,
     patch: {
-      status: "applied" | "failed";
+      status: "running" | "applied" | "failed";
+      jobIds?: string[];
       outputAssetIds?: string[];
       error?: Record<string, unknown>;
     }
@@ -146,6 +150,7 @@ export function defaultEngineStore(): OrchestratorEngineStore {
     listRunActions,
     async recordInvocation(input) {
       await createAction({
+        id: input.actionId,
         projectId: input.projectId,
         orchestratorRunId: input.orchestratorRunId,
         tool: input.tool,
@@ -159,6 +164,7 @@ export function defaultEngineStore(): OrchestratorEngineStore {
     async markInvocation(actionId, patch) {
       await updateAction(actionId, {
         status: patch.status,
+        ...(patch.jobIds !== undefined ? { jobIds: patch.jobIds } : {}),
         ...(patch.outputAssetIds !== undefined
           ? { outputAssetIds: patch.outputAssetIds }
           : {}),
@@ -581,17 +587,6 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       tool: decision.toolName,
       model: decision.model,
     });
-    const toolContext = createToolExecutionContext({
-      workspaceId: r.workspaceId,
-      projectId: run.projectId,
-      orchestratorRunId: run.id,
-      actorId: r.actorId ?? "orchestrator",
-      agentId: r.agentId ?? "orchestrator",
-      messageId: r.messageId,
-      requestId: r.requestId,
-      metadata: runMetadata(run, r),
-    });
-
     // Gate handling. Pending/reached gates pause before executing. Approved gates
     // fall through. Rejected gates also fall through once: that is the
     // "regenerate this stage" path, and after the tool succeeds the gate is
@@ -619,6 +614,33 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       }
     }
 
+    // Persist the canonical invocation before the tool can mutate the graph or
+    // launch a provider job. The same UUID travels through the tool context, so
+    // asynchronous job/asset paths can attach to it instead of minting a
+    // wrapper action later.
+    const actionId = randomUUID();
+    const toolContext = createToolExecutionContext({
+      workspaceId: r.workspaceId,
+      projectId: run.projectId,
+      orchestratorRunId: run.id,
+      toolCallId: actionId,
+      actorId: r.actorId ?? "orchestrator",
+      agentId: r.agentId ?? "orchestrator",
+      messageId: r.messageId,
+      requestId: r.requestId,
+      metadata: runMetadata(run, r),
+    });
+    await r.store.recordInvocation({
+      actionId,
+      projectId: run.projectId,
+      orchestratorRunId: run.id,
+      tool: decision.toolName,
+      status: "running",
+      params: decision.input,
+      outputAssetIds: [],
+      jobIds: [],
+    });
+
     // Credit pre-check: fail fast before spending on a generation a broke user
     // with no BYO keys can't pay for. Only gates BILLABLE tools (estimate > 0) —
     // free planning/critique still runs when out of credits. Users who bring their
@@ -639,14 +661,8 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
             "Out of credits. Buy credits or add your own provider API keys to keep generating.",
           recoverable: false,
         };
-        await r.store.recordInvocation({
-          projectId: run.projectId,
-          orchestratorRunId: run.id,
-          tool: decision.toolName,
+        await r.store.markInvocation(actionId, {
           status: "failed",
-          params: decision.input,
-          outputAssetIds: [],
-          jobIds: [],
           error,
         });
         return finish(run, "failed", r, error);
@@ -679,14 +695,8 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
         tool: decision.toolName,
         error: { code: error.kind, message: error.message },
       });
-      await r.store.recordInvocation({
-        projectId: run.projectId,
-        orchestratorRunId: run.id,
-        tool: decision.toolName,
+      await r.store.markInvocation(actionId, {
         status: "failed",
-        params: decision.input,
-        outputAssetIds: [],
-        jobIds: [],
         error,
       });
       return finish(run, "failed", r, error);
@@ -716,20 +726,15 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       });
     }
 
-    await r.store.recordInvocation({
-      projectId: run.projectId,
-      orchestratorRunId: run.id,
-      tool: decision.toolName,
+    await r.store.markInvocation(actionId, {
       status:
         result.status === "succeeded"
           ? "applied"
           : result.status === "failed"
             ? "failed"
             : "running",
-      params: decision.input,
       outputAssetIds: invocationOutputAssetIds(result),
       jobIds: result.status === "accepted" ? [result.jobId] : [],
-      costUsd: result.status === "succeeded" ? result.costUsd : undefined,
       error: result.status === "failed" ? { ...result.error } : undefined,
     });
 

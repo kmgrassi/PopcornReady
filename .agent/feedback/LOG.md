@@ -142,3 +142,9 @@
 - Friction or failure: The merged PR advanced `main` and exposed a feedback-log conflict on PR #795 after its implementation push.
 - Suggested improvement: Recheck mergeability after every caretaker comment resolution because branch protection and base updates can change during review.
 - Follow-up: none.
+
+### 2026-07-16T10:05:00-04:00 — API-20260716-03
+- What helped: Starting at the pre-execution action boundary made the existing duplicate-action risk concrete and gave jobs one canonical initiating identity.
+- Friction or failure: An independent review showed that in-process locks and local job-created guards are not enough for cross-instance retries, provider claims, or action-to-asset lineage.
+- Suggested improvement: Design the database reservation, claim, and generated-asset provenance path as one crash-window testable transaction boundary before claiming idempotent orchestration behavior.
+- Follow-up: Continue PR 5 with atomic idempotency reservation/consume, provider claim fencing, and canonical action propagation into generated assets.

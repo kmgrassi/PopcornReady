@@ -253,10 +253,13 @@ export function createGenerateKeyframeTool(
         return storyboardRequired();
       }
 
-      const { job } = await resolved.createJob({
+      const { job, created } = await resolved.createJob({
         workspaceId: context.auth.workspaceId,
         type: "asset_generation",
         projectId: context.projectId,
+        ...(context.toolCallId
+          ? { actionId: context.toolCallId, idempotencyKey: `action:${context.toolCallId}` }
+          : {}),
         execution: {
           schemaVersion: "orchestrator_job_execution.v1",
           kind: "generate_keyframe",
@@ -288,17 +291,19 @@ export function createGenerateKeyframeTool(
         ),
       });
 
-      void resolved.runGenerateKeyframeJob({
-        jobId: job.id,
-        workspaceId: context.auth.workspaceId,
-        projectId: context.projectId,
-        ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
-        plan: active.plan,
-        planAssetId: active.assetId,
-        planContentHash: active.contentHash,
-        storyboard,
-        ...(input.provider ? { provider: input.provider } : {}),
-      });
+      if (created) {
+        void resolved.runGenerateKeyframeJob({
+          jobId: job.id,
+          workspaceId: context.auth.workspaceId,
+          projectId: context.projectId,
+          ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
+          plan: active.plan,
+          planAssetId: active.assetId,
+          planContentHash: active.contentHash,
+          storyboard,
+          ...(input.provider ? { provider: input.provider } : {}),
+        });
+      }
 
       return { status: "accepted", jobId: job.id, resumesWhen: "job_terminal" };
     },

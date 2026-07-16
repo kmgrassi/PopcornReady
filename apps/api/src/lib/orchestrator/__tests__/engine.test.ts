@@ -86,7 +86,7 @@ class FakeStore implements OrchestratorEngineStore {
   }
   async recordInvocation(input: InvocationRecord) {
     this.actions.push({
-      id: `a${this.actions.length}`,
+      id: input.actionId,
       tool: input.tool,
       status: input.status,
       params: input.params,
@@ -98,11 +98,17 @@ class FakeStore implements OrchestratorEngineStore {
   }
   async markInvocation(
     actionId: string,
-    patch: { status: "applied" | "failed"; outputAssetIds?: string[]; error?: Record<string, unknown> }
+    patch: {
+      status: "running" | "applied" | "failed";
+      jobIds?: string[];
+      outputAssetIds?: string[];
+      error?: Record<string, unknown>;
+    }
   ) {
     const action = this.actions.find((a) => a.id === actionId);
     if (!action) return;
     action.status = patch.status;
+    if (patch.jobIds) action.jobIds = patch.jobIds;
     if (patch.outputAssetIds) action.outputAssetIds = patch.outputAssetIds;
     if (patch.error) action.error = patch.error;
   }
@@ -228,6 +234,30 @@ test("injects the server-owned wrapper context into each tool execution", async 
   assert.equal(seenContext?.requestId, "req1");
   assert.deepEqual(seenContext?.metadata, { entrypoint: "prompt" });
   assert.match(seenContext?.toolCallId ?? "", /^[0-9a-f-]{36}$/);
+  assert.equal(seenContext?.toolCallId, store.actions[0]?.id);
+});
+
+test("persists the canonical running action before invoking a mutating tool", async () => {
+  const store = new FakeStore(runFixture());
+  const { model } = scriptedModel([
+    { type: "tool_call", toolName: "plan_shots" },
+    { type: "done" },
+  ]);
+  let actionAtExecution: RunActionSummary | undefined;
+  const registry = fakeRegistry({
+    plan_shots: (context) => {
+      const action = store.actions.find((candidate) => candidate.id === context.toolCallId);
+      actionAtExecution = action ? { ...action } : undefined;
+      return ok(["asset_plan"]);
+    },
+  });
+
+  await runOrchestratorToCompletion("run1", deps(store, model, registry));
+
+  assert.equal(actionAtExecution?.status, "running");
+  assert.equal(store.actions.length, 1);
+  assert.equal(store.actions[0]?.status, "applied");
+  assert.equal(store.actions[0]?.outputAssetIds[0], "asset_plan");
 });
 
 test("reconstructs uploaded-footage selected assets from persisted run summary", async () => {

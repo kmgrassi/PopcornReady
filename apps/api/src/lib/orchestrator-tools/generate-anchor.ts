@@ -157,10 +157,13 @@ export function createGenerateAnchorTool(
       const active = await resolved.getActiveProjectVisualAnchorPlan(context.projectId);
       if (!active) return visualAnchorPlanRequired();
 
-      const { job } = await resolved.createJob({
+      const { job, created } = await resolved.createJob({
         workspaceId: context.auth.workspaceId,
         type: "asset_generation",
         projectId: context.projectId,
+        ...(context.toolCallId
+          ? { actionId: context.toolCallId, idempotencyKey: `action:${context.toolCallId}` }
+          : {}),
         execution: {
           schemaVersion: "orchestrator_job_execution.v1",
           kind: "generate_anchor",
@@ -176,16 +179,18 @@ export function createGenerateAnchorTool(
         },
       });
 
-      void resolved.runGenerateAnchorJob({
-        jobId: job.id,
-        workspaceId: context.auth.workspaceId,
-        projectId: context.projectId,
-        ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
-        visualAnchorPlan: active.visualAnchorPlan,
-        visualAnchorPlanAssetId: active.assetId,
-        visualAnchorPlanContentHash: active.contentHash,
-        ...(input.provider ? { provider: input.provider } : {}),
-      });
+      if (created) {
+        void resolved.runGenerateAnchorJob({
+          jobId: job.id,
+          workspaceId: context.auth.workspaceId,
+          projectId: context.projectId,
+          ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
+          visualAnchorPlan: active.visualAnchorPlan,
+          visualAnchorPlanAssetId: active.assetId,
+          visualAnchorPlanContentHash: active.contentHash,
+          ...(input.provider ? { provider: input.provider } : {}),
+        });
+      }
 
       return { status: "accepted", jobId: job.id, resumesWhen: "job_terminal" };
     },

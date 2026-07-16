@@ -445,10 +445,13 @@ export function createGenerateClipTool(
         };
       }
 
-      const { job } = await resolved.createJob({
+      const { job, created } = await resolved.createJob({
         workspaceId: context.auth.workspaceId,
         type: "asset_generation",
         projectId: context.projectId,
+        ...(context.toolCallId
+          ? { actionId: context.toolCallId, idempotencyKey: `action:${context.toolCallId}` }
+          : {}),
         execution: {
           schemaVersion: "orchestrator_job_execution.v1",
           kind: "generate_clip",
@@ -473,16 +476,18 @@ export function createGenerateClipTool(
         skippedBeatIds,
       });
 
-      void resolved.runGenerateClipJob({
-        jobId: job.id,
-        workspaceId: context.auth.workspaceId,
-        projectId: context.projectId,
-        ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
-        beats: jobBeats,
-        skippedBeatIds,
-        ...(input.provider ? { provider: input.provider } : {}),
-        ...(input.model ? { model: input.model } : {}),
-      });
+      if (created) {
+        void resolved.runGenerateClipJob({
+          jobId: job.id,
+          workspaceId: context.auth.workspaceId,
+          projectId: context.projectId,
+          ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
+          beats: jobBeats,
+          skippedBeatIds,
+          ...(input.provider ? { provider: input.provider } : {}),
+          ...(input.model ? { model: input.model } : {}),
+        });
+      }
 
       return { status: "accepted", jobId: job.id, resumesWhen: "job_terminal" };
     },

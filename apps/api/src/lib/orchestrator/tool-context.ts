@@ -6,6 +6,8 @@ export interface ToolExecutionContextInput {
   workspaceId: string;
   projectId: string;
   orchestratorRunId: string;
+  /** A preallocated durable action id when the engine owns this invocation. */
+  toolCallId?: string;
   actorId?: string;
   agentId?: string;
   messageId?: string;
@@ -20,7 +22,7 @@ export function createToolExecutionContext(
     workspaceId: input.workspaceId,
     projectId: input.projectId,
     orchestratorRunId: input.orchestratorRunId,
-    toolCallId: randomUUID(),
+    toolCallId: input.toolCallId ?? randomUUID(),
     ...(input.actorId ? { actorId: input.actorId } : {}),
     ...(input.agentId ? { agentId: input.agentId } : {}),
     ...(input.messageId ? { messageId: input.messageId } : {}),

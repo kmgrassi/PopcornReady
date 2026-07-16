@@ -178,10 +178,13 @@ export function createGenerateAudioTool(
       if (!activePlan) return planRequired();
 
       const activeBrief = await resolved.getActiveProjectBrief(context.projectId);
-      const { job } = await resolved.createJob({
+      const { job, created } = await resolved.createJob({
         workspaceId: context.auth.workspaceId,
         type: "asset_generation",
         projectId: context.projectId,
+        ...(context.toolCallId
+          ? { actionId: context.toolCallId, idempotencyKey: `action:${context.toolCallId}` }
+          : {}),
         execution: {
           schemaVersion: "orchestrator_job_execution.v1",
           kind: "generate_audio",
@@ -202,21 +205,23 @@ export function createGenerateAudioTool(
         },
       });
 
-      void resolved.runGenerateAudioJob({
-        jobId: job.id,
-        workspaceId: context.auth.workspaceId,
-        projectId: context.projectId,
-        ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
-        plan: activePlan.plan,
-        planAssetId: activePlan.assetId,
-        planContentHash: activePlan.contentHash,
-        ...(activeBrief?.brief ? { brief: activeBrief.brief } : {}),
-        ...(activeBrief?.assetId ? { briefAssetId: activeBrief.assetId } : {}),
-        ...(activeBrief?.contentHash ? { briefContentHash: activeBrief.contentHash } : {}),
-        ...(input.provider ? { provider: input.provider } : {}),
-        ...(input.voiceId ? { voiceId: input.voiceId } : {}),
-        ...(input.feedback ? { feedback: input.feedback } : {}),
-      });
+      if (created) {
+        void resolved.runGenerateAudioJob({
+          jobId: job.id,
+          workspaceId: context.auth.workspaceId,
+          projectId: context.projectId,
+          ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
+          plan: activePlan.plan,
+          planAssetId: activePlan.assetId,
+          planContentHash: activePlan.contentHash,
+          ...(activeBrief?.brief ? { brief: activeBrief.brief } : {}),
+          ...(activeBrief?.assetId ? { briefAssetId: activeBrief.assetId } : {}),
+          ...(activeBrief?.contentHash ? { briefContentHash: activeBrief.contentHash } : {}),
+          ...(input.provider ? { provider: input.provider } : {}),
+          ...(input.voiceId ? { voiceId: input.voiceId } : {}),
+          ...(input.feedback ? { feedback: input.feedback } : {}),
+        });
+      }
 
       return { status: "accepted", jobId: job.id, resumesWhen: "job_terminal" };
     },

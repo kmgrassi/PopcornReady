@@ -196,6 +196,12 @@ export interface V1Action {
 }
 
 export interface CreateActionInput {
+  /**
+   * Optional caller-reserved identity. Orchestrator invocations allocate this
+   * before external work so a retried persistence write cannot append a second
+   * action for the same tool call.
+   */
+  id?: string;
   projectId: string;
   orchestratorRunId?: string;
   tool: string;
