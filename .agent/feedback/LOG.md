@@ -172,3 +172,8 @@
 - Friction or failure: Treating either renewal rejection or a false renewal result as final ownership loss skipped a valid token-fenced completion and could discard a successful response.
 - Suggested improvement: Let the database token predicate make the final completion decision; use renewal only to extend an active lease, not to preemptively suppress completion.
 - Follow-up: Keep provider-job claim fencing as the remaining protection for external side effects after a process crash.
+### 2026-07-16T16:35:00-04:00 — TYPE-20260716-01
+- What helped: A focused JSON sidecar boundary and a direct storage test made the type-safety improvement small and observable.
+- Friction or failure: The API package test script always runs the full suite, exposing three unrelated baseline failures before the focused test was run directly.
+- Suggested improvement: Add package-level support for selecting a single test file without appending the full glob.
+- Follow-up: None for this PR; the full-suite failures remain outside this change.

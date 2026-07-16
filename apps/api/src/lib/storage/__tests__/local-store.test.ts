@@ -67,3 +67,27 @@ test("local signed URLs intentionally fall back to the unsigned local media path
     "/media/assets-private/ws/proj/asset/private.mp4"
   );
 });
+
+test("local store ignores metadata sidecars with an invalid shape", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "popcorn-storage-"));
+  const config = readStorageConfig({
+    STORAGE_BACKEND: "local",
+    STORAGE_LOCAL_DIR: root,
+  });
+  const store = createLocalObjectStore(config);
+
+  await store.putObject({
+    key: "ws/proj/asset/source.txt",
+    body: "hello storage",
+    visibility: "public",
+    contentType: "text/plain",
+  });
+  await fs.writeFile(
+    path.join(root, "assets-public/ws/proj/asset/source.txt.metadata.json"),
+    JSON.stringify({ contentType: 42 }),
+    "utf8"
+  );
+
+  const stored = await store.getObject("ws/proj/asset/source.txt", "public");
+  assert.equal(stored.contentType, undefined);
+});

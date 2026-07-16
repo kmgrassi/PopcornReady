@@ -97,12 +97,19 @@ function toBuffer(body: Buffer | Uint8Array | string): Buffer {
 
 async function readMetadata(filePath: string): Promise<{ contentType?: string }> {
   try {
-    return JSON.parse(await fs.readFile(metadataPath(filePath), "utf8")) as {
-      contentType?: string;
-    };
+    const parsed: unknown = JSON.parse(
+      await fs.readFile(metadataPath(filePath), "utf8")
+    );
+    return isStoredObjectMetadata(parsed) ? parsed : {};
   } catch {
     return {};
   }
+}
+
+function isStoredObjectMetadata(value: unknown): value is { contentType?: string } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const contentType = (value as { contentType?: unknown }).contentType;
+  return contentType === undefined || typeof contentType === "string";
 }
 
 async function writeMetadata(
