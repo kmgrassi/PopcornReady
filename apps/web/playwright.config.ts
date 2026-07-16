@@ -95,6 +95,7 @@ const webServerEnv = hostedAuthMode
       PLAYWRIGHT_BASE_URL: baseURL,
       PLAYWRIGHT_API_PORT: String(apiPort),
     };
+webServerEnv.VITE_E2E_ENABLE_POSTER_GENERATION = "true";
 const pwaWebServerEnv = {
   ...webServerEnv,
   NODE_ENV: "production",

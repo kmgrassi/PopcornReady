@@ -155,8 +155,26 @@
 - Suggested improvement: Keep correlation IDs and durable identities as separate typed fields, and test both engine-reserved and direct-tool execution paths whenever a new durable link is added.
 - Follow-up: Retain the remaining PR 5 cross-instance reservation, provider-claim, crash-recovery, and generated-asset provenance work as explicit blockers.
 
+### 2026-07-16T16:00:00-04:00 — API-20260716-07
+- What helped: Pure helper extraction and facade re-exports kept the route refactor behavior-preserving and easy to validate.
+- Friction or failure: The branch's worksheet identifier collided with an unrelated main-branch worksheet during conflict resolution, so the branch record was renamed before committing.
+- Suggested improvement: Reserve worksheet IDs across parallel worktrees before implementation begins.
+- Follow-up: Keep the run-detail loading boundary as a separate future extraction.
+
 ### 2026-07-16T14:35:00-04:00 — PR-CARETAKER-20260716-02
 - What helped: Rebase conflict inspection exposed a shared worksheet identifier rather than a product-code conflict.
 - Friction or failure: Independent PRs used the same worksheet ID, which also collides with the worksheet tag namespace after merge.
 - Suggested improvement: Reserve worksheet IDs when a worktree is created or include the PR scope in the identifier before implementation begins.
 - Follow-up: Preserve `API-20260716-03` for merged PR 7 and use `API-20260716-04` for this PR 5 branch.
+
+### 2026-07-16T15:10:00-04:00 — API-20260716-06
+- What helped: Treating the idempotency row as a lease-backed reservation clarified the API-instance race without holding a transaction over producer work.
+- Friction or failure: A lease token fences stale record writes but cannot by itself make a provider launch safe after a process crash; the dedicated job claim remains required follow-up work.
+- Suggested improvement: Keep request reservation, provider claim, and generated-asset provenance as explicit separately-tested durability boundaries rather than implying one idempotency helper covers all three.
+- Follow-up: Apply the migration and run the env-gated Postgres race test once the local Supabase database is healthy; then implement the provider-job claim fence.
+
+### 2026-07-16T15:45:00-04:00 — API-20260716-06
+- What helped: PR review isolated the distinction between a failed lease-renewal attempt and durable ownership loss.
+- Friction or failure: Treating either renewal rejection or a false renewal result as final ownership loss skipped a valid token-fenced completion and could discard a successful response.
+- Suggested improvement: Let the database token predicate make the final completion decision; use renewal only to extend an active lease, not to preemptively suppress completion.
+- Follow-up: Keep provider-job claim fencing as the remaining protection for external side effects after a process crash.

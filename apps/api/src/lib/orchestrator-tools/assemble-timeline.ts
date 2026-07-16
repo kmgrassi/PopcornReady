@@ -10,6 +10,7 @@ import {
   type V1Action,
   type V1Asset,
 } from "@/lib/api/v1/store";
+import { withLlmCostRecording } from "@/lib/api/v1/llm-costs";
 import { sanitizeTimeline } from "@popcorn/timeline/timeline";
 import { planBeats, type Clip, type Timeline } from "@popcorn/shared/types";
 import type { GraphAssetInput } from "@/lib/api/v1/asset-graph";
@@ -370,12 +371,20 @@ export function createAssembleTimelineTool(
           rationale: "Assemble selected media assets into the active timeline.",
         });
 
-        const draft = await resolved.selectClips({
-          plan: activePlan.plan,
-          clips,
-          goal: input.goal ?? defaultGoal(activePlan),
-          storyContext: null,
-        });
+        const draft = await withLlmCostRecording(
+          {
+            projectId: context.projectId,
+            runId: context.orchestratorRunId,
+            actionId: action.id,
+          },
+          () =>
+            resolved.selectClips({
+              plan: activePlan.plan,
+              clips,
+              goal: input.goal ?? defaultGoal(activePlan),
+              storyContext: null,
+            })
+        );
         const timeline: Timeline = sortTimelineByAssetOrder(
           sanitizeTimeline(
             input.showCaptions === undefined

@@ -42,6 +42,7 @@ import type {
 import { SCHEMA as CONTRACT_SCHEMA } from "@popcorn/shared/v1/types";
 import { AuthContext } from "./auth";
 import { ApiError, FieldError, validationError } from "./errors";
+import { withLlmCostRecording } from "./llm-costs";
 import { VideoBrief } from "./schemas";
 import {
   createBriefVersion,
@@ -604,13 +605,15 @@ export async function createPlan(args: CreatePlanArgs): Promise<ApiResult> {
 
   const inputs = await resolvePlanInputs(deps, auth, projectId, body);
 
-  const plan = await deps.planEdit({
-    goal: inputs.goal,
-    targetLengthSec: inputs.targetLengthSec,
-    style: inputs.style,
-    aspectRatio: inputs.aspectRatio,
-    storyContext: inputs.storyContext,
-  });
+  const plan = await withLlmCostRecording({ projectId }, () =>
+    deps.planEdit({
+      goal: inputs.goal,
+      targetLengthSec: inputs.targetLengthSec,
+      style: inputs.style,
+      aspectRatio: inputs.aspectRatio,
+      storyContext: inputs.storyContext,
+    })
+  );
 
   // Persist as a composition by default (§6.4); persist:false skips.
   const persist = body.persist !== false;
@@ -736,12 +739,14 @@ export async function createPlanCritique(
       ? body.goal.trim()
       : planBeats(plan).map((b) => b.intent).join(" ");
 
-  const report: PlanCritiqueReport = await deps.critiquePlan({
-    goal,
-    plan,
-    style: effectiveStyle,
-    aspectRatio: effectiveAspectRatio,
-  });
+  const report: PlanCritiqueReport = await withLlmCostRecording({ projectId }, () =>
+    deps.critiquePlan({
+      goal,
+      plan,
+      style: effectiveStyle,
+      aspectRatio: effectiveAspectRatio,
+    })
+  );
 
   const job = await deps.createJob({
     workspaceId: auth.workspaceId,

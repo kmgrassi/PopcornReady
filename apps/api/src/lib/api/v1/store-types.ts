@@ -139,6 +139,15 @@ export interface IdempotencyRecord {
   createdAt: string;
 }
 
+export type IdempotencyReservationState = "reserved" | "pending" | "replay" | "conflict";
+
+export interface IdempotencyReservation {
+  state: IdempotencyReservationState;
+  status?: number;
+  responseBody?: unknown;
+  leaseToken?: string;
+}
+
 export interface AssetGraphSelectionRef {
   slotOwnerLineageId: string | null;
   slotRole: string;

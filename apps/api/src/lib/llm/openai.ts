@@ -11,6 +11,7 @@ import {
   ToolChoiceResult,
   ToolSpec,
 } from "./types";
+import { reportLlmUsage } from "@popcorn/llm";
 
 // Reasoning models accept `reasoning_effort`; non-reasoning models (gpt-4o,
 // gpt-4.1) reject it, so only send it when the model is a reasoning one.
@@ -48,6 +49,11 @@ export interface OpenAiChoiceLike {
 export interface OpenAiCompletionLike {
   model?: string | null;
   choices?: OpenAiChoiceLike[] | null;
+  usage?: {
+    prompt_tokens?: number | null;
+    completion_tokens?: number | null;
+    prompt_tokens_details?: { cached_tokens?: number | null } | null;
+  } | null;
 }
 
 export interface OpenAiFunctionTool {
@@ -100,6 +106,21 @@ export interface OpenAiCreateRequest {
 }
 
 type ChatCreate = (params: OpenAiCreateRequest) => Promise<OpenAiCompletionLike>;
+
+async function reportOpenAiUsage(
+  response: OpenAiCompletionLike,
+  fallbackModel: string
+): Promise<void> {
+  const usage = response.usage;
+  if (!usage) return;
+  await reportLlmUsage({
+    provider: "openai",
+    model: response.model ?? fallbackModel,
+    inputTokens: usage.prompt_tokens ?? 0,
+    outputTokens: usage.completion_tokens ?? 0,
+    cacheReadInputTokens: usage.prompt_tokens_details?.cached_tokens ?? 0,
+  });
+}
 
 // Low-reasoning calls route to the cheaper fast model.
 const FAST_EFFORTS = new Set<LlmEffort>(["minimal", "low"]);
@@ -296,6 +317,7 @@ export function createOpenAiLlmClient(deps: OpenAiDeps): LlmClient {
     let lastErr: unknown;
     for (let attempt = 0; attempt < STRUCTURED_RETRY_ATTEMPTS; attempt += 1) {
       const res = await ensureCreate()(requestParams);
+      await reportOpenAiUsage(res, callModel);
       try {
         return toolInputFromOpenAIMessage<T>(
           res?.choices?.[0]?.message,
@@ -343,6 +365,7 @@ export function createOpenAiLlmClient(deps: OpenAiDeps): LlmClient {
         max_completion_tokens: args.maxTokens ?? 2000,
         ...reasoningParams(callModel, args.effort),
       });
+      await reportOpenAiUsage(res, callModel);
       return interpretOpenAiToolResponse(res, callModel);
     },
   };

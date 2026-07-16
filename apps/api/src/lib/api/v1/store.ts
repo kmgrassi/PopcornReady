@@ -141,6 +141,10 @@ import {
 import {
   createJobWithDeps,
   createOrGetJobWithDeps,
+  reserveIdempotencyRecordWithDeps,
+  completeIdempotencyRecordWithDeps,
+  renewIdempotencyRecordWithDeps,
+  abandonIdempotencyRecordWithDeps,
   findIdempotencyRecordWithDeps,
   getCompositionPlanWithDeps,
   getJobWithDeps,
@@ -158,6 +162,7 @@ import type {
   ActionStatus,
   AssetGraphSelectionRef,
   CreateActionInput,
+  IdempotencyReservation,
   IdempotencyRecord,
   StaleCandidatesResult,
   StoryBlueprint,
@@ -185,6 +190,7 @@ export type {
   ActionStatus,
   AssetGraphSelectionRef,
   CreateActionInput,
+  IdempotencyReservation,
   IdempotencyRecord,
   StaleCandidateAsset,
   StaleCandidatesResult,
@@ -6649,4 +6655,28 @@ export function saveIdempotencyRecord(
   record: IdempotencyRecord
 ): Promise<void> {
   return saveIdempotencyRecordWithDeps(compositionJobsDeps, record);
+}
+
+export function reserveIdempotencyRecord(
+  input: Parameters<typeof reserveIdempotencyRecordWithDeps>[1]
+): Promise<IdempotencyReservation> {
+  return reserveIdempotencyRecordWithDeps(compositionJobsDeps, input);
+}
+
+export function completeIdempotencyRecord(
+  input: Parameters<typeof completeIdempotencyRecordWithDeps>[1]
+): Promise<boolean> {
+  return completeIdempotencyRecordWithDeps(compositionJobsDeps, input);
+}
+
+export function renewIdempotencyRecord(
+  input: Parameters<typeof renewIdempotencyRecordWithDeps>[1]
+): Promise<boolean> {
+  return renewIdempotencyRecordWithDeps(compositionJobsDeps, input);
+}
+
+export function abandonIdempotencyRecord(
+  input: Parameters<typeof abandonIdempotencyRecordWithDeps>[1]
+): Promise<boolean> {
+  return abandonIdempotencyRecordWithDeps(compositionJobsDeps, input);
 }
