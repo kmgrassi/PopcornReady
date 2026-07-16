@@ -58,6 +58,38 @@ The nine high-level steps as forward routing decisions, plus self-heal recovery:
 The recovery cases assert the system-prompt self-heal behavior: satisfy the
 surfaced precondition, never blindly retry the failed tool.
 
+## Gate-0 extension (specialist-agents PR 1)
+
+The harness now also carries the Decision Gate 0 baseline for
+[`specialist-agent-orchestration-prs.md`](specialist-agent-orchestration-prs.md):
+
+- **New flat-registry families** in `evals/gate0-scenarios.ts` — `long_context`,
+  `tool_overload`, `cross_modality`, `selective_regeneration`,
+  `premature_done`, and extended `recovery` (within- and cross-modality
+  precondition misses), same fixture pattern as `scenarios.ts`.
+- **Failure taxonomy + repeated-sample report** in `evals/gate0-report.ts` —
+  every sample is classified as `acceptable`, `wrong_tool`, `premature_done`,
+  `unnecessary_turn`, or `repeated_failed_call` and aggregated per family.
+- **Fixture-only hierarchy simulation** in `evals/hierarchy-fixture.ts` — the
+  proposed creative-director surface (root-owned tools plus
+  `delegate_visuals`/`delegate_audio` fixture definitions, and the dormant
+  visuals/audio registries) evaluated as decisions only; nothing is executable.
+- **Paired projection** in `evals/paired-projection.ts` — every flat scenario
+  is deterministically projected onto the hierarchy surface (leaf media →
+  dispatch tools; in-domain self-heal failures → the specialist surface) so
+  the gate comparison scores identical scenario matrices on both sides;
+  hand-written hierarchy-only cases run as diagnostics outside the comparison.
+- **Report script:** `pnpm --filter @popcorn/api evals:gate0 -- --samples 5`
+  (opt-in real model; `--fixture` is a free offline plumbing check; `--json`
+  emits one parseable document on stdout with banners on stderr). Thin CLI
+  over `evals/gate0-baseline-runner.ts`.
+- Gate 0 itself was resolved **proceed** on 2026-07-16 on design grounds
+  (modularity + observability); the paired comparison is now the
+  **non-inferiority regression bar** for the PR 18 default-on cutover — the
+  hierarchy must route at least as well as the flat root on the same paired
+  matrix. Decision, threshold, and measurements live in
+  [`gate-0-decision-record.md`](gate-0-decision-record.md).
+
 ## How to run
 
 A real provider call per scenario, so it is **gated on an API key** and skipped
