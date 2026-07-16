@@ -181,7 +181,12 @@ Then the PR:
   reference + the T1 anchor for character invariants). Pool + select **per beat**
   for durability; `graphInputs` → plan beat + anchor + storyboard tile.
 - **Constraint:** minors → Gemini; never use a `beat_storyboard` sketch as a
-  photoreal first frame (guardrail already in `keyframe.ts`).
+  photoreal first frame (guardrail already in `keyframe.ts`). Ideogram v3
+  currently consumes only the first caller-ordered generic reference because its
+  generate endpoint accepts one character-reference image; additional requested
+  anchors/storyboard references remain provenance inputs but are not effective
+  Ideogram conditioning until references carry typed character/style/structural
+  roles and provider-aware routing.
 - **Done when:** a run produces pooled `beat_keyframe` assets per beat with active
   selections + provenance; a beat with a filled/selected slot (incl. a user
   `upload`) is skipped.
