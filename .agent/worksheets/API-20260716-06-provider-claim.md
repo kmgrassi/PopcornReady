@@ -60,3 +60,14 @@ provider crash safely replayable.
   the final atomic action-completion and polling reconciliation changes.
 - Independent wrap-up review found no release blockers; it re-ran API typecheck,
   migration contract coverage, and whitespace validation.
+
+## Caretaker follow-up
+
+- Addressed both unresolved review findings with `@Codex` attribution: resolve
+  workspace provider/model defaults before inserting the canonical action, and
+  persist those resolved values in the queued job input.
+- Claim renewal now mirrors its heartbeat into `jobs.progress.lastProgressAt`
+  so run observability does not report healthy provider work as stalled.
+- `git diff --check` passed. Focused test/typecheck commands were attempted but
+  cannot start in this isolated worktree because `tsx` and `tsc` are unavailable.
+- Independent reviewer was unavailable in this automation environment.

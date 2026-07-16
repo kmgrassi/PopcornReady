@@ -28,6 +28,7 @@ test("provider job claims are token-fenced and service-role-only", () => {
   assert.match(migration, /return next v_job/);
   assert.match(migration, /create or replace function public\.renew_provider_job_execution/);
   assert.match(migration, /set provider_claimed_at = clock_timestamp\(\)/);
+  assert.match(migration, /progress = coalesce\(j\.progress, '\{\}'::jsonb\)[\s\S]*lastProgressAt/);
   assert.match(migration, /return coalesce\(v_renewed, false\)/);
   assert.match(migration, /revoke all on function public\.claim_provider_job_execution[\s\S]*from public, anon, authenticated/);
   assert.match(migration, /grant execute on function public\.complete_provider_job_execution[\s\S]*to service_role/);

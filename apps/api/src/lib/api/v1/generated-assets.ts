@@ -790,6 +790,30 @@ export async function enqueueGeneratedAssetJob(
 
   await getProject(auth.workspaceId, projectId); // throws not_found
   const parsed = parseGeneratedAssetRequest(body);
+  let durableBody = body;
+  if (!parsed.providerWasExplicit) {
+    const resolved = await resolveWorkspaceGenerationModel({
+      workspaceId: auth.workspaceId,
+      kind: parsed.kind,
+      explicitModel: parsed.model,
+    });
+    parsed.provider = resolved.provider;
+    parsed.model = resolved.model;
+    const supportedKinds = PROVIDER_KIND_SUPPORT[parsed.provider];
+    if (!supportedKinds?.includes(parsed.kind)) {
+      throw validationError("The request body is invalid.", [
+        {
+          path: "provider",
+          message: `Provider "${parsed.provider}" supports ${supportedKinds?.join(", ") || "no"} generation, not ${parsed.kind}.`,
+        },
+      ]);
+    }
+    durableBody = {
+      ...(body as Record<string, unknown>),
+      provider: parsed.provider,
+      ...(parsed.model ? { model: parsed.model } : {}),
+    };
+  }
   // Persist the action's graph references in canonical UUID form before the
   // durable job can be claimed. The provider boundary must never be the first
   // point at which its provenance becomes valid relational data.
@@ -846,7 +870,7 @@ export async function enqueueGeneratedAssetJob(
     type: "asset_generation",
     status: "queued",
     progress: { currentStep: "queued", percent: 0 },
-    payload: { body } satisfies GeneratedAssetJobInput,
+    payload: { body: durableBody } satisfies GeneratedAssetJobInput,
     result: null,
     actionId: action.id,
   });

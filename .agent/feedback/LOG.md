@@ -184,3 +184,9 @@
 - Friction or failure: A fixed stale timeout can falsely terminalize healthy provider work, and a preallocated action can remain nonterminal unless every post-claim failure finalizes it through the fenced job result.
 - Suggested improvement: Pair every external-call claim with a service-owned renewable heartbeat and make action terminalization follow, rather than precede, the successful token-fenced job completion.
 - Follow-up: Run the PostgreSQL claim race coverage once the local Supabase database accepts connections.
+
+### 2026-07-16T16:45:00-04:00 — PR-CARETAKER-20260716-03
+- What helped: Thread-aware review data identified that canonical action params and the eventual provider call could disagree when workspace defaults were resolved too late.
+- Friction or failure: Claim renewal previously updated only lease metadata, leaving run observability's progress timestamp stale during healthy long-running provider work.
+- Suggested improvement: Normalize durable job inputs at enqueue time and keep lease heartbeats mirrored into the projection fields used by operators.
+- Follow-up: Re-run the focused API checks in CI or a worktree with dependencies installed.

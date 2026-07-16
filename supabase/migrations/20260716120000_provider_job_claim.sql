@@ -155,6 +155,8 @@ declare
 begin
   update public.jobs j
      set provider_claimed_at = clock_timestamp(),
+         progress = coalesce(j.progress, '{}'::jsonb)
+           || jsonb_build_object('lastProgressAt', clock_timestamp()),
          updated_at = clock_timestamp()
    where j.id = p_job_id
      and j.workspace_id = p_workspace_id
