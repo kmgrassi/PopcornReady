@@ -27,6 +27,7 @@ import { toOrchestratorRegistry } from "@/lib/orchestrator-tools/to-orchestrator
 import { recoverDurableOrchestratorJob } from "./job-recovery";
 import { orchestratorModel, type OrchestratorModel } from "./model";
 import { executeRegisteredTool, type ToolRegistry } from "./registry";
+import { classifyToolFailure } from "./tool-errors";
 import { withStoreRetry, type RetryOptions } from "./retry";
 import {
   billableUsdSoFar,
@@ -39,7 +40,9 @@ import { applyCreditTransaction, getCreditBalance } from "@/lib/api/v1/credits";
 import { ApiError } from "@/core/errors";
 import { createToolExecutionContext } from "./tool-context";
 import type { ToolCallResult, ToolName } from "./types";
+import { isToolName } from "@/lib/orchestrator-tools/capability-catalog";
 import { createLogger } from "@/lib/v1/logger";
+import { redactMessage } from "@/lib/v1/redact";
 import { uploadedFootageMetadataFromSummary } from "./uploaded-footage-selection";
 
 // Credits charged per generation = providerCostUsd * MARGIN, at 1 credit = $0.01.
@@ -49,6 +52,7 @@ const PG_INSUFFICIENT_FUNDS = "23514"; // apply_credit_transaction overdraw guar
 
 const DEFAULT_MAX_TURNS = 50;
 const DEFAULT_MODEL_TURN_TIMEOUT_MS = 60_000;
+const MAX_RECOVERABLE_ASYNC_FAILURES_PER_TOOL = 3;
 const AFTER_GATE_PREFIX = "after:";
 const logger = createLogger();
 
@@ -93,7 +97,15 @@ export interface JobStatusReader {
   getJob(
     jobId: string,
     projectId?: string
-  ): Promise<{ status: string; result?: unknown } | null | undefined>;
+  ): Promise<
+    | {
+        status: string;
+        result?: unknown;
+        error?: { code?: string; message?: string } | null;
+      }
+    | null
+    | undefined
+  >;
 }
 
 export interface EngineDeps {
@@ -341,14 +353,62 @@ async function reconcileInFlightJob(
       jobStatus: job.status,
     });
     if (job.status === "failed" || job.status === "canceled") {
+      const jobMessage =
+        redactMessage(job.error?.message || `parking job ${parkingJobId} ended ${job.status}`);
+      const error =
+        isToolName(parkingAction.tool) &&
+        (job.error?.code === "object_not_found" ||
+          job.error?.code === "asset_not_ready" ||
+          job.error?.code === "storage_error" ||
+          job.error?.code === "database_error")
+          ? classifyToolFailure(
+              new ApiError(job.error.code, jobMessage, { jobId: parkingJobId }),
+              {
+                toolName: parkingAction.tool,
+                input: parkingAction.params,
+              }
+            )
+          : {
+              kind: "provider_failed" as const,
+              message: jobMessage,
+              recoverable: false,
+              details: job.error?.code
+                ? { code: job.error.code, jobId: parkingJobId }
+                : { jobId: parkingJobId },
+            };
+      let priorMatchingFailures = 0;
+      for (let index = actions.length - 1; index >= 0; index -= 1) {
+        const action = actions[index];
+        if (action.id === parkingAction.id || action.tool !== parkingAction.tool) continue;
+        if (action.status === "failed" && action.error?.kind === error.kind) {
+          priorMatchingFailures += 1;
+          continue;
+        }
+        break;
+      }
+      const asyncFailureCount = priorMatchingFailures + 1;
+      const retryLimitReached =
+        error.recoverable &&
+        asyncFailureCount >= MAX_RECOVERABLE_ASYNC_FAILURES_PER_TOOL;
+      const reconciledError = retryLimitReached
+        ? {
+            ...error,
+            recoverable: false,
+            suggestedNextTools: undefined,
+            details: {
+              ...(error.details ?? {}),
+              asyncFailureCount,
+              asyncFailureLimit: MAX_RECOVERABLE_ASYNC_FAILURES_PER_TOOL,
+            },
+          }
+        : error;
       await r.store.markInvocation(parkingAction.id, {
         status: "failed",
-        error: { kind: "provider_failed", message: `job ${parkingJobId} ended ${job.status}` },
+        error: { ...reconciledError },
       });
-      return finish(run, "failed", r, {
-        kind: "provider_failed",
-        message: `parking job ${parkingJobId} ended ${job.status}`,
-      });
+      return reconciledError.recoverable
+        ? null
+        : finish(run, "failed", r, { ...reconciledError });
     }
     if (job.status !== "succeeded") return park(run, r); // still running — stay parked
     // Job done → finalize the parking action with the assets it produced.

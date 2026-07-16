@@ -37,7 +37,8 @@ export type ToolErrorKind =
   | "budget_exceeded"
   | "approval_rejected"
   | "policy_violation"
-  | "timeout";
+  | "timeout"
+  | "storage_error";
 
 export interface SuggestedToolCall {
   tool: ToolName;

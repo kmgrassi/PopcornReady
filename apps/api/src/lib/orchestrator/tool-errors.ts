@@ -12,7 +12,8 @@ export type ToolErrorKind =
   | "approval_rejected"
   | "policy_violation"
   | "timeout"
-  | "database_error";
+  | "database_error"
+  | "storage_error";
 
 export interface SuggestedToolCall {
   tool: ToolName;
@@ -253,14 +254,17 @@ export function preconditionFromApiError(
     });
   }
 
-  if (error.code === "asset_not_ready") {
+  if (error.code === "asset_not_ready" || error.code === "object_not_found") {
     const assetIds = readStringArray(error.details?.assetIds);
     return preconditionUnmet({
       message: error.message,
       unmetRequirements: [
         {
           requirement: "ready_reference_asset",
-          because: "The requested media tool depends on an asset that is not ready.",
+          because:
+            error.code === "object_not_found"
+              ? "The requested media tool could not read a required reference asset."
+              : "The requested media tool depends on an asset that is not ready.",
           satisfyWith: {
             tool: chooseGenerationTool(context.toolName),
             inputHint: {
@@ -310,6 +314,17 @@ export function preconditionFromApiError(
   if (error.code === "database_error") {
     return {
       kind: "database_error",
+      message: error.message,
+      recoverable: true,
+      retryAfterSec: context.retryAfterSec,
+      suggestedNextTools: [{ tool: context.toolName, inputHint: { retry: true } }],
+      details: compactRecord({ code: error.code, ...(error.details ?? {}) }),
+    };
+  }
+
+  if (error.code === "storage_error") {
+    return {
+      kind: "storage_error",
       message: error.message,
       recoverable: true,
       retryAfterSec: context.retryAfterSec,

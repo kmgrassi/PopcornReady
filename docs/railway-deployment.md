@@ -1,5 +1,13 @@
 # Railway deployment
 
+<!-- agent-summary: The Express API deploys to Railway and the Vite SPA deploys to Netlify. -->
+<!-- agent-summary: Production requires Node 22 or newer. -->
+<!-- agent-summary: Hosted authentication uses Supabase while asset storage independently uses S3. -->
+<!-- agent-summary: STORAGE_BACKEND=s3 enables durable public/private asset reads and writes. -->
+<!-- agent-summary: Persisted storage buckets route server-side asset reads; DB_BACKEND does not. -->
+<!-- agent-summary: Public delivery uses CloudFront and private delivery uses signed URLs. -->
+<!-- agent-summary: Validate health, auth, storage, and generation handoffs after deployment changes. -->
+
 The Express API deploys to Railway from the monorepo root. The Vite web app
 deploys separately to Netlify and calls the Railway API through `VITE_API_URL`.
 The checked-in `railway.toml` pins the API build/start commands and configures
@@ -106,10 +114,10 @@ Notes:
 ## Provisioned asset storage
 
 Asset sharing and delivery will use the S3 + CloudFront resources provisioned
-for `docs/scopes/asset-sharing-delivery-prs.md` PR0. These resources exist now,
-but the current runtime does not read the S3 storage variables yet. Keep
-`STORAGE_BACKEND` on the currently supported backend until the PR1/PR2 storage
-code lands and has been validated in the target environment.
+for `docs/scopes/asset-sharing-delivery-prs.md` PR0. The runtime reads and writes
+asset bytes through the configured storage backend. Production uses
+`STORAGE_BACKEND=s3`; `DB_BACKEND=supabase` controls database persistence and
+does not route asset bytes to Supabase Storage.
 
 Stage these non-secret Railway values when enabling the S3 backend:
 

@@ -3,6 +3,10 @@ import path from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { buildSemanticAnalysis } from "@/lib/assets/semantic-analysis";
+import {
+  materializeAssetObject,
+  type MaterializedAssetObject,
+} from "@/lib/storage/asset-read";
 import { AuthContext } from "./auth";
 import { ApiError, validationError } from "./errors";
 import { createJob, getJob, updateJob, V1Job } from "./jobs";
@@ -17,10 +21,6 @@ import {
   V1AssetAnalysis,
   withLocalDir,
 } from "./store";
-import {
-  downloadAssetObjectToTemp,
-  useSupabaseStorage,
-} from "../../supabase/storage";
 
 const execFileAsync = promisify(execFile);
 const ANALYSIS_VERSION = "asset-analysis.v1";
@@ -123,12 +123,21 @@ async function runFfmpeg(args: string[]): Promise<void> {
   }
 }
 
-async function assetLocalPath(asset: V1Asset): Promise<string | null> {
+async function assetLocalPath(
+  asset: V1Asset
+): Promise<MaterializedAssetObject | null> {
   if (!asset.storageKey) return null;
-  if (useSupabaseStorage()) {
-    return downloadAssetObjectToTemp(asset.storageKey);
+  if (!asset.storageBucket) {
+    throw new ApiError(
+      "object_not_found",
+      `Asset ${asset.id} has a storage key but no storage bucket.`,
+      { assetIds: [asset.id], storageKey: asset.storageKey }
+    );
   }
-  return path.join(localDir(), asset.storageKey);
+  return materializeAssetObject({
+    storageKey: asset.storageKey,
+    storageBucket: asset.storageBucket,
+  });
 }
 
 async function extractVideoFrames(args: {
@@ -138,52 +147,57 @@ async function extractVideoFrames(args: {
   defaultVideoSamples: number;
   maxVideoSamples: number;
 }): Promise<FrameSample[]> {
-  const srcPath = await assetLocalPath(args.asset);
-  if (!srcPath) {
+  const materialized = await assetLocalPath(args.asset);
+  if (!materialized) {
     throw new ApiError(
       "asset_invalid",
       `Asset ${args.asset.id} has no local storage key; remote video analysis requires ingest first.`
     );
   }
+  const srcPath = materialized.path;
 
-  const outputDir = mediaAnalysisDir(
-    args.auth.workspaceId,
-    args.projectId,
-    args.asset.id
-  );
-  await fs.rm(outputDir, { recursive: true, force: true });
-  await fs.mkdir(outputDir, { recursive: true });
+  try {
+    const outputDir = mediaAnalysisDir(
+      args.auth.workspaceId,
+      args.projectId,
+      args.asset.id
+    );
+    await fs.rm(outputDir, { recursive: true, force: true });
+    await fs.mkdir(outputDir, { recursive: true });
 
-  const times = videoSampleTimes(
-    args.asset.durationSec,
-    args.defaultVideoSamples,
-    args.maxVideoSamples
-  );
-  const frames: FrameSample[] = [];
+    const times = videoSampleTimes(
+      args.asset.durationSec,
+      args.defaultVideoSamples,
+      args.maxVideoSamples
+    );
+    const frames: FrameSample[] = [];
 
-  for (const [index, sec] of times.entries()) {
-    const filename = `sample-${String(index + 1).padStart(2, "0")}.jpg`;
-    const outputPath = path.join(outputDir, filename);
-    await runFfmpeg([
-      "-y",
-      "-ss",
-      String(sec),
-      "-i",
-      srcPath,
-      "-frames:v",
-      "1",
-      "-q:v",
-      "2",
-      outputPath,
-    ]);
-    frames.push({
-      sec,
-      path: outputPath,
-      storageKey: path.relative(localDir(), outputPath),
-    });
+    for (const [index, sec] of times.entries()) {
+      const filename = `sample-${String(index + 1).padStart(2, "0")}.jpg`;
+      const outputPath = path.join(outputDir, filename);
+      await runFfmpeg([
+        "-y",
+        "-ss",
+        String(sec),
+        "-i",
+        srcPath,
+        "-frames:v",
+        "1",
+        "-q:v",
+        "2",
+        outputPath,
+      ]);
+      frames.push({
+        sec,
+        path: outputPath,
+        storageKey: path.relative(localDir(), outputPath),
+      });
+    }
+
+    return frames;
+  } finally {
+    await materialized.cleanup();
   }
-
-  return frames;
 }
 
 function stringArray(value: unknown): string[] {
