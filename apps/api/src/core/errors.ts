@@ -7,6 +7,7 @@ export type ApiErrorCode =
   | "not_found"
   | "validation_failed"
   | "idempotency_conflict"
+  | "idempotency_in_progress"
   | "asset_not_ready"
   | "asset_invalid"
   | "asset_not_transcribable"
@@ -35,6 +36,7 @@ const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
   not_found: 404,
   validation_failed: 400,
   idempotency_conflict: 409,
+  idempotency_in_progress: 409,
   asset_not_ready: 409,
   asset_invalid: 400,
   asset_not_transcribable: 422,
