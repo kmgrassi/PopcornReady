@@ -493,6 +493,8 @@ export interface Job<TInput = unknown, TResult = unknown> {
   input: TInput | null;
   result: TResult | null;
   error: JobError | null;
+  /** Canonical action that initiated this job, when it came from a tool invocation. */
+  actionId?: string;
   idempotencyKey?: string;
   createdAt: string;
   updatedAt: string;

@@ -131,10 +131,13 @@ export function createGenerateStoryboardTool(
         return planRequired();
       }
 
-      const { job } = await resolved.createJob({
+      const { job, created } = await resolved.createJob({
         workspaceId: context.auth.workspaceId,
         type: "asset_generation",
         projectId: context.projectId,
+        ...(context.actionId
+          ? { actionId: context.actionId, idempotencyKey: `action:${context.actionId}` }
+          : {}),
         execution: {
           schemaVersion: "orchestrator_job_execution.v1",
           kind: "generate_storyboard",
@@ -151,15 +154,17 @@ export function createGenerateStoryboardTool(
 
       // Fire-and-forget: the worker writes the tiles + storyboard, marks the job
       // terminal, and resumes the parked run on completion.
-      void resolved.runStoryboardJob({
-        jobId: job.id,
-        workspaceId: context.auth.workspaceId,
-        projectId: context.projectId,
-        ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
-        plan: active.plan,
-        planAssetId: active.assetId,
-        planContentHash: active.contentHash,
-      });
+      if (created) {
+        void resolved.runStoryboardJob({
+          jobId: job.id,
+          workspaceId: context.auth.workspaceId,
+          projectId: context.projectId,
+          ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
+          plan: active.plan,
+          planAssetId: active.assetId,
+          planContentHash: active.contentHash,
+        });
+      }
 
       return { status: "accepted", jobId: job.id, resumesWhen: "job_terminal" };
     },

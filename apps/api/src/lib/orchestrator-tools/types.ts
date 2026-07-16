@@ -81,6 +81,8 @@ export interface ToolExecutionContext {
   projectId?: string;
   generationRunId?: string;
   toolCallId?: string;
+  /** Canonical action reserved by the durable engine, if this is an engine call. */
+  actionId?: string;
   agentId?: string;
   messageId?: string;
   requestId?: string;

@@ -1168,28 +1168,54 @@ async function setActiveProjectScopedAssetSelection(
 
 export async function createAction(input: CreateActionInput): Promise<V1Action> {
   const db = getServiceSupabase();
-  const data = await runQuery(
-    `store.createAction ${input.tool}`,
+  const row = {
+    ...(input.id ? { id: input.id } : {}),
+    schema_version: "action.v1",
+    project_id: input.projectId,
+    orchestrator_run_id: input.orchestratorRunId ?? null,
+    tool: input.tool,
+    status: input.status ?? "proposed",
+    params: markedJson("action_params.v1", input.params ?? {}) ?? {},
+    input_asset_ids: input.inputAssetIds ?? [],
+    rationale: input.rationale ?? null,
+    proposal: markedJson("action_proposal.v1", input.proposal) ?? null,
+    job_ids: input.jobIds ?? [],
+    output_asset_ids: input.outputAssetIds ?? [],
+    error: markedJson("action_error.v1", input.error) ?? null,
+  };
+
+  if (!input.id) {
+    const data = await runQuery(
+      `store.createAction ${input.tool}`,
+      db.from("actions").insert(row).select("*").single()
+    );
+    return mapAction(data as ActionRow);
+  }
+
+  // A caller-reserved action id is an invocation idempotency key. The first
+  // insert wins; a retry reads that immutable identity instead of adding a
+  // sibling action. We deliberately do not update on conflict: action identity
+  // and input fields are append-only audit data.
+  const inserted = await runQuery(
+    `store.createAction reserved ${input.tool}`,
     db
       .from("actions")
-      .insert({
-        schema_version: "action.v1",
-        project_id: input.projectId,
-        orchestrator_run_id: input.orchestratorRunId ?? null,
-        tool: input.tool,
-        status: input.status ?? "proposed",
-        params: markedJson("action_params.v1", input.params ?? {}) ?? {},
-        input_asset_ids: input.inputAssetIds ?? [],
-        rationale: input.rationale ?? null,
-        proposal: markedJson("action_proposal.v1", input.proposal) ?? null,
-        job_ids: input.jobIds ?? [],
-        output_asset_ids: input.outputAssetIds ?? [],
-        error: markedJson("action_error.v1", input.error) ?? null,
-      })
+      .upsert(row, { onConflict: "id", ignoreDuplicates: true })
       .select("*")
+      .maybeSingle()
+  );
+  if (inserted) return mapAction(inserted as ActionRow);
+
+  const existing = await runQuery(
+    `store.createAction reserved existing ${input.tool}`,
+    db
+      .from("actions")
+      .select("*")
+      .eq("id", input.id)
+      .eq("project_id", input.projectId)
       .single()
   );
-  return mapAction(data as ActionRow);
+  return mapAction(existing as ActionRow);
 }
 
 export async function updateAction(
@@ -6422,6 +6448,7 @@ export function createJob(input: {
   type: JobType;
   status?: JobStatus;
   requestId?: string;
+  actionId?: string;
   payload?: unknown;
   result?: unknown;
   idempotencyKey?: string;

@@ -5,6 +5,7 @@ import type { AuthContext } from "@/lib/api/v1/auth";
 import type { V1Asset } from "@/lib/api/v1/store";
 import type { ShotPlan } from "@popcorn/shared/types";
 import type { ProjectStoryboard } from "@popcorn/shared/v1/types";
+import type { CreateOrchestratorJobInput } from "@/lib/orchestrator/job-gateway";
 import { createGenerateStoryboardTool } from "../generate-storyboard";
 import { runStoryboardJob } from "../storyboard-job";
 import type { ToolCallResult } from "../types";
@@ -84,6 +85,31 @@ test("generate_storyboard accepts and kicks off the worker with run + plan", asy
   assert.equal(kicked?.jobId, "job_1");
   assert.equal(kicked?.orchestratorRunId, "run_1");
   assert.equal(kicked?.planAssetId, "plan_1");
+});
+
+test("generate_storyboard only links jobs to an engine-reserved action", async () => {
+  let jobInput: CreateOrchestratorJobInput | undefined;
+  const tool = createGenerateStoryboardTool({
+    getActiveProjectPlan: async () => activePlan,
+    createJob: async (input) => {
+      jobInput = input;
+      return queuedJob();
+    },
+    runStoryboardJob: async () => {},
+  });
+
+  await tool.execute(
+    {},
+    {
+      auth,
+      projectId: "proj_1",
+      orchestratorRunId: "run_1",
+      toolCallId: "ephemeral-tool-call",
+    }
+  );
+
+  assert.equal(jobInput?.actionId, undefined);
+  assert.equal(jobInput?.idempotencyKey, undefined);
 });
 
 // ---------- worker ----------

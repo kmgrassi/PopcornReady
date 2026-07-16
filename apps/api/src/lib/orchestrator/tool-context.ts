@@ -6,6 +6,10 @@ export interface ToolExecutionContextInput {
   workspaceId: string;
   projectId: string;
   orchestratorRunId: string;
+  /** Per-call correlation id. It is not necessarily backed by an action row. */
+  toolCallId?: string;
+  /** A durable action id, set only after the engine reserves the action row. */
+  actionId?: string;
   actorId?: string;
   agentId?: string;
   messageId?: string;
@@ -20,7 +24,8 @@ export function createToolExecutionContext(
     workspaceId: input.workspaceId,
     projectId: input.projectId,
     orchestratorRunId: input.orchestratorRunId,
-    toolCallId: randomUUID(),
+    toolCallId: input.toolCallId ?? randomUUID(),
+    ...(input.actionId ? { actionId: input.actionId } : {}),
     ...(input.actorId ? { actorId: input.actorId } : {}),
     ...(input.agentId ? { agentId: input.agentId } : {}),
     ...(input.messageId ? { messageId: input.messageId } : {}),

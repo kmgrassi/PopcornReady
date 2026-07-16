@@ -230,10 +230,13 @@ export function createExportVideoTool(
       );
       if (!active) return timelineRequired();
 
-      const { job } = await resolved.createJob({
+      const { job, created } = await resolved.createJob({
         workspaceId: context.auth.workspaceId,
         type: "export",
         projectId: context.projectId,
+        ...(context.actionId
+          ? { actionId: context.actionId, idempotencyKey: `action:${context.actionId}` }
+          : {}),
         execution: {
           schemaVersion: "orchestrator_job_execution.v1",
           kind: "export_video",
@@ -249,16 +252,18 @@ export function createExportVideoTool(
         },
       });
 
-      void resolved.runExportVideoJob({
-        jobId: job.id,
-        workspaceId: context.auth.workspaceId,
-        projectId: context.projectId,
-        ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
-        timelineId: active.timeline.id,
-        timelineContentHash: active.timelineContentHash,
-        project: active.project,
-        options: input,
-      });
+      if (created) {
+        void resolved.runExportVideoJob({
+          jobId: job.id,
+          workspaceId: context.auth.workspaceId,
+          projectId: context.projectId,
+          ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
+          timelineId: active.timeline.id,
+          timelineContentHash: active.timelineContentHash,
+          project: active.project,
+          options: input,
+        });
+      }
 
       return { status: "accepted", jobId: job.id, resumesWhen: "job_terminal" };
     },

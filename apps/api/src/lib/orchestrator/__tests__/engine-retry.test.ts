@@ -47,7 +47,7 @@ class FlakyReadStore implements OrchestratorEngineStore {
   }
   async recordInvocation(input: InvocationRecord) {
     this.actions.push({
-      id: `a${this.actions.length}`,
+      id: input.actionId,
       tool: input.tool,
       status: input.status,
       params: input.params,
