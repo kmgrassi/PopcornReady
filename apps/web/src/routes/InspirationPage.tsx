@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/Button";
+import { MediaViewer, type MediaViewerItem } from "../components/media/MediaViewer";
 import { Spinner } from "../components/ui/Spinner";
 import { ErrorState } from "../components/ui/StateCard";
 import {
@@ -30,7 +31,8 @@ const INGREDIENTS: IngredientConfig[] = [
   { key: "structure", label: "Structure" },
 ];
 
-const DISABLE_LOCAL_POSTER_GENERATION = import.meta.env.DEV;
+const DISABLE_LOCAL_POSTER_GENERATION =
+  import.meta.env.DEV && !import.meta.env.VITE_E2E_ENABLE_POSTER_GENERATION;
 
 export function InspirationPage() {
   const navigate = useNavigate();
@@ -38,6 +40,7 @@ export function InspirationPage() {
   const [refreshingNonce, setRefreshingNonce] = useState<number | null>(null);
   const [story, setStory] = useState<RandomStoryInspiration | null>(null);
   const [visualTheme, setVisualTheme] = useState<"classic" | "cinema">("classic");
+  const [viewerItem, setViewerItem] = useState<MediaViewerItem | null>(null);
   const query = useRandomStoryInspiration(nonce);
   const posterMutation = useStoryConceptPosterMutation();
   const startRunMutation = useStartInspirationStoryboardRunMutation();
@@ -74,6 +77,16 @@ export function InspirationPage() {
   }, [storySignature]);
 
   const poster = story?.poster ?? null;
+
+  function openPoster() {
+    if (!story || !poster?.url) return;
+    setViewerItem({
+      id: poster.assetId ?? `inspiration-poster-${story.signature}`,
+      kind: "image",
+      title: story.movieTitle || "Generated movie poster concept",
+      url: poster.url,
+    });
+  }
 
   function refreshStory() {
     if (refreshInProgress) return;
@@ -153,6 +166,7 @@ export function InspirationPage() {
           posterError={posterMutation.error}
           posterGenerating={posterMutation.isPending}
           posterDisabled={DISABLE_LOCAL_POSTER_GENERATION}
+          onOpenPoster={openPoster}
           startingRun={startRunMutation.isPending}
           startRunError={
             startRunMutation.error instanceof Error
@@ -164,6 +178,7 @@ export function InspirationPage() {
           onStartFromPrompt={(inspiration) => void startFromPrompt(inspiration)}
         />
       ) : null}
+      <MediaViewer item={viewerItem} onClose={() => setViewerItem(null)} />
     </div>
   );
 }
@@ -174,6 +189,7 @@ function InspirationResult({
   posterError,
   posterGenerating,
   posterDisabled,
+  onOpenPoster,
   startingRun,
   startRunError,
   onStartFromPrompt,
@@ -183,6 +199,7 @@ function InspirationResult({
   posterError: Error | null;
   posterGenerating: boolean;
   posterDisabled: boolean;
+  onOpenPoster: () => void;
   startingRun: boolean;
   startRunError: string | null;
   onStartFromPrompt: (inspiration: RandomStoryInspiration) => void;
@@ -198,6 +215,8 @@ function InspirationResult({
           error={posterError}
           generating={posterGenerating}
           disabled={posterDisabled}
+          title={inspiration.movieTitle}
+          onOpen={onOpenPoster}
         />
         <div className={styles.promptPanel}>
           <p className={styles.promptLabel}>Generated plot</p>
@@ -257,14 +276,27 @@ function PosterPanel({
   error,
   generating,
   disabled,
+  title,
+  onOpen,
 }: {
   poster: StoryConceptPoster | null;
   error: Error | null;
   generating: boolean;
   disabled: boolean;
+  title: string;
+  onOpen: () => void;
 }) {
   if (poster?.url) {
-    return <img className={styles.poster} src={poster.url} alt="Generated movie poster concept" />;
+    return (
+      <button
+        type="button"
+        className={styles.posterButton}
+        onClick={onOpen}
+        aria-label={`View ${title || "generated movie"} poster full screen`}
+      >
+        <img className={styles.poster} src={poster.url} alt="Generated movie poster concept" />
+      </button>
+    );
   }
 
   const isGenerating = generating || poster?.status === "generating" || poster?.status === "queued";

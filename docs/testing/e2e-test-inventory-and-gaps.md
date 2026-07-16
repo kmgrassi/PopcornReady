@@ -33,6 +33,8 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   diagnostics.
 - `specs/library-collections.spec.ts` covers Library pagination, filters, media
   viewer, visibility mutation behavior, and watch links with mocked fixtures.
+- `inspiration-poster.spec.ts` covers opening a generated story poster in the
+  shared media viewer and dismissing it with Escape.
 - `storyboard-editor.spec.ts` verifies the dedicated storyboard route renders
   the empty state for a project whose storyboard endpoint returns `null`.
 - `evals.spec.ts` covers the eval dashboard and admin workbench judgment action.
@@ -349,6 +351,8 @@ Critical flows:
 Current coverage:
 
 - Some protected route viability is covered.
+- The mocked Inspiration story poster opens in the shared media viewer and
+  closes by keyboard.
 - Detailed interactions are mostly manual-only.
 
 Recommended next test:
