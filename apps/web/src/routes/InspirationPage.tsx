@@ -13,6 +13,7 @@ import {
   useStartInspirationStoryboardRunMutation,
   useStoryConceptPosterMutation,
 } from "../lib/inspiration";
+import { isE2ePosterGenerationEnabled } from "../lib/inspiration-poster-generation";
 import { runProgressPath } from "../lib/quickStartRun";
 import styles from "./InspirationPage.module.css";
 
@@ -31,8 +32,10 @@ const INGREDIENTS: IngredientConfig[] = [
   { key: "structure", label: "Structure" },
 ];
 
+const E2E_POSTER_GENERATION_ENABLED =
+  isE2ePosterGenerationEnabled(import.meta.env.VITE_E2E_ENABLE_POSTER_GENERATION);
 const DISABLE_LOCAL_POSTER_GENERATION =
-  import.meta.env.DEV && !import.meta.env.VITE_E2E_ENABLE_POSTER_GENERATION;
+  import.meta.env.DEV && !E2E_POSTER_GENERATION_ENABLED;
 
 export function InspirationPage() {
   const navigate = useNavigate();
