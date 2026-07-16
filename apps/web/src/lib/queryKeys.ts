@@ -39,6 +39,8 @@ export const queryKeys = {
     ["projects", projectId, "storyboard"] as const,
   projectStoryboardJob: (projectId: string) =>
     ["projects", projectId, "storyboards", "generate", "latest"] as const,
+  projectGenerationRuns: (projectId: string) =>
+    ["projects", projectId, "generation-runs"] as const,
   projectAssets: (
     projectId: string,
     params: { limit?: number; cursor?: string | null } = {},

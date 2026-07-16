@@ -1,34 +1,7 @@
 import { useState } from "react";
-import {
-  GATEABLE_GENERATION_STAGE_TYPES,
-  GENERATION_STAGE_LABELS,
-  type GateableGenerationStageType,
-} from "@popcorn/shared/v1/types";
 import type { StepProps } from "../useStudioFlow";
 import { StepShell } from "./StepShell";
 import styles from "./GenerateStep.module.css";
-
-const NEXT_STAGE_LABELS: Partial<Record<GateableGenerationStageType, string>> = {
-  brief_intake: "Plan",
-  creative_plan: "Storyboard",
-  storyboard: "Visuals",
-  asset_generation: "Audio",
-  audio_generation: "Timeline",
-  timeline_assembly: "Review",
-  quality_review: "Render",
-};
-
-function checkpointDescription(stage: GateableGenerationStageType, checked: boolean): string {
-  const nextStage = NEXT_STAGE_LABELS[stage];
-  if (checked) {
-    return nextStage
-      ? `The run will pause before continuing on to ${nextStage}.`
-      : "The run will pause after rendering is ready.";
-  }
-  return nextStage
-    ? `The run continues automatically to ${nextStage}.`
-    : "The run completes automatically after rendering.";
-}
 
 export interface GenerateStepProps extends StepProps {
   /** Kicks the create-project + start-run flow on the shell's StudioFlow. */
@@ -42,12 +15,11 @@ export interface GenerateStepProps extends StepProps {
 }
 
 /**
- * GenerateStep — step 4. The handoff controls for how autonomous the run should
- * be before the user reviews generated work.
+ * GenerateStep — step 4. The creator starts the autonomous planning pass here;
+ * every run then pauses at the storyboard before any production media is made.
  */
 export function GenerateStep({
   draft,
-  update,
   onGenerate,
   onEditBrief,
   error,
@@ -69,22 +41,14 @@ export function GenerateStep({
     }
   }
 
-  function toggleReviewGate(stage: GateableGenerationStageType) {
-    update({
-      reviewGates: draft.reviewGates.includes(stage)
-        ? draft.reviewGates.filter((candidate) => candidate !== stage)
-        : [...draft.reviewGates, stage],
-    });
-  }
-
   return (
     <StepShell
       wide
-      heading="Set checkpoints"
-      description="Choose where the agent should pause for approval before it keeps working."
+      heading="Create your storyboard"
+      description="The agent will develop the visual plan, then wait for you to review it before it makes the video."
       onBack={back}
       onNext={generate}
-      nextLabel={submitting ? "Starting run..." : "Start generating"}
+      nextLabel={submitting ? "Creating storyboard..." : "Create storyboard"}
       nextDisabled={!draft.goal.trim() || submitting}
       nextCta
     >
@@ -133,57 +97,12 @@ export function GenerateStep({
         <div>
           <h3>What happens when you start?</h3>
           <p>
-            We'll create the project, generate or select media, assemble an editable
-            rough cut, then take you to Review when it's ready.
+            We'll create the project, develop its scenes and shots, and generate the visual
+            storyboard. You'll review that plan before any photoreal frames, motion, sound,
+            or editing begins.
           </p>
         </div>
       </aside>
-      <fieldset className={`${styles.group} ${styles.checkpointPanel}`}>
-        <legend className={styles.legend}>Review checkpoints</legend>
-        <p className={styles.help}>
-          Select the stages where the run should stop and wait for your approval.
-          Leave all unchecked for a fully automatic rough cut.
-        </p>
-        <ol className={styles.gateSequence}>
-          {GATEABLE_GENERATION_STAGE_TYPES.map((stage, index) => {
-            const checked = draft.reviewGates.includes(stage);
-
-            return (
-              <li className={styles.gateStep} key={stage}>
-                <label
-                  className={`${styles.checkboxCard} ${
-                    checked ? styles.checkboxCardChecked : ""
-                  }`}
-                >
-                  <input
-                    className={styles.checkboxInput}
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleReviewGate(stage)}
-                  />
-                  <span className={styles.checkpointMarker} aria-hidden="true">
-                    {index + 1}
-                  </span>
-                  <span className={styles.checkboxCopy}>
-                    <span className={styles.checkpointHeader}>
-                      <strong>{GENERATION_STAGE_LABELS[stage]}</strong>
-                      <span
-                        className={styles.checkpointSignal}
-                        aria-hidden="true"
-                      >
-                        {checked ? "X" : "→"}
-                      </span>
-                    </span>
-                    <small>
-                      {checkpointDescription(stage, checked)}
-                    </small>
-                  </span>
-                </label>
-              </li>
-            );
-          })}
-        </ol>
-      </fieldset>
       {error ? <p className="new-project-error">{error}</p> : null}
     </StepShell>
   );

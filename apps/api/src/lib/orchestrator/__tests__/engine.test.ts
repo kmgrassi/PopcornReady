@@ -520,6 +520,36 @@ test("after-gates do not pause before the requested tool executes", async () => 
   );
 });
 
+test("continues from a reviewed storyboard without rerunning its planning pass", async () => {
+  const store = new FakeStore(runFixture(), [gateFixture("after:generate_storyboard")]);
+  const { model } = scriptedModel([
+    { type: "tool_call", toolName: "generate_storyboard" },
+    { type: "tool_call", toolName: "generate_keyframe" },
+    { type: "done" },
+  ]);
+  const registry = fakeRegistry({
+    generate_storyboard: () => ok(["storyboard_1"]),
+    generate_keyframe: () => ok(["keyframe_1"]),
+  });
+
+  const storyboardPass = await runOrchestratorToCompletion("run1", deps(store, model, registry));
+  assert.equal(storyboardPass.status, "succeeded");
+  assert.equal(store.gates[0].status, "reached");
+  assert.deepEqual(store.actions.map((action) => action.tool), ["generate_storyboard"]);
+
+  // This mirrors the approval route: resolve the post-tool gate and reopen the
+  // completed planning pass before the recovery worker resumes it.
+  store.gates[0].status = "approved";
+  store.run = { ...store.run, status: "waiting", completedAt: undefined };
+  const productionPass = await resumeOrchestratorRun("run1", deps(store, model, registry));
+
+  assert.equal(productionPass.status, "succeeded");
+  assert.deepEqual(store.actions.map((action) => action.tool), [
+    "generate_storyboard",
+    "generate_keyframe",
+  ]);
+});
+
 test("stays parked when the resume job is not yet terminal", async () => {
   const store = new FakeStore(runFixture());
   const { model } = scriptedModel([{ type: "tool_call", toolName: "generate_keyframe" }]);

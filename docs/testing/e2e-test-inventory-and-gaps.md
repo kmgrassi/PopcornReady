@@ -34,7 +34,9 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
 - `specs/library-collections.spec.ts` covers Library pagination, filters, media
   viewer, visibility mutation behavior, and watch links with mocked fixtures.
 - `storyboard-editor.spec.ts` verifies the dedicated storyboard route renders
-  the empty state for a project whose storyboard endpoint returns `null`.
+  the empty state for a project whose storyboard endpoint returns `null`, and
+  that a storyboard-review stop exposes **Generate video** before production
+  media can continue.
 - `evals.spec.ts` covers the eval dashboard and admin workbench judgment action.
 
 The required local-first database smoke is:

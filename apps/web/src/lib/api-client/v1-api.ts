@@ -2,6 +2,7 @@ import type {
   AssetKind,
   AssetStatus,
   BoardRevisionRequest,
+  GenerationRun,
   GenerationRunStatus,
   GenerationStageType,
   ProjectVisibility,
@@ -407,6 +408,11 @@ export const v1Api = {
   ) =>
     apiRequest<GenerationRunDetail>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/generation-runs/${encodeURIComponent(runId)}`,
+      { signal }
+    ),
+  listProjectGenerationRuns: (projectId: string, signal?: AbortSignal) =>
+    apiRequest<{ runs: GenerationRun[] }>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/generation-runs`,
       { signal }
     ),
   getGenerationRunArtifact: (

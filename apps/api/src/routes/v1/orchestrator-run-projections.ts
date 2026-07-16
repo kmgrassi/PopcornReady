@@ -385,7 +385,11 @@ export function projectRun(
 ): GenerationRun {
   const reviewGates = gates.filter((gate) => !gate.stage.startsWith(AFTER_GATE_PREFIX));
   const status = projectedRunStatus(run, actions, gates, assets);
-  const reachedGate = reviewGates.find((gate) => gate.status === "reached");
+  // A post-tool gate is the storyboard-review stop: the storyboard work is
+  // complete, but production must not start until the creator continues it.
+  // Project it just like a conventional review gate so every surface has one
+  // clear, actionable state rather than a misleading terminal success.
+  const reachedGate = gates.find((gate) => gate.status === "reached");
   const reviewGate = reachedGate
     ? {
         stageType: toolStage(reachedGate.stage) as GateableGenerationStageType,
@@ -419,14 +423,14 @@ export function projectRun(
         ? "waiting_on_job" as const
         : "working" as const;
   const currentStageType =
-    status === "succeeded"
+    reviewGate?.stageType ??
+    (status === "succeeded"
       ? "ready"
-      : reviewGate?.stageType ??
-        (latestRunningAction
-          ? toolStage(latestRunningAction.tool)
-          : latestAction
-            ? toolStage(latestAction.tool)
-            : undefined);
+      : latestRunningAction
+        ? toolStage(latestRunningAction.tool)
+        : latestAction
+          ? toolStage(latestAction.tool)
+          : undefined);
   const lastProgressAt = latestTimestamp(
     [...jobs.values()].map((job) => job.progress.lastProgressAt)
   );

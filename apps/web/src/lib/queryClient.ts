@@ -672,6 +672,24 @@ export function useGenerationRunQuery(projectId: string, runId: string, enabled 
   });
 }
 
+export function useProjectGenerationRunsQuery(projectId: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.projectGenerationRuns(projectId),
+    queryFn: ({ signal }: { signal: QuerySignal }) =>
+      v1Api.listProjectGenerationRuns(projectId, signal),
+    enabled: enabled && Boolean(projectId),
+    refetchInterval: (query) => {
+      const data = query.state.data as { runs: GenerationRun[] } | undefined;
+      const awaitingReview = data?.runs.some((run) => Boolean(run.reviewGate));
+      const active = data?.runs.some((run) => !isTerminal(run.status));
+      if (!awaitingReview && !active) return false;
+      if (document.visibilityState === "hidden") return HIDDEN_POLL_INTERVAL_MS;
+      return awaitingReview ? REVIEW_POLL_INTERVAL_MS : POLL_INTERVAL_MS;
+    },
+    refetchIntervalInBackground: true,
+  });
+}
+
 export function useGenerationRunArtifactQuery(
   projectId: string,
   runId: string,
@@ -699,6 +717,7 @@ export function useUpdateGenerationRunMutation(projectId: string, runId: string)
     }) => v1Api.updateGenerationRun(projectId, runId, action, body),
     onSuccess: (data) => {
       client.setQueryData(queryKeys.generationRun(projectId, runId), data);
+      void client.invalidateQueries({ queryKey: queryKeys.projectGenerationRuns(projectId) });
       void client.invalidateQueries({ queryKey: ["dashboard"] });
       void client.invalidateQueries({ queryKey: ["workspaces"] });
     },
