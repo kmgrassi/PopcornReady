@@ -9,10 +9,17 @@ import {
   ToolChoiceResult,
   ToolSpec,
 } from "./types";
+import { reportLlmUsage } from "@popcorn/llm";
 
 type AnthropicMessageResponse = {
   model?: string;
   content?: unknown;
+  usage?: {
+    input_tokens?: number | null;
+    output_tokens?: number | null;
+    cache_read_input_tokens?: number | null;
+    cache_creation_input_tokens?: number | null;
+  } | null;
 };
 
 type AnthropicToolUseBlock = {
@@ -34,6 +41,22 @@ type AnthropicContentBlock =
 type MessageCreate = (
   params: Record<string, unknown>
 ) => Promise<AnthropicMessageResponse>;
+
+async function reportAnthropicUsage(
+  response: AnthropicMessageResponse,
+  fallbackModel: string
+): Promise<void> {
+  const usage = response.usage;
+  if (!usage) return;
+  await reportLlmUsage({
+    provider: "anthropic",
+    model: response.model ?? fallbackModel,
+    inputTokens: usage.input_tokens ?? 0,
+    outputTokens: usage.output_tokens ?? 0,
+    cacheReadInputTokens: usage.cache_read_input_tokens ?? 0,
+    cacheCreationInputTokens: usage.cache_creation_input_tokens ?? 0,
+  });
+}
 
 // Low-reasoning calls route to the cheaper fast model.
 const FAST_EFFORTS = new Set<LlmEffort>(["minimal", "low"]);
@@ -177,6 +200,7 @@ export function createAnthropicLlmClient(deps: AnthropicDeps = {}): LlmClient {
     let lastErr: unknown;
     for (let attempt = 0; attempt < STRUCTURED_RETRY_ATTEMPTS; attempt += 1) {
       const res = await ensureCreate()(requestParams);
+      await reportAnthropicUsage(res, callModel);
       try {
         return resultFromAnthropicToolUse<T>(res);
       } catch (err) {
@@ -224,6 +248,7 @@ export function createAnthropicLlmClient(deps: AnthropicDeps = {}): LlmClient {
         tool_choice: { type: "auto" },
         messages: [{ role: "user", content: JSON.stringify(args.userPayload) }],
       });
+      await reportAnthropicUsage(res, callModel);
       return interpretAnthropicToolResponse(res, callModel, allowed);
     },
   };

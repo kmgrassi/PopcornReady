@@ -551,6 +551,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
         r.model({
           workspaceId: r.workspaceId,
           projectId: run.projectId,
+          orchestratorRunId: run.id,
           inputSummary: run.inputSummary,
           priorResults,
           registry: turnRegistry,

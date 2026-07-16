@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { type LlmUsage, withLlmUsageObserver } from "@popcorn/llm";
+
 import {
   createAnthropicLlmClient,
   interpretAnthropicToolResponse,
@@ -137,23 +139,38 @@ test("structured rejects a non-object tool payload", async () => {
 
 test("structured retries once when the model omits the required tool, then succeeds", async () => {
   let calls = 0;
+  const observed: LlmUsage[] = [];
   const client = createAnthropicLlmClient({
     model: "claude-x",
     createMessage: async () => {
       calls += 1;
       // First attempt: the model emits only text and never calls the tool.
-      if (calls === 1) return { content: [{ type: "text", text: "thinking..." }] };
+      if (calls === 1) {
+        return {
+          model: "claude-x",
+          usage: { input_tokens: 90, output_tokens: 10 },
+          content: [{ type: "text", text: "thinking..." }],
+        };
+      }
       return {
+        model: "claude-x",
+        usage: { input_tokens: 110, output_tokens: 12, cache_read_input_tokens: 80 },
         content: [{ type: "tool_use", name: "return_result", input: { plan: 2 } }],
       };
     },
   });
 
   assert.deepEqual(
-    await client.structured({ cachedSystem: "s", user: "u", schema: {} }),
+    await withLlmUsageObserver((usage) => {
+      observed.push(usage);
+    }, () => client.structured({ cachedSystem: "s", user: "u", schema: {} })),
     { plan: 2 }
   );
   assert.equal(calls, 2);
+  assert.deepEqual(observed, [
+    { provider: "anthropic", model: "claude-x", inputTokens: 90, outputTokens: 10, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 },
+    { provider: "anthropic", model: "claude-x", inputTokens: 110, outputTokens: 12, cacheReadInputTokens: 80, cacheCreationInputTokens: 0 },
+  ]);
 });
 
 test("structured retries at most once, then surfaces the empty-tool error", async () => {
