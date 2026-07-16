@@ -159,6 +159,78 @@ export function buildFixtureSurfaces(): FixtureSurfaces {
   };
 }
 
+// The production RoutingContext shape with the tool fields widened to plain
+// strings so fixture dispatch tools (delegate_visuals/delegate_audio) can
+// appear in it. Serialized into the model payload exactly like production's.
+export interface FixtureRoutingContext {
+  completedTools: string[];
+  latestFailure?: {
+    tool: string;
+    kind?: string;
+    message?: string;
+    unmetRequirements: string[];
+    requiredRecoveryTools: string[];
+  };
+  nextToolHint?: {
+    tool: string;
+    reason: string;
+  };
+  assetRoleGuide: Record<string, string>;
+}
+
+/**
+ * Fixture-aware routing context: production `buildRoutingContext` semantics,
+ * extended — locally to the eval fixture path, never for real runs — so
+ * dispatch fixture tools are preserved instead of dropped by the production
+ * ToolName filter. Real-tool signals (including the keyframe/storyboard
+ * next-tool hints) come straight from the production builder; only results
+ * whose tool name falls outside the production vocabulary (the delegate
+ * fixtures) get the same treatment production would give them: applied ones
+ * join completedTools, and a trailing failure surfaces latestFailure plus the
+ * suggested-recovery nextToolHint. Both compared surfaces therefore receive
+ * equivalent failure/recovery signals.
+ */
+export function buildFixtureRoutingContext(
+  priorResults: FixturePriorResult[]
+): FixtureRoutingContext {
+  const base = buildRoutingContext(priorResults);
+  // Recompute completions fixture-tolerantly: applied dispatch results count.
+  const completedTools = [
+    ...new Set(
+      priorResults.filter((result) => result.status === "applied").map((result) => result.tool)
+    ),
+  ];
+
+  const context: FixtureRoutingContext = { ...base, completedTools };
+  const latest = priorResults.at(-1);
+  if (latest?.status === "failed" && !base.latestFailure) {
+    // The production builder dropped this failure because its tool name is a
+    // fixture dispatch. Mirror its projection: unmet requirement names, the
+    // deduped recovery tools, and the generic suggested-recovery hint.
+    const recoveryTools = [
+      ...new Set([
+        ...(latest.error?.suggestedNextTools ?? []).map((call) => call.tool),
+        ...(latest.error?.unmetRequirements ?? []).map((miss) => miss.satisfyWith.tool),
+      ]),
+    ];
+    context.latestFailure = {
+      tool: latest.tool,
+      ...(latest.error?.kind ? { kind: latest.error.kind } : {}),
+      ...(latest.error?.message ? { message: latest.error.message } : {}),
+      unmetRequirements: (latest.error?.unmetRequirements ?? []).map((miss) => miss.requirement),
+      requiredRecoveryTools: recoveryTools,
+    };
+    const [recoveryTool] = recoveryTools;
+    if (recoveryTool) {
+      context.nextToolHint = {
+        tool: recoveryTool,
+        reason: "The latest failed action explicitly suggested this recovery tool.",
+      };
+    }
+  }
+  return context;
+}
+
 /**
  * Opt-in REAL-model adapter for the fixture surface. Every call is a billable
  * LLM request — only the env-gated report script should construct this; tests
@@ -175,7 +247,7 @@ export function createRealFixtureDecisionModel(): FixtureDecisionModel {
         projectId: scenarioId,
         inputSummary,
         priorResults,
-        routingContext: buildRoutingContext(priorResults),
+        routingContext: buildFixtureRoutingContext(priorResults),
         instruction:
           "Choose exactly one next tool if work remains. If all work is complete, answer with a concise text summary and no tool call. " +
           "If the latest action failed, resolve its error (follow suggestedNextTools / unmetRequirements) rather than calling the failed tool again unchanged.",

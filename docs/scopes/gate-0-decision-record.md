@@ -38,12 +38,20 @@ A **defer** decision blocks **PR 14 and hierarchy-specific successors
 
 ## Baseline dimensions and measured values
 
-Both surfaces run the same fabricated project states through decisions only —
-no tool execution, no live generation, no billable providers beyond the
-decision LLM calls themselves. The flat surface is the real production
-registry + orchestrator model; the hierarchy surface is the fixture-only
-simulation in
-`apps/api/src/lib/orchestrator/evals/hierarchy-fixture.ts`.
+**The gate comparison is paired-scenario.** Every scenario in the Gate-0
+matrix is scored on BOTH surfaces: its flat form against the real production
+registry + orchestrator model, and its deterministic hierarchy projection
+(`apps/api/src/lib/orchestrator/evals/paired-projection.ts` — leaf media
+history/expectations map onto `delegate_visuals`/`delegate_audio`, in-domain
+self-heal failures project onto the specialist surface) against the
+fixture-only simulation in
+`apps/api/src/lib/orchestrator/evals/hierarchy-fixture.ts`. Both sides share
+the same scenario ids, sample counts, and provider, so neither surface can
+look better merely by being measured on a smaller or easier matrix. The
+hand-written hierarchy-only cases run as `hierarchyDiagnostics` and are
+**excluded from the gate comparison**. Both surfaces run decisions only — no
+tool execution, no live generation, no billable providers beyond the decision
+LLM calls themselves.
 
 | Gate-0 dimension | Report metric | Flat production | Hierarchy fixture |
 | --- | --- | --- | --- |
@@ -73,17 +81,23 @@ pnpm --filter @popcorn/api evals:gate0 -- --samples 5
 pnpm --filter @popcorn/api evals:gate0 -- --surface flat --samples 5
 pnpm --filter @popcorn/api evals:gate0 -- --surface hierarchy --samples 5
 
-# Machine-readable output for recording in this document
-pnpm --filter @popcorn/api evals:gate0 -- --samples 5 --json
+# Machine-readable output for recording in this document: stdout carries
+# exactly ONE JSON document { mode, comparison, samplesPerScenario,
+# pairedScenarioCount, flat, hierarchy, hierarchyDiagnostics }; all banners
+# go to stderr, so the output can be piped/redirected directly.
+pnpm --filter @popcorn/api evals:gate0 -- --samples 5 --json > gate0-baseline.json
 
 # Free plumbing check (scripted decisions, NOT a baseline)
 pnpm --filter @popcorn/api evals:gate0 -- --fixture
 ```
 
 Run the comparison at least twice on different days before scoring it, and use
-the same provider/model for both surfaces within a run. The per-scenario
-live tests (`gate0-live-decision-evals.test.ts`) are pass/fail smoke checks;
-the baseline that fills this record comes from the report script.
+the same provider/model for both surfaces within a run. Score the threshold
+only on the paired `flat` vs `hierarchy` reports; `hierarchyDiagnostics`
+(the unpaired hand-written cases) is context, not gate input. The
+per-scenario live tests (`gate0-live-decision-evals.test.ts`) are pass/fail
+smoke checks; the baseline that fills this record comes from the report
+script.
 
 ## Material-improvement threshold
 

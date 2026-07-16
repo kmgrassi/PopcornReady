@@ -32,6 +32,7 @@ import {
   TOOL_OVERLOAD,
 } from "../gate0-scenarios";
 import {
+  buildFixtureRoutingContext,
   buildFixtureSurfaces,
   DELEGATE_AUDIO_FIXTURE,
   DELEGATE_VISUALS_FIXTURE,
@@ -40,7 +41,10 @@ import {
   runHierarchyScenarios,
   type FixtureDecisionModel,
 } from "../hierarchy-fixture";
-import { ALL_SCENARIOS } from "../scenarios";
+import { flatMatrix, runGate0Baseline } from "../gate0-baseline-runner";
+import { buildPairedMatrix, projectToHierarchy } from "../paired-projection";
+import { buildRoutingContext } from "../../model";
+import { ALL_SCENARIOS, RECOVERY } from "../scenarios";
 
 const TOOL_NAME_SET = new Set<string>(TOOL_NAMES);
 
@@ -414,4 +418,233 @@ test("hierarchy simulation: stopping mid-production and dispatching after export
   assert.equal(report.overall.prematureDone, 1);
   assert.equal(report.overall.unnecessaryTurns, 1);
   assert.equal(report.overall.acceptable, 0);
+});
+
+// ---------------------------------------------------------------------------
+// Paired scenario matrix (review finding 1): the gate comparison scores the
+// SAME scenarios on both surfaces via deterministic projection.
+// ---------------------------------------------------------------------------
+
+test("paired matrix projects every flat scenario onto the hierarchy surface with the same id", () => {
+  const scenarios = flatMatrix();
+  const pairs = buildPairedMatrix(scenarios);
+  assert.equal(pairs.length, scenarios.length);
+  for (const pair of pairs) {
+    assert.equal(pair.hierarchy.id, pair.flat.id, "pair ids must match for row-by-row comparison");
+    assert.equal(pair.hierarchy.family, pair.flat.family);
+    // done expectations survive projection; tool expectations stay non-empty.
+    if (pair.flat.expect.type === "done") {
+      assert.equal(pair.hierarchy.expect.type, "done");
+    } else {
+      assert.equal(pair.hierarchy.expect.type, "tool_call");
+      if (pair.hierarchy.expect.type === "tool_call") {
+        assert.ok(pair.hierarchy.expect.oneOf.length > 0, `${pair.flat.id}: empty projected set`);
+      }
+    }
+  }
+});
+
+test("paired projections only expect and reference tools available on their simulated surface", () => {
+  const surfaces = buildFixtureSurfaces();
+  const surfaceNames = {
+    root: new Set(surfaces.root.map((tool) => tool.name)),
+    visuals: new Set(surfaces.visuals.map((tool) => tool.name)),
+    audio: new Set(surfaces.audio.map((tool) => tool.name)),
+  };
+  for (const pair of buildPairedMatrix(flatMatrix())) {
+    const names = surfaceNames[pair.hierarchy.surface];
+    if (pair.hierarchy.expect.type === "tool_call") {
+      for (const tool of pair.hierarchy.expect.oneOf) {
+        assert.ok(names.has(tool), `${pair.hierarchy.id}: ${tool} not on ${pair.hierarchy.surface}`);
+      }
+    }
+    for (const prior of pair.hierarchy.priorResults) {
+      assert.ok(
+        names.has(prior.tool),
+        `${pair.hierarchy.id}: prior ${prior.tool} not on ${pair.hierarchy.surface}`
+      );
+    }
+  }
+});
+
+test("root projection collapses leaf media history into dispatches that keep stable asset ids", () => {
+  const flat = GATE0_FLAT_SCENARIOS.find(
+    (scenario) => scenario.id === "long_context_export_after_many_beats"
+  )!;
+  const projected = projectToHierarchy(flat);
+  assert.equal(projected.surface, "root");
+  const tools = projected.priorResults.map((result) => result.tool);
+  // One consecutive visuals run (anchor..clip8) collapses to ONE dispatch.
+  assert.equal(tools.filter((tool) => tool === "delegate_visuals").length, 1);
+  assert.equal(tools.filter((tool) => tool === "delegate_audio").length, 1);
+  assert.ok(!tools.includes("generate_clip"), "leaf tools must not survive root projection");
+  // Root-owned results pass through unchanged, in order.
+  assert.deepEqual(
+    tools.filter((tool) => tool !== "delegate_visuals" && tool !== "delegate_audio"),
+    [
+      "create_or_load_brief",
+      "develop_story_blueprint",
+      "draft_script",
+      "plan_shots",
+      "plan_visual_anchors",
+      "assemble_timeline",
+      "critique_timeline",
+    ]
+  );
+  // The collapsed dispatch result still carries the produced stable graph ids.
+  const dispatch = projected.priorResults.find((result) => result.tool === "delegate_visuals")!;
+  assert.ok(dispatch.outputAssetIds.includes("beat1_keyframe"));
+  assert.ok(dispatch.outputAssetIds.includes("beat8_clip"));
+  assert.deepEqual(projected.expect, { type: "tool_call", oneOf: ["export_video"] });
+});
+
+test("cross-domain recovery projects to a root decision whose remedy is the owning dispatch", () => {
+  const flat = GATE0_FLAT_SCENARIOS.find(
+    (scenario) => scenario.id === "recover_cross_domain_missing_audio"
+  )!;
+  const projected = projectToHierarchy(flat);
+  assert.equal(projected.surface, "root");
+  const latest = projected.priorResults.at(-1)!;
+  // The failed tool is root-owned, so it stays; its remedies map to dispatch.
+  assert.equal(latest.tool, "assemble_timeline");
+  assert.equal(latest.status, "failed");
+  assert.deepEqual(
+    latest.error?.suggestedNextTools?.map((call) => call.tool),
+    ["delegate_audio"]
+  );
+  assert.deepEqual(
+    latest.error?.unmetRequirements?.map((miss) => miss.satisfyWith.tool),
+    ["delegate_audio"]
+  );
+  assert.deepEqual(projected.expect, { type: "tool_call", oneOf: ["delegate_audio"] });
+});
+
+test("in-domain recovery projects onto the specialist surface with only in-domain history", () => {
+  const flatVisuals = tagScenarios(RECOVERY, "recovery").find(
+    (scenario) => scenario.id === "recover_missing_keyframe"
+  )!;
+  const visuals = projectToHierarchy(flatVisuals);
+  assert.equal(visuals.surface, "visuals");
+  // Root planning history is stripped; the failed leaf stays last.
+  assert.ok(visuals.priorResults.every((result) =>
+    ["generate_anchor", "generate_storyboard", "generate_keyframe", "generate_clip",
+     "regenerate_image_asset", "edit_video_asset"].includes(result.tool)
+  ));
+  assert.equal(visuals.priorResults.at(-1)!.tool, "generate_clip");
+  assert.equal(visuals.priorResults.at(-1)!.status, "failed");
+  assert.deepEqual(visuals.expect, { type: "tool_call", oneOf: ["generate_keyframe"] });
+
+  const flatAudio = GATE0_FLAT_SCENARIOS.find(
+    (scenario) => scenario.id === "recover_fit_audio_missing_track"
+  )!;
+  const audio = projectToHierarchy(flatAudio);
+  assert.equal(audio.surface, "audio");
+  assert.equal(audio.priorResults.at(-1)!.tool, "fit_audio_to_picture");
+  assert.deepEqual(audio.expect, { type: "tool_call", oneOf: ["generate_audio"] });
+});
+
+test("paired scoring: both surfaces produce identical scenario/sample totals", async () => {
+  const pairs = buildPairedMatrix(flatMatrix());
+  const flat = await runFlatBaseline(pairs.map((pair) => pair.flat), {
+    model: perfectModel(pairs.map((pair) => pair.flat)),
+    samples: 1,
+  });
+  const byId = new Map(pairs.map((pair) => [pair.hierarchy.id, pair.hierarchy]));
+  const scored = await runHierarchyScenarios(pairs.map((pair) => pair.hierarchy), {
+    model: async ({ scenarioId }) => {
+      const scenario = byId.get(scenarioId)!;
+      return scenario.expect.type === "done"
+        ? { type: "done" }
+        : { type: "tool_call", toolName: scenario.expect.oneOf[0]! };
+    },
+    samples: 1,
+  });
+  const hierarchy = buildGate0Report("hierarchy_fixture", 1, scored);
+  assert.equal(flat.overall.scenarios, hierarchy.overall.scenarios);
+  assert.equal(flat.overall.samples, hierarchy.overall.samples);
+  assert.equal(flat.overall.accuracy, 1);
+  assert.equal(hierarchy.overall.accuracy, 1);
+});
+
+// ---------------------------------------------------------------------------
+// Fixture routing context (review finding 2): dispatch failures must reach the
+// hierarchy model with the same latestFailure/nextToolHint signal flat gets.
+// ---------------------------------------------------------------------------
+
+test("fixture routing context preserves dispatch failures and their recovery hint", () => {
+  const blocked = HIERARCHY_ROOT_SCENARIOS.find(
+    (scenario) => scenario.id === "hier_root_visuals_blocked_on_audio"
+  )!;
+  // Production builder drops the fixture dispatch failure entirely…
+  const production = buildRoutingContext(blocked.priorResults);
+  assert.equal(production.latestFailure, undefined);
+  // …the fixture-aware wrapper preserves it with equivalent signals.
+  const context = buildFixtureRoutingContext(blocked.priorResults);
+  assert.equal(context.latestFailure?.tool, "delegate_visuals");
+  assert.deepEqual(context.latestFailure?.unmetRequirements, ["narration_track"]);
+  assert.deepEqual(context.latestFailure?.requiredRecoveryTools, ["delegate_audio"]);
+  assert.equal(context.nextToolHint?.tool, "delegate_audio");
+  // Applied dispatch history counts as completed work.
+  assert.ok(context.completedTools.includes("create_or_load_brief"));
+  const applied = buildFixtureRoutingContext([
+    { tool: "delegate_visuals", status: "applied", outputAssetIds: ["visuals_report"] },
+  ]);
+  assert.deepEqual(applied.completedTools, ["delegate_visuals"]);
+});
+
+test("fixture routing context matches production semantics for real-tool failures", () => {
+  const selfHeal = HIERARCHY_SCENARIOS.find(
+    (scenario) => scenario.id === "hier_visuals_self_heal_keyframe"
+  )!;
+  const production = buildRoutingContext(selfHeal.priorResults);
+  const fixture = buildFixtureRoutingContext(selfHeal.priorResults);
+  // Real ToolName failures flow through the production builder unchanged —
+  // including the special-cased keyframe hint.
+  assert.deepEqual(fixture.latestFailure, production.latestFailure);
+  assert.deepEqual(fixture.nextToolHint, production.nextToolHint);
+  assert.equal(fixture.nextToolHint?.tool, "generate_keyframe");
+  assert.deepEqual(fixture.completedTools, production.completedTools);
+});
+
+// ---------------------------------------------------------------------------
+// Runner output contract (review finding 3): --json emits exactly one
+// parseable document on stdout; banners go to stderr.
+// ---------------------------------------------------------------------------
+
+test("gate0 runner --json emits exactly one parseable document on stdout with paired totals", async () => {
+  const out: string[] = [];
+  const err: string[] = [];
+  const result = await runGate0Baseline(
+    { samples: 2, surface: "both", fixture: true, json: true },
+    { out: (text) => out.push(text), err: (text) => err.push(text) }
+  );
+  assert.equal(result.exitCode, 0);
+  assert.equal(out.length, 1, "stdout must carry exactly one JSON document");
+  const document = JSON.parse(out[0]!);
+  assert.equal(document.mode, "offline_fixture");
+  assert.equal(document.comparison, "paired_scenarios");
+  assert.equal(document.samplesPerScenario, 2);
+  assert.equal(document.pairedScenarioCount, flatMatrix().length);
+  // The gate comparison is paired: identical scenario/sample totals per side.
+  assert.equal(document.flat.overall.scenarios, document.pairedScenarioCount);
+  assert.equal(document.hierarchy.overall.scenarios, document.pairedScenarioCount);
+  assert.equal(document.flat.overall.samples, document.hierarchy.overall.samples);
+  // Unpaired diagnostics are reported separately from the gate comparison.
+  assert.equal(document.hierarchyDiagnostics.overall.scenarios, HIERARCHY_SCENARIOS.length);
+  // Banners never contaminate stdout.
+  assert.ok(err.length > 0, "banners go to stderr");
+  assert.deepEqual(result.document, document);
+});
+
+test("gate0 runner human mode still prints reports on stdout and banners on stderr", async () => {
+  const out: string[] = [];
+  const err: string[] = [];
+  const result = await runGate0Baseline(
+    { samples: 1, surface: "flat", fixture: true, json: false },
+    { out: (text) => out.push(text), err: (text) => err.push(text) }
+  );
+  assert.equal(result.exitCode, 0);
+  assert.ok(out.some((text) => text.includes("paired gate comparison — flat side")));
+  assert.ok(err.some((text) => text.includes("OFFLINE plumbing check")));
+  assert.equal(result.document.hierarchy, undefined);
 });

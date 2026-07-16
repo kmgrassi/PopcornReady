@@ -74,8 +74,15 @@ The harness now also carries the Decision Gate 0 baseline for
   proposed creative-director surface (root-owned tools plus
   `delegate_visuals`/`delegate_audio` fixture definitions, and the dormant
   visuals/audio registries) evaluated as decisions only; nothing is executable.
+- **Paired projection** in `evals/paired-projection.ts` — every flat scenario
+  is deterministically projected onto the hierarchy surface (leaf media →
+  dispatch tools; in-domain self-heal failures → the specialist surface) so
+  the gate comparison scores identical scenario matrices on both sides;
+  hand-written hierarchy-only cases run as diagnostics outside the comparison.
 - **Report script:** `pnpm --filter @popcorn/api evals:gate0 -- --samples 5`
-  (opt-in real model; `--fixture` is a free offline plumbing check).
+  (opt-in real model; `--fixture` is a free offline plumbing check; `--json`
+  emits one parseable document on stdout with banners on stderr). Thin CLI
+  over `evals/gate0-baseline-runner.ts`.
 - Results and the adoption decision are recorded in
   [`gate-0-decision-record.md`](gate-0-decision-record.md).
 
