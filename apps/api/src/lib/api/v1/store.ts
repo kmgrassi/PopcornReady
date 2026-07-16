@@ -155,6 +155,9 @@ import {
   updateJobWithDeps,
   updateActiveJobWithDeps,
   claimJobRecoveryWithDeps,
+  claimProviderJobExecutionWithDeps,
+  completeProviderJobExecutionWithDeps,
+  renewProviderJobExecutionWithDeps,
   type CompositionJobsStoreDeps,
   type InsertDataAssetInput,
 } from "./store-composition-jobs";
@@ -164,6 +167,7 @@ import type {
   CreateActionInput,
   IdempotencyReservation,
   IdempotencyRecord,
+  ProviderJobClaim,
   StaleCandidatesResult,
   StoryBlueprint,
   StoryBlueprintRecord,
@@ -192,6 +196,7 @@ export type {
   CreateActionInput,
   IdempotencyReservation,
   IdempotencyRecord,
+  ProviderJobClaim,
   StaleCandidateAsset,
   StaleCandidatesResult,
   StoryBlueprint,
@@ -6499,6 +6504,24 @@ export function claimJobRecovery(
   input: Parameters<typeof claimJobRecoveryWithDeps>[1]
 ): ReturnType<typeof claimJobRecoveryWithDeps> {
   return claimJobRecoveryWithDeps(compositionJobsDeps, input);
+}
+
+export function claimProviderJobExecution(
+  input: Parameters<typeof claimProviderJobExecutionWithDeps>[1]
+): ReturnType<typeof claimProviderJobExecutionWithDeps> {
+  return claimProviderJobExecutionWithDeps(compositionJobsDeps, input);
+}
+
+export function completeProviderJobExecution(
+  input: Parameters<typeof completeProviderJobExecutionWithDeps>[1]
+): ReturnType<typeof completeProviderJobExecutionWithDeps> {
+  return completeProviderJobExecutionWithDeps(compositionJobsDeps, input);
+}
+
+export function renewProviderJobExecution(
+  input: Parameters<typeof renewProviderJobExecutionWithDeps>[1]
+): ReturnType<typeof renewProviderJobExecutionWithDeps> {
+  return renewProviderJobExecutionWithDeps(compositionJobsDeps, input);
 }
 
 export function getJob(

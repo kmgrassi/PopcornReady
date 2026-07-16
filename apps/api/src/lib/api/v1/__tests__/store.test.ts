@@ -6,6 +6,10 @@ import { afterEach, beforeEach, test } from "node:test";
 import { VideoBrief } from "../schemas";
 import {
   addAsset,
+  claimProviderJobExecution,
+  completeProviderJobExecution,
+  createAction,
+  createJob,
   coerceShotPlanContent,
   createBriefVersion,
   createProject,
@@ -13,9 +17,12 @@ import {
   ensureLocalWorkspace,
   fillProjectPosterFromFirstFrame,
   findIdempotencyRecord,
+  getJob,
   getProject,
+  getServiceSupabaseForStore,
   listAssets,
   listProjects,
+  renewProviderJobExecution,
   saveIdempotencyRecord,
   setBrief,
   setProjectPoster,
@@ -151,6 +158,138 @@ dbTest("createProject without brief persists and is readable", async () => {
 
   const read = await getProject("ws_a", project.id);
   assert.equal(read.name, "Teaser");
+});
+
+dbTest("provider execution claims allow one launcher and fence terminal updates", async () => {
+  const workspace = await ensureLocalWorkspace(`provider-claim-${Date.now()}`);
+  const { project } = await createProject({
+    workspaceId: workspace.id,
+    name: "Provider claim",
+  });
+  const action = await createAction({
+    projectId: project.id,
+    tool: "generate_keyframe",
+    status: "running",
+  });
+  const job = await createJob({
+    workspaceId: workspace.id,
+    projectId: project.id,
+    type: "asset_generation",
+    status: "queued",
+    payload: { body: { kind: "image", provider: "mock", prompt: "claim" } },
+    actionId: action.id,
+  });
+  const staleBefore = new Date(Date.now() - 60_000).toISOString();
+  const claims = await Promise.all([
+    claimProviderJobExecution({
+      workspaceId: workspace.id,
+      projectId: project.id,
+      jobId: job.id,
+      staleBefore,
+    }),
+    claimProviderJobExecution({
+      workspaceId: workspace.id,
+      projectId: project.id,
+      jobId: job.id,
+      staleBefore,
+    }),
+  ]);
+  assert.equal(claims.filter((claim) => claim.state === "claimed").length, 1);
+  assert.equal(claims.filter((claim) => claim.state === "held").length, 1);
+  const winner = claims.find((claim) => claim.state === "claimed");
+  assert.ok(winner?.claimToken);
+
+  const wrongToken = await completeProviderJobExecution({
+    workspaceId: workspace.id,
+    projectId: project.id,
+    jobId: job.id,
+    claimToken: "00000000-0000-0000-0000-000000000000",
+    status: "succeeded",
+  });
+  assert.equal(wrongToken, null);
+
+  const completed = await completeProviderJobExecution({
+    workspaceId: workspace.id,
+    projectId: project.id,
+    jobId: job.id,
+    claimToken: winner.claimToken,
+    status: "succeeded",
+    result: { assetIds: ["00000000-0000-0000-0000-000000000002"] },
+    actionOutputAssetIds: ["00000000-0000-0000-0000-000000000002"],
+  });
+  assert.equal(completed?.status, "succeeded");
+  const { data: completedAction, error: completedActionError } = await getServiceSupabaseForStore()
+    .from("actions")
+    .select("status, output_asset_ids")
+    .eq("id", action.id)
+    .single();
+  assert.equal(completedActionError, null);
+  assert.equal(completedAction?.status, "applied");
+  assert.deepEqual(completedAction?.output_asset_ids, ["00000000-0000-0000-0000-000000000002"]);
+  const terminal = await claimProviderJobExecution({
+    workspaceId: workspace.id,
+    projectId: project.id,
+    jobId: job.id,
+    staleBefore,
+  });
+  assert.equal(terminal.state, "terminal");
+
+  const abandonedAction = await createAction({
+    projectId: project.id,
+    tool: "generate_keyframe",
+    status: "running",
+  });
+  const abandoned = await createJob({
+    workspaceId: workspace.id,
+    projectId: project.id,
+    type: "asset_generation",
+    status: "queued",
+    payload: { body: { kind: "image", provider: "mock", prompt: "stale" } },
+    actionId: abandonedAction.id,
+  });
+  const abandonedClaim = await claimProviderJobExecution({
+    workspaceId: workspace.id,
+    projectId: project.id,
+    jobId: abandoned.id,
+    staleBefore,
+  });
+  assert.equal(abandonedClaim.state, "claimed");
+  assert.ok(abandonedClaim.claimToken);
+  const renewalCutoff = new Date().toISOString();
+  assert.equal(
+    await renewProviderJobExecution({
+      workspaceId: workspace.id,
+      projectId: project.id,
+      jobId: abandoned.id,
+      claimToken: abandonedClaim.claimToken,
+    }),
+    true
+  );
+  const stillHeld = await claimProviderJobExecution({
+    workspaceId: workspace.id,
+    projectId: project.id,
+    jobId: abandoned.id,
+    staleBefore: renewalCutoff,
+  });
+  assert.equal(stillHeld.state, "held");
+  const reconciled = await claimProviderJobExecution({
+    workspaceId: workspace.id,
+    projectId: project.id,
+    jobId: abandoned.id,
+    staleBefore: new Date(Date.now() + 60_000).toISOString(),
+  });
+  assert.equal(reconciled.state, "terminal");
+  const reconciledJob = await getJob(workspace.id, project.id, abandoned.id);
+  assert.equal(reconciledJob.status, "failed");
+  assert.equal(reconciledJob.error?.code, "provider_claim_reconciliation_required");
+  const { data: reconciledAction, error: reconciledActionError } = await getServiceSupabaseForStore()
+    .from("actions")
+    .select("status, error")
+    .eq("id", abandonedAction.id)
+    .single();
+  assert.equal(reconciledActionError, null);
+  assert.equal(reconciledAction?.status, "failed");
+  assert.equal(reconciledAction?.error?.code, "provider_claim_reconciliation_required");
 });
 
 dbTest("createProject with brief creates an initial brief version", async () => {

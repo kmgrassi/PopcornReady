@@ -34,9 +34,10 @@ import type { GeneratedAssetCharacterBinding } from "@popcorn/shared/types";
 import { buildSemanticAnalysis } from "@/lib/assets/semantic-analysis";
 import { sha256Hex } from "./asset-graph";
 import { randomUUID } from "crypto";
+import type { Job } from "@popcorn/shared/v1/types";
+import type { V1Job } from "./jobs";
 import { AuthContext } from "./auth";
 import { ApiError, ApiErrorCode, validationError } from "./errors";
-import { createJob, getJob, updateJob, V1Job } from "./jobs";
 import { resolveAssetMetadata } from "./naming";
 import {
   GeneratedAssetProvenance,
@@ -46,12 +47,17 @@ import { AssetKind, SCHEMA_VERSIONS } from "./schemas";
 import {
   addAsset,
   canonicalizeAssetIds,
+  claimProviderJobExecution,
+  completeProviderJobExecution,
+  createJob,
   assertRunBudgetAllows,
   createAction,
   effectiveAssetStorageVisibility,
   getAssetFingerprintPins,
   getAsset,
+  getJob,
   getProject,
+  renewProviderJobExecution,
   updateAction,
   updateAsset,
   V1Action,
@@ -68,6 +74,18 @@ import {
 export interface ApiResult {
   status: number;
   body: Record<string, unknown>;
+}
+
+export type GeneratedAssetJob = V1Job & {
+  type: "asset_generation";
+  actionId?: string;
+};
+
+function asGeneratedAssetJob(job: Job): GeneratedAssetJob {
+  if (job.type !== "asset_generation") {
+    throw new ApiError("internal_error", `Expected an asset_generation job: ${job.id}.`);
+  }
+  return job as unknown as GeneratedAssetJob;
 }
 
 const CHARACTER_PROMPT_INVARIANT_VERSION = "char.invariant.v1";
@@ -696,10 +714,6 @@ async function runGeneration(
     outputAssetIds: [updated.id],
   });
   void enqueueAssetEmbeddingRefresh(updated, { reason: "asset_ready" }).catch(() => undefined);
-  await updateAction(action.id, {
-    status: "applied",
-    outputAssetIds: [updated.id],
-  });
   return updated;
 }
 
@@ -719,6 +733,8 @@ interface GeneratedAssetJobInput {
 }
 
 const PROMPT_PREVIEW_MAX = 240;
+const PROVIDER_CLAIM_STALE_MS = 15 * 60_000;
+const PROVIDER_CLAIM_HEARTBEAT_MS = 30_000;
 
 function clipPromptPreview(value: string): string {
   const trimmed = value.replace(/\s+/g, " ").trim();
@@ -773,76 +789,10 @@ export async function enqueueGeneratedAssetJob(
   const { auth, projectId, body } = args;
 
   await getProject(auth.workspaceId, projectId); // throws not_found
-  parseGeneratedAssetRequest(body);
-
-  return createJob({
-    workspaceId: auth.workspaceId,
-    projectId,
-    type: "asset_generation",
-    status: "queued",
-    progress: { currentStep: "queued", percent: 0 },
-    input: { body } satisfies GeneratedAssetJobInput,
-    result: null,
-    error: null,
-  });
-}
-
-function generatedAssetJobInput(job: V1Job): GeneratedAssetJobInput {
-  const input = job.input as GeneratedAssetJobInput | null | undefined;
-  if (!input || !("body" in input)) {
-    throw new ApiError(
-      "job_failed",
-      `Generated-asset job is missing durable input: ${job.id}.`
-    );
-  }
-  return input;
-}
-
-export async function runGeneratedAssetJob(args: {
-  auth: AuthContext;
-  projectId: string;
-  jobId: string;
-  progress?: RunStageHandle;
-}): Promise<V1Job> {
-  const { auth, projectId, jobId, progress } = args;
-  await getProject(auth.workspaceId, projectId); // throws not_found
-
-  const job = await getJob(jobId);
-  if (
-    !job ||
-    job.workspaceId !== auth.workspaceId ||
-    job.projectId !== projectId ||
-    job.type !== "asset_generation"
-  ) {
-    throw new ApiError("not_found", `Generated-asset job not found: ${jobId}.`);
-  }
-  if (job.status === "succeeded" || job.status === "failed" || job.status === "canceled") {
-    return job;
-  }
-
-  const parsed = parseGeneratedAssetRequest(generatedAssetJobInput(job).body);
-  if (!parsed.providerWasExplicit) {
-    const resolved = await resolveWorkspaceGenerationModel({
-      workspaceId: auth.workspaceId,
-      kind: parsed.kind,
-      explicitModel: parsed.model,
-    });
-    parsed.provider = resolved.provider;
-    parsed.model = resolved.model;
-    const supportedKinds = PROVIDER_KIND_SUPPORT[parsed.provider];
-    if (!supportedKinds?.includes(parsed.kind)) {
-      throw validationError("The request body is invalid.", [
-        {
-          path: "provider",
-          message: `Provider "${parsed.provider}" supports ${supportedKinds?.join(", ") || "no"} generation, not ${parsed.kind}.`,
-        },
-      ]);
-    }
-  }
-  // The agent may reference inputs by slug (e.g. "character_homeowner"). Resolve
-  // every asset reference to its canonical uuid BEFORE these values are written to
-  // uuid columns (createAction.input_asset_ids, asset_edges via graphInputs), or
-  // Postgres rejects the raw slug with 22P02. See store.canonicalizeAssetIds.
+  const parsed = parseGeneratedAssetRequest(body);
+  // Persist the action's graph references in canonical UUID form before the
+  // durable job can be claimed. The provider boundary must never be the first
+  // point at which its provenance becomes valid relational data.
   parsed.referenceAssetIds = await canonicalizeAssetIds(
     auth.workspaceId,
     projectId,
@@ -868,21 +818,172 @@ export async function runGeneratedAssetJob(args: {
       assetId: canonical[index],
     }));
   }
-  const estimatedCostUsd = estimateCostUsd({
-    provider: parsed.provider,
-    kind: parsed.kind,
-    durationSec: parsed.durationSec,
-    model: parsed.model,
-  });
-  const running = await updateJob(job.id, {
+  const action = await createAction({
+    id: randomUUID(),
+    projectId,
+    orchestratorRunId: parsed.runId,
+    tool: actionToolForParsed(parsed),
     status: "running",
-    progress: { currentStep: "generating_assets", percent: 10 },
-    error: null,
+    params: {
+      provider: parsed.provider,
+      kind: parsed.kind,
+      model: parsed.model,
+      prompt: parsed.prompt,
+      displayName: parsed.displayName,
+      slug: parsed.slug,
+      durationSec: parsed.durationSec,
+      referenceAssetIds: parsed.referenceAssetIds,
+      beatId: parsed.beatId,
+      anchorIds: parsed.anchorIds,
+    },
+    inputAssetIds: parsed.referenceAssetIds,
+    rationale: `Generate a ${parsed.kind} asset for the project.`,
   });
+
+  const job = await createJob({
+    workspaceId: auth.workspaceId,
+    projectId,
+    type: "asset_generation",
+    status: "queued",
+    progress: { currentStep: "queued", percent: 0 },
+    payload: { body } satisfies GeneratedAssetJobInput,
+    result: null,
+    actionId: action.id,
+  });
+  await updateAction(action.id, { jobIds: [job.id] });
+  return asGeneratedAssetJob(job);
+}
+
+function generatedAssetJobInput(job: GeneratedAssetJob): GeneratedAssetJobInput {
+  const input = job.input as GeneratedAssetJobInput | null | undefined;
+  if (!input || !("body" in input)) {
+    throw new ApiError(
+      "job_failed",
+      `Generated-asset job is missing durable input: ${job.id}.`
+    );
+  }
+  return input;
+}
+
+export async function runGeneratedAssetJob(args: {
+  auth: AuthContext;
+  projectId: string;
+  jobId: string;
+  progress?: RunStageHandle;
+}): Promise<GeneratedAssetJob> {
+  const { auth, projectId, jobId, progress } = args;
+  await getProject(auth.workspaceId, projectId); // throws not_found
+
+  const job = await getJob(auth.workspaceId, projectId, jobId);
+  if (
+    !job ||
+    job.workspaceId !== auth.workspaceId ||
+    job.projectId !== projectId ||
+    job.type !== "asset_generation"
+  ) {
+    throw new ApiError("not_found", `Generated-asset job not found: ${jobId}.`);
+  }
+  if (job.status === "succeeded" || job.status === "failed" || job.status === "canceled") {
+    return asGeneratedAssetJob(job);
+  }
+  const generatedJob = asGeneratedAssetJob(job);
+
+  const claim = await claimProviderJobExecution({
+    workspaceId: auth.workspaceId,
+    projectId,
+    jobId: job.id,
+    staleBefore: new Date(Date.now() - PROVIDER_CLAIM_STALE_MS).toISOString(),
+  });
+  if (claim.state !== "claimed") {
+    const current = await getJob(auth.workspaceId, projectId, job.id);
+    return asGeneratedAssetJob(current);
+  }
+  if (!claim.claimToken) {
+    throw new ApiError("internal_error", "Provider job claim was missing its token.");
+  }
+  const claimHeartbeat = setInterval(() => {
+    void renewProviderJobExecution({
+      workspaceId: auth.workspaceId,
+      projectId,
+      jobId: job.id,
+      claimToken: claim.claimToken!,
+    }).catch((err) => {
+      logger.error("generated_asset.provider_claim_renewal_failed", {
+        workspaceId: auth.workspaceId,
+        projectId,
+        jobId: job.id,
+        error: { message: err instanceof Error ? err.message : String(err) },
+      });
+    });
+  }, PROVIDER_CLAIM_HEARTBEAT_MS);
+
+  const running = generatedJob;
   let action: V1Action | null = null;
   let item: RunStageItemHandle | null = null;
+  let parsed: ParsedRequest | null = null;
+  let estimatedCostUsd = 0;
 
   try {
+    if (!running.actionId) {
+      throw new ApiError(
+        "job_failed",
+        `Generated-asset job is missing canonical action attribution: ${running.id}.`
+      );
+    }
+    parsed = parseGeneratedAssetRequest(generatedAssetJobInput(generatedJob).body);
+    if (!parsed.providerWasExplicit) {
+      const resolved = await resolveWorkspaceGenerationModel({
+        workspaceId: auth.workspaceId,
+        kind: parsed.kind,
+        explicitModel: parsed.model,
+      });
+      parsed.provider = resolved.provider;
+      parsed.model = resolved.model;
+      const supportedKinds = PROVIDER_KIND_SUPPORT[parsed.provider];
+      if (!supportedKinds?.includes(parsed.kind)) {
+        throw validationError("The request body is invalid.", [
+          {
+            path: "provider",
+            message: `Provider "${parsed.provider}" supports ${supportedKinds?.join(", ") || "no"} generation, not ${parsed.kind}.`,
+          },
+        ]);
+      }
+    }
+    // The agent may reference inputs by slug (e.g. "character_homeowner"). Resolve
+    // every asset reference to its canonical uuid BEFORE these values are written to
+    // uuid columns (createAction.input_asset_ids, asset_edges via graphInputs), or
+    // Postgres rejects the raw slug with 22P02. See store.canonicalizeAssetIds.
+    parsed.referenceAssetIds = await canonicalizeAssetIds(
+      auth.workspaceId,
+      projectId,
+      parsed.referenceAssetIds
+    );
+    if (parsed.editSourceAssetId) {
+      const [editSourceAssetId] = await canonicalizeAssetIds(
+        auth.workspaceId,
+        projectId,
+        [parsed.editSourceAssetId]
+      );
+      parsed.editSourceAssetId = editSourceAssetId;
+    }
+    parsed.anchorIds = await canonicalizeAssetIds(auth.workspaceId, projectId, parsed.anchorIds);
+    if (parsed.graphInputs?.length) {
+      const canonical = await canonicalizeAssetIds(
+        auth.workspaceId,
+        projectId,
+        parsed.graphInputs.map((input) => input.assetId)
+      );
+      parsed.graphInputs = parsed.graphInputs.map((input, index) => ({
+        ...input,
+        assetId: canonical[index],
+      }));
+    }
+    estimatedCostUsd = estimateCostUsd({
+      provider: parsed.provider,
+      kind: parsed.kind,
+      durationSec: parsed.durationSec,
+      model: parsed.model,
+    });
     const pinnedFingerprints = await getAssetFingerprintPins(
       projectId,
       parsed.referenceAssetIds
@@ -893,6 +994,7 @@ export async function runGeneratedAssetJob(args: {
       additionalCostUsd: estimatedCostUsd,
     });
     action = await createAction({
+      id: running.actionId,
       projectId,
       orchestratorRunId: parsed.runId,
       tool: actionToolForParsed(parsed),
@@ -956,19 +1058,25 @@ export async function runGeneratedAssetJob(args: {
     if (progress) await progress.attachJob(running.id);
 
     const asset = await runGeneration(auth, projectId, parsed, item, action);
-    const finished = await updateJob(running.id, {
+    const finished = await completeProviderJobExecution({
+      workspaceId: auth.workspaceId,
+      projectId,
+      jobId: running.id,
+      claimToken: claim.claimToken,
       status: "succeeded",
       progress: { currentStep: "saving_artifact", percent: 100 },
       result: { assetIds: [asset.id] },
       error: null,
+      actionOutputAssetIds: [asset.id],
     });
+    if (!finished) return getJob(auth.workspaceId, projectId, running.id).then(asGeneratedAssetJob);
     if (item) {
       await item.succeed({
         assetId: asset.id,
         message: `Generated ${parsed.kind}.`,
       });
     }
-    return finished;
+    return asGeneratedAssetJob(finished);
   } catch (err) {
     const apiErr =
       err instanceof ApiError
@@ -977,7 +1085,7 @@ export async function runGeneratedAssetJob(args: {
           ? new ApiError("budget_exceeded", err.message, {
               reason: "budget_exceeded",
               estimatedCostUsd,
-              runId: parsed.runId,
+              runId: parsed?.runId,
             })
         : err instanceof Error &&
             (/^Run not found:/.test(err.message) ||
@@ -994,23 +1102,23 @@ export async function runGeneratedAssetJob(args: {
             "job_failed",
             err instanceof Error ? err.message : "Asset generation failed."
           );
-    const failed = await updateJob(running.id, {
+    const failed = await completeProviderJobExecution({
+      workspaceId: auth.workspaceId,
+      projectId,
+      jobId: running.id,
+      claimToken: claim.claimToken,
       status: "failed",
       error: { code: apiErr.code, message: apiErr.message },
     });
-    if (action) {
-      await updateAction(action.id, {
-        status: "failed",
-        error: {
-          code: apiErr.code,
-          message: apiErr.message,
-        },
-      });
+    if (!failed) {
+      return getJob(auth.workspaceId, projectId, running.id).then(asGeneratedAssetJob);
     }
     if (item) {
       await item.fail(toGenerationErrorSummary(apiErr));
     }
-    return failed;
+    return asGeneratedAssetJob(failed);
+  } finally {
+    clearInterval(claimHeartbeat);
   }
 }
 
@@ -1026,7 +1134,21 @@ export async function getGeneratedAssetJob(
   const { auth, projectId, jobId } = args;
   await getProject(auth.workspaceId, projectId); // throws not_found
 
-  const job: V1Job | null = await getJob(jobId);
+  let loaded = await getJob(auth.workspaceId, projectId, jobId);
+  // Polling is also the safe reconciliation trigger after a process crash.
+  // It only examines an already-running provider claim; it never claims a
+  // queued job or launches provider work from a read path.
+  if (loaded.status === "running") {
+    await claimProviderJobExecution({
+      workspaceId: auth.workspaceId,
+      projectId,
+      jobId: loaded.id,
+      staleBefore: new Date(Date.now() - PROVIDER_CLAIM_STALE_MS).toISOString(),
+    });
+    loaded = await getJob(auth.workspaceId, projectId, jobId);
+  }
+  const job: GeneratedAssetJob | null =
+    loaded.type === "asset_generation" ? asGeneratedAssetJob(loaded) : null;
   if (
     !job ||
     job.workspaceId !== auth.workspaceId ||

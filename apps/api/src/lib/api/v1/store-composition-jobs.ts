@@ -16,6 +16,7 @@ import type {
   CreateActionInput,
   IdempotencyReservation,
   IdempotencyRecord,
+  ProviderJobClaim,
   UpdateActionPatch,
   V1Action,
   V1Project,
@@ -412,6 +413,80 @@ export async function claimJobRecoveryWithDeps(
   );
   const row = Array.isArray(data) ? data[0] : data;
   return row ? mapJob(row as JobRow) : null;
+}
+
+export async function claimProviderJobExecutionWithDeps(
+  deps: Pick<CompositionJobsStoreDeps, "getDb" | "getProject">,
+  input: { workspaceId: string; projectId: string; jobId: string; staleBefore: string }
+): Promise<ProviderJobClaim> {
+  await deps.getProject(input.workspaceId, input.projectId);
+  const data = await runQuery(
+    "store.claimProviderJobExecution",
+    deps.getDb().rpc("claim_provider_job_execution", {
+      p_workspace_id: input.workspaceId,
+      p_project_id: input.projectId,
+      p_job_id: input.jobId,
+      p_stale_before: input.staleBefore,
+    })
+  );
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | { state?: ProviderJobClaim["state"]; claim_token?: string | null }
+    | undefined;
+  if (!row?.state) throw new Error("Provider job claim RPC returned no state.");
+  return {
+    state: row.state,
+    ...(row.claim_token ? { claimToken: row.claim_token } : {}),
+  };
+}
+
+export async function completeProviderJobExecutionWithDeps(
+  deps: Pick<CompositionJobsStoreDeps, "getDb" | "getProject">,
+  input: {
+    workspaceId: string;
+    projectId: string;
+    jobId: string;
+    claimToken: string;
+    status: Extract<JobStatus, "succeeded" | "failed" | "canceled">;
+    progress?: Job["progress"];
+    result?: unknown;
+    error?: Job["error"];
+    actionOutputAssetIds?: string[];
+  }
+): Promise<Job | null> {
+  await deps.getProject(input.workspaceId, input.projectId);
+  const data = await runQuery(
+    "store.completeProviderJobExecution",
+    deps.getDb().rpc("complete_provider_job_execution", {
+      p_workspace_id: input.workspaceId,
+      p_project_id: input.projectId,
+      p_job_id: input.jobId,
+      p_claim_token: input.claimToken,
+      p_status: input.status,
+      p_progress: input.progress ?? {},
+      p_result: input.result ?? null,
+      p_error: input.error ?? null,
+      p_action_output_asset_ids: input.actionOutputAssetIds ?? null,
+    })
+  );
+  const row = Array.isArray(data) ? data[0] : data;
+  return row ? mapJob(row as JobRow) : null;
+}
+
+export async function renewProviderJobExecutionWithDeps(
+  deps: Pick<CompositionJobsStoreDeps, "getDb" | "getProject">,
+  input: { workspaceId: string; projectId: string; jobId: string; claimToken: string }
+): Promise<boolean> {
+  await deps.getProject(input.workspaceId, input.projectId);
+  const data = await runQuery(
+    "store.renewProviderJobExecution",
+    deps.getDb().rpc("renew_provider_job_execution", {
+      p_workspace_id: input.workspaceId,
+      p_project_id: input.projectId,
+      p_job_id: input.jobId,
+      p_claim_token: input.claimToken,
+    })
+  );
+  return data === true;
 }
 
 export async function getJobWithDeps(
