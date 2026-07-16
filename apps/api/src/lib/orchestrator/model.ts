@@ -69,7 +69,10 @@ type AssetKindResolver = (
   assetId: string
 ) => Promise<"image" | "video" | "audio" | undefined>;
 
-const SYSTEM_PROMPT =
+// Exported so the fixture-only Gate-0 hierarchy simulation
+// (lib/orchestrator/evals/hierarchy-fixture.ts) evaluates the proposed
+// creative-director surface against the exact production decision prompt.
+export const ORCHESTRATOR_SYSTEM_PROMPT =
   "You are the Popcorn Ready video-generation orchestrator. Decide the next single server-owned tool to call. The server owns validation, persistence, jobs, authorization, provider execution, and stage state. Call at most one tool. " +
   "Each prior result reports its tool and status; a failed result also carries an `error` describing why it failed. When the most recent action failed, do not repeat the same tool with the same inputs — instead follow `error.suggestedNextTools` and satisfy every `error.unmetRequirements[].satisfyWith.tool` before retrying the failed step. " +
   "Important asset roles: `generate_storyboard` creates cheap sketch `beat_storyboard` tiles for planning/review; `generate_keyframe` creates photoreal `beat_keyframe` first-frame assets required by `generate_clip`; `generate_clip` creates new motion `beat_clip` video assets for planned beats; `edit_video_asset` changes the content of an existing uploaded footage asset or generated clip and links the new asset back to the source. A missing `beat_keyframe` is fixed with `generate_keyframe`, not `generate_storyboard`, unless the keyframe tool itself says storyboard tiles are missing. " +
@@ -329,7 +332,7 @@ export const orchestratorModel: OrchestratorModel = async ({
 
   const client = await llmClientForWorkspace(workspaceId);
   const decision = await client.chooseTool({
-    system: SYSTEM_PROMPT,
+    system: ORCHESTRATOR_SYSTEM_PROMPT,
     userPayload: {
       projectId,
       inputSummary,

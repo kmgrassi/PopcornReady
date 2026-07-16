@@ -58,6 +58,27 @@ The nine high-level steps as forward routing decisions, plus self-heal recovery:
 The recovery cases assert the system-prompt self-heal behavior: satisfy the
 surfaced precondition, never blindly retry the failed tool.
 
+## Gate-0 extension (specialist-agents PR 1)
+
+The harness now also carries the Decision Gate 0 baseline for
+[`specialist-agent-orchestration-prs.md`](specialist-agent-orchestration-prs.md):
+
+- **New flat-registry families** in `evals/gate0-scenarios.ts` — `long_context`,
+  `tool_overload`, `cross_modality`, `selective_regeneration`,
+  `premature_done`, and extended `recovery` (within- and cross-modality
+  precondition misses), same fixture pattern as `scenarios.ts`.
+- **Failure taxonomy + repeated-sample report** in `evals/gate0-report.ts` —
+  every sample is classified as `acceptable`, `wrong_tool`, `premature_done`,
+  `unnecessary_turn`, or `repeated_failed_call` and aggregated per family.
+- **Fixture-only hierarchy simulation** in `evals/hierarchy-fixture.ts` — the
+  proposed creative-director surface (root-owned tools plus
+  `delegate_visuals`/`delegate_audio` fixture definitions, and the dormant
+  visuals/audio registries) evaluated as decisions only; nothing is executable.
+- **Report script:** `pnpm --filter @popcorn/api evals:gate0 -- --samples 5`
+  (opt-in real model; `--fixture` is a free offline plumbing check).
+- Results and the adoption decision are recorded in
+  [`gate-0-decision-record.md`](gate-0-decision-record.md).
+
 ## How to run
 
 A real provider call per scenario, so it is **gated on an API key** and skipped
