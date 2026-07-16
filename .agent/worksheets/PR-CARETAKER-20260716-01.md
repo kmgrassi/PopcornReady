@@ -32,12 +32,16 @@ Inspect every open Popcorn Ready PR. Resolve PR #806's merge conflict on its bra
 ## Validation evidence
 
 - Before resolution: `git merge --no-commit --no-ff origin/main` reported one conflict in `.agent/feedback/LOG.md`.
-- Pending: targeted API test, typecheck, lint/agent validation, and PR status verification after push.
+- `git diff --check` passed before commit.
+- `pnpm agent:lint:fix` ran through the commit hook and passed (`33 changed files`).
+- Focused API test and API typecheck could not run because the isolated worktree has no `node_modules` (`tsx` and `tsc` unavailable).
+- `pnpm agent:validate -- --scope api` ran lint successfully, then stopped at the same missing-dependency typecheck failure.
+- After push, PR #806 reports `MERGEABLE` and `BLOCKED`; all checks are pending while CI/Netlify rerun, and review remains required.
 
 ## Independent reviews
 
-- Research/plan review requested from an independent explorer agent; record its findings before handoff.
-- Implementation and wrap-up review: pending local validation and final PR state.
+- Independent explorer review confirmed the facts and minimal plan; it specifically advised preserving both feedback-log sides and not modifying #803/#804. The reviewer noted the configured external review command is unavailable.
+- Wrap-up review: post-push GitHub state confirms no conflict, but #806 must remain open pending required review and checks.
 
 ## Blockers and risks
 
@@ -46,4 +50,4 @@ Inspect every open Popcorn Ready PR. Resolve PR #806's merge conflict on its bra
 
 ## Next action / handoff
 
-Finish validation, commit the merge resolution and records, push PR #806, then re-inspect all PR statuses and report actions.
+CI must finish for PR #806 and a human approval is still required. Do not merge #803, #804, or #806 during this run.
