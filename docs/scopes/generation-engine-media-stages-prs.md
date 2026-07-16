@@ -1,5 +1,13 @@
 # Generation engine: media stages — scope & parallel PR plan
 
+<!-- agent-summary: Prompt and uploaded-footage generation run to a playable export by default. -->
+<!-- agent-summary: Stop-after behavior is explicit through stopAfter or runThrough=false. -->
+<!-- agent-summary: Storyboard/keyframe handoff is bound to the active plan asset id. -->
+<!-- agent-summary: Every planned beat requires a selected ready beat_storyboard image before keyframes. -->
+<!-- agent-summary: Partial storyboard attempts remain history but cannot shadow an older complete attempt. -->
+<!-- agent-summary: Storyboard jobs fail before success when beat ids or selected-panel coverage are incomplete. -->
+<!-- agent-summary: Keyframes and clips remain per-beat durable assets with immutable provenance. -->
+
 ## Goal
 
 Make the **v1 generation job actually produce media**. Today `runGenerationJob`
@@ -20,6 +28,28 @@ creative_plan (text)  →  storyboard (cheap sketches)
    →  timeline_assembly (selects from the pool, role-aware)
    →  quality_review  →  export  →  ready
 ```
+
+## Live entrypoint and storyboard handoff contract
+
+The production prompt and uploaded-footage entrypoints are autonomous by
+default: omitting both `stopAfter` and `runThrough` means the orchestrator keeps
+working toward a playable export. `stopAfter` is the explicit stage stop;
+`runThrough: false` retains the storyboard stop for older deliberate callers.
+Review gates remain independent opt-in approval pauses.
+
+Storyboard containers share the story-blueprint table with narrative
+development, so `projects.current_story_blueprint_id` is not a stable media
+handoff pointer. Keyframe generation resolves storyboard attempts by the active
+plan asset id and uses the newest *complete* attempt. Complete means each
+planned `(sceneIndex, beatIndex)` has a selected, ready panel whose asset is a
+ready image with role `beat_storyboard`, matching beat provenance, and an input
+edge to the active plan. The worker builds attempts unpublished, validates the
+full handoff, and only then marks the attempt handoff-ready and advances the
+mutable project pointer. Partial attempts may remain as immutable diagnostic
+history, but they are ignored during bounded, newest-first keyframe lookup and
+cannot hide an older usable attempt. Asset-read infrastructure failures escape
+as tool failures; they are never translated into a request to regenerate a
+valid storyboard.
 
 ## Two load-bearing principles
 

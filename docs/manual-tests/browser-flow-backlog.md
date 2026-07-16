@@ -124,6 +124,12 @@ Purpose: verify long-running generation states and user-controlled gates.
   visibly failed while the current work is labeled Recovering.
 - Verify storyboard-only completion says no video was created; only a ready,
   playable export may say Video ready.
+- From **Create new video**, leave every review checkpoint unchecked and submit
+  a prompt-only 10-second run. Verify the request has no implicit storyboard
+  stop, survives refresh, advances from selected storyboard tiles into
+  keyframes/clips, and reaches a playable export or a truthful failed stage.
+  Repeat with an explicit storyboard stop and verify only that deliberate run
+  ends with storyboard-only completion.
 
 ## Project Detail, Storyboard, And Watch
 

@@ -4,13 +4,18 @@ import {
 } from "@/lib/orchestrator/job-gateway";
 import {
   getActiveProjectPlan as realGetActiveProjectPlan,
-  getProjectStoryboard as realGetProjectStoryboard,
+  getAsset as realGetAsset,
+  getProjectStoryboardsForPlan as realGetProjectStoryboardsForPlan,
 } from "@/lib/api/v1/store";
 import { toolDefinitionMetadata } from "./capability-catalog";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 import { runGenerateKeyframeJob as realRunGenerateKeyframeJob } from "./generate-keyframe-job";
 import { createLogger } from "@/lib/v1/logger";
+import {
+  firstUsableStoryboardForPlan,
+  storyboardHandoffIssues,
+} from "./storyboard-keyframe-handoff";
 
 type KeyframeImageProvider = "openai" | "ideogram" | "gemini" | "xai" | "mock";
 
@@ -25,14 +30,16 @@ export interface GenerateKeyframeOutput {
 
 export interface GenerateKeyframeDeps {
   getActiveProjectPlan: typeof realGetActiveProjectPlan;
-  getProjectStoryboard: typeof realGetProjectStoryboard;
+  getProjectStoryboardsForPlan: typeof realGetProjectStoryboardsForPlan;
+  getAsset: typeof realGetAsset;
   createJob: OrchestratorJobCreator["createJob"];
   runGenerateKeyframeJob: typeof realRunGenerateKeyframeJob;
 }
 
 const defaultDeps: GenerateKeyframeDeps = {
   getActiveProjectPlan: realGetActiveProjectPlan,
-  getProjectStoryboard: realGetProjectStoryboard,
+  getProjectStoryboardsForPlan: realGetProjectStoryboardsForPlan,
+  getAsset: realGetAsset,
   createJob: createDurableOrchestratorJobCreator().createJob,
   runGenerateKeyframeJob: realRunGenerateKeyframeJob,
 };
@@ -201,21 +208,36 @@ export function createGenerateKeyframeTool(
         return planRequired();
       }
 
-      const storyboard = await resolved.getProjectStoryboard(
+      const storyboards = await resolved.getProjectStoryboardsForPlan(
         context.auth.workspaceId,
-        context.projectId
+        context.projectId,
+        active.assetId
       );
-      if (
-        !storyboard ||
-        (storyboard.planAssetId !== null && storyboard.planAssetId !== active.assetId)
-      ) {
+      const loadStoryboardAsset = (assetId: string) =>
+        resolved.getAsset(context.auth.workspaceId, context.projectId!, assetId);
+      const storyboard = await firstUsableStoryboardForPlan({
+        plan: active.plan,
+        planAssetId: active.assetId,
+        storyboards,
+        loadAsset: loadStoryboardAsset,
+      });
+      const newestIssues = storyboards[0]
+        ? await storyboardHandoffIssues({
+            plan: active.plan,
+            planAssetId: active.assetId,
+            storyboard: storyboards[0],
+            loadAsset: loadStoryboardAsset,
+          })
+        : [];
+      if (!storyboard) {
         logger.warn("generate_keyframe.precondition_missing_storyboard", {
           workspaceId: context.auth.workspaceId,
           projectId: context.projectId,
           runId: context.orchestratorRunId,
           planAssetId: active.assetId,
-          storyboardId: storyboard?.id,
-          storyboardPlanAssetId: storyboard?.planAssetId,
+          storyboardCandidateCount: storyboards.length,
+          newestStoryboardId: storyboards[0]?.id,
+          handoffIssueCodes: newestIssues.map((issue) => issue.code),
         });
         return storyboardRequired();
       }

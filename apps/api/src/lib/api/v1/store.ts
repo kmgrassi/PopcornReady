@@ -3719,6 +3719,187 @@ async function resolvePanelMediaByAssetId(
   return result;
 }
 
+async function hydrateProjectStoryboardById(
+  db: SupabaseClient,
+  project: ProjectRow,
+  workspaceId: string,
+  projectId: string,
+  storyBlueprintId: string
+): Promise<ProjectStoryboard | null> {
+  const storyBlueprint = await getStoryBlueprintRow(db, projectId, storyBlueprintId);
+  if (!storyBlueprint) return null;
+  const planAssetId =
+    typeof storyBlueprint.provenance?.planAssetId === "string"
+      ? storyBlueprint.provenance.planAssetId
+      : null;
+  const scenesData = await runQuery(
+    "store.getProjectStoryboard spine scenes",
+    db
+      .from("story_blueprint_scenes")
+      .select(
+        "id, project_id, story_blueprint_id, position, title, summary, setting, mood, target_duration_sec, scene_asset_id, status, created_at, updated_at"
+      )
+      .eq("project_id", projectId)
+      .eq("story_blueprint_id", storyBlueprintId)
+      .order("position", { ascending: true })
+  );
+  const spineSceneRows = (scenesData ?? []) as StorySpineSceneRow[];
+  const sceneIds = spineSceneRows.map((scene) => scene.id);
+
+  const beatsData = sceneIds.length
+    ? await runQuery(
+        "store.getProjectStoryboard spine beats",
+        db
+          .from("story_beats")
+          .select("*")
+          .eq("project_id", projectId)
+          .in("scene_id", sceneIds)
+          .order("beat_index", { ascending: true })
+      )
+    : [];
+  const beatRows = (beatsData ?? []) as StoryboardBeatRow[];
+  const beatIds = beatRows.map((beat) => beat.id);
+
+  const panelsData = beatIds.length
+    ? await runQuery(
+        "store.getProjectStoryboard spine panels",
+        db
+          .from("story_panels")
+          .select("*")
+          .eq("project_id", projectId)
+          .in("beat_id", beatIds)
+          .order("panel_index", { ascending: true })
+      )
+    : [];
+  const panelRows = (panelsData ?? []) as StoryboardPanelRow[];
+
+  const panelMedia = await resolvePanelMediaByAssetId(
+    db,
+    workspaceId,
+    projectId,
+    panelRows
+      .map((row) => row.image_asset_id)
+      .filter((id): id is string => Boolean(id))
+  );
+
+  const panelsByBeat = new Map<string, StoryboardPanel[]>();
+  for (const row of panelRows) {
+    const panel = mapStoryboardPanel(row);
+    const media = panel.imageAssetId ? panelMedia.get(panel.imageAssetId) : undefined;
+    if (media?.url) {
+      panel.url = media.url;
+      if (media.thumbnailUrl) panel.thumbnailUrl = media.thumbnailUrl;
+    }
+    if (media?.prompt) panel.prompt = media.prompt;
+    panelsByBeat.set(panel.beatId, [...(panelsByBeat.get(panel.beatId) ?? []), panel]);
+  }
+
+  const beatsByScene = new Map<string, StoryboardBeat[]>();
+  for (const beatRow of beatRows) {
+    const beat = mapStoryboardBeat(beatRow, panelsByBeat.get(beatRow.id) ?? []);
+    beatsByScene.set(beat.sceneId, [...(beatsByScene.get(beat.sceneId) ?? []), beat]);
+  }
+
+  const sceneMedia = await resolvePanelMediaByAssetId(
+    db,
+    workspaceId,
+    projectId,
+    spineSceneRows
+      .map((scene) => scene.scene_asset_id)
+      .filter((id): id is string => Boolean(id))
+  );
+
+  return mapSpineStoryboard(
+    project,
+    storyBlueprintId,
+    planAssetId,
+    spineSceneRows.map((scene) => {
+      const mapped = mapSpineScene(scene, beatsByScene.get(scene.id) ?? []);
+      const media = scene.scene_asset_id ? sceneMedia.get(scene.scene_asset_id) : undefined;
+      if (media?.url) {
+        mapped.url = media.url;
+        if (media.thumbnailUrl) mapped.thumbnailUrl = media.thumbnailUrl;
+      }
+      return mapped;
+    })
+  );
+}
+
+export async function getProjectStoryboardById(
+  workspaceId: string,
+  projectId: string,
+  storyboardId: string
+): Promise<ProjectStoryboard | null> {
+  const db = getServiceSupabase();
+  const project = await requireProjectRow(db, workspaceId, projectId);
+  return hydrateProjectStoryboardById(db, project, workspaceId, projectId, storyboardId);
+}
+
+export async function getProjectStoryboardsForPlan(
+  workspaceId: string,
+  projectId: string,
+  planAssetId: string
+): Promise<ProjectStoryboard[]> {
+  const db = getServiceSupabase();
+  const project = await requireProjectRow(db, workspaceId, projectId);
+  const [readyRows, legacyRows] = await Promise.all([
+    runQuery(
+      "store.getProjectStoryboardsForPlan ready",
+      db
+        .from("story_blueprints")
+        .select("id")
+        .eq("project_id", projectId)
+        .contains("provenance", { planAssetId, handoffReady: true })
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(10)
+    ),
+    // Pre-marker production storyboards remain eligible after the mutable
+    // current pointer moves. Full handoff validation decides usability.
+    runQuery(
+      "store.getProjectStoryboardsForPlan legacy",
+      db
+        .from("story_blueprints")
+        .select("id")
+        .eq("project_id", projectId)
+        .contains("provenance", { planAssetId })
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(25)
+    ),
+  ]);
+  const candidateIds = [
+    ...((readyRows ?? []) as Array<{ id: string }>),
+    ...((legacyRows ?? []) as Array<{ id: string }>),
+  ].filter((row, index, rows) => rows.findIndex((candidate) => candidate.id === row.id) === index);
+  const storyboards: ProjectStoryboard[] = [];
+  for (const row of candidateIds) {
+    const storyboard = await hydrateProjectStoryboardById(
+      db,
+      project,
+      workspaceId,
+      projectId,
+      row.id
+    );
+    if (storyboard) storyboards.push(storyboard);
+  }
+  // Keep the current plan-bound storyboard eligible even if it falls outside
+  // the bounded marked/legacy candidate windows; full handoff validation still
+  // decides whether it is usable.
+  const legacyCurrentId = project.current_story_blueprint_id ?? null;
+  if (legacyCurrentId && !storyboards.some((storyboard) => storyboard.id === legacyCurrentId)) {
+    const legacyCurrent = await hydrateProjectStoryboardById(
+      db,
+      project,
+      workspaceId,
+      projectId,
+      legacyCurrentId
+    );
+    if (legacyCurrent?.planAssetId === planAssetId) storyboards.push(legacyCurrent);
+  }
+  return storyboards;
+}
+
 export async function getProjectStoryboard(
   workspaceId: string,
   projectId: string
@@ -3726,110 +3907,8 @@ export async function getProjectStoryboard(
   const db = getServiceSupabase();
   const project = await requireProjectRow(db, workspaceId, projectId);
   const storyBlueprintId = project.current_story_blueprint_id ?? null;
-
-  if (storyBlueprintId) {
-    const storyBlueprint = await getStoryBlueprintRow(db, projectId, storyBlueprintId);
-    if (!storyBlueprint) return null;
-    const planAssetId =
-      typeof storyBlueprint.provenance?.planAssetId === "string"
-        ? storyBlueprint.provenance.planAssetId
-        : null;
-    const scenesData = await runQuery(
-      "store.getProjectStoryboard spine scenes",
-      db
-        .from("story_blueprint_scenes")
-        .select(
-          "id, project_id, story_blueprint_id, position, title, summary, setting, mood, target_duration_sec, scene_asset_id, status, created_at, updated_at"
-        )
-        .eq("project_id", projectId)
-        .eq("story_blueprint_id", storyBlueprintId)
-        .order("position", { ascending: true })
-    );
-    const spineSceneRows = (scenesData ?? []) as StorySpineSceneRow[];
-    const sceneIds = spineSceneRows.map((scene) => scene.id);
-
-    const beatsData = sceneIds.length
-      ? await runQuery(
-          "store.getProjectStoryboard spine beats",
-          db
-            .from("story_beats")
-            .select("*")
-            .eq("project_id", projectId)
-            .in("scene_id", sceneIds)
-            .order("beat_index", { ascending: true })
-        )
-      : [];
-    const beatRows = (beatsData ?? []) as StoryboardBeatRow[];
-    const beatIds = beatRows.map((beat) => beat.id);
-
-    const panelsData = beatIds.length
-      ? await runQuery(
-          "store.getProjectStoryboard spine panels",
-          db
-            .from("story_panels")
-            .select("*")
-            .eq("project_id", projectId)
-            .in("beat_id", beatIds)
-            .order("panel_index", { ascending: true })
-        )
-      : [];
-    const panelRows = (panelsData ?? []) as StoryboardPanelRow[];
-
-    const panelMedia = await resolvePanelMediaByAssetId(
-      db,
-      workspaceId,
-      projectId,
-      panelRows
-        .map((row) => row.image_asset_id)
-        .filter((id): id is string => Boolean(id))
-    );
-
-    const panelsByBeat = new Map<string, StoryboardPanel[]>();
-    for (const row of panelRows) {
-      const panel = mapStoryboardPanel(row);
-      const media = panel.imageAssetId ? panelMedia.get(panel.imageAssetId) : undefined;
-      if (media?.url) {
-        panel.url = media.url;
-        if (media.thumbnailUrl) panel.thumbnailUrl = media.thumbnailUrl;
-      }
-      if (media?.prompt) panel.prompt = media.prompt;
-      panelsByBeat.set(panel.beatId, [...(panelsByBeat.get(panel.beatId) ?? []), panel]);
-    }
-
-    const beatsByScene = new Map<string, StoryboardBeat[]>();
-    for (const beatRow of beatRows) {
-      const beat = mapStoryboardBeat(beatRow, panelsByBeat.get(beatRow.id) ?? []);
-      beatsByScene.set(beat.sceneId, [...(beatsByScene.get(beat.sceneId) ?? []), beat]);
-    }
-
-    // Resolve the scene-level wireframe media (story_blueprint_scenes.scene_asset_id)
-    // with the same lineage-head resolver used for panel tiles.
-    const sceneMedia = await resolvePanelMediaByAssetId(
-      db,
-      workspaceId,
-      projectId,
-      spineSceneRows
-        .map((scene) => scene.scene_asset_id)
-        .filter((id): id is string => Boolean(id))
-    );
-
-    return mapSpineStoryboard(
-      project,
-      storyBlueprintId,
-      planAssetId,
-      spineSceneRows.map((scene) => {
-        const mapped = mapSpineScene(scene, beatsByScene.get(scene.id) ?? []);
-        const media = scene.scene_asset_id ? sceneMedia.get(scene.scene_asset_id) : undefined;
-        if (media?.url) {
-          mapped.url = media.url;
-          if (media.thumbnailUrl) mapped.thumbnailUrl = media.thumbnailUrl;
-        }
-        return mapped;
-      })
-    );
-  }
-
-  return null;
+  if (!storyBlueprintId) return null;
+  return hydrateProjectStoryboardById(db, project, workspaceId, projectId, storyBlueprintId);
 }
 
 // Field list must match the story_beats_require_snapshot trigger: a semantic
