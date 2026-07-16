@@ -9,13 +9,18 @@ import { runQuery } from "../../supabase/db-errors";
 import { ApiError } from "./errors";
 import { deploymentMetadata, iso, markedJson, unmarkedJson } from "./store-internal";
 
+// Transport-oriented run lifecycle. `timed_out`/`superseded` were added by the
+// specialist-agent PR 4 schema (domain finite runs); store/lifecycle logic that
+// sets them lands with PRs 5-6.
 export type OrchestratorRunStatus =
   | "queued"
   | "running"
   | "waiting"
   | "succeeded"
   | "failed"
-  | "canceled";
+  | "canceled"
+  | "timed_out"
+  | "superseded";
 
 export type OrchestratorGateStatus = "pending" | "reached" | "approved" | "rejected";
 

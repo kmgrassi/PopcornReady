@@ -25,7 +25,16 @@ export interface ListWorkspaceGenerationRunsDeps {
 }
 
 function mapOrchestratorSummary(run: OrchestratorRun): GenerationRun {
-  const status = run.status === "waiting" ? "running" : run.status;
+  // Domain finite-run transport states (specialist-agents PR 4) collapse onto
+  // their nearest terminal legacy status in this summary projection.
+  const status =
+    run.status === "waiting"
+      ? "running"
+      : run.status === "timed_out"
+        ? "failed"
+        : run.status === "superseded"
+          ? "canceled"
+          : run.status;
   return {
     runId: run.id,
     projectId: run.projectId,
