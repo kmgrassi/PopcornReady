@@ -142,3 +142,21 @@
 - Friction or failure: The merged PR advanced `main` and exposed a feedback-log conflict on PR #795 after its implementation push.
 - Suggested improvement: Recheck mergeability after every caretaker comment resolution because branch protection and base updates can change during review.
 - Follow-up: none.
+
+### 2026-07-16T10:05:00-04:00 — API-20260716-04
+- What helped: Starting at the pre-execution action boundary made the existing duplicate-action risk concrete and gave jobs one canonical initiating identity.
+- Friction or failure: An independent review showed that in-process locks and local job-created guards are not enough for cross-instance retries, provider claims, or action-to-asset lineage.
+- Suggested improvement: Design the database reservation, claim, and generated-asset provenance path as one crash-window testable transaction boundary before claiming idempotent orchestration behavior.
+- Follow-up: Continue PR 5 with atomic idempotency reservation/consume, provider claim fencing, and canonical action propagation into generated assets.
+
+### 2026-07-16T14:20:00-04:00 — API-20260716-04
+- What helped: Thread-aware review retrieval isolated an FK violation caused by confusing ordinary tool-call correlation with an engine-reserved action identity.
+- Friction or failure: The context exposed only `toolCallId`, so direct tool harnesses could accidentally persist a foreign key to an action row that never existed.
+- Suggested improvement: Keep correlation IDs and durable identities as separate typed fields, and test both engine-reserved and direct-tool execution paths whenever a new durable link is added.
+- Follow-up: Retain the remaining PR 5 cross-instance reservation, provider-claim, crash-recovery, and generated-asset provenance work as explicit blockers.
+
+### 2026-07-16T14:35:00-04:00 — PR-CARETAKER-20260716-02
+- What helped: Rebase conflict inspection exposed a shared worksheet identifier rather than a product-code conflict.
+- Friction or failure: Independent PRs used the same worksheet ID, which also collides with the worksheet tag namespace after merge.
+- Suggested improvement: Reserve worksheet IDs when a worktree is created or include the PR scope in the identifier before implementation begins.
+- Follow-up: Preserve `API-20260716-03` for merged PR 7 and use `API-20260716-04` for this PR 5 branch.

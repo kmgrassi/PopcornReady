@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { type LlmUsage, withLlmUsageObserver } from "@popcorn/llm";
+
 import {
   type OpenAiCreateRequest,
   type OpenAiFunctionTool,
@@ -349,13 +351,22 @@ test("structured sends a required return_result function tool", async () => {
 
 test("structured retries once when the model omits the required tool, then succeeds", async () => {
   let calls = 0;
+  const observed: LlmUsage[] = [];
   const client = createOpenAiLlmClient({
     model: "gpt-5",
     create: async () => {
       calls += 1;
       // First attempt: the model emits reasoning/text and never calls the tool.
-      if (calls === 1) return { choices: [{ message: { content: "thinking..." } }] };
+      if (calls === 1) {
+        return {
+          model: "gpt-5",
+          usage: { prompt_tokens: 90, completion_tokens: 10 },
+          choices: [{ message: { content: "thinking..." } }],
+        };
+      }
       return {
+        model: "gpt-5",
+        usage: { prompt_tokens: 110, completion_tokens: 12 },
         choices: [
           {
             message: {
@@ -370,10 +381,18 @@ test("structured retries once when the model omits the required tool, then succe
   });
 
   assert.deepEqual(
-    await client.structured({ cachedSystem: "s", user: "u", schema: {} }),
+    await withLlmUsageObserver((usage) => {
+      observed.push(usage);
+    }, () =>
+      client.structured({ cachedSystem: "s", user: "u", schema: {} })
+    ),
     { plan: 2 }
   );
   assert.equal(calls, 2);
+  assert.deepEqual(observed, [
+    { provider: "openai", model: "gpt-5", inputTokens: 90, outputTokens: 10, cacheReadInputTokens: 0 },
+    { provider: "openai", model: "gpt-5", inputTokens: 110, outputTokens: 12, cacheReadInputTokens: 0 },
+  ]);
 });
 
 test("structured retries at most once, then surfaces the empty-tool error", async () => {

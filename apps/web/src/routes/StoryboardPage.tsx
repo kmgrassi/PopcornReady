@@ -30,6 +30,7 @@ interface EditTarget {
   url?: string | null;
   title: string;
   subtitle?: string | null;
+  sourcePrompt?: string | null;
   // Seeds the Request Changes box. Set when opening the modal to GENERATE a
   // missing wireframe so the item's intended prompt is pre-filled.
   initialPrompt?: string;
@@ -202,6 +203,7 @@ export function StoryboardPage() {
         imageUrl={editTarget?.url}
         title={editTarget?.title}
         subtitle={editTarget?.subtitle}
+        sourcePrompt={editTarget?.sourcePrompt}
         initialPrompt={editTarget?.initialPrompt}
         onClose={() => setEditTarget(null)}
         onSubmitted={(runId) => {
@@ -518,6 +520,7 @@ function BeatCard({
                     url: panel!.url ?? panel!.thumbnailUrl,
                     title: label,
                     subtitle: `Scene ${sceneOrder} · Beat ${order}`,
+                    sourcePrompt: prompt,
                   }),
               }
             : {})}
@@ -525,12 +528,6 @@ function BeatCard({
       )}
       <div className={styles.beatBody}>
         <p className={styles.beatIntent}>{label}</p>
-        {prompt ? (
-          <details className={styles.promptDrawer}>
-            <summary>Image prompt</summary>
-            <p>{prompt}</p>
-          </details>
-        ) : null}
       </div>
     </article>
   );

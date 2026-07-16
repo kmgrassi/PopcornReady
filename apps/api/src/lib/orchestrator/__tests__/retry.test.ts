@@ -82,7 +82,7 @@ test("withRetry uses exponential backoff delays (capped)", async () => {
   assert.deepEqual(delays, [50, 100, 120]);
 });
 
-test("withStoreRetry retries idempotent reads but never recordInvocation", async () => {
+test("withStoreRetry retries idempotent reads and reserved invocations", async () => {
   let listCalls = 0;
   let recordCalls = 0;
   const base: OrchestratorEngineStore = {
@@ -116,18 +116,19 @@ test("withStoreRetry retries idempotent reads but never recordInvocation", async
   assert.deepEqual(await wrapped.listRunActions("run1"), []);
   assert.equal(listCalls, 2);
 
-  // recordInvocation (a non-idempotent append) is NOT retried — fails once.
+  // A caller-reserved action id makes invocation persistence safe to retry.
   await assert.rejects(
     wrapped.recordInvocation({
+      actionId: "action-1",
       projectId: "p",
       orchestratorRunId: "run1",
       tool: "plan_shots",
-      status: "applied",
+      status: "running",
       params: {},
       outputAssetIds: [],
       jobIds: [],
     }),
     /append failed/
   );
-  assert.equal(recordCalls, 1, "recordInvocation must run exactly once (no duplicate appends)");
+  assert.equal(recordCalls, 3, "recordInvocation should use the bounded retry policy");
 });

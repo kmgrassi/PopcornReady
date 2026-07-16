@@ -4,6 +4,8 @@ import { createOpenAiLlmClient } from "./openai";
 import type { LlmClient } from "./types";
 
 export * from "./types";
+export { reportLlmUsage, withLlmUsageObserver } from "./usage";
+export type { LlmUsage, LlmUsageObserver } from "./usage";
 export { hasLlmCredentials, resolveLlmConfig } from "./config";
 export type { LlmConfig } from "./config";
 export {

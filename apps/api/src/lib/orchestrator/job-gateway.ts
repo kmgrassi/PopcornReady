@@ -14,6 +14,8 @@ export interface CreateOrchestratorJobInput {
   projectId: string;
   type: JobType;
   requestId?: string;
+  /** Preallocated action identity for a tool-originated provider job. */
+  actionId?: string;
   payload?: unknown;
   idempotencyKey?: string | null;
   execution?: OrchestratorJobExecutionEnvelope;
@@ -102,6 +104,7 @@ export function createDurableOrchestratorJobCreator(
           projectId: input.projectId,
           type: input.type,
           requestId: input.requestId,
+          actionId: input.actionId,
           payload: input.payload,
           idempotencyKey: input.idempotencyKey,
           progress: {
@@ -116,6 +119,7 @@ export function createDurableOrchestratorJobCreator(
         projectId: input.projectId,
         type: input.type,
         requestId: input.requestId,
+        actionId: input.actionId,
         payload: input.payload,
         idempotencyKey: input.idempotencyKey ?? undefined,
         progress: {

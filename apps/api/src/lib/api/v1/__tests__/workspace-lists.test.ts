@@ -10,7 +10,7 @@ import {
   type ListWorkspaceOutputsDeps,
 } from "../store";
 import type { Artifact } from "../../../agent-api/types";
-import type { OrchestratorRun } from "../orchestrator-store";
+import type { OrchestratorRun, OrchestratorRunGate } from "../orchestrator-store";
 
 // Unit coverage for the workspace-scoped cross-project aggregations that back
 // the dashboard Projects/Runs + Outputs views. The project enumeration and the
@@ -57,6 +57,10 @@ function makeArtifact(
 
 function listRunsFrom(runs: OrchestratorRun[]) {
   return async (projectId: string) => runs.filter((r) => r.projectId === projectId);
+}
+
+function listGatesFrom(gates: OrchestratorRunGate[]) {
+  return async (runId: string) => gates.filter((gate) => gate.orchestratorRunId === runId);
 }
 
 function artifactStoreFrom(
@@ -342,4 +346,37 @@ test("getWorkspaceDashboardSummary maps waiting orchestrator runs as active runs
   assert.equal(summary.activeRuns.length, 1);
   assert.equal(summary.activeRuns[0].status, "running");
   assert.equal(summary.activeRuns[0].progressPercent, undefined);
+});
+
+test("getWorkspaceDashboardSummary surfaces storyboard reviews from completed runs", async () => {
+  const runs = [makeRun("p1", { runId: "r_storyboard", status: "succeeded" })];
+  const gates: OrchestratorRunGate[] = [
+    {
+      id: "gate_storyboard",
+      orchestratorRunId: "r_storyboard",
+      stage: "after:generate_storyboard",
+      status: "reached",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:02.000Z",
+    },
+  ];
+  const deps: GetWorkspaceDashboardSummaryDeps = {
+    listProjects: async () => [{ id: "p1", name: "Alpha" }],
+    listRunsForProject: listRunsFrom(runs),
+    listRunGates: listGatesFrom(gates),
+    artifactStore: artifactStoreFrom([]),
+  };
+
+  const summary = await getWorkspaceDashboardSummary("ws1", deps);
+
+  assert.equal(summary.counts.activeRuns, 1);
+  assert.equal(summary.activeRuns[0].runId, "r_storyboard");
+  assert.equal(summary.activeRuns[0].status, "succeeded");
+  assert.deepEqual(summary.activeRuns[0].reviewGate, {
+    stageType: "storyboard",
+    stageId: "r_storyboard:tool:generate_storyboard",
+    state: "awaiting_review",
+    enteredAt: "2026-01-01T00:00:02.000Z",
+  });
+  assert.equal(summary.activeRuns[0].currentStageType, "storyboard");
 });

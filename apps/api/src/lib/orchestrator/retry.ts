@@ -53,11 +53,9 @@ export async function withRetry<T>(fn: () => Promise<T>, opts: RetryOptions = {}
   throw lastError;
 }
 
-// Wrap a store so its IDEMPOTENT methods retry on transient failure. recordInvocation
-// is deliberately left un-retried: it appends a new action row, so a failed-but-applied
-// write could duplicate the action on retry. Retrying it safely requires an idempotency
-// key on the action (tracked as follow-up in the step-durability scope); until then a
-// failed recordInvocation fails the run, which is the safe, non-duplicating choice.
+// Wrap a store so its IDEMPOTENT methods retry on transient failure. Invocation
+// writes now carry a caller-reserved action id, so their first insert wins and a
+// retried write reloads that same action instead of appending a duplicate.
 export function withStoreRetry(
   store: OrchestratorEngineStore,
   opts?: RetryOptions
@@ -75,8 +73,7 @@ export function withStoreRetry(
     listRunGates: (id) => retry(() => store.listRunGates(id)),
     markGateReached: (id, stage) => retry(() => store.markGateReached(id, stage)),
     listRunActions: (id) => retry(() => store.listRunActions(id)),
-    // non-idempotent append — see note above.
-    recordInvocation: (input) => store.recordInvocation(input),
+    recordInvocation: (input) => retry(() => store.recordInvocation(input)),
     // idempotent patch keyed by actionId — safe to retry.
     markInvocation: (actionId, patch) => retry(() => store.markInvocation(actionId, patch)),
   };

@@ -388,37 +388,6 @@
   -webkit-line-clamp: 2;
 }
 
-.promptDrawer {
-  display: grid;
-  gap: var(--space-1);
-  color: var(--muted);
-  font-size: var(--text-xs);
-  line-height: 1.5;
-}
-
-.promptDrawer summary {
-  width: max-content;
-  max-width: 100%;
-  color: var(--accent);
-  font-weight: 900;
-  cursor: pointer;
-  list-style-position: inside;
-}
-
-.promptDrawer summary:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: var(--radius-sm);
-}
-
-.promptDrawer p {
-  margin: 0;
-  padding: var(--space-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--panel-2);
-}
-
 .placeholder,
 .muted {
   margin: 0;

@@ -231,8 +231,14 @@ async function buildIdeogramForm(
   addOptional(form, "custom_model_uri", options.customModelUri);
   addOptional(form, "enable_copyright_detection", options.enableCopyrightDetection);
 
-  for (const filePath of input.referencePaths || []) {
-    form.append("character_reference_images", await readAsBlob(filePath));
+  // Ideogram v3 currently accepts at most one character reference image. The
+  // shared request contract carries caller-ordered generic references, so keep
+  // the first one and never let later scene/storyboard references turn a valid
+  // generation into a provider 400. Role-aware character/style/structural
+  // routing needs a typed reference contract rather than guessing here.
+  const firstReferencePath = input.referencePaths?.[0];
+  if (firstReferencePath) {
+    form.append("character_reference_images", await readAsBlob(firstReferencePath));
   }
 
   return form;

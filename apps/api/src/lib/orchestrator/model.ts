@@ -1,6 +1,7 @@
 import { getLlmClient } from "../llm";
 import { getAsset } from "../api/v1/store";
 import { getWorkspaceModelSetting } from "../api/v1/model-settings";
+import { withLlmCostRecording } from "../api/v1/llm-costs";
 import { ToolRegistry } from "./registry";
 import {
   OrchestratorModelDecision,
@@ -14,6 +15,8 @@ const TOOL_NAME_SET = new Set<string>(TOOL_NAMES);
 export interface ModelTurnInput {
   workspaceId?: string;
   projectId: string;
+  /** Durable run identity for agent reasoning that precedes a tool action. */
+  orchestratorRunId?: string;
   inputSummary: string;
   priorResults?: unknown[];
   registry: ToolRegistry;
@@ -306,6 +309,7 @@ export function buildRoutingContext(priorResults: unknown[] = []): RoutingContex
 export const orchestratorModel: OrchestratorModel = async ({
   projectId,
   workspaceId,
+  orchestratorRunId,
   inputSummary,
   priorResults = [],
   registry,
@@ -331,22 +335,29 @@ export const orchestratorModel: OrchestratorModel = async ({
   }));
 
   const client = await llmClientForWorkspace(workspaceId);
-  const decision = await client.chooseTool({
-    system: ORCHESTRATOR_SYSTEM_PROMPT,
-    userPayload: {
+  const decision = await withLlmCostRecording(
+    {
       projectId,
-      inputSummary,
-      priorResults,
-      routingContext: buildRoutingContext(priorResults),
-      instruction:
-        "Choose exactly one next tool if work remains. If all work is complete, answer with a concise text summary and no tool call. " +
-        "Inspect routingContext and priorResults first: if routingContext.nextToolHint is present, use that tool unless it is unavailable. " +
-        "If the latest action failed, resolve its error (follow suggestedNextTools / unmetRequirements) rather than calling the failed tool again unchanged.",
+      ...(orchestratorRunId ? { runId: orchestratorRunId } : {}),
     },
-    tools,
-    maxTokens,
-    effort: "medium", // pick the next single tool — modest reasoning
-  });
+    () =>
+      client.chooseTool({
+        system: ORCHESTRATOR_SYSTEM_PROMPT,
+        userPayload: {
+          projectId,
+          inputSummary,
+          priorResults,
+          routingContext: buildRoutingContext(priorResults),
+          instruction:
+            "Choose exactly one next tool if work remains. If all work is complete, answer with a concise text summary and no tool call. " +
+            "Inspect routingContext and priorResults first: if routingContext.nextToolHint is present, use that tool unless it is unavailable. " +
+            "If the latest action failed, resolve its error (follow suggestedNextTools / unmetRequirements) rather than calling the failed tool again unchanged.",
+        },
+        tools,
+        maxTokens,
+        effort: "medium", // pick the next single tool — modest reasoning
+      })
+  );
 
   if (decision.type === "tool_call") {
     return {

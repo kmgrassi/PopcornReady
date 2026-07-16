@@ -48,6 +48,7 @@ function bridgeContext(context: OrchestratorContext): {
   projectId?: string;
   orchestratorRunId?: string;
   toolCallId?: string;
+  actionId?: string;
   agentId?: string;
   messageId?: string;
   requestId?: string;
@@ -64,6 +65,7 @@ function bridgeContext(context: OrchestratorContext): {
     projectId: context.projectId,
     orchestratorRunId: context.orchestratorRunId,
     toolCallId: context.toolCallId,
+    actionId: context.actionId,
     agentId: context.agentId,
     messageId: context.messageId,
     requestId: context.requestId,

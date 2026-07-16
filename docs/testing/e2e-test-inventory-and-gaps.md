@@ -33,10 +33,13 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   diagnostics.
 - `specs/library-collections.spec.ts` covers Library pagination, filters, media
   viewer, visibility mutation behavior, and watch links with mocked fixtures.
+- `inspiration-poster.spec.ts` covers opening a generated story poster in the
+  shared media viewer and dismissing it with Escape.
 - `storyboard-editor.spec.ts` verifies the dedicated storyboard route renders
-  the empty state for a project whose storyboard endpoint returns `null`, and
-  that a storyboard-review stop exposes **Generate video** before production
-  media can continue.
+  the empty state for a project whose storyboard endpoint returns `null`, keeps
+  a ready beat card visual while disclosing its generation prompt only in the
+  opened asset detail, and exposes **Generate video** at a storyboard-review
+  stop before production media can continue.
 - `evals.spec.ts` covers the eval dashboard and admin workbench judgment action.
 
 The required local-first database smoke is:
@@ -315,9 +318,8 @@ Covered:
 Remaining gaps:
 
 - Project detail route coverage is thin.
-- Seeded storyboard loading, project-detail storyboard generation, panel request
-  changes, image-regeneration edge cases, and reload recovery are not covered by
-  the current browser spec.
+- Project-detail storyboard generation, panel request changes, image-regeneration
+  edge cases, and reload recovery are not covered by the current browser spec.
 - Direct scene/beat editing is not the current storyboard UX; changes should be
   exercised through object-scoped Request Changes flows.
 - Watch page video playback/fallback behavior has limited coverage.
@@ -351,6 +353,8 @@ Critical flows:
 Current coverage:
 
 - Some protected route viability is covered.
+- The mocked Inspiration story poster opens in the shared media viewer and
+  closes by keyboard.
 - Detailed interactions are mostly manual-only.
 
 Recommended next test:

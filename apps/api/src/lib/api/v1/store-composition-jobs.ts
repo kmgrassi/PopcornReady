@@ -84,6 +84,7 @@ interface JobRow {
   input: unknown;
   result: unknown;
   error: Job["error"];
+  action_id: string | null;
   idempotency_key: string | null;
   deploy_id: string | null;
   git_sha: string | null;
@@ -104,6 +105,7 @@ function jobToRow(job: Job): JobRow {
     input: job.input,
     result: job.result,
     error: job.error,
+    action_id: job.actionId ?? null,
     idempotency_key: job.idempotencyKey ?? null,
     ...deploymentMetadata(),
     created_at: job.createdAt,
@@ -124,6 +126,7 @@ function mapJob(row: JobRow): Job {
     input: row.input ?? null,
     result: row.result ?? null,
     error: row.error ?? null,
+    actionId: row.action_id ?? undefined,
     idempotencyKey: row.idempotency_key ?? undefined,
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
@@ -234,6 +237,7 @@ export async function createJobWithDeps(
     type: JobType;
     status?: JobStatus;
     requestId?: string;
+    actionId?: string;
     payload?: unknown;
     result?: unknown;
     idempotencyKey?: string;
@@ -248,6 +252,7 @@ export async function createJobWithDeps(
     workspaceId: input.workspaceId,
     projectId: input.projectId,
     requestId: input.requestId,
+    actionId: input.actionId,
     type: input.type,
     status: input.status ?? "queued",
     progress: input.progress ?? {
@@ -283,6 +288,7 @@ export async function createOrGetJobWithDeps(
     workspaceId: input.workspaceId,
     projectId: input.projectId,
     requestId: input.requestId,
+    actionId: input.actionId,
     type: input.type,
     status: input.status ?? "queued",
     progress: input.progress ?? { percent: 0, currentStep: "queued" },

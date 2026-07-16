@@ -14,6 +14,7 @@ import {
   boardRevisionResumePatch,
   initialRunGates,
   initialRunStopAfterTools,
+  isStoryboardAfterGate,
   parseBoardRevisionTarget,
   runFailedForInsufficientCredits,
   storyboardContinuationPatch,
@@ -151,6 +152,12 @@ test("continuing a reviewed storyboard reopens its completed run", () => {
   });
 });
 
+test("identifies only the completed storyboard after-gate for run reopening", () => {
+  assert.equal(isStoryboardAfterGate(gateFixture("after:generate_storyboard")), true);
+  assert.equal(isStoryboardAfterGate(gateFixture("generate_storyboard")), false);
+  assert.equal(isStoryboardAfterGate(gateFixture("after:generate_keyframe")), false);
+});
+
 test("surfaces orchestrator success as ready once export_video produced output", () => {
   const payload = projectRunDetailFromParts(
     runFixture(),
@@ -280,12 +287,16 @@ test("projects a storyboard stop as an actionable review state", () => {
   assert.equal(payload.run.completionKind, "storyboard_assets");
   assert.deepEqual(payload.run.reviewGate, {
     stageType: "storyboard",
-    stageId: "run_1:tool:after:generate_storyboard",
+    stageId: "run_1:tool:generate_storyboard",
     state: "awaiting_review",
     enteredAt: "2026-06-15T00:00:03.000Z",
   });
   assert.deepEqual(payload.run.reviewGates, []);
   assert.equal(payload.run.currentStageType, "storyboard");
+  assert.equal(
+    payload.stages.find((stage) => stage.type === "storyboard")?.stageId,
+    payload.run.reviewGate?.stageId
+  );
   assert.match(payload.run.message ?? "", /storyboard assets are ready/i);
 });
 

@@ -264,6 +264,13 @@ function toolStageId(runId: string, tool: string): string {
   return `${runId}:tool:${tool}`;
 }
 
+function reviewStageId(runId: string, gateStage: string): string {
+  const tool = gateStage.startsWith(AFTER_GATE_PREFIX)
+    ? gateStage.slice(AFTER_GATE_PREFIX.length)
+    : gateStage;
+  return toolStageId(runId, tool);
+}
+
 export function toolOrder(tool: string): number {
   const catalogOrder = isToolName(tool)
     ? getToolCapability(tool).runProjection.order
@@ -393,7 +400,7 @@ export function projectRun(
   const reviewGate = reachedGate
     ? {
         stageType: toolStage(reachedGate.stage) as GateableGenerationStageType,
-        stageId: toolStageId(run.id, reachedGate.stage),
+        stageId: reviewStageId(run.id, reachedGate.stage),
         state: "awaiting_review" as const,
         enteredAt: reachedGate.updatedAt,
       }

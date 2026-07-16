@@ -132,6 +132,7 @@
 }
 
 .poster {
+  display: block;
   width: 100%;
   aspect-ratio: 2 / 3;
   border: 1px solid var(--border);
@@ -139,6 +140,26 @@
   background: var(--panel);
   box-shadow: var(--shadow-sm);
   object-fit: cover;
+}
+
+.posterButton {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-md);
+  padding: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.posterButton:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.posterButton:hover .poster {
+  border-color: var(--accent-border);
 }
 
 .cinemaTheme .poster {

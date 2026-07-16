@@ -365,6 +365,10 @@ export function storyboardContinuationPatch(run: OrchestratorRun): UpdateOrchest
   };
 }
 
+export function isStoryboardAfterGate(gate: Pick<OrchestratorRunGate, "stage">): boolean {
+  return gate.stage === `${AFTER_GATE_PREFIX}generate_storyboard`;
+}
+
 function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalize);
   if (isRecord(value)) {
@@ -825,7 +829,7 @@ orchestratorRunsRouter.post(
       // An after-gate deliberately finishes the first review pass. Approval
       // turns that completed storyboard pass back into a resumable production
       // run so the orchestrator continues from its selected board assets.
-      if (gate.stage === `${AFTER_GATE_PREFIX}generate_storyboard`) {
+      if (isStoryboardAfterGate(gate)) {
         await updateOrchestratorRun(runId, storyboardContinuationPatch(await getOrchestratorRun(runId)));
       }
       await enqueueOrchestratorDispatch(runId, auth.workspaceId);
@@ -845,6 +849,9 @@ orchestratorRunsRouter.post(
     const gate = gates.find((candidate) => candidate.status === "reached");
     if (gate) {
       await resolveGate(gate.id, "rejected");
+      if (isStoryboardAfterGate(gate)) {
+        await updateOrchestratorRun(runId, storyboardContinuationPatch(await getOrchestratorRun(runId)));
+      }
       await enqueueOrchestratorDispatch(runId, auth.workspaceId);
     }
     return { status: 202, body: await assembleRunDetail(runId, auth.workspaceId, projectId) };
