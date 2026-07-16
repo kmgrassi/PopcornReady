@@ -172,3 +172,21 @@
 - Friction or failure: Treating either renewal rejection or a false renewal result as final ownership loss skipped a valid token-fenced completion and could discard a successful response.
 - Suggested improvement: Let the database token predicate make the final completion decision; use renewal only to extend an active lease, not to preemptively suppress completion.
 - Follow-up: Keep provider-job claim fencing as the remaining protection for external side effects after a process crash.
+
+### 2026-07-16T16:05:00-04:00 — API-20260716-06-provider-claim
+- What helped: Separating the provider-launch fence from the existing recovery lease made the ambiguous external-call crash window explicit.
+- Friction or failure: The generated-assets executor still used a process-local JSON job file, so a local mutex or recovery lease could not protect multiple API instances.
+- Suggested improvement: Keep provider launch authority as typed, service-only job state and let recovery terminalize ambiguous running work instead of automatically replaying it.
+- Follow-up: Add action-to-asset relation and edit-video parity only after the provider claim path is proven under a real Postgres race.
+
+### 2026-07-16T16:20:00-04:00 — API-20260716-06-provider-claim
+- What helped: Independent implementation review separated a durable provider-call fence from an expiring lease, revealing the long-running-call case before review.
+- Friction or failure: A fixed stale timeout can falsely terminalize healthy provider work, and a preallocated action can remain nonterminal unless every post-claim failure finalizes it through the fenced job result.
+- Suggested improvement: Pair every external-call claim with a service-owned renewable heartbeat and make action terminalization follow, rather than precede, the successful token-fenced job completion.
+- Follow-up: Run the PostgreSQL claim race coverage once the local Supabase database accepts connections.
+
+### 2026-07-16T16:45:00-04:00 — PR-CARETAKER-20260716-03
+- What helped: Thread-aware review data identified that canonical action params and the eventual provider call could disagree when workspace defaults were resolved too late.
+- Friction or failure: Claim renewal previously updated only lease metadata, leaving run observability's progress timestamp stale during healthy long-running provider work.
+- Suggested improvement: Normalize durable job inputs at enqueue time and keep lease heartbeats mirrored into the projection fields used by operators.
+- Follow-up: Re-run the focused API checks in CI or a worktree with dependencies installed.
