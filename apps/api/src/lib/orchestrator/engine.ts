@@ -52,6 +52,7 @@ const PG_INSUFFICIENT_FUNDS = "23514"; // apply_credit_transaction overdraw guar
 
 const DEFAULT_MAX_TURNS = 50;
 const DEFAULT_MODEL_TURN_TIMEOUT_MS = 60_000;
+const MAX_RECOVERABLE_ASYNC_FAILURES_PER_TOOL = 3;
 const AFTER_GATE_PREFIX = "after:";
 const logger = createLogger();
 
@@ -375,11 +376,39 @@ async function reconcileInFlightJob(
                 ? { code: job.error.code, jobId: parkingJobId }
                 : { jobId: parkingJobId },
             };
+      let priorMatchingFailures = 0;
+      for (let index = actions.length - 1; index >= 0; index -= 1) {
+        const action = actions[index];
+        if (action.id === parkingAction.id || action.tool !== parkingAction.tool) continue;
+        if (action.status === "failed" && action.error?.kind === error.kind) {
+          priorMatchingFailures += 1;
+          continue;
+        }
+        break;
+      }
+      const asyncFailureCount = priorMatchingFailures + 1;
+      const retryLimitReached =
+        error.recoverable &&
+        asyncFailureCount >= MAX_RECOVERABLE_ASYNC_FAILURES_PER_TOOL;
+      const reconciledError = retryLimitReached
+        ? {
+            ...error,
+            recoverable: false,
+            suggestedNextTools: undefined,
+            details: {
+              ...(error.details ?? {}),
+              asyncFailureCount,
+              asyncFailureLimit: MAX_RECOVERABLE_ASYNC_FAILURES_PER_TOOL,
+            },
+          }
+        : error;
       await r.store.markInvocation(parkingAction.id, {
         status: "failed",
-        error: { ...error },
+        error: { ...reconciledError },
       });
-      return finish(run, "failed", r, { ...error });
+      return reconciledError.recoverable
+        ? null
+        : finish(run, "failed", r, { ...reconciledError });
     }
     if (job.status !== "succeeded") return park(run, r); // still running — stay parked
     // Job done → finalize the parking action with the assets it produced.

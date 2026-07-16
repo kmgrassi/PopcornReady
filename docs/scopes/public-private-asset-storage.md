@@ -53,6 +53,9 @@ configuration, credentials, network, and other managed-storage failures use the
 recoverable `storage_error` code. The production-shaped regression uses local
 Supabase plus MinIO to write a visual anchor and storyboard tiles to the private
 S3 bucket, then loads both references through the real keyframe worker.
+Asynchronous orchestrator jobs return a recoverable storage failure to the model
+for retry, but stop after three consecutive failures for the same tool and error
+kind so a persistent outage cannot create an unbounded job loop.
 
 ---
 

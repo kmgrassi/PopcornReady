@@ -537,8 +537,9 @@ test("stays parked when the resume job is not yet terminal", async () => {
 
 test("preserves a failed parking job's reference-storage error", async () => {
   const store = new FakeStore(runFixture());
-  const { model } = scriptedModel([
+  const { model, calls } = scriptedModel([
     { type: "tool_call", toolName: "generate_keyframe" },
+    { type: "done" },
   ]);
   const registry = fakeRegistry({
     generate_keyframe: () => ({
@@ -549,7 +550,7 @@ test("preserves a failed parking job's reference-storage error", async () => {
   });
   await runOrchestratorToCompletion("run1", deps(store, model, registry));
 
-  const failed = await resumeOrchestratorRun(
+  const recovered = await resumeOrchestratorRun(
     "run1",
     deps(store, model, registry, {
       jobs: {
@@ -564,14 +565,15 @@ test("preserves a failed parking job's reference-storage error", async () => {
     })
   );
 
-  assert.equal(failed.status, "failed");
-  assert.equal((failed.error as { kind?: string }).kind, "precondition_unmet");
-  assert.match(
-    (failed.error as { message?: string }).message ?? "",
-    /asset_storyboard/
-  );
+  assert.equal(recovered.status, "succeeded");
   assert.equal(store.actions[0].status, "failed");
   assert.equal(store.actions[0].error?.kind, "precondition_unmet");
+  assert.match((store.actions[0].error?.message as string) ?? "", /asset_storyboard/);
+  const priorFailure = (calls[1] as Array<{ error?: ToolError }>)[0];
+  assert.equal(priorFailure.error?.kind, "precondition_unmet");
+  assert.equal(priorFailure.error?.recoverable, true);
+  assert.match(priorFailure.error?.message ?? "", /asset_storyboard/);
+  assert.equal(priorFailure.error?.unmetRequirements?.[0]?.requirement, "ready_reference_asset");
 });
 
 test("preserves a true failed parking job as a provider failure", async () => {
@@ -613,39 +615,171 @@ test("preserves a true failed parking job as a provider failure", async () => {
 
 test("classifies a failed parking job's storage infrastructure error as recoverable", async () => {
   const store = new FakeStore(runFixture());
-  const { model } = scriptedModel([
+  const { model, calls } = scriptedModel([
     { type: "tool_call", toolName: "generate_keyframe" },
+    { type: "tool_call", toolName: "generate_keyframe", input: { retry: true } },
   ]);
+  let invocation = 0;
   const registry = fakeRegistry({
-    generate_keyframe: () => ({
-      status: "accepted",
-      jobId: "job1",
-      resumesWhen: "job_terminal",
-    }),
+    generate_keyframe: () => {
+      invocation += 1;
+      return {
+        status: "accepted",
+        jobId: `job${invocation}`,
+        resumesWhen: "job_terminal",
+      };
+    },
   });
   await runOrchestratorToCompletion("run1", deps(store, model, registry));
 
-  const failed = await resumeOrchestratorRun(
+  const retried = await resumeOrchestratorRun(
     "run1",
     deps(store, model, registry, {
       jobs: {
+        getJob: async (jobId) =>
+          jobId === "job1"
+            ? {
+                status: "failed",
+                error: {
+                  code: "storage_error",
+                  message: "Reference storage failed while reading asset asset_storyboard.",
+                },
+              }
+            : { status: "running" },
+      },
+    })
+  );
+
+  assert.equal(retried.status, "waiting");
+  assert.equal(retried.error, undefined);
+  assert.deepEqual(
+    store.actions.map((action) => [action.status, action.jobIds]),
+    [
+      ["failed", ["job1"]],
+      ["running", ["job2"]],
+    ]
+  );
+  assert.equal(store.actions[0].error?.kind, "storage_error");
+  assert.equal(store.actions[0].error?.recoverable, true);
+  assert.deepEqual(
+    store.actions[0].error?.suggestedNextTools,
+    [{ tool: "generate_keyframe", inputHint: { retry: true } }]
+  );
+  assert.deepEqual(calls[1], [
+    {
+      tool: "generate_keyframe",
+      status: "failed",
+      outputAssetIds: [],
+      error: {
+        kind: "storage_error",
+        message: "Reference storage failed while reading asset asset_storyboard.",
+        recoverable: true,
+        suggestedNextTools: [{ tool: "generate_keyframe", inputHint: { retry: true } }],
+      },
+    },
+  ]);
+});
+
+test("stops retrying after repeated recoverable async storage failures", async () => {
+  const store = new FakeStore(runFixture());
+  const { model } = scriptedModel([
+    { type: "tool_call", toolName: "generate_keyframe" },
+    { type: "tool_call", toolName: "generate_keyframe", input: { retry: true } },
+    { type: "tool_call", toolName: "generate_keyframe", input: { retry: true } },
+  ]);
+  let invocation = 0;
+  const registry = fakeRegistry({
+    generate_keyframe: () => {
+      invocation += 1;
+      return {
+        status: "accepted",
+        jobId: `job${invocation}`,
+        resumesWhen: "job_terminal",
+      };
+    },
+  });
+  const failedStorageJob = {
+    status: "failed",
+    error: {
+      code: "storage_error",
+      message: "Reference storage is still unavailable.",
+    },
+  };
+
+  const failed = await runOrchestratorToCompletion(
+    "run1",
+    deps(store, model, registry, {
+      jobs: { getJob: async () => failedStorageJob },
+    })
+  );
+
+  assert.equal(failed.status, "failed");
+  assert.equal(store.actions.length, 3, "the engine must not schedule a fourth async job");
+  assert.deepEqual(
+    store.actions.map((action) => action.status),
+    ["failed", "failed", "failed"]
+  );
+  assert.equal(store.actions[2].error?.kind, "storage_error");
+  assert.equal(store.actions[2].error?.recoverable, false);
+  assert.deepEqual(store.actions[2].error?.details, {
+    code: "storage_error",
+    jobId: "job3",
+    asyncFailureCount: 3,
+    asyncFailureLimit: 3,
+  });
+});
+
+test("resets the async retry streak when the same tool fails with a different kind", async () => {
+  const store = new FakeStore(runFixture({ status: "waiting" }));
+  store.actions.push(
+    {
+      id: "a0",
+      tool: "generate_keyframe",
+      status: "failed",
+      params: {},
+      outputAssetIds: [],
+      jobIds: ["job1"],
+      error: { kind: "storage_error", recoverable: true },
+      createdAt: "t1",
+    },
+    {
+      id: "a1",
+      tool: "generate_keyframe",
+      status: "failed",
+      params: {},
+      outputAssetIds: [],
+      jobIds: ["job2"],
+      error: { kind: "precondition_unmet", recoverable: true },
+      createdAt: "t2",
+    },
+    {
+      id: "a2",
+      tool: "generate_keyframe",
+      status: "running",
+      params: {},
+      outputAssetIds: [],
+      jobIds: ["job3"],
+      createdAt: "t3",
+    }
+  );
+  const { model } = scriptedModel([{ type: "done" }]);
+
+  const recovered = await resumeOrchestratorRun(
+    "run1",
+    deps(store, model, fakeRegistry({}), {
+      jobs: {
         getJob: async () => ({
           status: "failed",
-          error: {
-            code: "storage_error",
-            message: "Reference storage failed while reading asset asset_storyboard.",
-          },
+          error: { code: "storage_error", message: "Storage is temporarily unavailable." },
         }),
       },
     })
   );
 
-  assert.equal((failed.error as { kind?: string }).kind, "storage_error");
-  assert.equal((failed.error as { recoverable?: boolean }).recoverable, true);
-  assert.deepEqual(
-    (failed.error as { suggestedNextTools?: unknown }).suggestedNextTools,
-    [{ tool: "generate_keyframe", inputHint: { retry: true } }]
-  );
+  assert.equal(recovered.status, "succeeded");
+  assert.equal(store.actions[2].status, "failed");
+  assert.equal(store.actions[2].error?.kind, "storage_error");
+  assert.equal(store.actions[2].error?.recoverable, true);
 });
 
 test("keeps a run parked when a legacy action references an unknown job id", async () => {
