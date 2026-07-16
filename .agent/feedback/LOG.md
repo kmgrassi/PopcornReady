@@ -154,3 +154,9 @@
 - Friction or failure: The context exposed only `toolCallId`, so direct tool harnesses could accidentally persist a foreign key to an action row that never existed.
 - Suggested improvement: Keep correlation IDs and durable identities as separate typed fields, and test both engine-reserved and direct-tool execution paths whenever a new durable link is added.
 - Follow-up: Retain the remaining PR 5 cross-instance reservation, provider-claim, crash-recovery, and generated-asset provenance work as explicit blockers.
+
+### 2026-07-16T14:35:00-04:00 — PR-CARETAKER-20260716-02
+- What helped: Rebase conflict inspection exposed a shared worksheet identifier rather than a product-code conflict.
+- Friction or failure: Independent PRs used the same worksheet ID, which also collides with the worksheet tag namespace after merge.
+- Suggested improvement: Reserve worksheet IDs when a worktree is created or include the PR scope in the identifier before implementation begins.
+- Follow-up: Preserve `API-20260716-03` for merged PR 7 and use `API-20260716-04` for this PR 5 branch.
