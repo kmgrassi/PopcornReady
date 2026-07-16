@@ -34,7 +34,9 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
 - `specs/library-collections.spec.ts` covers Library pagination, filters, media
   viewer, visibility mutation behavior, and watch links with mocked fixtures.
 - `storyboard-editor.spec.ts` verifies the dedicated storyboard route renders
-  the empty state for a project whose storyboard endpoint returns `null`.
+  the empty state for a project whose storyboard endpoint returns `null`, and
+  keeps a ready beat card visual while disclosing its generation prompt only in
+  the opened asset detail.
 - `evals.spec.ts` covers the eval dashboard and admin workbench judgment action.
 
 The required local-first database smoke is:
@@ -313,9 +315,8 @@ Covered:
 Remaining gaps:
 
 - Project detail route coverage is thin.
-- Seeded storyboard loading, project-detail storyboard generation, panel request
-  changes, image-regeneration edge cases, and reload recovery are not covered by
-  the current browser spec.
+- Project-detail storyboard generation, panel request changes, image-regeneration
+  edge cases, and reload recovery are not covered by the current browser spec.
 - Direct scene/beat editing is not the current storyboard UX; changes should be
   exercised through object-scoped Request Changes flows.
 - Watch page video playback/fallback behavior has limited coverage.

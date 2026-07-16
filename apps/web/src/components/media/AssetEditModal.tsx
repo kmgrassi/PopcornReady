@@ -14,6 +14,8 @@ export interface AssetEditModalProps {
   imageUrl?: string | null;
   title?: string;
   subtitle?: string | null;
+  /** Saved provenance displayed when a user inspects an existing asset. */
+  sourcePrompt?: string | null;
   /**
    * Seeds the message box when the modal opens. Used by the "Generate" action on
    * an empty slot to pre-fill the item's intended prompt (e.g. a beat's visual
@@ -36,6 +38,7 @@ export function AssetEditModal({
   imageUrl,
   title = "Edit this asset",
   subtitle,
+  sourcePrompt,
   initialPrompt,
   onClose,
   onSubmitted,
@@ -127,6 +130,13 @@ export function AssetEditModal({
               Sent to the agent. It’s revising this in context — this panel will update
               shortly. You can ask for another change or close.
             </p>
+          ) : null}
+
+          {sourcePrompt?.trim() ? (
+            <section className={styles.sourcePrompt} aria-label="Generation prompt">
+              <h3>Generation prompt</h3>
+              <p>{sourcePrompt}</p>
+            </section>
           ) : null}
 
           <label className={styles.field}>
