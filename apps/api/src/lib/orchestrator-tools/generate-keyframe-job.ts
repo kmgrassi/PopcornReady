@@ -76,9 +76,9 @@ function storyboardTileByPlanBeat(
       const beat = scene.beats[beatIndex];
       const beatId = beat.id ?? beat.name;
       const sbBeat = sbScene?.beats.find((candidate) => candidate.beatIndex === beatIndex);
-      const selectedPanel =
-        sbBeat?.panels.find((panel) => panel.isSelected && panel.imageAssetId) ??
-        sbBeat?.panels.find((panel) => panel.imageAssetId);
+      const selectedPanel = sbBeat?.panels.find(
+        (panel) => panel.isSelected && panel.imageAssetId
+      );
       if (selectedPanel?.imageAssetId) map.set(beatId, selectedPanel.imageAssetId);
     }
   }

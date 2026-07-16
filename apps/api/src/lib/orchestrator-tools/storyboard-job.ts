@@ -8,15 +8,32 @@
 import { createDurableOrchestratorJobWriter, startDurableJobHeartbeat, type OrchestratorJobWriter } from "@/lib/orchestrator/job-gateway";
 import { scheduleOrchestratorResume } from "@/lib/orchestrator/schedule-resume";
 import type { AuthContext } from "@/lib/api/v1/auth";
-import { addStoryboardTiles } from "@/lib/api/v1/store";
-import { buildStoryboardForPlan } from "@/lib/api/v1/storyboards";
+import {
+  addStoryboardTiles,
+  getAsset,
+  getProjectStoryboardById,
+} from "@/lib/api/v1/store";
+import {
+  buildStoryboardForPlan,
+  markStoryboardHandoffReady,
+  publishStoryboard,
+} from "@/lib/api/v1/storyboards";
 import { generateStoryboardTilesForPlan } from "@/lib/v1/generation/storyboard";
 import type { ShotPlan } from "@popcorn/shared/types";
+import {
+  persistedBeatIdSetIssues,
+  plannedBeatIds,
+  storyboardHandoffIssues,
+} from "./storyboard-keyframe-handoff";
 
 export interface StoryboardJobDeps {
   generateStoryboardTilesForPlan: typeof generateStoryboardTilesForPlan;
   addStoryboardTiles: typeof addStoryboardTiles;
   buildStoryboardForPlan: typeof buildStoryboardForPlan;
+  getProjectStoryboardById: typeof getProjectStoryboardById;
+  getAsset: typeof getAsset;
+  markStoryboardHandoffReady: typeof markStoryboardHandoffReady;
+  publishStoryboard: typeof publishStoryboard;
   jobs?: Pick<OrchestratorJobWriter, "setStep" | "succeed" | "fail"> & Partial<Pick<OrchestratorJobWriter, "reportProgress">>;
   enqueueOrchestratorDispatch?: (runId: string, workspaceId: string) => Promise<unknown>;
 }
@@ -25,6 +42,10 @@ const defaultDeps: StoryboardJobDeps = {
   generateStoryboardTilesForPlan,
   addStoryboardTiles,
   buildStoryboardForPlan,
+  getProjectStoryboardById,
+  getAsset,
+  markStoryboardHandoffReady,
+  publishStoryboard,
 };
 
 function localAuth(workspaceId: string): AuthContext {
@@ -80,14 +101,62 @@ export async function runStoryboardJob(
       ...(input.createdByActionId ? { createdByActionId: input.createdByActionId } : {}),
     });
 
+    const expectedBeatIds = plannedBeatIds(input.plan);
+    const persistedIssues = persistedBeatIdSetIssues(
+      input.plan,
+      persisted.map((tile) => tile.beatId)
+    );
+    if (expectedBeatIds.length === 0 || persistedIssues.length > 0) {
+      throw new Error(
+        `Storyboard tile persistence did not cover the shot plan (${persistedIssues
+          .map((issue) => issue.code)
+          .join(", ") || "no planned beats"}).`
+      );
+    }
+
     const tileAssetByBeatId = new Map(persisted.map((tile) => [tile.beatId, tile.assetId]));
-    const { storyboardId } = await d.buildStoryboardForPlan({
+    const { storyboardId, panelCount } = await d.buildStoryboardForPlan({
       auth: localAuth(input.workspaceId),
       projectId: input.projectId,
       planAssetId: input.planAssetId,
       plan: input.plan,
       tileAssetByBeatId,
     });
+    if (panelCount !== expectedBeatIds.length) {
+      throw new Error(
+        `Storyboard built ${panelCount} selected panels for ${expectedBeatIds.length} planned beats.`
+      );
+    }
+
+    const storyboard = await d.getProjectStoryboardById(
+      input.workspaceId,
+      input.projectId,
+      storyboardId
+    );
+    if (!storyboard) {
+      throw new Error("Storyboard could not be reloaded after persistence.");
+    }
+    const handoffIssues = await storyboardHandoffIssues({
+      plan: input.plan,
+      planAssetId: input.planAssetId,
+      storyboard,
+      loadAsset: (assetId) => d.getAsset(input.workspaceId, input.projectId, assetId),
+    });
+    if (handoffIssues.length > 0) {
+      throw new Error(
+        `Storyboard is not ready for keyframes (${handoffIssues
+          .map((issue) => issue.code)
+          .join(", ")}).`
+      );
+    }
+
+    const publication = {
+      auth: localAuth(input.workspaceId),
+      projectId: input.projectId,
+      storyboardId,
+    };
+    await d.markStoryboardHandoffReady(publication);
+    await d.publishStoryboard(publication);
 
     await jobs.succeed(input.jobId, {
       assetIds: persisted.map((tile) => tile.assetId),

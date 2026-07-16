@@ -144,6 +144,7 @@ export async function createStoryboard(input: {
   auth: AuthContext;
   projectId: string;
   data: StoryboardInput;
+  publishCurrent?: boolean;
 }): Promise<Storyboard> {
   const project = await getProject(input.auth.workspaceId, input.projectId);
   const db = getServiceSupabase();
@@ -176,15 +177,55 @@ export async function createStoryboard(input: {
       .single()
   );
   const storyboard = data as StoryBlueprintRow;
+  if (input.publishCurrent !== false) {
+    await publishStoryboard({
+      auth: input.auth,
+      projectId: input.projectId,
+      storyboardId: storyboard.id,
+    });
+  }
+  return mapStoryboardFromBlueprint(storyboard);
+}
+
+export async function publishStoryboard(input: {
+  auth: AuthContext;
+  projectId: string;
+  storyboardId: string;
+}): Promise<void> {
+  await assertProject(input.auth, input.projectId);
+  const db = getServiceSupabase();
+  await getStoryboardRow(db, input.projectId, input.storyboardId);
   await runQuery(
-    "storyboards.createStoryboard current pointer",
+    "storyboards.publishStoryboard",
     db
       .from("projects")
-      .update({ current_story_blueprint_id: storyboard.id })
+      .update({ current_story_blueprint_id: input.storyboardId })
       .eq("id", input.projectId)
       .eq("workspace_id", input.auth.workspaceId)
   );
-  return mapStoryboardFromBlueprint(storyboard);
+}
+
+export async function markStoryboardHandoffReady(input: {
+  auth: AuthContext;
+  projectId: string;
+  storyboardId: string;
+}): Promise<void> {
+  await assertProject(input.auth, input.projectId);
+  const db = getServiceSupabase();
+  const storyboard = await getStoryboardRow(db, input.projectId, input.storyboardId);
+  await runQuery(
+    "storyboards.markStoryboardHandoffReady",
+    db
+      .from("story_blueprints")
+      .update({
+        provenance: {
+          ...(storyboard.provenance ?? {}),
+          handoffReady: true,
+        },
+      })
+      .eq("id", input.storyboardId)
+      .eq("project_id", input.projectId)
+  );
 }
 
 export async function getStoryboard(input: {
@@ -728,6 +769,9 @@ export async function buildStoryboardForPlan(input: {
     auth: input.auth,
     projectId: input.projectId,
     data: { planAssetId: input.planAssetId, status: "ready" },
+    // The worker publishes this immutable attempt only after every row and
+    // backing tile has passed the keyframe handoff checks.
+    publishCurrent: false,
   });
 
   let panelCount = 0;

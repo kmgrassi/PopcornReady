@@ -112,10 +112,14 @@ test("makes an unexpected terminal success without video a terminal partial fail
   assert.equal(payload.resultArtifacts?.length, 0);
 });
 
-test("prompt runs stop after storyboard unless explicitly run through", () => {
-  assert.deepEqual(stopAfterTools({}), ["generate_storyboard"]);
+test("prompt runs run through unless an explicit stop is requested", () => {
+  assert.deepEqual(stopAfterTools({}), []);
   assert.deepEqual(stopAfterTools({ runThrough: true }), []);
+  assert.deepEqual(stopAfterTools({ runThrough: false }), ["generate_storyboard"]);
   assert.deepEqual(stopAfterTools({ stopAfter: "brief_intake" }), ["create_or_load_brief"]);
+  assert.deepEqual(stopAfterTools({ runThrough: true, stopAfter: "storyboard" }), [
+    "generate_storyboard",
+  ]);
 });
 
 test("surfaces orchestrator success as ready once export_video produced output", () => {

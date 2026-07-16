@@ -96,6 +96,14 @@ API restarts without requiring a separate worker service yet.
   Audio, storyboard, edit, and export emit durable heartbeats plus shared resume
   success/failure logs, but matching per-item lifecycle log depth remains a
   follow-up observability gap.
+- The storyboard worker reaches `succeeded` only after persisted tile beat ids
+  exactly match the active plan, the relational storyboard contains one selected
+  panel per planned beat, and each panel resolves to a ready
+  `beat_storyboard` image whose beat provenance and plan input edge match that
+  slot. Storyboard attempts are built without moving the project pointer; only
+  a validated attempt is marked handoff-ready and published. Partial attempts
+  remain durable history and a later retry may supersede them; bounded,
+  plan-scoped keyframe lookup skips unpublished or incomplete attempts.
 - Generation and export should still be modeled as jobs even when execution is
   local, so the API contract does not change if a separate worker is introduced
   later.

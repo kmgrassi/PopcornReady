@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { AuthContext } from "@/lib/api/v1/auth";
+import { ApiError } from "@/lib/api/v1/errors";
 import type { ApiResult } from "@/lib/api/v1/generated-assets";
 import type { V1Asset, VisualAnchorPlan } from "@/lib/api/v1/store";
 import type { ShotPlan } from "@popcorn/shared/types";
@@ -185,7 +186,12 @@ function jobsSpy() {
   };
 }
 
-function asset(id: string, role: string, status: V1Asset["status"] = "ready"): V1Asset {
+function asset(
+  id: string,
+  role: string,
+  status: V1Asset["status"] = "ready",
+  beatId = id.replace("tile_", "beat_")
+): V1Asset {
   return {
     id,
     schemaVersion: "asset.v1",
@@ -196,6 +202,8 @@ function asset(id: string, role: string, status: V1Asset["status"] = "ready"): V
     filename: `${id}.png`,
     status,
     source: { type: "generated", generatedAssetId: id },
+    provenance: { provider: "mock", prompt: "storyboard tile", beatId },
+    graphInputs: [{ assetId: "plan_1", relation: "input", role: "plan", position: 0 }],
     contentHash: `${id}_hash`,
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
@@ -219,7 +227,7 @@ function jobResult(assetId: string): ApiResult {
 test("generate_keyframe requires a shot plan", async () => {
   const tool = createGenerateKeyframeTool({
     getActiveProjectPlan: async () => null,
-    getProjectStoryboard: async () => {
+    getProjectStoryboardsForPlan: async () => {
       throw new Error("must not read storyboard without a plan");
     },
     createJob: async () => queuedJob(),
@@ -237,7 +245,7 @@ test("generate_keyframe requires a shot plan", async () => {
 test("generate_keyframe requires a storyboard", async () => {
   const tool = createGenerateKeyframeTool({
     getActiveProjectPlan: async () => activePlan,
-    getProjectStoryboard: async () => null,
+    getProjectStoryboardsForPlan: async () => [],
     createJob: async () => queuedJob(),
     runGenerateKeyframeJob: async () => {},
   });
@@ -253,7 +261,7 @@ test("generate_keyframe requires a storyboard", async () => {
 test("generate_keyframe rejects a storyboard for an older plan", async () => {
   const tool = createGenerateKeyframeTool({
     getActiveProjectPlan: async () => ({ ...activePlan, assetId: "new_plan_2" }),
-    getProjectStoryboard: async () => storyboard,
+    getProjectStoryboardsForPlan: async () => [storyboard],
     createJob: async () => {
       throw new Error("must not create a job from a stale storyboard");
     },
@@ -268,6 +276,153 @@ test("generate_keyframe rejects a storyboard for an older plan", async () => {
   }
 });
 
+test("generate_keyframe rejects a storyboard without exact plan provenance", async () => {
+  const tool = createGenerateKeyframeTool({
+    getActiveProjectPlan: async () => activePlan,
+    getProjectStoryboardsForPlan: async () => [{ ...storyboard, planAssetId: null }],
+    getAsset: async (_workspaceId, _projectId, assetId) => asset(assetId, "beat_storyboard"),
+    createJob: async () => {
+      throw new Error("must not create a job from an unbound storyboard");
+    },
+    runGenerateKeyframeJob: async () => {},
+  });
+
+  const result = (await tool.execute({}, { auth, projectId: "proj_1" })) as ToolCallResult;
+  assert.equal(result.status, "failed");
+  if (result.status === "failed") {
+    assert.equal(result.error.unmetRequirements?.[0]?.satisfyWith.tool, "generate_storyboard");
+  }
+});
+
+test("generate_keyframe rejects incomplete or unselected storyboard panels", async () => {
+  const incomplete = structuredClone(storyboard);
+  incomplete.scenes[0].beats[1].panels[0].isSelected = false;
+  const tool = createGenerateKeyframeTool({
+    getActiveProjectPlan: async () => activePlan,
+    getProjectStoryboardsForPlan: async () => [incomplete],
+    getAsset: async (_workspaceId, _projectId, assetId) => asset(assetId, "beat_storyboard"),
+    createJob: async () => {
+      throw new Error("must not create a job from incomplete panels");
+    },
+    runGenerateKeyframeJob: async () => {},
+  });
+
+  const result = (await tool.execute({}, { auth, projectId: "proj_1" })) as ToolCallResult;
+  assert.equal(result.status, "failed");
+});
+
+test("generate_keyframe requires selected storyboard assets to be ready beat_storyboard images", async () => {
+  for (const candidate of [
+    asset("tile_wrong_role", "upload"),
+    asset("tile_pending", "beat_storyboard", "pending"),
+    { ...asset("tile_video", "beat_storyboard"), kind: "video" as const },
+  ]) {
+    const tool = createGenerateKeyframeTool({
+      getActiveProjectPlan: async () => activePlan,
+      getProjectStoryboardsForPlan: async () => [storyboard],
+      getAsset: async () => candidate,
+      createJob: async () => {
+        throw new Error("must not create a job from an unusable tile asset");
+      },
+      runGenerateKeyframeJob: async () => {},
+    });
+
+    const result = (await tool.execute({}, { auth, projectId: "proj_1" })) as ToolCallResult;
+    assert.equal(result.status, "failed");
+  }
+});
+
+test("generate_keyframe rejects storyboard tiles bound to the wrong beat or plan", async () => {
+  for (const candidate of [
+    asset("tile_1", "beat_storyboard", "ready", "beat_2"),
+    {
+      ...asset("tile_1", "beat_storyboard", "ready", "beat_1"),
+      graphInputs: [
+        { assetId: "old_plan", relation: "input" as const, role: "plan", position: 0 },
+      ],
+    },
+  ]) {
+    const tool = createGenerateKeyframeTool({
+      getActiveProjectPlan: async () => activePlan,
+      getProjectStoryboardsForPlan: async () => [storyboard],
+      getAsset: async () => candidate,
+      createJob: async () => {
+        throw new Error("must not create a job from a cross-bound tile");
+      },
+      runGenerateKeyframeJob: async () => {},
+    });
+    const result = (await tool.execute({}, { auth, projectId: "proj_1" })) as ToolCallResult;
+    assert.equal(result.status, "failed");
+  }
+});
+
+test("generate_keyframe propagates storyboard asset infrastructure failures", async () => {
+  const databaseFailure = new ApiError("database_error", "database unavailable");
+  const tool = createGenerateKeyframeTool({
+    getActiveProjectPlan: async () => activePlan,
+    getProjectStoryboardsForPlan: async () => [storyboard],
+    getAsset: async () => {
+      throw databaseFailure;
+    },
+    createJob: async () => {
+      throw new Error("must not create a job after an asset read failure");
+    },
+    runGenerateKeyframeJob: async () => {},
+  });
+
+  await assert.rejects(
+    async () => tool.execute({}, { auth, projectId: "proj_1" }),
+    databaseFailure
+  );
+});
+
+test("generate_keyframe skips a newer storyboard whose tile asset was deleted", async () => {
+  const broken = structuredClone(storyboard);
+  broken.id = "storyboard_with_deleted_tile";
+  broken.scenes[0].beats[0].panels[0].imageAssetId = "missing_tile_1";
+  let kickedStoryboardId: string | undefined;
+  const tool = createGenerateKeyframeTool({
+    getActiveProjectPlan: async () => activePlan,
+    getProjectStoryboardsForPlan: async () => [broken, storyboard],
+    getAsset: async (_workspaceId, _projectId, assetId) => {
+      if (assetId === "missing_tile_1") {
+        throw new ApiError("not_found", "storyboard tile was deleted");
+      }
+      return asset(assetId, "beat_storyboard");
+    },
+    createJob: async () => queuedJob(),
+    runGenerateKeyframeJob: async (input) => {
+      kickedStoryboardId = input.storyboard.id;
+    },
+  });
+
+  const result = (await tool.execute({}, { auth, projectId: "proj_1" })) as ToolCallResult;
+  assert.equal(result.status, "accepted");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(kickedStoryboardId, "storyboard_1");
+});
+
+test("generate_keyframe skips a partial newer storyboard and uses an older complete attempt", async () => {
+  const partial = structuredClone(storyboard);
+  partial.id = "storyboard_partial";
+  partial.scenes[0].beats[0].panels = [];
+  let kickedStoryboardId: string | undefined;
+  const tool = createGenerateKeyframeTool({
+    getActiveProjectPlan: async () => activePlan,
+    getProjectStoryboardsForPlan: async () => [partial, storyboard],
+    getAsset: async (_workspaceId, _projectId, assetId) => asset(assetId, "beat_storyboard"),
+    createJob: async () => queuedJob(),
+    runGenerateKeyframeJob: async (input) => {
+      kickedStoryboardId = input.storyboard.id;
+    },
+  });
+
+  const result = (await tool.execute({}, { auth, projectId: "proj_1" })) as ToolCallResult;
+  assert.equal(result.status, "accepted");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(kickedStoryboardId, "storyboard_1");
+});
+
 test("generate_keyframe accepts and kicks off the worker with plan and storyboard", async () => {
   let kicked:
     | {
@@ -279,7 +434,8 @@ test("generate_keyframe accepts and kicks off the worker with plan and storyboar
     | undefined;
   const tool = createGenerateKeyframeTool({
     getActiveProjectPlan: async () => activePlan,
-    getProjectStoryboard: async () => storyboard,
+    getProjectStoryboardsForPlan: async () => [storyboard],
+    getAsset: async (_workspaceId, _projectId, assetId) => asset(assetId, "beat_storyboard"),
     createJob: async () => queuedJob(),
     runGenerateKeyframeJob: async (input) => {
       kicked = input;
@@ -307,7 +463,8 @@ test("generate_keyframe omits provider so workspace settings can resolve it", as
   let kicked: { provider?: string } | undefined;
   const tool = createGenerateKeyframeTool({
     getActiveProjectPlan: async () => activePlan,
-    getProjectStoryboard: async () => storyboard,
+    getProjectStoryboardsForPlan: async () => [storyboard],
+    getAsset: async (_workspaceId, _projectId, assetId) => asset(assetId, "beat_storyboard"),
     createJob: async () => queuedJob(),
     runGenerateKeyframeJob: async (input) => {
       kicked = input;
@@ -331,7 +488,7 @@ test("generate_keyframe validates input before reading graph state", async () =>
       planReads += 1;
       return activePlan;
     },
-    getProjectStoryboard: async () => storyboard,
+    getProjectStoryboardsForPlan: async () => [storyboard],
     createJob: async () => queuedJob(),
     runGenerateKeyframeJob: async () => {},
   });

@@ -338,8 +338,11 @@ function requestedGateTools(body: unknown): string[] {
 }
 
 export function stopAfterTools(body: unknown): string[] {
-  if (isRecord(body) && body.runThrough === true) return [];
-  if (!isRecord(body) || typeof body.stopAfter !== "string") return ["generate_storyboard"];
+  if (!isRecord(body)) return [];
+  if (body.runThrough === false && typeof body.stopAfter !== "string") {
+    return ["generate_storyboard"];
+  }
+  if (typeof body.stopAfter !== "string") return [];
   switch (body.stopAfter) {
     case "brief_intake":
       return ["create_or_load_brief"];
