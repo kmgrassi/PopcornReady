@@ -3,6 +3,10 @@ import test from "node:test";
 
 import { reportLlmUsage } from "@popcorn/llm";
 
+import {
+  generatedAssetLlmCostScope,
+  resolveGeneratedAssetMetadataWithCost,
+} from "../generated-assets";
 import { buildLlmCostRecord, withLlmCostRecording } from "../llm-costs";
 
 test("buildLlmCostRecord prices OpenAI input, output, and cache reads separately", () => {
@@ -107,4 +111,39 @@ test("withLlmCostRecording keeps concurrent scopes isolated and survives a ledge
     }
   );
   assert.equal(result, "provider-result");
+});
+
+test("generated asset AI naming records under the generation action, but explicit names do not", async () => {
+  const scope = generatedAssetLlmCostScope("project-a", "run-a", "action-a");
+  const recorded: Array<{ projectId: string; runId?: string; actionId?: string }> = [];
+  const recordUsage = async (costScope: typeof scope) => {
+    recorded.push(costScope);
+  };
+  const resolveMetadata: Parameters<typeof resolveGeneratedAssetMetadataWithCost>[0]["resolveMetadata"] = async (input) => {
+    if (!input.agent?.name) {
+      await reportLlmUsage({
+        provider: "openai",
+        model: "gpt-5-mini",
+        inputTokens: 10,
+        outputTokens: 2,
+      });
+    }
+    return { name: input.agent?.name ?? "AI generated name", slug: "ai-generated-name" };
+  };
+
+  await resolveGeneratedAssetMetadataWithCost({
+    scope,
+    input: { kind: "image", provider: "mock", prompt: "sunset" },
+    resolveMetadata,
+    recordUsage,
+  });
+  assert.deepEqual(recorded, [scope]);
+
+  await resolveGeneratedAssetMetadataWithCost({
+    scope,
+    input: { agent: { name: "Explicit title" }, kind: "image", provider: "mock", prompt: "sunset" },
+    resolveMetadata,
+    recordUsage,
+  });
+  assert.deepEqual(recorded, [scope]);
 });

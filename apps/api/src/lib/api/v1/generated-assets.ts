@@ -13,11 +13,12 @@ import {
 } from "@/lib/storage/asset-read";
 import { writeAssetObject } from "@/lib/storage/asset-write";
 import { measureAudioDurationSec } from "@/lib/generative/audio-duration";
+import { type LlmUsage } from "@popcorn/llm";
 import { withDerivedAssetKnowledge } from "./assets";
 import { enqueueAssetEmbeddingRefresh } from "./asset-embeddings/jobs";
 import { resolveWorkspaceGenerationModel } from "./model-settings";
 import { preflightGenerationContent } from "@/lib/generative/preflight";
-import { withLlmCostRecording } from "./llm-costs";
+import { type LlmCostScope, withLlmCostRecording } from "./llm-costs";
 import { providerFor } from "@/lib/generative/providers";
 import { estimateCostUsd } from "@/lib/generative/pricing";
 import { recordModelCallCost } from "./model-call-costs";
@@ -154,6 +155,38 @@ async function localPathForAssetBytes(
   }
 }
 
+export function generatedAssetLlmCostScope(
+  projectId: string,
+  runId: string | undefined,
+  actionId: string
+): LlmCostScope {
+  return {
+    projectId,
+    ...(runId ? { runId } : {}),
+    actionId,
+  };
+}
+
+type RecordLlmUsage = (scope: LlmCostScope, usage: LlmUsage) => Promise<void>;
+
+interface ResolveGeneratedAssetMetadataWithCostArgs {
+  scope: LlmCostScope;
+  input: Parameters<typeof resolveAssetMetadata>[0];
+  resolveMetadata?: typeof resolveAssetMetadata;
+  recordUsage?: RecordLlmUsage;
+}
+
+/** Keeps optional AI display-name generation in the owning asset action's cost scope. */
+export async function resolveGeneratedAssetMetadataWithCost(
+  args: ResolveGeneratedAssetMetadataWithCostArgs
+): Promise<Awaited<ReturnType<typeof resolveAssetMetadata>>> {
+  return withLlmCostRecording(
+    args.scope,
+    () => (args.resolveMetadata ?? resolveAssetMetadata)(args.input),
+    args.recordUsage
+  );
+}
+
 type ProgressItemKind = "image" | "video" | "audio" | "caption" | "timeline" | "export";
 
 interface RunStageItemHandle {
@@ -236,6 +269,7 @@ async function runGeneration(
   item: RunStageItemHandle | null,
   action: V1Action
 ): Promise<V1Asset> {
+  const llmCostScope = generatedAssetLlmCostScope(projectId, parsed.runId, action.id);
   // Resolve reference assets to local file paths the provider can read.
   const referencePaths: string[] = [];
   const materializedObjects: MaterializedAssetObject[] = [];
@@ -316,11 +350,7 @@ async function runGeneration(
     });
   }
   preflight = await withLlmCostRecording(
-    {
-      projectId,
-      ...(parsed.runId ? { runId: parsed.runId } : {}),
-      actionId: action.id,
-    },
+    llmCostScope,
     () =>
       preflightGenerationContent({
         provider: parsed.provider,
@@ -566,13 +596,16 @@ async function runGeneration(
   };
 
   const now = new Date().toISOString();
-  const { name: displayName, slug } = await resolveAssetMetadata({
-    agent: { name: parsed.displayName, slug: parsed.slug },
-    kind: parsed.kind,
-    provider: parsed.provider,
-    prompt: preflight.finalPrompt || parsed.prompt,
-    description: parsed.description,
-    role: parsed.assetRole,
+  const { name: displayName, slug } = await resolveGeneratedAssetMetadataWithCost({
+    scope: llmCostScope,
+    input: {
+      agent: { name: parsed.displayName, slug: parsed.slug },
+      kind: parsed.kind,
+      provider: parsed.provider,
+      prompt: preflight.finalPrompt || parsed.prompt,
+      description: parsed.description,
+      role: parsed.assetRole,
+    },
   });
   const context = parsed.description ? { summary: parsed.description } : undefined;
   const asset: V1Asset = {
