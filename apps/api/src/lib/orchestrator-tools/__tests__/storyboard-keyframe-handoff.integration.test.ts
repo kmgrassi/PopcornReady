@@ -4,8 +4,12 @@ import test from "node:test";
 import {
   addProjectBrief,
   addProjectPlan,
+  addProjectVisualAnchorPlan,
+  getActiveProjectScopedAsset,
   getActiveProjectBrief,
   getActiveProjectPlan,
+  getActiveProjectVisualAnchorPlan,
+  getAsset,
   getProjectStoryboard,
   getProjectStoryboardsForPlan,
 } from "@/lib/api/v1/store";
@@ -16,13 +20,19 @@ import {
 } from "@/lib/test-sandboxes/sandbox";
 import type { ShotPlan } from "@popcorn/shared/types";
 import { createGenerateKeyframeTool } from "../generate-keyframe";
+import { runGenerateAnchorJob } from "../generate-anchor-job";
+import { runGenerateKeyframeJob } from "../generate-keyframe-job";
 import { runStoryboardJob } from "../storyboard-job";
 
 const localUrl = process.env.SUPABASE_URL ?? "";
+const storageEndpoint = process.env.AWS_ENDPOINT_URL_S3 ?? "";
 const runLocalIntegration =
   process.env.RUN_LOCAL_DB_INTEGRATION === "1" &&
   /127\.0\.0\.1|localhost/.test(localUrl) &&
-  Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
+  Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY) &&
+  process.env.DB_BACKEND === "supabase" &&
+  process.env.STORAGE_BACKEND === "s3" &&
+  /127\.0\.0\.1|localhost/.test(storageEndpoint);
 const integrationTest = runLocalIntegration ? test : test.skip;
 
 const PREFIX = "__storyboard_handoff_test__";
@@ -73,6 +83,67 @@ integrationTest(
       });
       const activePlan = await getActiveProjectPlan(sandbox.projectId);
       assert.ok(activePlan);
+
+      const visualAnchorPlan = {
+        schemaVersion: "visual_anchor_plan.v1" as const,
+        anchors: [
+          {
+            id: "scene_popcorn",
+            kind: "location" as const,
+            label: "Popcorn reveal",
+            description: "A glowing film reel emerging from popcorn.",
+            sourceSceneIds: ["scene_1"],
+            sourceBeatIds: ["beat_1", "beat_2"],
+          },
+        ],
+      };
+      await addProjectVisualAnchorPlan({
+        workspaceId: sandbox.workspaceId,
+        projectId: sandbox.projectId,
+        visualAnchorPlan,
+        planAssetId,
+        planContentHash: activePlan.contentHash,
+      });
+      const activeVisualAnchors = await getActiveProjectVisualAnchorPlan(
+        sandbox.projectId
+      );
+      assert.ok(activeVisualAnchors);
+
+      let anchorAssetIds: string[] = [];
+      await runGenerateAnchorJob(
+        {
+          jobId: "anchor_job",
+          workspaceId: sandbox.workspaceId,
+          projectId: sandbox.projectId,
+          visualAnchorPlan,
+          visualAnchorPlanAssetId: activeVisualAnchors.assetId,
+          visualAnchorPlanContentHash: activeVisualAnchors.contentHash,
+          provider: "mock",
+        },
+        {
+          jobs: {
+            async setStep() {
+              return {} as never;
+            },
+            async succeed(_jobId, result) {
+              anchorAssetIds = (result as { assetIds?: string[] }).assetIds ?? [];
+              return {} as never;
+            },
+            async fail(_jobId, error) {
+              throw new Error(`Anchor worker failed: ${JSON.stringify(error)}`);
+            },
+          },
+        }
+      );
+      assert.equal(anchorAssetIds.length, 1);
+      const selectedAnchor = await getActiveProjectScopedAsset({
+        workspaceId: sandbox.workspaceId,
+        projectId: sandbox.projectId,
+        slotRole: "scene_anchor:scene_popcorn",
+        expectedRole: "scene_anchor",
+      });
+      assert.equal(selectedAnchor?.id, anchorAssetIds[0]);
+      assert.equal(selectedAnchor?.storageBucket, "assets-private");
 
       let succeededResult: unknown;
       await runStoryboardJob(
@@ -146,6 +217,55 @@ integrationTest(
         ).length,
         2
       );
+      for (const beat of completeStoryboard.scenes[0].beats) {
+        const tileId = beat.panels.find((panel) => panel.isSelected)?.imageAssetId;
+        assert.ok(tileId);
+        const tile = await getAsset(
+          sandbox.workspaceId,
+          sandbox.projectId,
+          tileId
+        );
+        assert.equal(tile.storageBucket, "assets-private");
+      }
+
+      let keyframeAssetIds: string[] = [];
+      await runGenerateKeyframeJob(
+        {
+          jobId: "keyframe_job_real",
+          workspaceId: sandbox.workspaceId,
+          projectId: sandbox.projectId,
+          plan,
+          planAssetId,
+          planContentHash: activePlan.contentHash,
+          storyboard: completeStoryboard,
+          provider: "mock",
+        },
+        {
+          jobs: {
+            async setStep() {
+              return {} as never;
+            },
+            async succeed(_jobId, result) {
+              keyframeAssetIds = (result as { assetIds?: string[] }).assetIds ?? [];
+              return {} as never;
+            },
+            async fail(_jobId, error) {
+              throw new Error(`Keyframe worker failed: ${JSON.stringify(error)}`);
+            },
+          },
+        }
+      );
+      assert.equal(keyframeAssetIds.length, 2);
+      for (const keyframeAssetId of keyframeAssetIds) {
+        const keyframe = await getAsset(
+          sandbox.workspaceId,
+          sandbox.projectId,
+          keyframeAssetId
+        );
+        assert.equal(keyframe.status, "ready");
+        assert.equal(keyframe.role, "beat_keyframe");
+        assert.equal(keyframe.storageBucket, "assets-private");
+      }
 
       let kickedStoryboardId: string | undefined;
       const tool = createGenerateKeyframeTool({

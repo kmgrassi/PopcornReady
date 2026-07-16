@@ -1,5 +1,13 @@
 # API Contract V1 Scope
 
+<!-- agent-summary: The Vite UI and agent clients share the versioned Express API contract. -->
+<!-- agent-summary: Mutations are idempotent and long-running work returns pollable jobs. -->
+<!-- agent-summary: Every response uses stable resource or error envelopes. -->
+<!-- agent-summary: Error codes distinguish input, provider, database, and storage failures. -->
+<!-- agent-summary: storage_error identifies recoverable managed-object infrastructure failures. -->
+<!-- agent-summary: object_not_found is reserved for a confirmed missing object. -->
+<!-- agent-summary: Local and hosted auth modes preserve the same response contract. -->
+
 ## Objective
 
 Define the first implementable `/api/v1` contract used by both the Vite React UI
@@ -350,6 +358,7 @@ Minimum v1 error codes:
 - `render_failed`
 - `model_output_invalid`
 - `rate_limited`
+- `storage_error`
 - `internal_error`
 
 ## Local Mode Behavior

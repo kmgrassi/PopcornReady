@@ -118,3 +118,9 @@
 - Friction or failure: The TS contract uses `schemaVersion` while persisted JSONB checks require the repo's `schema_version` marker, and `ALTER TYPE ADD VALUE` cannot be consumed in the same migration transaction — both surfaced only at apply time.
 - Suggested improvement: Document the persisted-JSONB `schema_version` marker convention and the enum-migration split rule next to the asset-graph JSONB rule in CLAUDE.md/AGENTS.md.
 - Follow-up: PR 5 executes the documented action_assets dual-write/backfill/assert plan and must clear `wait_reason`/set `superseded_at` per the new constraints.
+
+### 2026-07-16T08:55:00-04:00 — GEN-20260716-01
+- What helped: The production run's raw `Object not found` message and persisted bucket metadata made the database/storage backend mismatch directly traceable before provider execution.
+- Friction or failure: Existing handoff tests stopped at relational acceptance, and the async parking boundary discarded the underlying job error as a generic provider failure.
+- Suggested improvement: Every cross-stage media handoff should prove the downstream worker can read stored bytes under the production database/storage backend combination.
+- Follow-up: Keep the local Supabase + MinIO anchor/storyboard/keyframe integration in the required generation regression set.

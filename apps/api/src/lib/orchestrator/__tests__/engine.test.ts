@@ -535,6 +535,119 @@ test("stays parked when the resume job is not yet terminal", async () => {
   assert.equal(stillParked.status, "waiting");
 });
 
+test("preserves a failed parking job's reference-storage error", async () => {
+  const store = new FakeStore(runFixture());
+  const { model } = scriptedModel([
+    { type: "tool_call", toolName: "generate_keyframe" },
+  ]);
+  const registry = fakeRegistry({
+    generate_keyframe: () => ({
+      status: "accepted",
+      jobId: "job1",
+      resumesWhen: "job_terminal",
+    }),
+  });
+  await runOrchestratorToCompletion("run1", deps(store, model, registry));
+
+  const failed = await resumeOrchestratorRun(
+    "run1",
+    deps(store, model, registry, {
+      jobs: {
+        getJob: async () => ({
+          status: "failed",
+          error: {
+            code: "object_not_found",
+            message: "Stored bytes for reference asset asset_storyboard could not be read.",
+          },
+        }),
+      },
+    })
+  );
+
+  assert.equal(failed.status, "failed");
+  assert.equal((failed.error as { kind?: string }).kind, "precondition_unmet");
+  assert.match(
+    (failed.error as { message?: string }).message ?? "",
+    /asset_storyboard/
+  );
+  assert.equal(store.actions[0].status, "failed");
+  assert.equal(store.actions[0].error?.kind, "precondition_unmet");
+});
+
+test("preserves a true failed parking job as a provider failure", async () => {
+  const store = new FakeStore(runFixture());
+  const { model } = scriptedModel([
+    { type: "tool_call", toolName: "generate_keyframe" },
+  ]);
+  const registry = fakeRegistry({
+    generate_keyframe: () => ({
+      status: "accepted",
+      jobId: "job1",
+      resumesWhen: "job_terminal",
+    }),
+  });
+  await runOrchestratorToCompletion("run1", deps(store, model, registry));
+
+  const failed = await resumeOrchestratorRun(
+    "run1",
+    deps(store, model, registry, {
+      jobs: {
+        getJob: async () => ({
+          status: "failed",
+          error: {
+            code: "job_failed",
+            message:
+              "Runway generation failed with Bearer secret-provider-token-1234567890.",
+          },
+        }),
+      },
+    })
+  );
+
+  assert.equal((failed.error as { kind?: string }).kind, "provider_failed");
+  assert.equal(
+    (failed.error as { message?: string }).message,
+    "Runway generation failed with [REDACTED]"
+  );
+});
+
+test("classifies a failed parking job's storage infrastructure error as recoverable", async () => {
+  const store = new FakeStore(runFixture());
+  const { model } = scriptedModel([
+    { type: "tool_call", toolName: "generate_keyframe" },
+  ]);
+  const registry = fakeRegistry({
+    generate_keyframe: () => ({
+      status: "accepted",
+      jobId: "job1",
+      resumesWhen: "job_terminal",
+    }),
+  });
+  await runOrchestratorToCompletion("run1", deps(store, model, registry));
+
+  const failed = await resumeOrchestratorRun(
+    "run1",
+    deps(store, model, registry, {
+      jobs: {
+        getJob: async () => ({
+          status: "failed",
+          error: {
+            code: "storage_error",
+            message: "Reference storage failed while reading asset asset_storyboard.",
+          },
+        }),
+      },
+    })
+  );
+
+  assert.equal((failed.error as { kind?: string }).kind, "storage_error");
+  assert.equal((failed.error as { recoverable?: boolean }).recoverable, true);
+  assert.deepEqual(
+    (failed.error as { suggestedNextTools?: unknown }).suggestedNextTools,
+    [{ tool: "generate_keyframe", inputHint: { retry: true } }]
+  );
+});
+
 test("keeps a run parked when a legacy action references an unknown job id", async () => {
   const store = new FakeStore(runFixture());
   const { model } = scriptedModel([{ type: "tool_call", toolName: "generate_keyframe" }]);

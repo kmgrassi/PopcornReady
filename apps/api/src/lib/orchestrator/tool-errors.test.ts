@@ -61,6 +61,22 @@ test("converts existing ApiError preconditions into model-readable tool errors",
   });
 });
 
+test("classifies a missing stored reference as a precondition instead of provider failure", () => {
+  const err = classifyToolFailure(
+    new ApiError(
+      "object_not_found",
+      "Stored bytes for reference asset asset_storyboard could not be read.",
+      { assetIds: ["asset_storyboard"] }
+    ),
+    { toolName: "generate_keyframe", input: { projectId: "project_123" } }
+  );
+
+  assert.equal(err.kind, "precondition_unmet");
+  assert.equal(err.recoverable, true);
+  assert.equal(err.unmetRequirements?.[0]?.requirement, "ready_reference_asset");
+  assert.equal(err.details?.code, "object_not_found");
+});
+
 test("classifies persistence failures as recoverable, retry the same tool", () => {
   const err = classifyToolFailure(
     new ApiError("database_error", "Database operation failed: store.addProjectPlan.", {

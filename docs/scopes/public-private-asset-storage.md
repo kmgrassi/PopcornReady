@@ -1,5 +1,13 @@
 # Public/Private Asset Storage & Delivery — S3 + CloudFront Implementation Scope
 
+<!-- agent-summary: Current asset bytes use the ObjectStore abstraction for writes and server-side reads. -->
+<!-- agent-summary: STORAGE_BACKEND selects local or S3 storage independently from DB_BACKEND. -->
+<!-- agent-summary: Persisted storage_bucket selects the physical public or private bucket for reads. -->
+<!-- agent-summary: Generated references and media analysis share the bucket-aware storage reader. -->
+<!-- agent-summary: Supabase Storage is reserved for eval fixtures, not production asset delivery. -->
+<!-- agent-summary: Production S3 behavior is exercised locally with Supabase plus MinIO. -->
+<!-- agent-summary: Visibility moves remain copy, row update, then source delete. -->
+
 ## Objective
 
 Make Popcorn Ready actually **store asset bytes** and **serve them with the
@@ -27,6 +35,24 @@ settled here; this document is the *how*.
 > project-scoped pool. Visibility is metadata + a physical delivery location;
 > this scope adds the delivery layer, it does not add a new store or a
 > copy-on-share mechanic for owners.
+
+## Implementation status (2026-07-16)
+
+The storage foundation, write path, read/delivery path, and visibility moves are
+implemented. Asset writers persist bytes through `writeAssetObject()` and stamp
+both `storage_key` and `storage_bucket`. Server-side consumers that need bytes,
+including generated-asset references and media analysis, materialize the object
+through `ObjectStore.getObject()` using the persisted bucket to derive physical
+visibility. `DB_BACKEND` selects database persistence only and must never select
+asset storage.
+
+Supabase Storage remains an eval-fixture adapter. Production asset callers do
+not probe it or fall back across buckets; a missing or unknown bucket is an
+explicit asset-storage failure. Confirmed missing keys use `object_not_found`;
+configuration, credentials, network, and other managed-storage failures use the
+recoverable `storage_error` code. The production-shaped regression uses local
+Supabase plus MinIO to write a visual anchor and storyboard tiles to the private
+S3 bucket, then loads both references through the real keyframe worker.
 
 ---
 
