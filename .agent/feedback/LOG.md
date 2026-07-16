@@ -161,13 +161,13 @@
 - Suggested improvement: Reserve worksheet IDs when a worktree is created or include the PR scope in the identifier before implementation begins.
 - Follow-up: Preserve `API-20260716-03` for merged PR 7 and use `API-20260716-04` for this PR 5 branch.
 
-### 2026-07-16T15:10:00-04:00 — API-20260716-05
+### 2026-07-16T15:10:00-04:00 — API-20260716-06
 - What helped: Treating the idempotency row as a lease-backed reservation clarified the API-instance race without holding a transaction over producer work.
 - Friction or failure: A lease token fences stale record writes but cannot by itself make a provider launch safe after a process crash; the dedicated job claim remains required follow-up work.
 - Suggested improvement: Keep request reservation, provider claim, and generated-asset provenance as explicit separately-tested durability boundaries rather than implying one idempotency helper covers all three.
 - Follow-up: Apply the migration and run the env-gated Postgres race test once the local Supabase database is healthy; then implement the provider-job claim fence.
 
-### 2026-07-16T15:45:00-04:00 — API-20260716-05
+### 2026-07-16T15:45:00-04:00 — API-20260716-06
 - What helped: PR review isolated the distinction between a failed lease-renewal attempt and durable ownership loss.
 - Friction or failure: Treating either renewal rejection or a false renewal result as final ownership loss skipped a valid token-fenced completion and could discard a successful response.
 - Suggested improvement: Let the database token predicate make the final completion decision; use renewal only to extend an active lease, not to preemptively suppress completion.
