@@ -90,7 +90,8 @@ create table public.agent_sessions (
   constraint agent_sessions_next_sequence_positive check (next_sequence >= 1),
   constraint agent_sessions_claim_generation_nonneg check (claim_generation >= 0),
   constraint agent_sessions_summary_schema check (
-    summary is null or summary ->> 'schema_version' = 'AgentSessionSummary.v1'
+    summary is null
+    or summary ->> 'schemaVersion' is not distinct from 'AgentSessionSummary.v1'
   ),
   constraint agent_sessions_summary_bounds check (
     summary_through_sequence >= 0
@@ -301,14 +302,16 @@ alter table public.orchestrator_runs
   ),
   -- Typed, versioned JSONB payloads only (schema-marked envelopes).
   add constraint orchestrator_runs_task_schema check (
-    task_params is null or task_params ->> 'schema_version' = 'DomainTask.v1'
+    task_params is null
+    or task_params ->> 'schemaVersion' is not distinct from 'DomainTask.v1'
   ),
   add constraint orchestrator_runs_origin_request_schema check (
     origin_request is null
-    or origin_request ->> 'schema_version' = 'CreatorDirectOrigin.v1'
+    or origin_request ->> 'schemaVersion' is not distinct from 'CreatorDirectOrigin.v1'
   ),
   add constraint orchestrator_runs_pins_schema check (
-    pins is null or pins ->> 'schema_version' = 'DomainRunPins.v1'
+    pins is null
+    or pins ->> 'schemaVersion' is not distinct from 'DomainRunPins.v1'
   ),
   -- Wait reason: domain runs must declare why they wait; everything else
   -- carries none.
@@ -495,6 +498,25 @@ exception when others then
 end;
 $$;
 
+-- The shared contract (packages/shared/src/domain-agent-contract.ts) owns the
+-- domain envelopes and marks them with a camelCase `schemaVersion` key — the
+-- DB checks match that key verbatim. The generic marker-presence check on
+-- actions predates the contract and only recognized `schema`/`schema_version`;
+-- recreate it recognizing the contract key too so a verbatim DomainReport.v1
+-- payload is insertable. Strictly more permissive than the old check, so
+-- revalidation of existing rows is safe.
+alter table public.actions
+  drop constraint actions_params_schema_check;
+alter table public.actions
+  add constraint actions_params_schema_check
+  check (
+    params = '{}'::jsonb
+    or (
+      jsonb_typeof(params) = 'object'
+      and (params ? 'schema' or params ? 'schema_version' or params ? 'schemaVersion')
+    )
+  );
+
 -- Exactly one domain_report action per finite domain run.
 create unique index actions_one_domain_report_per_run_uidx
   on public.actions (orchestrator_run_id)
@@ -520,8 +542,8 @@ begin
     raise exception 'domain_report is only valid on a domain-role run'
       using errcode = 'check_violation';
   end if;
-  if coalesce(new.params ->> 'schema_version',
-              new.params #>> '{report,schema_version}') is distinct from 'DomainReport.v1'
+  if coalesce(new.params ->> 'schemaVersion',
+              new.params #>> '{report,schemaVersion}') is distinct from 'DomainReport.v1'
   then
     raise exception 'domain_report params must be a schema-marked DomainReport.v1 payload'
       using errcode = 'check_violation';

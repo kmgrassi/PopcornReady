@@ -2,6 +2,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type {
+  ActionId,
+  DomainReportV1,
+  DomainTaskV1,
+  OrchestratorRunId,
+} from "@popcorn/shared/domain-agent-contract";
 
 // PR 4 acceptance (docs/scopes/specialist-agent-orchestration-prs.md): one
 // Visuals session per project, collision-free concurrent sequence allocation,
@@ -135,10 +141,33 @@ integrationTest(
       });
       assertNoError(delegationError, "create delegation action");
 
-      const taskParams = {
-        schema_version: "DomainTask.v1",
+      // A literal shared-contract DomainTaskV1: the DB checks must accept the
+      // contract payload verbatim (camelCase schemaVersion key).
+      const taskParams: DomainTaskV1 = {
+        schemaVersion: "DomainTask.v1",
         domain: "visuals",
         taskKind: "visuals_production",
+        objective: "Produce the visuals for the assignment",
+        instruction: "Generate keyframes and clips for the targeted beats",
+        targets: [{ kind: "project", projectId }],
+        requiredOutputs: [{ kind: "clip", role: "primary", minimumCount: 1 }],
+        allowedOutputKinds: ["keyframe", "clip"],
+        creativeConstraints: { tone: "warm" },
+        preserve: { assetIds: [], selections: [], fingerprints: [], pins: [] },
+        candidateAffectedAssetIds: [],
+        budgetUsd: 5,
+        acceptanceCriteria: ["Every beat has a clip"],
+        origin: {
+          kind: "creative_director",
+          rootRunId: rootRunId as OrchestratorRunId,
+          rootActionId: delegationActionId as ActionId,
+          creatorMessageId: suffix,
+        },
+        responseRecipient: { kind: "creative_director" },
+      };
+      const revisionTaskParams: DomainTaskV1 = {
+        ...taskParams,
+        taskKind: "visuals_revision",
       };
       const { error: domainRunError } = await service.from("orchestrator_runs").insert({
         id: domainRunId,
@@ -155,6 +184,29 @@ integrationTest(
         root_action_id: delegationActionId,
       });
       assertNoError(domainRunError, "create domain run");
+
+      // The DB validates the contract key verbatim: the same payload with the
+      // wrong-cased marker key must be rejected.
+      const { schemaVersion: _taskMark, ...unmarkedTask } = taskParams;
+      const { error: wrongCaseTaskError } = await service.from("orchestrator_runs").insert({
+        project_id: projectId,
+        status: "queued",
+        input_summary: "wrong-cased task mark",
+        agent_role: "visuals",
+        agent_session_id: sessionId,
+        session_sequence: 4,
+        task_kind: "visuals_production",
+        task_params: { ...unmarkedTask, schema_version: "DomainTask.v1" },
+        origin_kind: "creative_director",
+        parent_run_id: rootRunId,
+        root_action_id: delegationActionId,
+      });
+      assert.ok(wrongCaseTaskError, "a snake_case task schema mark must be rejected");
+      assert.match(
+        wrongCaseTaskError!.message,
+        /orchestrator_runs_task_schema/,
+        "the task schema-mark constraint rejects the wrong-cased key"
+      );
 
       const { data: domainRun } = await service
         .from("orchestrator_runs")
@@ -176,12 +228,12 @@ integrationTest(
         agent_session_id: sessionId,
         session_sequence: 2,
         task_kind: "visuals_revision",
-        task_params: { ...taskParams, taskKind: "visuals_revision" },
+        task_params: revisionTaskParams,
         origin_kind: "creative_director",
         parent_run_id: rootRunId,
         root_action_id: delegationActionId,
         origin_actor_id: randomUUID(),
-        origin_request: { schema_version: "CreatorDirectOrigin.v1" },
+        origin_request: { schemaVersion: "CreatorDirectOrigin.v1" },
       });
       assert.ok(dualOriginError, "a run with both origins must be rejected");
 
@@ -194,7 +246,7 @@ integrationTest(
         agent_session_id: sessionId,
         session_sequence: 3,
         task_kind: "visuals_revision",
-        task_params: { ...taskParams, taskKind: "visuals_revision" },
+        task_params: revisionTaskParams,
         origin_kind: "creative_director",
         parent_run_id: rootRunId,
         root_action_id: delegationActionId,
@@ -225,17 +277,25 @@ integrationTest(
         .eq("id", sessionId);
       assert.ok(claimRollbackError, "the durable claim generation is monotonic");
 
-      // --- one immutable terminal report action per finite domain run.
+      // --- one immutable terminal report action per finite domain run. The
+      // params are a literal shared-contract DomainReportV1, accepted verbatim.
+      const reportParams: DomainReportV1 = {
+        schemaVersion: "DomainReport.v1",
+        outcome: {
+          outcome: "done",
+          outputs: [],
+          changedSelections: [],
+          acceptanceEvidence: [],
+          sessionSummary: "Visuals turn complete.",
+        },
+      };
       const { error: reportError } = await service.from("actions").insert({
         id: reportActionId,
         project_id: projectId,
         orchestrator_run_id: domainRunId,
         tool: "domain_report",
         status: "applied",
-        params: {
-          schema_version: "DomainReport.v1",
-          outcome: { outcome: "done" },
-        },
+        params: reportParams,
       });
       assertNoError(reportError, "create domain report action");
       const { error: duplicateReportError } = await service.from("actions").insert({
@@ -243,10 +303,7 @@ integrationTest(
         orchestrator_run_id: domainRunId,
         tool: "domain_report",
         status: "applied",
-        params: {
-          schema_version: "DomainReport.v1",
-          outcome: { outcome: "done" },
-        },
+        params: reportParams,
       });
       assert.ok(duplicateReportError, "a finite run accepts exactly one report action");
       const { error: rootReportError } = await service.from("actions").insert({
@@ -254,12 +311,28 @@ integrationTest(
         orchestrator_run_id: rootRunId,
         tool: "domain_report",
         status: "applied",
-        params: {
-          schema_version: "DomainReport.v1",
-          outcome: { outcome: "done" },
-        },
+        params: reportParams,
       });
       assert.ok(rootReportError, "a report is only valid on a domain-role run");
+      // Same domain run: the trigger's schema-mark check fires before the
+      // one-report unique index, so the wrong-cased key is what gets rejected.
+      const { schemaVersion: _reportMark, ...unmarkedReport } = reportParams;
+      const { error: wrongCaseReportError } = await service.from("actions").insert({
+        project_id: projectId,
+        orchestrator_run_id: domainRunId,
+        tool: "domain_report",
+        status: "applied",
+        params: { ...unmarkedReport, schema_version: "DomainReport.v1" },
+      });
+      assert.ok(
+        wrongCaseReportError,
+        "a snake_case report schema mark must be rejected"
+      );
+      assert.match(
+        wrongCaseReportError!.message,
+        /DomainReport\.v1/,
+        "the report trigger rejects the wrong-cased key"
+      );
       const { error: reportMutationError } = await service
         .from("actions")
         .update({ output_asset_ids: [randomUUID()] })
@@ -324,7 +397,7 @@ integrationTest(
         agent_role: "visuals",
         agent_session_id: sessionId,
         task_kind: "visuals_revision",
-        task_params: { ...taskParams, taskKind: "visuals_revision" },
+        task_params: revisionTaskParams,
         origin_kind: "creative_director",
         parent_run_id: rootRunId,
         root_action_id: delegationActionId,

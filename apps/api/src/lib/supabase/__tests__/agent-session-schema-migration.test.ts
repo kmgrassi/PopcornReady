@@ -31,7 +31,7 @@ test("agent_sessions is the only new domain table and owns the session invariant
   assert.match(migration, /claim_generation\s+bigint\s+not null default 0/);
   assert.match(
     migration,
-    /summary ->> 'schema_version' = 'AgentSessionSummary\.v1'/,
+    /summary ->> 'schemaVersion' is not distinct from 'AgentSessionSummary\.v1'/,
     "the compact summary is a schema-marked payload"
   );
   assert.match(migration, /summary_through_sequence < next_sequence/);
@@ -111,7 +111,7 @@ test("finite runs carry the assignment identity with exactly one trusted origin"
     /completion_recipient text generated always as/,
     "the completion recipient is derived from the trusted origin, never stored independently"
   );
-  assert.match(migration, /task_params ->> 'schema_version' = 'DomainTask\.v1'/);
+  assert.match(migration, /task_params ->> 'schemaVersion' is not distinct from 'DomainTask\.v1'/);
   assert.match(
     migration,
     /orchestrator run assignment identity is immutable/,
@@ -151,6 +151,22 @@ test("one immutable domain_report action closes one finite domain run", () => {
     migration,
     /schema-marked DomainReport\.v1 payload/,
     "report params must be schema-marked"
+  );
+  // The shared TS contract owns the envelope key: the DB checks validate the
+  // camelCase `schemaVersion` verbatim (no snake_case domain payloads), and
+  // the generic action marker check recognizes the contract key.
+  assert.match(
+    migration,
+    /coalesce\(new\.params ->> 'schemaVersion',\s+new\.params #>> '\{report,schemaVersion\}'\) is distinct from 'DomainReport\.v1'/
+  );
+  assert.doesNotMatch(migration, /'schema_version'[^\n]*'Domain(Task|Report)\.v1'/);
+  // A CHECK treats NULL as pass, so the mark comparisons must be null-safe or
+  // a payload simply MISSING the key would slip through.
+  assert.doesNotMatch(migration, /->> 'schemaVersion' = '/);
+  assert.match(
+    migration,
+    /params \? 'schema' or params \? 'schema_version' or params \? 'schemaVersion'/,
+    "the generic actions marker check must accept the contract-cased key"
   );
   assert.match(migration, /domain_report output links are immutable once inserted/);
 });
