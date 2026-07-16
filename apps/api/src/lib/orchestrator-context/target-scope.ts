@@ -192,6 +192,7 @@ function assetIdsForTarget(
 export function buildDomainTargetScope(input: {
   snapshot: ProjectGraphSnapshot;
   targets: readonly DomainTarget[];
+  candidateAffectedAssetIds?: readonly string[];
 }): DomainTargetScope {
   const { snapshot } = input;
   if (!snapshot.projectId || !snapshot.workspaceId) {
@@ -218,6 +219,13 @@ export function buildDomainTargetScope(input: {
     for (const assetId of assetIdsForTarget(snapshot, target, assetById)) {
       addAsset(authorizedAssetIds, assetById.get(assetId));
     }
+  }
+
+  for (const assetId of input.candidateAffectedAssetIds ?? []) {
+    if (!assetById.has(assetId)) {
+      throw new Error("Candidate affected asset is not in the project.");
+    }
+    authorizedAssetIds.add(assetId);
   }
 
   // Versions of an authorized lineage are safe immutable alternatives, and all
@@ -302,7 +310,8 @@ function targetFromPrimitiveField(
     case "beatId": return { kind: "beat", projectId, beatId: value };
     case "panelId": return { kind: "panel", projectId, panelId: value };
     case "assetId":
-    case "sourceAssetId": return { kind: "asset", projectId, assetId: value };
+    case "sourceAssetId":
+    case "audioAssetId": return { kind: "asset", projectId, assetId: value };
     case "lineageId": return { kind: "lineage", projectId, lineageId: value };
     case "timelineItemId": return { kind: "timeline_item", projectId, timelineItemId: value };
     case "exportId": return { kind: "export", projectId, exportId: value };
@@ -332,7 +341,7 @@ export function assertScopedPrimitiveInput(
 ): void {
   assertProject(scope, input.projectId);
   const singular = [
-    "storyboardId", "sceneId", "beatId", "panelId", "assetId", "sourceAssetId",
+    "storyboardId", "sceneId", "beatId", "panelId", "assetId", "sourceAssetId", "audioAssetId",
     "lineageId", "timelineItemId", "exportId",
   ];
   for (const field of singular) {
@@ -436,7 +445,10 @@ export function assertPreservePinsCurrent(
   }
   for (const pin of preserve.selections) {
     const selection = snapshot.selections.find(
-      (candidate) => candidate.slotRole === pin.slotRole && candidate.activeAssetId === pin.activeAssetId
+      (candidate) =>
+        candidate.slotRole === pin.slotRole &&
+        (candidate.slotOwnerLineageId ?? candidate.slotRole) === pin.slotKey &&
+        candidate.activeAssetId === pin.activeAssetId
     );
     if (!selection || (pin.sequence !== undefined && selection.seq !== pin.sequence)) {
       throw new Error("Selection pin is stale; reload the current graph before writing.");

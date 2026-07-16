@@ -49,7 +49,13 @@ export interface DomainTurnProjection {
 
 function roleCanInspectAsset(task: DomainTaskV1, asset: SnapshotAsset): boolean {
   if (task.domain === "audio") {
-    return asset.media === "audio" || asset.kind === "audio_track" || task.targets.some((target) => target.kind === "asset" && target.assetId === asset.id);
+    return (
+      asset.media === "audio" ||
+      asset.kind === "audio_track" ||
+      asset.media === "image" ||
+      asset.media === "video" ||
+      task.targets.some((target) => target.kind === "asset" && target.assetId === asset.id)
+    );
   }
   return asset.media === "image" || asset.media === "video" || ["image", "anchor", "keyframe", "clip", "composite", "render"].includes(asset.kind);
 }
@@ -63,7 +69,11 @@ export function buildDomainTurnProjection(input: {
   task: DomainTaskV1;
 }): DomainTurnProjection {
   const { snapshot, task } = input;
-  const scope = buildDomainTargetScope({ snapshot, targets: task.targets });
+  const scope = buildDomainTargetScope({
+    snapshot,
+    targets: task.targets,
+    candidateAffectedAssetIds: task.candidateAffectedAssetIds,
+  });
   assertPreservePinsCurrent(scope, snapshot, task.preserve);
   const root = buildRootGraphProjection(snapshot);
 

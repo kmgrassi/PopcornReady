@@ -132,3 +132,7 @@
   or selection write; do not recreate target authorization in prompts.
 - Follow-up: PRs 5/6 wire these guards into lifecycle transactions; PR 8 loads
   `loadDomainTurnProjection` at the finite-turn boundary.
+## PR-CARETAKER-20260716-01
+
+- Reviewed all open PRs and addressed four actionable review threads on PR #795.
+- Verified PR #794's outdated recoverable-storage thread against current code and tests.

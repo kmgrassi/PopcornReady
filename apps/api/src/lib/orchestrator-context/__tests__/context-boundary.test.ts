@@ -208,6 +208,29 @@ test("domain projection separates trusted controls from creator content and filt
   assert.ok(projection.graph.assets.every((asset) => asset.media !== "audio"));
   assert.ok(!projection.graph.assets.some((asset) => asset.id === "asset_direct_pool"));
   assert.equal("tools" in projection, false, "a graph context never reveals a registry/tool surface");
+  assert.ok(projection.graph.assets.some((asset) => asset.id === "asset_clip"));
+});
+
+test("audio projections retain picture context and primitive audio IDs stay scoped", () => {
+  const task = {
+    ...visualsTask(),
+    domain: "audio",
+    taskKind: "audio_production",
+    targets: [
+      ...visualsTask().targets,
+      { kind: "asset", projectId, assetId: "asset_audio" },
+    ],
+    requiredOutputs: [{ kind: "audio_track", role: "soundtrack", minimumCount: 1 }],
+    allowedOutputKinds: ["audio_track"],
+  } as DomainTaskV1;
+  const projection = buildDomainTurnProjection({ snapshot: snapshot(), task });
+  assert.ok(projection.graph.assets.some((asset) => asset.id === "asset_clip"));
+  const scope = buildDomainTargetScope({ snapshot: snapshot(), targets: task.targets });
+  assert.doesNotThrow(() => assertScopedPrimitiveInput(scope, { audioAssetId: "asset_audio" }));
+  assert.throws(
+    () => assertScopedPrimitiveInput(scope, { audioAssetId: "asset_direct_pool" }),
+    /outside/
+  );
 });
 
 test("stable target scope rejects foreign primitive inputs and graph writes", () => {
@@ -257,6 +280,20 @@ test("a stale preserve pin prevents a domain projection from becoming write auth
   assert.throws(
     () => buildDomainTurnProjection({ snapshot: snapshot(), task }),
     /fingerprint pin is stale/
+  );
+});
+
+test("preserve selection pins include their slot key", () => {
+  const task = visualsTask();
+  task.preserve.selections = [{
+    slotRole: "beat_keyframe",
+    slotKey: "different_slot",
+    activeAssetId: "asset_anchor_current",
+    sequence: 3,
+  }];
+  assert.throws(
+    () => buildDomainTurnProjection({ snapshot: snapshot(), task }),
+    /Selection pin is stale/
   );
 });
 
