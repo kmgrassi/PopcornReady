@@ -36,9 +36,10 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
 - `inspiration-poster.spec.ts` covers opening a generated story poster in the
   shared media viewer and dismissing it with Escape.
 - `storyboard-editor.spec.ts` verifies the dedicated storyboard route renders
-  the empty state for a project whose storyboard endpoint returns `null`, and
-  keeps a ready beat card visual while disclosing its generation prompt only in
-  the opened asset detail.
+  the empty state for a project whose storyboard endpoint returns `null`, keeps
+  a ready beat card visual while disclosing its generation prompt only in the
+  opened asset detail, and exposes **Generate video** at a storyboard-review
+  stop before production media can continue.
 - `evals.spec.ts` covers the eval dashboard and admin workbench judgment action.
 
 The required local-first database smoke is:

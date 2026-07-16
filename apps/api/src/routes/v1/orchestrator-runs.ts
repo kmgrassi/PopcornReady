@@ -37,6 +37,8 @@ import {
   GENERATION_STAGE_ORDER,
   GATEABLE_GENERATION_STAGE_TYPES,
   type GateableGenerationStageType,
+  type BoardRevisionTarget,
+  type GenerationStageType,
   type Job,
 } from "@popcorn/shared/v1/types";
 import {
@@ -140,38 +142,6 @@ function promptBriefFromBody(body: unknown) {
   return parseBrief(source, "brief");
 }
 
-function requestedGates(body: unknown): GateableGenerationStageType[] {
-  if (!isRecord(body)) return [];
-  const raw = stringArray(body.reviewGates ?? body.gates);
-  return raw.filter((stage): stage is GateableGenerationStageType =>
-    GATEABLE_GENERATION_STAGE_TYPES.includes(stage as GateableGenerationStageType)
-  );
-}
-
-function requestedGateTools(body: unknown): string[] {
-  const tools = requestedGates(body).flatMap((stage) => {
-    switch (stage) {
-      case "brief_intake":
-        return ["create_or_load_brief"];
-      case "creative_plan":
-        return ["develop_story_blueprint", "draft_script", "plan_shots", "plan_visual_anchors"];
-      case "storyboard":
-        return ["generate_storyboard"];
-      case "asset_generation":
-        return ["generate_anchor", "generate_keyframe", "generate_clip"];
-      case "audio_generation":
-        return ["generate_audio", "fit_audio_to_picture"];
-      case "timeline_assembly":
-        return ["assemble_timeline"];
-      case "quality_review":
-        return ["critique_timeline", "request_approval"];
-      case "export":
-        return ["export_video"];
-    }
-  });
-  return [...new Set(tools)];
-}
-
 export function stopAfterTools(body: unknown): string[] {
   if (!isRecord(body)) return [];
   if (body.runThrough === false && typeof body.stopAfter !== "string") {
@@ -202,8 +172,40 @@ export function stopAfterTools(body: unknown): string[] {
   }
 }
 
+/**
+ * Every newly started production run pauses after its complete storyboard.
+ * This is server-owned policy: a client checkbox or an orchestrator decision
+ * must never be able to skip the creator's first visual review.
+ */
+export function initialRunStopAfterTools(body: unknown): string[] {
+  // `stopAfter` and review-gate payloads are legacy controls. An initial
+  // production run has exactly one boundary: a complete storyboard. They are
+  // deliberately ignored rather than becoming an earlier client-created stop.
+  void body;
+  return ["generate_storyboard"];
+}
+
 function afterGateTools(tools: string[]): string[] {
   return tools.map((tool) => `${AFTER_GATE_PREFIX}${tool}`);
+}
+
+/** The identical gate contract used by prompt and uploaded-footage entrypoints. */
+export function initialRunGates(body: unknown): string[] {
+  return afterGateTools(initialRunStopAfterTools(body));
+}
+
+/** Re-open a storyboard-complete run so approval can continue production. */
+export function storyboardContinuationPatch(run: OrchestratorRun): UpdateOrchestratorRunPatch {
+  return {
+    status: "waiting",
+    startedAt: run.startedAt ?? new Date().toISOString(),
+    clearCompletedAt: true,
+    clearError: true,
+  };
+}
+
+export function isStoryboardAfterGate(gate: Pick<OrchestratorRunGate, "stage">): boolean {
+  return gate.stage === `${AFTER_GATE_PREFIX}generate_storyboard`;
 }
 
 function canonicalize(value: unknown): unknown {
@@ -544,7 +546,7 @@ orchestratorRunsRouter.post(
       brief = promptBriefFromBody(body);
       await createBriefVersion(auth.workspaceId, projectId, brief);
     }
-    const gates = [...requestedGateTools(body), ...afterGateTools(stopAfterTools(body))];
+    const gates = initialRunGates(body);
     const budget = budgetUsd(body);
     const { run, replayed } = await createEntrypointRun({
       workspaceId: auth.workspaceId,
@@ -592,7 +594,7 @@ orchestratorRunsRouter.post(
       `briefVersionId=${briefVersionId}`,
       `selectedAssetIds=${assetIds.join(",")}`,
     ];
-    const gates = [...requestedGateTools(body), ...afterGateTools(stopAfterTools(body))];
+    const gates = initialRunGates(body);
     const budget = budgetUsd(body);
     const { run, replayed } = await createEntrypointRun({
       workspaceId: auth.workspaceId,
@@ -655,6 +657,12 @@ orchestratorRunsRouter.post(
     const gate = gates.find((candidate) => candidate.status === "reached");
     if (gate) {
       await resolveGate(gate.id, "approved");
+      // An after-gate deliberately finishes the first review pass. Approval
+      // turns that completed storyboard pass back into a resumable production
+      // run so the orchestrator continues from its selected board assets.
+      if (isStoryboardAfterGate(gate)) {
+        await updateOrchestratorRun(runId, storyboardContinuationPatch(await getOrchestratorRun(runId)));
+      }
       await enqueueOrchestratorDispatch(runId, auth.workspaceId);
     }
     return { status: 202, body: await assembleRunDetail(runId, auth.workspaceId, projectId) };
@@ -672,6 +680,9 @@ orchestratorRunsRouter.post(
     const gate = gates.find((candidate) => candidate.status === "reached");
     if (gate) {
       await resolveGate(gate.id, "rejected");
+      if (isStoryboardAfterGate(gate)) {
+        await updateOrchestratorRun(runId, storyboardContinuationPatch(await getOrchestratorRun(runId)));
+      }
       await enqueueOrchestratorDispatch(runId, auth.workspaceId);
     }
     return { status: 202, body: await assembleRunDetail(runId, auth.workspaceId, projectId) };

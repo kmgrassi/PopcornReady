@@ -25,9 +25,10 @@ since landed. Map below (details inline per section). **§3 describes the model 
   (`storyboard_scenes` / `storyboard_beats` / `storyboard_panels`) carry stable ids
   and link to immutable asset snapshots via `*_asset_id`
   (`supabase/migrations/20260610130000_storyboard_relational_model.sql`).
-- ✅ **Orchestrator + tools (§6; §7 P2)** — a durable, gated, autonomous-by-default
-  run loop (`apps/api/src/lib/orchestrator/engine.ts`; `orchestrator_runs` /
-  `orchestrator_run_gates` tables) drives the registered tool surface
+- ✅ **Orchestrator + tools (§6; §7 P2)** — a durable run loop, autonomous through
+  storyboard and explicitly continued into production
+  (`apps/api/src/lib/orchestrator/engine.ts`; `orchestrator_runs` /
+  `orchestrator_run_gates` tables), drives the registered tool surface
   (`apps/api/src/lib/orchestrator-tools/default-registry.ts`). **Pending:** restart
   / rerun decisions still need to consume `downstream_assets()` stale candidates
   instead of relying on the fixed stage restart path.
@@ -81,17 +82,13 @@ the audio" — the agent decides the **minimal set of work to redo**. That might
 audio-only, or it might ripple *back* and re-do a couple of shots. We must not
 trap ourselves in the old, forward-only "edit the timeline with patches" model.
 
-**End-to-end is the happy path, not the enemy.** Running cleanly forward — plan,
-generate, edit, review, publish, in order, untouched — is the **default** and a
-first-class outcome; that is exactly what "autonomous by default" (§2.2) means,
-and there should always be a way to get a finished video from a single prompt in
-one pass. What we reject is forward-**only**: a pipeline that can *only* go
-forward, where the sole way to change anything is to start over (the
-all-or-nothing conveyor belt of §3). "Non-one-directional" **adds** a capability;
-it does not remove the straight-through run. So the same engine supports both a
-full end-to-end pass *and* surgical edits the user injects at any stage — the
-second is just the first with the ability to step back in and recompute only what
-that change touches.
+**Storyboard-first is the default production boundary.** The agent works
+autonomously from a prompt through the complete storyboard, then stops for the
+creator to inspect its visual plan. Only an explicit **Generate video** action
+continues into photoreal keyframes, clips, audio, assembly, and export. This is
+not a return to a forward-only conveyor belt: the asset graph still enables
+targeted re-entry and selective regeneration. It is the deliberate point at
+which a creator sees the plan before the expensive media work begins.
 
 ## 2. Principles (the mental-model shift)
 
@@ -99,9 +96,10 @@ that change touches.
    keyframes → clips → audio → assemble → critique → export` are **tools the
    agent calls**, not a fixed conveyor belt. Give the agent latitude; don't be
    prescriptive about order.
-2. **Autonomous by default; stops are opt-in.** With no gates, it runs straight
-   through (today's one-shot behavior, just observable). The user — or an
-   optional gate — can pause at any artifact.
+2. **Autonomous through storyboard; production is explicit.** The default run
+   creates a complete storyboard, then waits for the creator to choose
+   **Generate video** before it spends work on keyframes, clips, audio,
+   assembly, or export. Additional gates can still pause other artifacts.
 3. **Non-one-directional / selective regeneration — the agent decides, not a
    rigid cascade.** Changing one input should affect only the impacted
    sub-video(s), never all of them. The dependency graph + fingerprints (§5)
@@ -341,7 +339,8 @@ likeness" is the edge from a clip to its anchor.
   Next monolith (`src/app/api/oneshot`, `.local/` JSON) is not yet retired — it's
   the last of the "two pipelines."
 - **P2 — Orchestrator agent. 🟡 Partially shipped.** The agent calls the tools via
-  the run loop; runs are durable, autonomous-by-default with opt-in gates
+  the run loop; initial runs are durable and autonomous through their complete
+  storyboard, then require an explicit production continuation
   (`orchestrator_run_gates`), and carry a budget ceiling
   (`orchestrator_runs.budget_usd` / `spent_usd`). **Pending:** graph-based
   "minimal re-run on any change" decisioning is not wired into the restart path

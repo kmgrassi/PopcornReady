@@ -128,16 +128,13 @@ function buildInspirationDraft(inspiration: RandomStoryInspiration): BriefDraft 
     projectName: (inspiration.movieTitle || inspiration.logline).slice(0, 96),
     targetLengthSec: 30,
     footageChoice: "prompt_only",
-    reviewGates: ["brief_intake"],
   };
 }
 
 export function startInspirationStoryboardRun(
   inspiration: RandomStoryInspiration,
 ): Promise<StartRunResult> {
-  return createAndStartRun(buildInspirationDraft(inspiration), {
-    stopAfter: "storyboard",
-  });
+  return createAndStartRun(buildInspirationDraft(inspiration));
 }
 
 export function useStartInspirationStoryboardRunMutation() {

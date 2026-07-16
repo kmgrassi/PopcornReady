@@ -3,11 +3,7 @@
 // implementation. This is the only place that turns a BriefDraft into a live
 // generation run; useStudioFlow.startGeneration() calls it.
 
-import type {
-  AssetKind,
-  GateableGenerationStageType,
-  VideoBriefInput,
-} from "@popcorn/shared/v1/types";
+import type { AssetKind, VideoBriefInput } from "@popcorn/shared/v1/types";
 import type { CompositionMode } from "@popcorn/shared/v1/types";
 import { inferMobileUploadKind } from "@popcorn/shared/mobile-upload-policy";
 import { v1Api } from "./api-client";
@@ -21,12 +17,7 @@ export interface StartRunResult {
 
 export interface CreateAndStartRunOptions {
   enforceGuestRunLimit?: boolean;
-  stopAfter?: GateableGenerationStageType;
-  runThrough?: boolean;
 }
-
-export const LONG_VIDEO_PLANNING_REVIEW_THRESHOLD_SEC = 30;
-const LONG_VIDEO_POST_PLAN_REVIEW_GATE: GateableGenerationStageType = "storyboard";
 
 /** Build the V1 brief payload the create/run endpoints expect from a draft. */
 function briefInputFromDraft(draft: BriefDraft): VideoBriefInput {
@@ -135,14 +126,6 @@ function assertUploadDraftHasVisualFootage(draft: BriefDraft): void {
   }
 }
 
-export function reviewGatesForDraft(draft: BriefDraft): GateableGenerationStageType[] {
-  const reviewGates = new Set<GateableGenerationStageType>(draft.reviewGates);
-  if (draft.targetLengthSec > LONG_VIDEO_PLANNING_REVIEW_THRESHOLD_SEC) {
-    reviewGates.add(LONG_VIDEO_POST_PLAN_REVIEW_GATE);
-  }
-  return [...reviewGates];
-}
-
 /**
  * Create the project, kick off a prompt generation run, and return the ids the
  * shell needs to poll. Throws on any API failure or a missing run id so the
@@ -158,8 +141,6 @@ export async function createAndStartRun(
   }
 
   const brief = briefInputFromDraft(draft);
-  const reviewGates = reviewGatesForDraft(draft);
-
   const projectInput = {
     ...(draft.projectName.trim() ? { name: draft.projectName.trim() } : {}),
     brief,
@@ -177,7 +158,6 @@ export async function createAndStartRun(
       assetIds,
       mode: compositionModeFromDraft(draft),
       allowGeneratedGapFill: true,
-      reviewGates,
       showCaptions: draft.showCaptions,
     });
 
@@ -200,9 +180,6 @@ export async function createAndStartRun(
     mode: compositionModeFromDraft(draft),
     allowGeneratedGapFill: true,
     provider: draft.provider,
-    reviewGates,
-    ...(options.stopAfter ? { stopAfter: options.stopAfter } : {}),
-    ...(options.runThrough ? { runThrough: true } : {}),
     showCaptions: draft.showCaptions,
     seedAsset: {
       kind: effectiveSeedKind,
