@@ -4,7 +4,7 @@ import {
   type GenerationRunStatus,
 } from "@popcorn/shared/v1/types";
 import type { AgentApiStore } from "../../agent-api/jobs";
-import type { OrchestratorRun } from "./orchestrator-store";
+import type { OrchestratorRun, OrchestratorRunGate } from "./orchestrator-store";
 import { paginate, type PageResult } from "./pagination";
 
 export interface WorkspaceProjectRef {
@@ -22,9 +22,15 @@ export interface WorkspaceGenerationRunSummary extends GenerationRun {
 export interface ListWorkspaceGenerationRunsDeps {
   listProjects: (workspaceId: string) => Promise<WorkspaceProjectRef[]>;
   listRunsForProject: (projectId: string) => Promise<OrchestratorRun[]>;
+  listRunGates?: (runId: string) => Promise<OrchestratorRunGate[]>;
 }
 
-function mapOrchestratorSummary(run: OrchestratorRun): GenerationRun {
+const AFTER_STORYBOARD_GATE = "after:generate_storyboard";
+
+function mapOrchestratorSummary(
+  run: OrchestratorRun,
+  gates: OrchestratorRunGate[] = []
+): GenerationRun {
   // Domain finite-run transport states (specialist-agents PR 4) collapse onto
   // their nearest terminal legacy status in this summary projection.
   const status =
@@ -35,13 +41,26 @@ function mapOrchestratorSummary(run: OrchestratorRun): GenerationRun {
         : run.status === "superseded"
           ? "canceled"
           : run.status;
+  const storyboardGate = gates.find(
+    (gate) => gate.stage === AFTER_STORYBOARD_GATE && gate.status === "reached"
+  );
+  const reviewGate = storyboardGate
+    ? {
+        stageType: "storyboard" as const,
+        stageId: `${run.id}:tool:generate_storyboard`,
+        state: "awaiting_review" as const,
+        enteredAt: storyboardGate.updatedAt,
+      }
+    : null;
   return {
     runId: run.id,
     projectId: run.projectId,
     status,
     progressPercent: status === "queued" ? 0 : undefined,
     message:
-      run.status === "waiting"
+      reviewGate
+        ? "Storyboard is ready for review before video production."
+        : run.status === "waiting"
         ? "Generation is waiting for its next activity."
         : run.status === "running"
           ? "The orchestrator is running."
@@ -62,6 +81,8 @@ function mapOrchestratorSummary(run: OrchestratorRun): GenerationRun {
           retryable: run.error.recoverable === true,
         }
       : undefined,
+    reviewGate,
+    currentStageType: reviewGate?.stageType,
   };
 }
 
@@ -80,10 +101,15 @@ export async function listWorkspaceGenerationRunsWithDeps(
   const perProject = await Promise.all(
     scoped.map(async (project) => {
       const runs = await deps.listRunsForProject(project.id);
-      return runs.map((run) => ({
-        ...mapOrchestratorSummary(run),
-        projectName: project.name,
-      }));
+      return Promise.all(
+        runs.map(async (run) => ({
+          ...mapOrchestratorSummary(
+            run,
+            deps.listRunGates ? await deps.listRunGates(run.id) : []
+          ),
+          projectName: project.name,
+        }))
+      );
     })
   );
 
@@ -177,6 +203,7 @@ export async function listWorkspaceOutputsWithDeps(
 export interface GetWorkspaceDashboardSummaryDeps {
   listProjects: (workspaceId: string) => Promise<WorkspaceProjectRef[]>;
   listRunsForProject: (projectId: string) => Promise<OrchestratorRun[]>;
+  listRunGates?: (runId: string) => Promise<OrchestratorRunGate[]>;
   artifactStore: Pick<AgentApiStore, "listArtifactsForProject">;
 }
 
@@ -197,7 +224,11 @@ export async function getWorkspaceDashboardSummaryWithDeps(
       {},
       Number.MAX_SAFE_INTEGER,
       null,
-      { listProjects: listProjectsOnce, listRunsForProject: deps.listRunsForProject }
+      {
+        listProjects: listProjectsOnce,
+        listRunsForProject: deps.listRunsForProject,
+        listRunGates: deps.listRunGates,
+      }
     ),
     listWorkspaceOutputsWithDeps(
       workspaceId,
@@ -208,8 +239,8 @@ export async function getWorkspaceDashboardSummaryWithDeps(
     ),
   ]);
 
-  const activeRuns = runsPage.items.filter((run) =>
-    DASHBOARD_RUN_STATUSES.includes(run.status)
+  const activeRuns = runsPage.items.filter(
+    (run) => DASHBOARD_RUN_STATUSES.includes(run.status) || Boolean(run.reviewGate)
   );
 
   return {

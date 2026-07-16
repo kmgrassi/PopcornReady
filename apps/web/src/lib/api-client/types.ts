@@ -362,9 +362,11 @@ export interface StartGenerationRunInput {
   mode?: CompositionMode;
   allowGeneratedGapFill?: boolean;
   assetIds?: string[];
+  /** @deprecated Initial runs always stop after storyboard; this is ignored. */
   reviewGates?: GateableGenerationStageType[];
+  /** @deprecated Initial runs always stop after storyboard; this is ignored. */
   stopAfter?: GateableGenerationStageType;
-  /** Continue past the default storyboard checkpoint through final export. */
+  /** @deprecated Initial runs always stop after storyboard; this is ignored. */
   runThrough?: boolean;
   provider?: string;
   seedAsset?: {

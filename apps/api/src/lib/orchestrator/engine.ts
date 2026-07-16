@@ -190,11 +190,12 @@ function registryForRejectedGate(
   registry: ToolRegistry,
   gates: OrchestratorRunGate[]
 ): ToolRegistry {
-  const rejectedGate = gates.find(
-    (gate) => gate.status === "rejected" && !gate.stage.startsWith(AFTER_GATE_PREFIX)
-  );
+  const rejectedGate = gates.find((gate) => gate.status === "rejected");
   if (!rejectedGate) return registry;
-  const tool = registry.get(rejectedGate.stage as ToolName);
+  const toolName = rejectedGate.stage.startsWith(AFTER_GATE_PREFIX)
+    ? rejectedGate.stage.slice(AFTER_GATE_PREFIX.length)
+    : rejectedGate.stage;
+  const tool = registry.get(toolName as ToolName);
   if (!tool) return registry;
   return new Map([[tool.name, tool]]);
 }

@@ -93,6 +93,7 @@ import type { Asset } from "@popcorn/shared/assets/types";
 import type { GeneratedStoryboardTile } from "@/lib/generative/storyboard-tile";
 import {
   getOrchestratorRun,
+  listRunGates,
   listOrchestratorRunsForProject,
   updateOrchestratorRun,
 } from "./orchestrator-store";
@@ -6067,6 +6068,7 @@ export async function listWorkspaceGenerationRuns(
   deps: ListWorkspaceGenerationRunsDeps = {
     listProjects: listWorkspaceProjectRefs,
     listRunsForProject: listOrchestratorRunsForProject,
+    listRunGates,
   }
 ): Promise<PageResult<WorkspaceGenerationRunSummary>> {
   return listWorkspaceGenerationRunsWithDeps(
@@ -6264,6 +6266,7 @@ export async function getWorkspaceDashboardSummary(
   deps: GetWorkspaceDashboardSummaryDeps = {
     listProjects: listWorkspaceProjectRefs,
     listRunsForProject: listOrchestratorRunsForProject,
+    listRunGates,
     artifactStore: agentApiStore,
   }
 ): ReturnType<typeof getWorkspaceDashboardSummaryWithDeps> {
