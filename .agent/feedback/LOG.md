@@ -118,3 +118,17 @@
 - Friction or failure: The TS contract uses `schemaVersion` while persisted JSONB checks require the repo's `schema_version` marker, and `ALTER TYPE ADD VALUE` cannot be consumed in the same migration transaction — both surfaced only at apply time.
 - Suggested improvement: Document the persisted-JSONB `schema_version` marker convention and the enum-migration split rule next to the asset-graph JSONB rule in CLAUDE.md/AGENTS.md.
 - Follow-up: PR 5 executes the documented action_assets dual-write/backfill/assert plan and must clear `wait_reason`/set `superseded_at` per the new constraints.
+
+### 2026-07-16T14:00:00-04:00 — API-20260716-03
+- What helped: Keeping the fresh graph reader, pure projections, target guards,
+  and compaction in one isolated `orchestrator-context/` boundary made the PR 7
+  controls testable without conflicting with PR 5/6's sequential store ownership.
+- Friction or failure: The broad API suite has three known merged-main failures
+  (two absent historical migration fixtures and one discover UUID expectation),
+  so the new observable fixture suite and scoped validation are the reliable
+  regression signal for this PR.
+- Suggested improvement: Keep every future domain write path calling the
+  fail-closed target/closure guards in the same transaction as its asset, edge,
+  or selection write; do not recreate target authorization in prompts.
+- Follow-up: PRs 5/6 wire these guards into lifecycle transactions; PR 8 loads
+  `loadDomainTurnProjection` at the finite-turn boundary.
