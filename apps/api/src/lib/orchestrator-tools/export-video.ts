@@ -234,8 +234,8 @@ export function createExportVideoTool(
         workspaceId: context.auth.workspaceId,
         type: "export",
         projectId: context.projectId,
-        ...(context.toolCallId
-          ? { actionId: context.toolCallId, idempotencyKey: `action:${context.toolCallId}` }
+        ...(context.actionId
+          ? { actionId: context.actionId, idempotencyKey: `action:${context.actionId}` }
           : {}),
         execution: {
           schemaVersion: "orchestrator_job_execution.v1",

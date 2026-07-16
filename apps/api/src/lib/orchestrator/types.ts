@@ -103,6 +103,8 @@ export interface ToolExecutionContext {
   projectId: string;
   orchestratorRunId: string;
   toolCallId: string;
+  /** Set only after the engine has durably reserved an action row. */
+  actionId?: string;
   actorId?: string;
   agentId?: string;
   messageId?: string;

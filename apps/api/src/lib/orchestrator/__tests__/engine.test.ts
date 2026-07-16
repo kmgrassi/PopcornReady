@@ -235,6 +235,7 @@ test("injects the server-owned wrapper context into each tool execution", async 
   assert.deepEqual(seenContext?.metadata, { entrypoint: "prompt" });
   assert.match(seenContext?.toolCallId ?? "", /^[0-9a-f-]{36}$/);
   assert.equal(seenContext?.toolCallId, store.actions[0]?.id);
+  assert.equal(seenContext?.actionId, store.actions[0]?.id);
 });
 
 test("persists the canonical running action before invoking a mutating tool", async () => {
@@ -246,7 +247,7 @@ test("persists the canonical running action before invoking a mutating tool", as
   let actionAtExecution: RunActionSummary | undefined;
   const registry = fakeRegistry({
     plan_shots: (context) => {
-      const action = store.actions.find((candidate) => candidate.id === context.toolCallId);
+      const action = store.actions.find((candidate) => candidate.id === context.actionId);
       actionAtExecution = action ? { ...action } : undefined;
       return ok(["asset_plan"]);
     },
@@ -258,6 +259,25 @@ test("persists the canonical running action before invoking a mutating tool", as
   assert.equal(store.actions.length, 1);
   assert.equal(store.actions[0]?.status, "applied");
   assert.equal(store.actions[0]?.outputAssetIds[0], "asset_plan");
+});
+
+test("finalizes a reserved action when preflight estimation throws", async () => {
+  const store = new FakeStore(runFixture());
+  const { model } = scriptedModel([{ type: "tool_call", toolName: "plan_shots" }]);
+  const registry = fakeRegistry({ plan_shots: () => ok() });
+  const definition = registry.get("plan_shots")!;
+  definition.estimateCostUsd = async () => {
+    throw new Error("invalid estimated input");
+  };
+
+  await assert.rejects(
+    () => runOrchestratorToCompletion("run1", deps(store, model, registry)),
+    /invalid estimated input/
+  );
+
+  assert.equal(store.actions.length, 1);
+  assert.equal(store.actions[0]?.status, "failed");
+  assert.match(store.actions[0]?.error?.message as string, /invalid estimated input/);
 });
 
 test("reconstructs uploaded-footage selected assets from persisted run summary", async () => {

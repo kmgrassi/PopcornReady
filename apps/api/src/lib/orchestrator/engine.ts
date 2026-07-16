@@ -624,6 +624,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       projectId: run.projectId,
       orchestratorRunId: run.id,
       toolCallId: actionId,
+      actionId,
       actorId: r.actorId ?? "orchestrator",
       agentId: r.agentId ?? "orchestrator",
       messageId: r.messageId,
@@ -641,34 +642,54 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       jobIds: [],
     });
 
-    // Credit pre-check: fail fast before spending on a generation a broke user
-    // with no BYO keys can't pay for. Only gates BILLABLE tools (estimate > 0) —
-    // free planning/critique still runs when out of credits. Users who bring their
-    // own keys are never blocked here; any platform spend they incur is still
-    // settled by the post-generation debit below. (No run user => not billed.)
     const runUserId = currentRunUserId();
-    const toolEstimateUsd =
-      (await turnRegistry
-        .get(decision.toolName)
-        ?.estimateCostUsd(decision.input, toolContext)) ?? 0;
-    if (runUserId && toolEstimateUsd > 0) {
-      const estimatedCredits = Math.ceil(toolEstimateUsd * CREDIT_MARGIN * CREDITS_PER_USD);
-      const balance = await r.getCreditBalance(runUserId);
-      if (balance < estimatedCredits && !(await r.userHasAnyProviderKey(runUserId))) {
-        const error = {
-          kind: "insufficient_credits",
-          message:
-            "Out of credits. Buy credits or add your own provider API keys to keep generating.",
-          recoverable: false,
-        };
-        await r.store.markInvocation(actionId, {
-          status: "failed",
-          error,
-        });
-        return finish(run, "failed", r, error);
+    let billedBeforeUsd = 0;
+    try {
+      // Credit pre-check: fail fast before spending on a generation a broke user
+      // with no BYO keys can't pay for. Only gates BILLABLE tools (estimate > 0) —
+      // free planning/critique still runs when out of credits. Users who bring their
+      // own keys are never blocked here; any platform spend they incur is still
+      // settled by the post-generation debit below. (No run user => not billed.)
+      const toolEstimateUsd =
+        (await turnRegistry
+          .get(decision.toolName)
+          ?.estimateCostUsd(decision.input, toolContext)) ?? 0;
+      if (runUserId && toolEstimateUsd > 0) {
+        const estimatedCredits = Math.ceil(toolEstimateUsd * CREDIT_MARGIN * CREDITS_PER_USD);
+        const balance = await r.getCreditBalance(runUserId);
+        if (balance < estimatedCredits && !(await r.userHasAnyProviderKey(runUserId))) {
+          const error = {
+            kind: "insufficient_credits",
+            message:
+              "Out of credits. Buy credits or add your own provider API keys to keep generating.",
+            recoverable: false,
+          };
+          await r.store.markInvocation(actionId, {
+            status: "failed",
+            error,
+          });
+          return finish(run, "failed", r, error);
+        }
       }
+
+      billedBeforeUsd = billableUsdSoFar();
+    } catch (err) {
+      // Estimation and credit checks can fail before a tool handler runs. Keep
+      // the reservation's lifecycle truthful in that case instead of leaving a
+      // phantom running action behind.
+      const error = {
+        kind: "provider_failed",
+        message: err instanceof Error ? err.message : String(err),
+        recoverable: false,
+      };
+      try {
+        await r.store.markInvocation(actionId, { status: "failed", error });
+      } catch {
+        // Preserve the original preflight failure; the durable run guard will
+        // still record the terminal run error.
+      }
+      throw err;
     }
-    const billedBeforeUsd = billableUsdSoFar();
 
     // A wired tool may THROW (DB/provider exception) instead of returning a
     // ToolCallResult. Catch it so the run reaches a terminal 'failed' state with a
