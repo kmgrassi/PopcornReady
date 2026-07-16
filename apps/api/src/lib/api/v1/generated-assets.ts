@@ -17,6 +17,7 @@ import { withDerivedAssetKnowledge } from "./assets";
 import { enqueueAssetEmbeddingRefresh } from "./asset-embeddings/jobs";
 import { resolveWorkspaceGenerationModel } from "./model-settings";
 import { preflightGenerationContent } from "@/lib/generative/preflight";
+import { withLlmCostRecording } from "./llm-costs";
 import { providerFor } from "@/lib/generative/providers";
 import { estimateCostUsd } from "@/lib/generative/pricing";
 import { recordModelCallCost } from "./model-call-costs";
@@ -314,14 +315,22 @@ async function runGeneration(
           : "Preparing the generation prompt.",
     });
   }
-  preflight = await preflightGenerationContent({
-    provider: parsed.provider,
-    kind: parsed.kind,
-    prompt: parsed.prompt,
-    description: parsed.description,
-    iterations: parsed.preflightIterations,
-    dialogueInputs: parsed.dialogueInputs,
-  });
+  preflight = await withLlmCostRecording(
+    {
+      projectId,
+      ...(parsed.runId ? { runId: parsed.runId } : {}),
+      actionId: action.id,
+    },
+    () =>
+      preflightGenerationContent({
+        provider: parsed.provider,
+        kind: parsed.kind,
+        prompt: parsed.prompt,
+        description: parsed.description,
+        iterations: parsed.preflightIterations,
+        dialogueInputs: parsed.dialogueInputs,
+      })
+  );
 
   if (item) {
     await item.update({

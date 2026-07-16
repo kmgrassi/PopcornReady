@@ -230,8 +230,18 @@ As of 2026-07-14, the production orchestrator is one durable all-tools agent:
   and UI projections contain older hand-maintained counts, so authoritative
   prose must not treat a count as a contract.
 - Run projections assume one flat history and impose a static tool order.
+- Project-attributable OpenAI and Anthropic text calls now write estimated token
+  costs to `model_call_costs`, including successful structured-output retries;
+  root decisions retain the durable run ID but no action ID. Provider cache
+  tokens affect the estimate, although the current ledger schema persists only
+  raw input/output token fields. This is post-hoc cost visibility: it neither
+  reserves an LLM budget before a request nor settles user credits. The rate
+  table is a checked global-tier estimate, so provider invoices remain the
+  reconciliation source. Calls without a project scope (for example global
+  naming and embeddings) remain intentionally outside this ledger until their
+  ownership is explicit.
 - `spent_usd` and model/provider cost records do not yet form one complete async
-  cost ledger.
+  cost ledger across every provider and background workflow.
 - Request Changes still relies partly on fixed stage boundaries rather than
   graph-scoped creative-director decisions.
 

@@ -11,6 +11,7 @@ import {
   ToolChoiceResult,
   ToolSpec,
 } from "./types";
+import { reportLlmUsage } from "./usage";
 
 export const ANTHROPIC_DEFAULT_MODEL = "claude-opus-4-7";
 
@@ -44,6 +45,12 @@ type AnthropicContentBlock =
 interface AnthropicMessageResponse {
   model?: string | null;
   content?: AnthropicContentBlock[] | null;
+  usage?: {
+    input_tokens?: number | null;
+    output_tokens?: number | null;
+    cache_read_input_tokens?: number | null;
+    cache_creation_input_tokens?: number | null;
+  } | null;
 }
 
 export interface AnthropicImageBlock {
@@ -87,6 +94,22 @@ export interface AnthropicMessageCreateRequest {
 type MessageCreate = (
   params: AnthropicMessageCreateRequest
 ) => Promise<AnthropicMessageResponse>;
+
+async function reportAnthropicUsage(
+  response: AnthropicMessageResponse,
+  fallbackModel: string
+): Promise<void> {
+  const usage = response.usage;
+  if (!usage) return;
+  await reportLlmUsage({
+    provider: "anthropic",
+    model: response.model ?? fallbackModel,
+    inputTokens: usage.input_tokens ?? 0,
+    outputTokens: usage.output_tokens ?? 0,
+    cacheReadInputTokens: usage.cache_read_input_tokens ?? 0,
+    cacheCreationInputTokens: usage.cache_creation_input_tokens ?? 0,
+  });
+}
 
 // Low-reasoning calls route to the cheaper fast model.
 const FAST_EFFORTS = new Set<LlmEffort>(["minimal", "low"]);
@@ -214,6 +237,7 @@ export function createAnthropicLlmClient(deps: AnthropicDeps = {}): LlmClient {
       tool_choice: { type: "tool", name: STRUCTURED_RESULT_TOOL },
       messages: [{ role: "user", content: userContent }],
     });
+    await reportAnthropicUsage(res, callModel);
     return resultFromAnthropicToolUse<T>(res);
   };
 
@@ -257,6 +281,7 @@ export function createAnthropicLlmClient(deps: AnthropicDeps = {}): LlmClient {
           { role: "user", content: JSON.stringify(args.userPayload) },
         ],
       });
+      await reportAnthropicUsage(res, callModel);
       return interpretAnthropicToolResponse(res, callModel, allowed);
     },
   };

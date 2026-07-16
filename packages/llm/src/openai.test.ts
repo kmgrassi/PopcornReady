@@ -14,6 +14,7 @@ import {
   toOpenAITool,
 } from "./openai";
 import type { ToolSpec } from "./types";
+import { type LlmUsage, withLlmUsageObserver } from "./usage";
 
 type OpenAiRequest = OpenAiCreateRequest;
 type OpenAiResponse = Awaited<
@@ -169,6 +170,38 @@ test("chooseTool sends function tools + tool_choice auto and uses max_completion
   assert.ok("max_completion_tokens" in sent);
   assert.ok(!("max_tokens" in sent));
   assert.equal(decision.type, "tool_call");
+});
+
+test("chooseTool reports provider usage without coupling the client to persistence", async () => {
+  const observed: LlmUsage[] = [];
+  const client = createOpenAiLlmClient({
+    model: "gpt-5",
+    create: async () => ({
+      model: "gpt-5",
+      usage: {
+        prompt_tokens: 120,
+        completion_tokens: 15,
+        prompt_tokens_details: { cached_tokens: 40 },
+      },
+      choices: [{ message: { content: "done" } }],
+    }),
+  });
+
+  await withLlmUsageObserver((usage) => {
+    observed.push(usage);
+  }, () =>
+    client.chooseTool({ system: "sys", userPayload: {}, tools: [planShots] })
+  );
+
+  assert.deepEqual(observed, [
+    {
+      provider: "openai",
+      model: "gpt-5",
+      inputTokens: 120,
+      outputTokens: 15,
+      cacheReadInputTokens: 40,
+    },
+  ]);
 });
 
 test("default OpenAI client fails with a clear missing-key error", async () => {

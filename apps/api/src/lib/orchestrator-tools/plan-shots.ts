@@ -6,6 +6,7 @@ import {
   getActiveProjectScriptDraft as realGetActiveProjectScriptDraft,
   getActiveProjectStoryBlueprint as realGetActiveProjectStoryBlueprint,
 } from "@/lib/api/v1/store";
+import { withLlmCostRecording } from "@/lib/api/v1/llm-costs";
 import { briefToStoryContext } from "@/lib/v1/generation/prepare";
 import type { ShotPlan } from "@popcorn/shared/types";
 import { buildFootageGroundingContext, groundingGraphInputs } from "./footage-grounding";
@@ -261,16 +262,24 @@ export function createPlanShotsTool(
           : null;
       const narrativeInputs = Number(Boolean(storyBlueprint)) + Number(Boolean(matchingScript));
 
-      const plan = await resolved.planEdit({
-        goal: brief.goal,
-        targetLengthSec: brief.targetLengthSec,
-        style: brief.style ?? DEFAULT_STYLE,
-        aspectRatio: brief.aspectRatio,
-        storyContext: briefToStoryContext(brief),
-        narrativeContext: narrativeContext({ storyBlueprint, scriptDraft: matchingScript }),
-        feedback: input.feedback ?? null,
-        footageGrounding: footageGrounding.promptText,
-      });
+      const plan = await withLlmCostRecording(
+        {
+          projectId: context.projectId,
+          runId: context.orchestratorRunId,
+          ...(context.actionId ? { actionId: context.actionId } : {}),
+        },
+        () =>
+          resolved.planEdit({
+            goal: brief.goal,
+            targetLengthSec: brief.targetLengthSec,
+            style: brief.style ?? DEFAULT_STYLE,
+            aspectRatio: brief.aspectRatio,
+            storyContext: briefToStoryContext(brief),
+            narrativeContext: narrativeContext({ storyBlueprint, scriptDraft: matchingScript }),
+            feedback: input.feedback ?? null,
+            footageGrounding: footageGrounding.promptText,
+          })
+      );
 
       // Record the brief as the plan's input so a brief replacement marks the
       // plan (and its downstream) stale.

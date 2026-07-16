@@ -9,6 +9,7 @@ import {
   toAnthropicTool,
 } from "./anthropic";
 import type { ToolSpec } from "./types";
+import { type LlmUsage, withLlmUsageObserver } from "./usage";
 
 type AnthropicRequest = AnthropicMessageCreateRequest;
 type AnthropicResponse = Awaited<
@@ -95,6 +96,40 @@ test("low/minimal effort routes chooseTool to the fast model", async () => {
   await client.chooseTool({ system: "s", userPayload: {}, tools: [planShots], effort: "minimal" });
   await client.chooseTool({ system: "s", userPayload: {}, tools: [planShots], effort: "high" });
   assert.deepEqual(seen, ["claude-haiku", "claude-x"]);
+});
+
+test("chooseTool reports Anthropic cache usage", async () => {
+  const observed: LlmUsage[] = [];
+  const client = createAnthropicLlmClient({
+    model: "claude-opus-4-7",
+    createMessage: async () => ({
+      model: "claude-opus-4-7",
+      usage: {
+        input_tokens: 120,
+        output_tokens: 15,
+        cache_read_input_tokens: 40,
+        cache_creation_input_tokens: 20,
+      },
+      content: [{ type: "text", text: "done" }],
+    }),
+  });
+
+  await withLlmUsageObserver((usage) => {
+    observed.push(usage);
+  }, () =>
+    client.chooseTool({ system: "sys", userPayload: {}, tools: [planShots] })
+  );
+
+  assert.deepEqual(observed, [
+    {
+      provider: "anthropic",
+      model: "claude-opus-4-7",
+      inputTokens: 120,
+      outputTokens: 15,
+      cacheReadInputTokens: 40,
+      cacheCreationInputTokens: 20,
+    },
+  ]);
 });
 
 test("modelFor reports the same routing structured/chooseTool use", () => {
