@@ -50,6 +50,9 @@ history, but they are ignored during bounded, newest-first keyframe lookup and
 cannot hide an older usable attempt. Asset-read infrastructure failures escape
 as tool failures; they are never translated into a request to regenerate a
 valid storyboard.
+Missing/deleted tile assets invalidate only their storyboard attempt so lookup
+can continue to an older complete attempt; database, authorization, and storage
+failures still escape through the normal tool recovery path.
 
 ## Two load-bearing principles
 

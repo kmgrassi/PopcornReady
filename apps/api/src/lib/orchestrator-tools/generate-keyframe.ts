@@ -7,6 +7,7 @@ import {
   getAsset as realGetAsset,
   getProjectStoryboardsForPlan as realGetProjectStoryboardsForPlan,
 } from "@/lib/api/v1/store";
+import { ApiError } from "@/lib/api/v1/errors";
 import { toolDefinitionMetadata } from "./capability-catalog";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
@@ -213,8 +214,18 @@ export function createGenerateKeyframeTool(
         context.projectId,
         active.assetId
       );
-      const loadStoryboardAsset = (assetId: string) =>
-        resolved.getAsset(context.auth.workspaceId, context.projectId!, assetId);
+      const loadStoryboardAsset = async (assetId: string) => {
+        try {
+          return await resolved.getAsset(
+            context.auth.workspaceId,
+            context.projectId!,
+            assetId
+          );
+        } catch (error) {
+          if (error instanceof ApiError && error.code === "not_found") return null;
+          throw error;
+        }
+      };
       const storyboard = await firstUsableStoryboardForPlan({
         plan: active.plan,
         planAssetId: active.assetId,

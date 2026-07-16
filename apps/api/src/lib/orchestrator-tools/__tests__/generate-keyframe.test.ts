@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { AuthContext } from "@/lib/api/v1/auth";
+import { ApiError } from "@/lib/api/v1/errors";
 import type { ApiResult } from "@/lib/api/v1/generated-assets";
 import type { V1Asset, VisualAnchorPlan } from "@/lib/api/v1/store";
 import type { ShotPlan } from "@popcorn/shared/types";
@@ -356,7 +357,7 @@ test("generate_keyframe rejects storyboard tiles bound to the wrong beat or plan
 });
 
 test("generate_keyframe propagates storyboard asset infrastructure failures", async () => {
-  const databaseFailure = new Error("database unavailable");
+  const databaseFailure = new ApiError("database_error", "database unavailable");
   const tool = createGenerateKeyframeTool({
     getActiveProjectPlan: async () => activePlan,
     getProjectStoryboardsForPlan: async () => [storyboard],
@@ -373,6 +374,32 @@ test("generate_keyframe propagates storyboard asset infrastructure failures", as
     async () => tool.execute({}, { auth, projectId: "proj_1" }),
     databaseFailure
   );
+});
+
+test("generate_keyframe skips a newer storyboard whose tile asset was deleted", async () => {
+  const broken = structuredClone(storyboard);
+  broken.id = "storyboard_with_deleted_tile";
+  broken.scenes[0].beats[0].panels[0].imageAssetId = "missing_tile_1";
+  let kickedStoryboardId: string | undefined;
+  const tool = createGenerateKeyframeTool({
+    getActiveProjectPlan: async () => activePlan,
+    getProjectStoryboardsForPlan: async () => [broken, storyboard],
+    getAsset: async (_workspaceId, _projectId, assetId) => {
+      if (assetId === "missing_tile_1") {
+        throw new ApiError("not_found", "storyboard tile was deleted");
+      }
+      return asset(assetId, "beat_storyboard");
+    },
+    createJob: async () => queuedJob(),
+    runGenerateKeyframeJob: async (input) => {
+      kickedStoryboardId = input.storyboard.id;
+    },
+  });
+
+  const result = (await tool.execute({}, { auth, projectId: "proj_1" })) as ToolCallResult;
+  assert.equal(result.status, "accepted");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(kickedStoryboardId, "storyboard_1");
 });
 
 test("generate_keyframe skips a partial newer storyboard and uses an older complete attempt", async () => {
