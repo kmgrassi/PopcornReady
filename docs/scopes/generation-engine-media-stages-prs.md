@@ -1,7 +1,7 @@
 # Generation engine: media stages — scope & parallel PR plan
 
-<!-- agent-summary: Prompt and uploaded-footage generation run to a playable export by default. -->
-<!-- agent-summary: Stop-after behavior is explicit through stopAfter or runThrough=false. -->
+<!-- agent-summary: Prompt and uploaded-footage generation stop after storyboard review by default. -->
+<!-- agent-summary: Only an explicit creator continuation may start keyframes, clips, audio, assembly, and export. -->
 <!-- agent-summary: Storyboard/keyframe handoff is bound to the active plan asset id. -->
 <!-- agent-summary: Every planned beat requires a selected ready beat_storyboard image before keyframes. -->
 <!-- agent-summary: Partial storyboard attempts remain history but cannot shadow an older complete attempt. -->
@@ -31,11 +31,14 @@ creative_plan (text)  →  storyboard (cheap sketches)
 
 ## Live entrypoint and storyboard handoff contract
 
-The production prompt and uploaded-footage entrypoints are autonomous by
-default: omitting both `stopAfter` and `runThrough` means the orchestrator keeps
-working toward a playable export. `stopAfter` is the explicit stage stop;
-`runThrough: false` retains the storyboard stop for older deliberate callers.
-Review gates remain independent opt-in approval pauses.
+The production prompt and uploaded-footage entrypoints are autonomous through a
+complete storyboard. Every initial run reaches a post-storyboard review stop;
+the creator must explicitly continue from the reviewed board before the
+orchestrator may create photoreal keyframes, clips, audio, a timeline, or an
+export. This is server-owned policy, not a client default or an LLM choice.
+Legacy `reviewGates`, `stopAfter`, and `runThrough` payload fields cannot create
+an earlier initial-run stop or bypass this boundary. Any future downstream
+review controls must be added only as an explicit continuation policy.
 
 Storyboard containers share the story-blueprint table with narrative
 development, so `projects.current_story_blueprint_id` is not a stable media
@@ -249,9 +252,8 @@ PR G0 (port primitives) ──┬─► PR G1 (resolve-or-generate)
 
 ## Risks / decisions
 - **Cost/latency:** real per-beat keyframe+clip generation is the expensive path. Keep the
-  storyboard sketch (cheap) as the gateable preview; gate `asset_generation` behind a review gate so a
-  user approves the plan/sketches before media spend (the redesign's Generate step already exposes
-  gate config).
+  storyboard sketch (cheap) as the required preview; a user explicitly starts media production from
+  that board after approving the plan/sketches.
 - **Legacy one-shot:** G0 ports its logic; one-shot still serves the live landing page, so retiring it
   is a deliberate follow-up, not part of this scope. Until then, prefer G0 functions as the single
   source and have one-shot delegate to avoid drift.

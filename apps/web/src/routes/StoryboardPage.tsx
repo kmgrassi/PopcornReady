@@ -14,7 +14,9 @@ import { EmptyState, ErrorState } from "../components/ui/StateCard";
 import {
   useGenerationRunQuery,
   useProjectQuery,
+  useProjectGenerationRunsQuery,
   useProjectStoryboardQuery,
+  useUpdateGenerationRunMutation,
 } from "../lib/queryClient";
 import { useGenerateSceneWireframeMutation } from "../lib/sceneWireframe";
 import styles from "./StoryboardPage.module.css";
@@ -39,6 +41,7 @@ export function StoryboardPage() {
   const projectQuery = useProjectQuery(projectId ?? "", Boolean(projectId));
   const storyboardQuery = useProjectStoryboardQuery(projectId ?? "", Boolean(projectId));
   const refetchStoryboard = storyboardQuery.refetch;
+  const projectRunsQuery = useProjectGenerationRunsQuery(projectId ?? "", Boolean(projectId));
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
   // Beats whose panel the agent is currently revising (skeleton + live update).
   const [revisingBeats, setRevisingBeats] = useState<Set<string>>(() => new Set());
@@ -68,11 +71,22 @@ export function StoryboardPage() {
 
   const project = projectQuery.data?.project ?? null;
   const storyboard = storyboardQuery.data?.storyboard ?? null;
+  // Project runs are returned newest-first; the newest waiting storyboard pass
+  // is the active board review for this project.
+  const storyboardReviewRun = projectRunsQuery.data?.runs.find(
+    (run) => run.reviewGate?.stageType === "storyboard",
+  );
+  const continueRunMutation = useUpdateGenerationRunMutation(
+    projectId ?? "",
+    storyboardReviewRun?.runId ?? "",
+  );
   const loading = storyboardQuery.isLoading;
   const error = storyboardQuery.error ?? null;
   const revising = revisingBeats.size > 0;
   const headerDescription = loading
     ? "Loading storyboard..."
+    : storyboardReviewRun
+      ? "Review the visual plan. When it is ready, start video production from this board."
     : storyboard
       ? "Click any panel to request changes."
       : "Generate a storyboard from the project page to see scenes, beats, and panels here.";
@@ -130,24 +144,56 @@ export function StoryboardPage() {
       ) : null}
 
       {!loading && !error && storyboard ? (
-        <StoryboardBody
-          storyboard={storyboard}
-          revisingBeats={revisingBeats}
-          sceneWireframe={sceneWireframe}
-          onEdit={setEditTarget}
-          onRegenerateStart={(beatId) => {
-            setRevisingBeats((current) => new Set(current).add(beatId));
-          }}
-          onRegenerateSettled={(beatId) => {
-            void refetchStoryboard().finally(() => {
-              setRevisingBeats((current) => {
-                const next = new Set(current);
-                next.delete(beatId);
-                return next;
+        <>
+          {storyboardReviewRun ? (
+            <section className={styles.productionGate} aria-labelledby="storyboard-review-heading">
+              <div>
+                <span className={styles.productionGateLabel}>Storyboard ready for review</span>
+                <h2 id="storyboard-review-heading">Ready to make the video?</h2>
+                <p>
+                  Your visual plan is paused here. Request changes to any panel first, or continue
+                  to generate the photoreal frames, motion, sound, and final cut.
+                </p>
+              </div>
+              <Button
+                variant="cta"
+                type="button"
+                onClick={() =>
+                  void continueRunMutation.mutateAsync({ action: "approve" }).then(() => {
+                    void projectRunsQuery.refetch();
+                  }).catch(() => undefined)
+                }
+                isLoading={continueRunMutation.isPending}
+                disabled={continueRunMutation.isPending}
+              >
+                Generate video
+              </Button>
+            </section>
+          ) : null}
+          {continueRunMutation.error ? (
+            <p className={styles.productionGateError} role="alert">
+              We couldn't start video production. Please try again.
+            </p>
+          ) : null}
+          <StoryboardBody
+            storyboard={storyboard}
+            revisingBeats={revisingBeats}
+            sceneWireframe={sceneWireframe}
+            onEdit={setEditTarget}
+            onRegenerateStart={(beatId) => {
+              setRevisingBeats((current) => new Set(current).add(beatId));
+            }}
+            onRegenerateSettled={(beatId) => {
+              void refetchStoryboard().finally(() => {
+                setRevisingBeats((current) => {
+                  const next = new Set(current);
+                  next.delete(beatId);
+                  return next;
+                });
               });
-            });
-          }}
-        />
+            }}
+          />
+        </>
       ) : null}
 
       <AssetEditModal

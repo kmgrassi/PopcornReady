@@ -148,6 +148,13 @@ export interface IdempotencyReservation {
   leaseToken?: string;
 }
 
+export type ProviderJobClaimState = "claimed" | "held" | "terminal";
+
+export interface ProviderJobClaim {
+  state: ProviderJobClaimState;
+  claimToken?: string;
+}
+
 export interface AssetGraphSelectionRef {
   slotOwnerLineageId: string | null;
   slotRole: string;
