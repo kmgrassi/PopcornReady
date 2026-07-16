@@ -14,6 +14,7 @@ import { deploymentMetadata, iso } from "./store-internal";
 import { unmarkedContent, type ContentSchemaKind, type DataAssetRow } from "./store-content";
 import type {
   CreateActionInput,
+  IdempotencyReservation,
   IdempotencyRecord,
   UpdateActionPatch,
   V1Action,
@@ -511,4 +512,114 @@ export async function saveIdempotencyRecordWithDeps(
       { onConflict: "scope,key", ignoreDuplicates: true }
     )
   );
+}
+
+interface IdempotencyReservationRow {
+  state: IdempotencyReservation["state"];
+  status: number | null;
+  response_body: unknown;
+  lease_token: string | null;
+}
+
+function mapIdempotencyReservation(row: IdempotencyReservationRow): IdempotencyReservation {
+  return {
+    state: row.state,
+    ...(row.status !== null ? { status: row.status } : {}),
+    ...(row.state === "replay" ? { responseBody: row.response_body } : {}),
+    ...(row.lease_token ? { leaseToken: row.lease_token } : {}),
+  };
+}
+
+export async function reserveIdempotencyRecordWithDeps(
+  deps: Pick<CompositionJobsStoreDeps, "getDb">,
+  input: {
+    scope: string;
+    key: string;
+    bodyHash: string;
+    leaseSeconds: number;
+  }
+): Promise<IdempotencyReservation> {
+  const db = deps.getDb();
+  const data = await runQuery(
+    "store.reserveIdempotencyRecord",
+    db.rpc("reserve_idempotency_record", {
+      p_scope: input.scope,
+      p_key: input.key,
+      p_body_hash: input.bodyHash,
+      p_lease_seconds: input.leaseSeconds,
+    })
+  );
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error("Idempotency reservation RPC returned no state.");
+  return mapIdempotencyReservation(row as IdempotencyReservationRow);
+}
+
+export async function completeIdempotencyRecordWithDeps(
+  deps: Pick<CompositionJobsStoreDeps, "getDb">,
+  input: {
+    scope: string;
+    key: string;
+    bodyHash: string;
+    leaseToken: string;
+    status: number;
+    responseBody: unknown;
+  }
+): Promise<boolean> {
+  const db = deps.getDb();
+  const data = await runQuery(
+    "store.completeIdempotencyRecord",
+    db.rpc("complete_idempotency_record", {
+      p_scope: input.scope,
+      p_key: input.key,
+      p_body_hash: input.bodyHash,
+      p_lease_token: input.leaseToken,
+      p_status: input.status,
+      p_response_body: input.responseBody,
+    })
+  );
+  const value = Array.isArray(data) ? data[0] : data;
+  return value === true;
+}
+
+export async function renewIdempotencyRecordWithDeps(
+  deps: Pick<CompositionJobsStoreDeps, "getDb">,
+  input: {
+    scope: string;
+    key: string;
+    bodyHash: string;
+    leaseToken: string;
+    leaseSeconds: number;
+  }
+): Promise<boolean> {
+  const db = deps.getDb();
+  const data = await runQuery(
+    "store.renewIdempotencyRecord",
+    db.rpc("renew_idempotency_record", {
+      p_scope: input.scope,
+      p_key: input.key,
+      p_body_hash: input.bodyHash,
+      p_lease_token: input.leaseToken,
+      p_lease_seconds: input.leaseSeconds,
+    })
+  );
+  const value = Array.isArray(data) ? data[0] : data;
+  return value === true;
+}
+
+export async function abandonIdempotencyRecordWithDeps(
+  deps: Pick<CompositionJobsStoreDeps, "getDb">,
+  input: { scope: string; key: string; bodyHash: string; leaseToken: string }
+): Promise<boolean> {
+  const db = deps.getDb();
+  const data = await runQuery(
+    "store.abandonIdempotencyRecord",
+    db.rpc("abandon_idempotency_record", {
+      p_scope: input.scope,
+      p_key: input.key,
+      p_body_hash: input.bodyHash,
+      p_lease_token: input.leaseToken,
+    })
+  );
+  const value = Array.isArray(data) ? data[0] : data;
+  return value === true;
 }

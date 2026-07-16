@@ -98,6 +98,12 @@ Rate-limit headers are optional in local mode.
 - Replaying the same request body returns the original response.
 - Replaying the same key with a different body returns
   `idempotency_conflict`.
+- A concurrent matching request waits briefly for the durable reservation to
+  complete. If it remains active, the API returns the retryable
+  `idempotency_in_progress` conflict instead of running a second producer.
+- The producer renews its reservation while it runs. If its process dies, the
+  expired lease is reclaimable; asynchronous provider work is separately fenced
+  by its durable job claim.
 - Idempotency records should expire after a configurable retention period.
 
 Recommended local retention: keep idempotency records in JSON indefinitely until
@@ -349,6 +355,7 @@ Minimum v1 error codes:
 - `not_found`
 - `validation_failed`
 - `idempotency_conflict`
+- `idempotency_in_progress`
 - `asset_not_ready`
 - `asset_invalid`
 - `brief_missing`
