@@ -135,6 +135,45 @@ dbTest("creates image, video, and audio generated assets and lists them", async 
   }
 });
 
+dbTest(
+  "loads generated references from the object store when the database backend is Supabase",
+  async () => {
+    const projectId = await newProjectId("object store references");
+    const referenceResult = await createGeneratedAsset({
+      auth,
+      projectId,
+      body: {
+        kind: "image",
+        provider: "mock",
+        prompt: "storyboard reference",
+      },
+    });
+    const referenceId = assetIds(jobOf(referenceResult))[0];
+    const reference = await getAsset(LOCAL_WORKSPACE_ID, projectId, referenceId);
+    assert.equal(reference.status, "ready");
+    assert.equal(reference.storageBucket, "assets-public");
+
+    const generated = await createGeneratedAsset({
+      auth,
+      projectId,
+      body: {
+        kind: "image",
+        provider: "mock",
+        prompt: "keyframe conditioned on the storyboard",
+        referenceAssetIds: [referenceId],
+      },
+    });
+
+    assert.equal(jobOf(generated).status, "succeeded");
+    const output = await getAsset(
+      LOCAL_WORKSPACE_ID,
+      projectId,
+      assetIds(jobOf(generated))[0]
+    );
+    assert.equal(output.status, "ready");
+  }
+);
+
 dbTest("persists actual audio duration in provenance", async () => {
   const projectId = await newProjectId("audio provenance");
 

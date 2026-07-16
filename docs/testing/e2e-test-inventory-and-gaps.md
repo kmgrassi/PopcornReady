@@ -260,9 +260,11 @@ Covered:
   completion copy.
 - API regression coverage now keeps prompt/upload entrypoints autonomous when
   stop controls are omitted, preserves explicit `runThrough: false`, and rejects
-  incomplete storyboard-to-keyframe handoffs. A provider-free browser fixture
-  for the full create-new-video request body and later-stage transition remains
-  a focused gap.
+  incomplete storyboard-to-keyframe handoffs. A local Supabase + MinIO
+  integration now persists a selected visual anchor and storyboard tiles, runs
+  the real keyframe worker with both reference types, and verifies ready selected
+  keyframes. A provider-free browser fixture for the full create-new-video
+  request body and later-stage transition remains a focused gap.
 - A grouped stage stays indeterminate when a completed sibling tool reports
   `100%` while another tool is still running.
 - Between explicit jobs, the creator sees `Choosing the next step` instead of a

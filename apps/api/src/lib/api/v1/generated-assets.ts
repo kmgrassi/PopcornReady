@@ -6,7 +6,11 @@
 // actual audio-duration capture. Idempotency is handled by the shared
 // handleMutation wrapper, so this module stays framework-free and testable.
 
-import path from "path";
+import {
+  AssetObjectNotFoundError,
+  materializeAssetObject,
+  type MaterializedAssetObject,
+} from "@/lib/storage/asset-read";
 import { writeAssetObject } from "@/lib/storage/asset-write";
 import { measureAudioDurationSec } from "@/lib/generative/audio-duration";
 import { withDerivedAssetKnowledge } from "./assets";
@@ -46,16 +50,11 @@ import {
   getAssetFingerprintPins,
   getAsset,
   getProject,
-  localDir,
   updateAction,
   updateAsset,
   V1Action,
   V1Asset,
 } from "./store";
-import {
-  downloadAssetObjectToTemp,
-  useSupabaseStorage,
-} from "../../supabase/storage";
 import { readStorageConfig } from "@/lib/storage/config";
 import { createLogger } from "@/lib/v1/logger";
 import {
@@ -90,16 +89,21 @@ const BILLABLE_KEY_PROVIDER: Partial<Record<GenerativeProviderName, KeyProvider>
 
 const logger = createLogger();
 
-async function localPathForAssetBytes(asset: V1Asset): Promise<string> {
-  if (!asset.storageKey) {
+async function localPathForAssetBytes(
+  asset: V1Asset
+): Promise<MaterializedAssetObject> {
+  if (!asset.storageKey || !asset.storageBucket) {
     throw new ApiError(
       "asset_not_ready",
       `Reference asset is missing stored bytes: ${asset.id}.`,
-      { assetIds: [asset.id] }
+      {
+        assetIds: [asset.id],
+        storageKey: asset.storageKey,
+        storageBucket: asset.storageBucket,
+      }
     );
   }
   const storageConfig = readStorageConfig();
-  const usesSupabaseStorage = useSupabaseStorage();
   const logFields = {
     workspaceId: asset.workspaceId,
     projectId: asset.projectId,
@@ -108,34 +112,45 @@ async function localPathForAssetBytes(asset: V1Asset): Promise<string> {
     assetKind: asset.kind,
     storageBackend: storageConfig.backend,
     dbBackend: process.env.DB_BACKEND ?? "local",
-    useSupabaseStorage: usesSupabaseStorage,
     storageBucket: asset.storageBucket,
     storageKey: asset.storageKey,
   };
   logger.info("generated_asset.reference_resolve_started", logFields);
-  if (usesSupabaseStorage) {
-    try {
-      const localPath = await downloadAssetObjectToTemp(asset.storageKey);
-      logger.info("generated_asset.reference_resolve_succeeded", {
-        ...logFields,
-        resolver: "supabase_storage",
-      });
-      return localPath;
-    } catch (err) {
-      logger.error("generated_asset.reference_resolve_failed", {
-        ...logFields,
-        resolver: "supabase_storage",
-        error: { message: err instanceof Error ? err.message : String(err) },
-      });
-      throw err;
+  try {
+    const materialized = await materializeAssetObject({
+      storageKey: asset.storageKey,
+      storageBucket: asset.storageBucket,
+      config: storageConfig,
+    });
+    logger.info("generated_asset.reference_resolve_succeeded", {
+      ...logFields,
+      resolver: "object_store",
+    });
+    return materialized;
+  } catch (err) {
+    logger.error("generated_asset.reference_resolve_failed", {
+      ...logFields,
+      resolver: "object_store",
+      error: { message: err instanceof Error ? err.message : String(err) },
+    });
+    const details = {
+      assetIds: [asset.id],
+      storageKey: asset.storageKey,
+      storageBucket: asset.storageBucket,
+    };
+    if (err instanceof AssetObjectNotFoundError) {
+      throw new ApiError(
+        "object_not_found",
+        `Stored bytes for reference asset ${asset.id} could not be read.`,
+        details
+      );
     }
+    throw new ApiError(
+      "storage_error",
+      `Reference storage failed while reading asset ${asset.id}.`,
+      details
+    );
   }
-  const localPath = path.join(localDir(), asset.storageKey);
-  logger.info("generated_asset.reference_resolve_succeeded", {
-    ...logFields,
-    resolver: "local_path",
-  });
-  return localPath;
 }
 
 type ProgressItemKind = "image" | "video" | "audio" | "caption" | "timeline" | "export";
@@ -222,6 +237,10 @@ async function runGeneration(
 ): Promise<V1Asset> {
   // Resolve reference assets to local file paths the provider can read.
   const referencePaths: string[] = [];
+  const materializedObjects: MaterializedAssetObject[] = [];
+  let result;
+  let preflight: Awaited<ReturnType<typeof preflightGenerationContent>>;
+  try {
   for (const id of parsed.referenceAssetIds) {
     const asset = await getAsset(auth.workspaceId, projectId, id); // throws not_found
     if (asset.status !== "ready" || !asset.storageKey) {
@@ -242,7 +261,9 @@ async function runGeneration(
       );
     }
     try {
-      referencePaths.push(await localPathForAssetBytes(asset));
+      const materialized = await localPathForAssetBytes(asset);
+      materializedObjects.push(materialized);
+      referencePaths.push(materialized.path);
     } catch (err) {
       logger.error("generated_asset.reference_download_failed", {
         workspaceId: auth.workspaceId,
@@ -279,7 +300,9 @@ async function runGeneration(
         { assetIds: [parsed.editSourceAssetId] }
       );
     }
-    editSourceVideoPath = await localPathForAssetBytes(asset);
+    const materialized = await localPathForAssetBytes(asset);
+    materializedObjects.push(materialized);
+    editSourceVideoPath = materialized.path;
   }
 
   if (item) {
@@ -291,7 +314,7 @@ async function runGeneration(
           : "Preparing the generation prompt.",
     });
   }
-  const preflight = await preflightGenerationContent({
+  preflight = await preflightGenerationContent({
     provider: parsed.provider,
     kind: parsed.kind,
     prompt: parsed.prompt,
@@ -339,7 +362,6 @@ async function runGeneration(
     resolution: parsed.resolution,
   };
 
-  let result;
   if (parsed.provider === "openai" && parsed.kind === "image") {
     result = await provider.generateAsset({
       provider: "openai",
@@ -445,6 +467,11 @@ async function runGeneration(
     });
   } else {
     throw new Error(`${parsed.provider} provider does not support ${parsed.kind}.`);
+  }
+  } finally {
+    await Promise.allSettled(
+      materializedObjects.map((materialized) => materialized.cleanup())
+    );
   }
 
   // Meter this generation against the run's credit balance. Only cost incurred on

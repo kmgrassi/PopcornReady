@@ -119,20 +119,26 @@
 - Suggested improvement: Document the persisted-JSONB `schema_version` marker convention and the enum-migration split rule next to the asset-graph JSONB rule in CLAUDE.md/AGENTS.md.
 - Follow-up: PR 5 executes the documented action_assets dual-write/backfill/assert plan and must clear `wait_reason`/set `superseded_at` per the new constraints.
 
-### 2026-07-16T14:00:00-04:00 — API-20260716-03
-- What helped: Keeping the fresh graph reader, pure projections, target guards,
-  and compaction in one isolated `orchestrator-context/` boundary made the PR 7
-  controls testable without conflicting with PR 5/6's sequential store ownership.
-- Friction or failure: The broad API suite has three known merged-main failures
-  (two absent historical migration fixtures and one discover UUID expectation),
-  so the new observable fixture suite and scoped validation are the reliable
-  regression signal for this PR.
-- Suggested improvement: Keep every future domain write path calling the
-  fail-closed target/closure guards in the same transaction as its asset, edge,
-  or selection write; do not recreate target authorization in prompts.
-- Follow-up: PRs 5/6 wire these guards into lifecycle transactions; PR 8 loads
-  `loadDomainTurnProjection` at the finite-turn boundary.
-## PR-CARETAKER-20260716-01
+### 2026-07-16T08:55:00-04:00 — GEN-20260716-01
+- What helped: The production run's raw `Object not found` message and persisted bucket metadata made the database/storage backend mismatch directly traceable before provider execution.
+- Friction or failure: Existing handoff tests stopped at relational acceptance, and the async parking boundary discarded the underlying job error as a generic provider failure.
+- Suggested improvement: Every cross-stage media handoff should prove the downstream worker can read stored bytes under the production database/storage backend combination.
+- Follow-up: Keep the local Supabase + MinIO anchor/storyboard/keyframe integration in the required generation regression set.
 
-- Reviewed all open PRs and addressed four actionable review threads on PR #795.
-- Verified PR #794's outdated recoverable-storage thread against current code and tests.
+### 2026-07-16T09:45:00-04:00 — GEN-20260716-01
+- What helped: Thread-aware PR review data pinpointed the terminal async reconciliation branch, and a fake terminal job made retry behavior deterministic.
+- Friction or failure: A recoverable resume initially created an unbounded fast-job retry path because each async resume resets the turn budget; the live local smoke was then blocked by repeated Supabase REST statement timeouts before media generation.
+- Suggested improvement: Bound recoverable async retries in durable action history, and add a local-stack health check that verifies ordinary PostgREST reads/writes before spending provider credits.
+- Follow-up: With explicit approval, reset the local Supabase test database and retry the 10-second live-provider smoke.
+
+### 2026-07-16T14:00:00-04:00 — API-20260716-03
+- What helped: Keeping the fresh graph reader, pure projections, target guards, and compaction in one isolated `orchestrator-context/` boundary made the PR 7 controls testable without conflicting with PR 5/6's sequential store ownership.
+- Friction or failure: The broad API suite has three known merged-main failures, so the new observable fixture suite and scoped validation are the reliable regression signal for this PR.
+- Suggested improvement: Keep every future domain write path calling the fail-closed target/closure guards in the same transaction as its asset, edge, or selection write.
+- Follow-up: PRs 5/6 wire these guards into lifecycle transactions; PR 8 loads `loadDomainTurnProjection` at the finite-turn boundary.
+
+### 2026-07-16T14:07:00-04:00 — PR-CARETAKER-20260716-01
+- What helped: Thread-aware review data and isolated worktrees made it possible to fix all four actionable PR #795 findings and verify PR #794's outdated thread.
+- Friction or failure: The merged PR advanced `main` and exposed a feedback-log conflict on PR #795 after its implementation push.
+- Suggested improvement: Recheck mergeability after every caretaker comment resolution because branch protection and base updates can change during review.
+- Follow-up: none.
