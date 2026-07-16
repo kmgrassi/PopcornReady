@@ -1,5 +1,8 @@
-// Gate-0 baseline report for the specialist-agent adoption decision
-// (docs/scopes/specialist-agent-orchestration-prs.md, PR 1 / Decision Gate 0).
+// Gate-0 baseline report for the specialist-agent hierarchy comparison
+// (docs/scopes/specialist-agent-orchestration-prs.md, PR 1 / Decision Gate 0 —
+// resolved "proceed" 2026-07-16 on design grounds; this harness is now the
+// non-inferiority regression bar for the PR 18 default-on cutover, see
+// docs/scopes/gate-0-decision-record.md).
 //
 // Classifies every sampled decision into the Gate-0 failure taxonomy and
 // aggregates per-family + overall baselines so repeated real-model runs of the

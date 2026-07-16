@@ -83,7 +83,11 @@ The harness now also carries the Decision Gate 0 baseline for
   (opt-in real model; `--fixture` is a free offline plumbing check; `--json`
   emits one parseable document on stdout with banners on stderr). Thin CLI
   over `evals/gate0-baseline-runner.ts`.
-- Results and the adoption decision are recorded in
+- Gate 0 itself was resolved **proceed** on 2026-07-16 on design grounds
+  (modularity + observability); the paired comparison is now the
+  **non-inferiority regression bar** for the PR 18 default-on cutover — the
+  hierarchy must route at least as well as the flat root on the same paired
+  matrix. Decision, threshold, and measurements live in
   [`gate-0-decision-record.md`](gate-0-decision-record.md).
 
 ## How to run
