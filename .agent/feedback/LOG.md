@@ -166,3 +166,9 @@
 - Friction or failure: A lease token fences stale record writes but cannot by itself make a provider launch safe after a process crash; the dedicated job claim remains required follow-up work.
 - Suggested improvement: Keep request reservation, provider claim, and generated-asset provenance as explicit separately-tested durability boundaries rather than implying one idempotency helper covers all three.
 - Follow-up: Apply the migration and run the env-gated Postgres race test once the local Supabase database is healthy; then implement the provider-job claim fence.
+
+### 2026-07-16T15:45:00-04:00 — API-20260716-05
+- What helped: PR review isolated the distinction between a failed lease-renewal attempt and durable ownership loss.
+- Friction or failure: Treating either renewal rejection or a false renewal result as final ownership loss skipped a valid token-fenced completion and could discard a successful response.
+- Suggested improvement: Let the database token predicate make the final completion decision; use renewal only to extend an active lease, not to preemptively suppress completion.
+- Follow-up: Keep provider-job claim fencing as the remaining protection for external side effects after a process crash.

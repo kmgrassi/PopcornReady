@@ -132,16 +132,10 @@ export async function runIdempotent(
     }
 
     let result: ApiResult;
-    let leaseLost = false;
     const renewInterval = scheduleRenewal(() => {
       void store
         .renew({ scope, key, bodyHash, leaseToken: reservation.leaseToken!, leaseSeconds })
-        .then((renewed) => {
-          if (!renewed) leaseLost = true;
-        })
-        .catch(() => {
-          leaseLost = true;
-        });
+        .catch(() => undefined);
     }, Math.max(1_000, Math.floor((leaseSeconds * 1_000) / 2)));
     (renewInterval as { unref?: () => void }).unref?.();
     try {
@@ -162,16 +156,17 @@ export async function runIdempotent(
       return result;
     }
 
-    const completed =
-      !leaseLost &&
-      (await store.complete({
-        scope,
-        key,
-        bodyHash,
-        leaseToken: reservation.leaseToken,
-        status: result.status,
-        responseBody: result.body,
-      }));
+    // Renewal is best-effort. Completion's lease-token predicate is the
+    // authoritative ownership check: a transient renew failure must not throw
+    // away a successful response while this producer still owns the row.
+    const completed = await store.complete({
+      scope,
+      key,
+      bodyHash,
+      leaseToken: reservation.leaseToken,
+      status: result.status,
+      responseBody: result.body,
+    });
     if (!completed) {
       // Do not release here: the token may have been reclaimed after a slow
       // producer. Let the durable lease/replay state fence any retry.

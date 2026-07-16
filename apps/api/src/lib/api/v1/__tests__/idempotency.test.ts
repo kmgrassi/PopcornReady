@@ -19,6 +19,8 @@ class FakeIdempotencyStore implements IdempotencyStore {
   readonly records = new Map<string, RecordState>();
   now = 0;
   renewCalls = 0;
+  nextRenewError: Error | undefined;
+  nextRenewResult: boolean | undefined;
   private nextToken = 1;
 
   private recordKey(scope: string, key: string) {
@@ -81,6 +83,16 @@ class FakeIdempotencyStore implements IdempotencyStore {
     leaseSeconds: number;
   }) {
     this.renewCalls += 1;
+    if (this.nextRenewError) {
+      const error = this.nextRenewError;
+      this.nextRenewError = undefined;
+      throw error;
+    }
+    if (this.nextRenewResult !== undefined) {
+      const result = this.nextRenewResult;
+      this.nextRenewResult = undefined;
+      return result;
+    }
     const record = this.records.get(this.recordKey(input.scope, input.key));
     if (!record || record.bodyHash !== input.bodyHash || record.leaseToken !== input.leaseToken) {
       return false;
@@ -145,6 +157,106 @@ test("a long-running producer renews its active reservation", async () => {
   );
 
   assert.equal(store.renewCalls, 1);
+});
+
+test("a transient renewal error still records the successful response", async () => {
+  const store = new FakeIdempotencyStore();
+  store.nextRenewError = new Error("temporary renewal outage");
+  let renew: (() => void) | undefined;
+  let runs = 0;
+  const produce = async () => {
+    renew?.();
+    await Promise.resolve();
+    return { status: 201, body: { runs: ++runs } };
+  };
+  const options = {
+    store,
+    scheduleRenewal: (callback: () => void) => {
+      renew = callback;
+      return {} as ReturnType<typeof setInterval>;
+    },
+    clearRenewal: () => undefined,
+  };
+
+  const first = await runIdempotent("scope", "renew-error", "hash", produce, options);
+  const replay = await runIdempotent("scope", "renew-error", "hash", produce, options);
+
+  assert.deepEqual(first, replay);
+  assert.equal(runs, 1);
+});
+
+test("a transient unsuccessful renewal still records the successful response", async () => {
+  const store = new FakeIdempotencyStore();
+  store.nextRenewResult = false;
+  let renew: (() => void) | undefined;
+  let runs = 0;
+  const produce = async () => {
+    renew?.();
+    await Promise.resolve();
+    return { status: 201, body: { runs: ++runs } };
+  };
+  const options = {
+    store,
+    scheduleRenewal: (callback: () => void) => {
+      renew = callback;
+      return {} as ReturnType<typeof setInterval>;
+    },
+    clearRenewal: () => undefined,
+  };
+
+  const first = await runIdempotent("scope", "renew-false", "hash", produce, options);
+  const replay = await runIdempotent("scope", "renew-false", "hash", produce, options);
+
+  assert.deepEqual(first, replay);
+  assert.equal(runs, 1);
+});
+
+test("a reclaimed lease token cannot overwrite the new owner's response", async () => {
+  const store = new FakeIdempotencyStore();
+  let reclaimedToken: string | undefined;
+
+  await assert.rejects(
+    () =>
+      runIdempotent(
+        "scope",
+        "reclaimed",
+        "hash",
+        async () => {
+          store.now = 1_001;
+          const reclaimed = await store.reserve({
+            scope: "scope",
+            key: "reclaimed",
+            bodyHash: "hash",
+            leaseSeconds: 60,
+          });
+          assert.equal(reclaimed.state, "reserved");
+          reclaimedToken = reclaimed.leaseToken;
+          return { status: 201, body: { stale: true } };
+        },
+        { store, leaseSeconds: 1 }
+      ),
+    (err: unknown) => err instanceof ApiError && err.code === "idempotency_in_progress"
+  );
+
+  assert.equal(
+    await store.complete({
+      scope: "scope",
+      key: "reclaimed",
+      bodyHash: "hash",
+      leaseToken: reclaimedToken!,
+      status: 201,
+      responseBody: { current: true },
+    }),
+    true
+  );
+  const replay = await runIdempotent(
+    "scope",
+    "reclaimed",
+    "hash",
+    async () => ({ status: 201, body: { shouldNotRun: true } }),
+    { store }
+  );
+  assert.deepEqual(replay.body, { current: true });
 });
 
 test("a replay with the same key and body returns the completed response", async () => {
