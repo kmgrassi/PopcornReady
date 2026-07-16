@@ -166,14 +166,16 @@ test("Ideogram provider maps v3 image options", async () => {
   }
 });
 
-test("Ideogram provider forces v3 when references are present", async () => {
+test("Ideogram provider forces v3 and sends only the first caller-ordered reference", async () => {
   const previousKey = process.env.IDEOGRAM_API_KEY;
   const previousFetch = globalThis.fetch;
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "popcornready-ideogram-test-"));
   const referencePath = path.join(tmpDir, "reference.png");
+  const secondReferencePath = path.join(tmpDir, "reference-two.png");
   const requests: Array<{ url: string; body?: unknown; headers: Headers }> = [];
 
-  await fs.writeFile(referencePath, Buffer.from("reference-bytes"));
+  await fs.writeFile(referencePath, Buffer.from("reference-one-bytes"));
+  await fs.writeFile(secondReferencePath, Buffer.from("reference-two-bytes"));
   process.env.IDEOGRAM_API_KEY = "ideogram-test-key";
   globalThis.fetch = async (input, init) => {
     requests.push({
@@ -208,16 +210,17 @@ test("Ideogram provider forces v3 when references are present", async () => {
       kind: "image",
       model: "ideogram-v4",
       prompt: "Use the reference character.",
-      referencePaths: [referencePath],
+      referencePaths: [referencePath, secondReferencePath],
     });
 
     assert.equal(result.model, "ideogram-v3");
     assert.equal(requests[0].url, "https://api.ideogram.ai/v1/ideogram-v3/generate");
     assert.equal(formValue(requests[0].body, "prompt"), "Use the reference character.");
-    assert.ok(
-      formValue(requests[0].body, "character_reference_images") instanceof Blob,
-      "reference image should be passed through to v3"
-    );
+    assert.ok(requests[0].body instanceof FormData);
+    const characterReferences = requests[0].body.getAll("character_reference_images");
+    assert.equal(characterReferences.length, 1);
+    assert.ok(characterReferences[0] instanceof Blob);
+    assert.equal(await characterReferences[0].text(), "reference-one-bytes");
     assert.equal(formValue(requests[0].body, "text_prompt"), null);
   } finally {
     if (previousKey === undefined) delete process.env.IDEOGRAM_API_KEY;
