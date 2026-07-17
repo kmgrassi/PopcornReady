@@ -178,6 +178,11 @@
 - Friction or failure: Treating either renewal rejection or a false renewal result as final ownership loss skipped a valid token-fenced completion and could discard a successful response.
 - Suggested improvement: Let the database token predicate make the final completion decision; use renewal only to extend an active lease, not to preemptively suppress completion.
 - Follow-up: Keep provider-job claim fencing as the remaining protection for external side effects after a process crash.
+### 2026-07-16T16:35:00-04:00 — TYPE-20260716-01
+- What helped: A focused JSON sidecar boundary and a direct storage test made the type-safety improvement small and observable.
+- Friction or failure: The API package test script always runs the full suite, exposing three unrelated baseline failures before the focused test was run directly.
+- Suggested improvement: Add package-level support for selecting a single test file without appending the full glob.
+- Follow-up: None for this PR; the full-suite failures remain outside this change.
 
 ### 2026-07-16T16:05:00-04:00 — API-20260716-06-provider-claim
 - What helped: Separating the provider-launch fence from the existing recovery lease made the ambiguous external-call crash window explicit.
@@ -195,4 +200,4 @@
 - What helped: Thread-aware review data identified that canonical action params and the eventual provider call could disagree when workspace defaults were resolved too late.
 - Friction or failure: Claim renewal previously updated only lease metadata, leaving run observability's progress timestamp stale during healthy long-running provider work.
 - Suggested improvement: Normalize durable job inputs at enqueue time and keep lease heartbeats mirrored into the projection fields used by operators.
-- Follow-up: Re-run the focused API checks in CI or a worktree with dependencies installed.
+ - Follow-up: Re-run the focused API checks in CI or a worktree with dependencies installed.

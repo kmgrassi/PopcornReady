@@ -1,33 +1,53 @@
-# PR caretaker fixes — 2026-07-16
+# Worksheet: PR-CARETAKER-20260716-01
 
-<!-- agent-summary: Addressed all actionable unresolved review threads found during the PR caretaker sweep. -->
-<!-- agent-summary: PR #794's unresolved thread was outdated and already covered by current code and tests. -->
-<!-- agent-summary: PR #795 now scopes audioAssetId and candidate affected assets fail-closed. -->
-<!-- agent-summary: PR #795 audio projections retain in-scope picture assets for audio fitting. -->
-<!-- agent-summary: PR #795 preserve pins now match their slot key as well as role and asset. -->
-<!-- agent-summary: Targeted context-boundary tests and API validation are required before handoff. -->
-<!-- agent-summary: GitHub review threads are resolved only after the fixes are pushed and verified. -->
+<!-- agent-summary: Durable record for one bounded task. -->
+<!-- agent-summary: Update this file as evidence arrives, then commit it with the work. -->
+<!-- agent-summary: Use worksheet/PR-CARETAKER-20260716-01 as the git tag after completion. -->
+<!-- agent-summary: Do not include secrets, private prompts, or customer data. -->
+<!-- agent-summary: A successor agent should be able to continue from this document alone. -->
+<!-- agent-summary: Keep command outcomes factual; do not imply checks that did not run. -->
+<!-- agent-summary: Link related reviews, feedback entries, and PRs. -->
 
-## Scope
+## Goal and acceptance criteria
 
-Caretaker sweep of all open Popcorn Ready pull requests on 2026-07-16.
+Inspect every open Popcorn Ready PR. Resolve PR #806's merge conflict on its branch, validate, commit, and push. Leave blocked PRs untouched; merge only when all stated conditions are satisfied.
 
-## Findings and decisions
+## Context and source-of-truth documents
 
-- PR #794 had one unresolved Codex P2 thread, but the thread was outdated. The current head returns recoverable async failures to the loop and has focused retry tests.
-- PR #795 had four actionable unresolved Codex P2 threads. All four were implemented:
-  - validate `audioAssetId` as an asset-scoped primitive;
-  - include in-scope picture assets in audio projections;
-  - authorize `candidateAffectedAssetIds` in the graph scope;
-  - require preserve selection pins to match `slotKey`.
+- `AGENTS.md`, `AGENT_WORKFLOW.md`, `CLAUDE.md`, `docs/repository-structure.md`
+- `docs/agent-system/worksheets-and-feedback.md`, `docs/agent-system/reviews.md`
+- Open PRs at run start: #803, #804, #806.
 
-## Validation
+## Decisions
 
-- `pnpm --filter @popcorn/api exec tsx --test src/lib/orchestrator-context/__tests__/context-boundary.test.ts`
-- `pnpm --filter @popcorn/api typecheck`
-- `pnpm agent:lint:fix`
-- `pnpm agent:validate -- --scope api`
+- PR #803 and #804 have no actionable comments or unresolved review threads, but GitHub reports required review status blocking merge; do not merge.
+- PR #806 has no actionable comments or unresolved review threads, but conflicts with `origin/main`; merge `origin/main` into the PR branch and preserve both sides of the feedback log.
+- Work in an isolated worktree to preserve unrelated untracked files in the primary checkout.
 
-## Review handoff
+## Changes
 
-Reply to each addressed PR #795 thread, resolve only after the fixes are pushed and verified, and report merge blockers/check state.
+- Resolved the `.agent/feedback/LOG.md` merge conflict on PR #806 by retaining both branch entries.
+- This caretaker worksheet and feedback record document the sweep.
+
+## Validation evidence
+
+- Before resolution: `git merge --no-commit --no-ff origin/main` reported one conflict in `.agent/feedback/LOG.md`.
+- `git diff --check` passed before commit.
+- `pnpm agent:lint:fix` ran through the commit hook and passed (`33 changed files`).
+- Focused API test and API typecheck could not run because the isolated worktree has no `node_modules` (`tsx` and `tsc` unavailable).
+- `pnpm agent:validate -- --scope api` ran lint successfully, then stopped at the same missing-dependency typecheck failure.
+- After push, PR #806 reports `MERGEABLE` and `BLOCKED`; all checks are pending while CI/Netlify rerun, and review remains required.
+
+## Independent reviews
+
+- Independent explorer review confirmed the facts and minimal plan; it specifically advised preserving both feedback-log sides and not modifying #803/#804. The reviewer noted the configured external review command is unavailable.
+- Wrap-up review: post-push GitHub state confirms no conflict, but #806 must remain open pending required review and checks.
+
+## Blockers and risks
+
+- PR #806's merge brings a broad `origin/main` delta into the branch; verify the conflict resolution did not alter product files beyond the merge result.
+- Required checks may need to rerun after the new merge commit.
+
+## Next action / handoff
+
+CI must finish for PR #806 and a human approval is still required. Do not merge #803, #804, or #806 during this run.
