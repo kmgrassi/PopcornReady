@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { providerFor } from "../providers";
+import type { NvidiaCosmosRequestBody } from "../providers/nvidia-cosmos";
 
 test("providerFor resolves NVIDIA Cosmos aliases", () => {
   assert.equal(providerFor("nvidia_api_catalog").name, "nvidia_api_catalog");
@@ -12,7 +13,11 @@ test("NVIDIA Cosmos provider maps video requests to API Catalog payloads", async
   const previousModel = process.env.NVIDIA_VIDEO_GENERATION_MODEL;
   const previousBaseUrl = process.env.NVIDIA_VIDEO_GENERATION_BASE_URL;
   const previousFetch = globalThis.fetch;
-  const requests: Array<{ url: string; body: any; headers: Headers }> = [];
+  const requests: Array<{
+    url: string;
+    body: NvidiaCosmosRequestBody;
+    headers: Headers;
+  }> = [];
 
   process.env.NVIDIA_API_KEY = "test-key";
   process.env.NVIDIA_VIDEO_GENERATION_MODEL = "nvidia/cosmos3-nano";
@@ -21,7 +26,7 @@ test("NVIDIA Cosmos provider maps video requests to API Catalog payloads", async
   globalThis.fetch = async (input, init) => {
     requests.push({
       url: String(input),
-      body: JSON.parse(String(init?.body || "{}")),
+      body: JSON.parse(String(init?.body || "{}")) as NvidiaCosmosRequestBody,
       headers: new Headers(init?.headers),
     });
     return new Response(
