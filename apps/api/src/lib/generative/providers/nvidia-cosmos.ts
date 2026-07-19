@@ -24,7 +24,7 @@ type NvidiaCosmosResponse = {
   message?: unknown;
 };
 
-type NvidiaCosmosRequestBody = {
+export type NvidiaCosmosRequestBody = {
   prompt: string;
   negative_prompt?: string;
   image?: string;
