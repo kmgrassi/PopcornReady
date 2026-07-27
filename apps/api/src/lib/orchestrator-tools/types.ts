@@ -102,6 +102,8 @@ export interface ToolExecutionContext {
   /** The orchestrator run driving this call — async tools' workers use it to
    * resume the run when their job completes. */
   orchestratorRunId?: string;
+  /** Durable domain-session claim copied onto causal jobs so late workers are fenced. */
+  sessionClaimGeneration?: number;
 }
 
 export interface ToolCostEstimate {

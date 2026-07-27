@@ -9,6 +9,7 @@ import {
   resolveAgentDefinition,
 } from "../agent-definition";
 import type { ToolRegistry } from "../registry";
+import type { AgentDefinition } from "../agent-definition";
 
 const rootRun: OrchestratorRun = {
   id: "root-run",
@@ -102,4 +103,67 @@ test("disabled domain runtime does not invoke a model or tool", async () => {
     model: async () => assert.fail("disabled domain runtime must not call the model"),
   });
   assert.equal(result.status, "queued");
+});
+
+test("manual domain smoke drives a claimed question turn without a provider", async () => {
+  let run: OrchestratorRun = {
+    ...rootRun,
+    id: "claimed-visual-run",
+    status: "queued",
+    agentRole: "visuals" as const,
+  };
+  const store = {
+    getOrchestratorRun: async () => run,
+    updateOrchestratorRun: async (_id: string, patch: Partial<OrchestratorRun>) => {
+      run = { ...run, ...patch };
+      return run;
+    },
+    listRunGates: async () => [],
+    markGateReached: async () => null,
+    listRunActions: async () => [],
+    recordInvocation: async () => assert.fail("question smoke must not invoke a tool"),
+    markInvocation: async () => assert.fail("question smoke must not mark a tool"),
+  };
+  const definition: AgentDefinition = {
+    role: "visuals",
+    registry: new Map(),
+    systemPrompt: "test",
+    task: visualTask,
+    loadTurnContext: async () => ({ schemaVersion: "DomainTurnProjection.v1" }),
+  };
+  let finalizedGeneration: number | undefined;
+  const result = await runOrchestratorToCompletion(run.id, {
+    workspaceId: "workspace-1",
+    store,
+    domainRuntimeEnabled: true,
+    sessionClaimGeneration: 42,
+    resolveOwnerUserId: async () => null,
+    resolveAgentDefinition: async () => definition,
+    model: async () => ({
+      type: "done",
+      summary: JSON.stringify({
+        outcome: "question",
+        question: "Which visual direction should this clip use?",
+        options: [
+          { id: "warm", label: "Warm", tradeoff: "Softer and nostalgic." },
+          { id: "cool", label: "Cool", tradeoff: "Sharper and more distant." },
+        ],
+      }),
+      model: "manual-smoke",
+    }),
+    finalizeDomainTurn: async (input) => {
+      finalizedGeneration = input.expectedClaimGeneration;
+      run = { ...run, status: "succeeded" };
+      return {
+        reportActionId: "report-action",
+        performed: true,
+        recipient: "creative_director",
+        parentRunId: "root-run",
+        wokeParent: true,
+        summaryApplied: true,
+      };
+    },
+  });
+  assert.equal(finalizedGeneration, 42);
+  assert.equal(result.status, "succeeded");
 });

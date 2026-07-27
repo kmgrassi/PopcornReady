@@ -56,7 +56,11 @@ import {
   type AgentDefinition,
   type ResolveAgentDefinitionInput,
 } from "./agent-definition";
-import { finalizeDomainTurn } from "./domain-run-service";
+import {
+  failDomainRunTurn,
+  finalizeDomainTurn,
+  isStaleDomainTurnError,
+} from "./domain-run-service";
 import { projectDomainRecovery } from "./domain-recovery-projection";
 
 // Credits charged per generation = providerCostUsd * MARGIN, at 1 credit = $0.01.
@@ -164,6 +168,9 @@ export interface EngineDeps {
   domainRuntimeEnabled?: boolean;
   /** Durable session claim generation carried by a claimed domain dispatch. */
   sessionClaimGeneration?: number;
+  /** Domain transport seams keep deterministic local smoke tests provider-free. */
+  finalizeDomainTurn?: typeof finalizeDomainTurn;
+  failDomainRunTurn?: typeof failDomainRunTurn;
   /** Injectable for deterministic definition/transport tests. */
   resolveAgentDefinition?: (
     input: ResolveAgentDefinitionInput
@@ -283,6 +290,8 @@ function resolved(deps: EngineDeps) {
     applyCreditTransaction: deps.applyCreditTransaction ?? applyCreditTransaction,
     domainRuntimeEnabled: deps.domainRuntimeEnabled ?? false,
     sessionClaimGeneration: deps.sessionClaimGeneration,
+    finalizeDomainTurn: deps.finalizeDomainTurn ?? finalizeDomainTurn,
+    failDomainRunTurn: deps.failDomainRunTurn ?? failDomainRunTurn,
     resolveAgentDefinition: deps.resolveAgentDefinition ?? resolveAgentDefinition,
     workspaceId: deps.workspaceId,
     actorId: deps.actorId,
@@ -319,7 +328,9 @@ export async function runOrchestratorToCompletion(
 ): Promise<OrchestratorRun> {
   const r = resolved(deps);
   let run = await r.store.getOrchestratorRun(runId);
-  if (isDomainRun(run) && !r.domainRuntimeEnabled) return run;
+  if (isDomainRun(run) && (!r.domainRuntimeEnabled || r.sessionClaimGeneration === undefined)) {
+    return run;
+  }
   if (run.status === "queued") {
     run = await r.store.updateOrchestratorRun(runId, {
       status: "running",
@@ -341,7 +352,9 @@ export async function resumeOrchestratorRun(
 ): Promise<OrchestratorRun> {
   const r = resolved(deps);
   const run = await r.store.getOrchestratorRun(runId);
-  if (isDomainRun(run) && !r.domainRuntimeEnabled) return run;
+  if (isDomainRun(run) && (!r.domainRuntimeEnabled || r.sessionClaimGeneration === undefined)) {
+    return run;
+  }
   return resumeRun(run, r);
 }
 
@@ -610,17 +623,42 @@ function toDomainPriorResult(
 
 async function finalizeDomainReport(
   run: OrchestratorRun,
-  definition: AgentDefinition,
   report: import("@popcorn/shared/domain-agent-contract").DomainReportV1,
   r: Resolved
 ): Promise<OrchestratorRun> {
-  await finalizeDomainTurn({
+  await r.finalizeDomainTurn({
     projectId: run.projectId,
     runId: run.id,
     report,
     expectedClaimGeneration: r.sessionClaimGeneration,
   });
   return r.store.getOrchestratorRun(run.id);
+}
+
+class DomainFailureTerminalizationError extends Error {
+  constructor(cause: unknown) {
+    super("Could not claim-fence the domain run failure terminalization.", { cause });
+  }
+}
+
+async function terminalizeDomainFailure(
+  run: OrchestratorRun,
+  r: Resolved,
+  error: Record<string, unknown>
+): Promise<OrchestratorRun> {
+  if (r.sessionClaimGeneration === undefined) return r.store.getOrchestratorRun(run.id);
+  try {
+    await r.failDomainRunTurn({
+      projectId: run.projectId,
+      runId: run.id,
+      error,
+      expectedClaimGeneration: r.sessionClaimGeneration,
+    });
+    return r.store.getOrchestratorRun(run.id);
+  } catch (err) {
+    if (isStaleDomainTurnError(err)) return r.store.getOrchestratorRun(run.id);
+    throw new DomainFailureTerminalizationError(err);
+  }
 }
 
 function invocationOutputAssetIds(result: ToolCallResult): string[] {
@@ -671,11 +709,13 @@ async function driveGuardedInner(
   try {
     return await driveLoop(run, r);
   } catch (err) {
+    if (err instanceof DomainFailureTerminalizationError) throw err;
     const error = {
       kind: "provider_failed",
       message: err instanceof Error ? err.message : String(err),
       recoverable: false,
     };
+    if (isDomainRun(run)) return terminalizeDomainFailure(run, r, error);
     try {
       await finish(run, "failed", r, error);
     } catch {
@@ -689,7 +729,9 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
   for (let turn = 0; turn < r.maxTurns; turn += 1) {
     run = await r.store.getOrchestratorRun(run.id);
     if (run.status !== "running") return run;
-    if (isDomainRun(run) && !r.domainRuntimeEnabled) return run;
+    if (isDomainRun(run) && (!r.domainRuntimeEnabled || r.sessionClaimGeneration === undefined)) {
+      return run;
+    }
 
     const definition = await r.resolveAgentDefinition({
       run,
@@ -741,19 +783,29 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
 
     if (decision.type === "done") {
       if (definition.task) {
+        let report: import("@popcorn/shared/domain-agent-contract").DomainReportV1;
         try {
-          const report = await buildDomainReportFromCompletion({
+          report = await buildDomainReportFromCompletion({
             runId: run.id,
             projectId: run.projectId,
             task: definition.task,
             summary: decision.summary,
             actions: prior,
           });
-          return finalizeDomainReport(run, definition, report, r);
         } catch (err) {
-          return finish(run, "failed", r, {
+          return terminalizeDomainFailure(run, r, {
             kind: "invalid_input",
             message: err instanceof Error ? err.message : "Invalid domain completion.",
+            recoverable: false,
+          });
+        }
+        try {
+          return await finalizeDomainReport(run, report, r);
+        } catch (err) {
+          if (isStaleDomainTurnError(err)) return r.store.getOrchestratorRun(run.id);
+          return terminalizeDomainFailure(run, r, {
+            kind: "provider_failed",
+            message: err instanceof Error ? err.message : "Domain report finalization failed.",
             recoverable: false,
           });
         }
@@ -970,7 +1022,6 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       if (blocked) {
         return finalizeDomainReport(
           run,
-          definition,
           {
             schemaVersion: "DomainReport.v1",
             outcome: {
@@ -1107,6 +1158,13 @@ async function finish(
   r: Resolved,
   error?: Record<string, unknown>
 ): Promise<OrchestratorRun> {
+  if (status === "failed" && isDomainRun(run)) {
+    return terminalizeDomainFailure(run, r, error ?? {
+      kind: "provider_failed",
+      message: "Domain run failed without a structured engine error.",
+      recoverable: false,
+    });
+  }
   return r.store.updateOrchestratorRun(run.id, {
     status,
     completedAt: nowIso(),
