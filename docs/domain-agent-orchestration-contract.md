@@ -203,12 +203,18 @@ activating it:
   primitives, including optional catalog publication;
 - `visuals-registry.ts` exposes only the six current image/motion primitives;
   and
-- `audio-registry.ts` exposes only audio generation and picture fitting.
+- `audio-registry.ts` exposes only audio generation and picture fitting. A
+  finite Audio run supplies its trusted `DomainTask.v1`, producing task-bound
+  schemas/descriptions and scope-checked wrappers under those same canonical
+  tool names; the flat default registry remains unchanged.
 
 The three registries are an exact, disjoint partition of the current 18-tool
 vocabulary. Domain registries contain no root, sibling, approval, assembly, or
-dispatch capability. Future delegation and standalone generic generation tools
-are intentionally absent and join only in their owning roadmap PRs.
+dispatch capability. Standalone Audio generation is a task mode over
+`generate_audio`, not a second primitive name. It reuses generated-assets
+provider/job/storage/action/cost execution, creates one pooled `audio_track`,
+and never fabricates a production selection. Creator-direct route construction
+remains owned by PR 12.
 
 Under the proposed hierarchy, responsibility is:
 
@@ -216,7 +222,7 @@ Under the proposed hierarchy, responsibility is:
 | --- | --- |
 | Creative director, conditional | current brief, story, script, shot and visual-anchor planning; timeline assembly and critique; approval, export, and optional catalog publication; future delegation and batched dispatch after their owning PRs |
 | Visuals | current anchor, storyboard, keyframe, clip, immutable image regeneration, and content-aware video edit capabilities; future standalone image/video capabilities after their owning PR |
-| Audio | current narration/dialogue/music/sound generation and fitting audio to picture |
+| Audio | exact-script narration/dialogue, production or standalone music/sound generation, immutable delivery revisions, and fitting authorized audio to current picture |
 | Runtime, never model-facing | authorization, session/run claim, enqueue/lease, wait/resume, report acknowledgement, retry, cancellation, gate persistence, cost settlement, provider callback fencing |
 
 The conditional creative director retains coherence decisions; it is not only
@@ -253,6 +259,19 @@ They may launch deterministic provider jobs through their allowed server-owned
 tools. Provider calls, storage, queueing, rendering, authorization, graph writes,
 and lifecycle transitions remain deterministic worker/runtime responsibilities;
 they are not modeled as agents.
+
+Within Audio, delivery, voice choice, warmth, bounded retiming, mix, and sound
+design are local only while spoken words and meaning remain unchanged.
+Production generations persist the current plan, brief, and script assets they
+actually consume as typed graph inputs. A delivery revision uses an exact
+authorized source asset/transcript, creates the next row in that immutable
+lineage with a `source` edge, and never moves a selection implicitly. Delivery
+presets map to typed provider voice settings rather than adding instructions to
+the spoken text. Revision source, fit audio, fit picture, and fit beat must be
+explicit trusted targets or pins; project-wide read authority is insufficient
+for those operations. Missing current picture returns a typed cross-domain
+prerequisite; a picture window too short for exact words becomes a `question`
+about whether picture or meaning may change.
 
 A future domain is admitted only when a cohesive tool cluster has a distinct
 craft/context boundary and decision-evaluation evidence shows that separating

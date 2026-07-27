@@ -21,6 +21,13 @@ export interface GeneratedAssetProviderSettings {
   seconds?: number;
   audioMode?: string;
   voiceId?: string;
+  voiceSettings?: {
+    stability?: number;
+    similarityBoost?: number;
+    style?: number;
+    speed?: number;
+    useSpeakerBoost?: boolean;
+  };
   outputFormat?: string;
   languageCode?: string;
   loop?: boolean;

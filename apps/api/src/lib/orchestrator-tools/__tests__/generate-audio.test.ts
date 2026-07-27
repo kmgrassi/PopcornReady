@@ -100,7 +100,7 @@ test("generate_audio accepts and kicks off the worker with active plan and brief
     | {
         jobId: string;
         orchestratorRunId?: string;
-        planAssetId: string;
+        planAssetId?: string;
         provider?: string;
         voiceId?: string;
         briefAssetId?: string;
@@ -311,6 +311,125 @@ test("runGenerateAudioJob honors selected user audio slots instead of regenerati
     assetIds: ["uploaded_voiceover", "generated_1", "generated_2"],
   });
   assert.ok(!spy.calls.includes("fail"));
+});
+
+test("runGenerateAudioJob single-track mode creates one pooled asset without reading a plan or selection", async () => {
+  const spy = jobsSpy();
+  const bodies: Array<Record<string, unknown>> = [];
+
+  await runGenerateAudioJob(
+    {
+      jobId: "job_1",
+      workspaceId: "ws_1",
+      projectId: "proj_1",
+      orchestratorRunId: "run_1",
+      mode: "single_track",
+      taskKind: "soundtrack_create",
+      graphInputs: [
+        {
+          assetId: "reference_1",
+          relation: "input",
+          role: "reference",
+          position: 0,
+          contentHash: "reference_hash",
+        },
+      ],
+      singleTrack: {
+        prompt: "Warm analog instrumental underscore.",
+        description: "Standalone warm analog instrumental underscore.",
+        displayName: "Warm Analog Underscore",
+        durationSec: 15,
+        audioMode: "music",
+        assetRole: "soundtrack",
+        forceInstrumental: true,
+      },
+    },
+    {
+      jobs: spy.jobs,
+      getActiveProjectScopedAsset: async () =>
+        assert.fail("single-track mode must not read production selections"),
+      createGeneratedAsset: async (args) => {
+        bodies.push(args.body as Record<string, unknown>);
+        return {
+          status: 202,
+          body: { job: { result: { assetIds: ["standalone_audio"] } } },
+        };
+      },
+      selectGeneratedAudioAsset: async () =>
+        assert.fail("single-track mode must not move a production selection"),
+    }
+  );
+
+  assert.equal(bodies.length, 1);
+  assert.equal(bodies[0]?.audioMode, "music");
+  assert.equal(bodies[0]?.runId, "run_1");
+  assert.deepEqual(bodies[0]?.referenceAssetIds, ["reference_1"]);
+  assert.deepEqual(spy.succeededResult, { assetIds: ["standalone_audio"] });
+});
+
+test("runGenerateAudioJob forwards the exact revision source to generated-assets", async () => {
+  const spy = jobsSpy();
+  let body: Record<string, unknown> | undefined;
+
+  await runGenerateAudioJob(
+    {
+      jobId: "job_1",
+      workspaceId: "ws_1",
+      projectId: "proj_1",
+      mode: "single_track",
+      taskKind: "audio_revision",
+      graphInputs: [
+        {
+          assetId: "source_audio",
+          relation: "input",
+          role: "source",
+          position: 0,
+          contentHash: "source_hash",
+        },
+      ],
+      singleTrack: {
+        prompt: "The exact approved words.",
+        description: "Warmer delivery of the approved words.",
+        displayName: "Warm Voiceover",
+        durationSec: 8,
+        audioMode: "speech",
+        assetRole: "voiceover",
+        sourceAssetId: "source_audio",
+        voiceSettings: {
+          stability: 0.35,
+          similarityBoost: 0.75,
+          style: 0.35,
+          speed: 0.95,
+          useSpeakerBoost: true,
+        },
+      },
+    },
+    {
+      jobs: spy.jobs,
+      getActiveProjectScopedAsset: async () =>
+        assert.fail("single-track mode must not read production selections"),
+      createGeneratedAsset: async (args) => {
+        body = args.body as Record<string, unknown>;
+        return {
+          status: 202,
+          body: { job: { result: { assetIds: ["revised_audio"] } } },
+        };
+      },
+      selectGeneratedAudioAsset: async () =>
+        assert.fail("single-track mode must not move a production selection"),
+    }
+  );
+
+  assert.equal(body?.sourceAssetId, "source_audio");
+  assert.equal(body?.prompt, "The exact approved words.");
+  assert.deepEqual(body?.voiceSettings, {
+    stability: 0.35,
+    similarityBoost: 0.75,
+    style: 0.35,
+    speed: 0.95,
+    useSpeakerBoost: true,
+  });
+  assert.deepEqual(spy.succeededResult, { assetIds: ["revised_audio"] });
 });
 
 test("runGenerateAudioJob regenerates stale generated audio selections", async () => {

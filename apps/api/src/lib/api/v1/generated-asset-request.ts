@@ -1,6 +1,7 @@
 import { parseConsistencyMode } from "@/lib/generative/character-context";
 import {
   AudioGenerationMode,
+  AudioVoiceSettings,
   DialogueInput,
   GenerativeAssetKind,
   GenerativeProviderName,
@@ -42,6 +43,8 @@ export interface ParsedRequest {
   providerSeconds?: number;
   referenceAssetIds: string[];
   editSourceAssetId?: string;
+  /** Audio-only immutable revision source; new bytes mint version+1 in this lineage. */
+  sourceAssetId?: string;
   beatId?: string;
   anchorIds: string[];
   characterProfileIds: string[];
@@ -62,6 +65,7 @@ export interface ParsedRequest {
   customModelUri?: string;
   enableCopyrightDetection?: boolean;
   voiceId?: string;
+  voiceSettings?: AudioVoiceSettings;
   outputFormat?: string;
   languageCode?: string;
   loop?: boolean;
@@ -197,6 +201,65 @@ function parseNumber(value: unknown): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function parseAudioVoiceSettings(
+  value: unknown,
+  kind: GenerativeAssetKind
+): AudioVoiceSettings | undefined {
+  if (value === undefined) return undefined;
+  if (kind !== "audio" || !isPlainObject(value)) {
+    throw validationError("The request body is invalid.", [
+      {
+        path: "voiceSettings",
+        message: "Voice settings are supported only for audio and must be an object.",
+      },
+    ]);
+  }
+  const allowed = new Set([
+    "stability",
+    "similarityBoost",
+    "style",
+    "speed",
+    "useSpeakerBoost",
+  ]);
+  if (Object.keys(value).some((key) => !allowed.has(key))) {
+    throw validationError("The request body is invalid.", [
+      { path: "voiceSettings", message: "Contains unsupported voice settings." },
+    ]);
+  }
+  const settings: AudioVoiceSettings = {};
+  for (const key of ["stability", "similarityBoost", "style"] as const) {
+    if (value[key] === undefined) continue;
+    const number = Number(value[key]);
+    if (!Number.isFinite(number) || number < 0 || number > 1) {
+      throw validationError("The request body is invalid.", [
+        { path: `voiceSettings.${key}`, message: "Must be between 0 and 1." },
+      ]);
+    }
+    settings[key] = number;
+  }
+  if (value.speed !== undefined) {
+    const speed = Number(value.speed);
+    if (!Number.isFinite(speed) || speed < 0.7 || speed > 1.2) {
+      throw validationError("The request body is invalid.", [
+        { path: "voiceSettings.speed", message: "Must be between 0.7 and 1.2." },
+      ]);
+    }
+    settings.speed = speed;
+  }
+  if (value.useSpeakerBoost !== undefined) {
+    if (typeof value.useSpeakerBoost !== "boolean") {
+      throw validationError("The request body is invalid.", [
+        {
+          path: "voiceSettings.useSpeakerBoost",
+          message: "Must be a boolean.",
+        },
+      ]);
+    }
+    settings.useSpeakerBoost = value.useSpeakerBoost;
+  }
+  return settings;
+}
+
 export function parseGeneratedAssetRequest(body: unknown): ParsedRequest {
   if (!isPlainObject(body)) {
     throw validationError("The request body is invalid.", [
@@ -302,6 +365,12 @@ export function parseGeneratedAssetRequest(body: unknown): ParsedRequest {
       typeof body.editSourceAssetId === "string" && body.editSourceAssetId.trim()
         ? body.editSourceAssetId.trim()
         : undefined,
+    sourceAssetId:
+      kind === "audio" &&
+      typeof body.sourceAssetId === "string" &&
+      body.sourceAssetId.trim()
+        ? body.sourceAssetId.trim()
+        : undefined,
     beatId:
       typeof body.beatId === "string" && body.beatId.trim()
         ? body.beatId.trim()
@@ -340,6 +409,7 @@ export function parseGeneratedAssetRequest(body: unknown): ParsedRequest {
           ? body.enable_copyright_detection
           : undefined,
     voiceId: body.voiceId ? String(body.voiceId) : undefined,
+    voiceSettings: parseAudioVoiceSettings(body.voiceSettings, kind),
     outputFormat: body.outputFormat ? String(body.outputFormat) : undefined,
     languageCode: body.languageCode ? String(body.languageCode) : undefined,
     loop: typeof body.loop === "boolean" ? body.loop : undefined,
