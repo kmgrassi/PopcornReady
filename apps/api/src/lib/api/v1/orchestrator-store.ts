@@ -368,6 +368,34 @@ export async function enqueueOrchestratorDispatch(
   );
 }
 
+/** Repair finite-run control records before leasing more work after a crash. */
+export async function recoverOrchestratorRuntimeControls(): Promise<void> {
+  await runQuery(
+    "store.recoverOrchestratorRuntimeControls",
+    getServiceSupabase().rpc("recover_orchestrator_runtime_controls")
+  );
+}
+
+/** Cancel a root/direct finite-run family and fence only its causal jobs. */
+export async function cancelOrchestratorRunFamily(input: {
+  projectId: string;
+  runId: string;
+}): Promise<{ canceledRunIds: string[]; canceledJobIds: string[] }> {
+  const rows = await runQuery(
+    "store.cancelOrchestratorRunFamily",
+    getServiceSupabase().rpc("cancel_orchestrator_run_family", {
+      p_project_id: input.projectId,
+      p_run_id: input.runId,
+    })
+  );
+  const row = (rows as Array<{ canceled_run_ids: string[]; canceled_job_ids: string[] }>)[0];
+  if (!row) throw new ApiError("internal_error", "Run-family cancellation returned no result.");
+  return {
+    canceledRunIds: row.canceled_run_ids ?? [],
+    canceledJobIds: row.canceled_job_ids ?? [],
+  };
+}
+
 export async function claimOrchestratorDispatches(
   limit = 4,
   leaseSeconds = 120

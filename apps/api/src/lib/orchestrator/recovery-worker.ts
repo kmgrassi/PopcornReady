@@ -3,6 +3,7 @@ import {
   enqueueOrchestratorDispatch,
   getOrchestratorRun,
   listRunGates,
+  recoverOrchestratorRuntimeControls,
   releaseOrchestratorDispatch,
   type ClaimedOrchestratorDispatch,
 } from "@/lib/api/v1/orchestrator-store";
@@ -44,6 +45,7 @@ export interface RecoveryWorkerDeps {
   listGates: typeof listRunGates;
   run: typeof runOrchestratorToCompletion;
   resume: typeof resumeOrchestratorRun;
+  repair: typeof recoverOrchestratorRuntimeControls;
   logger: Logger;
 }
 
@@ -54,15 +56,28 @@ const defaults: RecoveryWorkerDeps = {
   listGates: listRunGates,
   run: runOrchestratorToCompletion,
   resume: resumeOrchestratorRun,
+  repair: recoverOrchestratorRuntimeControls,
   logger: createLogger(),
 };
 
 function terminal(status: string): boolean {
-  return status === "succeeded" || status === "failed" || status === "canceled";
+  return (
+    status === "succeeded" ||
+    status === "failed" ||
+    status === "canceled" ||
+    status === "timed_out" ||
+    status === "superseded"
+  );
 }
 
 async function processDispatch(dispatch: ClaimedOrchestratorDispatch, deps: RecoveryWorkerDeps) {
   const run = await deps.getRun(dispatch.runId);
+  // A lease recovered after terminalization is cleanup, not another model turn.
+  // Include timed_out/superseded so a stale dispatch cannot loop forever.
+  if (terminal(run.status)) {
+    await deps.release({ ...dispatch, delaySeconds: 0, completed: true });
+    return;
+  }
   const gates = await deps.listGates(dispatch.runId);
   // A reached gate belongs to a human. It is deliberately removed from the
   // worker queue and is re-enqueued by the approve/reject route.
@@ -92,6 +107,9 @@ async function processDispatch(dispatch: ClaimedOrchestratorDispatch, deps: Reco
 
 export async function recoverOrchestratorRuns(deps: Partial<RecoveryWorkerDeps> = {}): Promise<number> {
   const resolved = { ...defaults, ...deps };
+  // The public helper stays lightweight for unit callers; the long-running
+  // worker below always injects the durable repair sweep before its lease pass.
+  if (deps.repair) await resolved.repair();
   const dispatches = await resolved.claim();
   for (const dispatch of dispatches) {
     try {
@@ -119,7 +137,7 @@ export function startOrchestratorRecoveryWorker(options: { env?: NodeJS.ProcessE
   const tick = () => {
     if (active || Date.now() < nextAttemptAt) return;
     active = true;
-    recoverOrchestratorRuns({ logger })
+    recoverOrchestratorRuns({ logger, repair: defaults.repair })
       .then(() => {
         consecutiveFailures = 0;
         nextAttemptAt = 0;

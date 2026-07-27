@@ -76,6 +76,29 @@ test("worker forwards a claimed domain session generation to the shared engine",
   assert.equal(seenGeneration, 7);
 });
 
+test("terminal finite-run states retire a recovered dispatch without another turn", async () => {
+  for (const status of ["timed_out", "superseded"] as const) {
+    let called = false;
+    const releases: boolean[] = [];
+    await recoverOrchestratorRuns({
+      claim: async () => [{
+        dispatchId: `dispatch-${status}`,
+        runId: `run-${status}`,
+        workspaceId: "workspace-1",
+        leaseToken: "lease-1",
+      }],
+      getRun: async () => run(status),
+      listGates: async () => [],
+      release: async ({ completed }) => { releases.push(completed); },
+      run: async () => { called = true; return run(status); },
+      resume: async () => { called = true; return run(status); },
+      logger: { debug() {}, info() {}, warn() {}, error() {}, child() { return this; } },
+    });
+    assert.equal(called, false, `${status} must not re-enter the engine`);
+    assert.deepEqual(releases, [true]);
+  }
+});
+
 test("recovery is enabled by default and has a safe lower interval bound", () => {
   assert.equal(isOrchestratorRecoveryEnabled({}), true);
   assert.equal(isOrchestratorRecoveryEnabled({ ORCHESTRATOR_RECOVERY_ENABLED: "false" }), false);

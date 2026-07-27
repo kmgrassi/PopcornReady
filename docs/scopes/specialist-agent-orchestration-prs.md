@@ -1028,6 +1028,12 @@ and opt-in real-provider routing tests.
 
 **Depends on:** PR 8.
 
+**Implementation status:** implemented on the finite-run runtime. Budget admission
+is keyed to the existing run/action/job identities; cost and credit records stay
+canonical; creator-direct confirmation is durable and one-use; and causal
+cancellation/recovery controls are wired before domain profiles can use live
+provider work.
+
 **Deliver:**
 
 - Reserve child-run budget atomically against the root/direct ceiling before
