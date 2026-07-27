@@ -231,3 +231,9 @@
 - Friction or failure: Adding delegate_visuals/delegate_audio to the typed catalog rippled through every flat surface (driver stubs, batteries, eval scenario tool lists, bridge stubs); the PRODUCTION_TOOL_NAMES/DISPATCH_TOOL_NAMES split contained it. The full API suite carries three pre-existing failures (guest-retention x2, discover public-id) — confirmed identical on unmodified origin/main via git stash.
 - Suggested improvement: When extending a shared vocabulary, land the surface marker and the split name lists in the same change so "nothing user-visible changes in production" is an assertable invariant.
 - Follow-up: PR 8 wires driveLoop domain completion to finalizeDomainTurn (replacing the fake report producer); PR 12 reuses dispatchDomainRun's gateStage/enqueue=false quote mode for creator-direct proposals.
+
+### 2026-07-27T18:10:00Z — API-20260727-PR11
+- What helped: Independent implementation review caught four authority/ordering failures that focused happy-path tests missed, including provider spend before source validation and beat audio consuming unrelated script scenes.
+- Friction or failure: The local Supabase CLI reported a running stack while its Postgres socket timed out, so the migration and same-lineage integration tests could not execute locally.
+- Suggested improvement: Keep every provider-backed revision's source/readiness checks before preflight or spend, and require tests with at least two scenes whenever a supposedly targeted media tool consumes script or plan content.
+- Follow-up: PR 12 must derive exact creator-direct Audio targets and prove root/direct successor runs reuse one serialized Audio session; rerun the Supabase-gated revision test when the local database accepts connections.

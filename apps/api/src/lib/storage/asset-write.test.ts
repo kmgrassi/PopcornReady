@@ -6,6 +6,7 @@ import test from "node:test";
 import {
   assetStorageKey,
   contentTypeForFilename,
+  deleteAssetObject,
   writeAssetObject,
 } from "./asset-write";
 import type { ObjectStore } from "./object-store";
@@ -79,6 +80,40 @@ test("writeAssetObject keeps a compatibility local cache for object-store writes
     assert.equal(
       await fs.readFile(path.join(tmpDir, result.storageKey), "utf8"),
       "video-bytes"
+    );
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("deleteAssetObject removes both object-store bytes and the local compatibility copy", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "popcornready-storage-"));
+  try {
+    const store = mockObjectStore();
+    const stored = await withLocalDir(tmpDir, () =>
+      writeAssetObject({
+        workspaceId: "ws_1",
+        projectId: "proj_1",
+        assetId: "asset_revision",
+        filename: "voiceover.wav",
+        bytes: Buffer.from("revision-bytes"),
+        visibility: "private",
+        store,
+      })
+    );
+    await withLocalDir(tmpDir, () =>
+      deleteAssetObject({
+        storageKey: stored.storageKey,
+        visibility: "private",
+        store,
+      })
+    );
+
+    assert.deepEqual(store.deletes, [
+      { key: stored.storageKey, visibility: "private" },
+    ]);
+    await assert.rejects(() =>
+      fs.readFile(path.join(tmpDir, stored.storageKey))
     );
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true });
@@ -160,10 +195,15 @@ test("writeAssetObject does not write compatibility cache for hosted s3 backend"
   }
 });
 
-function mockObjectStore(): ObjectStore & { puts: ObjectStorePut[] } {
+function mockObjectStore(): ObjectStore & {
+  puts: ObjectStorePut[];
+  deletes: Array<{ key: string; visibility: "public" | "private" }>;
+} {
   const puts: ObjectStorePut[] = [];
+  const deletes: Array<{ key: string; visibility: "public" | "private" }> = [];
   return {
     puts,
+    deletes,
     async putObject(input) {
       puts.push(input);
       return {
@@ -183,7 +223,9 @@ function mockObjectStore(): ObjectStore & { puts: ObjectStorePut[] } {
         key: input.destinationKey,
       };
     },
-    async deleteObject() {},
+    async deleteObject(key, visibility) {
+      deletes.push({ key, visibility });
+    },
     objectUrl(key) {
       return `/media/${key}`;
     },

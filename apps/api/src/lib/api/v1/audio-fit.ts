@@ -16,6 +16,8 @@ import type { Beat, ShotPlan } from "@popcorn/shared/types";
 
 export interface AudioFitRequest {
   audioAssetId: string;
+  /** Current authorized picture used to derive the real fit window. */
+  pictureAssetId?: string;
   beatId: string;
   options?: {
     maxRetime?: number;
@@ -95,6 +97,10 @@ export function parseAudioFitRequest(body: unknown): AudioFitRequest {
       : undefined;
   const beatId =
     typeof body.beatId === "string" && body.beatId.trim() ? body.beatId.trim() : undefined;
+  const pictureAssetId =
+    typeof body.pictureAssetId === "string" && body.pictureAssetId.trim()
+      ? body.pictureAssetId.trim()
+      : undefined;
   if (!audioAssetId) fields.push({ path: "audioAssetId", message: "Required." });
   if (!beatId) fields.push({ path: "beatId", message: "Required." });
 
@@ -117,7 +123,12 @@ export function parseAudioFitRequest(body: unknown): AudioFitRequest {
   if (fields.length > 0 || !audioAssetId || !beatId) {
     throw validationError("Invalid audio fit request.", fields);
   }
-  return { audioAssetId, beatId, ...(options ? { options } : {}) };
+  return {
+    audioAssetId,
+    ...(pictureAssetId ? { pictureAssetId } : {}),
+    beatId,
+    ...(options ? { options } : {}),
+  };
 }
 
 function planBeats(plan: ShotPlan): Beat[] {
@@ -135,6 +146,21 @@ function beatWindowFromPlan(plan: ShotPlan, beatId: string): AudioFitWindow | nu
     cursor = endSec;
   }
   return null;
+}
+
+export function resolveAudioFitTargetWindow(input: {
+  pictureDurationSec?: number;
+  plannedWindow: AudioFitWindow | null;
+  requestedWindow?: AudioFitWindow;
+}): AudioFitWindow | null {
+  if (input.pictureDurationSec !== undefined) {
+    const startSec = input.plannedWindow?.startSec ?? 0;
+    return {
+      startSec,
+      endSec: startSec + input.pictureDurationSec,
+    };
+  }
+  return input.requestedWindow ?? input.plannedWindow;
 }
 
 export async function fitProjectAudioToPicture(input: {
@@ -159,10 +185,31 @@ export async function fitProjectAudioToPicture(input: {
     });
   }
 
+  const picture = input.request.pictureAssetId
+    ? await getAsset(
+        input.auth.workspaceId,
+        input.projectId,
+        input.request.pictureAssetId
+      )
+    : null;
+  if (
+    picture &&
+    (picture.kind !== "video" || picture.status !== "ready" || !picture.durationSec)
+  ) {
+    throw new ApiError(
+      picture.kind !== "video" ? "asset_invalid" : "asset_not_ready",
+      `Picture asset ${picture.id} must be a ready video with a measured duration.`,
+      { assetIds: [picture.id] }
+    );
+  }
+
   const plan = await getActiveProjectPlan(input.projectId);
-  const targetWindow =
-    input.request.options?.targetWindow ??
-    (plan ? beatWindowFromPlan(plan.plan, input.request.beatId) : null);
+  const plannedWindow = plan ? beatWindowFromPlan(plan.plan, input.request.beatId) : null;
+  const targetWindow = resolveAudioFitTargetWindow({
+    pictureDurationSec: picture?.durationSec,
+    plannedWindow,
+    requestedWindow: input.request.options?.targetWindow,
+  });
   if (!targetWindow) {
     throw new ApiError("validation_failed", `Unknown beat id: ${input.request.beatId}.`, {
       beatId: input.request.beatId,
@@ -187,6 +234,7 @@ export async function fitProjectAudioToPicture(input: {
   const critique = {
     schemaVersion: "audio_fit_critique.v1",
     audioAssetId: audio.id,
+    ...(picture ? { pictureAssetId: picture.id } : {}),
     beatId: input.request.beatId,
     targetWindow,
     placement: decision.placement,
@@ -200,6 +248,8 @@ export async function fitProjectAudioToPicture(input: {
     projectId: input.projectId,
     audioAssetId: audio.id,
     audioContentHash: audio.contentHash,
+    pictureAssetId: picture?.id,
+    pictureContentHash: picture?.contentHash,
     planAssetId: plan?.assetId,
     planContentHash: plan?.contentHash,
     beatId: input.request.beatId,

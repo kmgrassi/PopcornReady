@@ -1124,6 +1124,14 @@ graph/selection assertions, follow-up-session tests, and opt-in media smoke.
 
 **Owns:** new Audio prompt/config/evals and Audio registry file.
 
+**Implementation status:** implemented as a task-bound Audio profile over the
+shared finite-run engine and canonical `generate_audio` /
+`fit_audio_to_picture` vocabulary. Production work records exact
+plan/brief/script dependencies; standalone creation uses the generated-assets
+service without a fabricated plan or selection; and source-targeted delivery
+revisions mint a new immutable audio lineage version. The creator-direct HTTP
+entrypoint remains intentionally owned by PR 12.
+
 **Deliver:**
 
 - Scope Audio to narration, dialogue, music, sound generation, and fitting audio

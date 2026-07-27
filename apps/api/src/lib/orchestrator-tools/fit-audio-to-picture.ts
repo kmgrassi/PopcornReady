@@ -27,6 +27,7 @@ export const fitAudioToPictureInputSchema = {
   additionalProperties: false,
   properties: {
     audioAssetId: str,
+    pictureAssetId: str,
     beatId: str,
     options: {
       type: "object",
