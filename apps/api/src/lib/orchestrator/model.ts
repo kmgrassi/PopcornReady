@@ -20,6 +20,10 @@ export interface ModelTurnInput {
   inputSummary: string;
   priorResults?: unknown[];
   registry: ToolRegistry;
+  /** Role-specific prompt selected from a durable AgentDefinition. */
+  systemPrompt?: string;
+  /** Fresh structured context; never concatenate trusted and creator data into prose. */
+  agentContext?: unknown;
   maxTokens?: number;
   resolveAssetKind?: AssetKindResolver;
 }
@@ -315,6 +319,8 @@ export const orchestratorModel: OrchestratorModel = async ({
   inputSummary,
   priorResults = [],
   registry,
+  systemPrompt,
+  agentContext,
   // Headroom so reasoning models (e.g. gpt-5) have budget left for the tool call
   // after thinking; non-reasoning models only use what they need.
   maxTokens = 4000,
@@ -344,12 +350,13 @@ export const orchestratorModel: OrchestratorModel = async ({
     },
     () =>
       client.chooseTool({
-        system: ORCHESTRATOR_SYSTEM_PROMPT,
+        system: systemPrompt ?? ORCHESTRATOR_SYSTEM_PROMPT,
         userPayload: {
           projectId,
           inputSummary,
           priorResults,
           routingContext: buildRoutingContext(priorResults),
+          ...(agentContext === undefined ? {} : { agentContext }),
           instruction:
             "Choose exactly one next tool if work remains. If all work is complete, answer with a concise text summary and no tool call. " +
             "Inspect routingContext and priorResults first: if routingContext.nextToolHint is present, use that tool unless it is unavailable. " +

@@ -18,6 +18,12 @@
 - Follow-up: <TODO / PR / none>
 ```
 
+### 2026-07-27T15:50:00-04:00 — API-20260727-04
+- What helped: The merged PR 6/7 seams made it possible to prove the active root remains unchanged while introducing a fail-closed declarative domain configuration.
+- Friction or failure: Independent implementation review exposed that context isolation is not write authorization and that session claim generations can disappear across an adapter boundary.
+- Suggested improvement: Add an end-to-end contract test that follows the session generation from dispatch claim through bridge, job creation, callback, and terminal report before any domain runtime flag can be introduced.
+- Follow-up: PR 8 continuation must add tool-write scope guards and provider-job claim propagation before activation.
+
 ### 2026-07-27T15:30:00-04:00 — API-20260727-02
 - What helped: Thread-aware review retrieval plus the existing local transport suite made each lifecycle defect directly reproducible at the database boundary.
 - Friction or failure: The local PostgREST stack intermittently returned an unstructured upstream error during the pre-existing concurrent idempotency drift test, even though the focused root, cancellation, and retry cases passed serially.

@@ -121,6 +121,8 @@ export interface ToolExecutionContext {
   agentId?: string;
   messageId?: string;
   requestId?: string;
+  /** Present only for a claimed finite domain run; provider jobs must preserve it. */
+  sessionClaimGeneration?: number;
   metadata?: Record<string, unknown>;
 }
 
