@@ -218,7 +218,7 @@ function toolInputFromOpenAIMessage<T extends object>(
     throw new Error(`Model did not call required tool: ${expectedTool}`);
   }
   try {
-    const parsed = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
     if (!isJsonObject(parsed)) {
       throw new Error(
         `Model returned invalid tool arguments for ${expectedTool}: expected a JSON object.`
@@ -255,7 +255,7 @@ export function interpretOpenAiToolResponse(
     const raw = call?.function?.arguments;
     if (typeof raw === "string" && raw.trim()) {
       try {
-        const parsed = JSON.parse(raw);
+        const parsed: unknown = JSON.parse(raw);
         if (isJsonObject(parsed)) {
           input = parsed;
         }
