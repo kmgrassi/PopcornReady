@@ -87,6 +87,7 @@ interface JobRow {
   result: unknown;
   error: Job["error"];
   action_id: string | null;
+  session_claim_generation: number | null;
   idempotency_key: string | null;
   deploy_id: string | null;
   git_sha: string | null;
@@ -108,6 +109,7 @@ function jobToRow(job: Job): JobRow {
     result: job.result,
     error: job.error,
     action_id: job.actionId ?? null,
+    session_claim_generation: job.sessionClaimGeneration ?? null,
     idempotency_key: job.idempotencyKey ?? null,
     ...deploymentMetadata(),
     created_at: job.createdAt,
@@ -129,6 +131,8 @@ function mapJob(row: JobRow): Job {
     result: row.result ?? null,
     error: row.error ?? null,
     actionId: row.action_id ?? undefined,
+    sessionClaimGeneration:
+      row.session_claim_generation == null ? undefined : Number(row.session_claim_generation),
     idempotencyKey: row.idempotency_key ?? undefined,
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
@@ -240,6 +244,7 @@ export async function createJobWithDeps(
     status?: JobStatus;
     requestId?: string;
     actionId?: string;
+    sessionClaimGeneration?: number;
     payload?: unknown;
     result?: unknown;
     idempotencyKey?: string;
@@ -255,6 +260,7 @@ export async function createJobWithDeps(
     projectId: input.projectId,
     requestId: input.requestId,
     actionId: input.actionId,
+    sessionClaimGeneration: input.sessionClaimGeneration,
     type: input.type,
     status: input.status ?? "queued",
     progress: input.progress ?? {
@@ -291,6 +297,7 @@ export async function createOrGetJobWithDeps(
     projectId: input.projectId,
     requestId: input.requestId,
     actionId: input.actionId,
+    sessionClaimGeneration: input.sessionClaimGeneration,
     type: input.type,
     status: input.status ?? "queued",
     progress: input.progress ?? { percent: 0, currentStep: "queued" },

@@ -207,3 +207,9 @@
 - Friction or failure: The worktree began without dependencies, and the full API suite still reports two unrelated guest-retention migration failures; the configured independent-review adapter is unavailable.
 - Suggested improvement: Keep a lightweight request-body type at each API boundary and export pure parsers so route validation can be tested without database setup.
 - Follow-up: Revisit the two guest-retention migration failures separately; configure an independent reviewer for future workflow checkpoints.
+
+### 2026-07-27T10:15:00-04:00 — API-20260727-01
+- What helped: The PR 4 schema tests and the merged #801/#805 slices made the remaining PR 5 surface (session store, claim transitions, fencing) very cleanly separable; exercising real store modules against the local stack caught behavior a mock suite would have missed.
+- Friction or failure: Eight truly concurrent identical PK upserts through the local Kong gateway intermittently 502 ("invalid response from upstream server"); the bounded store retry the engine already uses is also the right fix in tests. The DB-gated generated-assets suite fails on a fresh local reset because its hard-coded workspace id is not seeded.
+- Suggested improvement: Seed the local stack with the LOCAL_WORKSPACE_ID fixture (or make those tests create their workspace) so the Supabase-gated API suites are runnable after `supabase db reset --local`.
+- Follow-up: PR 6 consumes claim/release + completeDomainRun for the turn-boundary dispatch transaction.

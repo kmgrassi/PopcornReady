@@ -495,6 +495,13 @@ export interface Job<TInput = unknown, TResult = unknown> {
   error: JobError | null;
   /** Canonical action that initiated this job, when it came from a tool invocation. */
   actionId?: string;
+  /**
+   * The agent session's durable claim generation copied at launch when the
+   * launching run held a domain-session claim. Finalization writes are fenced
+   * against the session's current generation so a stale, reclaimed worker
+   * cannot commit late.
+   */
+  sessionClaimGeneration?: number;
   idempotencyKey?: string;
   createdAt: string;
   updatedAt: string;

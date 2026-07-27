@@ -97,3 +97,49 @@ test("edit_video_asset idempotency separates beat targets", async () => {
 
   assert.notEqual(keys[0], keys[1]);
 });
+
+test("edit_video_asset uses the engine-reserved canonical action as its job identity", async () => {
+  const launches: Array<{ actionId?: string; idempotencyKey?: string | null }> = [];
+  const tool = createEditVideoAssetTool({
+    getAsset: async () => sourceAsset(),
+    createJob: async (input) => {
+      launches.push({
+        actionId: input.actionId,
+        idempotencyKey: input.idempotencyKey,
+      });
+      return {
+        created: false,
+        job: {
+          id: `job_${launches.length}`,
+          type: "asset_generation",
+          status: "queued",
+          projectId: "proj_1",
+          createdAt: "t",
+          updatedAt: "t",
+        },
+      };
+    },
+    runEditVideoAssetJob: async () => {},
+  });
+
+  // Engine invocation: the preallocated action id is the tenant-scoped job
+  // idempotency key AND the persisted jobs.action_id, so a crash-retried
+  // invocation reuses the same provider job.
+  await tool.execute(
+    { sourceAssetId: "source_1", instruction: "Add a dinosaur." },
+    { auth, projectId: "proj_1", actionId: "action_1" }
+  );
+  assert.deepEqual(launches[0], {
+    actionId: "action_1",
+    idempotencyKey: "action:action_1",
+  });
+
+  // Direct tool call (no reserved action): keeps the content-derived key and
+  // claims no action row.
+  await tool.execute(
+    { sourceAssetId: "source_1", instruction: "Add a dinosaur." },
+    { auth, projectId: "proj_1" }
+  );
+  assert.equal(launches[1].actionId, undefined);
+  assert.ok(launches[1].idempotencyKey && !launches[1].idempotencyKey.startsWith("action:"));
+});

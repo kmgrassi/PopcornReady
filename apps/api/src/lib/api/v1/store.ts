@@ -6463,6 +6463,7 @@ export function createJob(input: {
   status?: JobStatus;
   requestId?: string;
   actionId?: string;
+  sessionClaimGeneration?: number;
   payload?: unknown;
   result?: unknown;
   idempotencyKey?: string;
