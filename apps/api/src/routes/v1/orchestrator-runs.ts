@@ -19,7 +19,9 @@ import {
   supersedeRunActions,
   updateOrchestratorRun,
   type OrchestratorRun,
+  type OrchestratorRunGate,
   type RunActionSummary,
+  type UpdateOrchestratorRunPatch,
 } from "@/lib/api/v1/orchestrator-store";
 import {
   createAction,
