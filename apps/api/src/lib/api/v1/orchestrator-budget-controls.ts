@@ -91,6 +91,26 @@ export async function settleOrchestratorBudget(input: {
   return { settled: row.settled, runId: row.run_id, actualUsd: Number(row.actual_usd) };
 }
 
+export async function recordOrchestratorBudgetBilling(input: {
+  projectId: string;
+  reservationKey: string;
+  billingUserId: string;
+  billableUsd: number;
+}): Promise<void> {
+  if (!validAmount(input.billableUsd)) {
+    throw new ApiError("validation_failed", "Billable cost must be a non-negative number.");
+  }
+  await runQuery(
+    "orchestratorBudget.recordBilling",
+    getServiceSupabase().rpc("record_orchestrator_budget_billing", {
+      p_project_id: input.projectId,
+      p_reservation_key: input.reservationKey,
+      p_billing_user_id: input.billingUserId,
+      p_billable_usd: input.billableUsd,
+    })
+  );
+}
+
 export async function releaseOrchestratorBudget(input: {
   projectId: string;
   reservationKey: string;

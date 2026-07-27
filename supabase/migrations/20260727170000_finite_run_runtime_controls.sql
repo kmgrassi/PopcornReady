@@ -30,6 +30,8 @@ create table public.orchestrator_budget_reservations (
     check (reservation_scope in ('operation', 'run_ceiling')),
   estimated_usd double precision not null check (estimated_usd >= 0),
   actual_usd double precision check (actual_usd is null or actual_usd >= 0),
+  billing_user_id uuid references public.users(id) on delete set null,
+  billable_usd double precision not null default 0 check (billable_usd >= 0),
   status public.orchestrator_budget_reservation_status not null default 'reserved',
   settled_at timestamptz,
   released_at timestamptz,
@@ -128,6 +130,8 @@ declare
   v_root public.orchestrator_runs%rowtype;
   v_existing public.orchestrator_budget_reservations%rowtype;
   v_committed double precision;
+  v_family_usage double precision;
+  v_family_ceiling double precision;
   v_root_id uuid;
   v_family_increment double precision;
 begin
@@ -208,11 +212,9 @@ begin
       on r.parent_run_id = f.id or r.continues_run_id = f.id
      where r.project_id = p_project_id
   )
-  select coalesce(sum(
-      case when ceiling.estimated_usd is not null then greatest(r.spent_usd, ceiling.estimated_usd)
-           else r.spent_usd + coalesce(operation.estimated_usd, 0) end
-    ), 0)
-    into v_committed
+  select coalesce(sum(r.spent_usd + coalesce(operation.estimated_usd, 0)), 0),
+         max(ceiling.estimated_usd)
+    into v_family_usage, v_family_ceiling
     from public.orchestrator_runs r
     left join lateral (
       select b.estimated_usd from public.orchestrator_budget_reservations b
@@ -225,14 +227,16 @@ begin
          and b.status = 'reserved'
     ) operation on true
    where r.id in (select id from family);
+  v_committed := greatest(v_family_usage, coalesce(v_family_ceiling, 0));
   v_family_increment := p_estimated_usd;
-  if p_reservation_scope = 'operation' and exists (
-    select 1 from public.orchestrator_budget_reservations b
-     where b.orchestrator_run_id = v_run.id and b.reservation_scope = 'run_ceiling'
-       and b.status = 'reserved'
-  ) then
-    -- A finite-run ceiling already occupies its family share. Operations still
-    -- have their own ceiling check above, but never double-reserve the parent.
+  if p_reservation_scope = 'operation' and v_family_ceiling is not null then
+    -- A creator-direct ceiling follows the whole continuation family, not just
+    -- the run that originally consumed the proposal token. Its operations share
+    -- one approved cap and must not reserve it a second time on successors.
+    if v_family_usage + p_estimated_usd > v_family_ceiling then
+      raise exception 'continuation family budget exhausted: % + % exceeds %',
+        v_family_usage, p_estimated_usd, v_family_ceiling using errcode = 'check_violation';
+    end if;
     v_family_increment := 0;
   end if;
   if v_root.budget_usd is not null and v_committed + v_family_increment > v_root.budget_usd then
@@ -251,6 +255,34 @@ begin
   reserved_usd := p_estimated_usd;
   replayed := false;
   return next;
+end;
+$$;
+
+create or replace function public.record_orchestrator_budget_billing(
+  p_project_id uuid,
+  p_reservation_key text,
+  p_billing_user_id uuid,
+  p_billable_usd double precision
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if p_billing_user_id is null or p_billable_usd is null or p_billable_usd < 0 then
+    raise exception 'budget billing attribution requires user and non-negative cost' using errcode = '22023';
+  end if;
+  update public.orchestrator_budget_reservations
+     set billing_user_id = p_billing_user_id,
+         billable_usd = p_billable_usd,
+         updated_at = now()
+   where project_id = p_project_id
+     and reservation_key = p_reservation_key
+     and status = 'reserved';
+  if not found then
+    raise exception 'active budget reservation % not found', p_reservation_key using errcode = 'P0002';
+  end if;
 end;
 $$;
 
@@ -631,6 +663,8 @@ declare
   v_parent record;
   v_wait record;
   v_reservation record;
+  v_delegation_error jsonb;
+  v_rows integer;
 begin
   -- A terminal finite run cannot keep the permanent session serialized. The
   -- generation bump fences any provider callback that survived a worker crash.
@@ -649,6 +683,7 @@ begin
   -- terminal job that never recorded a cost frees its admission headroom.
   for v_reservation in
     select b.project_id, b.reservation_key, b.estimated_usd,
+           b.billing_user_id, b.billable_usd,
            m.cost_usd as recorded_cost_usd
       from public.orchestrator_budget_reservations b
       join public.jobs j on j.id = b.job_id
@@ -659,7 +694,9 @@ begin
       perform public.settle_orchestrator_run_budget(
         v_reservation.project_id,
         v_reservation.reservation_key,
-        least(v_reservation.recorded_cost_usd, v_reservation.estimated_usd)
+        least(v_reservation.recorded_cost_usd, v_reservation.estimated_usd),
+        v_reservation.billing_user_id,
+        v_reservation.billable_usd
       );
     else
       perform public.release_orchestrator_run_budget(
@@ -672,15 +709,77 @@ begin
 
   parent_wakes := 0;
   for v_parent in
-    select distinct child.parent_run_id as run_id
+    select child.parent_run_id as run_id,
+           child.id as child_run_id,
+           child.root_action_id,
+           report.params as report,
+           report.output_asset_ids
       from public.orchestrator_runs child
       join public.actions report
         on report.orchestrator_run_id = child.id and report.tool = 'domain_report'
+      join public.actions delegation
+        on delegation.id = child.root_action_id
+       and delegation.status in ('proposed', 'running')
      where child.parent_run_id is not null
+       and child.origin_kind = 'creative_director'
        and child.status in ('succeeded', 'failed', 'canceled', 'timed_out', 'superseded')
   loop
-    perform public.wake_orchestrator_dispatch(v_parent.run_id);
-    parent_wakes := parent_wakes + 1;
+    -- A report without its delegation projection is a durable crash-repair
+    -- state. Win the action CAS before waking: a later recovery pass must not
+    -- requeue a parent whose child report has already been acknowledged.
+    v_delegation_error := null;
+    if v_parent.report -> 'outcome' ->> 'outcome' = 'blocked' then
+      v_delegation_error := jsonb_build_object(
+        'schema', 'ToolError.v1',
+        'kind', 'precondition_unmet',
+        'message', coalesce(v_parent.report #>> '{outcome,reason}', 'Delegated domain reported a blocked prerequisite.'),
+        'recoverable', true,
+        'childRunId', v_parent.child_run_id,
+        'unmetRequirements', jsonb_build_array(jsonb_build_object(
+          'requirement', v_parent.report #>> '{outcome,precondition,requirement}',
+          'because', v_parent.report #>> '{outcome,precondition,because}',
+          'satisfyWith', jsonb_build_object(
+            'tool', case v_parent.report #>> '{outcome,requiredDomain}'
+              when 'audio' then 'delegate_audio'
+              when 'visuals' then 'delegate_visuals'
+              else 'request_approval'
+            end,
+            'inputHint', '{}'::jsonb
+          )
+        )),
+        'suggestedNextTools', jsonb_build_array(jsonb_build_object(
+          'tool', case v_parent.report #>> '{outcome,requiredDomain}'
+            when 'audio' then 'delegate_audio'
+            when 'visuals' then 'delegate_visuals'
+            else 'request_approval'
+          end,
+          'inputHint', '{}'::jsonb
+        )),
+        'domainReport', v_parent.report
+      );
+    elsif v_parent.report -> 'outcome' ->> 'outcome' = 'question' then
+      v_delegation_error := jsonb_build_object(
+        'schema', 'ToolError.v1',
+        'kind', 'invalid_input',
+        'message', coalesce(v_parent.report #>> '{outcome,question}', 'Delegated domain requires a decision.'),
+        'recoverable', true,
+        'childRunId', v_parent.child_run_id,
+        'domainReport', v_parent.report
+      );
+    end if;
+    update public.actions delegation
+       set status = case when v_delegation_error is null then 'applied'::public.action_status
+                         else 'failed'::public.action_status end,
+           output_asset_ids = coalesce(v_parent.output_asset_ids, '{}'),
+           error = v_delegation_error,
+           updated_at = now()
+     where delegation.id = v_parent.root_action_id
+       and delegation.status in ('proposed', 'running');
+    get diagnostics v_rows = row_count;
+    if v_rows > 0 then
+      perform public.wake_orchestrator_dispatch(v_parent.run_id);
+      parent_wakes := parent_wakes + 1;
+    end if;
   end loop;
 
   domain_wait_wakes := 0;
@@ -696,6 +795,7 @@ end;
 $$;
 
 revoke all on function public.reserve_orchestrator_run_budget(uuid, uuid, uuid, uuid, text, double precision, text) from public, anon, authenticated;
+revoke all on function public.record_orchestrator_budget_billing(uuid, text, uuid, double precision) from public, anon, authenticated;
 revoke all on function public.settle_orchestrator_run_budget(uuid, text, double precision, uuid, double precision) from public, anon, authenticated;
 revoke all on function public.release_orchestrator_run_budget(uuid, text, text) from public, anon, authenticated;
 revoke all on function public.create_creator_direct_proposal_gate(uuid, uuid, uuid, uuid, text, double precision, text, timestamptz) from public, anon, authenticated;
@@ -704,6 +804,7 @@ revoke all on function public.reject_creator_direct_proposal_gate(uuid, uuid, uu
 revoke all on function public.cancel_orchestrator_run_family(uuid, uuid) from public, anon, authenticated;
 revoke all on function public.recover_orchestrator_runtime_controls() from public, anon, authenticated;
 grant execute on function public.reserve_orchestrator_run_budget(uuid, uuid, uuid, uuid, text, double precision, text) to service_role;
+grant execute on function public.record_orchestrator_budget_billing(uuid, text, uuid, double precision) to service_role;
 grant execute on function public.settle_orchestrator_run_budget(uuid, text, double precision, uuid, double precision) to service_role;
 grant execute on function public.release_orchestrator_run_budget(uuid, text, text) to service_role;
 grant execute on function public.create_creator_direct_proposal_gate(uuid, uuid, uuid, uuid, text, double precision, text, timestamptz) to service_role;

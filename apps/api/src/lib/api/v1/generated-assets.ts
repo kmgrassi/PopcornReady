@@ -24,6 +24,7 @@ import { estimateCostUsd } from "@/lib/generative/pricing";
 import { recordModelCallCost } from "./model-call-costs";
 import {
   releaseOrchestratorBudget,
+  recordOrchestratorBudgetBilling,
   reserveOrchestratorBudget,
   settleOrchestratorBudget,
 } from "./orchestrator-budget-controls";
@@ -1108,6 +1109,16 @@ export async function runGeneratedAssetJob(args: {
     if (progress) await progress.attachJob(running.id);
 
     const asset = await runGeneration(auth, projectId, parsed, item, action);
+    const billableUsd = Math.max(0, billableUsdSoFar() - billableBeforeUsd);
+    const billingUserId = currentRunUserId();
+    if (budgetReserved && billingUserId) {
+      await recordOrchestratorBudgetBilling({
+        projectId,
+        reservationKey: budgetReservationKey,
+        billingUserId,
+        billableUsd,
+      });
+    }
     const finished = await completeProviderJobExecution({
       workspaceId: auth.workspaceId,
       projectId,
@@ -1129,8 +1140,8 @@ export async function runGeneratedAssetJob(args: {
           projectId,
           reservationKey: budgetReservationKey,
           actualUsd: estimatedCostUsd,
-          billingUserId: currentRunUserId() ?? undefined,
-          billableUsd: Math.max(0, billableUsdSoFar() - billableBeforeUsd),
+          billingUserId: billingUserId ?? undefined,
+          billableUsd,
         });
       } catch (settlementError) {
         // Do not rewrite a completed provider job as failed because an
@@ -1154,12 +1165,22 @@ export async function runGeneratedAssetJob(args: {
     if (budgetReserved) {
       try {
         if (modelCostRecorded) {
+          const billingUserId = currentRunUserId();
+          const billableUsd = Math.max(0, billableUsdSoFar() - billableBeforeUsd);
+          if (billingUserId) {
+            await recordOrchestratorBudgetBilling({
+              projectId,
+              reservationKey: budgetReservationKey,
+              billingUserId,
+              billableUsd,
+            });
+          }
           await settleOrchestratorBudget({
             projectId,
             reservationKey: budgetReservationKey,
             actualUsd: estimatedCostUsd,
-            billingUserId: currentRunUserId() ?? undefined,
-            billableUsd: Math.max(0, billableUsdSoFar() - billableBeforeUsd),
+            billingUserId: billingUserId ?? undefined,
+            billableUsd,
           });
         } else {
           await releaseOrchestratorBudget({
