@@ -6,6 +6,8 @@ import { createAudioToolRegistry } from "../audio-registry";
 import {
   assertExactlyOneToolOwner,
   getToolCapability,
+  DISPATCH_TOOL_NAMES,
+  PRODUCTION_TOOL_NAMES,
   TOOL_CAPABILITY_CATALOG,
   TOOL_NAMES,
   type ToolName,
@@ -15,7 +17,7 @@ import { createRootToolRegistry } from "../root-registry";
 import { ToolRegistry } from "../registry";
 import { createVisualsToolRegistry } from "../visuals-registry";
 
-const expectedVocabulary: ToolName[] = [
+const expectedProductionVocabulary: ToolName[] = [
   "create_or_load_brief",
   "develop_story_blueprint",
   "draft_script",
@@ -34,6 +36,16 @@ const expectedVocabulary: ToolName[] = [
   "request_approval",
   "export_video",
   "publish_to_catalog",
+];
+
+// Root-only dispatch tools (PR 6) join the catalog AFTER the production
+// vocabulary so legacy display orders are unchanged; they never appear on any
+// flat production surface.
+const expectedDispatchVocabulary: ToolName[] = ["delegate_visuals", "delegate_audio"];
+
+const expectedVocabulary: ToolName[] = [
+  ...expectedProductionVocabulary,
+  ...expectedDispatchVocabulary,
 ];
 
 const expectedDefaultRegistryOrder: ToolName[] = [
@@ -82,15 +94,25 @@ function names(registry: ToolRegistry): ToolName[] {
   return registry.list().map((definition) => definition.name);
 }
 
-test("catalog is the immutable, ordered 18-tool vocabulary", () => {
+test("catalog is the immutable, ordered vocabulary with a production/dispatch split", () => {
   assert.deepEqual(TOOL_NAMES, expectedVocabulary);
+  assert.deepEqual(PRODUCTION_TOOL_NAMES, expectedProductionVocabulary);
+  assert.deepEqual(DISPATCH_TOOL_NAMES, expectedDispatchVocabulary);
   assert.equal(Object.isFrozen(TOOL_NAMES), true);
+  assert.equal(Object.isFrozen(PRODUCTION_TOOL_NAMES), true);
+  assert.equal(Object.isFrozen(DISPATCH_TOOL_NAMES), true);
   assert.equal(Object.isFrozen(TOOL_CAPABILITY_CATALOG), true);
   assert.equal(Object.isFrozen(TOOL_CAPABILITY_CATALOG.request_approval.gate), true);
   assert.throws(() => (TOOL_NAMES as ToolName[]).push("plan_shots"));
   assert.throws(() => {
     (TOOL_CAPABILITY_CATALOG.request_approval.gate as { kind: string }).kind = "none";
   });
+  // Dispatch tools are root-owned and keep the neutral projection fallback.
+  for (const name of expectedDispatchVocabulary) {
+    const metadata = getToolCapability(name);
+    assert.equal(metadata.ownerRole, "creative_director", name);
+    assert.deepEqual(metadata.runProjection, { label: null, order: null }, name);
+  }
 });
 
 test("ownership validation fails for unowned, multiply owned, and unknown tools", () => {
@@ -132,9 +154,9 @@ test("approval execution and gate metadata cannot drift", () => {
   assert.equal(regeneration.costClass, "media");
 });
 
-test("driver stubs preserve vocabulary, descriptions, and schemas with catalog modes", () => {
+test("driver stubs preserve the flat production vocabulary, descriptions, and schemas", () => {
   const registry = createDriverRegistry();
-  assert.deepEqual([...registry.keys()], expectedVocabulary);
+  assert.deepEqual([...registry.keys()], expectedProductionVocabulary);
   assert.deepEqual(
     [...registry.values()].map(({ name, description, mode }) => [name, description, mode]),
     expectedDriverDefinitions
@@ -176,7 +198,7 @@ test("flat default registry keeps its existing order and catalog metadata", () =
   }
 });
 
-test("dormant role registries form an exact disjoint 10/6/2 partition", () => {
+test("dormant role registries form an exact disjoint 12/6/2 partition", () => {
   const root = names(createRootToolRegistry());
   const visuals = names(createVisualsToolRegistry());
   const audio = names(createAudioToolRegistry());
@@ -192,6 +214,9 @@ test("dormant role registries form an exact disjoint 10/6/2 partition", () => {
     "request_approval",
     "assemble_timeline",
     "publish_to_catalog",
+    // Root-only dispatch adapters (PR 6): registered here and ONLY here.
+    "delegate_visuals",
+    "delegate_audio",
   ]);
   assert.deepEqual(visuals, [
     "generate_anchor",
@@ -209,8 +234,16 @@ test("dormant role registries form an exact disjoint 10/6/2 partition", () => {
   for (const domainTool of [...visuals, ...audio]) {
     assert.notEqual(domainTool, "request_approval");
     assert.notEqual(domainTool, "assemble_timeline");
+    assert.equal(DISPATCH_TOOL_NAMES.includes(domainTool), false);
   }
   assert.equal(visuals.some((name) => audio.includes(name)), false);
+
+  // Nothing user-visible changes in production: the flat default registry
+  // never contains a dispatch tool.
+  const flat = names(createDefaultToolRegistry());
+  for (const dispatchTool of DISPATCH_TOOL_NAMES) {
+    assert.equal(flat.includes(dispatchTool), false, dispatchTool);
+  }
 });
 
 test("rich registry rejects cross-domain or execution metadata drift", () => {

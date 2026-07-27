@@ -18,6 +18,12 @@
 - Follow-up: <TODO / PR / none>
 ```
 
+### 2026-07-27T15:30:00-04:00 — API-20260727-02
+- What helped: Thread-aware review retrieval plus the existing local transport suite made each lifecycle defect directly reproducible at the database boundary.
+- Friction or failure: The local PostgREST stack intermittently returned an unstructured upstream error during the pre-existing concurrent idempotency drift test, even though the focused root, cancellation, and retry cases passed serially.
+- Suggested improvement: Make the local integration runner serialize shared-stack tests by default and surface PostgREST upstream response bodies for failed RPC assertions.
+- Follow-up: none.
+
 ### 2026-07-14T12:32:20-04:00 — API-20260714-02
 - What helped: Treating the dispatch lease as the single turn owner exposed the inline-completion race clearly.
 - Friction or failure: Inline provider completion could race invocation parking and wake duplicate engine turns.
@@ -213,3 +219,9 @@
 - Friction or failure: Eight truly concurrent identical PK upserts through the local Kong gateway intermittently 502 ("invalid response from upstream server"); the bounded store retry the engine already uses is also the right fix in tests. The DB-gated generated-assets suite fails on a fresh local reset because its hard-coded workspace id is not seeded.
 - Suggested improvement: Seed the local stack with the LOCAL_WORKSPACE_ID fixture (or make those tests create their workspace) so the Supabase-gated API suites are runnable after `supabase db reset --local`.
 - Follow-up: PR 6 consumes claim/release + completeDomainRun for the turn-boundary dispatch transaction.
+
+### 2026-07-27T15:30:00Z — API-20260727-03
+- What helped: PR 5's claim/release/wake primitives composed directly into the two new SQL transactions; deterministic run ids (sha256 of the idempotency key) let the database's primary keys serialize concurrent duplicate dispatches with a one-retry replay in the service.
+- Friction or failure: Adding delegate_visuals/delegate_audio to the typed catalog rippled through every flat surface (driver stubs, batteries, eval scenario tool lists, bridge stubs); the PRODUCTION_TOOL_NAMES/DISPATCH_TOOL_NAMES split contained it. The full API suite carries three pre-existing failures (guest-retention x2, discover public-id) — confirmed identical on unmodified origin/main via git stash.
+- Suggested improvement: When extending a shared vocabulary, land the surface marker and the split name lists in the same change so "nothing user-visible changes in production" is an assertable invariant.
+- Follow-up: PR 8 wires driveLoop domain completion to finalizeDomainTurn (replacing the fake report producer); PR 12 reuses dispatchDomainRun's gateStage/enqueue=false quote mode for creator-direct proposals.

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { ToolExecutionContext as DriverContext } from "@/lib/orchestrator";
-import { TOOL_NAMES } from "@/lib/orchestrator";
+import { PRODUCTION_TOOL_NAMES } from "@/lib/orchestrator";
 import { ToolRegistry } from "@/lib/orchestrator-tools/registry";
 import { toolDefinitionMetadata } from "@/lib/orchestrator-tools/capability-catalog";
 import type {
@@ -91,12 +91,14 @@ test("default mode exposes only the wired tools (no stubs)", () => {
   assert.equal(registry.has("export_video"), false);
 });
 
-test("includeStubs exposes the full vocabulary with stubs for unimplemented tools", async () => {
+test("includeStubs exposes the full production vocabulary with stubs for unimplemented tools", async () => {
   const real = new ToolRegistry();
   real.register(fakeTool());
   const registry = toOrchestratorRegistry(real, { includeStubs: true });
 
-  assert.equal(registry.size, TOOL_NAMES.length);
+  // Stubs cover the flat production vocabulary only — root-only dispatch
+  // tools (delegate_*) never join the harness surface.
+  assert.equal(registry.size, PRODUCTION_TOOL_NAMES.length);
 
   // implemented tool is the real (bridged) one
   const planShots = await registry.get("plan_shots")!.execute({ goal: "x" }, driverContext);

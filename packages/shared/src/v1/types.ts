@@ -606,6 +606,7 @@ export type GenerationRunStatus = JobStatus;
 export type GenerationRunActivityState =
   | "working"
   | "waiting_on_job"
+  | "waiting_on_domain"
   | "recovering";
 
 // Ordered stage types a run can move through. Individual runs may skip stages

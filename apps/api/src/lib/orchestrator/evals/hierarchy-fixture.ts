@@ -148,11 +148,18 @@ export interface FixtureSurfaces {
  * expose. Definitions only — execution is never bridged.
  */
 export function buildFixtureSurfaces(): FixtureSurfaces {
+  // Since PR 6, createRootToolRegistry registers the REAL delegate_visuals /
+  // delegate_audio adapters, so the root surface carries their definitions
+  // directly; the fixture constants remain only as a fallback (and as stable
+  // name/description references for the paired projection and tests).
+  const rootDefinitions = toFixtureDefinitions(createRootToolRegistry());
+  const rootNames = new Set(rootDefinitions.map((definition) => definition.name));
   return {
     root: [
-      ...toFixtureDefinitions(createRootToolRegistry()),
-      DELEGATE_VISUALS_FIXTURE,
-      DELEGATE_AUDIO_FIXTURE,
+      ...rootDefinitions,
+      ...[DELEGATE_VISUALS_FIXTURE, DELEGATE_AUDIO_FIXTURE].filter(
+        (fixture) => !rootNames.has(fixture.name)
+      ),
     ],
     visuals: toFixtureDefinitions(createVisualsToolRegistry()),
     audio: toFixtureDefinitions(createAudioToolRegistry()),

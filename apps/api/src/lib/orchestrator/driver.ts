@@ -51,6 +51,10 @@ function invocationStatus(result: ToolCallResult): ToolInvocationStatus {
       return "waiting_for_job";
     case "waiting_for_approval":
       return "waiting_for_approval";
+    // The legacy driver never hosts dispatch tools; treat a (never-produced)
+    // delegated result as an in-flight invocation for type completeness.
+    case "delegated":
+      return "running";
     case "failed":
       return "failed";
   }
