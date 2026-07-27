@@ -53,6 +53,7 @@ function bridgeContext(context: OrchestratorContext): {
   messageId?: string;
   requestId?: string;
   metadata?: Record<string, unknown>;
+  sessionClaimGeneration?: number;
 } {
   const auth: AuthContext = {
     mode: "local",
@@ -70,6 +71,7 @@ function bridgeContext(context: OrchestratorContext): {
     messageId: context.messageId,
     requestId: context.requestId,
     metadata: context.metadata,
+    sessionClaimGeneration: context.sessionClaimGeneration,
   };
 }
 

@@ -71,8 +71,16 @@ async function processDispatch(dispatch: ClaimedOrchestratorDispatch, deps: Reco
     return;
   }
   const result = run.status === "waiting"
-    ? await deps.resume(run.id, { workspaceId: dispatch.workspaceId, agentId: "orchestrator-worker" })
-    : await deps.run(run.id, { workspaceId: dispatch.workspaceId, agentId: "orchestrator-worker" });
+    ? await deps.resume(run.id, {
+        workspaceId: dispatch.workspaceId,
+        agentId: "orchestrator-worker",
+        sessionClaimGeneration: dispatch.sessionClaimGeneration,
+      })
+    : await deps.run(run.id, {
+        workspaceId: dispatch.workspaceId,
+        agentId: "orchestrator-worker",
+        sessionClaimGeneration: dispatch.sessionClaimGeneration,
+      });
   const resultGates = await deps.listGates(dispatch.runId);
   const completed = terminal(result.status) || resultGates.some((gate) => gate.status === "reached");
   await deps.release({

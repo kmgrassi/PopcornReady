@@ -135,6 +135,9 @@ export function createGenerateStoryboardTool(
         workspaceId: context.auth.workspaceId,
         type: "asset_generation",
         projectId: context.projectId,
+        ...(context.sessionClaimGeneration !== undefined
+          ? { sessionClaimGeneration: context.sessionClaimGeneration }
+          : {}),
         ...(context.actionId
           ? { actionId: context.actionId, idempotencyKey: `action:${context.actionId}` }
           : {}),

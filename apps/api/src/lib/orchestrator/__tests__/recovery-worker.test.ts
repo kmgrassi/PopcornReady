@@ -52,6 +52,30 @@ test("worker processes only atomically claimed dispatches", async () => {
   assert.deepEqual(released, [{ completed: false }, { completed: false }, { completed: false }]);
 });
 
+test("worker forwards a claimed domain session generation to the shared engine", async () => {
+  let seenGeneration: number | undefined;
+  await recoverOrchestratorRuns({
+    claim: async () => [{
+      dispatchId: "dispatch-domain",
+      runId: "run-domain",
+      workspaceId: "workspace-1",
+      leaseToken: "lease-1",
+      agentSessionId: "session-1",
+      sessionClaimGeneration: 7,
+    }],
+    getRun: async () => ({ ...run("queued"), agentRole: "visuals" }),
+    listGates: async () => [],
+    release: async () => {},
+    run: async (_id, deps) => {
+      seenGeneration = deps.sessionClaimGeneration;
+      return { ...run("queued"), agentRole: "visuals" };
+    },
+    resume: async () => assert.fail("queued run must not resume"),
+    logger: { debug() {}, info() {}, warn() {}, error() {}, child() { return this; } },
+  });
+  assert.equal(seenGeneration, 7);
+});
+
 test("recovery is enabled by default and has a safe lower interval bound", () => {
   assert.equal(isOrchestratorRecoveryEnabled({}), true);
   assert.equal(isOrchestratorRecoveryEnabled({ ORCHESTRATOR_RECOVERY_ENABLED: "false" }), false);

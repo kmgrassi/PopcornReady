@@ -14,6 +14,7 @@ export interface ToolExecutionContextInput {
   agentId?: string;
   messageId?: string;
   requestId?: string;
+  sessionClaimGeneration?: number;
   metadata?: Record<string, unknown>;
 }
 
@@ -30,6 +31,9 @@ export function createToolExecutionContext(
     ...(input.agentId ? { agentId: input.agentId } : {}),
     ...(input.messageId ? { messageId: input.messageId } : {}),
     ...(input.requestId ? { requestId: input.requestId } : {}),
+    ...(input.sessionClaimGeneration !== undefined
+      ? { sessionClaimGeneration: input.sessionClaimGeneration }
+      : {}),
     ...(input.metadata ? { metadata: input.metadata } : {}),
   };
 }
