@@ -302,11 +302,18 @@ export function createEditVideoAssetTool(
         );
       }
 
+      // An engine-reserved canonical action is the invocation identity: it
+      // becomes the tenant-scoped job idempotency key and jobs.action_id so a
+      // crash-retried invocation reuses the same job instead of launching
+      // duplicate provider work. Direct tool/test calls (no reserved action)
+      // keep the content-derived key and claim no action row.
       const { job, created } = await resolved.createJob({
         workspaceId: context.auth.workspaceId,
         type: "asset_generation",
         projectId: context.projectId,
-        idempotencyKey: idempotencyKey(input, source),
+        ...(context.actionId
+          ? { actionId: context.actionId, idempotencyKey: `action:${context.actionId}` }
+          : { idempotencyKey: idempotencyKey(input, source) }),
         execution: {
           schemaVersion: "orchestrator_job_execution.v1",
           kind: "edit_video_asset",

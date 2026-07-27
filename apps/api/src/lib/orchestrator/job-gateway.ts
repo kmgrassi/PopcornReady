@@ -16,6 +16,8 @@ export interface CreateOrchestratorJobInput {
   requestId?: string;
   /** Preallocated action identity for a tool-originated provider job. */
   actionId?: string;
+  /** Durable session claim generation copied from the launching run's session. */
+  sessionClaimGeneration?: number;
   payload?: unknown;
   idempotencyKey?: string | null;
   execution?: OrchestratorJobExecutionEnvelope;
@@ -105,6 +107,7 @@ export function createDurableOrchestratorJobCreator(
           type: input.type,
           requestId: input.requestId,
           actionId: input.actionId,
+          sessionClaimGeneration: input.sessionClaimGeneration,
           payload: input.payload,
           idempotencyKey: input.idempotencyKey,
           progress: {
@@ -120,6 +123,7 @@ export function createDurableOrchestratorJobCreator(
         type: input.type,
         requestId: input.requestId,
         actionId: input.actionId,
+        sessionClaimGeneration: input.sessionClaimGeneration,
         payload: input.payload,
         idempotencyKey: input.idempotencyKey ?? undefined,
         progress: {

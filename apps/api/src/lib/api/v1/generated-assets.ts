@@ -70,6 +70,7 @@ import {
   PROVIDER_KIND_SUPPORT,
   type ParsedRequest,
 } from "./generated-asset-request";
+import { getRunSessionClaim } from "./domain-session-store";
 
 export interface ApiResult {
   status: number;
@@ -864,6 +865,11 @@ export async function enqueueGeneratedAssetJob(
     rationale: `Generate a ${parsed.kind} asset for the project.`,
   });
 
+  // A job launched under a domain-session claim carries the session's durable
+  // claim generation; finalization writes are fenced against the session's
+  // current generation so a stale, reclaimed worker cannot commit late. Runs
+  // outside a session (root runs, direct requests) carry none.
+  const sessionClaim = parsed.runId ? await getRunSessionClaim(parsed.runId) : null;
   const job = await createJob({
     workspaceId: auth.workspaceId,
     projectId,
@@ -873,6 +879,7 @@ export async function enqueueGeneratedAssetJob(
     payload: { body: durableBody } satisfies GeneratedAssetJobInput,
     result: null,
     actionId: action.id,
+    ...(sessionClaim ? { sessionClaimGeneration: sessionClaim.claimGeneration } : {}),
   });
   await updateAction(action.id, { jobIds: [job.id] });
   return asGeneratedAssetJob(job);

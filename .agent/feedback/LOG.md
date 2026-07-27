@@ -201,3 +201,9 @@
 - Friction or failure: Claim renewal previously updated only lease metadata, leaving run observability's progress timestamp stale during healthy long-running provider work.
 - Suggested improvement: Normalize durable job inputs at enqueue time and keep lease heartbeats mirrored into the projection fields used by operators.
  - Follow-up: Re-run the focused API checks in CI or a worktree with dependencies installed.
+
+### 2026-07-27T10:15:00-04:00 — API-20260727-01
+- What helped: The PR 4 schema tests and the merged #801/#805 slices made the remaining PR 5 surface (session store, claim transitions, fencing) very cleanly separable; exercising real store modules against the local stack caught behavior a mock suite would have missed.
+- Friction or failure: Eight truly concurrent identical PK upserts through the local Kong gateway intermittently 502 ("invalid response from upstream server"); the bounded store retry the engine already uses is also the right fix in tests. The DB-gated generated-assets suite fails on a fresh local reset because its hard-coded workspace id is not seeded.
+- Suggested improvement: Seed the local stack with the LOCAL_WORKSPACE_ID fixture (or make those tests create their workspace) so the Supabase-gated API suites are runnable after `supabase db reset --local`.
+- Follow-up: PR 6 consumes claim/release + completeDomainRun for the turn-boundary dispatch transaction.
