@@ -76,7 +76,8 @@ create or replace function public.create_domain_run_dispatch(
   p_enqueue boolean,
   p_max_children_per_root integer,
   p_max_continuation_chain integer,
-  p_max_session_turns integer
+  p_max_session_turns integer,
+  p_max_blocked_reports_per_requirement integer
 )
 returns table (
   run_id uuid,
@@ -97,6 +98,8 @@ declare
   v_gate_id uuid;
   v_children integer;
   v_chain integer;
+  v_blocked_reports integer;
+  v_retry_requirement text;
   v_enqueued boolean := false;
 begin
   if p_idempotency_scope is null or length(trim(p_idempotency_scope)) = 0
@@ -135,6 +138,49 @@ begin
       (v_record.response_body ->> 'gateId')::uuid,
       false;
     return;
+  end if;
+
+  -- A bounded retry applies only to the exact blocked requirement on a
+  -- root-origin continuation. It deliberately runs AFTER idempotency
+  -- replay, so an existing successful dispatch can always replay its durable
+  -- identity even after later reports exhaust the retry budget.
+  if p_origin_kind = 'creative_director' and p_continues_run_id is not null then
+    -- Serialize retry admission through the root row, then prove the supplied
+    -- continuation belongs to THIS root. Deriving the requirement here keeps
+    -- an internal caller from bypassing the guard by omitting a client-side
+    -- hint and closes the concurrent admission race.
+    perform 1
+      from public.orchestrator_runs r
+     where r.id = p_parent_run_id and r.project_id = p_project_id
+     for update;
+    if not found then
+      raise exception 'root run % not found for domain continuation', p_parent_run_id
+        using errcode = '22023';
+    end if;
+    select report.params #>> '{outcome,precondition,requirement}'
+      into v_retry_requirement
+      from public.orchestrator_runs predecessor
+      join public.actions report
+        on report.orchestrator_run_id = predecessor.id
+       and report.tool = 'domain_report'
+     where predecessor.id = p_continues_run_id
+       and predecessor.parent_run_id = p_parent_run_id
+       and predecessor.origin_kind = 'creative_director'
+       and report.params -> 'outcome' ->> 'outcome' = 'blocked';
+    if v_retry_requirement is not null then
+      select count(*) into v_blocked_reports
+        from public.orchestrator_runs r
+        join public.actions a
+          on a.orchestrator_run_id = r.id
+         and a.tool = 'domain_report'
+       where r.parent_run_id = p_parent_run_id
+         and a.params -> 'outcome' ->> 'outcome' = 'blocked'
+         and a.params #>> '{outcome,precondition,requirement}' = v_retry_requirement;
+      if v_blocked_reports >= greatest(p_max_blocked_reports_per_requirement, 1) then
+        raise exception 'domain_requirement_retry_limit: requirement % has % blocked reports in root %',
+          v_retry_requirement, v_blocked_reports, p_parent_run_id using errcode = '54000';
+      end if;
+    end if;
   end if;
 
   -- Depth is enforced by orchestrator_runs_validate_agent_links; bounded
@@ -261,6 +307,7 @@ declare
   v_performed boolean := false;
   v_woke boolean := false;
   v_summary_applied boolean := false;
+  v_delegation_error jsonb;
   v_missing uuid;
   i integer;
 begin
@@ -274,6 +321,11 @@ begin
   if v_run.agent_session_id is null then
     raise exception 'run % is not a finite domain run', p_run_id
       using errcode = 'check_violation';
+  end if;
+  if p_report ->> 'schemaVersion' is distinct from 'DomainReport.v1'
+     or coalesce(p_report -> 'outcome' ->> 'outcome', '') not in ('done', 'blocked', 'question') then
+    raise exception 'invalid domain report payload for run %', p_run_id
+      using errcode = '22023';
   end if;
 
   select * into v_session
@@ -402,9 +454,50 @@ begin
   -- delegation action and wakes its parent — exactly once, tied to winning
   -- the terminal transition. Creator-direct completion mutates no parent.
   if v_performed and v_run.origin_kind = 'creative_director' then
+    if p_report -> 'outcome' ->> 'outcome' = 'blocked' then
+      v_delegation_error := jsonb_build_object(
+        'schema', 'ToolError.v1',
+        'kind', 'precondition_unmet',
+        'message', coalesce(p_report #>> '{outcome,reason}', 'Delegated domain reported a blocked prerequisite.'),
+        'recoverable', true,
+        'childRunId', p_run_id,
+        'unmetRequirements', jsonb_build_array(jsonb_build_object(
+          'requirement', p_report #>> '{outcome,precondition,requirement}',
+          'because', p_report #>> '{outcome,precondition,because}',
+          'satisfyWith', jsonb_build_object(
+            'tool', case p_report #>> '{outcome,requiredDomain}'
+              when 'audio' then 'delegate_audio'
+              when 'visuals' then 'delegate_visuals'
+              else 'request_approval'
+            end,
+            'inputHint', '{}'::jsonb
+          )
+        )),
+        'suggestedNextTools', jsonb_build_array(jsonb_build_object(
+          'tool', case p_report #>> '{outcome,requiredDomain}'
+            when 'audio' then 'delegate_audio'
+            when 'visuals' then 'delegate_visuals'
+            else 'request_approval'
+          end,
+          'inputHint', '{}'::jsonb
+        )),
+        'domainReport', p_report
+      );
+    elsif p_report -> 'outcome' ->> 'outcome' = 'question' then
+      v_delegation_error := jsonb_build_object(
+        'schema', 'ToolError.v1',
+        'kind', 'invalid_input',
+        'message', coalesce(p_report #>> '{outcome,question}', 'Delegated domain requires a decision.'),
+        'recoverable', true,
+        'childRunId', p_run_id,
+        'domainReport', p_report
+      );
+    end if;
     update public.actions a
-       set status = 'applied',
+       set status = case when v_delegation_error is null then 'applied'::public.action_status
+                         else 'failed'::public.action_status end,
            output_asset_ids = coalesce(p_output_asset_ids, '{}'),
+           error = v_delegation_error,
            updated_at = now()
      where a.id = v_run.root_action_id
        and a.status in ('proposed', 'running');
@@ -421,7 +514,77 @@ end;
 $$;
 
 -- ===========================================================================
--- 4. Session-aware dispatch claim. Recreated because the return set gains the
+-- 4. Atomic domain cancellation. A terminal run must never remain the active
+--    session owner, and a canceled claim must fence every causal provider job.
+-- ===========================================================================
+create or replace function public.cancel_domain_run(
+  p_project_id uuid,
+  p_run_id uuid
+)
+returns table (canceled boolean)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_run public.orchestrator_runs%rowtype;
+  v_rows integer := 0;
+begin
+  select * into v_run
+    from public.orchestrator_runs r
+   where r.id = p_run_id and r.project_id = p_project_id
+   for update;
+  if not found then
+    raise exception 'domain run % not found', p_run_id using errcode = 'P0002';
+  end if;
+  if v_run.agent_session_id is null then
+    raise exception 'run % is not a finite domain run', p_run_id using errcode = 'check_violation';
+  end if;
+
+  -- Lock the session before changing the terminal state, keeping claim
+  -- release and provider-job fencing in this same transaction.
+  perform 1
+    from public.agent_sessions s
+   where s.id = v_run.agent_session_id
+   for update;
+
+  update public.orchestrator_runs r
+     set status = 'canceled', completed_at = now(), wait_reason = null,
+         updated_at = now()
+   where r.id = p_run_id
+     and r.status in ('queued', 'running', 'waiting');
+  get diagnostics v_rows = row_count;
+  if v_rows = 0 then
+    return query select false;
+    return;
+  end if;
+
+  update public.agent_sessions s
+     set active_run_id = null,
+         claim_generation = s.claim_generation + 1,
+         updated_at = now()
+   where s.id = v_run.agent_session_id
+     and s.active_run_id = p_run_id;
+
+  -- Cancellation is intentionally not subject to the stale-claim terminal
+  -- write fence: this transaction is the authoritative cleanup path.
+  update public.jobs j
+     set status = 'canceled', updated_at = now()
+   where j.project_id = p_project_id
+     and j.status in ('queued', 'running')
+     and exists (
+       select 1
+         from public.actions a
+        where a.id = j.action_id
+          and a.orchestrator_run_id = p_run_id
+     );
+
+  return query select true;
+end;
+$$;
+
+-- ===========================================================================
+-- 5. Session-aware dispatch claim. Recreated because the return set gains the
 --    session claim columns a worker must stamp onto provider jobs.
 -- ===========================================================================
 drop function public.claim_orchestrator_dispatches(integer, integer);
@@ -542,21 +705,25 @@ $$;
 revoke all on function public.create_domain_run_dispatch(
   text, text, text, uuid, uuid, public.agent_domain, text, numeric,
   public.domain_task_kind, jsonb, public.trusted_origin_kind,
-  uuid, uuid, uuid, jsonb, uuid, jsonb, text, boolean, integer, integer, integer
+  uuid, uuid, uuid, jsonb, uuid, jsonb, text, boolean, integer, integer, integer, integer
 ) from public, anon, authenticated;
 revoke all on function public.finalize_domain_run_turn(
   uuid, uuid, uuid, jsonb, uuid[], text[], bigint, jsonb, integer, integer
 ) from public, anon, authenticated;
 revoke all on function public.claim_orchestrator_dispatches(integer, integer)
   from public, anon, authenticated;
+revoke all on function public.cancel_domain_run(uuid, uuid)
+  from public, anon, authenticated;
 
 grant execute on function public.create_domain_run_dispatch(
   text, text, text, uuid, uuid, public.agent_domain, text, numeric,
   public.domain_task_kind, jsonb, public.trusted_origin_kind,
-  uuid, uuid, uuid, jsonb, uuid, jsonb, text, boolean, integer, integer, integer
+  uuid, uuid, uuid, jsonb, uuid, jsonb, text, boolean, integer, integer, integer, integer
 ) to service_role;
 grant execute on function public.finalize_domain_run_turn(
   uuid, uuid, uuid, jsonb, uuid[], text[], bigint, jsonb, integer, integer
 ) to service_role;
 grant execute on function public.claim_orchestrator_dispatches(integer, integer)
+  to service_role;
+grant execute on function public.cancel_domain_run(uuid, uuid)
   to service_role;

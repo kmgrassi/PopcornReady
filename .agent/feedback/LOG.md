@@ -18,6 +18,12 @@
 - Follow-up: <TODO / PR / none>
 ```
 
+### 2026-07-27T15:30:00-04:00 — API-20260727-02
+- What helped: Thread-aware review retrieval plus the existing local transport suite made each lifecycle defect directly reproducible at the database boundary.
+- Friction or failure: The local PostgREST stack intermittently returned an unstructured upstream error during the pre-existing concurrent idempotency drift test, even though the focused root, cancellation, and retry cases passed serially.
+- Suggested improvement: Make the local integration runner serialize shared-stack tests by default and surface PostgREST upstream response bodies for failed RPC assertions.
+- Follow-up: none.
+
 ### 2026-07-14T12:32:20-04:00 — API-20260714-02
 - What helped: Treating the dispatch lease as the single turn owner exposed the inline-completion race clearly.
 - Friction or failure: Inline provider completion could race invocation parking and wake duplicate engine turns.

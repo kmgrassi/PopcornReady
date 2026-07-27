@@ -151,6 +151,31 @@ function visualsTask(fixture: Fixture, rootActionId: string): DomainTaskV1 {
   };
 }
 
+function audioTask(fixture: Fixture, rootActionId: string): DomainTaskV1 {
+  return {
+    schemaVersion: "DomainTask.v1",
+    domain: "audio",
+    taskKind: "audio_production",
+    objective: "Produce narration for the assignment",
+    instruction: "Generate and fit narration for the targeted beats",
+    targets: [{ kind: "project", projectId: fixture.projectId }],
+    requiredOutputs: [{ kind: "audio_track", role: "narration", minimumCount: 1 }],
+    allowedOutputKinds: ["audio_track"],
+    creativeConstraints: { tone: "warm" },
+    preserve: { assetIds: [], selections: [], fingerprints: [], pins: [] },
+    candidateAffectedAssetIds: [],
+    budgetUsd: 5,
+    acceptanceCriteria: ["Narration is available for each beat"],
+    origin: {
+      kind: "creative_director",
+      rootRunId: fixture.rootRunId as OrchestratorRunId,
+      rootActionId: rootActionId as ActionId,
+      creatorMessageId: randomUUID(),
+    },
+    responseRecipient: { kind: "creative_director" },
+  };
+}
+
 function creatorDirectTask(fixture: Fixture, actorId: string): DomainTaskV1 {
   return {
     schemaVersion: "DomainTask.v1",
@@ -424,6 +449,17 @@ integrationTest(
         runId: questionRun.runId,
         report: questionReport("fp_palette_1"),
       });
+      const { data: questionDelegation } = await fixture.service
+        .from("actions")
+        .select("status, error")
+        .eq("id", questionActionId)
+        .single();
+      assert.equal(questionDelegation?.status, "failed");
+      assert.deepEqual(
+        (questionDelegation?.error as { domainReport?: unknown } | null)?.domainReport,
+        questionReport("fp_palette_1"),
+        "the parent receives the question, options, and fingerprint on resume"
+      );
 
       const answerActionId = await reserveDelegationAction(fixture);
       // One immutable successor task: the idempotent replay must hash equal.
@@ -967,6 +1003,23 @@ integrationTest(
         runId: child.runId,
       });
       assert.equal(claim.state, "claimed");
+      const claimGeneration = claim.claimGeneration!;
+      const providerActionId = randomUUID();
+      await createAction({
+        id: providerActionId,
+        projectId: fixture.projectId,
+        orchestratorRunId: child.runId,
+        tool: "generate_keyframe",
+        status: "running",
+        params: {},
+      });
+      const providerJob = await createJob({
+        workspaceId: fixture.workspaceId,
+        projectId: fixture.projectId,
+        type: "asset_generation",
+        actionId: providerActionId,
+        sessionClaimGeneration: claimGeneration,
+      });
       assert.equal(
         await cancelDomainRun({ projectId: fixture.projectId, runId: child.runId }),
         true
@@ -975,6 +1028,16 @@ integrationTest(
       assert.equal(canceled?.status, "canceled");
       const session = await getAgentSession(fixture.projectId, "visuals");
       assert.equal(session?.activeRunId, null, "cancellation releases the slot");
+      assert.ok(
+        session!.claimGeneration > claimGeneration,
+        "cancellation advances the durable generation inside the terminal transaction"
+      );
+      const { data: canceledJob } = await fixture.service
+        .from("jobs")
+        .select("status")
+        .eq("id", providerJob.id)
+        .single();
+      assert.equal(canceledJob?.status, "canceled", "causal provider jobs cancel atomically");
       await assert.rejects(
         finalizeDomainTurn({
           projectId: fixture.projectId,
@@ -988,6 +1051,52 @@ integrationTest(
       assert.equal(canceledClaim, null);
       const retired = await dispatchRow(fixture, child.runId);
       assert.equal(retired?.status, "completed");
+
+      // Cancellation and finalization contend on the same run/session locks.
+      // Exactly one terminal transition wins, and neither outcome strands the
+      // durable session claim.
+      const raceActionId = await reserveDelegationAction(fixture);
+      const race = await dispatchDomainRun({
+        projectId: fixture.projectId,
+        domain: "visuals",
+        task: visualsTask(fixture, raceActionId),
+        inputSummary: "cancel/finalize race",
+        origin: {
+          kind: "creative_director",
+          parentRunId: fixture.rootRunId,
+          rootActionId: raceActionId,
+        },
+        idempotencyKey: `root-action:${raceActionId}`,
+      });
+      const raceClaim = await claimSessionRun({
+        projectId: fixture.projectId,
+        sessionId: race.sessionId,
+        runId: race.runId,
+      });
+      assert.equal(raceClaim.state, "claimed");
+      const raceAttempts = await Promise.allSettled([
+        cancelDomainRun({ projectId: fixture.projectId, runId: race.runId }),
+        finalizeDomainTurn({
+          projectId: fixture.projectId,
+          runId: race.runId,
+          report: doneReport(),
+          expectedClaimGeneration: raceClaim.claimGeneration,
+        }),
+      ]);
+      const winners = raceAttempts.flatMap((attempt) => {
+        if (attempt.status !== "fulfilled") return [];
+        return typeof attempt.value === "boolean"
+          ? attempt.value
+            ? ["canceled"]
+            : []
+          : attempt.value.performed
+            ? ["finalized"]
+            : [];
+      });
+      assert.equal(winners.length, 1, "exactly one terminal transition wins the race");
+      const racedSession = await getAgentSession(fixture.projectId, "visuals");
+      assert.equal(racedSession?.activeRunId, null, "the race cannot strand session ownership");
+      assert.ok(racedSession!.claimGeneration > raceClaim.claimGeneration);
 
       // Unconfirmed quote: a pending gate keeps the run out of the slot.
       const gatedActionId = await reserveDelegationAction(fixture);
@@ -1071,6 +1180,9 @@ integrationTest("fan-out, continuation, and bounce limits are enforced", async (
       },
     };
     const runs: string[] = [];
+    let allowedRetry: Awaited<ReturnType<typeof continueDomainSession>> | undefined;
+    let allowedRetryActionId: string | undefined;
+    let allowedRetryTask: DomainTaskV1 | undefined;
     for (let index = 0; index < 2; index += 1) {
       const actionId = await reserveDelegationAction(fixture);
       const dispatched = await dispatchDomainRun({
@@ -1097,22 +1209,93 @@ integrationTest("fan-out, continuation, and bounce limits are enforced", async (
         runId: dispatched.runId,
         report: blockedReport,
       });
+      if (index === 0) {
+        const { data: blockedDelegation } = await fixture.service
+          .from("actions")
+          .select("status, error")
+          .eq("id", actionId)
+          .single();
+        assert.equal(blockedDelegation?.status, "failed");
+        const blockedError = blockedDelegation?.error as {
+          domainReport?: unknown;
+          unmetRequirements?: unknown;
+          suggestedNextTools?: unknown;
+        } | null;
+        assert.deepEqual(blockedError?.domainReport, blockedReport);
+        assert.ok(Array.isArray(blockedError?.unmetRequirements));
+        assert.ok(Array.isArray(blockedError?.suggestedNextTools));
+        allowedRetryActionId = await reserveDelegationAction(fixture);
+        allowedRetryTask = visualsTask(fixture, allowedRetryActionId);
+        allowedRetry = await continueDomainSession({
+          projectId: fixture.projectId,
+          continuesRunId: dispatched.runId,
+          task: allowedRetryTask,
+          inputSummary: "first retry of the blocked narration requirement",
+          origin: {
+            kind: "creative_director",
+            parentRunId: fixture.rootRunId,
+            rootActionId: allowedRetryActionId,
+          },
+          idempotencyKey: `root-action:${allowedRetryActionId}`,
+          limits: { maxBlockedReportsPerRequirement: 2, maxContinuationChain: 99 },
+        });
+      }
     }
+
+    // Two Visuals reports blocked on narration MUST NOT prevent the root from
+    // dispatching Audio to satisfy the prerequisite.
+    const siblingActionId = await reserveDelegationAction(fixture, "delegate_audio");
+    const sibling = await dispatchDomainRun({
+      projectId: fixture.projectId,
+      domain: "audio",
+      task: audioTask(fixture, siblingActionId),
+      inputSummary: "produce the missing narration",
+      origin: {
+        kind: "creative_director",
+        parentRunId: fixture.rootRunId,
+        rootActionId: siblingActionId,
+      },
+      idempotencyKey: `root-action:${siblingActionId}`,
+      limits: { maxBlockedReportsPerRequirement: 2 },
+    });
+    assert.equal(sibling.created, true, "the unrelated sibling dispatch remains available");
+
+    // An existing allowed continuation still replays after the requirement's
+    // count reaches its limit: the RPC returns before retry admission checks.
+    assert.ok(allowedRetry && allowedRetryActionId && allowedRetryTask);
+    const retryReplay = await continueDomainSession({
+      projectId: fixture.projectId,
+      continuesRunId: runs[0]!,
+      task: allowedRetryTask,
+      inputSummary: "first retry of the blocked narration requirement",
+      origin: {
+        kind: "creative_director",
+        parentRunId: fixture.rootRunId,
+        rootActionId: allowedRetryActionId,
+      },
+      idempotencyKey: `root-action:${allowedRetryActionId}`,
+      limits: { maxBlockedReportsPerRequirement: 2, maxContinuationChain: 99 },
+    });
+    assert.equal(retryReplay.runId, allowedRetry.runId);
+    assert.equal(retryReplay.created, false);
+
+    // A NEW continuation of the exact exhausted requirement is refused.
     const bouncedActionId = await reserveDelegationAction(fixture);
     await assert.rejects(
-      dispatchDomainRun({
+      continueDomainSession({
         projectId: fixture.projectId,
-        domain: "visuals",
+        continuesRunId: runs[1]!,
         task: visualsTask(fixture, bouncedActionId),
-        inputSummary: "third bounce on the same requirement",
+        inputSummary: "third retry of the same blocked requirement",
         origin: {
           kind: "creative_director",
           parentRunId: fixture.rootRunId,
           rootActionId: bouncedActionId,
         },
         idempotencyKey: `root-action:${bouncedActionId}`,
+        limits: { maxBlockedReportsPerRequirement: 2, maxContinuationChain: 99 },
       }),
-      (err: unknown) => err instanceof ApiError && err.code === "validation_failed"
+      (err: unknown) => isDomainRunLimitError(err)
     );
 
     // Continuation chain limit.

@@ -216,6 +216,68 @@ test("resume proceeds once finalization applied the delegation action", async ()
   assert.equal(result.waitReason, undefined);
 });
 
+for (const [label, domainReport] of [
+  [
+    "blocked",
+    {
+      schemaVersion: "DomainReport.v1",
+      outcome: {
+        outcome: "blocked",
+        precondition: { requirement: "narration_track", because: "timing depends on it" },
+        requiredDomain: "audio",
+        targets: [],
+        reason: "Narration is required before the visual timing can continue.",
+      },
+    },
+  ],
+  [
+    "question",
+    {
+      schemaVersion: "DomainReport.v1",
+      outcome: {
+        outcome: "question",
+        question: "Use a warm or cool palette?",
+        targets: [],
+        options: [{ id: "warm", label: "Warm", tradeoff: "cozier" }],
+        fingerprint: "palette-v1",
+      },
+    },
+  ],
+] as const) {
+  test(`resume exposes a ${label} domain report to the root model`, async () => {
+    const store = new FakeStore(runFixture({ status: "waiting", waitReason: "domain" }));
+    store.actions.push({
+      id: "action1",
+      tool: "delegate_visuals",
+      status: "failed",
+      params: {},
+      outputAssetIds: [],
+      jobIds: [],
+      error: {
+        schema: "ToolError.v1",
+        kind: label === "blocked" ? "precondition_unmet" : "invalid_input",
+        message: "Delegated domain needs root attention.",
+        recoverable: true,
+        domainReport,
+      },
+      createdAt: "t1",
+    });
+    let received: unknown[] | undefined;
+    const model: OrchestratorModel = async ({ priorResults }) => {
+      received = priorResults;
+      return { type: "done", summary: "handled", model: "mock" };
+    };
+
+    const result = await resumeOrchestratorRun("root1", deps(store, model, new Map()));
+    assert.equal(result.status, "succeeded");
+    assert.deepEqual(
+      (received?.[0] as { error?: { domainReport?: unknown } })?.error?.domainReport,
+      domainReport,
+      "the complete immutable report survives the action-to-model projection"
+    );
+  });
+}
+
 test("a child that ended without a report fails the invocation recoverably", async () => {
   const store = new FakeStore(runFixture({ status: "waiting", waitReason: "domain" }));
   store.actions.push({

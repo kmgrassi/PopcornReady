@@ -541,6 +541,7 @@ const ERROR_GUIDANCE_FIELDS = [
   "recoverable",
   "unmetRequirements",
   "suggestedNextTools",
+  "domainReport",
 ] as const;
 
 function toPriorResult(action: RunActionSummary): Record<string, unknown> {
