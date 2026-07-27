@@ -200,7 +200,13 @@
 - What helped: Thread-aware review data identified that canonical action params and the eventual provider call could disagree when workspace defaults were resolved too late.
 - Friction or failure: Claim renewal previously updated only lease metadata, leaving run observability's progress timestamp stale during healthy long-running provider work.
 - Suggested improvement: Normalize durable job inputs at enqueue time and keep lease heartbeats mirrored into the projection fields used by operators.
- - Follow-up: Re-run the focused API checks in CI or a worktree with dependencies installed.
+- Follow-up: Re-run the focused API checks in CI or a worktree with dependencies installed.
+
+### 2026-07-24T15:02:11Z — API-20260723-01
+- What helped: Starting from the route's existing validation made the type improvement small and preserved the API error contract; the focused parser tests gave direct evidence for both valid and invalid bodies.
+- Friction or failure: The worktree began without dependencies, and the full API suite still reports two unrelated guest-retention migration failures; the configured independent-review adapter is unavailable.
+- Suggested improvement: Keep a lightweight request-body type at each API boundary and export pure parsers so route validation can be tested without database setup.
+- Follow-up: Revisit the two guest-retention migration failures separately; configure an independent reviewer for future workflow checkpoints.
 
 ### 2026-07-27T10:15:00-04:00 — API-20260727-01
 - What helped: The PR 4 schema tests and the merged #801/#805 slices made the remaining PR 5 surface (session store, claim transitions, fencing) very cleanly separable; exercising real store modules against the local stack caught behavior a mock suite would have missed.

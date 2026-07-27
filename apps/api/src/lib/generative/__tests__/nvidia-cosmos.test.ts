@@ -72,3 +72,30 @@ test("NVIDIA Cosmos provider maps video requests to API Catalog payloads", async
     globalThis.fetch = previousFetch;
   }
 });
+
+test("NVIDIA Cosmos rejects a successful response with an invalid video payload", async () => {
+  const previousKey = process.env.NVIDIA_API_KEY;
+  const previousFetch = globalThis.fetch;
+
+  process.env.NVIDIA_API_KEY = "test-key";
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ b64_video: 42 }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+
+  try {
+    await assert.rejects(
+      providerFor("nvidia").generateAsset({
+        provider: "nvidia_api_catalog",
+        kind: "video",
+        prompt: "A clean product shot.",
+      }),
+      { message: "NVIDIA Cosmos response did not include b64_video." }
+    );
+  } finally {
+    if (previousKey === undefined) delete process.env.NVIDIA_API_KEY;
+    else process.env.NVIDIA_API_KEY = previousKey;
+    globalThis.fetch = previousFetch;
+  }
+});
