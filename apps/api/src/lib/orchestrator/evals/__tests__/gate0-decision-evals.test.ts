@@ -575,10 +575,11 @@ test("fixture routing context preserves dispatch failures and their recovery hin
   const blocked = HIERARCHY_ROOT_SCENARIOS.find(
     (scenario) => scenario.id === "hier_root_visuals_blocked_on_audio"
   )!;
-  // Production builder drops the fixture dispatch failure entirely…
+  // Since PR 6 the dispatch tools are real catalog names, so the production
+  // builder preserves the failure too (before PR 6 it dropped unknown names);
+  // the fixture-aware wrapper keeps equivalent signals either way.
   const production = buildRoutingContext(blocked.priorResults);
-  assert.equal(production.latestFailure, undefined);
-  // …the fixture-aware wrapper preserves it with equivalent signals.
+  assert.equal(production.latestFailure?.tool, "delegate_visuals");
   const context = buildFixtureRoutingContext(blocked.priorResults);
   assert.equal(context.latestFailure?.tool, "delegate_visuals");
   assert.deepEqual(context.latestFailure?.unmetRequirements, ["narration_track"]);

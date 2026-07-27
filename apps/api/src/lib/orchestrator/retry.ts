@@ -76,5 +76,11 @@ export function withStoreRetry(
     recordInvocation: (input) => retry(() => store.recordInvocation(input)),
     // idempotent patch keyed by actionId — safe to retry.
     markInvocation: (actionId, patch) => retry(() => store.markInvocation(actionId, patch)),
+    ...(store.findDelegatedChildRun
+      ? {
+          findDelegatedChildRun: (rootActionId: string) =>
+            retry(() => store.findDelegatedChildRun!(rootActionId)),
+        }
+      : {}),
   };
 }

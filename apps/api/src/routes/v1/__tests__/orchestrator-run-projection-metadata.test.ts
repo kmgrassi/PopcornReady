@@ -24,6 +24,10 @@ test("catalog-backed run labels and ordering preserve legacy projection behavior
     request_approval: ["Approval", 14],
     export_video: ["Final Render", 15],
     publish_to_catalog: ["Publish", 16],
+    // Dispatch tools (PR 6) use the same neutral stage-label/order fallback
+    // as regenerate_image_asset; they never render a dedicated stage.
+    delegate_visuals: ["Plan", 101],
+    delegate_audio: ["Plan", 101],
   } as const;
 
   assert.deepEqual(

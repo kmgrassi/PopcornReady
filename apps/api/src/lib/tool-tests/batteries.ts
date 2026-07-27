@@ -2,7 +2,7 @@
 // tool's spec import here. A startup check asserts every vocabulary tool has
 // a battery so a newly-declared tool can't silently lack test coverage.
 
-import { TOOL_NAMES, type ToolName } from "@/lib/orchestrator";
+import { PRODUCTION_TOOL_NAMES, type ToolName } from "@/lib/orchestrator";
 import type { ToolBattery } from "./types";
 
 import { assembleTimelineBattery } from "./specs/assemble-timeline";
@@ -49,15 +49,18 @@ export const batteries: Map<ToolName, ToolBattery> = new Map(
   ALL_BATTERIES.map((battery) => [battery.tool, battery])
 );
 
-// Fail loud if a vocabulary tool has no battery (or a battery names an unknown
-// tool) — keeps the harness honest as the vocabulary grows.
-const missing = TOOL_NAMES.filter((name) => !batteries.has(name));
+// Fail loud if a production-vocabulary tool has no battery (or a battery
+// names an unknown tool) — keeps the harness honest as the vocabulary grows.
+// Root-only dispatch tools (delegate_*) are transport adapters exercised by
+// the engine/service test suites, never by the model-in-the-loop media
+// harness, so they deliberately have no battery.
+const missing = PRODUCTION_TOOL_NAMES.filter((name) => !batteries.has(name));
 if (missing.length > 0) {
   throw new Error(`Tool-test batteries missing for: ${missing.join(", ")}`);
 }
-if (batteries.size !== TOOL_NAMES.length) {
+if (batteries.size !== PRODUCTION_TOOL_NAMES.length) {
   throw new Error(
-    `Tool-test batteries define ${batteries.size} tools but the vocabulary has ${TOOL_NAMES.length}.`
+    `Tool-test batteries define ${batteries.size} tools but the vocabulary has ${PRODUCTION_TOOL_NAMES.length}.`
   );
 }
 

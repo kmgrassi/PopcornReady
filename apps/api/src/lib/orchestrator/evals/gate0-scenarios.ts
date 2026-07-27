@@ -8,11 +8,12 @@
 // long-context, tool-overload, cross-modality, selective-regeneration,
 // premature-done, and precondition-miss recovery.
 
-import { TOOL_NAMES, type ToolName } from "../types";
+import { PRODUCTION_TOOL_NAMES, type ToolName } from "../types";
 import type { Gate0Scenario } from "./gate0-report";
 import type { PriorResult } from "./types";
 
-const ALL_TOOLS: ToolName[] = [...TOOL_NAMES];
+// The flat baseline never sees root-only dispatch tools (delegate_*).
+const ALL_TOOLS: ToolName[] = [...PRODUCTION_TOOL_NAMES];
 const GOAL = "Make a 15-second 9:16 video about a skateboarding puppy.";
 
 function applied(tool: ToolName, assetId?: string): PriorResult {

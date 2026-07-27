@@ -70,6 +70,18 @@ export type ToolCallResult<TOutput = unknown> =
       previewArtifactIds: string[];
     }
   | {
+      /**
+       * A root-only delegate_* tool durably enqueued a finite domain run in a
+       * persistent session. The calling run parks in the domain wait (distinct
+       * from media-job and approval waits) until the child's terminal
+       * domain_report finalization wakes its dispatch.
+       */
+      status: "delegated";
+      childRunId: string;
+      sessionId: string;
+      resumesWhen: "domain_report";
+    }
+  | {
       status: "failed";
       error: ToolError;
     };

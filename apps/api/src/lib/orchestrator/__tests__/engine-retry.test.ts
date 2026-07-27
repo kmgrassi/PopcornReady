@@ -31,7 +31,10 @@ class FlakyReadStore implements OrchestratorEngineStore {
     return { ...this.run };
   }
   async updateOrchestratorRun(_id: string, patch: UpdateOrchestratorRunPatch) {
-    this.run = { ...this.run, ...patch };
+    const { waitReason, ...rest } = patch;
+    this.run = { ...this.run, ...rest };
+    if (waitReason) this.run.waitReason = waitReason;
+    else if (waitReason === null) delete this.run.waitReason;
     return { ...this.run };
   }
   async listRunGates(): Promise<OrchestratorRunGate[]> {

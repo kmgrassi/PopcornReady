@@ -41,9 +41,14 @@ import { applyCreditTransaction, getCreditBalance } from "@/lib/api/v1/credits";
 import { ApiError } from "@/core/errors";
 import { createToolExecutionContext } from "./tool-context";
 import type { ToolCallResult, ToolName } from "./types";
-import { isToolName } from "@/lib/orchestrator-tools/capability-catalog";
+import {
+  isDispatchToolName,
+  isToolName,
+} from "@/lib/orchestrator-tools/capability-catalog";
 import { createLogger } from "@/lib/v1/logger";
 import { redactMessage } from "@/lib/v1/redact";
+import { getServiceSupabase } from "@/lib/supabase/clients";
+import { runQuery } from "@/lib/supabase/db-errors";
 import { uploadedFootageMetadataFromSummary } from "./uploaded-footage-selection";
 
 // Credits charged per generation = providerCostUsd * MARGIN, at 1 credit = $0.01.
@@ -95,6 +100,15 @@ export interface OrchestratorEngineStore {
       error?: Record<string, unknown>;
     }
   ): Promise<void>;
+  /**
+   * Resolve the finite domain run created by a delegate_* invocation
+   * (orchestrator_runs.root_action_id linkage). Optional: fake stores that
+   * never exercise delegation may omit it, in which case a running delegation
+   * action keeps the run parked in the domain wait.
+   */
+  findDelegatedChildRun?: (
+    rootActionId: string
+  ) => Promise<{ id: string; status: string } | null>;
 }
 
 export interface JobStatusReader {
@@ -170,6 +184,17 @@ export function defaultEngineStore(): OrchestratorEngineStore {
           : {}),
         ...(patch.error !== undefined ? { error: patch.error } : {}),
       });
+    },
+    async findDelegatedChildRun(rootActionId) {
+      const data = await runQuery(
+        "engine.findDelegatedChildRun",
+        getServiceSupabase()
+          .from("orchestrator_runs")
+          .select("id, status")
+          .eq("root_action_id", rootActionId)
+          .maybeSingle()
+      );
+      return (data as { id: string; status: string } | null) ?? null;
     },
   };
 }
@@ -432,6 +457,74 @@ async function reconcileInFlightJob(
     const stopped = await finishIfAfterGateReached(run, parkingAction.tool, r);
     if (stopped) return stopped;
   }
+
+  const delegationParked = await reconcileDelegation(run, actions, r);
+  if (delegationParked) return delegationParked;
+  return null;
+}
+
+const TERMINAL_DOMAIN_RUN_STATUSES = new Set([
+  "succeeded",
+  "failed",
+  "canceled",
+  "timed_out",
+  "superseded",
+]);
+
+// A running delegate_* action means the run parked in the domain wait. The
+// child's report finalization transaction marks the delegation action applied
+// (with the report outputs) BEFORE waking this run's dispatch, so:
+//   - child still active            -> stay parked in the domain wait;
+//   - child terminal without report -> fail the invocation recoverably so the
+//     model can re-delegate (canceled/superseded children never apply it);
+//   - child missing (crash between the invocation write and the dispatch
+//     transaction) -> fail the invocation recoverably; the retried delegation
+//     replays idempotently through the same service.
+async function reconcileDelegation(
+  run: OrchestratorRun,
+  actions: RunActionSummary[],
+  r: Resolved
+): Promise<OrchestratorRun | null> {
+  const delegation = [...actions]
+    .reverse()
+    .find((action) => action.status === "running" && isDispatchToolName(action.tool));
+  if (!delegation) return null;
+
+  if (!r.store.findDelegatedChildRun) {
+    return park(run, r, "domain");
+  }
+  const child = await r.store.findDelegatedChildRun(delegation.id);
+  if (!child) {
+    await r.store.markInvocation(delegation.id, {
+      status: "failed",
+      error: {
+        kind: "provider_failed",
+        message: "Delegated assignment was never dispatched; re-delegate to retry.",
+        recoverable: true,
+      },
+    });
+    return null;
+  }
+  if (!TERMINAL_DOMAIN_RUN_STATUSES.has(child.status)) {
+    logger.info("orchestrator.delegation_waiting", {
+      workspaceId: r.workspaceId,
+      projectId: run.projectId,
+      runId: run.id,
+      delegationActionId: delegation.id,
+      childRunId: child.id,
+      childStatus: child.status,
+    });
+    return park(run, r, "domain");
+  }
+  await r.store.markInvocation(delegation.id, {
+    status: "failed",
+    error: {
+      kind: "precondition_unmet",
+      message: `Delegated run ended ${child.status} without a terminal report.`,
+      recoverable: true,
+      details: { childRunId: child.id, childStatus: child.status },
+    },
+  });
   return null;
 }
 
@@ -812,6 +905,22 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       if (stopped) return stopped;
     }
 
+    if (result.status === "delegated") {
+      // The dispatch transaction already durably enqueued the child run; the
+      // child's report finalization wakes this run's dispatch. Park in the
+      // domain wait (distinct from media-job/approval waits) until then.
+      logger.info("orchestrator.parked_on_delegation", {
+        workspaceId: r.workspaceId,
+        projectId: run.projectId,
+        runId: run.id,
+        turn,
+        tool: decision.toolName,
+        childRunId: result.childRunId,
+        sessionId: result.sessionId,
+      });
+      return park(run, r, "domain");
+    }
+
     if (result.status === "accepted") {
       logger.info("orchestrator.parked_after_tool", {
         workspaceId: r.workspaceId,
@@ -870,6 +979,13 @@ async function finish(
   });
 }
 
-async function park(run: OrchestratorRun, r: Resolved): Promise<OrchestratorRun> {
-  return r.store.updateOrchestratorRun(run.id, { status: "waiting" });
+async function park(
+  run: OrchestratorRun,
+  r: Resolved,
+  waitReason: "domain" | null = null
+): Promise<OrchestratorRun> {
+  // The domain wait is distinct from media-job and approval waits: a root run
+  // parked on a delegated child records it durably so store/projection can
+  // distinguish "waiting on a specialist" from "waiting on a provider job".
+  return r.store.updateOrchestratorRun(run.id, { status: "waiting", waitReason });
 }

@@ -7,8 +7,11 @@ import type {
 
 export {
   TOOL_NAMES,
+  PRODUCTION_TOOL_NAMES,
+  DISPATCH_TOOL_NAMES,
   getToolCapability,
   isToolName,
+  isDispatchToolName,
 } from "@/lib/orchestrator-tools/capability-catalog";
 export type { ToolName } from "@/lib/orchestrator-tools/capability-catalog";
 
@@ -72,6 +75,15 @@ export type ToolCallResult =
       gateId: string;
       resumesWhen: "approval_terminal";
       previewArtifactIds: string[];
+    }
+  | {
+      /** A delegate_* dispatch tool enqueued a finite domain run; the caller
+       * parks in the domain wait until the child's report finalization wakes
+       * its dispatch. */
+      status: "delegated";
+      childRunId: string;
+      sessionId: string;
+      resumesWhen: "domain_report";
     }
   | {
       status: "failed";
