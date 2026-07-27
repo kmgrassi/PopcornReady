@@ -64,6 +64,15 @@ begin
       using errcode = '23514';
   end if;
 
+  -- A terminal run is never claimable — checked BEFORE the owner re-claim
+  -- branch so a run that became terminal while still recorded as
+  -- active_run_id (a crash between the terminal update and the separate
+  -- release) cannot be re-claimed by recovery and relaunch completed work.
+  -- Release remains the separate cleanup operation for that window.
+  if v_run_status in ('succeeded', 'failed', 'canceled', 'timed_out', 'superseded') then
+    return query select 'terminal'::text, null::bigint;
+    return;
+  end if;
   -- Idempotent re-claim by the current owner: same generation, no increment.
   if v_session.active_run_id = p_run_id then
     return query select 'claimed'::text, v_session.claim_generation;
@@ -71,10 +80,6 @@ begin
   end if;
   if v_session.active_run_id is not null then
     return query select 'held'::text, null::bigint;
-    return;
-  end if;
-  if v_run_status in ('succeeded', 'failed', 'canceled', 'timed_out', 'superseded') then
-    return query select 'terminal'::text, null::bigint;
     return;
   end if;
 

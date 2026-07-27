@@ -22,6 +22,13 @@ test("session claims are lock-serialized, generation-incrementing, and service-r
   assert.match(migration, /if v_session\.active_run_id = p_run_id then/);
   assert.match(migration, /'held'::text, null::bigint/);
   assert.match(migration, /'terminal'::text, null::bigint/);
+  // The terminal-status check runs BEFORE the owner re-claim branch, so a run
+  // that became terminal while still active_run_id (crash between the
+  // terminal update and the separate release) can never be re-claimed.
+  assert.match(
+    migration,
+    /if v_run_status in \('succeeded', 'failed', 'canceled', 'timed_out', 'superseded'\)[\s\S]*if v_session\.active_run_id = p_run_id then/
+  );
   // The claimed run must belong to the session (same project).
   assert.match(migration, /does not belong to session/);
   assert.match(migration, /create or replace function public\.release_agent_session_run/);

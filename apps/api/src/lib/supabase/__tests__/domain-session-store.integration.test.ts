@@ -349,18 +349,30 @@ integrationTest("session claims are stable under concurrency", async () => {
     const reclaim = await claimSessionRun(claimInput(winner.id));
     assert.deepEqual(reclaim, { state: "claimed", claimGeneration: generation });
 
-    // Release advances the durable generation and clears the slot.
+    // Crash window: the run becomes terminal while STILL recorded as the
+    // active run (a crash between completeDomainRun's terminal update and
+    // the separate release). Even the "owner re-claim" must be rejected so
+    // recovery cannot relaunch completed work...
+    await fixture.service
+      .from("orchestrator_runs")
+      .update({ status: "canceled", completed_at: new Date().toISOString() })
+      .eq("id", winner.id);
+    const crashWindowClaim = await claimSessionRun(claimInput(winner.id));
+    assert.deepEqual(
+      crashWindowClaim,
+      { state: "terminal" },
+      "a terminal run is never claimable, even while still active_run_id"
+    );
+
+    // ...while release remains the separate cleanup operation, advancing the
+    // durable generation and clearing the slot.
     assert.equal(await releaseSessionRun(claimInput(winner.id)), true);
     assert.equal(await releaseSessionRun(claimInput(winner.id)), false, "release is one-shot");
     const session = await getAgentSession(fixture.projectId, "visuals");
     assert.equal(session?.activeRunId, null);
     assert.ok(session!.claimGeneration > generation, "ownership change advances the generation");
 
-    // A terminal run cannot take the slot.
-    await fixture.service
-      .from("orchestrator_runs")
-      .update({ status: "canceled", completed_at: new Date().toISOString() })
-      .eq("id", winner.id);
+    // A terminal run still cannot take the freed slot.
     const terminalClaim = await claimSessionRun(claimInput(winner.id));
     assert.deepEqual(terminalClaim, { state: "terminal" });
 
@@ -414,7 +426,8 @@ integrationTest("one immutable report action closes one domain run", async () =>
       { asset_id: outputAssetId, direction: "output", role: "primary", ordinal: 0 },
     ]);
 
-    // Replaying the same logical report is a no-op...
+    // Replaying the same logical report (same id, identical payload) is a
+    // no-op that returns the persisted state...
     const replayed = await appendDomainReport({
       projectId: fixture.projectId,
       runId: run.id,
@@ -422,6 +435,36 @@ integrationTest("one immutable report action closes one domain run", async () =>
       report: doneReport([{ assetId: outputAssetId, intrinsicRole: "primary" }]),
     });
     assert.deepEqual(replayed, { reportActionId, created: false });
+
+    // ...but a same-id replay whose payload DRIFTED from the immutable action
+    // params is rejected and writes no attribution: audit rows must derive
+    // from the persisted report, never a retry payload.
+    const driftedAssetId = await insertAsset(fixture);
+    await assert.rejects(
+      appendDomainReport({
+        projectId: fixture.projectId,
+        runId: run.id,
+        reportActionId,
+        report: doneReport([
+          { assetId: outputAssetId, intrinsicRole: "primary" },
+          { assetId: driftedAssetId, intrinsicRole: "extra" },
+        ]),
+      }),
+      (err: unknown) =>
+        err instanceof ApiError &&
+        err.code === "idempotency_conflict" &&
+        err.details?.reason === "domain_report_replay_mismatch" &&
+        err.details?.existingReportActionId === reportActionId
+    );
+    const { data: postDriftAttribution } = await fixture.service
+      .from("action_assets")
+      .select("asset_id, direction, role, ordinal")
+      .eq("action_id", reportActionId);
+    assert.deepEqual(
+      postDriftAttribution,
+      [{ asset_id: outputAssetId, direction: "output", role: "primary", ordinal: 0 }],
+      "a rejected drifted replay writes no action_assets rows"
+    );
 
     // ...while a second distinct report surfaces the typed conflict.
     await assert.rejects(
@@ -583,6 +626,27 @@ integrationTest(
         claim.state === "claimed" ? claim.claimGeneration : -1
       );
 
+      // A queued sibling run on the same session holds NO claim: it must not
+      // be stamped with the active owner's valid generation, or its jobs
+      // would pass the fence and defeat the single-active-run boundary.
+      const sibling = await createDomainRun({
+        projectId: fixture.projectId,
+        domain: "visuals",
+        task: visualsTask(fixture),
+        inputSummary: "queued sibling",
+        origin: {
+          kind: "creative_director",
+          parentRunId: fixture.rootRunId,
+          rootActionId: fixture.delegationActionId,
+        },
+      });
+      assert.equal(sibling.agentSessionId, run.agentSessionId);
+      assert.equal(
+        await getRunSessionClaim(sibling.id),
+        null,
+        "a non-owner run obtains no session claim generation"
+      );
+
       // Two provider jobs launched under the live claim, attributed to
       // primitive actions on the finite run.
       async function launchFencedJob(): Promise<string> {
@@ -629,6 +693,11 @@ integrationTest(
           runId: run.id,
         }),
         true
+      );
+      assert.equal(
+        await getRunSessionClaim(run.id),
+        null,
+        "the ex-owner no longer holds a claim after release"
       );
 
       // ...so the stale worker cannot commit late through the store...

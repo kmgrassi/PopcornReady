@@ -19,6 +19,7 @@
 // session allocation, claims, and attribution are server-owned transitions.
 
 import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import type {
   AgentDomain,
   AgentRole,
@@ -406,10 +407,15 @@ export async function releaseSessionRun(input: {
 
 /**
  * The durable claim context a provider job launched by the given run must
- * carry (`jobs.session_claim_generation`). While a run holds active
- * ownership, the session's current generation equals its claim-time
- * generation (the counter only advances when ownership changes). Runs outside
- * a session (root runs, direct tool calls) have no claim to copy.
+ * carry (`jobs.session_claim_generation`). A claim exists ONLY while the run
+ * holds the session's single active-ownership slot
+ * (`agent_sessions.active_run_id === runId`): a queued or stale sibling run
+ * on the same session must never be stamped with the active owner's valid
+ * generation, or its jobs would pass the finalization fence and defeat the
+ * one-active-run session boundary. While the run owns the slot, the current
+ * generation equals its claim-time generation (the counter only advances when
+ * ownership changes). Runs outside a session (root runs, direct tool calls)
+ * and non-owner runs have no claim to copy.
  */
 export async function getRunSessionClaim(
   runId: string
@@ -429,14 +435,16 @@ export async function getRunSessionClaim(
     "domainSessionStore.getRunSessionClaim session",
     db
       .from("agent_sessions")
-      .select("claim_generation")
+      .select("active_run_id, claim_generation")
       .eq("id", sessionId)
       .maybeSingle()
   );
   if (!session) return null;
+  const row = session as { active_run_id: string | null; claim_generation: number };
+  if (row.active_run_id !== runId) return null;
   return {
     sessionId,
-    claimGeneration: Number((session as { claim_generation: number }).claim_generation),
+    claimGeneration: Number(row.claim_generation),
   };
 }
 
@@ -582,11 +590,15 @@ function reportOutputAssetIds(report: DomainReportV1): string[] {
 /**
  * Append the run's unique terminal `domain_report` action. Exactly one report
  * exists per finite domain run (partial unique index); a second append
- * surfaces a typed conflict, while replaying the same caller-reserved action
- * id returns the existing immutable report. Output asset references are
- * same-project validated, mirrored onto the immutable `output_asset_ids`
- * array, and attributed through ordered `action_assets` rows that preserve
- * each output's intrinsic role.
+ * surfaces a typed conflict. Replaying the same caller-reserved action id
+ * with the SAME payload is a no-op returning the persisted report; a replay
+ * whose payload drifted from the immutable action params is rejected with a
+ * typed conflict and writes nothing. Any attribution ever written derives
+ * from the PERSISTED report (never a retry payload), so `action_assets`
+ * audit rows can never contradict the immutable action row. Output asset
+ * references are same-project validated, mirrored onto the immutable
+ * `output_asset_ids` array, and attributed through ordered `action_assets`
+ * rows that preserve each output's intrinsic role.
  */
 export async function appendDomainReport(
   input: AppendDomainReportInput
@@ -617,16 +629,32 @@ export async function appendDomainReport(
       "domainSessionStore.appendDomainReport existing",
       db
         .from("actions")
-        .select("id")
+        .select("id, params")
         .eq("orchestrator_run_id", input.runId)
         .eq("tool", "domain_report")
         .maybeSingle()
     );
-    const existingId = (existing as { id: string } | null)?.id;
-    if (existingId && input.reportActionId && existingId === input.reportActionId) {
-      // Idempotent replay of the same logical report.
-      await attributeReportOutputs(input, actionId);
-      return { reportActionId: existingId, created: false };
+    const existingRow = existing as { id: string; params: DomainReportV1 } | null;
+    if (existingRow && input.reportActionId && existingRow.id === input.reportActionId) {
+      // Same logical report id: only an identical payload is an idempotent
+      // replay. A drifted retry (e.g. blocked -> done) must not silently win
+      // or attribute outputs the immutable action row never recorded.
+      if (!isDeepStrictEqual(existingRow.params, input.report)) {
+        throw new ApiError(
+          "idempotency_conflict",
+          `Report replay for run ${input.runId} does not match the persisted immutable report.`,
+          {
+            reason: "domain_report_replay_mismatch",
+            runId: input.runId,
+            existingReportActionId: existingRow.id,
+          }
+        );
+      }
+      // Attribution derives from the PERSISTED params (identical rows are
+      // ignored on conflict), which also heals a crash between the original
+      // insert and its attribution write.
+      await attributeReportOutputs(input.projectId, existingRow.id, existingRow.params);
+      return { reportActionId: existingRow.id, created: false };
     }
     throw new ApiError(
       "idempotency_conflict",
@@ -634,28 +662,29 @@ export async function appendDomainReport(
       {
         reason: "domain_report_exists",
         runId: input.runId,
-        ...(existingId ? { existingReportActionId: existingId } : {}),
+        ...(existingRow ? { existingReportActionId: existingRow.id } : {}),
       }
     );
   }
 
-  await attributeReportOutputs(input, actionId);
+  await attributeReportOutputs(input.projectId, actionId, input.report);
   return { reportActionId: actionId, created: true };
 }
 
 async function attributeReportOutputs(
-  input: AppendDomainReportInput,
-  actionId: string
+  projectId: string,
+  actionId: string,
+  report: DomainReportV1
 ): Promise<void> {
-  if (input.report.outcome.outcome !== "done" || input.report.outcome.outputs.length === 0) {
+  if (report.outcome.outcome !== "done" || report.outcome.outputs.length === 0) {
     return;
   }
   const db = getServiceSupabase();
   await runQuery(
     "domainSessionStore.appendDomainReport action_assets",
     db.from("action_assets").upsert(
-      input.report.outcome.outputs.map((output, ordinal) => ({
-        project_id: input.projectId,
+      report.outcome.outputs.map((output, ordinal) => ({
+        project_id: projectId,
         action_id: actionId,
         asset_id: output.assetId,
         direction: "output",
