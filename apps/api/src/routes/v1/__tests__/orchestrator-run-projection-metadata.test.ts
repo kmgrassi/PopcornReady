@@ -17,6 +17,8 @@ test("catalog-backed run labels and ordering preserve legacy projection behavior
     generate_clip: ["Clips", 8],
     regenerate_image_asset: ["Plan", 101],
     edit_video_asset: ["Video Edits", 9],
+    generate_image_asset: ["Plan", 101],
+    generate_video_asset: ["Plan", 101],
     generate_audio: ["Audio", 10],
     fit_audio_to_picture: ["Audio Sync", 11],
     assemble_timeline: ["Timeline", 12],

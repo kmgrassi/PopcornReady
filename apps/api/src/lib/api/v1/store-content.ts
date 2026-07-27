@@ -16,6 +16,7 @@ export type ContentSchemaKind =
 
 export type GraphAssetKind =
   | "source_footage"
+  | "image"
   | "brief"
   | "beat"
   | "anchor"
@@ -34,6 +35,32 @@ export type GraphAssetKind =
   | "poster";
 
 export type AssetMedia = "data" | "image" | "video" | "audio";
+
+const PRODUCTION_KEYFRAME_ROLES = new Set([
+  "beat_keyframe",
+  "beat_storyboard",
+  "scene_storyboard",
+  "act_mockup",
+]);
+
+/** Preserve semantic production kinds; otherwise an image is genuinely generic. */
+export function graphKindForMediaAsset(input: {
+  kind: "image" | "video" | "audio";
+  role?: string | null;
+  generated: boolean;
+}): GraphAssetKind {
+  if (input.kind === "audio") return "audio_track";
+  if (input.kind === "image") {
+    if (input.role === "poster") return "poster";
+    if (input.role === "character_anchor" || input.role === "scene_anchor") {
+      return "anchor";
+    }
+    if (input.role && PRODUCTION_KEYFRAME_ROLES.has(input.role)) return "keyframe";
+    return "image";
+  }
+  if (input.role === "export_video") return "render";
+  return input.generated ? "clip" : "source_footage";
+}
 
 export interface DataAssetRow {
   id: string;

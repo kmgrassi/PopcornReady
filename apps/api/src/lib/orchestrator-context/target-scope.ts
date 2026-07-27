@@ -351,7 +351,7 @@ export function assertScopedPrimitiveInput(
     const target = targetFromPrimitiveField(field, value, scope.projectId);
     if (target) assertTarget(scope, target);
   }
-  for (const [field, kind] of [["assetIds", "asset"], ["sourceAssetIds", "asset"], ["beatIds", "beat"], ["panelIds", "panel"], ["timelineItemIds", "timeline_item"]] as const) {
+  for (const [field, kind] of [["assetIds", "asset"], ["sourceAssetIds", "asset"], ["referenceAssetIds", "asset"], ["beatIds", "beat"], ["panelIds", "panel"], ["timelineItemIds", "timeline_item"]] as const) {
     const values = input[field];
     if (values === undefined) continue;
     if (!Array.isArray(values) || values.length > MAX_REFERENCED_IDS) {

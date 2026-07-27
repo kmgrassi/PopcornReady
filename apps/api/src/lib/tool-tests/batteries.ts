@@ -2,7 +2,11 @@
 // tool's spec import here. A startup check asserts every vocabulary tool has
 // a battery so a newly-declared tool can't silently lack test coverage.
 
-import { PRODUCTION_TOOL_NAMES, type ToolName } from "@/lib/orchestrator";
+import {
+  DOMAIN_TOOL_NAMES,
+  PRODUCTION_TOOL_NAMES,
+  type ToolName,
+} from "@/lib/orchestrator";
 import type { ToolBattery } from "./types";
 
 import { assembleTimelineBattery } from "./specs/assemble-timeline";
@@ -18,6 +22,8 @@ import { generateAudioBattery } from "./specs/generate-audio";
 import { generateClipBattery } from "./specs/generate-clip";
 import { generateKeyframeBattery } from "./specs/generate-keyframe";
 import { generateStoryboardBattery } from "./specs/generate-storyboard";
+import { generateImageAssetBattery } from "./specs/generate-image-asset";
+import { generateVideoAssetBattery } from "./specs/generate-video-asset";
 import { planShotsBattery } from "./specs/plan-shots";
 import { planVisualAnchorsBattery } from "./specs/plan-visual-anchors";
 import { publishToCatalogBattery } from "./specs/publish-to-catalog";
@@ -36,6 +42,8 @@ const ALL_BATTERIES: ToolBattery[] = [
   generateClipBattery,
   regenerateImageAssetBattery,
   editVideoAssetBattery,
+  generateImageAssetBattery,
+  generateVideoAssetBattery,
   generateAudioBattery,
   fitAudioToPictureBattery,
   assembleTimelineBattery,
@@ -54,13 +62,14 @@ export const batteries: Map<ToolName, ToolBattery> = new Map(
 // Root-only dispatch tools (delegate_*) are transport adapters exercised by
 // the engine/service test suites, never by the model-in-the-loop media
 // harness, so they deliberately have no battery.
-const missing = PRODUCTION_TOOL_NAMES.filter((name) => !batteries.has(name));
+const batteryToolNames = [...PRODUCTION_TOOL_NAMES, ...DOMAIN_TOOL_NAMES];
+const missing = batteryToolNames.filter((name) => !batteries.has(name));
 if (missing.length > 0) {
   throw new Error(`Tool-test batteries missing for: ${missing.join(", ")}`);
 }
-if (batteries.size !== PRODUCTION_TOOL_NAMES.length) {
+if (batteries.size !== batteryToolNames.length) {
   throw new Error(
-    `Tool-test batteries define ${batteries.size} tools but the vocabulary has ${PRODUCTION_TOOL_NAMES.length}.`
+    `Tool-test batteries define ${batteries.size} tools but the battery vocabulary has ${batteryToolNames.length}.`
   );
 }
 

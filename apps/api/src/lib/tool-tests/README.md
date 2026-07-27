@@ -87,8 +87,9 @@ export const myToolBattery: ToolBattery = {
 };
 ```
 
-Then import it in `batteries.ts`. A startup check fails loudly if any vocabulary
-tool lacks a battery.
+Then import it in `batteries.ts`. A startup check fails loudly if any flat
+production or specialist-only domain tool lacks a battery. Root-only dispatch
+adapters are covered by runtime/service tests instead.
 
 ### Case fields
 
@@ -112,5 +113,5 @@ tool lacks a battery.
 | `bridge.ts` | adapts the real `orchestrator-tools` registry to the driver registry |
 | `sandbox.ts` / `sandbox-guard.ts` | throwaway workspace lifecycle + delete guard |
 | `runner.ts` | runs a case/suite end-to-end |
-| `batteries.ts` | aggregates one battery per `TOOL_NAMES` entry |
+| `batteries.ts` | aggregates one battery per flat-production or domain-only tool |
 | `specs/*.ts` | one battery per tool |

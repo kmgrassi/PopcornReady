@@ -38,7 +38,7 @@ function mediaKindForThumbnail(
 ): "image" | "video" | "audio" {
   if (media === "image" || media === "video" || media === "audio") return media;
   if (kind === "audio_track") return "audio";
-  if (kind === "anchor" || kind === "keyframe") return "image";
+  if (kind === "image" || kind === "anchor" || kind === "keyframe" || kind === "poster") return "image";
   return "video";
 }
 
