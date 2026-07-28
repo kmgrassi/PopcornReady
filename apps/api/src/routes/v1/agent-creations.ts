@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { Router } from "express";
 import type { CreatorDirectTaskKind, DomainTaskV1 } from "@popcorn/shared/domain-agent-contract";
 import { mutation, route } from "@/core/adapter";
@@ -60,7 +60,7 @@ function digest(input: CreationRequest): string {
   return createHash("sha256").update(JSON.stringify({ ...input, referenceAssetIds: [...input.referenceAssetIds].sort() })).digest("hex");
 }
 
-function taskFor(args: { projectId: string; actorId: string; request: CreationRequest; requestDigest: string; approvalGateId: string; idempotencyKey: string }): DomainTaskV1 {
+function taskFor(args: { projectId: string; actorId: string; request: CreationRequest; requestDigest: string; approvalGateId: string; proposalActionId: string; sourceFingerprint?: string; idempotencyKey: string }): DomainTaskV1 {
   const visual = args.request.kind === "image_create" || args.request.kind === "video_create" || args.request.kind === "video_edit";
   const allowedOutputKinds = args.request.kind === "image_create" ? ["image"] as const : visual ? ["clip"] as const : ["audio_track"] as const;
   const sourceTargets = args.request.sourceAssetId ? [{ kind: "asset" as const, projectId: args.projectId, assetId: args.request.sourceAssetId }] : [];
@@ -75,9 +75,9 @@ function taskFor(args: { projectId: string; actorId: string; request: CreationRe
     requiredOutputs: [{ kind: allowedOutputKinds[0], role: "creator_direct", minimumCount: 1 }],
     allowedOutputKinds,
     creativeConstraints: {},
-    preserve: { assetIds: args.request.sourceAssetId ? [args.request.sourceAssetId] : [], selections: [], fingerprints: [], pins: args.request.sourceAssetId ? [{ kind: "asset", id: args.request.sourceAssetId }] : [] },
+    preserve: { assetIds: args.request.sourceAssetId ? [args.request.sourceAssetId] : [], selections: [], fingerprints: args.request.sourceAssetId && args.sourceFingerprint ? [{ assetId: args.request.sourceAssetId, value: args.sourceFingerprint }] : [], pins: args.request.sourceAssetId ? [{ kind: "asset", id: args.request.sourceAssetId, ...(args.sourceFingerprint ? { fingerprint: args.sourceFingerprint } : {}) }] : [] },
     candidateAffectedAssetIds: [], budgetUsd: args.request.maximumUsd,
-    approvalContext: { proposalActionId: "00000000-0000-4000-8000-000000000000" as never, approvedBudgetUsd: args.request.maximumUsd, approvalFingerprint: args.requestDigest },
+    approvalContext: { proposalActionId: args.proposalActionId as never, approvedBudgetUsd: args.request.maximumUsd, approvalFingerprint: args.requestDigest },
     acceptanceCriteria: [args.request.prompt],
     origin: { kind: "creator_direct", actorId: args.actorId, creatorMessageId: args.requestDigest, entrypoint: "project_api", requestDigest: args.requestDigest, idempotencyKey: args.idempotencyKey, approvalGateId: args.approvalGateId },
     responseRecipient: { kind: "creator_conversation" },
@@ -86,26 +86,34 @@ function taskFor(args: { projectId: string; actorId: string; request: CreationRe
 
 async function verifyReferences(workspaceId: string, projectId: string, request: CreationRequest) {
   await getProject(workspaceId, projectId);
+  let sourceFingerprint: string | undefined;
   for (const assetId of [...request.referenceAssetIds, ...(request.sourceAssetId ? [request.sourceAssetId] : [])]) {
-    await getAsset(workspaceId, projectId, assetId);
+    const asset = await getAsset(workspaceId, projectId, assetId);
+    if (assetId === request.sourceAssetId) sourceFingerprint = asset.contentHash;
   }
+  if (request.kind === "video_edit" && !sourceFingerprint) {
+    throw new ApiError("validation_failed", "video_edit sourceAssetId must have a current content fingerprint.");
+  }
+  return sourceFingerprint;
 }
 
 agentCreationsRouter.post("/projects/:projectId/agent-creations/proposals", mutation(async ({ auth, body, req }, params) => {
   const projectId = string(params.projectId, "projectId", 128);
   const request = parseCreation(body);
-  await verifyReferences(auth.workspaceId, projectId, request);
+  const sourceFingerprint = await verifyReferences(auth.workspaceId, projectId, request);
   const requestDigest = digest(request);
   const approvalToken = randomBytes(24).toString("base64url");
-  const idempotencyKey = req.header("Idempotency-Key") ?? `proposal:${requestDigest}`;
+  const idempotencyKey = req.header("Idempotency-Key");
+  if (!idempotencyKey) throw new ApiError("validation_failed", "Idempotency-Key is required to create a proposal.");
+  const proposalActionId = randomUUID();
+  const gateId = randomUUID();
   // The finite run is deliberately not enqueued until the one-use gate is consumed.
-  const dispatch = await dispatchDomainRun({ projectId, domain: request.kind === "soundtrack_create" || request.kind === "audio_create" ? "audio" : "visuals", task: taskFor({ projectId, actorId: auth.actor.id, request, requestDigest, approvalGateId: "pending", idempotencyKey }), inputSummary: request.prompt, budgetUsd: request.maximumUsd, origin: { kind: "creator_direct", actorId: auth.actor.id, request: { requestDigest } }, enqueue: false, idempotencyKey });
-  const proposal = await createAction({ projectId, orchestratorRunId: dispatch.runId, tool: "creator_direct_proposal", status: "proposed", params: { kind: request.kind, requestDigest, maximumUsd: request.maximumUsd }, rationale: request.prompt, proposal: { maximumUsd: request.maximumUsd } });
+  const dispatch = await dispatchDomainRun({ projectId, domain: request.kind === "soundtrack_create" || request.kind === "audio_create" ? "audio" : "visuals", task: taskFor({ projectId, actorId: auth.actor.id, request, requestDigest, approvalGateId: gateId, proposalActionId, sourceFingerprint, idempotencyKey }), inputSummary: request.prompt, budgetUsd: request.maximumUsd, origin: { kind: "creator_direct", actorId: auth.actor.id, request: { requestDigest } }, enqueue: false, idempotencyKey });
+  const proposal = await createAction({ id: proposalActionId, projectId, orchestratorRunId: dispatch.runId, tool: "creator_direct_proposal", status: "proposed", params: { kind: request.kind, requestDigest, maximumUsd: request.maximumUsd }, rationale: request.prompt, proposal: { maximumUsd: request.maximumUsd } });
   const tokenHash = createHash("sha256").update(approvalToken).digest("hex");
   const expiresAt = new Date(Date.now() + 15 * 60_000).toISOString();
-  const rows = await runQuery("agentCreations.createProposalGate", getServiceSupabase().rpc("create_creator_direct_proposal_gate", { p_project_id: projectId, p_run_id: dispatch.runId, p_proposal_action_id: proposal.id, p_actor_id: auth.actor.id, p_request_digest: requestDigest, p_approved_max_usd: request.maximumUsd, p_approval_token_hash: tokenHash, p_expires_at: expiresAt }));
-  const gateId = (rows as Array<{ gate_id: string }>)[0]?.gate_id;
-  if (!gateId) throw new ApiError("internal_error", "Creator-direct proposal gate was not created.");
+  const rows = await runQuery("agentCreations.createProposalGate", getServiceSupabase().rpc("create_creator_direct_proposal_gate_with_id", { p_gate_id: gateId, p_project_id: projectId, p_run_id: dispatch.runId, p_proposal_action_id: proposal.id, p_actor_id: auth.actor.id, p_request_digest: requestDigest, p_approved_max_usd: request.maximumUsd, p_approval_token_hash: tokenHash, p_expires_at: expiresAt }));
+  if (!(rows as Array<{ gate_id: string }>)[0]?.gate_id) throw new ApiError("internal_error", "Creator-direct proposal gate was not created.");
   return { status: 201, body: { proposal: { sessionId: dispatch.sessionId, runId: dispatch.runId, gateId, requestDigest, maximumUsd: request.maximumUsd, approvalToken, expiresAt } } };
 }));
 

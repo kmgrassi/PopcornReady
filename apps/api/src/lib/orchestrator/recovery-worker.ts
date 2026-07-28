@@ -90,13 +90,15 @@ async function processDispatch(dispatch: ClaimedOrchestratorDispatch, deps: Reco
         workspaceId: dispatch.workspaceId,
         agentId: "orchestrator-worker",
         sessionClaimGeneration: dispatch.sessionClaimGeneration,
-        enabledDomainRoles: ["visuals"],
+        domainRuntimeEnabled: true,
+        enabledDomainRoles: ["visuals", "audio"],
       })
     : await deps.run(run.id, {
         workspaceId: dispatch.workspaceId,
         agentId: "orchestrator-worker",
         sessionClaimGeneration: dispatch.sessionClaimGeneration,
-        enabledDomainRoles: ["visuals"],
+        domainRuntimeEnabled: true,
+        enabledDomainRoles: ["visuals", "audio"],
       });
   const resultGates = await deps.listGates(dispatch.runId);
   const completed = terminal(result.status) || resultGates.some((gate) => gate.status === "reached");
