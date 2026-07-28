@@ -43,8 +43,6 @@ export interface ResolveAgentDefinitionInput {
   registryDeps?: DefaultToolRegistryDeps;
   /** Domain execution is fail-closed and role-aware. */
   enabledDomainRoles?: readonly AgentDomain[];
-  /** Temporary root rollout fence; false preserves the flat production path. */
-  creativeDirectorHierarchyEnabled?: boolean;
   /** Root-only test seam; production reads the durable root/child linkage. */
   loadRootRunFamily?: (rootRunId: string) => Promise<RootRunFamily>;
 }
@@ -83,7 +81,9 @@ export function assertDomainRegistry(role: "visuals" | "audio", registry: ToolRe
 }
 
 function rootDefinition(input: ResolveAgentDefinitionInput): AgentDefinition {
-  if (input.creativeDirectorHierarchyEnabled) {
+  // Existing rows predate PR 18 and therefore have no durable profile; they
+  // remain flat so a rollback/config change cannot rewrite an in-flight run.
+  if (input.run.rootExecutionProfile === "creative_director") {
     return {
       role: "creative_director",
       // The rollout must not be widened by a caller-supplied legacy registry.
