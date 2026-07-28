@@ -25,10 +25,11 @@ import {
   applyRegeneratedAssetMedia,
   effectiveAssetStorageVisibility,
   getAssetByWorkspace,
-  type AssetMediaUrls,
   type RegeneratedAssetMedia,
+  type RegeneratedAssetResult,
   type V1Asset,
 } from "./store";
+import { getRunSessionClaim as realGetRunSessionClaim } from "./domain-session-store";
 
 // Image provider used when the asset carries no provenance provider (older
 // assets, or ones generated before provenance was recorded).
@@ -43,6 +44,11 @@ export interface RegenerateImageAssetArgs {
   provider?: string | null;
   model?: string | null;
   requestId?: string;
+  actionId?: string;
+  orchestratorRunId?: string;
+  sessionClaimGeneration?: number;
+  /** Legacy replacement defaults true; domain specialists mint pooled alternatives. */
+  repointSurfaces?: boolean;
   deps?: Partial<RegenerateImageAssetDeps>;
 }
 
@@ -59,7 +65,8 @@ export interface RegenerateImageAssetDeps {
     workspaceId: string,
     assetId: string,
     update: RegeneratedAssetMedia
-  ) => Promise<AssetMediaUrls>;
+  ) => Promise<RegeneratedAssetResult>;
+  getRunSessionClaim: typeof realGetRunSessionClaim;
   logger: Logger;
 }
 
@@ -83,6 +90,7 @@ const defaultDeps: RegenerateImageAssetDeps = {
   writeObject: writeAssetObject,
   resolveVisibility: effectiveAssetStorageVisibility,
   applyMedia: applyRegeneratedAssetMedia,
+  getRunSessionClaim: realGetRunSessionClaim,
   logger: createLogger(),
 };
 
@@ -122,9 +130,17 @@ async function timed<T>(
 
 export async function regenerateImageAsset(
   args: RegenerateImageAssetArgs
-): Promise<AssetMediaUrls> {
+): Promise<RegeneratedAssetResult> {
   const { workspaceId, assetId } = args;
-  const { getAsset, generateImage, writeObject, resolveVisibility, applyMedia, logger: baseLogger } = {
+  const {
+    getAsset,
+    generateImage,
+    writeObject,
+    resolveVisibility,
+    applyMedia,
+    getRunSessionClaim,
+    logger: baseLogger,
+  } = {
     ...defaultDeps,
     ...args.deps,
   };
@@ -170,6 +186,30 @@ export async function regenerateImageAsset(
         "This image has no saved prompt to regenerate from. Provide a prompt to continue.",
         { assetIds: [assetId] }
       );
+    }
+    if (
+      (args.orchestratorRunId === undefined) !==
+      (args.sessionClaimGeneration === undefined)
+    ) {
+      throw new ApiError(
+        "job_failed",
+        "Pooled domain regeneration requires its run and exact session claim."
+      );
+    }
+    if (
+      args.orchestratorRunId !== undefined &&
+      args.sessionClaimGeneration !== undefined
+    ) {
+      const currentClaim = await getRunSessionClaim(args.orchestratorRunId);
+      if (
+        !currentClaim ||
+        currentClaim.claimGeneration !== args.sessionClaimGeneration
+      ) {
+        throw new ApiError(
+          "job_failed",
+          "The domain-session claim changed before image regeneration."
+        );
+      }
     }
 
     const requestedProvider = args.provider?.trim();
@@ -262,6 +302,14 @@ export async function regenerateImageAsset(
           contentHash: sha256Hex(result.bytes),
           ...(asset.durationSec != null ? { durationSec: asset.durationSec } : {}),
           provenance,
+          repointSurfaces: args.repointSurfaces,
+          ...(args.actionId ? { actionId: args.actionId } : {}),
+          ...(args.orchestratorRunId
+            ? { orchestratorRunId: args.orchestratorRunId }
+            : {}),
+          ...(args.sessionClaimGeneration !== undefined
+            ? { sessionClaimGeneration: args.sessionClaimGeneration }
+            : {}),
         })
     );
 

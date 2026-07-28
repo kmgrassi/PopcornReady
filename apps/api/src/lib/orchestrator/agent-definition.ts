@@ -4,7 +4,7 @@
 // report. It selects the model-visible surface and fresh context for an already
 // claimed run. PR 6 remains the sole domain-report finalization boundary.
 
-import type { AgentRole, DomainTaskV1 } from "@popcorn/shared/domain-agent-contract";
+import type { AgentDomain, AgentRole, DomainTaskV1 } from "@popcorn/shared/domain-agent-contract";
 import type { DomainReportV1 } from "@popcorn/shared/domain-agent-contract";
 import { createHash } from "node:crypto";
 import type { OrchestratorRun } from "@/lib/api/v1/orchestrator-store";
@@ -17,16 +17,10 @@ import { toOrchestratorRegistry } from "@/lib/orchestrator-tools/to-orchestrator
 import { loadDomainTurnProjection } from "@/lib/orchestrator-context/domain-projection";
 import type { ToolRegistry } from "./registry";
 import { ORCHESTRATOR_SYSTEM_PROMPT } from "./model";
+import { VISUALS_SYSTEM_PROMPT } from "./visuals-profile";
 import type { RunActionSummary } from "@/lib/api/v1/orchestrator-store";
 import { getServiceSupabase } from "@/lib/supabase/clients";
 import { runQuery } from "@/lib/supabase/db-errors";
-
-const VISUALS_SYSTEM_PROMPT =
-  "You are the Popcorn Ready Visuals specialist. Work only inside the trusted task and current graph context. " +
-  "Call at most one allowed Visuals tool per turn. Never delegate, use Audio/root capabilities, alter unrelated assets, or make a project-wide creative decision. " +
-  "If a prerequisite belongs outside Visuals, let the server translate the typed precondition into a blocked report. " +
-  "When the bounded task is complete, return only JSON: {\"outcome\":\"done\",\"sessionSummary\":string,\"acceptanceEvidence\":[{\"criterion\":string,\"satisfied\":boolean,\"evidence\":string,\"assetIds\":string[]}]}. " +
-  "When a creative-director decision is required, return only JSON: {\"outcome\":\"question\",\"question\":string,\"options\":[{\"id\":string,\"label\":string,\"tradeoff\":string}]}.";
 
 const AUDIO_SYSTEM_PROMPT =
   "You are the Popcorn Ready Audio specialist. Work only inside the trusted task and current graph context. " +
@@ -50,8 +44,8 @@ export interface ResolveAgentDefinitionInput {
   /** Test seams may supply the exact root registry without changing its behavior. */
   rootRegistry?: ToolRegistry;
   registryDeps?: DefaultToolRegistryDeps;
-  /** Domain execution is fail-closed until the later runtime-safety rollout. */
-  domainRuntimeEnabled?: boolean;
+  /** Domain execution is fail-closed and role-aware. */
+  enabledDomainRoles?: readonly AgentDomain[];
 }
 
 export function assertDomainRegistry(role: "visuals" | "audio", registry: ToolRegistry): ToolRegistry {
@@ -77,14 +71,14 @@ function rootDefinition(input: ResolveAgentDefinitionInput): AgentDefinition {
 /**
  * Resolve a definition from durable run data, never caller-provided role/task
  * hints. Domain work is deliberately unavailable when the explicit runtime
- * gate is absent or false; tests inject `domainRuntimeEnabled: true`.
+ * role allowlist is absent or does not include the durable run role.
  */
 export async function resolveAgentDefinition(
   input: ResolveAgentDefinitionInput
 ): Promise<AgentDefinition> {
   const role = input.run.agentRole ?? "creative_director";
   if (role === "creative_director") return rootDefinition(input);
-  if (!input.domainRuntimeEnabled) {
+  if (!input.enabledDomainRoles?.includes(role)) {
     throw new Error("Domain agent runtime is disabled until its rollout safety gate is enabled.");
   }
 
@@ -99,11 +93,14 @@ export async function resolveAgentDefinition(
     throw new Error(`Run ${input.run.id} is not a valid ${role} domain assignment.`);
   }
 
+  const task = domainRun.taskParams;
   const registry =
     role === "visuals"
-      ? assertDomainRegistry(role, toOrchestratorRegistry(createVisualsToolRegistry(input.registryDeps)))
+      ? assertDomainRegistry(
+          role,
+          toOrchestratorRegistry(createVisualsToolRegistry(input.registryDeps, task))
+        )
       : assertDomainRegistry(role, toOrchestratorRegistry(createAudioToolRegistry(input.registryDeps)));
-  const task = domainRun.taskParams;
   return {
     role,
     registry,
@@ -225,13 +222,18 @@ function questionFingerprint(runId: string, question: string, options: unknown):
 }
 
 /** Strictly convert the domain model's terminal JSON into the immutable report. */
-export async function buildDomainReportFromCompletion(input: {
-  runId: string;
-  projectId: string;
-  task: DomainTaskV1;
-  summary: string;
-  actions: readonly RunActionSummary[];
-}): Promise<DomainReportV1> {
+export async function buildDomainReportFromCompletion(
+  input: {
+    runId: string;
+    projectId: string;
+    task: DomainTaskV1;
+    summary: string;
+    actions: readonly RunActionSummary[];
+  },
+  deps: {
+    validatedOutputs?: typeof validatedOutputs;
+  } = {}
+): Promise<DomainReportV1> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(input.summary);
@@ -241,7 +243,7 @@ export async function buildDomainReportFromCompletion(input: {
   const completion = completionObject(parsed);
   const outcome = completion.outcome;
   if (outcome === "done") {
-    const outputs = await validatedOutputs(input);
+    const outputs = await (deps.validatedOutputs ?? validatedOutputs)(input);
     return {
       schemaVersion: "DomainReport.v1",
       outcome: {

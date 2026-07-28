@@ -6,6 +6,7 @@ export type AssetEmbeddingMedia = "image" | "video" | "audio";
 const ASSET_EMBEDDING_MEDIA: AssetEmbeddingMedia[] = ["image", "video", "audio"];
 export type AssetSearchGraphKind =
   | "source_footage"
+  | "image"
   | "anchor"
   | "keyframe"
   | "clip"
@@ -14,6 +15,7 @@ export type AssetSearchGraphKind =
   | "poster";
 const ASSET_SEARCH_GRAPH_KINDS: AssetSearchGraphKind[] = [
   "source_footage",
+  "image",
   "anchor",
   "keyframe",
   "clip",
@@ -135,5 +137,4 @@ export function parseAssetSemanticSearch(body: unknown): AssetSemanticSearchInpu
     ...(role ? { role } : {}),
   };
 }
-
 

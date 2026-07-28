@@ -85,6 +85,39 @@ test("question completion derives trusted targets and a server fingerprint", asy
   }
 });
 
+test("done completion never attributes a concurrent external selection to the domain run", async () => {
+  const report = await buildDomainReportFromCompletion(
+    {
+      runId: "domain-run",
+      projectId: "project-1",
+      task: visualTask,
+      actions: [],
+      summary: JSON.stringify({
+        outcome: "done",
+        acceptanceEvidence: [
+          {
+            criterion: "Produce one approved clip.",
+            satisfied: true,
+            assetIds: ["clip-output"],
+            evidence: "The pooled clip satisfies the requested visual output.",
+          },
+        ],
+        sessionSummary: "Created one pooled clip.",
+      }),
+    },
+    {
+      validatedOutputs: async () => [
+        { assetId: "clip-output", intrinsicRole: "beat_clip", kind: "clip" },
+      ],
+    }
+  );
+
+  assert.equal(report.outcome.outcome, "done");
+  if (report.outcome.outcome === "done") {
+    assert.deepEqual(report.outcome.changedSelections, []);
+  }
+});
+
 test("disabled domain runtime does not invoke a model or tool", async () => {
   const run = { ...rootRun, id: "visual-run", agentRole: "visuals" as const };
   const store = {
@@ -100,6 +133,26 @@ test("disabled domain runtime does not invoke a model or tool", async () => {
     workspaceId: "workspace-1",
     store,
     model: async () => assert.fail("disabled domain runtime must not call the model"),
+  });
+  assert.equal(result.status, "queued");
+});
+
+test("Visuals-only rollout leaves an otherwise identical Audio run queued", async () => {
+  const run = { ...rootRun, id: "audio-run", agentRole: "audio" as const };
+  const store = {
+    getOrchestratorRun: async () => run,
+    updateOrchestratorRun: async () => assert.fail("Audio must remain queued"),
+    listRunGates: async () => [],
+    markGateReached: async () => null,
+    listRunActions: async () => [],
+    recordInvocation: async () => assert.fail("Audio must not record an action"),
+    markInvocation: async () => assert.fail("Audio must not mark an action"),
+  };
+  const result = await runOrchestratorToCompletion(run.id, {
+    workspaceId: "workspace-1",
+    store,
+    enabledDomainRoles: ["visuals"],
+    model: async () => assert.fail("Audio must not call the model"),
   });
   assert.equal(result.status, "queued");
 });

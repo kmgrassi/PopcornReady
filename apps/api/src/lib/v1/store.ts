@@ -120,6 +120,7 @@ function rowToBriefVersion(r: BriefVersionRow): BriefVersion {
 
 type GraphAssetKind =
   | "source_footage"
+  | "image"
   | "brief"
   | "beat"
   | "anchor"
@@ -239,13 +240,13 @@ export function renderableAssetUrlFromRow(
 function mediaToV1Kind(media: AssetMedia, kind: GraphAssetKind): V1Asset["kind"] {
   if (media === "image" || media === "video" || media === "audio") return media;
   if (kind === "audio_track") return "audio";
-  if (kind === "anchor" || kind === "keyframe") return "image";
+  if (kind === "image" || kind === "anchor" || kind === "keyframe") return "image";
   return "video";
 }
 
 function v1AssetKindToGraphKind(asset: V1Asset): GraphAssetKind {
   if (asset.kind === "audio") return "audio_track";
-  if (asset.kind === "image") return asset.source === "generated" ? "keyframe" : "anchor";
+  if (asset.kind === "image") return "image";
   return asset.source === "generated" ? "clip" : "source_footage";
 }
 

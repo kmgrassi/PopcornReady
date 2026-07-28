@@ -78,6 +78,7 @@ async function generateClipForBeat(input: {
   provider?: VideoProvider;
   model?: string;
   orchestratorRunId?: string;
+  sessionClaimGeneration?: number;
 }): Promise<string[]> {
   const existingClip = await input.deps.getActiveProjectScopedAsset({
     workspaceId: input.auth.workspaceId,
@@ -107,16 +108,21 @@ async function generateClipForBeat(input: {
       graphInputs: graphInputsForBeat(input.beat),
       ...(input.orchestratorRunId ? { runId: input.orchestratorRunId } : {}),
     },
+    ...(input.sessionClaimGeneration !== undefined
+      ? { sessionClaimGeneration: input.sessionClaimGeneration }
+      : {}),
   });
 
   const assetIds = assetIdsFromResult(result);
   for (const assetId of assetIds) {
-    await input.deps.selectGeneratedBeatClipAsset({
-      workspaceId: input.auth.workspaceId,
-      projectId: input.projectId,
-      assetId,
-      beatId: input.beat.beatId,
-    });
+    if (input.sessionClaimGeneration === undefined) {
+      await input.deps.selectGeneratedBeatClipAsset({
+        workspaceId: input.auth.workspaceId,
+        projectId: input.projectId,
+        assetId,
+        beatId: input.beat.beatId,
+      });
+    }
   }
   return assetIds;
 }
@@ -126,6 +132,7 @@ export interface GenerateClipJobInput {
   workspaceId: string;
   projectId: string;
   orchestratorRunId?: string;
+  sessionClaimGeneration?: number;
   beats: GenerateClipJobBeat[];
   skippedBeatIds?: string[];
   provider?: VideoProvider;
@@ -164,6 +171,9 @@ export async function runGenerateClipJob(
         ...(input.provider ? { provider: input.provider } : {}),
         ...(input.model ? { model: input.model } : {}),
         ...(input.orchestratorRunId ? { orchestratorRunId: input.orchestratorRunId } : {}),
+        ...(input.sessionClaimGeneration !== undefined
+          ? { sessionClaimGeneration: input.sessionClaimGeneration }
+          : {}),
       });
       if (assetIds.length === 0) {
         throw new Error(`Clip generation returned no assets for ${beat.beatId}.`);

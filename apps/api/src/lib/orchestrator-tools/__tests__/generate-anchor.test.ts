@@ -241,6 +241,54 @@ test("runGenerateAnchorJob generates character and scene anchors, stamps graph m
   assert.ok(!spy.calls.includes("fail"));
 });
 
+test("domain anchor completion stays pooled and cannot overwrite a newer selection", async () => {
+  const spy = jobsSpy();
+  const claims: Array<number | undefined> = [];
+  let selectionAttempts = 0;
+
+  await runGenerateAnchorJob(
+    {
+      jobId: "job_domain",
+      workspaceId: "ws_1",
+      projectId: "proj_1",
+      orchestratorRunId: "run_domain",
+      sessionClaimGeneration: 7,
+      visualAnchorPlan,
+      visualAnchorPlanAssetId: "vap_1",
+      visualAnchorPlanContentHash: "vap_hash",
+      provider: "mock",
+    },
+    {
+      jobs: spy.jobs,
+      generateCharacterAnchor: async (args) => {
+        claims.push(args.sessionClaimGeneration);
+        return {
+          status: 202,
+          body: { job: { result: { assetIds: ["char_anchor_domain"] } } },
+        };
+      },
+      createGeneratedAsset: async (args) => {
+        claims.push(args.sessionClaimGeneration);
+        return {
+          status: 202,
+          body: { job: { result: { assetIds: ["scene_anchor_domain"] } } },
+        };
+      },
+      selectGeneratedAnchorAsset: async () => {
+        selectionAttempts += 1;
+        throw new Error("domain jobs must not append selections");
+      },
+      enqueueOrchestratorDispatch: async () => {},
+    }
+  );
+
+  assert.deepEqual(claims, [7, 7]);
+  assert.equal(selectionAttempts, 0);
+  assert.deepEqual(spy.succeededResult, {
+    assetIds: ["char_anchor_domain", "scene_anchor_domain"],
+  });
+});
+
 test("runGenerateAnchorJob routes anchors mentioning minors to Gemini by default", async () => {
   const spy = jobsSpy();
   let provider: string | undefined;

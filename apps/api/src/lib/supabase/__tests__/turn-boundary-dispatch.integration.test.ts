@@ -53,7 +53,12 @@ import {
   getAgentSession,
   getDomainRun,
 } from "@/lib/api/v1/domain-session-store";
-import { createAction, createJob, updateJob } from "@/lib/api/v1/store";
+import {
+  createAction,
+  createJob,
+  getProjectRunGeneratedAsset,
+  updateJob,
+} from "@/lib/api/v1/store";
 import { ApiError } from "@/lib/api/v1/errors";
 import type { AuthContext } from "@/lib/api/v1/auth";
 
@@ -176,21 +181,40 @@ function audioTask(fixture: Fixture, rootActionId: string): DomainTaskV1 {
   };
 }
 
-function creatorDirectTask(fixture: Fixture, actorId: string): DomainTaskV1 {
+function creatorDirectTask(
+  fixture: Fixture,
+  actorId: string,
+  taskKind: "image_create" | "video_create" = "image_create",
+  preserveAssetId?: string
+): DomainTaskV1 {
+  const image = taskKind === "image_create";
   return {
     schemaVersion: "DomainTask.v1",
     domain: "visuals",
-    taskKind: "image_create",
-    objective: "Create a standalone image",
-    instruction: "Generate one image from the creator's prompt",
+    taskKind,
+    objective: image ? "Create a standalone image" : "Create a standalone video",
+    instruction: image
+      ? "Generate one image from the creator's prompt"
+      : "Generate one video from the creator's prompt",
     targets: [{ kind: "project", projectId: fixture.projectId }],
-    requiredOutputs: [{ kind: "image", role: "primary", minimumCount: 1 }],
-    allowedOutputKinds: ["image"],
+    requiredOutputs: [{
+      kind: image ? "image" : "clip",
+      role: "primary",
+      minimumCount: 1,
+    }],
+    allowedOutputKinds: [image ? "image" : "clip"],
     creativeConstraints: {},
-    preserve: { assetIds: [], selections: [], fingerprints: [], pins: [] },
+    preserve: {
+      assetIds: preserveAssetId ? [preserveAssetId] : [],
+      selections: [],
+      fingerprints: [],
+      pins: preserveAssetId
+        ? [{ kind: "asset", id: preserveAssetId }]
+        : [],
+    },
     candidateAffectedAssetIds: [],
     budgetUsd: 1,
-    acceptanceCriteria: ["One image exists"],
+    acceptanceCriteria: [image ? "One image exists" : "One video exists"],
     origin: {
       kind: "creator_direct",
       actorId,
@@ -206,7 +230,7 @@ function creatorDirectTask(fixture: Fixture, actorId: string): DomainTaskV1 {
       approvedBudgetUsd: 1,
       approvalFingerprint: "fp",
     },
-  };
+  } as DomainTaskV1;
 }
 
 function doneReport(
@@ -858,6 +882,27 @@ integrationTest(
         .from("users")
         .insert({ id: actorId, email: `pr6-${actorId}@example.test` });
       assert.equal(userError, null, `create user: ${userError?.message}`);
+      const videoPreserveAssetId = randomUUID();
+      const { error: preserveAssetError } = await fixture.service
+        .from("assets")
+        .insert({
+          id: videoPreserveAssetId,
+          schema_version: "asset.v2",
+          workspace_id: fixture.workspaceId,
+          project_id: fixture.projectId,
+          kind: "image",
+          media: "image",
+          status: "ready",
+          role: "standalone_image",
+          filename: "video-preserve-reference.png",
+          source: { type: "generated" },
+          content_hash: "video-preserve-hash",
+        });
+      assert.equal(
+        preserveAssetError,
+        null,
+        `create preserve asset: ${preserveAssetError?.message}`
+      );
 
       // Root-origin run takes the slot.
       const rootActionId = await reserveDelegationAction(fixture);
@@ -939,6 +984,51 @@ integrationTest(
       assert.equal(directFinalization.parentRunId, null);
       assert.equal(directFinalization.wokeParent, false);
       assert.deepEqual(directWakes, [], "direct completion never wakes a root");
+
+      // A later creator-direct video reuses this exact Visuals session while
+      // retaining its own task/pin envelope.
+      const directVideo = await dispatchDomainRun({
+        projectId: fixture.projectId,
+        domain: "visuals",
+        task: creatorDirectTask(
+          fixture,
+          actorId,
+          "video_create",
+          videoPreserveAssetId
+        ),
+        inputSummary: "creator-direct video",
+        origin: {
+          kind: "creator_direct",
+          actorId,
+          request: { requestDigest: "digest-video", entrypoint: "asset_studio" },
+        },
+        idempotencyKey: `creator:${actorId}:video-1`,
+      });
+      assert.equal(directVideo.sessionId, rootChild.sessionId);
+      await makeDispatchAvailable(fixture, directVideo.runId);
+      const directVideoClaim = await claimDispatchForRun(directVideo.runId);
+      assert.ok(directVideoClaim);
+      const directVideoRow = await getDomainRun(
+        fixture.projectId,
+        directVideo.runId
+      );
+      assert.equal(directVideoRow?.taskKind, "video_create");
+      assert.deepEqual(
+        directVideoRow?.taskParams?.preserve.assetIds,
+        [videoPreserveAssetId]
+      );
+      const unchangedRoot = await getDomainRun(
+        fixture.projectId,
+        rootChild.runId
+      );
+      assert.deepEqual(unchangedRoot?.taskParams?.preserve.assetIds, []);
+      await finalizeDomainTurn({
+        projectId: fixture.projectId,
+        runId: directVideo.runId,
+        report: doneReport(),
+        expectedClaimGeneration:
+          directVideoClaim!.sessionClaimGeneration,
+      });
 
       // Same-origin supersession of a QUEUED run works; late reports to the
       // superseded run are fenced.
@@ -1124,6 +1214,100 @@ integrationTest(
       await makeDispatchAvailable(fixture, gated.runId);
       const confirmedClaim = await claimDispatchForRun(gated.runId);
       assert.ok(confirmedClaim, "a confirmed run claims normally");
+    } finally {
+      await fixture.cleanup();
+    }
+  }
+);
+
+integrationTest(
+  "run-scoped pooled prerequisites never rejoin from a different run",
+  async () => {
+    const fixture = await createFixture("run-scoped-prerequisite");
+    try {
+      const otherRunId = randomUUID();
+      const { error: otherRunError } = await fixture.service
+        .from("orchestrator_runs")
+        .insert({
+          id: otherRunId,
+          project_id: fixture.projectId,
+          status: "running",
+          input_summary: "other run",
+        });
+      assert.equal(otherRunError, null, `create other run: ${otherRunError?.message}`);
+
+      const requestedAction = await createAction({
+        projectId: fixture.projectId,
+        orchestratorRunId: fixture.rootRunId,
+        tool: "generate_keyframe",
+        status: "applied",
+      });
+      const otherAction = await createAction({
+        projectId: fixture.projectId,
+        orchestratorRunId: otherRunId,
+        tool: "generate_keyframe",
+        status: "applied",
+      });
+      const requestedAssetId = randomUUID();
+      const otherAssetId = randomUUID();
+      const rows = [
+        {
+          id: requestedAssetId,
+          schema_version: "asset.v2",
+          workspace_id: fixture.workspaceId,
+          project_id: fixture.projectId,
+          kind: "keyframe",
+          media: "image",
+          status: "ready",
+          role: "beat_keyframe",
+          filename: "requested-keyframe.png",
+          source: { type: "generated" },
+          params: {
+            schema_version: "generated_asset_params.v1",
+            provenance: { provider: "mock", prompt: "requested", beatId: "beat_1" },
+          },
+          content_hash: "requested-keyframe-hash",
+          created_by_action_id: requestedAction.id,
+        },
+        {
+          id: otherAssetId,
+          schema_version: "asset.v2",
+          workspace_id: fixture.workspaceId,
+          project_id: fixture.projectId,
+          kind: "keyframe",
+          media: "image",
+          status: "ready",
+          role: "beat_keyframe",
+          filename: "other-keyframe.png",
+          source: { type: "generated" },
+          params: {
+            schema_version: "generated_asset_params.v1",
+            provenance: { provider: "mock", prompt: "other", beatId: "beat_1" },
+          },
+          content_hash: "other-keyframe-hash",
+          created_by_action_id: otherAction.id,
+        },
+      ];
+      const { error: assetError } = await fixture.service.from("assets").insert(rows);
+      assert.equal(assetError, null, `create pooled keyframes: ${assetError?.message}`);
+
+      const requested = await getProjectRunGeneratedAsset({
+        workspaceId: fixture.workspaceId,
+        projectId: fixture.projectId,
+        orchestratorRunId: fixture.rootRunId,
+        role: "beat_keyframe",
+        beatId: "beat_1",
+      });
+      const other = await getProjectRunGeneratedAsset({
+        workspaceId: fixture.workspaceId,
+        projectId: fixture.projectId,
+        orchestratorRunId: otherRunId,
+        role: "beat_keyframe",
+        beatId: "beat_1",
+      });
+
+      assert.equal(requested?.id, requestedAssetId);
+      assert.equal(other?.id, otherAssetId);
     } finally {
       await fixture.cleanup();
     }
