@@ -1130,7 +1130,10 @@ shared finite-run engine and canonical `generate_audio` /
 plan/brief/script dependencies; standalone creation uses the generated-assets
 service without a fabricated plan or selection; and source-targeted delivery
 revisions mint a new immutable audio lineage version. The creator-direct HTTP
-entrypoint remains intentionally owned by PR 12.
+entrypoint remains intentionally owned by PR 12. Production speech fails closed
+without server-resolved script copy, picture fitting requires a current planned
+beat, and the generated-assets plus locked RPC boundaries preserve revision
+subtype, role, and exact spoken words.
 
 **Deliver:**
 

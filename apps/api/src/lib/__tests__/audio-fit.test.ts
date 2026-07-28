@@ -88,3 +88,34 @@ test("current picture duration overrides a caller-supplied fit window", () => {
     { startSec: 10, endSec: 15 }
   );
 });
+
+test("picture duration cannot invent a window for an unknown beat", () => {
+  assert.equal(
+    resolveAudioFitTargetWindow({
+      pictureDurationSec: 5,
+      plannedWindow: null,
+    }),
+    null
+  );
+});
+
+test("caller window cannot authorize an unknown beat", () => {
+  assert.equal(
+    resolveAudioFitTargetWindow({
+      plannedWindow: null,
+      requestedWindow: { startSec: 99, endSec: 199 },
+    }),
+    null
+  );
+});
+
+test("picture and caller windows together cannot authorize an unknown beat", () => {
+  assert.equal(
+    resolveAudioFitTargetWindow({
+      pictureDurationSec: 5,
+      plannedWindow: null,
+      requestedWindow: { startSec: 99, endSec: 199 },
+    }),
+    null
+  );
+});

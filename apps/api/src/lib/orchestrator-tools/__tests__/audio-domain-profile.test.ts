@@ -211,6 +211,9 @@ function generationHarness(
     role?: "voiceover" | "dialogue" | "sound_effect" | "soundtrack";
     audioMode?: "speech" | "dialogue" | "sound_effect" | "music";
     reorderPlanWithoutMapping?: boolean;
+    scriptAvailable?: boolean;
+    sourcePrompt?: string;
+    sourceProviderPrompt?: string;
   } = {}
 ) {
   let workerInput: Record<string, unknown> | undefined;
@@ -261,8 +264,11 @@ function generationHarness(
       contentHash: "plan_hash",
     }),
     getBrief: async () => null,
-    getScript: async () => ({
-      scriptDraft: {
+    getScript: async () =>
+      sourceOverrides.scriptAvailable === false
+        ? null
+        : {
+            scriptDraft: {
         schemaVersion: "scriptDraft.v1",
         id: "script_1",
         projectId,
@@ -309,11 +315,11 @@ function generationHarness(
           "Maya opens the doors before sunrise. This unrelated narration must not be spoken for beat one.",
         createdAt: "2026-07-27T17:00:00.000Z",
         updatedAt: "2026-07-27T17:00:00.000Z",
-      },
-      scriptDraftId: "script_1",
-      assetId: "script_asset",
-      contentHash: "script_hash",
-    }),
+            },
+            scriptDraftId: "script_1",
+            assetId: "script_asset",
+            contentHash: "script_hash",
+          },
     getAsset: async (_workspace, _project, assetId) =>
       ({
         id: assetId,
@@ -327,7 +333,11 @@ function generationHarness(
         role: sourceOverrides.role ?? "voiceover",
         provenance: {
           provider: "mock",
-          prompt: "The exact original sentence.",
+          prompt:
+            sourceOverrides.sourcePrompt ?? "The exact original sentence.",
+          ...(sourceOverrides.sourceProviderPrompt
+            ? { providerPrompt: sourceOverrides.sourceProviderPrompt }
+            : {}),
           providerSettings: {
             audioMode: sourceOverrides.audioMode ?? "speech",
           },
@@ -396,6 +406,29 @@ test("production narration uses exact pinned script copy, not beat intent or mod
   const inputs = harness.workerInput?.graphInputs as Array<Record<string, unknown>>;
   assert.ok(inputs.some((input) => input.assetId === "script_asset" && input.role === "script"));
   assert.ok(inputs.some((input) => input.assetId === "plan_asset" && input.role === "plan"));
+});
+
+test("production speech rejects model-authored words when no trusted script exists", async () => {
+  const targets = [
+    { kind: "project", projectId, contentKind: "narration" },
+    { kind: "beat", beatId: "beat_1", contentKind: "dialogue" },
+  ] as const;
+  for (const target of targets) {
+    const harness = generationHarness(audioTask("audio_production"), {
+      scriptAvailable: false,
+    });
+    const result = await harness.registry.execute(
+      "generate_audio",
+      {
+        target,
+        spokenText: "Model-authored words are not approved production copy.",
+      },
+      { auth, projectId, orchestratorRunId: "run_1", actionId: "outer_action" }
+    );
+    assert.equal(result.status, "failed");
+    assert.equal(result.error?.kind, "precondition_unmet");
+    assert.equal(harness.jobCreates, 0);
+  }
 });
 
 test("production music inherits the current plan duration and graph provenance", async () => {
@@ -491,6 +524,29 @@ test("audio revision preserves source words and records the immutable source edg
   });
   const inputs = harness.workerInput?.graphInputs as Array<Record<string, unknown>>;
   assert.ok(inputs.some((input) => input.assetId === "audio_source" && input.role === "source"));
+});
+
+test("audio revision speaks provider-effective text rather than delivery directives", async () => {
+  const task = audioTask("audio_revision", [
+    { kind: "asset", projectId, assetId: "audio_source" },
+  ]);
+  const harness = generationHarness(task, {
+    sourcePrompt: "[Delivery: warm]\nThe exact original sentence.",
+    sourceProviderPrompt: "The exact original sentence.",
+  });
+  await harness.registry.execute(
+    "generate_audio",
+    {
+      target: {
+        kind: "asset",
+        assetId: "audio_source",
+        contentKind: "narration",
+      },
+    },
+    { auth, projectId, orchestratorRunId: "run_1", actionId: "outer_action" }
+  );
+  const track = harness.workerInput?.singleTrack as Record<string, unknown>;
+  assert.equal(track.prompt, "The exact original sentence.");
 });
 
 test("audio revision rejects project-wide authority without an explicit source target or pin", async () => {

@@ -225,6 +225,13 @@ Under the proposed hierarchy, responsibility is:
 | Audio | exact-script narration/dialogue, production or standalone music/sound generation, immutable delivery revisions, and fitting authorized audio to current picture |
 | Runtime, never model-facing | authorization, session/run claim, enqueue/lease, wait/resume, report acknowledgement, retry, cancellation, gate persistence, cost settlement, provider callback fencing |
 
+Audio production speech never treats model-written tool input as approved copy:
+the current script must resolve the exact requested project or beat segment.
+Picture fitting likewise requires a current planned beat before picture duration
+can refine its window. Immutable audio delivery revisions preserve the source's
+trusted role, provider audio mode, and—when speech or dialogue—the exact spoken
+words at both the generated-assets boundary and the locked lineage-mint RPC.
+
 The conditional creative director retains coherence decisions; it is not only
 a router. It owns cross-modality intent, story and pacing decisions, visual
 anchor planning, assembly, critique, approval, budgets, export, and deciding

@@ -153,8 +153,9 @@ export function resolveAudioFitTargetWindow(input: {
   plannedWindow: AudioFitWindow | null;
   requestedWindow?: AudioFitWindow;
 }): AudioFitWindow | null {
+  if (!input.plannedWindow) return null;
   if (input.pictureDurationSec !== undefined) {
-    const startSec = input.plannedWindow?.startSec ?? 0;
+    const startSec = input.plannedWindow.startSec;
     return {
       startSec,
       endSec: startSec + input.pictureDurationSec,

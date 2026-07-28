@@ -42,3 +42,34 @@ test("audio revision minting never moves selections and is service-role-only", (
     /grant execute on function public\.mint_audio_asset_version[\s\S]*to service_role/
   );
 });
+
+test("audio revision minting preserves subtype, role, and spoken copy under the source lock", () => {
+  assert.match(
+    migration,
+    /v_source\.params #>> '\{provenance,providerSettings,audioMode\}'/
+  );
+  assert.match(
+    migration,
+    /audio_revision_subtype_change_forbidden/
+  );
+  assert.match(
+    migration,
+    /audio_revision_role_change_forbidden/
+  );
+  assert.match(
+    migration,
+    /audio_revision_spoken_words_change_forbidden/
+  );
+  assert.match(
+    migration,
+    /v_source\.params #>> '\{provenance,providerPrompt\}'[\s\S]*p_asset #>> '\{params,provenance,providerPrompt\}'/
+  );
+  assert.match(
+    migration,
+    /for update[\s\S]*Re-evaluate the trusted source subtype[\s\S]*audio_revision_locked_source_constraint_failed/
+  );
+  assert.match(
+    migration,
+    /audio_revision_locked_spoken_words_change_forbidden/
+  );
+});

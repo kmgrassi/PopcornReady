@@ -1,6 +1,10 @@
 import type { DomainTaskV1 } from "@popcorn/shared/domain-agent-contract";
 import type { GraphAssetInput } from "@/lib/api/v1/asset-graph";
 import {
+  audioRevisionConstraintError,
+  trustedAudioRevisionText,
+} from "@/lib/api/v1/audio-revision-constraints";
+import {
   getActiveProjectBrief,
   getActiveProjectPlan,
   getActiveProjectScriptDraft,
@@ -411,13 +415,13 @@ function exactScriptSegmentRequired() {
     error: {
       kind: "precondition_unmet" as const,
       message:
-        "The targeted beat does not map to one exact current script segment.",
+        "Production speech requires exact current script text for the requested target.",
       recoverable: true,
       unmetRequirements: [
         {
           requirement: "exact_script_segment",
           because:
-            "Audio cannot speak unrelated scenes or infer approved words from free-form intent.",
+            "Audio cannot infer approved words from free-form intent or unrelated scenes.",
           satisfyWith: {
             tool: "draft_script" as const,
             inputHint: {},
@@ -433,37 +437,6 @@ function modeFor(kind: AudioContentKind): AudioMode {
   if (kind === "narration") return "speech";
   if (kind === "dialogue") return "dialogue";
   return kind;
-}
-
-function revisionContentKindMatchesSource(
-  sourceAsset: NonNullable<Awaited<ReturnType<typeof getAsset>>>,
-  contentKind: AudioContentKind
-): boolean {
-  const recordedMode = sourceAsset.provenance?.providerSettings?.audioMode;
-  const trustedModes: AudioMode[] = [];
-  if (
-    recordedMode === "speech" ||
-    recordedMode === "dialogue" ||
-    recordedMode === "sound_effect" ||
-    recordedMode === "music"
-  ) {
-    trustedModes.push(recordedMode);
-  }
-  const roleMode: Record<string, AudioMode> = {
-    voiceover: "speech",
-    dialogue: "dialogue",
-    sound_effect: "sound_effect",
-    soundtrack: "music",
-  };
-  const trustedRoleMode = sourceAsset.role
-    ? roleMode[sourceAsset.role]
-    : undefined;
-  if (trustedRoleMode) trustedModes.push(trustedRoleMode);
-  const requestedMode = modeFor(contentKind);
-  return (
-    trustedModes.length > 0 &&
-    trustedModes.every((trustedMode) => trustedMode === requestedMode)
-  );
 }
 
 function roleFor(kind: AudioContentKind, taskKind: AudioTask["taskKind"]): string {
@@ -637,17 +610,6 @@ export function createAudioDomainGenerateTool(
           "audio_revision source must be a ready audio_track."
         );
       }
-      if (
-        sourceAsset &&
-        !revisionContentKindMatchesSource(
-          sourceAsset,
-          input.target.contentKind
-        )
-      ) {
-        throw new ToolInputError(
-          "audio_revision cannot change the trusted source audio subtype."
-        );
-      }
       const graphInputs: GraphAssetInput[] = input.referenceAssetIds.map((assetId, index) =>
         graphInput(snapshot, assetId, "reference", index)
       );
@@ -719,47 +681,46 @@ export function createAudioDomainGenerateTool(
         plan,
         snapshot,
       });
+      const isSpeech =
+        input.target.contentKind === "narration" ||
+        input.target.contentKind === "dialogue";
       if (
-        script &&
-        input.target.kind === "beat" &&
-        (input.target.contentKind === "narration" ||
-          input.target.contentKind === "dialogue") &&
+        task.taskKind === "audio_production" &&
+        isSpeech &&
         !scripted.text
       ) {
         return exactScriptSegmentRequired();
       }
       const sourceSpokenText =
-        sourceAsset &&
-        (input.target.contentKind === "narration" ||
-          input.target.contentKind === "dialogue")
-          ? sourceAsset.provenance?.prompt?.trim() ||
-            sourceAsset.context?.transcriptText?.trim() ||
-            sourceAsset.semanticAnalysis?.transcript
-              ?.map((span) => span.text)
-              .join("\n")
-              .trim()
+        sourceAsset && isSpeech
+          ? trustedAudioRevisionText(sourceAsset)
           : undefined;
+      const role = roleFor(input.target.contentKind, task.taskKind);
+      if (sourceAsset) {
+        const constraintError = audioRevisionConstraintError({
+          source: sourceAsset,
+          requestedMode: modeFor(input.target.contentKind),
+          requestedRole: role,
+          ...(sourceSpokenText
+            ? { requestedSpokenTexts: [sourceSpokenText] }
+            : {}),
+        });
+        if (constraintError) throw new ToolInputError(constraintError);
+      }
       const spokenText =
         sourceSpokenText ||
         scripted.text ||
-        (task.taskKind === "audio_revision" ? undefined : input.spokenText);
-      if (
-        (input.target.contentKind === "narration" ||
-          input.target.contentKind === "dialogue") &&
-        !spokenText
-      ) {
+        (task.taskKind === "audio_create" ? input.spokenText : undefined);
+      if (isSpeech && !spokenText) {
         throw new ToolInputError(
           "Narration/dialogue generation requires exact trusted spoken text."
         );
       }
-      const role = roleFor(input.target.contentKind, task.taskKind);
       const direction = [input.prompt, input.feedback, brief?.brief.style]
         .filter(Boolean)
         .join(" ");
       const prompt =
-        input.target.contentKind === "narration" || input.target.contentKind === "dialogue"
-          ? spokenText!
-          : input.prompt ?? task.instruction;
+        isSpeech ? spokenText! : input.prompt ?? task.instruction;
       const durationSec =
         input.durationSec ??
         targetBeatDuration(input, plan) ??

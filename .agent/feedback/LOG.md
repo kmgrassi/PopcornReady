@@ -237,3 +237,9 @@
 - Friction or failure: The local Supabase CLI reported a running stack while its Postgres socket timed out, so the migration and same-lineage integration tests could not execute locally.
 - Suggested improvement: Keep every provider-backed revision's source/readiness checks before preflight or spend, and require tests with at least two scenes whenever a supposedly targeted media tool consumes script or plan content.
 - Follow-up: PR 12 must derive exact creator-direct Audio targets and prove root/direct successor runs reuse one serialized Audio session; rerun the Supabase-gated revision test when the local database accepts connections.
+
+### 2026-07-28T00:30:00-04:00 — API-20260727-PR11-review
+- What helped: Thread-aware PR review exposed that model-facing guards were correct but the reusable generated-assets and SQL mint boundaries remained independently callable.
+- Friction or failure: Production speech and fit timing each had a permissive fallback that converted missing trusted state into apparently valid provider work.
+- Suggested improvement: Put semantic invariants at every canonical write boundary, and test missing authority with adversarial caller input rather than only valid wrapper flows.
+- Follow-up: Keep creator-direct PR 12 on the shared Audio constraints and rerun the database-gated lineage tests when local Postgres is reachable.

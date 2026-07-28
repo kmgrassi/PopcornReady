@@ -18,6 +18,10 @@ import {
 import { measureAudioDurationSec } from "@/lib/generative/audio-duration";
 import { type LlmUsage } from "@popcorn/llm";
 import { withDerivedAssetKnowledge } from "./assets";
+import {
+  audioRevisionConstraintError,
+  providerEffectiveAudioRevisionText,
+} from "./audio-revision-constraints";
 import { enqueueAssetEmbeddingRefresh } from "./asset-embeddings/jobs";
 import { resolveWorkspaceGenerationModel } from "./model-settings";
 import { preflightGenerationContent } from "@/lib/generative/preflight";
@@ -308,6 +312,52 @@ function buildGenerationActionProposal(args: {
   };
 }
 
+function assertAudioRevisionConstraints(
+  parsed: ParsedRequest,
+  source: V1Asset
+): void {
+  if (parsed.preflightIterations !== 0) {
+    throw new ApiError(
+      "validation_failed",
+      "Audio revisions cannot rewrite content through prompt preflight.",
+      { assetIds: [source.id] }
+    );
+  }
+  if (source.kind !== "audio" || source.status !== "ready") {
+    throw new ApiError(
+      source.kind !== "audio" ? "asset_invalid" : "asset_not_ready",
+      `Audio revision source must be ready audio: ${source.id}.`,
+      { assetIds: [source.id] }
+    );
+  }
+  const hasSourceEdge = parsed.graphInputs?.some(
+    (input) => input.assetId === source.id && input.role === "source"
+  );
+  if (!hasSourceEdge) {
+    throw new ApiError(
+      "validation_failed",
+      "Audio revision requires an immutable source graph edge.",
+      { assetIds: [source.id] }
+    );
+  }
+  const providerEffectiveText = providerEffectiveAudioRevisionText({
+    mode: parsed.audioMode,
+    prompt: parsed.prompt,
+    dialogueInputs: parsed.dialogueInputs,
+  });
+  const constraintError = audioRevisionConstraintError({
+    source,
+    requestedMode: parsed.audioMode,
+    requestedRole: parsed.assetRole,
+    requestedSpokenTexts: [providerEffectiveText],
+  });
+  if (constraintError) {
+    throw new ApiError("validation_failed", constraintError, {
+      assetIds: [source.id],
+    });
+  }
+}
+
 async function runGeneration(
   auth: AuthContext,
   projectId: string,
@@ -329,27 +379,7 @@ async function runGeneration(
       projectId,
       parsed.sourceAssetId
     );
-    if (
-      revisionSource.kind !== "audio" ||
-      revisionSource.status !== "ready"
-    ) {
-      throw new ApiError(
-        revisionSource.kind !== "audio" ? "asset_invalid" : "asset_not_ready",
-        `Audio revision source must be ready audio: ${revisionSource.id}.`,
-        { assetIds: [revisionSource.id] }
-      );
-    }
-    const hasSourceEdge = parsed.graphInputs?.some(
-      (input) =>
-        input.assetId === revisionSource!.id && input.role === "source"
-    );
-    if (!hasSourceEdge) {
-      throw new ApiError(
-        "validation_failed",
-        "Audio revision requires an immutable source graph edge.",
-        { assetIds: [revisionSource.id] }
-      );
-    }
+    assertAudioRevisionConstraints(parsed, revisionSource);
   }
   // Resolve reference assets to local file paths the provider can read.
   const referencePaths: string[] = [];
@@ -1000,6 +1030,18 @@ export async function enqueueGeneratedAssetJob(
       ...input,
       assetId: canonical[index],
     }));
+    durableBody = {
+      ...(durableBody as Record<string, unknown>),
+      graphInputs: parsed.graphInputs,
+    };
+  }
+  if (parsed.sourceAssetId) {
+    const revisionSource = await getAsset(
+      auth.workspaceId,
+      projectId,
+      parsed.sourceAssetId
+    );
+    assertAudioRevisionConstraints(parsed, revisionSource);
   }
   const action = await createAction({
     id: randomUUID(),

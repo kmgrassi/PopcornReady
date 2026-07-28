@@ -210,6 +210,7 @@ dbTest("audio revisions mint a new immutable version without overwriting source 
       prompt: "The exact approved sentence.",
       durationSec: 4,
       audioMode: "speech",
+      assetRole: "voiceover",
     },
   });
   const sourceId = assetIds(jobOf(sourceResult))[0];
@@ -228,6 +229,7 @@ dbTest("audio revisions mint a new immutable version without overwriting source 
       description: "Warmer delivery; unchanged words.",
       durationSec: 4,
       audioMode: "speech",
+      assetRole: "voiceover",
       sourceAssetId: sourceId,
       graphInputs: [
         {
@@ -268,6 +270,72 @@ dbTest("audio revisions mint a new immutable version without overwriting source 
   assert.equal(lineageRows?.[0]?.lineage_id, lineageRows?.[1]?.lineage_id);
   assert.equal(lineageRows?.[1]?.version, Number(lineageRows?.[0]?.version) + 1);
   assert.deepEqual(sourceBytesAfter, sourceBytesBefore);
+});
+
+dbTest("audio revisions reject subtype or spoken-word changes before provider work", async () => {
+  const projectId = await newProjectId("invalid audio revision");
+  const sourceResult = await createGeneratedAsset({
+    auth,
+    projectId,
+    body: {
+      kind: "audio",
+      provider: "mock",
+      prompt: "The exact approved sentence.",
+      durationSec: 4,
+      audioMode: "speech",
+      assetRole: "voiceover",
+    },
+  });
+  const sourceId = assetIds(jobOf(sourceResult))[0];
+  const sourceAsset = await getAsset(
+    LOCAL_WORKSPACE_ID,
+    projectId,
+    sourceId
+  );
+  const sourceEdge = [
+    {
+      assetId: sourceId,
+      relation: "input",
+      role: "source",
+      position: 0,
+      contentHash: sourceAsset.contentHash,
+    },
+  ];
+
+  await assert.rejects(
+    createGeneratedAsset({
+      auth,
+      projectId,
+      body: {
+        kind: "audio",
+        provider: "mock",
+        prompt: "The exact approved sentence.",
+        durationSec: 4,
+        audioMode: "music",
+        assetRole: "soundtrack",
+        sourceAssetId: sourceId,
+        graphInputs: sourceEdge,
+      },
+    }),
+    /cannot change the trusted source audio subtype/
+  );
+  await assert.rejects(
+    createGeneratedAsset({
+      auth,
+      projectId,
+      body: {
+        kind: "audio",
+        provider: "mock",
+        prompt: "Changed words.",
+        durationSec: 4,
+        audioMode: "speech",
+        assetRole: "voiceover",
+        sourceAssetId: sourceId,
+        graphInputs: sourceEdge,
+      },
+    }),
+    /cannot change the trusted source words/
+  );
 });
 
 dbTest("persists provider settings used to produce the asset", async () => {
