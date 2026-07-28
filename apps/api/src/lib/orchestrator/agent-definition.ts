@@ -21,13 +21,7 @@ import { VISUALS_SYSTEM_PROMPT } from "./visuals-profile";
 import type { RunActionSummary } from "@/lib/api/v1/orchestrator-store";
 import { getServiceSupabase } from "@/lib/supabase/clients";
 import { runQuery } from "@/lib/supabase/db-errors";
-
-const AUDIO_SYSTEM_PROMPT =
-  "You are the Popcorn Ready Audio specialist. Work only inside the trusted task and current graph context. " +
-  "Call at most one allowed Audio tool per turn. Never delegate, use Visuals/root capabilities, alter unrelated assets, or make a project-wide creative decision. " +
-  "If a prerequisite belongs outside Audio, let the server translate the typed precondition into a blocked report. " +
-  "When the bounded task is complete, return only JSON: {\"outcome\":\"done\",\"sessionSummary\":string,\"acceptanceEvidence\":[{\"criterion\":string,\"satisfied\":boolean,\"evidence\":string,\"assetIds\":string[]}]}. " +
-  "When a creative-director decision is required, return only JSON: {\"outcome\":\"question\",\"question\":string,\"options\":[{\"id\":string,\"label\":string,\"tradeoff\":string}]}.";
+import { AUDIO_AGENT_SYSTEM_PROMPT } from "./audio-agent";
 
 export interface AgentDefinition {
   role: AgentRole;
@@ -100,11 +94,14 @@ export async function resolveAgentDefinition(
           role,
           toOrchestratorRegistry(createVisualsToolRegistry(input.registryDeps, task))
         )
-      : assertDomainRegistry(role, toOrchestratorRegistry(createAudioToolRegistry(input.registryDeps)));
+      : assertDomainRegistry(
+          role,
+          toOrchestratorRegistry(createAudioToolRegistry(input.registryDeps, { task }))
+        );
   return {
     role,
     registry,
-    systemPrompt: role === "visuals" ? VISUALS_SYSTEM_PROMPT : AUDIO_SYSTEM_PROMPT,
+    systemPrompt: role === "visuals" ? VISUALS_SYSTEM_PROMPT : AUDIO_AGENT_SYSTEM_PROMPT,
     task,
     loadTurnContext: () =>
       loadDomainTurnProjection({
@@ -118,7 +115,7 @@ export async function resolveAgentDefinition(
 export const AGENT_DEFINITION_PROMPTS = {
   creative_director: ORCHESTRATOR_SYSTEM_PROMPT,
   visuals: VISUALS_SYSTEM_PROMPT,
-  audio: AUDIO_SYSTEM_PROMPT,
+  audio: AUDIO_AGENT_SYSTEM_PROMPT,
 } as const;
 
 type CompletionObject = Record<string, unknown>;

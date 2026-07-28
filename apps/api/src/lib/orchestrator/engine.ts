@@ -596,7 +596,7 @@ const ERROR_GUIDANCE_FIELDS = [
   "domainReport",
 ] as const;
 
-function toPriorResult(action: RunActionSummary): Record<string, unknown> {
+export function toPriorResult(action: RunActionSummary): Record<string, unknown> {
   const base: Record<string, unknown> = {
     tool: action.tool,
     status: action.status,
@@ -604,6 +604,13 @@ function toPriorResult(action: RunActionSummary): Record<string, unknown> {
   };
   if (action.tool === "board_feedback") {
     base.request = action.params;
+  }
+  if (
+    action.tool === "fit_audio_to_picture" &&
+    action.status === "applied" &&
+    action.params.result !== undefined
+  ) {
+    base.result = action.params.result;
   }
   if (action.status === "failed" && action.error) {
     const guidance: Record<string, unknown> = {};

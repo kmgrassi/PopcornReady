@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { fitAudioToPicture } from "@popcorn/shared/audio-fit";
+import { resolveAudioFitTargetWindow } from "@/lib/api/v1/audio-fit";
 
 test("fitAudioToPicture accepts an audio segment already within tolerance", () => {
   const result = fitAudioToPicture({
@@ -75,4 +76,15 @@ test("fitAudioToPicture fails degenerate target windows", () => {
 
   assert.equal(result.verdict, "fail");
   assert.ok(result.reasons.includes("target_window_invalid"));
+});
+
+test("current picture duration overrides a caller-supplied fit window", () => {
+  assert.deepEqual(
+    resolveAudioFitTargetWindow({
+      pictureDurationSec: 5,
+      plannedWindow: { startSec: 10, endSec: 16 },
+      requestedWindow: { startSec: 99, endSec: 199 },
+    }),
+    { startSec: 10, endSec: 15 }
+  );
 });
