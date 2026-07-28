@@ -9,6 +9,7 @@ import {
 } from "@/lib/api/v1/orchestrator-store";
 import { createLogger, type Logger } from "@/lib/v1/logger";
 import { resumeOrchestratorRun, runOrchestratorToCompletion } from "./engine";
+import { isCreativeDirectorHierarchyEnabled } from "./feature-flag";
 
 const DEFAULT_INTERVAL_MS = 1_000;
 const ASYNC_RETRY_SECONDS = 10;
@@ -36,6 +37,13 @@ export function isOrchestratorRecoveryEnabled(env: NodeJS.ProcessEnv = process.e
 export function orchestratorRecoveryIntervalMs(env: NodeJS.ProcessEnv = process.env): number {
   const configured = Number(env.ORCHESTRATOR_RECOVERY_INTERVAL_MS);
   return Number.isFinite(configured) && configured >= 250 ? configured : DEFAULT_INTERVAL_MS;
+}
+
+/** Keep root surface selection and runnable specialist roles on one rollout fence. */
+export function creativeDirectorRuntimeOptions(env: NodeJS.ProcessEnv = process.env) {
+  return {
+    creativeDirectorHierarchyEnabled: isCreativeDirectorHierarchyEnabled(env),
+  };
 }
 
 export interface RecoveryWorkerDeps {
@@ -85,6 +93,7 @@ async function processDispatch(dispatch: ClaimedOrchestratorDispatch, deps: Reco
     await deps.release({ ...dispatch, delaySeconds: 0, completed: true });
     return;
   }
+  const runtime = creativeDirectorRuntimeOptions();
   const result = run.status === "waiting"
       ? await deps.resume(run.id, {
         workspaceId: dispatch.workspaceId,
@@ -92,6 +101,7 @@ async function processDispatch(dispatch: ClaimedOrchestratorDispatch, deps: Reco
         sessionClaimGeneration: dispatch.sessionClaimGeneration,
         domainRuntimeEnabled: true,
         enabledDomainRoles: ["visuals", "audio"],
+        ...runtime,
       })
     : await deps.run(run.id, {
         workspaceId: dispatch.workspaceId,
@@ -99,6 +109,7 @@ async function processDispatch(dispatch: ClaimedOrchestratorDispatch, deps: Reco
         sessionClaimGeneration: dispatch.sessionClaimGeneration,
         domainRuntimeEnabled: true,
         enabledDomainRoles: ["visuals", "audio"],
+        ...runtime,
       });
   const resultGates = await deps.listGates(dispatch.runId);
   const completed = terminal(result.status) || resultGates.some((gate) => gate.status === "reached");

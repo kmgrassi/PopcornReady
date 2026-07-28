@@ -6,8 +6,10 @@ import { runOrchestratorToCompletion } from "../engine";
 import {
   assertDomainRegistry,
   buildDomainReportFromCompletion,
+  compactRootDomainReports,
   resolveAgentDefinition,
 } from "../agent-definition";
+import { CREATIVE_DIRECTOR_SYSTEM_PROMPT } from "../creative-director-agent";
 import type { ToolRegistry } from "../registry";
 import type { AgentDefinition } from "../agent-definition";
 
@@ -55,6 +57,90 @@ test("root definition preserves the supplied flat registry and carries no struct
   assert.equal(definition.role, "creative_director");
   assert.equal(definition.registry, registry);
   assert.equal(await definition.loadTurnContext(), undefined);
+});
+
+test("hierarchy-enabled root exposes only the creative-director surface", async () => {
+  const definition = await resolveAgentDefinition({
+    run: rootRun,
+    workspaceId: "workspace-1",
+    creativeDirectorHierarchyEnabled: true,
+  });
+  assert.equal(definition.systemPrompt, CREATIVE_DIRECTOR_SYSTEM_PROMPT);
+  assert.deepEqual([...definition.registry.keys()], [
+    "create_or_load_brief",
+    "develop_story_blueprint",
+    "draft_script",
+    "plan_shots",
+    "plan_visual_anchors",
+    "critique_timeline",
+    "export_video",
+    "request_approval",
+    "assemble_timeline",
+    "publish_to_catalog",
+    "delegate_visuals",
+    "delegate_audio",
+  ]);
+  assert.equal(definition.registry.has("generate_clip"), false);
+  assert.equal(definition.registry.has("generate_audio"), false);
+});
+
+test("root context reports include only root-origin specialist completions", () => {
+  const reports = compactRootDomainReports({
+    rootRunId: "root-run",
+    family: {
+      root: rootRun,
+      children: [
+        {
+          id: "visuals-root-child",
+          agentRole: "visuals",
+          agentSessionId: "visuals-session",
+          taskKind: "visuals_production",
+          originKind: "creative_director",
+          parentRunId: "root-run",
+          reportActionId: "report-root",
+          report: {
+            schemaVersion: "DomainReport.v1",
+            outcome: {
+              outcome: "done",
+              outputs: [{ assetId: "anchor-1", intrinsicRole: "visual_anchor" }],
+              changedSelections: [],
+              acceptanceEvidence: [],
+              sessionSummary: "Anchor plan complete.",
+            },
+          },
+        },
+        {
+          id: "visuals-direct-child",
+          agentRole: "visuals",
+          agentSessionId: "visuals-session",
+          taskKind: "image_create",
+          originKind: "creator_direct",
+          parentRunId: "root-run",
+          reportActionId: "report-direct",
+          report: {
+            schemaVersion: "DomainReport.v1",
+            outcome: { outcome: "question", question: "ignored", targets: [], options: [], fingerprint: "x" },
+          },
+        },
+      ],
+    } as never,
+  });
+  assert.deepEqual(reports, [
+    {
+      runId: "visuals-root-child",
+      sessionId: "visuals-session",
+      domain: "visuals",
+      taskKind: "visuals_production",
+      reportActionId: "report-root",
+      outcome: {
+        outcome: "done",
+        outputs: [{ assetId: "anchor-1", intrinsicRole: "visual_anchor" }],
+        changedSelections: [],
+        acceptanceEvidence: [],
+        sessionSummary: "Anchor plan complete.",
+      },
+    },
+  ]);
 });
 
 test("domain registries reject dispatch capabilities and foreign ownership", () => {
