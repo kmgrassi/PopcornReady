@@ -6787,6 +6787,28 @@ export async function getStaleCandidates(
   };
 }
 
+/** Current selection sequence pins for one asset, used to fence rerun previews. */
+export async function listAssetSelectionRefs(
+  workspaceId: string,
+  projectId: string,
+  assetId: string
+): Promise<AssetGraphSelectionRef[]> {
+  await getAsset(workspaceId, projectId, assetId);
+  const data = await runQuery(
+    "store.listAssetSelectionRefs",
+    getRequestSupabaseOrService()
+      .from("current_selections")
+      .select("slot_owner_lineage_id, slot_role, seq")
+      .eq("project_id", projectId)
+      .eq("active_asset_id", assetId)
+  );
+  return ((data ?? []) as CurrentSelectionSummaryRow[]).map((selection) => ({
+    slotOwnerLineageId: selection.slot_owner_lineage_id,
+    slotRole: selection.slot_role,
+    seq: selection.seq,
+  }));
+}
+
 // ---------------------------------------------------------------------------
 // Idempotency
 // ---------------------------------------------------------------------------
