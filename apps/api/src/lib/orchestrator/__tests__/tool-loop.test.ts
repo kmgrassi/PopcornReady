@@ -8,7 +8,10 @@ import {
   runToolLoopTurn,
   ToolExecutionContext,
 } from "../index";
-import { isCreativeDirectorHierarchyEnabled } from "../feature-flag";
+import {
+  creativeDirectorHierarchyRollout,
+  isCreativeDirectorHierarchyEnabled,
+} from "../feature-flag";
 
 function runFixture(patch: Partial<OrchestratorRun> = {}): OrchestratorRun {
   return {
@@ -33,11 +36,53 @@ test("tool-loop feature flag is opt-in", () => {
   );
 });
 
-test("creative-director hierarchy flag is opt-in", () => {
-  assert.equal(isCreativeDirectorHierarchyEnabled({}), false);
-  assert.equal(
-    isCreativeDirectorHierarchyEnabled({ POPCORN_CREATIVE_DIRECTOR_HIERARCHY: "true" }),
-    true
+test("creative-director hierarchy is default-on with an expiring flat fallback", () => {
+  const now = new Date("2026-07-28T12:00:00.000Z");
+  assert.equal(isCreativeDirectorHierarchyEnabled({}), true);
+  assert.deepEqual(
+    creativeDirectorHierarchyRollout(
+      { POPCORN_CREATIVE_DIRECTOR_FLAT_FALLBACK_UNTIL: "2026-07-29T12:00:00.000Z" },
+      now
+    ),
+    { enabled: true, fallbackUntil: null },
+    "an expiry alone cannot activate emergency fallback"
+  );
+  assert.deepEqual(
+    creativeDirectorHierarchyRollout(
+      {
+        POPCORN_CREATIVE_DIRECTOR_FLAT_FALLBACK: "1",
+        POPCORN_CREATIVE_DIRECTOR_FLAT_FALLBACK_UNTIL: "2026-07-29T12:00:00.000Z",
+      },
+      now
+    ),
+    { enabled: false, fallbackUntil: "2026-07-29T12:00:00.000Z" }
+  );
+  assert.deepEqual(
+    creativeDirectorHierarchyRollout(
+      { POPCORN_CREATIVE_DIRECTOR_FLAT_FALLBACK: "true", POPCORN_CREATIVE_DIRECTOR_FLAT_FALLBACK_UNTIL: "not-a-date" },
+      now
+    ),
+    { enabled: true, fallbackUntil: null },
+    "an invalid rollback value must fail back to the safe default-on route"
+  );
+  assert.deepEqual(
+    creativeDirectorHierarchyRollout(
+      {
+        POPCORN_CREATIVE_DIRECTOR_FLAT_FALLBACK: "true",
+        POPCORN_CREATIVE_DIRECTOR_FLAT_FALLBACK_UNTIL: "2026-07-29T08:00:00-04:00",
+      },
+      now
+    ),
+    { enabled: true, fallbackUntil: null },
+    "the emergency expiry must be an explicit UTC timestamp"
+  );
+  assert.deepEqual(
+    creativeDirectorHierarchyRollout(
+      { POPCORN_CREATIVE_DIRECTOR_FLAT_FALLBACK: "true", POPCORN_CREATIVE_DIRECTOR_FLAT_FALLBACK_UNTIL: "2026-07-27T12:00:00.000Z" },
+      now
+    ),
+    { enabled: true, fallbackUntil: null },
+    "an expired fallback cannot leave the flat root enabled"
   );
 });
 

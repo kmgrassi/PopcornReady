@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { OrchestratorRun } from "@/lib/api/v1/orchestrator-store";
 import {
-  creativeDirectorRuntimeOptions,
   isOrchestratorRecoveryEnabled,
   orchestratorRecoveryIntervalMs,
   orchestratorTickBackoffMs,
@@ -112,12 +111,23 @@ test("recovery is enabled by default and has a safe lower interval bound", () =>
   assert.equal(orchestratorRecoveryIntervalMs({ ORCHESTRATOR_RECOVERY_INTERVAL_MS: "10" }), 1_000);
 });
 
-test("hierarchy recovery selects the root profile without narrowing active domain roles", () => {
-  assert.deepEqual(creativeDirectorRuntimeOptions({}), { creativeDirectorHierarchyEnabled: false });
-  assert.deepEqual(
-    creativeDirectorRuntimeOptions({ POPCORN_CREATIVE_DIRECTOR_HIERARCHY: "on" }),
-    { creativeDirectorHierarchyEnabled: true }
-  );
+test("worker logs the persisted root profile rather than a mutable process flag", async () => {
+  let rolloutLog: Record<string, unknown> | undefined;
+  await recoverOrchestratorRuns({
+    claim: async () => [{ dispatchId: "dispatch-root", runId: "run-root", workspaceId: "workspace-1", leaseToken: "lease-1" }],
+    getRun: async () => ({ ...run("queued"), rootExecutionProfile: "creative_director" }),
+    listGates: async () => [],
+    release: async () => {},
+    run: async () => run("succeeded"),
+    resume: async () => assert.fail("queued root must not resume"),
+    repair: async () => {},
+    logger: {
+      debug() {},
+      info(event, details) { if (event === "orchestrator_worker.rollout") rolloutLog = details; },
+      warn() {}, error() {}, child() { return this; },
+    },
+  });
+  assert.equal(rolloutLog?.rootExecutionProfile, "creative_director");
 });
 
 test("failed ticks back off exponentially and cap at 30s", () => {
