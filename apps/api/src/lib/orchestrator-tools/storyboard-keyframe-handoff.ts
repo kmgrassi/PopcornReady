@@ -25,10 +25,130 @@ export interface StoryboardHandoffIssue {
 
 export type StoryboardAssetLoader = (assetId: string) => Promise<V1Asset | null>;
 
+export interface PreservedStoryboardTile {
+  planBeatId: string;
+  sceneIndex: number;
+  beatIndex: number;
+  relationalSceneId: string;
+  relationalBeatId: string;
+  panelId: string;
+  assetId: string;
+  assetContentHash: string;
+}
+
 export function plannedBeatIds(plan: ShotPlan): string[] {
   return plan.scenes.flatMap((scene) =>
     scene.beats.map((beat) => beat.id?.trim() ?? "")
   );
+}
+
+export function storyboardTileByPlanBeat(
+  plan: ShotPlan,
+  storyboard: ProjectStoryboard
+): Map<string, string> {
+  const map = new Map<string, string>();
+  for (let sceneIndex = 0; sceneIndex < plan.scenes.length; sceneIndex += 1) {
+    const scene = plan.scenes[sceneIndex];
+    const storyboardScene = storyboard.scenes.find(
+      (candidate) => candidate.sceneIndex === sceneIndex
+    );
+    for (let beatIndex = 0; beatIndex < scene.beats.length; beatIndex += 1) {
+      const beatId = scene.beats[beatIndex].id?.trim();
+      if (!beatId) continue;
+      const storyboardBeat = storyboardScene?.beats.find(
+        (candidate) => candidate.beatIndex === beatIndex
+      );
+      const selectedPanel = storyboardBeat?.panels.find(
+        (panel) => panel.isSelected && panel.imageAssetId
+      );
+      if (selectedPanel?.imageAssetId) map.set(beatId, selectedPanel.imageAssetId);
+    }
+  }
+  return map;
+}
+
+export async function preservedStoryboardTiles(input: {
+  plan: ShotPlan;
+  planAssetId: string;
+  planContentHash: string;
+  storyboard: ProjectStoryboard;
+  targetBeatIds: readonly string[];
+  loadAsset: StoryboardAssetLoader;
+}): Promise<PreservedStoryboardTile[]> {
+  if (input.storyboard.planAssetId !== input.planAssetId) {
+    throw new Error("The preservation storyboard is not bound to the active plan.");
+  }
+  const targeted = new Set(input.targetBeatIds);
+  const manifest: PreservedStoryboardTile[] = [];
+  const seenBeatIds = new Set<string>();
+  for (let sceneIndex = 0; sceneIndex < input.plan.scenes.length; sceneIndex += 1) {
+    const scene = input.plan.scenes[sceneIndex];
+    const storyboardScene = input.storyboard.scenes.find(
+      (candidate) => candidate.sceneIndex === sceneIndex
+    );
+    if (!storyboardScene) {
+      throw new Error(`The preservation storyboard is missing scene ${sceneIndex}.`);
+    }
+    for (let beatIndex = 0; beatIndex < scene.beats.length; beatIndex += 1) {
+      const planBeatId = scene.beats[beatIndex].id?.trim();
+      if (!planBeatId || seenBeatIds.has(planBeatId)) {
+        throw new Error("The active plan needs unique stable beat ids for preservation.");
+      }
+      seenBeatIds.add(planBeatId);
+      if (targeted.has(planBeatId)) continue;
+      const storyboardBeat = storyboardScene.beats.find(
+        (candidate) => candidate.beatIndex === beatIndex
+      );
+      const panels = storyboardBeat?.panels.filter(
+        (panel) => panel.isSelected && panel.imageAssetId
+      ) ?? [];
+      if (!storyboardBeat || panels.length !== 1 || !panels[0].imageAssetId) {
+        throw new Error(
+          `The preservation storyboard has no unique selected tile for ${planBeatId}.`
+        );
+      }
+      const panel = panels[0];
+      if (panel.status !== "ready" && panel.status !== "approved") {
+        throw new Error(`The preserved tile panel for ${planBeatId} is not ready.`);
+      }
+      const imageAssetId = panel.imageAssetId;
+      if (!imageAssetId) {
+        throw new Error(`The preserved tile panel for ${planBeatId} has no image.`);
+      }
+      const asset = await input.loadAsset(imageAssetId);
+      const planInput = asset?.graphInputs?.find(
+        (edge) =>
+          edge.assetId === input.planAssetId &&
+          edge.relation === "input" &&
+          edge.role === "plan"
+      );
+      if (
+        !asset ||
+        asset.status !== "ready" ||
+        asset.kind !== "image" ||
+        asset.role !== "beat_storyboard" ||
+        asset.provenance?.beatId !== planBeatId ||
+        !planInput ||
+        (input.planContentHash &&
+          planInput.contentHash !== input.planContentHash)
+      ) {
+        throw new Error(
+          `The preserved tile for ${planBeatId} does not match the active plan.`
+        );
+      }
+      manifest.push({
+        planBeatId,
+        sceneIndex,
+        beatIndex,
+        relationalSceneId: storyboardScene.id,
+        relationalBeatId: storyboardBeat.id,
+        panelId: panel.id,
+        assetId: asset.id,
+        assetContentHash: asset.contentHash ?? "",
+      });
+    }
+  }
+  return manifest;
 }
 
 export function persistedBeatIdSetIssues(

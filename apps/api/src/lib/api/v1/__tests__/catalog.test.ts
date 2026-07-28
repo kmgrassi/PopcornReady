@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildCatalogAssetSource, buildSearchText, searchCatalogEntries } from "../catalog";
+import { catalogCloneImageIdentity } from "../catalog-clone";
 import type { CatalogDb } from "../catalog-types";
 import { ApiError } from "../errors";
 import {
@@ -87,6 +88,38 @@ test("parsePublishCatalogEntry accepts image-backed entries", () => {
       tags: ["cafe", "warm"],
       status: "published",
     }
+  );
+});
+
+test("catalog image clones preserve generic graph kind and role", () => {
+  assert.deepEqual(
+    catalogCloneImageIdentity("image", {
+      graphKind: "image",
+      role: "standalone_image",
+    }),
+    { kind: "image", role: "standalone_image" }
+  );
+  assert.deepEqual(
+    catalogCloneImageIdentity("character", {
+      graphKind: "image",
+      role: "standalone_image",
+    }),
+    { kind: "anchor", role: "character_anchor" }
+  );
+});
+
+test("catalog image clones recover legacy production kinds from role", () => {
+  assert.deepEqual(
+    catalogCloneImageIdentity("image", { role: "scene_anchor" }),
+    { kind: "anchor", role: "scene_anchor" }
+  );
+  assert.deepEqual(
+    catalogCloneImageIdentity("image", { role: "beat_storyboard" }),
+    { kind: "keyframe", role: "beat_storyboard" }
+  );
+  assert.deepEqual(
+    catalogCloneImageIdentity("image", { role: "act_mockup" }),
+    { kind: "keyframe", role: "act_mockup" }
   );
 });
 

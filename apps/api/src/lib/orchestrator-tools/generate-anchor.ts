@@ -3,18 +3,27 @@ import {
   type OrchestratorJobCreator,
 } from "@/lib/orchestrator/job-gateway";
 import {
+  getActiveProjectPlan as realGetActiveProjectPlan,
   getActiveProjectVisualAnchorPlan as realGetActiveProjectVisualAnchorPlan,
+  getProjectStoryboardById as realGetProjectStoryboardById,
 } from "@/lib/api/v1/store";
 import { toolDefinitionMetadata } from "./capability-catalog";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 import { runGenerateAnchorJob as realRunGenerateAnchorJob } from "./generate-anchor-job";
+import {
+  anchorPlanForTargets,
+  resolveVisualTargets,
+  type TrustedVisualTargets,
+} from "./visual-targeting";
 
 type AnchorImageProvider = "openai" | "gemini" | "mock";
 
 export interface GenerateAnchorInput {
   provider?: AnchorImageProvider;
   feedback?: string;
+  /** Server-derived domain scope; never model-authored. */
+  trustedVisualTargets?: TrustedVisualTargets;
 }
 
 export interface GenerateAnchorOutput {
@@ -23,12 +32,16 @@ export interface GenerateAnchorOutput {
 
 export interface GenerateAnchorDeps {
   getActiveProjectVisualAnchorPlan: typeof realGetActiveProjectVisualAnchorPlan;
+  getActiveProjectPlan: typeof realGetActiveProjectPlan;
+  getProjectStoryboardById: typeof realGetProjectStoryboardById;
   createJob: OrchestratorJobCreator["createJob"];
   runGenerateAnchorJob: typeof realRunGenerateAnchorJob;
 }
 
 const defaultDeps: GenerateAnchorDeps = {
   getActiveProjectVisualAnchorPlan: realGetActiveProjectVisualAnchorPlan,
+  getActiveProjectPlan: realGetActiveProjectPlan,
+  getProjectStoryboardById: realGetProjectStoryboardById,
   createJob: createDurableOrchestratorJobCreator().createJob,
   runGenerateAnchorJob: realRunGenerateAnchorJob,
 };
@@ -156,11 +169,42 @@ export function createGenerateAnchorTool(
 
       const active = await resolved.getActiveProjectVisualAnchorPlan(context.projectId);
       if (!active) return visualAnchorPlanRequired();
+      const targets = input.trustedVisualTargets
+        ? await (async () => {
+            const activePlan = await resolved.getActiveProjectPlan(context.projectId!);
+            if (!activePlan) {
+              throw new ToolInputError(
+                "The active visual-anchor plan has no active shot plan."
+              );
+            }
+            return resolveVisualTargets({
+              activePlan,
+              targets: input.trustedVisualTargets,
+              loadStoryboard: (storyboardId) =>
+                resolved.getProjectStoryboardById(
+                  context.auth.workspaceId,
+                  context.projectId!,
+                  storyboardId
+                ),
+            });
+          })()
+        : null;
+      const visualAnchorPlan = anchorPlanForTargets(
+        active.visualAnchorPlan,
+        targets?.planBeatIds,
+        targets?.planSceneIds
+      );
+      if (context.domainTask && visualAnchorPlan.anchors.length === 0) {
+        throw new ToolInputError(
+          "No planned visual anchors intersect the trusted scene/beat targets."
+        );
+      }
 
       const { job, created } = await resolved.createJob({
         workspaceId: context.auth.workspaceId,
         type: "asset_generation",
         projectId: context.projectId,
+        sessionClaimGeneration: context.sessionClaimGeneration,
         ...(context.actionId
           ? { actionId: context.actionId, idempotencyKey: `action:${context.actionId}` }
           : {}),
@@ -171,7 +215,7 @@ export function createGenerateAnchorTool(
             workspaceId: context.auth.workspaceId,
             projectId: context.projectId,
             ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
-            visualAnchorPlan: active.visualAnchorPlan,
+            visualAnchorPlan,
             visualAnchorPlanAssetId: active.assetId,
             visualAnchorPlanContentHash: active.contentHash,
             ...(input.provider ? { provider: input.provider } : {}),
@@ -185,7 +229,10 @@ export function createGenerateAnchorTool(
           workspaceId: context.auth.workspaceId,
           projectId: context.projectId,
           ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
-          visualAnchorPlan: active.visualAnchorPlan,
+          ...(context.sessionClaimGeneration !== undefined
+            ? { sessionClaimGeneration: context.sessionClaimGeneration }
+            : {}),
+          visualAnchorPlan,
           visualAnchorPlanAssetId: active.assetId,
           visualAnchorPlanContentHash: active.contentHash,
           ...(input.provider ? { provider: input.provider } : {}),

@@ -2,11 +2,23 @@ import {
   createDurableOrchestratorJobCreator,
   type OrchestratorJobCreator,
 } from "@/lib/orchestrator/job-gateway";
-import { getActiveProjectPlan as realGetActiveProjectPlan } from "@/lib/api/v1/store";
+import {
+  getActiveProjectPlan as realGetActiveProjectPlan,
+  getAsset as realGetAsset,
+  getProjectCurrentStoryboardId as realGetProjectCurrentStoryboardId,
+  getProjectStoryboardById as realGetProjectStoryboardById,
+  getProjectStoryboardsForPlan as realGetProjectStoryboardsForPlan,
+} from "@/lib/api/v1/store";
 import { toolDefinitionMetadata } from "./capability-catalog";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 import { runStoryboardJob as realRunStoryboardJob } from "./storyboard-job";
+import {
+  resolveVisualTargets,
+  shotPlanForTargetBeats,
+  type TrustedVisualTargets,
+} from "./visual-targeting";
+import { preservedStoryboardTiles } from "./storyboard-keyframe-handoff";
 
 // generate_storyboard reads the project's persisted plan (the stage→stage handoff
 // through the asset graph) and generates one cheap sketch tile per beat. It is the
@@ -15,6 +27,8 @@ import { runStoryboardJob as realRunStoryboardJob } from "./storyboard-job";
 export interface GenerateStoryboardInput {
   /** Optional instruction to revise an existing storyboard. */
   feedback?: string;
+  /** Server-derived domain scope; never model-authored. */
+  trustedVisualTargets?: TrustedVisualTargets;
 }
 
 export interface GenerateStoryboardOutput {
@@ -23,12 +37,20 @@ export interface GenerateStoryboardOutput {
 
 export interface GenerateStoryboardDeps {
   getActiveProjectPlan: typeof realGetActiveProjectPlan;
+  getAsset: typeof realGetAsset;
+  getProjectCurrentStoryboardId: typeof realGetProjectCurrentStoryboardId;
+  getProjectStoryboardById: typeof realGetProjectStoryboardById;
+  getProjectStoryboardsForPlan: typeof realGetProjectStoryboardsForPlan;
   createJob: OrchestratorJobCreator["createJob"];
   runStoryboardJob: typeof realRunStoryboardJob;
 }
 
 const defaultDeps: GenerateStoryboardDeps = {
   getActiveProjectPlan: realGetActiveProjectPlan,
+  getAsset: realGetAsset,
+  getProjectCurrentStoryboardId: realGetProjectCurrentStoryboardId,
+  getProjectStoryboardById: realGetProjectStoryboardById,
+  getProjectStoryboardsForPlan: realGetProjectStoryboardsForPlan,
   createJob: createDurableOrchestratorJobCreator().createJob,
   runStoryboardJob: realRunStoryboardJob,
 };
@@ -125,16 +147,105 @@ export function createGenerateStoryboardTool(
           },
         };
       }
+      if (
+        context.domainTask &&
+        (!context.orchestratorRunId ||
+          context.sessionClaimGeneration === undefined ||
+          !context.actionId)
+      ) {
+        throw new ToolInputError(
+          "Domain storyboard generation requires its exact run, session claim, and invocation action."
+        );
+      }
 
       const active = await resolved.getActiveProjectPlan(context.projectId);
       if (!active) {
         return planRequired();
+      }
+      const targets = await resolveVisualTargets({
+        activePlan: active,
+        targets: _input.trustedVisualTargets,
+        loadStoryboard: (storyboardId) =>
+          resolved.getProjectStoryboardById(
+            context.auth.workspaceId,
+            context.projectId!,
+            storyboardId
+          ),
+      });
+      const generationPlan = shotPlanForTargetBeats(
+        active.plan,
+        targets?.planBeatIds
+      );
+      if (context.domainTask && generationPlan.scenes.length === 0) {
+        throw new ToolInputError("No planned beats intersect the trusted task targets.");
+      }
+      const allBeatCount = active.plan.scenes.reduce(
+        (count, scene) => count + scene.beats.length,
+        0
+      );
+      const targetBeatCount = generationPlan.scenes.reduce(
+        (count, scene) => count + scene.beats.length,
+        0
+      );
+      let baselineStoryboardId: string | undefined;
+      if (targetBeatCount !== allBeatCount) {
+        const candidates = targets?.sourceStoryboard
+          ? [targets.sourceStoryboard]
+          : await resolved.getProjectStoryboardsForPlan(
+              context.auth.workspaceId,
+              context.projectId,
+              active.assetId
+            );
+        for (const candidate of candidates) {
+          try {
+            await preservedStoryboardTiles({
+              plan: active.plan,
+              planAssetId: active.assetId,
+              planContentHash: active.contentHash,
+              storyboard: candidate,
+              targetBeatIds: targets?.planBeatIds ?? [],
+              loadAsset: (assetId) =>
+                resolved.getAsset(
+                  context.auth.workspaceId,
+                  context.projectId!,
+                  assetId
+                ),
+            });
+            baselineStoryboardId = candidate.id;
+            break;
+          } catch {
+            // Try an older same-plan attempt only when no exact relational
+            // target fixed the baseline identity.
+            if (targets?.sourceStoryboard) break;
+          }
+        }
+        if (!baselineStoryboardId) {
+          throw new ToolInputError(
+            "Scoped storyboard generation needs a complete compatible storyboard to preserve untargeted beats."
+          );
+        }
+      }
+      const expectedCurrentStoryboardId =
+        context.sessionClaimGeneration !== undefined
+          ? await resolved.getProjectCurrentStoryboardId(
+              context.auth.workspaceId,
+              context.projectId
+            )
+          : undefined;
+      if (
+        context.sessionClaimGeneration !== undefined &&
+        (active.selectionSeq === undefined || !context.actionId)
+      ) {
+        throw new ToolInputError(
+          "Claimed storyboard generation requires an explicitly selected plan and invocation action."
+        );
       }
 
       const { job, created } = await resolved.createJob({
         workspaceId: context.auth.workspaceId,
         type: "asset_generation",
         projectId: context.projectId,
+        sessionClaimGeneration: context.sessionClaimGeneration,
         ...(context.actionId
           ? { actionId: context.actionId, idempotencyKey: `action:${context.actionId}` }
           : {}),
@@ -145,9 +256,23 @@ export function createGenerateStoryboardTool(
             workspaceId: context.auth.workspaceId,
             projectId: context.projectId,
             ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
+            ...(context.sessionClaimGeneration !== undefined
+              ? { sessionClaimGeneration: context.sessionClaimGeneration }
+              : {}),
+            ...(context.actionId ? { createdByActionId: context.actionId } : {}),
             plan: active.plan,
             planAssetId: active.assetId,
             planContentHash: active.contentHash,
+            ...(active.selectionSeq !== undefined
+              ? { expectedPlanSelectionSeq: active.selectionSeq }
+              : {}),
+            ...(expectedCurrentStoryboardId !== undefined
+              ? { expectedCurrentStoryboardId }
+              : {}),
+            ...(targets?.planBeatIds.length
+              ? { targetBeatIds: targets.planBeatIds }
+              : {}),
+            ...(baselineStoryboardId ? { baselineStoryboardId } : {}),
           },
         },
       });
@@ -160,9 +285,23 @@ export function createGenerateStoryboardTool(
           workspaceId: context.auth.workspaceId,
           projectId: context.projectId,
           ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
+          ...(context.sessionClaimGeneration !== undefined
+            ? { sessionClaimGeneration: context.sessionClaimGeneration }
+            : {}),
+          ...(context.actionId ? { createdByActionId: context.actionId } : {}),
           plan: active.plan,
           planAssetId: active.assetId,
           planContentHash: active.contentHash,
+          ...(active.selectionSeq !== undefined
+            ? { expectedPlanSelectionSeq: active.selectionSeq }
+            : {}),
+          ...(expectedCurrentStoryboardId !== undefined
+            ? { expectedCurrentStoryboardId }
+            : {}),
+          ...(targets?.planBeatIds.length
+            ? { targetBeatIds: targets.planBeatIds }
+            : {}),
+          ...(baselineStoryboardId ? { baselineStoryboardId } : {}),
         });
       }
 

@@ -1,7 +1,8 @@
 import type { EditPlan } from "@popcorn/shared/types";
 import type { AuthContext } from "./auth";
 import { ApiError } from "./errors";
-import { getProject } from "./store";
+import { getProject, type UploadedStoryboardTile } from "./store";
+import { canonicalContentHash, inputsFingerprint } from "./asset-graph";
 import { getServiceSupabase } from "@/lib/supabase/clients";
 import { runQuery } from "@/lib/supabase/db-errors";
 import {
@@ -824,4 +825,155 @@ export async function buildStoryboardForPlan(input: {
   }
 
   return { storyboardId: storyboard.id, panelCount };
+}
+
+export interface StoryboardBundleIds {
+  storyboardId: string;
+  actId: string;
+  scenes: Array<{
+    sceneId: string;
+    beats: Array<{ beatId: string; panelId: string }>;
+  }>;
+}
+
+export interface StoryboardPreservationExpectation {
+  planBeatId: string;
+  sceneIndex: number;
+  beatIndex: number;
+  relationalSceneId: string;
+  relationalBeatId: string;
+  panelId: string;
+  assetId: string;
+  assetContentHash: string;
+}
+
+/**
+ * The only visibility commit for claimed storyboard work. Tile objects have
+ * already been uploaded under deterministic ids; this RPC atomically fences
+ * the job/run/claim and every project-state CAS before creating graph rows.
+ */
+export async function commitClaimedStoryboardBundle(input: {
+  auth: AuthContext;
+  projectId: string;
+  jobId: string;
+  actionId: string;
+  orchestratorRunId: string;
+  sessionClaimGeneration: number;
+  planAssetId: string;
+  planContentHash: string;
+  expectedPlanSelectionSeq: number;
+  expectedCurrentStoryboardId: string | null;
+  baselineStoryboardId: string | null;
+  preservation: StoryboardPreservationExpectation[];
+  plan: EditPlan;
+  uploadedTiles: UploadedStoryboardTile[];
+  tileAssetByBeatId: Map<string, string>;
+  ids: StoryboardBundleIds;
+}): Promise<{ storyboardId: string; panelCount: number; assetIds: string[] }> {
+  await assertProject(input.auth, input.projectId);
+  if (
+    input.ids.scenes.length !== input.plan.scenes.length ||
+    input.ids.scenes.some(
+      (sceneIds, sceneIndex) =>
+        sceneIds.beats.length !== input.plan.scenes[sceneIndex].beats.length
+    )
+  ) {
+    throw new ApiError("validation_failed", "Storyboard bundle ids do not match the plan.");
+  }
+  const graphInputs = [{
+    assetId: input.planAssetId,
+    relation: "input" as const,
+    role: "plan",
+    position: 0,
+    contentHash: input.planContentHash,
+  }];
+  const newAssets = input.uploadedTiles.map((tile, index) => {
+    const params = {
+      schema_version: "asset_params.v1",
+      provenance: {
+        provider: tile.provider,
+        ...(tile.model ? { model: tile.model } : {}),
+        prompt: tile.prompt,
+        beatId: tile.beatId,
+      },
+    };
+    const inputs = graphInputs.map((edge) => ({ ...edge, position: index }));
+    return {
+      id: tile.assetId,
+      filename: tile.filename,
+      storageKey: tile.storageKey,
+      storageBucket: tile.storageBucket,
+      visibility: tile.visibility,
+      params,
+      inputs,
+      inputsFingerprint: inputsFingerprint(inputs, params),
+      contentHash: tile.contentHash,
+      ...(tile.description ? { description: tile.description } : {}),
+      beatId: tile.beatId,
+    };
+  });
+  const rows = input.plan.scenes.map((scene, sceneIndex) => ({
+    id: input.ids.scenes[sceneIndex].sceneId,
+    sceneIndex,
+    title: scene.name ?? null,
+    setting: scene.setting ?? null,
+    mood: scene.mood ?? null,
+    beats: scene.beats.map((beat, beatIndex) => {
+      const planBeatId = beat.id?.trim();
+      if (!planBeatId) {
+        throw new ApiError("validation_failed", "Storyboard plan beat has no stable id.");
+      }
+      const imageAssetId = input.tileAssetByBeatId.get(planBeatId);
+      if (!imageAssetId) {
+        throw new ApiError(
+          "validation_failed",
+          `Storyboard bundle has no tile for ${planBeatId}.`
+        );
+      }
+      return {
+        id: input.ids.scenes[sceneIndex].beats[beatIndex].beatId,
+        panelId: input.ids.scenes[sceneIndex].beats[beatIndex].panelId,
+        beatIndex,
+        planBeatId,
+        intent: beat.intent ?? "",
+        durationSec: beat.durationSec ?? null,
+        shotType: beat.shotType ?? null,
+        camera: beat.camera ?? null,
+        framing: beat.framing ?? null,
+        imageAssetId,
+      };
+    }),
+  }));
+  const rpcInput = {
+    p_workspace_id: input.auth.workspaceId,
+    p_project_id: input.projectId,
+    p_job_id: input.jobId,
+    p_action_id: input.actionId,
+    p_run_id: input.orchestratorRunId,
+    p_session_claim_generation: input.sessionClaimGeneration,
+    p_plan_asset_id: input.planAssetId,
+    p_plan_content_hash: input.planContentHash,
+    p_expected_plan_selection_seq: input.expectedPlanSelectionSeq,
+    p_expected_current_storyboard_id: input.expectedCurrentStoryboardId,
+    p_baseline_storyboard_id: input.baselineStoryboardId,
+    p_preservation: input.preservation,
+    p_storyboard_id: input.ids.storyboardId,
+    p_act_id: input.ids.actId,
+    p_new_assets: newAssets,
+    p_rows: rows,
+  };
+  const bundleFingerprint = canonicalContentHash(rpcInput);
+  const data = await runQuery(
+    "storyboards.commitClaimedStoryboardBundle",
+    getServiceSupabase().rpc("commit_claimed_storyboard_bundle", {
+      ...rpcInput,
+      p_bundle_fingerprint: bundleFingerprint,
+    })
+  );
+  const result = data as {
+    storyboardId: string;
+    panelCount: number;
+    assetIds: string[];
+  };
+  return result;
 }

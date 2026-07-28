@@ -83,11 +83,16 @@ function makeDeps(asset: V1Asset, effectiveVisibility: "public" | "private" = "p
       ) => {
         calls.applyMedia = { assetId, update };
         return {
+          assetId: "asset-new",
           url: "https://cdn.example/new.png",
           thumbnailUrl: "https://cdn.example/new.png",
           expiresAt: "2026-06-20T01:00:00.000Z",
         };
       },
+      getRunSessionClaim: async () => ({
+        sessionId: "session-1",
+        claimGeneration: 9,
+      }),
       logger: silentLogger,
     },
   };
@@ -160,6 +165,48 @@ test("caller-supplied provider and model override saved provenance", async () =>
   assert.equal(calls.generateImage?.model, "ideogram-v4");
   assert.equal(calls.applyMedia?.update.provenance.provider, "ideogram");
   assert.equal(calls.applyMedia?.update.provenance.model, "ideogram-v4");
+});
+
+test("pooled regeneration carries canonical action/run/session fencing", async () => {
+  const asset = imageAsset();
+  const { calls, deps } = makeDeps(asset);
+  await regenerateImageAsset({
+    workspaceId: "ws-1",
+    assetId: asset.id,
+    prompt: "A colder revision.",
+    repointSurfaces: false,
+    actionId: "action-1",
+    orchestratorRunId: "run-1",
+    sessionClaimGeneration: 9,
+    deps,
+  });
+  assert.equal(calls.applyMedia?.update.actionId, "action-1");
+  assert.equal(calls.applyMedia?.update.orchestratorRunId, "run-1");
+  assert.equal(calls.applyMedia?.update.sessionClaimGeneration, 9);
+});
+
+test("stale pooled regeneration stops before provider work", async () => {
+  const asset = imageAsset();
+  const { calls, deps } = makeDeps(asset);
+  deps.getRunSessionClaim = async () => ({
+    sessionId: "session-1",
+    claimGeneration: 10,
+  });
+  await assert.rejects(
+    regenerateImageAsset({
+      workspaceId: "ws-1",
+      assetId: asset.id,
+      prompt: "A stale revision.",
+      repointSurfaces: false,
+      actionId: "action-1",
+      orchestratorRunId: "run-1",
+      sessionClaimGeneration: 9,
+      deps,
+    }),
+    /session claim changed/
+  );
+  assert.equal(calls.generateImage, undefined);
+  assert.equal(calls.writeObject, undefined);
 });
 
 test("provider-only override does not reuse an incompatible saved model", async () => {

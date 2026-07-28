@@ -3,7 +3,6 @@ import { scheduleOrchestratorResume } from "@/lib/orchestrator/schedule-resume";
 import type { AuthContext } from "@/lib/api/v1/auth";
 import { createGeneratedAsset as realCreateGeneratedAsset } from "@/lib/api/v1/generated-assets";
 import { getAsset as realGetAsset, type V1Asset } from "@/lib/api/v1/store";
-import { getServiceSupabase } from "@/lib/supabase/clients";
 
 type VideoProvider =
   | "openai"
@@ -51,35 +50,6 @@ function assetIdsFromResult(result: Awaited<ReturnType<typeof realCreateGenerate
   return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [];
 }
 
-async function swapSelections(input: {
-  projectId: string;
-  sourceAssetId: string;
-  editedAssetId: string;
-}): Promise<string[]> {
-  const db = getServiceSupabase();
-  const { data, error } = await db
-    .from("current_selections")
-    .select("slot_role")
-    .eq("project_id", input.projectId)
-    .eq("active_asset_id", input.sourceAssetId);
-  if (error) throw error;
-  const slots = (data ?? [])
-    .map((row) => row.slot_role)
-    .filter((slot): slot is string => typeof slot === "string" && slot.length > 0);
-  if (slots.length === 0) return [];
-
-  const { error: insertError } = await db.from("selections").insert(
-    slots.map((slotRole) => ({
-      project_id: input.projectId,
-      slot_owner_lineage_id: null,
-      slot_role: slotRole,
-      active_asset_id: input.editedAssetId,
-    }))
-  );
-  if (insertError) throw insertError;
-  return slots;
-}
-
 function editedAssetRole(source: V1Asset): string | undefined {
   return source.role || undefined;
 }
@@ -95,6 +65,7 @@ export interface EditVideoAssetJobInput {
   provider?: VideoProvider;
   model?: string;
   orchestratorRunId?: string;
+  sessionClaimGeneration?: number;
 }
 
 export async function runEditVideoAssetJob(
@@ -134,26 +105,19 @@ export async function runEditVideoAssetJob(
         ],
         ...(input.orchestratorRunId ? { runId: input.orchestratorRunId } : {}),
       },
+      ...(input.sessionClaimGeneration !== undefined
+        ? { sessionClaimGeneration: input.sessionClaimGeneration }
+        : {}),
     });
 
     const assetIds = assetIdsFromResult(result);
     if (assetIds.length === 0) {
       throw new Error(`Video edit returned no assets for ${input.sourceAssetId}.`);
     }
-    const selectionSlots: string[] = [];
-    for (const assetId of assetIds) {
-      selectionSlots.push(
-        ...(await swapSelections({
-          projectId: input.projectId,
-          sourceAssetId: input.sourceAssetId,
-          editedAssetId: assetId,
-        }))
-      );
-    }
     await jobs.succeed(input.jobId, {
       assetIds,
       sourceAssetId: input.sourceAssetId,
-      selectionSlots: [...new Set(selectionSlots)],
+      selectionSlots: [],
     });
   } catch (err) {
     await jobs.fail(input.jobId, {

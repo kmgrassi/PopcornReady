@@ -295,3 +295,52 @@ test("runGenerateClipJob generates clips with keyframe graph inputs, selects the
   assert.equal(resumedRun, "run_1");
   assert.ok(!spy.calls.includes("fail"));
 });
+
+test("domain clip completion stays pooled and cannot overwrite a newer selection", async () => {
+  const spy = jobsSpy();
+  const claims: Array<number | undefined> = [];
+  let selectionAttempts = 0;
+
+  await runGenerateClipJob(
+    {
+      jobId: "job_domain",
+      workspaceId: "ws_1",
+      projectId: "proj_1",
+      orchestratorRunId: "run_domain",
+      sessionClaimGeneration: 9,
+      provider: "mock",
+      beats: [
+        {
+          beatId: "beat_1",
+          prompt: "Maya unlocks the cafe.",
+          durationSec: 5,
+          keyframeAssetId: "kf_1",
+          keyframeContentHash: "kf_hash",
+        },
+      ],
+    },
+    {
+      jobs: spy.jobs,
+      getActiveProjectScopedAsset: async () => null,
+      createGeneratedAsset: async (args) => {
+        claims.push(args.sessionClaimGeneration);
+        return {
+          status: 202,
+          body: { job: { result: { assetIds: ["clip_domain"] } } },
+        };
+      },
+      selectGeneratedBeatClipAsset: async () => {
+        selectionAttempts += 1;
+        throw new Error("domain jobs must not append selections");
+      },
+      enqueueOrchestratorDispatch: async () => {},
+    }
+  );
+
+  assert.deepEqual(claims, [9]);
+  assert.equal(selectionAttempts, 0);
+  assert.deepEqual(spy.succeededResult, {
+    assetIds: ["clip_domain"],
+    skippedBeatIds: [],
+  });
+});

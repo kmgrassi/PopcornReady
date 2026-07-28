@@ -5,6 +5,8 @@ import {
 import {
   getActiveProjectScopedAsset as realGetActiveProjectScopedAsset,
   getActiveProjectPlan as realGetActiveProjectPlan,
+  getProjectRunGeneratedAsset as realGetProjectRunGeneratedAsset,
+  getProjectStoryboardById as realGetProjectStoryboardById,
   type ActiveProjectPlan,
 } from "@/lib/api/v1/store";
 import type { ShotPlan } from "@popcorn/shared/types";
@@ -14,6 +16,10 @@ import { ToolInputError } from "./types";
 import { runGenerateClipJob as realRunGenerateClipJob } from "./generate-clip-job";
 import { createLogger } from "@/lib/v1/logger";
 import { estimateCostUsd as estimateGenerativeCostUsd } from "@/lib/generative/pricing";
+import {
+  resolveVisualTargets,
+  type TrustedVisualTargets,
+} from "./visual-targeting";
 
 type VideoProvider =
   | "openai"
@@ -35,6 +41,8 @@ export interface GenerateClipInput {
   seconds?: number;
   prompt?: string;
   revisionInstruction?: string;
+  /** Server-derived domain scope; never model-authored. */
+  trustedVisualTargets?: TrustedVisualTargets;
 }
 
 export interface GenerateClipOutput {
@@ -54,6 +62,8 @@ export interface GenerateClipJobBeat {
 export interface GenerateClipDeps {
   getActiveProjectPlan: typeof realGetActiveProjectPlan;
   getActiveProjectScopedAsset: typeof realGetActiveProjectScopedAsset;
+  getProjectRunGeneratedAsset: typeof realGetProjectRunGeneratedAsset;
+  getProjectStoryboardById: typeof realGetProjectStoryboardById;
   createJob: OrchestratorJobCreator["createJob"];
   runGenerateClipJob: typeof realRunGenerateClipJob;
 }
@@ -61,6 +71,8 @@ export interface GenerateClipDeps {
 const defaultDeps: GenerateClipDeps = {
   getActiveProjectPlan: realGetActiveProjectPlan,
   getActiveProjectScopedAsset: realGetActiveProjectScopedAsset,
+  getProjectRunGeneratedAsset: realGetProjectRunGeneratedAsset,
+  getProjectStoryboardById: realGetProjectStoryboardById,
   createJob: createDurableOrchestratorJobCreator().createJob,
   runGenerateClipJob: realRunGenerateClipJob,
 };
@@ -363,7 +375,27 @@ export function createGenerateClipTool(
       }
 
       const allBeats = new Map(planBeats(activePlan.plan).map((beat) => [beat.id, beat]));
-      const requestedBeatIds = selectedBeatIds(input, activePlan);
+      const trustedTargets = await resolveVisualTargets({
+        activePlan,
+        targets: input.trustedVisualTargets,
+        loadStoryboard: (storyboardId) =>
+          resolved.getProjectStoryboardById(
+            context.auth.workspaceId,
+            context.projectId!,
+            storyboardId
+          ),
+      });
+      const requestedBeatIds =
+        trustedTargets?.planBeatIds ?? selectedBeatIds(input, activePlan);
+      if (
+        context.domainTask &&
+        trustedTargets &&
+        requestedBeatIds.length === 0
+      ) {
+        throw new ToolInputError(
+          "No planned beats intersect the trusted task targets."
+        );
+      }
       const unknown = requestedBeatIds.filter((beatId) => !allBeats.has(beatId));
       if (unknown.length) return unknownBeats(unknown);
 
@@ -372,12 +404,24 @@ export function createGenerateClipTool(
       const missingKeyframeBeatIds: string[] = [];
 
       for (const beatId of requestedBeatIds) {
-        const existingClip = await resolved.getActiveProjectScopedAsset({
+        const selectedClip = await resolved.getActiveProjectScopedAsset({
           workspaceId: context.auth.workspaceId,
           projectId: context.projectId,
           slotRole: `beat_clip:${beatId}`,
           expectedRole: "beat_clip",
         });
+        const existingClip =
+          selectedClip ??
+          (context.orchestratorRunId &&
+          context.sessionClaimGeneration !== undefined
+            ? await resolved.getProjectRunGeneratedAsset({
+                workspaceId: context.auth.workspaceId,
+                projectId: context.projectId,
+                orchestratorRunId: context.orchestratorRunId,
+                role: "beat_clip",
+                beatId,
+              })
+            : null);
         if (existingClip) {
           logger.info("generate_clip.beat_skipped_existing_clip", {
             workspaceId: context.auth.workspaceId,
@@ -390,12 +434,24 @@ export function createGenerateClipTool(
           continue;
         }
 
-        const keyframe = await resolved.getActiveProjectScopedAsset({
+        const selectedKeyframe = await resolved.getActiveProjectScopedAsset({
           workspaceId: context.auth.workspaceId,
           projectId: context.projectId,
           slotRole: `beat_keyframe:${beatId}`,
           expectedRole: "beat_keyframe",
         });
+        const keyframe =
+          selectedKeyframe ??
+          (context.orchestratorRunId &&
+          context.sessionClaimGeneration !== undefined
+            ? await resolved.getProjectRunGeneratedAsset({
+                workspaceId: context.auth.workspaceId,
+                projectId: context.projectId,
+                orchestratorRunId: context.orchestratorRunId,
+                role: "beat_keyframe",
+                beatId,
+              })
+            : null);
         if (!keyframe) {
           logger.warn("generate_clip.beat_missing_keyframe", {
             workspaceId: context.auth.workspaceId,
@@ -449,6 +505,7 @@ export function createGenerateClipTool(
         workspaceId: context.auth.workspaceId,
         type: "asset_generation",
         projectId: context.projectId,
+        sessionClaimGeneration: context.sessionClaimGeneration,
         ...(context.actionId
           ? { actionId: context.actionId, idempotencyKey: `action:${context.actionId}` }
           : {}),
@@ -482,6 +539,9 @@ export function createGenerateClipTool(
           workspaceId: context.auth.workspaceId,
           projectId: context.projectId,
           ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
+          ...(context.sessionClaimGeneration !== undefined
+            ? { sessionClaimGeneration: context.sessionClaimGeneration }
+            : {}),
           beats: jobBeats,
           skippedBeatIds,
           ...(input.provider ? { provider: input.provider } : {}),

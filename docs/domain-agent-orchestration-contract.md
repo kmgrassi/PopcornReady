@@ -201,15 +201,19 @@ activating it:
 
 - `root-registry.ts` exposes the ten current Creative Director-owned
   primitives, including optional catalog publication;
-- `visuals-registry.ts` exposes only the six current image/motion primitives;
-  and
+- `visuals-registry.ts` owns eight image/motion primitives: the six production
+  and revision tools plus standalone `generate_image_asset` and
+  `generate_video_asset`; the trusted task kind narrows model visibility to one
+  standalone tool for `image_create`, `video_create`, or `video_edit`; and
 - `audio-registry.ts` exposes only audio generation and picture fitting. A
   finite Audio run supplies its trusted `DomainTask.v1`, producing task-bound
   schemas/descriptions and scope-checked wrappers under those same canonical
   tool names; the flat default registry remains unchanged.
 
-The three registries are an exact, disjoint partition of the current 18-tool
-vocabulary. Domain registries contain no root, sibling, approval, assembly, or
+The three role registries are an exact, disjoint 12/8/2 partition of the
+current 22-tool catalog. The two standalone Visuals tools remain absent from
+`PRODUCTION_TOOL_NAMES`, driver stubs, the flat default registry, and root
+evals. Domain registries contain no root, sibling, approval, assembly, or
 dispatch capability. Standalone Audio generation is a task mode over
 `generate_audio`, not a second primitive name. It reuses generated-assets
 provider/job/storage/action/cost execution, creates one pooled `audio_track`,
@@ -221,7 +225,7 @@ Under the proposed hierarchy, responsibility is:
 | Owner | Model-visible responsibility/capabilities |
 | --- | --- |
 | Creative director, conditional | current brief, story, script, shot and visual-anchor planning; timeline assembly and critique; approval, export, and optional catalog publication; future delegation and batched dispatch after their owning PRs |
-| Visuals | current anchor, storyboard, keyframe, clip, immutable image regeneration, and content-aware video edit capabilities; future standalone image/video capabilities after their owning PR |
+| Visuals | anchor, storyboard, keyframe, clip, immutable pooled image regeneration, pinned content-aware video edit, and standalone pooled image/video generation |
 | Audio | exact-script narration/dialogue, production or standalone music/sound generation, immutable delivery revisions, and fitting authorized audio to current picture |
 | Runtime, never model-facing | authorization, session/run claim, enqueue/lease, wait/resume, report acknowledgement, retry, cancellation, gate persistence, cost settlement, provider callback fencing |
 

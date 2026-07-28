@@ -51,6 +51,7 @@ function defaultDefinition(name: ToolName): ToolDefinition {
       additionalProperties: true,
     },
     requiredResourceIds: ["projectId"],
+    prepareInput: (input) => input,
     estimateCostUsd: () => undefined,
     execute: async () => failedUnimplemented(name),
   };
@@ -71,6 +72,19 @@ export function createToolRegistry(
       return [name, definition];
     })
   );
+}
+
+export async function prepareRegisteredTool(args: {
+  registry: ToolRegistry;
+  toolName: ToolName;
+  input: unknown;
+  context: ToolExecutionContext;
+}): Promise<unknown> {
+  const tool = args.registry.get(args.toolName);
+  if (!tool) throw new Error(`Unknown orchestrator tool: ${args.toolName}`);
+  return tool.prepareInput
+    ? tool.prepareInput(args.input, args.context)
+    : args.input;
 }
 
 export async function executeRegisteredTool(args: {

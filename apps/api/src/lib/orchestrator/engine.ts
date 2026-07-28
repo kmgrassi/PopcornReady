@@ -41,6 +41,7 @@ import { applyCreditTransaction, getCreditBalance } from "@/lib/api/v1/credits";
 import { ApiError } from "@/core/errors";
 import { createToolExecutionContext } from "./tool-context";
 import type { ToolCallResult, ToolName } from "./types";
+import type { AgentDomain, DomainTaskV1 } from "@popcorn/shared/domain-agent-contract";
 import {
   isDispatchToolName,
   isToolName,
@@ -57,7 +58,20 @@ import {
   type ResolveAgentDefinitionInput,
 } from "./agent-definition";
 import { finalizeDomainTurn } from "./domain-run-service";
-import { projectDomainRecovery } from "./domain-recovery-projection";
+import {
+  projectDomainRecovery,
+  type DomainRecoveryProjection,
+} from "./domain-recovery-projection";
+import {
+  loadProjectGraphSnapshot,
+  type ProjectGraphSnapshot,
+} from "@/lib/orchestrator-context/graph-snapshot";
+import {
+  assertPreservePinsCurrent,
+  buildDomainTargetScope,
+  type DomainTargetScope,
+} from "@/lib/orchestrator-context/target-scope";
+import { prepareRegisteredTool } from "./registry";
 
 // Credits charged per generation = providerCostUsd * MARGIN, at 1 credit = $0.01.
 const CREDIT_MARGIN = 2;
@@ -103,6 +117,7 @@ export interface OrchestratorEngineStore {
     actionId: string,
     patch: {
       status: "running" | "applied" | "failed";
+      params?: Record<string, unknown>;
       jobIds?: string[];
       outputAssetIds?: string[];
       error?: Record<string, unknown>;
@@ -160,14 +175,19 @@ export interface EngineDeps {
   getCreditBalance?: typeof getCreditBalance;
   userHasAnyProviderKey?: typeof userHasAnyProviderKey;
   applyCreditTransaction?: typeof applyCreditTransaction;
-  /** Fail-closed rollout control: absent/false keeps finite domain runs queued. */
-  domainRuntimeEnabled?: boolean;
+  /** Fail-closed rollout control: absent roles remain queued. */
+  enabledDomainRoles?: readonly AgentDomain[];
   /** Durable session claim generation carried by a claimed domain dispatch. */
   sessionClaimGeneration?: number;
   /** Injectable for deterministic definition/transport tests. */
   resolveAgentDefinition?: (
     input: ResolveAgentDefinitionInput
   ) => Promise<AgentDefinition>;
+  prepareDomainScope?: (input: {
+    workspaceId: string;
+    projectId: string;
+    task: DomainTaskV1;
+  }) => Promise<{ snapshot: ProjectGraphSnapshot; scope: DomainTargetScope }>;
 }
 
 export function defaultEngineStore(): OrchestratorEngineStore {
@@ -194,6 +214,7 @@ export function defaultEngineStore(): OrchestratorEngineStore {
     async markInvocation(actionId, patch) {
       await updateAction(actionId, {
         status: patch.status,
+        ...(patch.params !== undefined ? { params: patch.params } : {}),
         ...(patch.jobIds !== undefined ? { jobIds: patch.jobIds } : {}),
         ...(patch.outputAssetIds !== undefined
           ? { outputAssetIds: patch.outputAssetIds }
@@ -281,9 +302,21 @@ function resolved(deps: EngineDeps) {
     getCreditBalance: deps.getCreditBalance ?? getCreditBalance,
     userHasAnyProviderKey: deps.userHasAnyProviderKey ?? userHasAnyProviderKey,
     applyCreditTransaction: deps.applyCreditTransaction ?? applyCreditTransaction,
-    domainRuntimeEnabled: deps.domainRuntimeEnabled ?? false,
+    enabledDomainRoles: deps.enabledDomainRoles ?? [],
     sessionClaimGeneration: deps.sessionClaimGeneration,
     resolveAgentDefinition: deps.resolveAgentDefinition ?? resolveAgentDefinition,
+    prepareDomainScope:
+      deps.prepareDomainScope ??
+      (async ({ workspaceId, projectId, task }) => {
+        const snapshot = await loadProjectGraphSnapshot({ workspaceId, projectId });
+        const scope = buildDomainTargetScope({
+          snapshot,
+          targets: task.targets,
+          candidateAffectedAssetIds: task.candidateAffectedAssetIds,
+        });
+        assertPreservePinsCurrent(scope, snapshot, task.preserve);
+        return { snapshot, scope };
+      }),
     workspaceId: deps.workspaceId,
     actorId: deps.actorId,
     agentId: deps.agentId,
@@ -319,7 +352,7 @@ export async function runOrchestratorToCompletion(
 ): Promise<OrchestratorRun> {
   const r = resolved(deps);
   let run = await r.store.getOrchestratorRun(runId);
-  if (isDomainRun(run) && !r.domainRuntimeEnabled) return run;
+  if (isDomainRun(run) && !domainRoleEnabled(run, r.enabledDomainRoles)) return run;
   if (run.status === "queued") {
     run = await r.store.updateOrchestratorRun(runId, {
       status: "running",
@@ -341,7 +374,7 @@ export async function resumeOrchestratorRun(
 ): Promise<OrchestratorRun> {
   const r = resolved(deps);
   const run = await r.store.getOrchestratorRun(runId);
-  if (isDomainRun(run) && !r.domainRuntimeEnabled) return run;
+  if (isDomainRun(run) && !domainRoleEnabled(run, r.enabledDomainRoles)) return run;
   return resumeRun(run, r);
 }
 
@@ -636,6 +669,22 @@ function invocationOutputAssetIds(result: ToolCallResult): string[] {
   return [];
 }
 
+function preparedFitActionParams(
+  input: unknown,
+  result: unknown
+): Record<string, unknown> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new Error("fit_audio_to_picture must prepare an object input.");
+  }
+  return { ...(input as Record<string, unknown>), result };
+}
+
+export function selectDomainBlockedCandidate(
+  recovery: DomainRecoveryProjection
+): DomainRecoveryProjection["blockedCandidates"][number] | undefined {
+  return recovery.blockedCandidates[0];
+}
+
 // Async tool jobs report their produced assets as { assetIds: string[] }.
 function jobAssetIds(result: unknown): string[] {
   if (result && typeof result === "object" && "assetIds" in result) {
@@ -649,6 +698,15 @@ type Resolved = ReturnType<typeof resolved>;
 
 function isDomainRun(run: OrchestratorRun): boolean {
   return run.agentRole === "visuals" || run.agentRole === "audio";
+}
+
+function domainRoleEnabled(
+  run: OrchestratorRun,
+  enabledRoles: readonly AgentDomain[]
+): boolean {
+  return run.agentRole === "visuals" || run.agentRole === "audio"
+    ? enabledRoles.includes(run.agentRole)
+    : true;
 }
 
 function runMetadata(run: OrchestratorRun, r: Resolved): Record<string, unknown> | undefined {
@@ -696,13 +754,13 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
   for (let turn = 0; turn < r.maxTurns; turn += 1) {
     run = await r.store.getOrchestratorRun(run.id);
     if (run.status !== "running") return run;
-    if (isDomainRun(run) && !r.domainRuntimeEnabled) return run;
+    if (isDomainRun(run) && !domainRoleEnabled(run, r.enabledDomainRoles)) return run;
 
     const definition = await r.resolveAgentDefinition({
       run,
       workspaceId: r.workspaceId,
       rootRegistry: r.registry,
-      domainRuntimeEnabled: r.domainRuntimeEnabled,
+      enabledDomainRoles: r.enabledDomainRoles,
     });
 
     if (run.budgetUsd != null && run.spentUsd >= run.budgetUsd) {
@@ -812,11 +870,28 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       }
     }
 
-    // Persist the canonical invocation before the tool can mutate the graph or
-    // launch a provider job. The same UUID travels through the tool context, so
-    // asynchronous job/asset paths can attach to it instead of minting a
-    // wrapper action later.
+    // Parse and authorize once against a fresh trusted scope before persisting
+    // any invocation. The same canonical input then drives estimate + execute.
     const actionId = randomUUID();
+    let domainScope: DomainTargetScope | undefined;
+    let domainSnapshot: ProjectGraphSnapshot | undefined;
+    if (definition.task) {
+      try {
+        const prepared = await r.prepareDomainScope({
+          workspaceId: r.workspaceId,
+          projectId: run.projectId,
+          task: definition.task,
+        });
+        domainScope = prepared.scope;
+        domainSnapshot = prepared.snapshot;
+      } catch (err) {
+        return finish(run, "failed", r, {
+          kind: "invalid_input",
+          message: err instanceof Error ? err.message : String(err),
+          recoverable: false,
+        });
+      }
+    }
     const toolContext = createToolExecutionContext({
       workspaceId: r.workspaceId,
       projectId: run.projectId,
@@ -828,15 +903,33 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       messageId: r.messageId,
       requestId: r.requestId,
       sessionClaimGeneration: r.sessionClaimGeneration,
+      ...(definition.task ? { domainTask: definition.task } : {}),
+      ...(domainScope ? { domainScope } : {}),
+      ...(domainSnapshot ? { domainSnapshot } : {}),
       metadata: runMetadata(run, r),
     });
+    let preparedInput: unknown;
+    try {
+      preparedInput = await prepareRegisteredTool({
+        registry: turnRegistry,
+        toolName: decision.toolName,
+        input: decision.input,
+        context: toolContext,
+      });
+    } catch (err) {
+      return finish(run, "failed", r, {
+        kind: "invalid_input",
+        message: err instanceof Error ? err.message : String(err),
+        recoverable: false,
+      });
+    }
     await r.store.recordInvocation({
       actionId,
       projectId: run.projectId,
       orchestratorRunId: run.id,
       tool: decision.toolName,
       status: "running",
-      params: decision.input,
+      params: preparedInput as Record<string, unknown>,
       outputAssetIds: [],
       jobIds: [],
     });
@@ -852,7 +945,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       const toolEstimateUsd =
         (await turnRegistry
           .get(decision.toolName)
-          ?.estimateCostUsd(decision.input, toolContext)) ?? 0;
+          ?.estimateCostUsd(preparedInput, toolContext)) ?? 0;
       if (runUserId && toolEstimateUsd > 0) {
         const estimatedCredits = Math.ceil(toolEstimateUsd * CREDIT_MARGIN * CREDITS_PER_USD);
         const balance = await r.getCreditBalance(runUserId);
@@ -898,7 +991,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       result = await executeRegisteredTool({
         registry: turnRegistry,
         toolName: decision.toolName,
-        input: decision.input,
+        input: preparedInput,
         context: toolContext,
       });
     } catch (err) {
@@ -955,6 +1048,9 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
             : "running",
       outputAssetIds: invocationOutputAssetIds(result),
       jobIds: result.status === "accepted" ? [result.jobId] : [],
+      ...(result.status === "succeeded" && decision.toolName === "fit_audio_to_picture"
+        ? { params: preparedFitActionParams(preparedInput, result.output) }
+        : {}),
       error: result.status === "failed" ? { ...result.error } : undefined,
     });
 
@@ -969,11 +1065,10 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
         trustedTargets: definition.task.targets,
         error: result.error,
       });
-      // A same-domain recovery remains visible only as sanitized model context.
-      // Finalize a blocked report solely when no allowed local recovery exists.
-      const blocked = recovery.suggestedNextTools.length || recovery.unmetRequirements.length
-        ? undefined
-        : recovery.blockedCandidates[0];
+      // A cross-domain prerequisite must not disappear merely because the same
+      // failure also advertised a local recovery candidate. Root/Audio work
+      // cannot be completed by retrying a Visuals primitive.
+      const blocked = selectDomainBlockedCandidate(recovery);
       if (blocked) {
         return finalizeDomainReport(
           run,

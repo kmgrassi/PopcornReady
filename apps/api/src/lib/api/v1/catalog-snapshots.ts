@@ -85,6 +85,7 @@ export async function assetSnapshot(
       source: "asset",
       asset: {
         id: asset.id,
+        graphKind: asset.kind,
         filename: asset.filename,
         role: asset.role,
         summary,

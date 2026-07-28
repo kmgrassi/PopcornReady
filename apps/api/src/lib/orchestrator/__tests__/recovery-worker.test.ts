@@ -54,6 +54,7 @@ test("worker processes only atomically claimed dispatches", async () => {
 
 test("worker forwards a claimed domain session generation to the shared engine", async () => {
   let seenGeneration: number | undefined;
+  let seenRoles: readonly string[] | undefined;
   await recoverOrchestratorRuns({
     claim: async () => [{
       dispatchId: "dispatch-domain",
@@ -68,12 +69,14 @@ test("worker forwards a claimed domain session generation to the shared engine",
     release: async () => {},
     run: async (_id, deps) => {
       seenGeneration = deps.sessionClaimGeneration;
+      seenRoles = deps.enabledDomainRoles;
       return { ...run("queued"), agentRole: "visuals" };
     },
     resume: async () => assert.fail("queued run must not resume"),
     logger: { debug() {}, info() {}, warn() {}, error() {}, child() { return this; } },
   });
   assert.equal(seenGeneration, 7);
+  assert.deepEqual(seenRoles, ["visuals"]);
 });
 
 test("terminal finite-run states retire a recovered dispatch without another turn", async () => {

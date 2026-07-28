@@ -103,6 +103,7 @@ class FakeStore implements OrchestratorEngineStore {
     actionId: string,
     patch: {
       status: "running" | "applied" | "failed";
+      params?: Record<string, unknown>;
       jobIds?: string[];
       outputAssetIds?: string[];
       error?: Record<string, unknown>;
@@ -111,6 +112,7 @@ class FakeStore implements OrchestratorEngineStore {
     const action = this.actions.find((a) => a.id === actionId);
     if (!action) return;
     action.status = patch.status;
+    if (patch.params) action.params = patch.params;
     if (patch.jobIds) action.jobIds = patch.jobIds;
     if (patch.outputAssetIds) action.outputAssetIds = patch.outputAssetIds;
     if (patch.error) action.error = patch.error;
@@ -177,6 +179,62 @@ const ok = (resourceIds: string[] = [], costUsd?: number): ToolCallResult => ({
 
 // ---------- tests ----------
 
+test("prepares once before persistence and reuses the canonical input", async () => {
+  const store = new FakeStore(runFixture());
+  const { model } = scriptedModel([
+    { type: "tool_call", toolName: "plan_shots", input: { prompt: " raw " } },
+    { type: "done" },
+  ]);
+  let prepareCalls = 0;
+  let estimateInput: unknown;
+  let executeInput: unknown;
+  const registry: ToolRegistry = new Map([[
+    "plan_shots",
+    {
+      ...driverToolDefinitionMetadata("plan_shots"),
+      description: "",
+      inputSchema: {},
+      outputSchema: {},
+      requiredResourceIds: [],
+      prepareInput: (input) => {
+        prepareCalls += 1;
+        return { prompt: String((input as { prompt: string }).prompt).trim() };
+      },
+      estimateCostUsd: (input) => {
+        estimateInput = input;
+        return 0;
+      },
+      execute: async (input) => {
+        executeInput = input;
+        return ok(["asset-plan"]);
+      },
+    },
+  ]]);
+
+  await runOrchestratorToCompletion("run1", deps(store, model, registry));
+
+  assert.equal(prepareCalls, 1);
+  assert.deepEqual(store.actions[0]?.params, { prompt: "raw" });
+  assert.equal(estimateInput, executeInput);
+  assert.equal(estimateInput, store.actions[0]?.params);
+});
+
+test("prepare failure creates no invocation action", async () => {
+  const store = new FakeStore(runFixture());
+  const { model } = scriptedModel([
+    { type: "tool_call", toolName: "plan_shots", input: { unsupported: true } },
+  ]);
+  const registry = fakeRegistry({ plan_shots: () => ok(["asset-plan"]) });
+  registry.get("plan_shots")!.prepareInput = () => {
+    throw new Error("unsupported input");
+  };
+
+  const result = await runOrchestratorToCompletion("run1", deps(store, model, registry));
+
+  assert.equal(result.status, "failed");
+  assert.equal(store.actions.length, 0);
+});
+
 test("drives tool→tool→done and persists one action per executed tool", async () => {
   const store = new FakeStore(runFixture());
   const { model } = scriptedModel([
@@ -200,6 +258,46 @@ test("drives tool→tool→done and persists one action per executed tool", asyn
       ["plan_shots", "applied"],
     ]
   );
+});
+
+test("persists a fit verdict with its server-owned invocation input", async () => {
+  const store = new FakeStore(runFixture());
+  const { model } = scriptedModel([
+    {
+      type: "tool_call",
+      toolName: "fit_audio_to_picture",
+      input: {
+        audioAssetId: " audio_target ",
+        pictureAssetId: " picture_target ",
+        beatId: " beat_1 ",
+      },
+    },
+    { type: "done" },
+  ]);
+  const registry = fakeRegistry({
+    fit_audio_to_picture: () => ({
+      status: "succeeded",
+      resourceIds: ["fit_critique"],
+      output: { verdict: "fail", requiresApproval: true },
+    }),
+  });
+  registry.get("fit_audio_to_picture")!.prepareInput = (input) => {
+    const value = input as Record<string, string>;
+    return {
+      audioAssetId: value.audioAssetId.trim(),
+      pictureAssetId: value.pictureAssetId.trim(),
+      beatId: value.beatId.trim(),
+    };
+  };
+
+  await runOrchestratorToCompletion("run1", deps(store, model, registry));
+
+  assert.deepEqual(store.actions[0].params, {
+    audioAssetId: "audio_target",
+    pictureAssetId: "picture_target",
+    beatId: "beat_1",
+    result: { verdict: "fail", requiresApproval: true },
+  });
 });
 
 test("injects the server-owned wrapper context into each tool execution", async () => {
@@ -1027,10 +1125,8 @@ test("a rejected gate prevents a later-stage tool from executing", async () => {
   assert.equal(run.status, "failed");
   assert.equal(planShotsExecuted, false);
   assert.equal(store.gates[0].status, "rejected");
-  assert.equal(store.actions.length, 1);
-  assert.equal(store.actions[0].tool, "plan_shots");
-  assert.equal(store.actions[0].status, "failed");
-  assert.match((store.actions[0].error as { message?: string }).message ?? "", /Unknown orchestrator tool/);
+  // Parse/preflight failures happen before invocation persistence.
+  assert.equal(store.actions.length, 0);
 });
 
 test("an async rejected gate parks on the job, then parks for review after job success", async () => {
