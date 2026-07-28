@@ -39,9 +39,11 @@ import {
 } from "../lib/queryClient";
 import { UploadQueueProvider } from "../lib/uploadQueue";
 import styles from "./AppLayout.module.css";
+import { isStandaloneCreationEnabled } from "../lib/agent-creations";
 
 const STORAGE_KEY = "popcorn-ready-theme";
 const DEFAULT_THEME = "popcorn";
+const assetStudioEnabled = isStandaloneCreationEnabled();
 const VALID_THEMES = new Set(["popcorn", "popcorn-warm", "popcorn-night", "popcorn-studio"]);
 
 // Primary workspace nav. Library groups the collection routes until PR 5 gives
@@ -336,7 +338,7 @@ export function AuthenticatedAppLayout() {
           variant="secondary"
           onClick={() => {
             setNavOpen(false);
-            navigate(`/projects/new?new=${Date.now()}`);
+            navigate(assetStudioEnabled ? "/create" : `/projects/new?new=${Date.now()}`);
           }}
         >
           Create new video
@@ -532,7 +534,7 @@ function MobileTabBar({ activityCount }: { activityCount: number }) {
               type="button"
               className={className}
               aria-current={isActive ? "page" : undefined}
-              onClick={() => navigate(`/projects/new?new=${Date.now()}`)}
+              onClick={() => navigate(assetStudioEnabled ? "/create" : `/projects/new?new=${Date.now()}`)}
             >
               <MobileTabIcon name={item.icon} />
               <span>{item.label}</span>
