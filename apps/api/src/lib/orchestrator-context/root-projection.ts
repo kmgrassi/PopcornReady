@@ -24,6 +24,7 @@ export interface RootProjectionAsset {
   media: string;
   role?: string;
   description?: string;
+  durationSec?: number;
   status: string;
   activeSelection: boolean;
   source: "root_production" | "creator_pool" | "unknown";
@@ -129,6 +130,7 @@ function projectAsset(
     media: asset.media,
     ...(asset.role ? { role: asset.role } : {}),
     ...(asset.description ? { description: asset.description } : {}),
+    ...(asset.durationSec !== undefined ? { durationSec: asset.durationSec } : {}),
     status: asset.status,
     activeSelection: selected.has(asset.id),
     source: source === "creator_pool" && selected.has(asset.id) ? "root_production" : source,

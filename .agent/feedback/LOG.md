@@ -231,3 +231,21 @@
 - Friction or failure: Adding delegate_visuals/delegate_audio to the typed catalog rippled through every flat surface (driver stubs, batteries, eval scenario tool lists, bridge stubs); the PRODUCTION_TOOL_NAMES/DISPATCH_TOOL_NAMES split contained it. The full API suite carries three pre-existing failures (guest-retention x2, discover public-id) — confirmed identical on unmodified origin/main via git stash.
 - Suggested improvement: When extending a shared vocabulary, land the surface marker and the split name lists in the same change so "nothing user-visible changes in production" is an assertable invariant.
 - Follow-up: PR 8 wires driveLoop domain completion to finalizeDomainTurn (replacing the fake report producer); PR 12 reuses dispatchDomainRun's gateStage/enqueue=false quote mode for creator-direct proposals.
+
+### 2026-07-27T18:10:00Z — API-20260727-PR11
+- What helped: Independent implementation review caught four authority/ordering failures that focused happy-path tests missed, including provider spend before source validation and beat audio consuming unrelated script scenes.
+- Friction or failure: The local Supabase CLI reported a running stack while its Postgres socket timed out, so the migration and same-lineage integration tests could not execute locally.
+- Suggested improvement: Keep every provider-backed revision's source/readiness checks before preflight or spend, and require tests with at least two scenes whenever a supposedly targeted media tool consumes script or plan content.
+- Follow-up: PR 12 must derive exact creator-direct Audio targets and prove root/direct successor runs reuse one serialized Audio session; rerun the Supabase-gated revision test when the local database accepts connections.
+
+### 2026-07-28T00:30:00-04:00 — API-20260727-PR11-review
+- What helped: Thread-aware PR review exposed that model-facing guards were correct but the reusable generated-assets and SQL mint boundaries remained independently callable.
+- Friction or failure: Production speech and fit timing each had a permissive fallback that converted missing trusted state into apparently valid provider work.
+- Suggested improvement: Put semantic invariants at every canonical write boundary, and test missing authority with adversarial caller input rather than only valid wrapper flows.
+- Follow-up: Keep creator-direct PR 12 on the shared Audio constraints and rerun the database-gated lineage tests when local Postgres is reachable.
+
+### 2026-07-28T09:00:00-04:00 — API-20260727-PR11-merge
+- What helped: Merging the updated stacked base instead of rewriting the reviewed branch kept PR history intact, and the independent cross-profile review found an activation gap outside Git's textual conflicts.
+- Friction or failure: PR 10 introduced a role allowlist and durable session-claim propagation after PR 11 branched; Git auto-merged the recovery and Audio job paths without revealing that Audio would stay queued and then lose its claim at the inner provider boundary.
+- Suggested improvement: When stacked specialist profiles add a rollout role, include both the production worker activation point and every async parent/child job claim handoff in the profile checklist; test the complete enabled-role set and provider-bound claim, not only the definition factory.
+- Follow-up: PR 12 should extend the same explicit role-aware activation model for creator-direct Audio entry points without weakening the fail-closed default.

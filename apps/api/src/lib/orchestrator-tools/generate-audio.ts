@@ -7,9 +7,12 @@ import {
   getActiveProjectPlan as realGetActiveProjectPlan,
 } from "@/lib/api/v1/store";
 import { toolDefinitionMetadata } from "./capability-catalog";
-import type { ToolCallResult, ToolDefinition } from "./types";
+import type { ToolCallResult, ToolDefinition, ToolExecutionContext } from "./types";
 import { ToolInputError } from "./types";
-import { runGenerateAudioJob as realRunGenerateAudioJob } from "./generate-audio-job";
+import {
+  runGenerateAudioJob as realRunGenerateAudioJob,
+  type GenerateAudioJobInput,
+} from "./generate-audio-job";
 
 type AudioProvider = "elevenlabs" | "mock";
 
@@ -31,12 +34,69 @@ export interface GenerateAudioDeps {
   runGenerateAudioJob: typeof realRunGenerateAudioJob;
 }
 
-const defaultDeps: GenerateAudioDeps = {
+export const defaultGenerateAudioDeps: GenerateAudioDeps = {
   getActiveProjectPlan: realGetActiveProjectPlan,
   getActiveProjectBrief: realGetActiveProjectBrief,
   createJob: createDurableOrchestratorJobCreator().createJob,
   runGenerateAudioJob: realRunGenerateAudioJob,
 };
+
+export type GenerateAudioJobLaunchInput = Omit<
+  GenerateAudioJobInput,
+  "jobId" | "workspaceId" | "projectId" | "orchestratorRunId" | "sessionClaimGeneration"
+>;
+
+/** One durable parent job for either the legacy production batch or one Audio-profile track. */
+export async function launchGenerateAudioJob(input: {
+  context: ToolExecutionContext;
+  jobInput: GenerateAudioJobLaunchInput;
+  deps?: Partial<GenerateAudioDeps>;
+}): Promise<ToolCallResult<GenerateAudioOutput>> {
+  const context = input.context;
+  if (!context.projectId) {
+    return {
+      status: "failed",
+      error: {
+        kind: "precondition_unmet",
+        message: "generate_audio requires a projectId in the execution context.",
+        recoverable: false,
+      },
+    };
+  }
+  const resolved = { ...defaultGenerateAudioDeps, ...input.deps };
+  const executionInput = {
+    workspaceId: context.auth.workspaceId,
+    projectId: context.projectId,
+    ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
+    ...(context.sessionClaimGeneration !== undefined
+      ? { sessionClaimGeneration: context.sessionClaimGeneration }
+      : {}),
+    ...input.jobInput,
+  };
+  const { job, created } = await resolved.createJob({
+    workspaceId: context.auth.workspaceId,
+    type: "asset_generation",
+    projectId: context.projectId,
+    ...(context.actionId
+      ? { actionId: context.actionId, idempotencyKey: `action:${context.actionId}` }
+      : {}),
+    ...(context.sessionClaimGeneration !== undefined
+      ? { sessionClaimGeneration: context.sessionClaimGeneration }
+      : {}),
+    execution: {
+      schemaVersion: "orchestrator_job_execution.v1",
+      kind: "generate_audio",
+      input: executionInput,
+    },
+  });
+  if (created) {
+    void resolved.runGenerateAudioJob({
+      jobId: job.id,
+      ...executionInput,
+    });
+  }
+  return { status: "accepted", jobId: job.id, resumesWhen: "job_terminal" };
+}
 
 export const generateAudioInputSchema = {
   type: "object",
@@ -137,7 +197,7 @@ function planRequired(): ToolCallResult<GenerateAudioOutput> {
 export function createGenerateAudioTool(
   deps: Partial<GenerateAudioDeps> = {}
 ): ToolDefinition<GenerateAudioInput, GenerateAudioOutput> {
-  const resolved = { ...defaultDeps, ...deps };
+  const resolved = { ...defaultGenerateAudioDeps, ...deps };
 
   return {
     ...toolDefinitionMetadata("generate_audio"),
@@ -178,39 +238,11 @@ export function createGenerateAudioTool(
       if (!activePlan) return planRequired();
 
       const activeBrief = await resolved.getActiveProjectBrief(context.projectId);
-      const { job, created } = await resolved.createJob({
-        workspaceId: context.auth.workspaceId,
-        type: "asset_generation",
-        projectId: context.projectId,
-        ...(context.actionId
-          ? { actionId: context.actionId, idempotencyKey: `action:${context.actionId}` }
-          : {}),
-        execution: {
-          schemaVersion: "orchestrator_job_execution.v1",
-          kind: "generate_audio",
-          input: {
-            workspaceId: context.auth.workspaceId,
-            projectId: context.projectId,
-            ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
-            plan: activePlan.plan,
-            planAssetId: activePlan.assetId,
-            planContentHash: activePlan.contentHash,
-            ...(activeBrief?.brief ? { brief: activeBrief.brief } : {}),
-            ...(activeBrief?.assetId ? { briefAssetId: activeBrief.assetId } : {}),
-            ...(activeBrief?.contentHash ? { briefContentHash: activeBrief.contentHash } : {}),
-            ...(input.provider ? { provider: input.provider } : {}),
-            ...(input.voiceId ? { voiceId: input.voiceId } : {}),
-            ...(input.feedback ? { feedback: input.feedback } : {}),
-          },
-        },
-      });
-
-      if (created) {
-        void resolved.runGenerateAudioJob({
-          jobId: job.id,
-          workspaceId: context.auth.workspaceId,
-          projectId: context.projectId,
-          ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
+      return launchGenerateAudioJob({
+        context,
+        deps: resolved,
+        jobInput: {
+          mode: "production",
           plan: activePlan.plan,
           planAssetId: activePlan.assetId,
           planContentHash: activePlan.contentHash,
@@ -220,10 +252,8 @@ export function createGenerateAudioTool(
           ...(input.provider ? { provider: input.provider } : {}),
           ...(input.voiceId ? { voiceId: input.voiceId } : {}),
           ...(input.feedback ? { feedback: input.feedback } : {}),
-        });
-      }
-
-      return { status: "accepted", jobId: job.id, resumesWhen: "job_terminal" };
+        },
+      });
     },
   };
 }

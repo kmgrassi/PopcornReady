@@ -90,6 +90,14 @@ export interface DialogueInput {
   voiceId: string;
 }
 
+export interface AudioVoiceSettings {
+  stability?: number;
+  similarityBoost?: number;
+  style?: number;
+  speed?: number;
+  useSpeakerBoost?: boolean;
+}
+
 export interface ShotDelta {
   action?: string;
   camera?: string;
@@ -124,6 +132,7 @@ interface BaseGenerateAssetRequest {
   seconds?: number;
   audioMode?: AudioGenerationMode;
   voiceId?: string;
+  voiceSettings?: AudioVoiceSettings;
   outputFormat?: string;
   languageCode?: string;
   dialogueInputs?: DialogueInput[];

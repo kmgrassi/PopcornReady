@@ -1238,6 +1238,7 @@ export async function updateAction(
 ): Promise<V1Action> {
   const row: Record<string, unknown> = {};
   if (patch.status !== undefined) row.status = patch.status;
+  if (patch.params !== undefined) row.params = markedJson("action_params.v1", patch.params);
   if (patch.jobIds !== undefined) row.job_ids = patch.jobIds;
   if (patch.outputAssetIds !== undefined) row.output_asset_ids = patch.outputAssetIds;
   if (patch.error !== undefined) row.error = markedJson("action_error.v1", patch.error) ?? null;
@@ -2818,6 +2819,8 @@ export async function addAudioFitCritique(input: {
   projectId: string;
   audioAssetId: string;
   audioContentHash?: string;
+  pictureAssetId?: string;
+  pictureContentHash?: string;
   planAssetId?: string;
   planContentHash?: string;
   beatId: string;
@@ -2844,13 +2847,31 @@ export async function addAudioFitCritique(input: {
           },
         ]
       : []),
+    ...(input.pictureAssetId
+      ? [
+          {
+            assetId: input.pictureAssetId,
+            relation: "input" as const,
+            role: "picture",
+            position: 2,
+            ...(input.pictureContentHash
+              ? { contentHash: input.pictureContentHash }
+              : {}),
+          },
+        ]
+      : []),
   ];
   const action = await createAction({
     projectId: input.projectId,
     orchestratorRunId: input.orchestratorRunId,
     tool: "fit_audio_to_picture",
     status: "running",
-    params: { beatId: input.beatId, audioAssetId: input.audioAssetId },
+    params: {
+      beatId: input.beatId,
+      audioAssetId: input.audioAssetId,
+      ...(input.pictureAssetId ? { pictureAssetId: input.pictureAssetId } : {}),
+      result: input.critique,
+    },
     inputAssetIds: graphInputs.map((graphInput) => graphInput.assetId),
     rationale: "Persist an audio-to-picture sync report for a voiceover segment.",
   });
@@ -5526,6 +5547,36 @@ export async function addAsset(
     "store.addAsset",
     db.from("assets").insert(row).select("*").single()
   );
+  return mapAsset(data as AssetRow);
+}
+
+/**
+ * Persist generated Audio revision bytes as version+1 in the source lineage.
+ * The caller supplies the generated-asset action so provider/cost/creator
+ * provenance remains on the canonical inner action. This operation never moves
+ * a selection; task-pinned selection reconciliation is a separate boundary.
+ */
+export async function addGeneratedAudioVersion(input: {
+  workspaceId: string;
+  projectId: string;
+  sourceAssetId: string;
+  actionId: string;
+  asset: V1Asset;
+}): Promise<V1Asset> {
+  const db = getServiceSupabase();
+  const assetWithGraph = await withGraphMetadataForInsert(db, input.asset);
+  const row = assetToRow(assetWithGraph);
+  const data = await runQuery(
+    "store.addGeneratedAudioVersion",
+    db.rpc("mint_audio_asset_version", {
+      p_workspace_id: input.workspaceId,
+      p_project_id: input.projectId,
+      p_source_asset_id: input.sourceAssetId,
+      p_action_id: input.actionId,
+      p_asset: row,
+    })
+  );
+  if (!data) throw notFound(`Asset not found: ${input.sourceAssetId}`);
   return mapAsset(data as AssetRow);
 }
 

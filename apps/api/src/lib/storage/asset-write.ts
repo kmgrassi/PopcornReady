@@ -73,6 +73,24 @@ export async function writeAssetObject(input: {
   return { storageKey, storageBucket: stored.bucket, contentType };
 }
 
+export async function deleteAssetObject(input: {
+  storageKey: string;
+  visibility: AssetVisibility;
+  store?: ObjectStore;
+  config?: StorageConfig;
+}): Promise<void> {
+  const config = input.config ?? readStorageConfig();
+  const store = input.store ?? createObjectStore(config);
+  await store.deleteObject(input.storageKey, input.visibility);
+  if (shouldWriteCompatibilityCache(config)) {
+    await fs
+      .unlink(path.join(localDir(), input.storageKey))
+      .catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") throw error;
+      });
+  }
+}
+
 function shouldWriteCompatibilityCache(config: StorageConfig): boolean {
   if (config.backend === "local") return true;
   return !isHostedRuntime();

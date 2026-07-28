@@ -21,13 +21,7 @@ import { VISUALS_SYSTEM_PROMPT } from "./visuals-profile";
 import type { RunActionSummary } from "@/lib/api/v1/orchestrator-store";
 import { getServiceSupabase } from "@/lib/supabase/clients";
 import { runQuery } from "@/lib/supabase/db-errors";
-
-const AUDIO_SYSTEM_PROMPT =
-  "You are the Popcorn Ready Audio specialist. Work only inside the trusted task and current graph context. " +
-  "Call at most one allowed Audio tool per turn. Never delegate, use Visuals/root capabilities, alter unrelated assets, or make a project-wide creative decision. " +
-  "If a prerequisite belongs outside Audio, let the server translate the typed precondition into a blocked report. " +
-  "When the bounded task is complete, return only JSON: {\"outcome\":\"done\",\"sessionSummary\":string,\"acceptanceEvidence\":[{\"criterion\":string,\"satisfied\":boolean,\"evidence\":string,\"assetIds\":string[]}]}. " +
-  "When a creative-director decision is required, return only JSON: {\"outcome\":\"question\",\"question\":string,\"options\":[{\"id\":string,\"label\":string,\"tradeoff\":string}]}.";
+import { AUDIO_AGENT_SYSTEM_PROMPT } from "./audio-agent";
 
 export interface AgentDefinition {
   role: AgentRole;
@@ -100,11 +94,14 @@ export async function resolveAgentDefinition(
           role,
           toOrchestratorRegistry(createVisualsToolRegistry(input.registryDeps, task))
         )
-      : assertDomainRegistry(role, toOrchestratorRegistry(createAudioToolRegistry(input.registryDeps)));
+      : assertDomainRegistry(
+          role,
+          toOrchestratorRegistry(createAudioToolRegistry(input.registryDeps, { task }))
+        );
   return {
     role,
     registry,
-    systemPrompt: role === "visuals" ? VISUALS_SYSTEM_PROMPT : AUDIO_SYSTEM_PROMPT,
+    systemPrompt: role === "visuals" ? VISUALS_SYSTEM_PROMPT : AUDIO_AGENT_SYSTEM_PROMPT,
     task,
     loadTurnContext: () =>
       loadDomainTurnProjection({
@@ -118,7 +115,7 @@ export async function resolveAgentDefinition(
 export const AGENT_DEFINITION_PROMPTS = {
   creative_director: ORCHESTRATOR_SYSTEM_PROMPT,
   visuals: VISUALS_SYSTEM_PROMPT,
-  audio: AUDIO_SYSTEM_PROMPT,
+  audio: AUDIO_AGENT_SYSTEM_PROMPT,
 } as const;
 
 type CompletionObject = Record<string, unknown>;
@@ -148,29 +145,77 @@ interface OutputAssetRow {
   role: string | null;
 }
 
-async function validatedOutputs(input: {
-  projectId: string;
-  task: DomainTaskV1;
-  actions: readonly RunActionSummary[];
-}): Promise<Array<{ assetId: string; intrinsicRole: string; kind: string }>> {
-  const ids = actionOutputIds(input.actions);
-  if (ids.length === 0) throw new Error("Domain done completion requires outputs created by this run.");
-  const rows = await runQuery(
+async function loadOutputAssetRows(
+  projectId: string,
+  candidateIds: readonly string[]
+): Promise<OutputAssetRow[]> {
+  return await runQuery(
     "agentDefinition.validatedOutputs",
     getServiceSupabase()
       .from("assets")
       .select("id, project_id, kind, role")
-      .eq("project_id", input.projectId)
-      .in("id", ids)
+      .eq("project_id", projectId)
+      .in("id", candidateIds)
   ) as OutputAssetRow[];
-  if (rows.length !== ids.length || rows.some((row) => row.project_id !== input.projectId)) {
+}
+
+async function validatedOutputs(input: {
+  projectId: string;
+  task: DomainTaskV1;
+  actions: readonly RunActionSummary[];
+  requestedOutputIds?: readonly string[];
+  loadOutputRows?: (
+    projectId: string,
+    candidateIds: readonly string[]
+  ) => Promise<OutputAssetRow[]>;
+}): Promise<Array<{ assetId: string; intrinsicRole: string; kind: string }>> {
+  const actionIds = actionOutputIds(input.actions);
+  const requestedIds = input.requestedOutputIds
+    ? [...new Set(input.requestedOutputIds)]
+    : undefined;
+  const candidateIds = [...new Set([...(requestedIds ?? []), ...actionIds])];
+  if (candidateIds.length === 0) {
+    throw new Error("Domain done completion requires a primary output.");
+  }
+  const rows = await (input.loadOutputRows ?? loadOutputAssetRows)(
+    input.projectId,
+    candidateIds
+  );
+  if (
+    rows.length !== candidateIds.length ||
+    rows.some((row) => row.project_id !== input.projectId)
+  ) {
     throw new Error("Domain completion referenced an output outside its project.");
   }
   const allowed = new Set<string>(input.task.allowedOutputKinds);
+  const ids = requestedIds ?? actionIds.filter((id) => {
+    const row = rows.find((candidate) => candidate.id === id);
+    return Boolean(row && allowed.has(row.kind));
+  });
+  const created = new Set(actionIds);
+  const fitTargetIds = new Set(
+    input.task.domain === "audio" && input.task.taskKind === "audio_fit"
+      ? [
+          ...input.task.targets.flatMap((target) =>
+            target.kind === "asset" ? [target.assetId] : []
+          ),
+          ...input.task.preserve.assetIds,
+          ...input.task.preserve.selections.map((selection) => selection.activeAssetId),
+          ...input.task.preserve.pins.flatMap((pin) =>
+            pin.kind === "asset" ? [pin.id] : []
+          ),
+        ]
+      : []
+  );
   const outputs = ids.map((id) => {
     const row = rows.find((candidate) => candidate.id === id);
     if (!row || !allowed.has(row.kind)) {
       throw new Error(`Domain completion output ${id} is not an allowed task output.`);
+    }
+    if (!created.has(id) && !fitTargetIds.has(id)) {
+      throw new Error(
+        `Domain completion output ${id} was neither created by this run nor authorized as its fit target.`
+      );
     }
     const required = input.task.requiredOutputs.find((candidate) => candidate.kind === row.kind);
     return { assetId: id, intrinsicRole: row.role ?? required?.role ?? row.kind, kind: row.kind };
@@ -221,6 +266,54 @@ function questionFingerprint(runId: string, question: string, options: unknown):
     .digest("hex");
 }
 
+function failedAudioFitRequiresQuestion(
+  task: DomainTaskV1,
+  actions: readonly RunActionSummary[]
+): boolean {
+  if (task.domain !== "audio" || task.taskKind !== "audio_fit") return false;
+  return actions.some((action) => {
+    if (action.tool !== "fit_audio_to_picture" || action.status !== "applied") {
+      return false;
+    }
+    const result = action.params.result;
+    return (
+      typeof result === "object" &&
+      result !== null &&
+      (result as { verdict?: unknown }).verdict === "fail"
+    );
+  });
+}
+
+function audioFitQuestion(input: {
+  runId: string;
+  task: DomainTaskV1;
+}): DomainReportV1 {
+  const question =
+    "The current picture is too short for the exact spoken words. Should the picture timing or the spoken meaning change?";
+  const options = [
+    {
+      id: "revise_picture",
+      label: "Revise picture timing",
+      tradeoff: "Preserves the approved words but requires a visual/timing change.",
+    },
+    {
+      id: "revise_words",
+      label: "Revise spoken meaning",
+      tradeoff: "Fits the current picture but requires creative-director approval for new words.",
+    },
+  ];
+  return {
+    schemaVersion: "DomainReport.v1",
+    outcome: {
+      outcome: "question",
+      question,
+      targets: input.task.targets.slice(0, 32),
+      options,
+      fingerprint: questionFingerprint(input.runId, question, options),
+    },
+  };
+}
+
 /** Strictly convert the domain model's terminal JSON into the immutable report. */
 export async function buildDomainReportFromCompletion(
   input: {
@@ -229,6 +322,10 @@ export async function buildDomainReportFromCompletion(
     task: DomainTaskV1;
     summary: string;
     actions: readonly RunActionSummary[];
+    loadOutputRows?: (
+      projectId: string,
+      candidateIds: readonly string[]
+    ) => Promise<OutputAssetRow[]>;
   },
   deps: {
     validatedOutputs?: typeof validatedOutputs;
@@ -243,7 +340,23 @@ export async function buildDomainReportFromCompletion(
   const completion = completionObject(parsed);
   const outcome = completion.outcome;
   if (outcome === "done") {
-    const outputs = await (deps.validatedOutputs ?? validatedOutputs)(input);
+    if (failedAudioFitRequiresQuestion(input.task, input.actions)) {
+      return audioFitQuestion(input);
+    }
+    const outputAssetIds =
+      completion.outputAssetIds === undefined
+        ? undefined
+        : Array.isArray(completion.outputAssetIds)
+          ? completion.outputAssetIds.map((id) =>
+              boundedString(id, "outputAssetIds", 128)
+            )
+          : (() => {
+              throw new Error("Domain completion outputAssetIds must be an array.");
+            })();
+    const outputs = await (deps.validatedOutputs ?? validatedOutputs)({
+      ...input,
+      requestedOutputIds: outputAssetIds,
+    });
     return {
       schemaVersion: "DomainReport.v1",
       outcome: {

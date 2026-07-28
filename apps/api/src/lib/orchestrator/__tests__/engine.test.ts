@@ -103,6 +103,7 @@ class FakeStore implements OrchestratorEngineStore {
     actionId: string,
     patch: {
       status: "running" | "applied" | "failed";
+      params?: Record<string, unknown>;
       jobIds?: string[];
       outputAssetIds?: string[];
       error?: Record<string, unknown>;
@@ -111,6 +112,7 @@ class FakeStore implements OrchestratorEngineStore {
     const action = this.actions.find((a) => a.id === actionId);
     if (!action) return;
     action.status = patch.status;
+    if (patch.params) action.params = patch.params;
     if (patch.jobIds) action.jobIds = patch.jobIds;
     if (patch.outputAssetIds) action.outputAssetIds = patch.outputAssetIds;
     if (patch.error) action.error = patch.error;
@@ -256,6 +258,46 @@ test("drives tool→tool→done and persists one action per executed tool", asyn
       ["plan_shots", "applied"],
     ]
   );
+});
+
+test("persists a fit verdict with its server-owned invocation input", async () => {
+  const store = new FakeStore(runFixture());
+  const { model } = scriptedModel([
+    {
+      type: "tool_call",
+      toolName: "fit_audio_to_picture",
+      input: {
+        audioAssetId: " audio_target ",
+        pictureAssetId: " picture_target ",
+        beatId: " beat_1 ",
+      },
+    },
+    { type: "done" },
+  ]);
+  const registry = fakeRegistry({
+    fit_audio_to_picture: () => ({
+      status: "succeeded",
+      resourceIds: ["fit_critique"],
+      output: { verdict: "fail", requiresApproval: true },
+    }),
+  });
+  registry.get("fit_audio_to_picture")!.prepareInput = (input) => {
+    const value = input as Record<string, string>;
+    return {
+      audioAssetId: value.audioAssetId.trim(),
+      pictureAssetId: value.pictureAssetId.trim(),
+      beatId: value.beatId.trim(),
+    };
+  };
+
+  await runOrchestratorToCompletion("run1", deps(store, model, registry));
+
+  assert.deepEqual(store.actions[0].params, {
+    audioAssetId: "audio_target",
+    pictureAssetId: "picture_target",
+    beatId: "beat_1",
+    result: { verdict: "fail", requiresApproval: true },
+  });
 });
 
 test("injects the server-owned wrapper context into each tool execution", async () => {

@@ -10,8 +10,11 @@ import type { V1Asset } from "@/lib/api/v1/store";
 import type { VideoBrief } from "@/lib/api/v1/schemas";
 import type { GraphAssetInput } from "@/lib/api/v1/asset-graph";
 import type { ShotPlan } from "@popcorn/shared/types";
+import type { AudioTaskKind } from "@popcorn/shared/domain-agent-contract";
+import type { AudioVoiceSettings } from "@popcorn/shared/generative/types";
 
 type AudioProvider = "elevenlabs" | "mock";
+export type AudioContentKind = "narration" | "dialogue" | "music" | "sound_effect";
 
 export interface GenerateAudioJobDeps {
   createGeneratedAsset: typeof realCreateGeneratedAsset;
@@ -101,6 +104,7 @@ function soundtrackPrompt(input: {
 }
 
 function graphInputsForPlan(input: GenerateAudioJobInput): GraphAssetInput[] {
+  if (!input.planAssetId) throw new Error("Production audio requires a plan asset.");
   const graphInputs: GraphAssetInput[] = [
     {
       assetId: input.planAssetId,
@@ -118,6 +122,11 @@ function graphInputsForPlan(input: GenerateAudioJobInput): GraphAssetInput[] {
       position: 1,
       ...(input.briefContentHash ? { contentHash: input.briefContentHash } : {}),
     });
+  }
+  for (const graphInput of input.graphInputs ?? []) {
+    if (!graphInputs.some((candidate) => candidate.assetId === graphInput.assetId)) {
+      graphInputs.push({ ...graphInput, position: graphInputs.length });
+    }
   }
   return graphInputs;
 }
@@ -147,15 +156,82 @@ export interface GenerateAudioJobInput {
   workspaceId: string;
   projectId: string;
   orchestratorRunId?: string;
-  plan: ShotPlan;
-  planAssetId: string;
-  planContentHash: string;
+  sessionClaimGeneration?: number;
+  mode?: "production" | "single_track";
+  taskKind?: AudioTaskKind;
+  plan?: ShotPlan;
+  planAssetId?: string;
+  planContentHash?: string;
   brief?: VideoBrief;
   briefAssetId?: string;
   briefContentHash?: string;
   provider?: AudioProvider;
   voiceId?: string;
   feedback?: string;
+  /** Exact bounded production subset; omitted preserves the legacy whole-plan path. */
+  targetBeatIds?: string[];
+  contentKinds?: AudioContentKind[];
+  /** Additional authorized immutable inputs (script/source/picture/reference). */
+  graphInputs?: GraphAssetInput[];
+  /** Single-track mode never reads a plan or writes a selection. */
+  singleTrack?: {
+    prompt: string;
+    description: string;
+    displayName: string;
+    slug?: string;
+    durationSec: number;
+    audioMode: "speech" | "dialogue" | "sound_effect" | "music";
+    assetRole: string;
+    voiceSettings?: AudioVoiceSettings;
+    dialogueInputs?: Array<{ text: string; voiceId: string }>;
+    forceInstrumental?: boolean;
+    sourceAssetId?: string;
+  };
+}
+
+function contentKinds(input: GenerateAudioJobInput): Set<AudioContentKind> {
+  return new Set(input.contentKinds ?? ["narration", "dialogue", "music", "sound_effect"]);
+}
+
+async function runSingleTrack(
+  input: GenerateAudioJobInput,
+  deps: GenerateAudioJobDeps
+): Promise<string[]> {
+  const track = input.singleTrack;
+  if (!track) throw new Error("Single-track audio generation is missing its trusted request.");
+  const result = await deps.createGeneratedAsset({
+    auth: localAuth(input.workspaceId),
+    projectId: input.projectId,
+    body: {
+      kind: "audio",
+      ...(input.provider ? { provider: input.provider } : {}),
+      prompt: track.prompt,
+      description: track.description,
+      name: track.displayName,
+      ...(track.slug ? { slug: track.slug } : {}),
+      durationSec: track.durationSec,
+      audioMode: track.audioMode,
+      assetRole: track.assetRole,
+      graphInputs: input.graphInputs ?? [],
+      referenceAssetIds: (input.graphInputs ?? [])
+        .filter((graphInput) => graphInput.role === "reference")
+        .map((graphInput) => graphInput.assetId),
+      ...(track.dialogueInputs ? { dialogueInputs: track.dialogueInputs } : {}),
+      ...(track.forceInstrumental !== undefined
+        ? { forceInstrumental: track.forceInstrumental }
+        : {}),
+      ...(input.voiceId ? { voiceId: input.voiceId } : {}),
+      ...(track.voiceSettings ? { voiceSettings: track.voiceSettings } : {}),
+      ...(input.orchestratorRunId ? { runId: input.orchestratorRunId } : {}),
+      ...(track.sourceAssetId ? { sourceAssetId: track.sourceAssetId } : {}),
+    },
+    ...(input.sessionClaimGeneration !== undefined
+      ? { sessionClaimGeneration: input.sessionClaimGeneration }
+      : {}),
+  });
+  const ids = assetIdsFromResult(result);
+  if (ids.length === 0) throw new Error("Single-track audio generation returned no assets.");
+  return ids;
 }
 
 export async function runGenerateAudioJob(
@@ -167,11 +243,24 @@ export async function runGenerateAudioJob(
   const stopHeartbeat = startDurableJobHeartbeat(jobs, input.jobId);
   try {
     await jobs.setStep(input.jobId, "generating_assets");
+    if (input.mode === "single_track") {
+      const assetIds = await runSingleTrack(input, d);
+      await jobs.succeed(input.jobId, { assetIds });
+      return;
+    }
+    if (!input.plan) throw new Error("Production audio requires an active shot plan.");
+    const plan = input.plan;
     const auth = localAuth(input.workspaceId);
     const assetIds: string[] = [];
     const graphInputs = graphInputsForPlan(input);
+    const selectedKinds = contentKinds(input);
+    const targetedBeats = input.targetBeatIds?.length
+      ? new Set(input.targetBeatIds)
+      : null;
 
-    for (const beat of planBeats(input.plan)) {
+    for (const beat of planBeats(plan)) {
+      if (targetedBeats && !targetedBeats.has(beat.id)) continue;
+      if (!selectedKinds.has("narration") && !selectedKinds.has("dialogue")) continue;
       const existing = await d.getActiveProjectScopedAsset({
         workspaceId: input.workspaceId,
         projectId: input.projectId,
@@ -202,6 +291,9 @@ export async function runGenerateAudioJob(
           ...(input.voiceId ? { voiceId: input.voiceId } : {}),
           ...(input.orchestratorRunId ? { runId: input.orchestratorRunId } : {}),
         },
+        ...(input.sessionClaimGeneration !== undefined
+          ? { sessionClaimGeneration: input.sessionClaimGeneration }
+          : {}),
       });
       const generatedIds = assetIdsFromResult(result);
       if (generatedIds.length === 0) {
@@ -219,32 +311,35 @@ export async function runGenerateAudioJob(
       }
     }
 
-    const soundtrack = await d.getActiveProjectScopedAsset({
+    const soundtrack = selectedKinds.has("music") ? await d.getActiveProjectScopedAsset({
       workspaceId: input.workspaceId,
       projectId: input.projectId,
       slotRole: "soundtrack:main",
       expectedRole: "soundtrack",
-    });
-    if (soundtrack && canReuseSelectedAudio(soundtrack, graphInputs)) {
+    }) : null;
+    if (selectedKinds.has("music") && soundtrack && canReuseSelectedAudio(soundtrack, graphInputs)) {
       assetIds.push(soundtrack.id);
-    } else {
+    } else if (selectedKinds.has("music")) {
       const result = await d.createGeneratedAsset({
         auth,
         projectId: input.projectId,
         body: {
           kind: "audio",
           ...(input.provider ? { provider: input.provider } : {}),
-          prompt: soundtrackPrompt(input),
+          prompt: soundtrackPrompt({ plan, brief: input.brief, feedback: input.feedback }),
           description: "Generated soundtrack",
           name: "Soundtrack",
           slug: "soundtrack-main",
-          durationSec: input.plan.targetLengthSec,
+          durationSec: plan.targetLengthSec,
           audioMode: "music",
           forceInstrumental: true,
           assetRole: "soundtrack",
           graphInputs,
           ...(input.orchestratorRunId ? { runId: input.orchestratorRunId } : {}),
         },
+        ...(input.sessionClaimGeneration !== undefined
+          ? { sessionClaimGeneration: input.sessionClaimGeneration }
+          : {}),
       });
       const generatedIds = assetIdsFromResult(result);
       if (generatedIds.length === 0) {

@@ -8,8 +8,8 @@
 <!-- agent-summary: The creative-director hierarchy and two-level root/domain split remain conditional on the Gate 0 proceed decision. -->
 <!-- agent-summary: The shared contract and API capability catalog are the executable TypeScript sources for this document. -->
 
-> **Status:** Accepted contract with the internal Visuals profile active on the
-> shared finite-run runtime. Persistent Visuals/Audio sessions,
+> **Status:** Accepted contract with the internal Visuals and Audio profiles
+> active on the shared finite-run runtime. Persistent Visuals/Audio sessions,
 > creator-direct work, identities, and task/report semantics are active design
 > constraints for PRs 3–13. The creative-director hierarchy is a conditional
 > proposal until Gate 0 records `proceed`; this document does not amend the
@@ -205,13 +205,20 @@ Role builders make the boundary executable without changing the flat root:
   `generate_video_asset`; the trusted task kind narrows model visibility to one
   standalone tool for `image_create`, `video_create`, or `video_edit`;
   and
-- `audio-registry.ts` exposes only audio generation and picture fitting.
+- `audio-registry.ts` exposes only audio generation and picture fitting. A
+  finite Audio run supplies its trusted `DomainTask.v1`, producing task-bound
+  schemas/descriptions and scope-checked wrappers under those same canonical
+  tool names; the flat default registry remains unchanged.
 
 The three role registries are an exact, disjoint 12/8/2 partition of the
 current 22-tool catalog. The two standalone tools have a specialist-only
 catalog surface and remain absent from `PRODUCTION_TOOL_NAMES`, driver stubs,
 the flat default registry, and root evals. Domain registries contain no root,
 sibling, approval, assembly, or dispatch capability.
+Standalone Audio generation is a task mode over `generate_audio`, not a second
+primitive name. It reuses generated-assets provider/job/storage/action/cost
+execution, creates one pooled `audio_track`, and never fabricates a production
+selection. Creator-direct route construction remains owned by PR 12.
 
 Under the proposed hierarchy, responsibility is:
 
@@ -219,8 +226,15 @@ Under the proposed hierarchy, responsibility is:
 | --- | --- |
 | Creative director, conditional | current brief, story, script, shot and visual-anchor planning; timeline assembly and critique; approval, export, and optional catalog publication; future delegation and batched dispatch after their owning PRs |
 | Visuals | anchor, storyboard, keyframe, clip, immutable pooled image regeneration, pinned content-aware video edit, and standalone pooled image/video generation |
-| Audio | current narration/dialogue/music/sound generation and fitting audio to picture |
+| Audio | exact-script narration/dialogue, production or standalone music/sound generation, immutable delivery revisions, and fitting authorized audio to current picture |
 | Runtime, never model-facing | authorization, session/run claim, enqueue/lease, wait/resume, report acknowledgement, retry, cancellation, gate persistence, cost settlement, provider callback fencing |
+
+Audio production speech never treats model-written tool input as approved copy:
+the current script must resolve the exact requested project or beat segment.
+Picture fitting likewise requires a current planned beat before picture duration
+can refine its window. Immutable audio delivery revisions preserve the source's
+trusted role, provider audio mode, and—when speech or dialogue—the exact spoken
+words at both the generated-assets boundary and the locked lineage-mint RPC.
 
 The conditional creative director retains coherence decisions; it is not only
 a router. It owns cross-modality intent, story and pacing decisions, visual
@@ -241,13 +255,13 @@ strings fail closed. The raw error remains unchanged for audit. Cross-domain
 blocking takes precedence when one error also advertises a local recovery, so
 required root/Audio work cannot disappear into a Visuals retry loop.
 
-Visuals execution is enabled by an explicit role allowlist; Audio remains
-queued until its profile PR. Before an invocation action exists, the engine
-loads a fresh graph snapshot, verifies preserve pins, parses the selected tool
-once, and authorizes its stable IDs against the trusted task scope. The
-canonical parsed value is then reused for persistence, cost estimation, and
-execution. The rich bridge preserves the domain task, scope, snapshot, and
-session claim generation so a stale reclaimed worker cannot regain authority.
+Visuals and Audio execution are enabled by an explicit role allowlist. Before
+an invocation action exists, the engine loads a fresh graph snapshot, verifies
+preserve pins, parses the selected tool once, and authorizes its stable IDs
+against the trusted task scope. The canonical parsed value is then reused for
+persistence, cost estimation, and execution. The rich bridge preserves the
+domain task, scope, snapshot, and session claim generation so a stale reclaimed
+worker cannot regain authority.
 
 Standalone image/video wrappers call the canonical generated-assets job,
 provider, storage, action, cost, content-hash, and embedding path. Provider and
@@ -314,6 +328,19 @@ They may launch deterministic provider jobs through their allowed server-owned
 tools. Provider calls, storage, queueing, rendering, authorization, graph writes,
 and lifecycle transitions remain deterministic worker/runtime responsibilities;
 they are not modeled as agents.
+
+Within Audio, delivery, voice choice, warmth, bounded retiming, mix, and sound
+design are local only while spoken words and meaning remain unchanged.
+Production generations persist the current plan, brief, and script assets they
+actually consume as typed graph inputs. A delivery revision uses an exact
+authorized source asset/transcript, creates the next row in that immutable
+lineage with a `source` edge, and never moves a selection implicitly. Delivery
+presets map to typed provider voice settings rather than adding instructions to
+the spoken text. Revision source, fit audio, fit picture, and fit beat must be
+explicit trusted targets or pins; project-wide read authority is insufficient
+for those operations. Missing current picture returns a typed cross-domain
+prerequisite; a picture window too short for exact words becomes a `question`
+about whether picture or meaning may change.
 
 A future domain is admitted only when a cohesive tool cluster has a distinct
 craft/context boundary and decision-evaluation evidence shows that separating

@@ -298,5 +298,5 @@ export interface StoryBlueprintRecord {
 }
 
 export type UpdateActionPatch = Partial<
-  Pick<V1Action, "status" | "jobIds" | "outputAssetIds" | "error">
+  Pick<V1Action, "status" | "params" | "jobIds" | "outputAssetIds" | "error">
 >;
