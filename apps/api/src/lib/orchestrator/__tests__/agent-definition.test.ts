@@ -9,6 +9,7 @@ import {
   resolveAgentDefinition,
 } from "../agent-definition";
 import type { ToolRegistry } from "../registry";
+import type { AgentDefinition } from "../agent-definition";
 
 const rootRun: OrchestratorRun = {
   id: "root-run",
@@ -85,39 +86,6 @@ test("question completion derives trusted targets and a server fingerprint", asy
   }
 });
 
-test("done completion never attributes a concurrent external selection to the domain run", async () => {
-  const report = await buildDomainReportFromCompletion(
-    {
-      runId: "domain-run",
-      projectId: "project-1",
-      task: visualTask,
-      actions: [],
-      summary: JSON.stringify({
-        outcome: "done",
-        acceptanceEvidence: [
-          {
-            criterion: "Produce one approved clip.",
-            satisfied: true,
-            assetIds: ["clip-output"],
-            evidence: "The pooled clip satisfies the requested visual output.",
-          },
-        ],
-        sessionSummary: "Created one pooled clip.",
-      }),
-    },
-    {
-      validatedOutputs: async () => [
-        { assetId: "clip-output", intrinsicRole: "beat_clip", kind: "clip" },
-      ],
-    }
-  );
-
-  assert.equal(report.outcome.outcome, "done");
-  if (report.outcome.outcome === "done") {
-    assert.deepEqual(report.outcome.changedSelections, []);
-  }
-});
-
 test("disabled domain runtime does not invoke a model or tool", async () => {
   const run = { ...rootRun, id: "visual-run", agentRole: "visuals" as const };
   const store = {
@@ -137,22 +105,65 @@ test("disabled domain runtime does not invoke a model or tool", async () => {
   assert.equal(result.status, "queued");
 });
 
-test("Visuals-only rollout leaves an otherwise identical Audio run queued", async () => {
-  const run = { ...rootRun, id: "audio-run", agentRole: "audio" as const };
+test("manual domain smoke drives a claimed question turn without a provider", async () => {
+  let run: OrchestratorRun = {
+    ...rootRun,
+    id: "claimed-visual-run",
+    status: "queued",
+    agentRole: "visuals" as const,
+  };
   const store = {
     getOrchestratorRun: async () => run,
-    updateOrchestratorRun: async () => assert.fail("Audio must remain queued"),
+    updateOrchestratorRun: async (_id: string, patch: Partial<OrchestratorRun>) => {
+      run = { ...run, ...patch };
+      return run;
+    },
     listRunGates: async () => [],
     markGateReached: async () => null,
     listRunActions: async () => [],
-    recordInvocation: async () => assert.fail("Audio must not record an action"),
-    markInvocation: async () => assert.fail("Audio must not mark an action"),
+    recordInvocation: async () => assert.fail("question smoke must not invoke a tool"),
+    markInvocation: async () => assert.fail("question smoke must not mark a tool"),
   };
+  const definition: AgentDefinition = {
+    role: "visuals",
+    registry: new Map(),
+    systemPrompt: "test",
+    task: visualTask,
+    loadTurnContext: async () => ({ schemaVersion: "DomainTurnProjection.v1" }),
+  };
+  let finalizedGeneration: number | undefined;
   const result = await runOrchestratorToCompletion(run.id, {
     workspaceId: "workspace-1",
     store,
-    enabledDomainRoles: ["visuals"],
-    model: async () => assert.fail("Audio must not call the model"),
+    domainRuntimeEnabled: true,
+    sessionClaimGeneration: 42,
+    resolveOwnerUserId: async () => null,
+    resolveAgentDefinition: async () => definition,
+    model: async () => ({
+      type: "done",
+      summary: JSON.stringify({
+        outcome: "question",
+        question: "Which visual direction should this clip use?",
+        options: [
+          { id: "warm", label: "Warm", tradeoff: "Softer and nostalgic." },
+          { id: "cool", label: "Cool", tradeoff: "Sharper and more distant." },
+        ],
+      }),
+      model: "manual-smoke",
+    }),
+    finalizeDomainTurn: async (input) => {
+      finalizedGeneration = input.expectedClaimGeneration;
+      run = { ...run, status: "succeeded" };
+      return {
+        reportActionId: "report-action",
+        performed: true,
+        recipient: "creative_director",
+        parentRunId: "root-run",
+        wokeParent: true,
+        summaryApplied: true,
+      };
+    },
   });
-  assert.equal(result.status, "queued");
+  assert.equal(finalizedGeneration, 42);
+  assert.equal(result.status, "succeeded");
 });

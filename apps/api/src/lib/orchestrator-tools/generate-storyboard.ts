@@ -7,7 +7,6 @@ import { toolDefinitionMetadata } from "./capability-catalog";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 import { runStoryboardJob as realRunStoryboardJob } from "./storyboard-job";
-import { shotPlanForTargetBeats } from "./visual-targeting";
 
 // generate_storyboard reads the project's persisted plan (the stage→stage handoff
 // through the asset graph) and generates one cheap sketch tile per beat. It is the
@@ -16,8 +15,6 @@ import { shotPlanForTargetBeats } from "./visual-targeting";
 export interface GenerateStoryboardInput {
   /** Optional instruction to revise an existing storyboard. */
   feedback?: string;
-  /** Server-derived domain scope; never model-authored. */
-  targetBeatIds?: string[];
 }
 
 export interface GenerateStoryboardOutput {
@@ -133,16 +130,14 @@ export function createGenerateStoryboardTool(
       if (!active) {
         return planRequired();
       }
-      const plan = shotPlanForTargetBeats(active.plan, _input.targetBeatIds);
-      if (context.domainTask && plan.scenes.length === 0) {
-        throw new ToolInputError("No planned beats intersect the trusted task targets.");
-      }
 
       const { job, created } = await resolved.createJob({
         workspaceId: context.auth.workspaceId,
         type: "asset_generation",
         projectId: context.projectId,
-        sessionClaimGeneration: context.sessionClaimGeneration,
+        ...(context.sessionClaimGeneration !== undefined
+          ? { sessionClaimGeneration: context.sessionClaimGeneration }
+          : {}),
         ...(context.actionId
           ? { actionId: context.actionId, idempotencyKey: `action:${context.actionId}` }
           : {}),
@@ -153,7 +148,7 @@ export function createGenerateStoryboardTool(
             workspaceId: context.auth.workspaceId,
             projectId: context.projectId,
             ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
-            plan,
+            plan: active.plan,
             planAssetId: active.assetId,
             planContentHash: active.contentHash,
           },
@@ -168,7 +163,7 @@ export function createGenerateStoryboardTool(
           workspaceId: context.auth.workspaceId,
           projectId: context.projectId,
           ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
-          plan,
+          plan: active.plan,
           planAssetId: active.assetId,
           planContentHash: active.contentHash,
         });

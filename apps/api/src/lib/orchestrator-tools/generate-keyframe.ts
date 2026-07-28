@@ -17,18 +17,12 @@ import {
   firstUsableStoryboardForPlan,
   storyboardHandoffIssues,
 } from "./storyboard-keyframe-handoff";
-import {
-  shotPlanForTargetBeats,
-  storyboardForTargetBeats,
-} from "./visual-targeting";
 
 type KeyframeImageProvider = "openai" | "ideogram" | "gemini" | "xai" | "mock";
 
 export interface GenerateKeyframeInput {
   provider?: KeyframeImageProvider;
   feedback?: string;
-  /** Server-derived domain scope; never model-authored. */
-  targetBeatIds?: string[];
 }
 
 export interface GenerateKeyframeOutput {
@@ -258,20 +252,14 @@ export function createGenerateKeyframeTool(
         });
         return storyboardRequired();
       }
-      const plan = shotPlanForTargetBeats(active.plan, input.targetBeatIds);
-      const scopedStoryboard = storyboardForTargetBeats(
-        storyboard,
-        input.targetBeatIds
-      );
-      if (context.domainTask && plan.scenes.length === 0) {
-        throw new ToolInputError("No planned beats intersect the trusted task targets.");
-      }
 
       const { job, created } = await resolved.createJob({
         workspaceId: context.auth.workspaceId,
         type: "asset_generation",
         projectId: context.projectId,
-        sessionClaimGeneration: context.sessionClaimGeneration,
+        ...(context.sessionClaimGeneration !== undefined
+          ? { sessionClaimGeneration: context.sessionClaimGeneration }
+          : {}),
         ...(context.actionId
           ? { actionId: context.actionId, idempotencyKey: `action:${context.actionId}` }
           : {}),
@@ -282,10 +270,10 @@ export function createGenerateKeyframeTool(
             workspaceId: context.auth.workspaceId,
             projectId: context.projectId,
             ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
-            plan,
+            plan: active.plan,
             planAssetId: active.assetId,
             planContentHash: active.contentHash,
-            storyboard: scopedStoryboard,
+            storyboard,
             ...(input.provider ? { provider: input.provider } : {}),
           },
         },
@@ -298,8 +286,8 @@ export function createGenerateKeyframeTool(
         planAssetId: active.assetId,
         storyboardId: storyboard.id,
         sceneCount: storyboard.scenes.length,
-        beatCount: scopedStoryboard.scenes.reduce((count, scene) => count + scene.beats.length, 0),
-        panelCount: scopedStoryboard.scenes.reduce(
+        beatCount: storyboard.scenes.reduce((count, scene) => count + scene.beats.length, 0),
+        panelCount: storyboard.scenes.reduce(
           (count, scene) =>
             count + scene.beats.reduce((beatCount, beat) => beatCount + beat.panels.length, 0),
           0
@@ -312,13 +300,10 @@ export function createGenerateKeyframeTool(
           workspaceId: context.auth.workspaceId,
           projectId: context.projectId,
           ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
-          ...(context.sessionClaimGeneration !== undefined
-            ? { sessionClaimGeneration: context.sessionClaimGeneration }
-            : {}),
-          plan,
+          plan: active.plan,
           planAssetId: active.assetId,
           planContentHash: active.contentHash,
-          storyboard: scopedStoryboard,
+          storyboard,
           ...(input.provider ? { provider: input.provider } : {}),
         });
       }

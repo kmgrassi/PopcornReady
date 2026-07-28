@@ -250,7 +250,7 @@ export function createEditVideoAssetTool(
       ],
       produces: [
         "A new video asset with graph input role edited_from pointing to the source asset.",
-        "A pooled immutable output; active selections remain unchanged.",
+        "Any active project selection that referenced the source asset is moved to the edited asset.",
       ],
       useWhen: [
         "The user asks to change existing footage or a generated clip by adding, removing, replacing, restyling, or modifying content inside that video.",
@@ -311,7 +311,9 @@ export function createEditVideoAssetTool(
         workspaceId: context.auth.workspaceId,
         type: "asset_generation",
         projectId: context.projectId,
-        sessionClaimGeneration: context.sessionClaimGeneration,
+        ...(context.sessionClaimGeneration !== undefined
+          ? { sessionClaimGeneration: context.sessionClaimGeneration }
+          : {}),
         ...(context.actionId
           ? { actionId: context.actionId, idempotencyKey: `action:${context.actionId}` }
           : { idempotencyKey: idempotencyKey(input, source) }),
@@ -352,9 +354,6 @@ export function createEditVideoAssetTool(
           ...(input.provider ? { provider: input.provider } : {}),
           ...(input.model ? { model: input.model } : {}),
           ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
-          ...(context.sessionClaimGeneration !== undefined
-            ? { sessionClaimGeneration: context.sessionClaimGeneration }
-            : {}),
         });
       } else {
         const terminal = terminalJobResult(job);

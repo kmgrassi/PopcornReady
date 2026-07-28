@@ -25,6 +25,7 @@ test("finite-run budget admission serializes a root family and is replay-safe", 
   assert.match(migration, /budget settlement exceeds reserved maximum/);
   assert.match(migration, /apply_credit_transaction\(/);
   assert.match(migration, /budget-settlement-credit:/);
+  assert.match(migration, /record_orchestrator_budget_billing/);
   assert.match(migration, /budget_settlement_replay_mismatch/);
   assert.match(migration, /spent_usd = spent_usd \+ p_actual_usd/);
   assert.match(migration, /orchestrator_run_family_budget_projection/);
@@ -52,6 +53,10 @@ test("cancellation stays causal and recovery identifies only durable repair stat
   assert.match(migration, /orchestrator_runtime_recovery_projection/);
   assert.match(migration, /recover_orchestrator_runtime_controls/);
   assert.match(migration, /terminal_job_without_recorded_cost/);
+  assert.match(migration, /delegation\.status in \('proposed', 'running'\)/);
+  assert.match(migration, /Win the action CAS before waking/);
+  assert.match(migration, /if v_rows > 0 then\s+perform public\.wake_orchestrator_dispatch\(v_parent\.run_id\)/);
+  assert.match(migration, /continuation family budget exhausted/);
   assert.match(migration, /unacknowledged_domain_wait/);
   assert.match(migration, /parent_wakes integer/);
 });
