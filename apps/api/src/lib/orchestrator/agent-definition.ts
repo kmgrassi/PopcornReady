@@ -271,6 +271,54 @@ function questionFingerprint(runId: string, question: string, options: unknown):
     .digest("hex");
 }
 
+function failedAudioFitRequiresQuestion(
+  task: DomainTaskV1,
+  actions: readonly RunActionSummary[]
+): boolean {
+  if (task.domain !== "audio" || task.taskKind !== "audio_fit") return false;
+  return actions.some((action) => {
+    if (action.tool !== "fit_audio_to_picture" || action.status !== "applied") {
+      return false;
+    }
+    const result = action.params.result;
+    return (
+      typeof result === "object" &&
+      result !== null &&
+      (result as { verdict?: unknown }).verdict === "fail"
+    );
+  });
+}
+
+function audioFitQuestion(input: {
+  runId: string;
+  task: DomainTaskV1;
+}): DomainReportV1 {
+  const question =
+    "The current picture is too short for the exact spoken words. Should the picture timing or the spoken meaning change?";
+  const options = [
+    {
+      id: "revise_picture",
+      label: "Revise picture timing",
+      tradeoff: "Preserves the approved words but requires a visual/timing change.",
+    },
+    {
+      id: "revise_words",
+      label: "Revise spoken meaning",
+      tradeoff: "Fits the current picture but requires creative-director approval for new words.",
+    },
+  ];
+  return {
+    schemaVersion: "DomainReport.v1",
+    outcome: {
+      outcome: "question",
+      question,
+      targets: input.task.targets.slice(0, 32),
+      options,
+      fingerprint: questionFingerprint(input.runId, question, options),
+    },
+  };
+}
+
 /** Strictly convert the domain model's terminal JSON into the immutable report. */
 export async function buildDomainReportFromCompletion(input: {
   runId: string;
@@ -292,6 +340,9 @@ export async function buildDomainReportFromCompletion(input: {
   const completion = completionObject(parsed);
   const outcome = completion.outcome;
   if (outcome === "done") {
+    if (failedAudioFitRequiresQuestion(input.task, input.actions)) {
+      return audioFitQuestion(input);
+    }
     const outputAssetIds =
       completion.outputAssetIds === undefined
         ? undefined

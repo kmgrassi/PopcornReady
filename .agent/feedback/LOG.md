@@ -237,3 +237,9 @@
 - Friction or failure: The local Supabase CLI reported a running stack while its Postgres socket timed out, so the migration and same-lineage integration tests could not execute locally.
 - Suggested improvement: Keep every provider-backed revision's source/readiness checks before preflight or spend, and require tests with at least two scenes whenever a supposedly targeted media tool consumes script or plan content.
 - Follow-up: PR 12 must derive exact creator-direct Audio targets and prove root/direct successor runs reuse one serialized Audio session; rerun the Supabase-gated revision test when the local database accepts connections.
+
+### 2026-07-28T11:30:00-04:00 — API-20260727-PR11
+- What helped: An independent handoff review checked negative terminal paths instead of only the profile's happy-path tool calls.
+- Friction or failure: The initial implementation trusted standalone model-supplied spoken text and allowed an impossible fit verdict to be reported as done with an existing target.
+- Suggested improvement: Treat immutable spoken words and impossible exact-word timing as terminal contract boundaries, with deterministic regression tests around the report builder and engine persistence.
+- Follow-up: PR 12 can add a creator-direct immutable spoken-text request shape; until then direct audio creation remains music/sound-only.

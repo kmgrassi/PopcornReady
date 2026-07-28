@@ -380,6 +380,25 @@ test("standalone soundtrack creates one no-plan, unselected single-track job", a
   assert.equal("selection" in track, false);
 });
 
+test("standalone audio rejects model-authored narration before creating a job", async () => {
+  const harness = generationHarness(audioTask("audio_create"));
+  const result = await harness.registry.execute(
+    "generate_audio",
+    {
+      target: { kind: "project", projectId, contentKind: "narration" },
+      spokenText: "Words from the model must not become a standalone voiceover.",
+      provider: "mock",
+    },
+    { auth, projectId, orchestratorRunId: "run_1", actionId: "outer_action" }
+  );
+  assert.equal(result.status, "failed");
+  if (result.status === "failed") {
+    assert.equal(result.error.kind, "precondition_unmet");
+    assert.match(result.error.message, /immutable script-backed spoken text/);
+  }
+  assert.equal(harness.jobCreates, 0);
+});
+
 test("production narration uses exact pinned script copy, not beat intent or model paraphrase", async () => {
   const harness = generationHarness(audioTask("audio_production"));
   await harness.registry.execute(

@@ -713,6 +713,22 @@ export function createAudioDomainGenerateTool(
         task.allowedOutputKinds
       );
 
+      if (
+        task.taskKind === "audio_create" &&
+        (input.target.contentKind === "narration" ||
+          input.target.contentKind === "dialogue")
+      ) {
+        return {
+          status: "failed",
+          error: {
+            kind: "precondition_unmet",
+            message:
+              "Standalone narration or dialogue requires immutable script-backed spoken text; request a creative decision instead of supplying model-authored words.",
+            recoverable: true,
+          },
+        };
+      }
+
       const scripted = exactScriptText({
         target: input.target,
         script,

@@ -154,6 +154,41 @@ test("audio fit completion may report its exact existing audio target and ignore
   }
 });
 
+test("a failed Audio fit becomes a typed creative question even when the model says done", async () => {
+  const report = await buildDomainReportFromCompletion({
+    runId: "audio-run",
+    projectId: "project-1",
+    task: audioFitTask,
+    actions: [
+      {
+        id: "action-1",
+        tool: "fit_audio_to_picture",
+        status: "applied",
+        params: {
+          audioAssetId: "audio_target",
+          pictureAssetId: "picture_target",
+          beatId: "beat_1",
+          result: { verdict: "fail", requiresApproval: true },
+        },
+        outputAssetIds: ["fit_critique"],
+        jobIds: [],
+        createdAt: "2026-07-27T00:00:00.000Z",
+      },
+    ],
+    summary: JSON.stringify({ outcome: "done" }),
+    loadOutputRows: outputRows,
+  });
+
+  assert.equal(report.outcome.outcome, "question");
+  if (report.outcome.outcome === "question") {
+    assert.match(report.outcome.question, /picture is too short/);
+    assert.deepEqual(report.outcome.options.map((option) => option.id), [
+      "revise_picture",
+      "revise_words",
+    ]);
+  }
+});
+
 test("audio fit completion rejects an arbitrary existing audio asset", async () => {
   await assert.rejects(
     buildDomainReportFromCompletion({
