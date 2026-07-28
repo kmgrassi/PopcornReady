@@ -23,6 +23,14 @@ import { providerFor } from "@/lib/generative/providers";
 import { estimateCostUsd } from "@/lib/generative/pricing";
 import { recordModelCallCost } from "./model-call-costs";
 import {
+  releaseOrchestratorBudget,
+  recordOrchestratorBudgetBilling,
+  reserveOrchestratorBudget,
+  settleOrchestratorBudget,
+} from "./orchestrator-budget-controls";
+import {
+  billableUsdSoFar,
+  currentRunUserId,
   noteBillableGeneration,
   type KeyProvider,
 } from "@/lib/provider-keys/resolve";
@@ -50,7 +58,6 @@ import {
   claimProviderJobExecution,
   completeProviderJobExecution,
   createJob,
-  assertRunBudgetAllows,
   createAction,
   effectiveAssetStorageVisibility,
   getAssetFingerprintPins,
@@ -953,6 +960,10 @@ export async function runGeneratedAssetJob(args: {
   let item: RunStageItemHandle | null = null;
   let parsed: ParsedRequest | null = null;
   let estimatedCostUsd = 0;
+  const budgetReservationKey = `generated-asset:${running.id}`;
+  let budgetReserved = false;
+  let modelCostRecorded = false;
+  const billableBeforeUsd = billableUsdSoFar();
 
   try {
     if (!running.actionId) {
@@ -1019,11 +1030,18 @@ export async function runGeneratedAssetJob(args: {
       projectId,
       parsed.referenceAssetIds
     );
-    await assertRunBudgetAllows({
-      runId: parsed.runId,
+    // The job/action were preallocated when the durable request was accepted.
+    // Reserve against the root-family ceiling before any provider call can
+    // begin; concurrent finite children serialize inside the RPC.
+    const budgetReservation = await reserveOrchestratorBudget({
       projectId,
-      additionalCostUsd: estimatedCostUsd,
+      runId: parsed.runId,
+      actionId: running.actionId,
+      jobId: running.id,
+      reservationKey: budgetReservationKey,
+      estimatedUsd: estimatedCostUsd,
     });
+    budgetReserved = budgetReservation !== null;
     action = await createAction({
       id: running.actionId,
       projectId,
@@ -1068,7 +1086,9 @@ export async function runGeneratedAssetJob(args: {
         unit: parsed.kind === "image" ? "images" : "seconds",
         quantity: parsed.kind === "image" ? 1 : parsed.durationSec ?? 0,
         costUsd: estimatedCostUsd,
+        idempotencyKey: budgetReservationKey,
       });
+      modelCostRecorded = true;
     }
 
     // Bind a stage item to this asset so the progress UI can show a per-asset
@@ -1089,6 +1109,16 @@ export async function runGeneratedAssetJob(args: {
     if (progress) await progress.attachJob(running.id);
 
     const asset = await runGeneration(auth, projectId, parsed, item, action);
+    const billableUsd = Math.max(0, billableUsdSoFar() - billableBeforeUsd);
+    const billingUserId = currentRunUserId();
+    if (budgetReserved && billingUserId) {
+      await recordOrchestratorBudgetBilling({
+        projectId,
+        reservationKey: budgetReservationKey,
+        billingUserId,
+        billableUsd,
+      });
+    }
     const finished = await completeProviderJobExecution({
       workspaceId: auth.workspaceId,
       projectId,
@@ -1101,6 +1131,29 @@ export async function runGeneratedAssetJob(args: {
       actionOutputAssetIds: [asset.id],
     });
     if (!finished) return getJob(auth.workspaceId, projectId, running.id).then(asGeneratedAssetJob);
+    if (budgetReserved) {
+      // The accepted request's deterministic provider estimate is the current
+      // settlement value. This replay-safe transition ensures an admitted
+      // operation never holds family headroom forever.
+      try {
+        await settleOrchestratorBudget({
+          projectId,
+          reservationKey: budgetReservationKey,
+          actualUsd: estimatedCostUsd,
+          billingUserId: billingUserId ?? undefined,
+          billableUsd,
+        });
+      } catch (settlementError) {
+        // Do not rewrite a completed provider job as failed because an
+        // accounting retry is needed; the recovery sweep can settle this
+        // durable reservation by its stable action/job identity.
+        logger.error("generated_asset.budget_settlement_failed", {
+          projectId,
+          jobId: running.id,
+          error: { message: settlementError instanceof Error ? settlementError.message : String(settlementError) },
+        });
+      }
+    }
     if (item) {
       await item.succeed({
         assetId: asset.id,
@@ -1109,6 +1162,41 @@ export async function runGeneratedAssetJob(args: {
     }
     return asGeneratedAssetJob(finished);
   } catch (err) {
+    if (budgetReserved) {
+      try {
+        if (modelCostRecorded) {
+          const billingUserId = currentRunUserId();
+          const billableUsd = Math.max(0, billableUsdSoFar() - billableBeforeUsd);
+          if (billingUserId) {
+            await recordOrchestratorBudgetBilling({
+              projectId,
+              reservationKey: budgetReservationKey,
+              billingUserId,
+              billableUsd,
+            });
+          }
+          await settleOrchestratorBudget({
+            projectId,
+            reservationKey: budgetReservationKey,
+            actualUsd: estimatedCostUsd,
+            billingUserId: billingUserId ?? undefined,
+            billableUsd,
+          });
+        } else {
+          await releaseOrchestratorBudget({
+            projectId,
+            reservationKey: budgetReservationKey,
+            reason: "pre_provider_failure",
+          });
+        }
+      } catch (releaseError) {
+        logger.error("generated_asset.budget_release_failed", {
+          projectId,
+          jobId: running.id,
+          error: { message: releaseError instanceof Error ? releaseError.message : String(releaseError) },
+        });
+      }
+    }
     const apiErr =
       err instanceof ApiError
         ? err

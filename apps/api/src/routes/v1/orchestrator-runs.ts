@@ -6,6 +6,7 @@ import type { HandlerCtx } from "@/lib/api/v1/handler";
 import { runIdempotent } from "@/lib/api/v1/idempotency";
 import {
   clearProjectSelections,
+  cancelOrchestratorRunFamily,
   createPendingApprovalGate,
   createReachedApprovalGate,
   createOrchestratorRun,
@@ -697,8 +698,8 @@ orchestratorRunsRouter.post(
     const projectId = requireParam(params, "projectId");
     const runId = requireParam(params, "runId");
     await requireProjectAccess(auth.workspaceId, projectId);
-    const run = await requireProjectRun(runId, projectId);
-    await stopAfterCurrentStep(run);
+    await requireProjectRun(runId, projectId);
+    await cancelOrchestratorRunFamily({ projectId, runId });
     return { status: 200, body: await assembleRunDetail(runId, auth.workspaceId, projectId) };
   })
 );
