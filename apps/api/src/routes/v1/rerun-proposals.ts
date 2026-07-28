@@ -4,6 +4,7 @@ import { ApiError } from "@/core/errors";
 import { createRerunProposal } from "@/lib/orchestrator/rerun-proposal-service";
 
 export const rerunProposalsRouter = Router();
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function required(params: Record<string, string | undefined>, name: string) {
   const value = params[name];
@@ -22,7 +23,8 @@ rerunProposalsRouter.post("/projects/:projectId/rerun-proposals", mutation(async
     throw new ApiError("validation_failed", "rootRunId must be a string.");
   }
   const rootRunId = typeof input.rootRunId === "string" ? input.rootRunId.trim() : undefined;
-  if (!assetId || !message || message.length > 4_000) throw new ApiError("validation_failed", "assetId and a message of at most 4000 characters are required.");
+  if (!UUID_PATTERN.test(assetId)) throw new ApiError("validation_failed", "assetId must be a UUID.");
+  if (!message || message.length > 4_000) throw new ApiError("validation_failed", "message must be between 1 and 4000 characters.");
   const result = await createRerunProposal({
     workspaceId: auth.workspaceId,
     projectId: required(params, "projectId"),

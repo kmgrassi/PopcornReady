@@ -4,6 +4,7 @@ import { createAction, getStaleCandidates, listAssetSelectionRefs } from "@/lib/
 import { getOrchestratorRun } from "@/lib/api/v1/orchestrator-store";
 
 const RERUN_PROPOSAL_TOOL = "rerun_proposal";
+const IMAGE_GRAPH_KINDS = new Set(["image", "keyframe", "anchor"]);
 
 export interface RerunProposalServiceDeps {
   getStaleCandidates: typeof getStaleCandidates;
@@ -38,7 +39,7 @@ export async function createRerunProposal(input: {
     input.workspaceId, input.projectId, graph.changedAsset.assetId
   );
   const candidates = [graph.changedAsset, ...graph.candidates];
-  const executable = graph.changedAsset.kind === "image";
+  const executable = IMAGE_GRAPH_KINDS.has(graph.changedAsset.kind);
   const selectedAssetIds = executable ? [graph.changedAsset.assetId] : [];
   const unavailableKinds = executable ? [] : [graph.changedAsset.kind];
   const proposal: RerunProposalV1 = {

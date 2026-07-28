@@ -52,3 +52,15 @@ test("does not claim an execution path for a kind without immutable coverage", a
   assert.deepEqual(result.proposal.unavailableKinds, ["audio_track"]);
   assert.deepEqual(result.proposal.selectedAssetIds, []);
 });
+
+test("treats graph keyframes and anchors as immutable image coverage", async () => {
+  for (const kind of ["keyframe", "anchor"]) {
+    const result = await createRerunProposal({ workspaceId: "workspace-1", projectId: "project-1", assetId: `${kind}-1`, message: "warmer" }, {
+      getStaleCandidates: async () => ({ changedAsset: { assetId: `${kind}-1`, ref: null, kind, contentHash: "hash" }, candidates: [] }),
+      listAssetSelectionRefs: async () => [],
+      createAction: async () => ({ id: `proposal-${kind}` } as never),
+    });
+    assert.equal(result.proposal.hasImmutableRegenerationCoverage, true);
+    assert.deepEqual(result.proposal.selectedAssetIds, [`${kind}-1`]);
+  }
+});
