@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { OrchestratorRun } from "@/lib/api/v1/orchestrator-store";
 import {
+  creativeDirectorRuntimeOptions,
   isOrchestratorRecoveryEnabled,
   orchestratorRecoveryIntervalMs,
   orchestratorTickBackoffMs,
@@ -109,6 +110,14 @@ test("recovery is enabled by default and has a safe lower interval bound", () =>
   assert.equal(isOrchestratorRecoveryEnabled({}), true);
   assert.equal(isOrchestratorRecoveryEnabled({ ORCHESTRATOR_RECOVERY_ENABLED: "false" }), false);
   assert.equal(orchestratorRecoveryIntervalMs({ ORCHESTRATOR_RECOVERY_INTERVAL_MS: "10" }), 1_000);
+});
+
+test("hierarchy recovery selects the root profile without narrowing active domain roles", () => {
+  assert.deepEqual(creativeDirectorRuntimeOptions({}), { creativeDirectorHierarchyEnabled: false });
+  assert.deepEqual(
+    creativeDirectorRuntimeOptions({ POPCORN_CREATIVE_DIRECTOR_HIERARCHY: "on" }),
+    { creativeDirectorHierarchyEnabled: true }
+  );
 });
 
 test("failed ticks back off exponentially and cap at 30s", () => {

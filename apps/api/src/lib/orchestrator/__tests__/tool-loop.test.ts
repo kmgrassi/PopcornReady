@@ -8,6 +8,7 @@ import {
   runToolLoopTurn,
   ToolExecutionContext,
 } from "../index";
+import { isCreativeDirectorHierarchyEnabled } from "../feature-flag";
 
 function runFixture(patch: Partial<OrchestratorRun> = {}): OrchestratorRun {
   return {
@@ -29,6 +30,14 @@ test("tool-loop feature flag is opt-in", () => {
   assert.equal(
     isOrchestratorToolLoopEnabled({ POPCORN_ORCHESTRATOR_TOOL_LOOP: "0" }),
     false
+  );
+});
+
+test("creative-director hierarchy flag is opt-in", () => {
+  assert.equal(isCreativeDirectorHierarchyEnabled({}), false);
+  assert.equal(
+    isCreativeDirectorHierarchyEnabled({ POPCORN_CREATIVE_DIRECTOR_HIERARCHY: "true" }),
+    true
   );
 });
 

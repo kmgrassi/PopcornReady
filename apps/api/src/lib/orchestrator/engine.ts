@@ -76,6 +76,7 @@ import {
   type DomainTargetScope,
 } from "@/lib/orchestrator-context/target-scope";
 import { prepareRegisteredTool } from "./registry";
+import { isCreativeDirectorHierarchyEnabled } from "./feature-flag";
 
 // Credits charged per generation = providerCostUsd * MARGIN, at 1 credit = $0.01.
 const CREDIT_MARGIN = 2;
@@ -182,6 +183,8 @@ export interface EngineDeps {
   enabledDomainRoles?: readonly AgentDomain[];
   /** Runtime controls require an explicit claimed-domain execution opt-in. */
   domainRuntimeEnabled?: boolean;
+  /** Override the environment rollout fence in deterministic tests/callers. */
+  creativeDirectorHierarchyEnabled?: boolean;
   /** Durable session claim generation carried by a claimed domain dispatch. */
   sessionClaimGeneration?: number;
   /** Domain transport seams keep deterministic local smoke tests provider-free. */
@@ -311,6 +314,8 @@ function resolved(deps: EngineDeps) {
     applyCreditTransaction: deps.applyCreditTransaction ?? applyCreditTransaction,
     enabledDomainRoles: deps.enabledDomainRoles ?? [],
     domainRuntimeEnabled: deps.domainRuntimeEnabled ?? false,
+    creativeDirectorHierarchyEnabled:
+      deps.creativeDirectorHierarchyEnabled ?? isCreativeDirectorHierarchyEnabled(),
     sessionClaimGeneration: deps.sessionClaimGeneration,
     finalizeDomainTurn: deps.finalizeDomainTurn ?? finalizeDomainTurn,
     failDomainRunTurn: deps.failDomainRunTurn ?? failDomainRunTurn,
@@ -792,8 +797,11 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
     const definition = await r.resolveAgentDefinition({
       run,
       workspaceId: r.workspaceId,
-      rootRegistry: r.registry,
+      // The hierarchy owns an exact root surface. A caller-supplied flat test
+      // registry must not accidentally reintroduce leaf tools when the flag is on.
+      rootRegistry: r.creativeDirectorHierarchyEnabled ? undefined : r.registry,
       enabledDomainRoles: r.enabledDomainRoles,
+      creativeDirectorHierarchyEnabled: r.creativeDirectorHierarchyEnabled,
     });
 
     if (run.budgetUsd != null && run.spentUsd >= run.budgetUsd) {

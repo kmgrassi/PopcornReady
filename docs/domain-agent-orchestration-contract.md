@@ -5,15 +5,15 @@
 <!-- agent-summary: One persistent project/domain session contains sequenced finite orchestrator runs that reuse driveLoop. -->
 <!-- agent-summary: DomainTask.v1 travels down and exactly one done, blocked, or question DomainReport.v1 returns at a turn boundary. -->
 <!-- agent-summary: Creator-direct work and root-origin work share a serialized session but retain distinct trusted origins and recipients. -->
-<!-- agent-summary: The creative-director hierarchy and two-level root/domain split remain conditional on the Gate 0 proceed decision. -->
+<!-- agent-summary: The accepted creative-director hierarchy has a two-level root/domain split after Gate 0 proceed. -->
 <!-- agent-summary: The shared contract and API capability catalog are the executable TypeScript sources for this document. -->
 
 > **Status:** Accepted contract with the internal Visuals profile active on the
 > shared finite-run runtime. Persistent Visuals/Audio sessions,
 > creator-direct work, identities, and task/report semantics are active design
-> constraints for PRs 3–13. The creative-director hierarchy is a conditional
-> proposal until Gate 0 records `proceed`; this document does not amend the
-> central-agent principles in [`NORTH_STAR.md`](NORTH_STAR.md).
+> constraints. Gate 0 recorded `proceed` on 2026-07-16, so the accepted
+> creative-director hierarchy is now implemented behind its temporary rollout
+> flag and the active principles in [`NORTH_STAR.md`](NORTH_STAR.md) reflect it.
 
 ## Contract source and scope
 

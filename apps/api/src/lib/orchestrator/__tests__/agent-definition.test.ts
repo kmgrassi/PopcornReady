@@ -8,6 +8,7 @@ import {
   buildDomainReportFromCompletion,
   resolveAgentDefinition,
 } from "../agent-definition";
+import { CREATIVE_DIRECTOR_SYSTEM_PROMPT } from "../creative-director-agent";
 import type { ToolRegistry } from "../registry";
 import type { AgentDefinition } from "../agent-definition";
 
@@ -55,6 +56,31 @@ test("root definition preserves the supplied flat registry and carries no struct
   assert.equal(definition.role, "creative_director");
   assert.equal(definition.registry, registry);
   assert.equal(await definition.loadTurnContext(), undefined);
+});
+
+test("hierarchy-enabled root exposes only the creative-director surface", async () => {
+  const definition = await resolveAgentDefinition({
+    run: rootRun,
+    workspaceId: "workspace-1",
+    creativeDirectorHierarchyEnabled: true,
+  });
+  assert.equal(definition.systemPrompt, CREATIVE_DIRECTOR_SYSTEM_PROMPT);
+  assert.deepEqual([...definition.registry.keys()], [
+    "create_or_load_brief",
+    "develop_story_blueprint",
+    "draft_script",
+    "plan_shots",
+    "plan_visual_anchors",
+    "critique_timeline",
+    "export_video",
+    "request_approval",
+    "assemble_timeline",
+    "publish_to_catalog",
+    "delegate_visuals",
+    "delegate_audio",
+  ]);
+  assert.equal(definition.registry.has("generate_clip"), false);
+  assert.equal(definition.registry.has("generate_audio"), false);
 });
 
 test("domain registries reject dispatch capabilities and foreign ownership", () => {

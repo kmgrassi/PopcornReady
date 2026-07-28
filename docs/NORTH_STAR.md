@@ -68,8 +68,10 @@ lead with it); align marketing and product copy to it.
 ## 1. The North Star (read this first)
 
 We want **one continuous generation pipeline that runs end-to-end on its own**,
-where a **central agent owns every step as a callable tool** and can **drop into
-or re-trigger any part of the flow**.
+where a **creative director owns the whole flow** and can **drop into or
+re-trigger any part of the flow**. The director delegates bounded Visuals and
+Audio execution to persistent project-scoped specialists, while retaining the
+story, cross-modality, assembly, critique, approval, and completion decisions.
 
 The agent sets the high-level goal, produces the **schema** (the plan: beats +
 reference anchors), and moves through asset generation with **feedback loops at
@@ -92,15 +94,16 @@ which a creator sees the plan before the expensive media work begins.
 
 ## 2. Principles (the mental-model shift)
 
-1. **The agent owns the flow; stages are tools.** `brief → plan → anchors →
-   keyframes → clips → audio → assemble → critique → export` are **tools the
-   agent calls**, not a fixed conveyor belt. Give the agent latitude; don't be
-   prescriptive about order.
+1. **The creative director owns the flow; stages are tools.** `brief → plan →
+   anchors → keyframes → clips → audio → assemble → critique → export` are
+   **tools the agent calls**, not a fixed conveyor belt. The creative director
+   retains whole-production choices and delegates bounded Visuals/Audio craft;
+   give the agents latitude without prescribing order.
 2. **Autonomous through storyboard; production is explicit.** The default run
    creates a complete storyboard, then waits for the creator to choose
    **Generate video** before it spends work on keyframes, clips, audio,
    assembly, or export. Additional gates can still pause other artifacts.
-3. **Non-one-directional / selective regeneration — the agent decides, not a
+3. **Non-one-directional / selective regeneration — the creative director decides, not a
    rigid cascade.** Changing one input should affect only the impacted
    sub-video(s), never all of them. The dependency graph + fingerprints (§5)
    cheaply compute a **candidate** "possibly affected" set; the target runtime
@@ -120,15 +123,17 @@ which a creator sees the plan before the expensive media work begins.
    re-shot, ~$X — go?") before spending. This *replaces* rigid gates with natural
    human-in-the-loop.
 6. **One engine.** The synchronous one-shot route and the async run pipeline
-   **converge into a single engine**. The staged "run" model is the trunk; the
-   quick call becomes a thin entry into it.
-7. **Determinism lives in the tool contracts, not in a fixed order — and the
-   agent self-heals.** Each tool (API call) **deterministically validates its
+   **converge into one `driveLoop` shared by the creative director and every
+   specialist**. The staged "run" model is the trunk; the quick call becomes a
+   thin entry into it.
+7. **Determinism lives in the tool contracts, not in a fixed order — and agents
+   self-heal in-lane.** Each tool (API call) **deterministically validates its
    inputs** ("a video with a main character requires a character likeness";
    "because you have X you also need Y") and, on a miss, returns a **structured,
    actionable failure** instead of doing the wrong thing. The failure bounces
-   back to the agent, which **satisfies the precondition (e.g. generates the
-   missing anchor image) and retries.** Step ordering is therefore *emergent*
+   back to its owning agent, which **satisfies an in-domain precondition (e.g.
+   generates a missing anchor image) and retries.** Cross-domain prerequisites
+   return a durable blocked report to the creative director. Step ordering is therefore *emergent*
    from the contracts — the agent reacts to what each step says it needs rather
    than following a hardcoded sequence. This is what makes the flow both flexible
    (agent-driven) and reliable (every step guards its own preconditions), and it
@@ -151,11 +156,11 @@ which a creator sees the plan before the expensive media work begins.
    intermediate anchors/keyframes and every composite, is persisted in the pool
    (never a temp file). Beyond reuse, persistence is the **audit trail** for *why
    the agent did what it did*.
-10. **Every change flows through the agent — nothing is edited in isolation.**
+10. **Every change flows through the agent system — nothing is edited in isolation.**
     The user never directly mutates an asset, a beat, the brief, or the story
     through a one-off form control. Every change — "make this shot brighter,"
     "give the hero a denim jacket," "tighten the open," "rename the protagonist"
-    — is expressed as **intent to the agent**, which decides the blast radius
+    — is expressed as **intent to the agent system**, whose creative director decides the blast radius
     (Principle 3), proposes the minimal re-run (Principle 5), and recomputes only
     the affected assets over the provenance graph (Principle 4). This is what
     makes upstream/downstream consistency a **property of the system rather than
