@@ -17,6 +17,7 @@ import { miscCapabilitiesRouter } from "./misc-capabilities.js";
 import { orchestratorRunsRouter } from "./orchestrator-runs.js";
 import { planRouter } from "./plan.js";
 import { providerApiKeysRouter } from "./provider-api-keys.js";
+import { rerunProposalsRouter } from "./rerun-proposals.js";
 import { projectsRouter } from "./projects.js";
 import { storyboardsRouter } from "./storyboards.js";
 import { studioDraftsRouter } from "./studio-drafts.js";
@@ -42,6 +43,7 @@ export function mountProtectedV1Routes(v1: Router) {
   v1.use(miscCapabilitiesRouter);
   v1.use(planRouter);
   v1.use(providerApiKeysRouter);
+  v1.use(rerunProposalsRouter);
   v1.use(storyboardsRouter);
   v1.use(orchestratorRunsRouter);
   v1.use(studioDraftsRouter);
