@@ -18,7 +18,7 @@
 > [`ui-interaction-model.md`](../ui-interaction-model.md), and the asset-graph
 > rules in [`CLAUDE.md`](../../CLAUDE.md) remain authoritative. PR 2 records the
 > shared domain contracts without overriding the central-agent principle; the
-> hierarchy-specific North Star amendment moves to Gate-0-approved PR 14.
+> hierarchy-specific North Star amendment landed in Gate-0-approved PR 14.
 
 ## Objective
 
@@ -740,7 +740,7 @@ protects against and what non-inferiority result clears the PR 18 cutover.
 **Validation:** deterministic eval unit tests plus repeated opt-in real-model
 decision reports.
 
-### PR 2 — Shared domain-agent contract and proposed hierarchy record
+### PR 2 — Shared domain-agent contract and hierarchy record
 
 **Depends on:** this scope being approved. It may proceed in parallel with PR 1
 and does not require the hierarchy result to be “proceed.”
@@ -751,9 +751,9 @@ and does not require the hierarchy result to be “proceed.”
   one reused `driveLoop`, graph-as-state, turn-boundary communication, both
   trusted origins, and the creator-direct entry path.
 - Record the creative-director hierarchy, two-level limit, root coherence
-  ownership, and proposed North Star changes as **conditional on Gate 0**. Do
-  not amend the active central-agent principle or present the hierarchy as an
-  approved architecture when Gate 0 is deferred.
+  ownership, and proposed North Star changes as **conditional on Gate 0**.
+  PR 14 promotes this record after the recorded `proceed` decision and amends
+  the active North Star principles.
 - Define `AgentRole`, `DomainTask.v1`, `DomainReport.v1`, report payloads, and
   runtime assignment states in a focused shared module.
 - Define the domain assignment identifier as the finite
@@ -1283,7 +1283,9 @@ parallel with PRs 12–13 because all three reuse the same stable domain contrac
   leaf media/provider tool.
 - Support fresh projects, partial projects, resumes, multi-domain requests,
   blocked prerequisites, creative questions, and queued creator-direct work.
-- Ship behind a temporary hierarchy feature flag, off by default.
+- Ship behind a temporary hierarchy feature flag, off by default. Treat the
+  flag as deployment-stable while hierarchy-origin runs or their child
+  dispatches remain active; drain those runs before disabling it.
 - Compare decisions only; never execute flat and hierarchical billable work in
   shadow mode.
 

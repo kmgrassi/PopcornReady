@@ -8,8 +8,9 @@ import type { AgentDomain, AgentRole, DomainTaskV1 } from "@popcorn/shared/domai
 import type { DomainReportV1 } from "@popcorn/shared/domain-agent-contract";
 import { createHash } from "node:crypto";
 import type { OrchestratorRun } from "@/lib/api/v1/orchestrator-store";
-import { getDomainRun } from "@/lib/api/v1/domain-session-store";
+import { getDomainRun, getRootRunFamily, type RootRunFamily } from "@/lib/api/v1/domain-session-store";
 import { createDefaultToolRegistry, type DefaultToolRegistryDeps } from "@/lib/orchestrator-tools/default-registry";
+import { createRootToolRegistry } from "@/lib/orchestrator-tools/root-registry";
 import { createAudioToolRegistry } from "@/lib/orchestrator-tools/audio-registry";
 import { createVisualsToolRegistry } from "@/lib/orchestrator-tools/visuals-registry";
 import { isDispatchToolName } from "@/lib/orchestrator-tools/capability-catalog";
@@ -22,6 +23,8 @@ import type { RunActionSummary } from "@/lib/api/v1/orchestrator-store";
 import { getServiceSupabase } from "@/lib/supabase/clients";
 import { runQuery } from "@/lib/supabase/db-errors";
 import { AUDIO_AGENT_SYSTEM_PROMPT } from "./audio-agent";
+import { CREATIVE_DIRECTOR_SYSTEM_PROMPT } from "./creative-director-agent";
+import { loadRootGraphProjection } from "@/lib/orchestrator-context/root-projection";
 
 export interface AgentDefinition {
   role: AgentRole;
@@ -40,6 +43,34 @@ export interface ResolveAgentDefinitionInput {
   registryDeps?: DefaultToolRegistryDeps;
   /** Domain execution is fail-closed and role-aware. */
   enabledDomainRoles?: readonly AgentDomain[];
+  /** Temporary root rollout fence; false preserves the flat production path. */
+  creativeDirectorHierarchyEnabled?: boolean;
+  /** Root-only test seam; production reads the durable root/child linkage. */
+  loadRootRunFamily?: (rootRunId: string) => Promise<RootRunFamily>;
+}
+
+export function compactRootDomainReports(input: {
+  rootRunId: string;
+  family: RootRunFamily;
+}) {
+  return input.family.children.flatMap((child) => {
+    if (
+      child.originKind !== "creative_director" ||
+      child.parentRunId !== input.rootRunId ||
+      !child.report ||
+      !child.reportActionId
+    ) {
+      return [];
+    }
+    return [{
+      runId: child.id,
+      sessionId: child.agentSessionId,
+      domain: child.agentRole,
+      taskKind: child.taskKind,
+      reportActionId: child.reportActionId,
+      outcome: child.report.outcome,
+    }];
+  });
 }
 
 export function assertDomainRegistry(role: "visuals" | "audio", registry: ToolRegistry): ToolRegistry {
@@ -52,6 +83,34 @@ export function assertDomainRegistry(role: "visuals" | "audio", registry: ToolRe
 }
 
 function rootDefinition(input: ResolveAgentDefinitionInput): AgentDefinition {
+  if (input.creativeDirectorHierarchyEnabled) {
+    return {
+      role: "creative_director",
+      // The rollout must not be widened by a caller-supplied legacy registry.
+      // Root profile tests use the catalog-backed registry directly.
+      registry: toOrchestratorRegistry(createRootToolRegistry(input.registryDeps)),
+      systemPrompt: CREATIVE_DIRECTOR_SYSTEM_PROMPT,
+      loadTurnContext: async () => {
+        const [graph, family] = await Promise.all([
+          loadRootGraphProjection({
+          workspaceId: input.workspaceId,
+          projectId: input.run.projectId,
+          }),
+          (input.loadRootRunFamily ?? getRootRunFamily)(input.run.id),
+        ]);
+        return {
+          ...graph,
+          runtime: {
+            rootRunId: input.run.id,
+            status: input.run.status,
+            spentUsd: input.run.spentUsd,
+            budgetUsd: input.run.budgetUsd ?? null,
+            domainReports: compactRootDomainReports({ rootRunId: input.run.id, family }),
+          },
+        };
+      },
+    };
+  }
   return {
     role: "creative_director",
     // Preserve the active root path byte-for-byte in behavior. PR 14 owns the
@@ -113,7 +172,7 @@ export async function resolveAgentDefinition(
 }
 
 export const AGENT_DEFINITION_PROMPTS = {
-  creative_director: ORCHESTRATOR_SYSTEM_PROMPT,
+  creative_director: CREATIVE_DIRECTOR_SYSTEM_PROMPT,
   visuals: VISUALS_SYSTEM_PROMPT,
   audio: AUDIO_AGENT_SYSTEM_PROMPT,
 } as const;

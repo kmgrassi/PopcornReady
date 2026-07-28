@@ -76,6 +76,7 @@ import {
   type DomainTargetScope,
 } from "@/lib/orchestrator-context/target-scope";
 import { prepareRegisteredTool } from "./registry";
+import { isCreativeDirectorHierarchyEnabled } from "./feature-flag";
 
 // Credits charged per generation = providerCostUsd * MARGIN, at 1 credit = $0.01.
 const CREDIT_MARGIN = 2;
@@ -135,6 +136,10 @@ export interface OrchestratorEngineStore {
   findDelegatedChildRun?: (
     rootActionId: string
   ) => Promise<{ id: string; status: string } | null>;
+  /** Batch dispatches share one root action and therefore have a durable join. */
+  findDelegatedChildRuns?: (
+    rootActionId: string
+  ) => Promise<Array<{ id: string; status: string }> >;
 }
 
 export interface JobStatusReader {
@@ -182,6 +187,8 @@ export interface EngineDeps {
   enabledDomainRoles?: readonly AgentDomain[];
   /** Runtime controls require an explicit claimed-domain execution opt-in. */
   domainRuntimeEnabled?: boolean;
+  /** Override the environment rollout fence in deterministic tests/callers. */
+  creativeDirectorHierarchyEnabled?: boolean;
   /** Durable session claim generation carried by a claimed domain dispatch. */
   sessionClaimGeneration?: number;
   /** Domain transport seams keep deterministic local smoke tests provider-free. */
@@ -239,6 +246,16 @@ export function defaultEngineStore(): OrchestratorEngineStore {
           .maybeSingle()
       );
       return (data as { id: string; status: string } | null) ?? null;
+    },
+    async findDelegatedChildRuns(rootActionId) {
+      const data = await runQuery(
+        "engine.findDelegatedChildRuns",
+        getServiceSupabase()
+          .from("orchestrator_runs")
+          .select("id, status")
+          .eq("root_action_id", rootActionId)
+      );
+      return (data as Array<{ id: string; status: string }> | null) ?? [];
     },
   };
 }
@@ -311,6 +328,8 @@ function resolved(deps: EngineDeps) {
     applyCreditTransaction: deps.applyCreditTransaction ?? applyCreditTransaction,
     enabledDomainRoles: deps.enabledDomainRoles ?? [],
     domainRuntimeEnabled: deps.domainRuntimeEnabled ?? false,
+    creativeDirectorHierarchyEnabled:
+      deps.creativeDirectorHierarchyEnabled ?? isCreativeDirectorHierarchyEnabled(),
     sessionClaimGeneration: deps.sessionClaimGeneration,
     finalizeDomainTurn: deps.finalizeDomainTurn ?? finalizeDomainTurn,
     failDomainRunTurn: deps.failDomainRunTurn ?? failDomainRunTurn,
@@ -558,11 +577,13 @@ async function reconcileDelegation(
     .find((action) => action.status === "running" && isDispatchToolName(action.tool));
   if (!delegation) return null;
 
-  if (!r.store.findDelegatedChildRun) {
+  if (!r.store.findDelegatedChildRun && !r.store.findDelegatedChildRuns) {
     return park(run, r, "domain");
   }
-  const child = await r.store.findDelegatedChildRun(delegation.id);
-  if (!child) {
+  const children = r.store.findDelegatedChildRuns
+    ? await r.store.findDelegatedChildRuns(delegation.id)
+    : await r.store.findDelegatedChildRun!(delegation.id).then((child) => child ? [child] : []);
+  if (children.length === 0) {
     await r.store.markInvocation(delegation.id, {
       status: "failed",
       error: {
@@ -573,14 +594,13 @@ async function reconcileDelegation(
     });
     return null;
   }
-  if (!TERMINAL_DOMAIN_RUN_STATUSES.has(child.status)) {
+  if (children.some((child) => !TERMINAL_DOMAIN_RUN_STATUSES.has(child.status))) {
     logger.info("orchestrator.delegation_waiting", {
       workspaceId: r.workspaceId,
       projectId: run.projectId,
       runId: run.id,
       delegationActionId: delegation.id,
-      childRunId: child.id,
-      childStatus: child.status,
+      children,
     });
     return park(run, r, "domain");
   }
@@ -588,9 +608,9 @@ async function reconcileDelegation(
     status: "failed",
     error: {
       kind: "precondition_unmet",
-      message: `Delegated run ended ${child.status} without a terminal report.`,
+      message: `Delegated run(s) ended without completing the durable join.`,
       recoverable: true,
-      details: { childRunId: child.id, childStatus: child.status },
+      details: { children },
     },
   });
   return null;
@@ -792,8 +812,11 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
     const definition = await r.resolveAgentDefinition({
       run,
       workspaceId: r.workspaceId,
-      rootRegistry: r.registry,
+      // The hierarchy owns an exact root surface. A caller-supplied flat test
+      // registry must not accidentally reintroduce leaf tools when the flag is on.
+      rootRegistry: r.creativeDirectorHierarchyEnabled ? undefined : r.registry,
       enabledDomainRoles: r.enabledDomainRoles,
+      creativeDirectorHierarchyEnabled: r.creativeDirectorHierarchyEnabled,
     });
 
     if (run.budgetUsd != null && run.spentUsd >= run.budgetUsd) {
@@ -1191,8 +1214,9 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
         runId: run.id,
         turn,
         tool: decision.toolName,
-        childRunId: result.childRunId,
-        sessionId: result.sessionId,
+        childRunId: "childRunId" in result ? result.childRunId : undefined,
+        sessionId: "sessionId" in result ? result.sessionId : undefined,
+        childRuns: "childRuns" in result ? result.childRuns : undefined,
       });
       return park(run, r, "domain");
     }

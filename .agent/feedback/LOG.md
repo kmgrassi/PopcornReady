@@ -24,6 +24,12 @@
 - Suggested improvement: Keep every finite-domain terminal path behind an explicitly claim-fenced transport RPC and exercise it through the documented no-provider smoke before activation.
 - Follow-up: Add write-scope authorization plus a local-Supabase full lifecycle smoke in the rollout PR.
 
+### 2026-07-28T12:00:00-04:00 — WEB-20260728-PR13
+- What helped: PR 12's explicit proposal and confirmation routes made the client boundary narrow and reviewable.
+- Friction or failure: The initial dependency branch was only a placeholder; implementation could begin only after PR 820 supplied the actual contract.
+- Suggested improvement: Merge or publish typed web-facing API contracts with API PRs so dependent UI worktrees do not need to infer response shapes.
+- Follow-up: Enable the UI only after an API-side standalone feature flag and the remaining creator-direct follow-up endpoints exist.
+
 ### 2026-07-27T15:50:00-04:00 — API-20260727-04
 - What helped: The merged PR 6/7 seams made it possible to prove the active root remains unchanged while introducing a fail-closed declarative domain configuration.
 - Friction or failure: Independent implementation review exposed that context isolation is not write authorization and that session claim generations can disappear across an adapter boundary.

@@ -1,6 +1,7 @@
 import type { DefaultToolRegistryDeps } from "./default-registry";
 import {
   createDelegateAudioTool,
+  createDelegateDomainsTool,
   createDelegateVisualsTool,
 } from "./delegate-domain";
 import { createOwnedToolRegistry } from "./owned-registry";
@@ -19,5 +20,6 @@ export function createRootToolRegistry(
   const registry = createOwnedToolRegistry("creative_director", deps);
   registry.register(createDelegateVisualsTool());
   registry.register(createDelegateAudioTool());
+  registry.register(createDelegateDomainsTool());
   return registry;
 }
