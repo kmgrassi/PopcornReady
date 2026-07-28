@@ -24,6 +24,8 @@ import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 
 const DELEGATION_DEFAULT_BUDGET_USD = 5;
+const VISUAL_OUTPUT_KINDS = ["image", "anchor", "keyframe", "clip", "composite", "render"] as const;
+type VisualOutputKind = (typeof VISUAL_OUTPUT_KINDS)[number];
 
 export interface DelegateDomainInput {
   objective: string;
@@ -32,9 +34,11 @@ export interface DelegateDomainInput {
   preserveAssetIds?: string[];
   constraints?: string;
   budgetUsd?: number;
+  /** Required terminal outputs for a Visuals assignment; trusted by schema validation. */
+  requiredOutputKinds?: VisualOutputKind[];
 }
 
-function parseDelegateInput(input: unknown): DelegateDomainInput {
+function parseDelegateInput(input: unknown, domain: AgentDomain): DelegateDomainInput {
   if (typeof input !== "object" || input === null) {
     throw new ToolInputError("Delegation input must be an object.");
   }
@@ -53,6 +57,24 @@ function parseDelegateInput(input: unknown): DelegateDomainInput {
   if (budget !== undefined && (typeof budget !== "number" || !(budget > 0))) {
     throw new ToolInputError("budgetUsd must be a positive number.");
   }
+  const requiredOutputKinds = record.requiredOutputKinds;
+  if (
+    requiredOutputKinds !== undefined &&
+    (!Array.isArray(requiredOutputKinds) ||
+      requiredOutputKinds.length === 0 ||
+      requiredOutputKinds.some(
+        (kind) => typeof kind !== "string" || !VISUAL_OUTPUT_KINDS.includes(kind as VisualOutputKind)
+      ) ||
+      new Set(requiredOutputKinds).size !== requiredOutputKinds.length)
+  ) {
+    throw new ToolInputError("requiredOutputKinds must contain unique supported Visuals output kinds.");
+  }
+  if (domain === "audio" && requiredOutputKinds !== undefined) {
+    throw new ToolInputError("Audio delegation does not accept requiredOutputKinds.");
+  }
+  if (domain === "visuals" && requiredOutputKinds === undefined) {
+    throw new ToolInputError("Visuals delegation requires at least one requiredOutputKinds value.");
+  }
   return {
     objective: record.objective.trim(),
     instruction:
@@ -61,39 +83,53 @@ function parseDelegateInput(input: unknown): DelegateDomainInput {
     constraints:
       typeof record.constraints === "string" ? record.constraints : undefined,
     budgetUsd: budget as number | undefined,
+    ...(requiredOutputKinds ? { requiredOutputKinds: requiredOutputKinds as VisualOutputKind[] } : {}),
   };
 }
 
-const delegateInputSchema = {
+const delegateInputProperties = {
+  objective: {
+    type: "string",
+    description: "What outcome the specialist assignment must produce.",
+  },
+  instruction: {
+    type: "string",
+    description: "Creator intent rewritten for the bounded assignment.",
+  },
+  preserveAssetIds: {
+    type: "array",
+    items: { type: "string" },
+    description: "Assets that must not change.",
+  },
+  constraints: {
+    type: "string",
+    description: "Creative constraints (tone, look, continuity, mood, pacing).",
+  },
+  budgetUsd: {
+    type: "number",
+    description: "Maximum allocation for this assignment.",
+  },
+} as const;
+
+function delegateInputSchema(domain: AgentDomain) {
+  return {
   type: "object",
   additionalProperties: false,
   properties: {
-    objective: {
-      type: "string",
-      description: "What outcome the specialist assignment must produce.",
-    },
-    instruction: {
-      type: "string",
-      description: "Creator intent rewritten for the bounded assignment.",
-    },
-    preserveAssetIds: {
+    ...delegateInputProperties,
+    ...(domain === "visuals" ? { requiredOutputKinds: {
       type: "array",
-      items: { type: "string" },
-      description: "Assets that must not change.",
-    },
-    constraints: {
-      type: "string",
-      description: "Creative constraints (tone, look, continuity, mood, pacing).",
-    },
-    budgetUsd: {
-      type: "number",
-      description: "Maximum allocation for this assignment.",
-    },
+      items: { enum: VISUAL_OUTPUT_KINDS },
+      minItems: 1,
+      uniqueItems: true,
+      description: "For Visuals, the terminal output kinds required from this bounded assignment.",
+    } } : {}),
   },
-  required: ["objective"],
-} as const;
+  required: domain === "visuals" ? ["objective", "requiredOutputKinds"] : ["objective"],
+  } as const;
+}
 
-function buildDelegatedTask(input: {
+export function buildDelegatedTask(input: {
   domain: AgentDomain;
   projectId: string;
   rootRunId: string;
@@ -128,12 +164,18 @@ function buildDelegatedTask(input: {
     responseRecipient: { kind: "creative_director" as const },
   };
   if (input.domain === "visuals") {
+    const requiredOutputKinds = input.parsed.requiredOutputKinds;
+    if (!requiredOutputKinds) throw new ToolInputError("Visuals delegation requires requiredOutputKinds.");
     return {
       ...base,
       domain: "visuals",
       taskKind: "visuals_production",
-      requiredOutputs: [{ kind: "clip", role: "primary", minimumCount: 1 }],
-      allowedOutputKinds: ["image", "anchor", "keyframe", "clip", "composite", "render"],
+      requiredOutputs: requiredOutputKinds.map((kind) => ({
+        kind,
+        role: kind === "anchor" ? "visual_anchor" : kind,
+        minimumCount: 1,
+      })),
+      allowedOutputKinds: [...VISUAL_OUTPUT_KINDS],
     } as DomainTaskV1;
   }
   return {
@@ -188,7 +230,7 @@ function createDelegateTool(input: {
   return {
     ...toolDefinitionMetadata(input.name),
     description: input.description,
-    inputSchema: delegateInputSchema as unknown as Record<string, unknown>,
+    inputSchema: delegateInputSchema(input.domain) as unknown as Record<string, unknown>,
     outputSchema: {
       type: "object",
       additionalProperties: true,
@@ -197,7 +239,7 @@ function createDelegateTool(input: {
         sessionId: { type: "string" },
       },
     },
-    parseInput: parseDelegateInput,
+    parseInput: (raw) => parseDelegateInput(raw, input.domain),
     async execute(parsed, context): Promise<ToolCallResult> {
       const projectId = context.projectId;
       const rootRunId = context.orchestratorRunId;
@@ -259,7 +301,7 @@ export function createDelegateVisualsTool(): ToolDefinition<DelegateDomainInput>
     domain: "visuals",
     description:
       "Assign a bounded visual-production task to the Visuals specialist (anchors, storyboard tiles, keyframes, clips, image/video revisions). " +
-      "Provide the objective, target beats/assets by stable id, constraints, and what to preserve. The specialist reports done, blocked, or a question. " +
+      "Provide the objective, requiredOutputKinds, target beats/assets by stable id, constraints, and what to preserve. The specialist reports done, blocked, or a question. " +
       "Use this instead of generating visual media yourself; you retain story, coherence, timeline, approval, and export decisions.",
   });
 }

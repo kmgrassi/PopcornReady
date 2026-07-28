@@ -8,7 +8,7 @@ import type { AgentDomain, AgentRole, DomainTaskV1 } from "@popcorn/shared/domai
 import type { DomainReportV1 } from "@popcorn/shared/domain-agent-contract";
 import { createHash } from "node:crypto";
 import type { OrchestratorRun } from "@/lib/api/v1/orchestrator-store";
-import { getDomainRun } from "@/lib/api/v1/domain-session-store";
+import { getDomainRun, getRootRunFamily, type RootRunFamily } from "@/lib/api/v1/domain-session-store";
 import { createDefaultToolRegistry, type DefaultToolRegistryDeps } from "@/lib/orchestrator-tools/default-registry";
 import { createRootToolRegistry } from "@/lib/orchestrator-tools/root-registry";
 import { createAudioToolRegistry } from "@/lib/orchestrator-tools/audio-registry";
@@ -45,6 +45,32 @@ export interface ResolveAgentDefinitionInput {
   enabledDomainRoles?: readonly AgentDomain[];
   /** Temporary root rollout fence; false preserves the flat production path. */
   creativeDirectorHierarchyEnabled?: boolean;
+  /** Root-only test seam; production reads the durable root/child linkage. */
+  loadRootRunFamily?: (rootRunId: string) => Promise<RootRunFamily>;
+}
+
+export function compactRootDomainReports(input: {
+  rootRunId: string;
+  family: RootRunFamily;
+}) {
+  return input.family.children.flatMap((child) => {
+    if (
+      child.originKind !== "creative_director" ||
+      child.parentRunId !== input.rootRunId ||
+      !child.report ||
+      !child.reportActionId
+    ) {
+      return [];
+    }
+    return [{
+      runId: child.id,
+      sessionId: child.agentSessionId,
+      domain: child.agentRole,
+      taskKind: child.taskKind,
+      reportActionId: child.reportActionId,
+      outcome: child.report.outcome,
+    }];
+  });
 }
 
 export function assertDomainRegistry(role: "visuals" | "audio", registry: ToolRegistry): ToolRegistry {
@@ -64,18 +90,25 @@ function rootDefinition(input: ResolveAgentDefinitionInput): AgentDefinition {
       // Root profile tests use the catalog-backed registry directly.
       registry: toOrchestratorRegistry(createRootToolRegistry(input.registryDeps)),
       systemPrompt: CREATIVE_DIRECTOR_SYSTEM_PROMPT,
-      loadTurnContext: async () => ({
-        ...(await loadRootGraphProjection({
+      loadTurnContext: async () => {
+        const [graph, family] = await Promise.all([
+          loadRootGraphProjection({
           workspaceId: input.workspaceId,
           projectId: input.run.projectId,
-        })),
-        runtime: {
-          rootRunId: input.run.id,
-          status: input.run.status,
-          spentUsd: input.run.spentUsd,
-          budgetUsd: input.run.budgetUsd ?? null,
-        },
-      }),
+          }),
+          (input.loadRootRunFamily ?? getRootRunFamily)(input.run.id),
+        ]);
+        return {
+          ...graph,
+          runtime: {
+            rootRunId: input.run.id,
+            status: input.run.status,
+            spentUsd: input.run.spentUsd,
+            budgetUsd: input.run.budgetUsd ?? null,
+            domainReports: compactRootDomainReports({ rootRunId: input.run.id, family }),
+          },
+        };
+      },
     };
   }
   return {
