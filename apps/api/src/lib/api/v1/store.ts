@@ -57,6 +57,7 @@ import {
   type AssetMedia,
   type DataAssetRow,
   type GraphAssetKind,
+  graphKindForMediaAsset,
   type TranscriptSegmentRow,
 } from "./store-content";
 import { ApiError, notFound } from "./errors";
@@ -481,6 +482,7 @@ function mapStoryBlueprintRecord(row: StoryBlueprintRow): StoryBlueprintRecord {
 interface CurrentSelectionRow {
   active_asset_id: string;
   set_by_action_id?: string | null;
+  seq?: number;
 }
 
 interface GraphAssetSummaryRow {
@@ -1604,20 +1606,17 @@ interface AssetRow {
 }
 
 function assetKindToGraphKind(asset: V1Asset): GraphAssetKind {
-  if (asset.kind === "audio") return "audio_track";
-  if (asset.kind === "image") {
-    if (asset.role === "poster") return "poster";
-    if (asset.role === "character_anchor" || asset.role === "scene_anchor") return "anchor";
-    return asset.provenance ? "keyframe" : "anchor";
-  }
-  if (asset.role === "export_video") return "render";
-  return asset.provenance ? "clip" : "source_footage";
+  return graphKindForMediaAsset({
+    kind: asset.kind,
+    role: asset.role,
+    generated: Boolean(asset.provenance),
+  });
 }
 
 function assetMediaToKind(media: AssetMedia, kind: GraphAssetKind): AssetKind {
   if (media === "image" || media === "video" || media === "audio") return media;
   if (kind === "audio_track") return "audio";
-  if (kind === "anchor" || kind === "keyframe") return "image";
+  if (kind === "image" || kind === "anchor" || kind === "keyframe" || kind === "poster") return "image";
   return "video";
 }
 
@@ -2906,6 +2905,8 @@ export interface ActiveProjectPlan {
   assetId: string;
   /** The plan asset's content hash — the stale-detection fingerprint. */
   contentHash: string;
+  /** Current plan selection sequence. Claimed domain work requires this CAS token. */
+  selectionSeq?: number;
 }
 
 // The project's active shot plan (mirrors getActiveProjectBrief). The storyboard
@@ -2914,6 +2915,16 @@ export async function getActiveProjectPlan(
   projectId: string
 ): Promise<ActiveProjectPlan | null> {
   const db = getServiceSupabase();
+  const selected = (await runQuery(
+    "store.getActiveProjectPlan selection",
+    db
+      .from("current_selections")
+      .select("active_asset_id, seq")
+      .eq("project_id", projectId)
+      .eq("slot_role", "plan")
+      .is("slot_owner_lineage_id", null)
+      .maybeSingle()
+  )) as CurrentSelectionRow | null;
   const selectedPlanAsset = await selectedDataAsset(db, projectId, "plan", "plan");
   const selectedPlan = selectedPlanAsset ? coerceShotPlanContent(selectedPlanAsset.content) : null;
   const planAsset =
@@ -2928,7 +2939,28 @@ export async function getActiveProjectPlan(
     plan,
     assetId: planAsset.id,
     contentHash: planAsset.content_hash ?? "",
+    ...(selected?.active_asset_id === planAsset.id && selected.seq !== undefined
+      ? { selectionSeq: selected.seq }
+      : {}),
   };
+}
+
+export async function getProjectCurrentStoryboardId(
+  workspaceId: string,
+  projectId: string
+): Promise<string | null> {
+  const db = getServiceSupabase();
+  const row = await runQuery(
+    "store.getProjectCurrentStoryboardId",
+    db
+      .from("projects")
+      .select("current_story_blueprint_id")
+      .eq("workspace_id", workspaceId)
+      .eq("id", projectId)
+      .maybeSingle()
+  );
+  return (row as { current_story_blueprint_id?: string | null } | null)
+    ?.current_story_blueprint_id ?? null;
 }
 
 export interface ActiveProjectVisualAnchorPlan {
@@ -3015,6 +3047,52 @@ export async function getActiveProjectScopedAsset(input: {
   );
   if (input.expectedRole && row.role !== input.expectedRole) return null;
   return mapAsset(row);
+}
+
+export async function getProjectRunGeneratedAsset(input: {
+  workspaceId: string;
+  projectId: string;
+  orchestratorRunId: string;
+  role: string;
+  beatId?: string;
+  slug?: string;
+}): Promise<V1Asset | null> {
+  const db = getServiceSupabase();
+  await requireProjectRow(db, input.workspaceId, input.projectId);
+  const actionData = await runQuery(
+    "store.getProjectRunGeneratedAsset actions",
+    db
+      .from("actions")
+      .select("id")
+      .eq("project_id", input.projectId)
+      .eq("orchestrator_run_id", input.orchestratorRunId)
+  );
+  const actionIds = ((actionData as Array<{ id: string }>) ?? []).map((row) => row.id);
+  if (actionIds.length === 0) return null;
+
+  const assetData = await runQuery(
+    "store.getProjectRunGeneratedAsset assets",
+    db
+      .from("assets")
+      .select("*")
+      .eq("project_id", input.projectId)
+      .eq("role", input.role)
+      .eq("status", "ready")
+      .in("created_by_action_id", actionIds)
+      .order("created_at", { ascending: false })
+      .limit(100)
+  );
+  const row = ((assetData as AssetRow[]) ?? []).find((candidate) => {
+    if (input.slug && candidate.slug !== input.slug) return false;
+    if (
+      input.beatId &&
+      candidate.params?.provenance?.beatId !== input.beatId
+    ) {
+      return false;
+    }
+    return true;
+  });
+  return row ? mapAsset(row) : null;
 }
 
 export async function selectGeneratedBeatKeyframeAsset(input: {
@@ -3283,6 +3361,72 @@ export async function addExportVideoAsset(input: {
 export interface PersistedStoryboardTile {
   beatId: string;
   assetId: string;
+}
+
+export interface UploadedStoryboardTile {
+  assetId: string;
+  beatId: string;
+  filename: string;
+  storageKey: string;
+  storageBucket: string;
+  visibility: "public" | "private";
+  provider: string;
+  model?: string;
+  prompt: string;
+  description?: string;
+  contentHash: string;
+}
+
+/**
+ * Upload tile bytes under deterministic ids without making graph rows visible.
+ * A claim-aware storyboard bundle transaction commits the metadata later.
+ */
+export async function uploadStoryboardTileObjects(input: {
+  workspaceId: string;
+  projectId: string;
+  tiles: GeneratedStoryboardTile[];
+  assetIds: string[];
+}): Promise<UploadedStoryboardTile[]> {
+  if (input.tiles.length !== input.assetIds.length) {
+    throw new ApiError("validation_failed", "Storyboard tile ids do not match tile count.");
+  }
+  const { writeAssetObject } = await import("../../storage/asset-write");
+  const visibility = await effectiveAssetStorageVisibility({
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    assetVisibility: "public",
+  });
+  const uploaded: UploadedStoryboardTile[] = [];
+  for (let index = 0; index < input.tiles.length; index += 1) {
+    const { asset: tile, bytes } = input.tiles[index];
+    const assetId = input.assetIds[index];
+    const beatId = tile.depicts?.beatId?.trim() ?? "";
+    if (!beatId) {
+      throw new ApiError("validation_failed", "A storyboard tile has no stable beat id.");
+    }
+    const stored = await writeAssetObject({
+      workspaceId: input.workspaceId,
+      projectId: input.projectId,
+      assetId,
+      filename: tile.media.filename,
+      bytes,
+      visibility,
+    });
+    uploaded.push({
+      assetId,
+      beatId,
+      filename: tile.media.filename,
+      storageKey: stored.storageKey,
+      storageBucket: stored.storageBucket,
+      visibility,
+      provider: tile.provenance?.provider ?? "mock",
+      ...(tile.provenance?.model ? { model: tile.provenance.model } : {}),
+      prompt: tile.provenance?.prompt ?? "",
+      ...(tile.description ? { description: tile.description } : {}),
+      contentHash: canonicalContentHash({ url: tile.media.filename, beatId }),
+    });
+  }
+  return uploaded;
 }
 
 // Persist generated storyboard tiles (one per beat) as image asset rows, each
@@ -5949,7 +6093,16 @@ export interface RegeneratedAssetMedia {
   contentHash?: string;
   durationSec?: number;
   provenance: GeneratedAssetProvenance;
+  /** False mints a pooled alternative without moving panels or selections. */
+  repointSurfaces?: boolean;
+  /** Reuse the orchestrator's canonical invocation action when present. */
+  actionId?: string;
+  orchestratorRunId?: string;
+  /** Exact active domain-session claim used by the guarded pooled RPC. */
+  sessionClaimGeneration?: number;
 }
+
+export type RegeneratedAssetResult = AssetMediaUrls & { assetId: string };
 
 // Regenerate an image asset by MINTING A NEW IMMUTABLE VERSION: a fresh row in
 // the same lineage (`version + 1`) carrying the regenerated bytes/provenance,
@@ -5962,7 +6115,7 @@ export async function applyRegeneratedAssetMedia(
   workspaceId: string,
   assetId: string,
   update: RegeneratedAssetMedia
-): Promise<AssetMediaUrls> {
+): Promise<RegeneratedAssetResult> {
   if (!isAssetIdShape(assetId)) throw notFound(`Asset not found: ${assetId}`);
   const db = getServiceSupabase();
 
@@ -5981,7 +6134,11 @@ export async function applyRegeneratedAssetMedia(
   const projectId = (current as { project_id: string }).project_id;
 
   const action = await createAction({
+    ...(update.actionId ? { id: update.actionId } : {}),
     projectId,
+    ...(update.orchestratorRunId
+      ? { orchestratorRunId: update.orchestratorRunId }
+      : {}),
     tool: "regenerate_asset",
     status: "running",
     params: {
@@ -5996,7 +6153,9 @@ export async function applyRegeneratedAssetMedia(
   try {
     data = await runQuery(
       "store.applyRegeneratedAssetMedia",
-      db.rpc("regenerate_asset_version", {
+      db.rpc(update.repointSurfaces === false
+        ? "regenerate_asset_version_pooled"
+        : "regenerate_asset_version", {
         p_workspace_id: workspaceId,
         p_old_asset_id: assetId,
         p_filename: update.filename,
@@ -6006,6 +6165,13 @@ export async function applyRegeneratedAssetMedia(
         p_content_hash: update.contentHash ?? null,
         p_duration_sec: update.durationSec ?? null,
         p_action_id: action.id,
+        ...(update.repointSurfaces === false
+          ? {
+              p_run_id: update.orchestratorRunId ?? null,
+              p_session_claim_generation:
+                update.sessionClaimGeneration ?? null,
+            }
+          : {}),
       })
     );
   } catch (err) {
@@ -6019,7 +6185,10 @@ export async function applyRegeneratedAssetMedia(
 
   const newRow = data as AssetRow;
   await updateAction(action.id, { status: "applied", outputAssetIds: [newRow.id] });
-  return assetMediaUrlsForRow(newRow);
+  return {
+    ...(await assetMediaUrlsForRow(newRow)),
+    assetId: newRow.id,
+  };
 }
 
 export async function listWorkspaceAssets(

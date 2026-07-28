@@ -156,6 +156,7 @@ export interface GenerateAudioJobInput {
   workspaceId: string;
   projectId: string;
   orchestratorRunId?: string;
+  sessionClaimGeneration?: number;
   mode?: "production" | "single_track";
   taskKind?: AudioTaskKind;
   plan?: ShotPlan;
@@ -224,6 +225,9 @@ async function runSingleTrack(
       ...(input.orchestratorRunId ? { runId: input.orchestratorRunId } : {}),
       ...(track.sourceAssetId ? { sourceAssetId: track.sourceAssetId } : {}),
     },
+    ...(input.sessionClaimGeneration !== undefined
+      ? { sessionClaimGeneration: input.sessionClaimGeneration }
+      : {}),
   });
   const ids = assetIdsFromResult(result);
   if (ids.length === 0) throw new Error("Single-track audio generation returned no assets.");
@@ -287,6 +291,9 @@ export async function runGenerateAudioJob(
           ...(input.voiceId ? { voiceId: input.voiceId } : {}),
           ...(input.orchestratorRunId ? { runId: input.orchestratorRunId } : {}),
         },
+        ...(input.sessionClaimGeneration !== undefined
+          ? { sessionClaimGeneration: input.sessionClaimGeneration }
+          : {}),
       });
       const generatedIds = assetIdsFromResult(result);
       if (generatedIds.length === 0) {
@@ -330,6 +337,9 @@ export async function runGenerateAudioJob(
           graphInputs,
           ...(input.orchestratorRunId ? { runId: input.orchestratorRunId } : {}),
         },
+        ...(input.sessionClaimGeneration !== undefined
+          ? { sessionClaimGeneration: input.sessionClaimGeneration }
+          : {}),
       });
       const generatedIds = assetIdsFromResult(result);
       if (generatedIds.length === 0) {

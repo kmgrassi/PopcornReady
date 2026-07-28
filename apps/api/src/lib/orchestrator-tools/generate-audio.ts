@@ -43,7 +43,7 @@ export const defaultGenerateAudioDeps: GenerateAudioDeps = {
 
 export type GenerateAudioJobLaunchInput = Omit<
   GenerateAudioJobInput,
-  "jobId" | "workspaceId" | "projectId" | "orchestratorRunId"
+  "jobId" | "workspaceId" | "projectId" | "orchestratorRunId" | "sessionClaimGeneration"
 >;
 
 /** One durable parent job for either the legacy production batch or one Audio-profile track. */
@@ -68,6 +68,9 @@ export async function launchGenerateAudioJob(input: {
     workspaceId: context.auth.workspaceId,
     projectId: context.projectId,
     ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
+    ...(context.sessionClaimGeneration !== undefined
+      ? { sessionClaimGeneration: context.sessionClaimGeneration }
+      : {}),
     ...input.jobInput,
   };
   const { job, created } = await resolved.createJob({
@@ -76,6 +79,9 @@ export async function launchGenerateAudioJob(input: {
     projectId: context.projectId,
     ...(context.actionId
       ? { actionId: context.actionId, idempotencyKey: `action:${context.actionId}` }
+      : {}),
+    ...(context.sessionClaimGeneration !== undefined
+      ? { sessionClaimGeneration: context.sessionClaimGeneration }
       : {}),
     execution: {
       schemaVersion: "orchestrator_job_execution.v1",

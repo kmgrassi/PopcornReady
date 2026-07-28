@@ -4,14 +4,19 @@ import type {
   ToolGateMetadata,
   ToolName,
 } from "@/lib/orchestrator-tools/capability-catalog";
+import type { DomainTaskV1 } from "@popcorn/shared/domain-agent-contract";
+import type { ProjectGraphSnapshot } from "@/lib/orchestrator-context/graph-snapshot";
+import type { DomainTargetScope } from "@/lib/orchestrator-context/target-scope";
 
 export {
   TOOL_NAMES,
   PRODUCTION_TOOL_NAMES,
   DISPATCH_TOOL_NAMES,
+  DOMAIN_TOOL_NAMES,
   getToolCapability,
   isToolName,
   isDispatchToolName,
+  isDomainToolName,
 } from "@/lib/orchestrator-tools/capability-catalog";
 export type { ToolName } from "@/lib/orchestrator-tools/capability-catalog";
 
@@ -103,6 +108,8 @@ export interface ToolDefinition {
   outputSchema: Record<string, unknown>;
   requiredResourceIds: string[];
   mode: "sync" | "async" | "approval";
+  /** Parse and authorize once, before the engine persists an invocation. */
+  prepareInput?(input: unknown, context: ToolExecutionContext): unknown | Promise<unknown>;
   estimateCostUsd(
     input: unknown,
     context: ToolExecutionContext
@@ -123,6 +130,10 @@ export interface ToolExecutionContext {
   requestId?: string;
   /** Present only for a claimed finite domain run; provider jobs must preserve it. */
   sessionClaimGeneration?: number;
+  /** Trusted finite assignment and fresh graph scope for domain-only policy. */
+  domainTask?: DomainTaskV1;
+  domainScope?: DomainTargetScope;
+  domainSnapshot?: ProjectGraphSnapshot;
   metadata?: Record<string, unknown>;
 }
 

@@ -27,6 +27,36 @@ import {
 } from "./catalog-utils";
 import { sourceAssetRow } from "./catalog-snapshots";
 
+export function catalogCloneImageIdentity(
+  entryKind: CatalogEntryRow["kind"],
+  snapshotAsset: unknown
+): { kind: "image" | "anchor" | "keyframe" | "poster"; role: string | null } {
+  const snapshot = recordValue(snapshotAsset);
+  const graphKind = stringValue(snapshot.graphKind);
+  const role = stringValue(snapshot.role) ?? null;
+  const legacyKind =
+    role === "poster"
+      ? "poster"
+      : role === "character_anchor" || role === "scene_anchor"
+        ? "anchor"
+        : role === "beat_keyframe" ||
+            role === "beat_storyboard" ||
+            role === "scene_storyboard" ||
+            role === "act_mockup"
+          ? "keyframe"
+          : "image";
+  const imageKind =
+    graphKind === "image" ||
+    graphKind === "anchor" ||
+    graphKind === "keyframe" ||
+    graphKind === "poster"
+      ? graphKind
+      : legacyKind;
+  return entryKind === "character"
+    ? { kind: "anchor", role: "character_anchor" }
+    : { kind: imageKind, role };
+}
+
 export async function cloneAssetEntry(
   db: CatalogDb,
   entry: CatalogEntryRow,
@@ -45,6 +75,7 @@ export async function cloneAssetEntry(
   const destinationVisibility =
     assetVisibility === "private" || project.visibility === "private" ? "private" : "public";
   const now = new Date().toISOString();
+  const cloneIdentity = catalogCloneImageIdentity(entry.kind, entry.snapshot.asset);
   const inserted = await runQuery(
     "catalog.cloneAssetEntry",
     db
@@ -53,10 +84,10 @@ export async function cloneAssetEntry(
         schema_version: "asset.v2",
         workspace_id: project.workspace_id,
         project_id: project.id,
-        kind: "anchor",
+        kind: cloneIdentity.kind,
         media: "image",
         status: "pending",
-        role: entry.kind === "character" ? "character_anchor" : "scene_anchor",
+        role: cloneIdentity.role,
         filename,
         source: buildCatalogAssetSource({
           catalogEntryId: entry.id,

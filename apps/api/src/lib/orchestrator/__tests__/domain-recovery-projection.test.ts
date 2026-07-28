@@ -7,6 +7,7 @@ import {
   projectDomainRecovery,
   type RawToolRecovery,
 } from "../domain-recovery-projection";
+import { selectDomainBlockedCandidate } from "../engine";
 
 test("specialist recovery keeps same-owner actions and redacts both cross-owner fields", () => {
   const raw: RawToolRecovery = {
@@ -162,6 +163,22 @@ test("root-to-specialist recovery becomes a domain candidate without a primitive
     },
   ]);
   assert.doesNotMatch(JSON.stringify(projected), /generate_keyframe/);
+});
+
+test("cross-domain blocking wins deterministically when local recovery is also present", () => {
+  const projected = projectDomainRecovery({
+    ownerRole: "visuals",
+    projectId: "project_1",
+    trustedTargets: [{ kind: "beat", projectId: "project_1", beatId: "beat_1" }],
+    error: {
+      suggestedNextTools: [
+        { tool: "generate_keyframe", inputHint: { beatId: "beat_1" } },
+        { tool: "generate_audio", inputHint: { beatId: "beat_1" } },
+      ],
+    },
+  });
+  assert.equal(projected.suggestedNextTools[0]?.tool, "generate_keyframe");
+  assert.equal(selectDomainBlockedCandidate(projected)?.requiredDomain, "audio");
 });
 
 test("duplicate same-domain recovery candidates are emitted once", () => {

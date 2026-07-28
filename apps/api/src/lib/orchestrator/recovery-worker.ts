@@ -13,6 +13,7 @@ import { resumeOrchestratorRun, runOrchestratorToCompletion } from "./engine";
 const DEFAULT_INTERVAL_MS = 1_000;
 const ASYNC_RETRY_SECONDS = 10;
 const MAX_TICK_BACKOFF_MS = 30_000;
+const ENABLED_DOMAIN_ROLES = ["visuals", "audio"] as const;
 
 /**
  * Delay before the next claim attempt after `consecutiveFailures` failed ticks.
@@ -86,15 +87,17 @@ async function processDispatch(dispatch: ClaimedOrchestratorDispatch, deps: Reco
     return;
   }
   const result = run.status === "waiting"
-    ? await deps.resume(run.id, {
+      ? await deps.resume(run.id, {
         workspaceId: dispatch.workspaceId,
         agentId: "orchestrator-worker",
         sessionClaimGeneration: dispatch.sessionClaimGeneration,
+        enabledDomainRoles: ENABLED_DOMAIN_ROLES,
       })
     : await deps.run(run.id, {
         workspaceId: dispatch.workspaceId,
         agentId: "orchestrator-worker",
         sessionClaimGeneration: dispatch.sessionClaimGeneration,
+        enabledDomainRoles: ENABLED_DOMAIN_ROLES,
       });
   const resultGates = await deps.listGates(dispatch.runId);
   const completed = terminal(result.status) || resultGates.some((gate) => gate.status === "reached");

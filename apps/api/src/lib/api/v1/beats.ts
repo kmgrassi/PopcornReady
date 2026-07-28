@@ -205,6 +205,7 @@ interface GenerateBeatMediaArgs {
   projectId: string;
   beatId: string;
   body: unknown;
+  sessionClaimGeneration?: number;
 }
 
 async function generateBeatMedia(
@@ -224,6 +225,9 @@ async function generateBeatMedia(
     auth,
     projectId,
     body: generatorBody,
+    ...(args.sessionClaimGeneration !== undefined
+      ? { sessionClaimGeneration: args.sessionClaimGeneration }
+      : {}),
   });
 
   // Stamp per-beat provenance onto every asset the job produced. Best-effort:
@@ -250,6 +254,7 @@ export interface BeatMediaRouteArgs {
   projectId: string;
   beatId: string;
   body: unknown;
+  sessionClaimGeneration?: number;
 }
 
 export function generateBeatKeyframe(args: BeatMediaRouteArgs): Promise<ApiResult> {

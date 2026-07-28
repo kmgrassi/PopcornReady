@@ -104,8 +104,11 @@ test("generate_audio accepts and kicks off the worker with active plan and brief
         provider?: string;
         voiceId?: string;
         briefAssetId?: string;
+        sessionClaimGeneration?: number;
       }
     | undefined;
+  let durableJobClaimGeneration: number | undefined;
+  let durableExecutionClaimGeneration: number | undefined;
   const tool = createGenerateAudioTool({
     getActiveProjectPlan: async () => activePlan,
     getActiveProjectBrief: async () => ({
@@ -118,7 +121,13 @@ test("generate_audio accepts and kicks off the worker with active plan and brief
       assetId: "brief_1",
       contentHash: "brief_hash",
     }),
-    createJob: async () => queuedJob(),
+    createJob: async (input) => {
+      durableJobClaimGeneration = input.sessionClaimGeneration;
+      durableExecutionClaimGeneration = (
+        input.execution?.input as { sessionClaimGeneration?: number } | undefined
+      )?.sessionClaimGeneration;
+      return queuedJob();
+    },
     runGenerateAudioJob: async (input) => {
       kicked = input;
     },
@@ -126,7 +135,12 @@ test("generate_audio accepts and kicks off the worker with active plan and brief
 
   const result = (await tool.execute(
     { provider: "mock", voiceId: "voice_1" },
-    { auth, projectId: "proj_1", orchestratorRunId: "run_1" }
+    {
+      auth,
+      projectId: "proj_1",
+      orchestratorRunId: "run_1",
+      sessionClaimGeneration: 7,
+    }
   )) as ToolCallResult;
 
   assert.equal(result.status, "accepted");
@@ -141,6 +155,9 @@ test("generate_audio accepts and kicks off the worker with active plan and brief
   assert.equal(kicked?.briefAssetId, "brief_1");
   assert.equal(kicked?.provider, "mock");
   assert.equal(kicked?.voiceId, "voice_1");
+  assert.equal(kicked?.sessionClaimGeneration, 7);
+  assert.equal(durableJobClaimGeneration, 7);
+  assert.equal(durableExecutionClaimGeneration, 7);
 });
 
 test("generate_audio omits provider so workspace settings can resolve it", async () => {
@@ -180,9 +197,15 @@ test("generate_audio validates input before reading the plan", async () => {
   assert.equal(planReads, 0);
 });
 
-test("runGenerateAudioJob generates missing voiceover and soundtrack, stamps graph metadata, and resumes", async () => {
+test("runGenerateAudioJob generates missing voiceover and soundtrack with graph and claim metadata, then resumes", async () => {
   const spy = jobsSpy();
-  const created: Array<{ role?: string; mode?: string; prompt?: string; graphInputs?: unknown[] }> = [];
+  const created: Array<{
+    role?: string;
+    mode?: string;
+    prompt?: string;
+    graphInputs?: unknown[];
+    sessionClaimGeneration?: number;
+  }> = [];
   const selected: Array<{ assetId: string; role: string; slotKey: string }> = [];
   let assetCounter = 0;
   let resumedRun: string | undefined;
@@ -193,6 +216,7 @@ test("runGenerateAudioJob generates missing voiceover and soundtrack, stamps gra
       workspaceId: "ws_1",
       projectId: "proj_1",
       orchestratorRunId: "run_1",
+      sessionClaimGeneration: 7,
       plan,
       planAssetId: "plan_1",
       planContentHash: "plan_hash",
@@ -216,6 +240,7 @@ test("runGenerateAudioJob generates missing voiceover and soundtrack, stamps gra
           mode: (args.body as { audioMode?: string }).audioMode,
           prompt: (args.body as { prompt?: string }).prompt,
           graphInputs: (args.body as { graphInputs?: unknown[] }).graphInputs,
+          sessionClaimGeneration: args.sessionClaimGeneration,
         });
         assetCounter += 1;
         return {
@@ -260,6 +285,7 @@ test("runGenerateAudioJob generates missing voiceover and soundtrack, stamps gra
       call.graphInputs?.some((input) => (input as { assetId?: string }).assetId === "plan_1")
     )
   );
+  assert.ok(created.every((call) => call.sessionClaimGeneration === 7));
   assert.deepEqual(selected, [
     { assetId: "audio_1", role: "voiceover", slotKey: "beat_1" },
     { assetId: "audio_2", role: "voiceover", slotKey: "beat_2" },
@@ -316,6 +342,7 @@ test("runGenerateAudioJob honors selected user audio slots instead of regenerati
 test("runGenerateAudioJob single-track mode creates one pooled asset without reading a plan or selection", async () => {
   const spy = jobsSpy();
   const bodies: Array<Record<string, unknown>> = [];
+  const claimGenerations: Array<number | undefined> = [];
 
   await runGenerateAudioJob(
     {
@@ -323,6 +350,7 @@ test("runGenerateAudioJob single-track mode creates one pooled asset without rea
       workspaceId: "ws_1",
       projectId: "proj_1",
       orchestratorRunId: "run_1",
+      sessionClaimGeneration: 11,
       mode: "single_track",
       taskKind: "soundtrack_create",
       graphInputs: [
@@ -350,6 +378,7 @@ test("runGenerateAudioJob single-track mode creates one pooled asset without rea
         assert.fail("single-track mode must not read production selections"),
       createGeneratedAsset: async (args) => {
         bodies.push(args.body as Record<string, unknown>);
+        claimGenerations.push(args.sessionClaimGeneration);
         return {
           status: 202,
           body: { job: { result: { assetIds: ["standalone_audio"] } } },
@@ -364,6 +393,7 @@ test("runGenerateAudioJob single-track mode creates one pooled asset without rea
   assert.equal(bodies[0]?.audioMode, "music");
   assert.equal(bodies[0]?.runId, "run_1");
   assert.deepEqual(bodies[0]?.referenceAssetIds, ["reference_1"]);
+  assert.deepEqual(claimGenerations, [11]);
   assert.deepEqual(spy.succeededResult, { assetIds: ["standalone_audio"] });
 });
 

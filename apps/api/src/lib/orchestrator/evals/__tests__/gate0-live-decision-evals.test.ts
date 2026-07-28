@@ -18,6 +18,7 @@ import {
   HIERARCHY_SCENARIOS,
   runHierarchyScenario,
 } from "../hierarchy-fixture";
+import { VISUALS_DECISION_SCENARIOS } from "../visuals-scenarios";
 
 function liveLlmSkipReason(env: NodeJS.ProcessEnv = process.env): string | false {
   const provider = resolveLlmConfig(env).provider;
@@ -35,7 +36,7 @@ for (const scenario of GATE0_FLAT_SCENARIOS) {
   });
 }
 
-for (const scenario of HIERARCHY_SCENARIOS) {
+for (const scenario of [...HIERARCHY_SCENARIOS, ...VISUALS_DECISION_SCENARIOS]) {
   test(`gate0 hierarchy fixture routing — ${scenario.id}`, { skip }, async () => {
     const scored = await runHierarchyScenario(scenario, {
       model: createRealFixtureDecisionModel(),

@@ -31,6 +31,16 @@ test("parseAssetSemanticSearch accepts a valid project asset search body", () =>
   assert.equal(input.role, "b_roll");
 });
 
+test("parseAssetSemanticSearch accepts the generic standalone image kind", () => {
+  const input = parseAssetSemanticSearch({
+    q: "moonlit diner",
+    queryEmbedding: Array(ASSET_EMBEDDING_DIMENSIONS).fill(0),
+    embeddingModel: "text-embedding-3-small",
+    kind: "image",
+  });
+  assert.equal(input.kind, "image");
+});
+
 test("parseAssetSemanticSearch requires the configured vector dimensions", () => {
   assert.throws(
     () =>

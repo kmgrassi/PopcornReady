@@ -12,6 +12,7 @@ function recoverableJob(status: Job["status"] = "queued"): Job {
     workspaceId: "ws_1",
     projectId: "project_1",
     type: "asset_generation",
+    sessionClaimGeneration: 7,
     status,
     progress: {
       currentStep: status === "queued" ? "queued" : "generating_assets",
@@ -134,6 +135,7 @@ test("canonical tenant and job IDs override a tampered execution envelope", () =
     jobId: job.id,
     workspaceId: job.workspaceId,
     projectId: job.projectId,
+    sessionClaimGeneration: 7,
   });
 });
 
@@ -198,4 +200,61 @@ test("stale running provider work is terminalized without replay", async () => {
   assert.equal(terminalized, 1);
   assert.equal(executions, 0);
   assert.equal(job.error?.code, "job_recovery_required");
+});
+
+test("stale running storyboard recovery reconciles a committed deterministic bundle", async () => {
+  let job = recoverableJob("running");
+  const progress = job.progress as DurableOrchestratorJobProgress;
+  progress.execution = {
+    schemaVersion: "orchestrator_job_execution.v1",
+    kind: "generate_storyboard",
+    input: {
+      workspaceId: job.workspaceId,
+      projectId: job.projectId,
+      orchestratorRunId: "run_1",
+    },
+  };
+  let reconciliations = 0;
+  let terminalized = 0;
+  let executions = 0;
+
+  const result = await recoverDurableOrchestratorJob(
+    {
+      workspaceId: job.workspaceId,
+      projectId: job.projectId,
+      jobId: job.id,
+      now: new Date("2026-07-15T12:00:00.000Z"),
+    },
+    {
+      getJob: async () => job,
+      getRun: async () => ({
+        id: "run_1",
+        projectId: job.projectId,
+      }) as never,
+      claimJobRecovery: async () => job,
+      reconcileCommittedStoryboard: async (_job, execution, ownerId) => {
+        reconciliations += 1;
+        assert.equal(execution.kind, "generate_storyboard");
+        assert.equal(ownerId, "recovery-test");
+        job = {
+          ...job,
+          status: "succeeded",
+          result: { storyboardId: "storyboard_1", assetIds: ["tile_1"] },
+        };
+        return true;
+      },
+      ownerId: () => "recovery-test",
+      terminalizeStaleRunning: async () => {
+        terminalized += 1;
+      },
+      execute: async () => {
+        executions += 1;
+      },
+    }
+  );
+
+  assert.equal(reconciliations, 1);
+  assert.equal(terminalized, 0);
+  assert.equal(executions, 0);
+  assert.equal(result?.status, "succeeded");
 });

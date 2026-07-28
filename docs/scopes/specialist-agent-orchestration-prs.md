@@ -1076,6 +1076,26 @@ No domain agent may be enabled against live provider work before this PR.
 
 **Depends on:** PR 9.
 
+**Implementation status:** implemented on the shared finite-run runtime.
+Visuals-only activation is role-gated; task-kind registries, standalone
+generated-asset wrappers, generic graph images, pre-invocation target/pin
+authorization, pooled revisions, and mixed recovery precedence are wired.
+Audio, creator-direct HTTP routes/UI, root delegation cutover, and graph-wide
+Request Changes remain in their owning later PRs.
+
+Scoped production targeting keeps relational storyboard IDs distinct from
+ShotPlan IDs and translates only through the exact plan-bound positional
+mapping. Partial storyboard work preserves validated untargeted tiles and
+publishes a full immutable attempt. Claimed storyboard graph/relational writes
+and the current pointer become visible in one idempotent, exact-claim-fenced
+transaction with plan, pointer, and preserved-panel compare-and-set checks.
+The transaction validates full selected-plan beat coverage and exact
+beat-to-asset provenance before inserting anything. Job-deterministic IDs plus
+a persisted bundle fingerprint make lost-response and terminal-state replay
+return the original committed result. Exact scene coverage, graph inputs, and
+canonical fingerprints are enforced too, and pointer publication plus job
+success share the same commit.
+
 **Owns:** new Visuals prompt/config/evals and Visuals registry file.
 
 **Deliver:**

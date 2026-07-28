@@ -8,8 +8,8 @@
 <!-- agent-summary: The creative-director hierarchy and two-level root/domain split remain conditional on the Gate 0 proceed decision. -->
 <!-- agent-summary: The shared contract and API capability catalog are the executable TypeScript sources for this document. -->
 
-> **Status:** Accepted contract for the standalone domain foundation and the
-> proposed hierarchy boundary. Persistent Visuals/Audio sessions,
+> **Status:** Accepted contract with the internal Visuals and Audio profiles
+> active on the shared finite-run runtime. Persistent Visuals/Audio sessions,
 > creator-direct work, identities, and task/report semantics are active design
 > constraints for PRs 3–13. The creative-director hierarchy is a conditional
 > proposal until Gate 0 records `proceed`; this document does not amend the
@@ -182,8 +182,8 @@ to unconsumed outputs or targets without downstream consumers.
 
 ## Capability ownership
 
-The current flat production registry remains authoritative until Gate 0 says
-`proceed`. The current executable primitive vocabulary and its ownership,
+The current flat production registry remains authoritative for root work until
+Gate 0 says `proceed`. The executable primitive vocabulary and its ownership,
 canonical labels/order, execution modes, cost classes, and approval-gate
 metadata live in
 [`apps/api/src/lib/orchestrator-tools/capability-catalog.ts`](../apps/api/src/lib/orchestrator-tools/capability-catalog.ts).
@@ -196,32 +196,36 @@ handler and bridge were already synchronous, while the old dormant stub
 incorrectly inferred asynchronous execution from a media-name set. The catalog
 corrects that dormant inconsistency without changing active execution.
 
-Explicit dormant builders now make the proposed boundary testable without
-activating it:
+Role builders make the boundary executable without changing the flat root:
 
 - `root-registry.ts` exposes the ten current Creative Director-owned
   primitives, including optional catalog publication;
-- `visuals-registry.ts` exposes only the six current image/motion primitives;
+- `visuals-registry.ts` owns eight image/motion primitives: the six production
+  and revision tools plus standalone `generate_image_asset` and
+  `generate_video_asset`; the trusted task kind narrows model visibility to one
+  standalone tool for `image_create`, `video_create`, or `video_edit`;
   and
 - `audio-registry.ts` exposes only audio generation and picture fitting. A
   finite Audio run supplies its trusted `DomainTask.v1`, producing task-bound
   schemas/descriptions and scope-checked wrappers under those same canonical
   tool names; the flat default registry remains unchanged.
 
-The three registries are an exact, disjoint partition of the current 18-tool
-vocabulary. Domain registries contain no root, sibling, approval, assembly, or
-dispatch capability. Standalone Audio generation is a task mode over
-`generate_audio`, not a second primitive name. It reuses generated-assets
-provider/job/storage/action/cost execution, creates one pooled `audio_track`,
-and never fabricates a production selection. Creator-direct route construction
-remains owned by PR 12.
+The three role registries are an exact, disjoint 12/8/2 partition of the
+current 22-tool catalog. The two standalone tools have a specialist-only
+catalog surface and remain absent from `PRODUCTION_TOOL_NAMES`, driver stubs,
+the flat default registry, and root evals. Domain registries contain no root,
+sibling, approval, assembly, or dispatch capability.
+Standalone Audio generation is a task mode over `generate_audio`, not a second
+primitive name. It reuses generated-assets provider/job/storage/action/cost
+execution, creates one pooled `audio_track`, and never fabricates a production
+selection. Creator-direct route construction remains owned by PR 12.
 
 Under the proposed hierarchy, responsibility is:
 
 | Owner | Model-visible responsibility/capabilities |
 | --- | --- |
 | Creative director, conditional | current brief, story, script, shot and visual-anchor planning; timeline assembly and critique; approval, export, and optional catalog publication; future delegation and batched dispatch after their owning PRs |
-| Visuals | current anchor, storyboard, keyframe, clip, immutable image regeneration, and content-aware video edit capabilities; future standalone image/video capabilities after their owning PR |
+| Visuals | anchor, storyboard, keyframe, clip, immutable pooled image regeneration, pinned content-aware video edit, and standalone pooled image/video generation |
 | Audio | exact-script narration/dialogue, production or standalone music/sound generation, immutable delivery revisions, and fitting authorized audio to current picture |
 | Runtime, never model-facing | authorization, session/run claim, enqueue/lease, wait/resume, report acknowledgement, retry, cancellation, gate persistence, cost settlement, provider callback fencing |
 
@@ -238,8 +242,8 @@ anchor planning, assembly, critique, approval, budgets, export, and deciding
 when a domain should work. Visuals and Audio self-heal only inside their own
 capability boundary and return `blocked` or `question` across that boundary.
 
-`domain-recovery-projection.ts` is the pure, dormant translation boundary for
-that future specialist context. It projects both suggested recovery tools and
+`domain-recovery-projection.ts` is the translation boundary for specialist
+context. It projects both suggested recovery tools and
 precondition satisfiers. Same-owner primitives remain actionable with only
 exact server-authorized `DomainTarget` identities under a trusted project ID.
 Hint strings cannot authorize targets: IDs must match the trusted target set,
@@ -247,9 +251,67 @@ pass bounded stable-ID validation, and fit bounded trusted-input and emitted
 target caps, or the projection falls back to the trusted project target. Cross-owner primitive
 names and raw hints are removed and replaced by a required domain, stable
 targets, and a generic reason; duplicates collapse and unknown historical tool
-strings fail closed. The raw error remains unchanged for audit. This projector
-is not wired into the current flat model, engine, persistence, or action audit;
-the domain runtime PRs own that activation.
+strings fail closed. The raw error remains unchanged for audit. Cross-domain
+blocking takes precedence when one error also advertises a local recovery, so
+required root/Audio work cannot disappear into a Visuals retry loop.
+
+Visuals and Audio execution are enabled by an explicit role allowlist. Before
+an invocation action exists, the engine loads a fresh graph snapshot, verifies
+preserve pins, parses the selected tool once, and authorizes its stable IDs
+against the trusted task scope. The canonical parsed value is then reused for
+persistence, cost estimation, and execution. The rich bridge preserves the
+domain task, scope, snapshot, and session claim generation so a stale reclaimed
+worker cannot regain authority.
+
+Standalone image/video wrappers call the canonical generated-assets job,
+provider, storage, action, cost, content-hash, and embedding path. Provider and
+model settings are server-derived; minor likenesses route deterministically to
+Gemini. Untargeted results and domain revisions remain pooled. A direct video
+edit requires an asset target, an asset pin, and a trusted fingerprint that
+matches the fresh graph. It mints an `edited_from` clip and never swaps every
+selection that happens to reference the source.
+
+Visuals media jobs carrying a domain session claim also leave generated
+anchors, keyframes, and clips pooled. Their exact claim fences provider work,
+but it is not authority to replace an active project slot after a long-running
+provider call. The existing flat root path retains its legacy selection writes;
+a future domain selection move requires an explicit target plus transactional
+expected-selection and active-claim checks. Later tools in the same claimed
+finite run can resolve those pooled prerequisites only through asset creation
+actions attributed to that exact run and stable beat/anchor identity. This
+preserves anchor → keyframe → clip self-healing without reading another run's
+pooled alternatives.
+
+Relational storyboard scene/beat/panel UUIDs are not ShotPlan identities.
+Trusted Visuals targeting retains both namespaces and resolves relational
+targets through the exact plan-bound storyboard's `sceneIndex` / `beatIndex`
+coordinates before filtering anchors, storyboard tiles, keyframes, or clips.
+A resolved target with no plan beats remains explicitly empty; beat-producing
+tools fail closed instead of treating it as an unscoped full-plan request.
+A scoped storyboard run generates only its target tiles, reuses validated
+untargeted tiles from that exact compatible attempt, and publishes a complete
+new relational storyboard. Claimed storyboard publication is one idempotent
+database transaction fenced by job, action, finite run, session claim,
+selected-plan sequence/hash, current-storyboard pointer, and the preserved
+panel identities. The transaction reconstructs the complete beat manifest from
+the selected plan and verifies every submitted panel against either a matching
+new asset provenance record or an exact preserved-panel expectation before its
+first insert. This includes exact scene coverage (including zero-beat scenes),
+beat semantics, a single plan input edge, canonical input fingerprint, and
+asset-to-beat provenance. The same transaction publishes the pointer and marks
+the job succeeded with its persisted result. Bundle and asset IDs are
+job-deterministic: an ambiguous response can replay the persisted
+fingerprint/result even after the job becomes terminal, while crash recovery
+reloads a committed bundle before provider generation can overwrite its
+objects. Stale provider completions may leave unreferenced uploaded objects for
+storage GC, but they cannot create visible assets, story rows, or move the
+project pointer.
+
+The graph `image` kind is the default only for genuinely generic stills.
+`poster`, `character_anchor`, `scene_anchor`, `beat_keyframe`,
+`beat_storyboard`, `scene_storyboard`, and `act_mockup` keep their explicit
+production mappings. Generic images participate in media delivery, embeddings,
+semantic search, catalog snapshot/clone, and immutable pooled regeneration.
 
 ## Two-level and deterministic boundaries
 

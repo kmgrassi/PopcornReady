@@ -16,6 +16,7 @@ import {
 } from "@/lib/orchestrator";
 import type { ToolRegistry as RealToolRegistry } from "./registry";
 import type { ToolUsage } from "./types";
+import { assertPreparedDomainToolInput } from "./domain-tool-policy";
 
 function bullets(items: string[]): string {
   return items.map((item) => `- ${item}`).join("\n");
@@ -52,6 +53,10 @@ function bridgeContext(context: OrchestratorContext): {
   agentId?: string;
   messageId?: string;
   requestId?: string;
+  sessionClaimGeneration?: number;
+  domainTask?: OrchestratorContext["domainTask"];
+  domainScope?: OrchestratorContext["domainScope"];
+  domainSnapshot?: OrchestratorContext["domainSnapshot"];
   metadata?: Record<string, unknown>;
 } {
   const auth: AuthContext = {
@@ -69,6 +74,10 @@ function bridgeContext(context: OrchestratorContext): {
     agentId: context.agentId,
     messageId: context.messageId,
     requestId: context.requestId,
+    sessionClaimGeneration: context.sessionClaimGeneration,
+    domainTask: context.domainTask,
+    domainScope: context.domainScope,
+    domainSnapshot: context.domainSnapshot,
     metadata: context.metadata,
   };
 }
@@ -87,14 +96,33 @@ function bridgeTool(real: RealToolRegistry, name: ToolName): OrchestratorToolDef
     inputSchema: definition.inputSchema,
     outputSchema: definition.outputSchema,
     requiredResourceIds: [],
+    prepareInput: (input, context) => {
+      const parsedInput = definition.parseInput(input);
+      if (context.domainTask) {
+        if (!context.domainScope || !context.domainSnapshot) {
+          throw new Error("Domain tool input preparation requires a fresh trusted scope.");
+        }
+        return assertPreparedDomainToolInput({
+          toolName: name,
+          parsedInput,
+          task: context.domainTask,
+          scope: context.domainScope,
+          snapshot: context.domainSnapshot,
+        });
+      }
+      return parsedInput;
+    },
     mode: definition.execution,
     estimateCostUsd: async (input, context) => {
-      const estimate = await real.estimateCost(name, input, bridgeContext(context));
+      const estimate = definition.estimateCost
+        ? await definition.estimateCost(input as never, bridgeContext(context))
+        : {};
       return estimate.estimatedCostUsd;
     },
-    // Delegate to the registry's execute (which runs parseInput + maps
-    // ToolInputError to a failed result) so validation matches production.
-    execute: (input, context) => real.execute(name, input, bridgeContext(context)),
+    // `prepareInput` already parsed and authorized this exact value before the
+    // engine persisted the invocation; never parse a second time here.
+    execute: async (input, context) =>
+      definition.execute(input as never, bridgeContext(context)),
   };
 }
 

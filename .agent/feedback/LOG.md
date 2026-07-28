@@ -243,3 +243,9 @@
 - Friction or failure: Production speech and fit timing each had a permissive fallback that converted missing trusted state into apparently valid provider work.
 - Suggested improvement: Put semantic invariants at every canonical write boundary, and test missing authority with adversarial caller input rather than only valid wrapper flows.
 - Follow-up: Keep creator-direct PR 12 on the shared Audio constraints and rerun the database-gated lineage tests when local Postgres is reachable.
+
+### 2026-07-28T09:00:00-04:00 — API-20260727-PR11-merge
+- What helped: Merging the updated stacked base instead of rewriting the reviewed branch kept PR history intact, and the independent cross-profile review found an activation gap outside Git's textual conflicts.
+- Friction or failure: PR 10 introduced a role allowlist and durable session-claim propagation after PR 11 branched; Git auto-merged the recovery and Audio job paths without revealing that Audio would stay queued and then lose its claim at the inner provider boundary.
+- Suggested improvement: When stacked specialist profiles add a rollout role, include both the production worker activation point and every async parent/child job claim handoff in the profile checklist; test the complete enabled-role set and provider-bound claim, not only the definition factory.
+- Follow-up: PR 12 should extend the same explicit role-aware activation model for creator-direct Audio entry points without weakening the fail-closed default.

@@ -10,7 +10,10 @@ import {
   type OrchestratorJobExecutionEnvelope,
   withRecoveryLease,
 } from "./job-gateway";
-import { runStoryboardJob } from "@/lib/orchestrator-tools/storyboard-job";
+import {
+  reconcileCommittedStoryboardJob,
+  runStoryboardJob,
+} from "@/lib/orchestrator-tools/storyboard-job";
 import { runGenerateAnchorJob } from "@/lib/orchestrator-tools/generate-anchor-job";
 import { runGenerateKeyframeJob } from "@/lib/orchestrator-tools/generate-keyframe-job";
 import { runGenerateClipJob } from "@/lib/orchestrator-tools/generate-clip-job";
@@ -61,6 +64,9 @@ export function canonicalExecutionInput(
     jobId: job.id,
     workspaceId: job.workspaceId,
     projectId: job.projectId,
+    ...(job.sessionClaimGeneration !== undefined
+      ? { sessionClaimGeneration: job.sessionClaimGeneration }
+      : {}),
   };
 }
 
@@ -69,6 +75,11 @@ export interface DurableJobRecoveryDeps {
   claimJobRecovery: typeof claimJobRecovery;
   getRun: typeof getOrchestratorRun;
   execute: typeof execute;
+  reconcileCommittedStoryboard(
+    job: Job,
+    execution: OrchestratorJobExecutionEnvelope,
+    ownerId: string
+  ): Promise<boolean>;
   ownerId(): string;
   terminalizeStaleRunning(job: Job, ownerId: string): Promise<void>;
 }
@@ -78,6 +89,21 @@ const defaults: DurableJobRecoveryDeps = {
   claimJobRecovery,
   getRun: getOrchestratorRun,
   execute,
+  reconcileCommittedStoryboard: async (job, execution, ownerId) => {
+    const writer = createDurableOrchestratorJobWriter(
+      job.workspaceId,
+      job.projectId
+    );
+    const canonicalInput = canonicalExecutionInput(job, execution);
+    return withRecoveryLease(ownerId, () =>
+      reconcileCommittedStoryboardJob(
+        canonicalInput as unknown as Parameters<
+          typeof reconcileCommittedStoryboardJob
+        >[0],
+        { jobs: writer }
+      )
+    );
+  },
   ownerId: () => `recovery-${randomUUID()}`,
   terminalizeStaleRunning: async (job, ownerId) => {
     const writer = createDurableOrchestratorJobWriter(job.workspaceId, job.projectId);
@@ -142,6 +168,12 @@ export async function recoverDurableOrchestratorJob(input: {
     attempt: (progress.attempt ?? 0) + 1,
   });
   if (job.status === "running") {
+    if (
+      execution.kind === "generate_storyboard" &&
+      await d.reconcileCommittedStoryboard(job, execution, ownerId)
+    ) {
+      return d.getJob(input.workspaceId, input.projectId, input.jobId);
+    }
     await d.terminalizeStaleRunning(job, ownerId);
     return d.getJob(input.workspaceId, input.projectId, input.jobId);
   }

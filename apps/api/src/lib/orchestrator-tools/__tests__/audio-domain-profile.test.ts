@@ -378,7 +378,13 @@ test("standalone soundtrack creates one no-plan, unselected single-track job", a
       durationSec: 30,
       provider: "mock",
     },
-    { auth, projectId, orchestratorRunId: "run_1", actionId: "outer_action" }
+    {
+      auth,
+      projectId,
+      orchestratorRunId: "run_1",
+      actionId: "outer_action",
+      sessionClaimGeneration: 13,
+    }
   );
   assert.equal(result.status, "accepted");
   assert.equal(harness.workerInput?.mode, "single_track");
@@ -388,6 +394,7 @@ test("standalone soundtrack creates one no-plan, unselected single-track job", a
   assert.equal(track.audioMode, "music");
   assert.equal(track.forceInstrumental, true);
   assert.equal("selection" in track, false);
+  assert.equal(harness.workerInput?.sessionClaimGeneration, 13);
 });
 
 test("production narration uses exact pinned script copy, not beat intent or model paraphrase", async () => {
