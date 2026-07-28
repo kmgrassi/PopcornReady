@@ -1076,6 +1076,13 @@ No domain agent may be enabled against live provider work before this PR.
 
 **Depends on:** PR 9.
 
+**Implementation status:** implemented on the shared finite-run runtime.
+Visuals-only activation is role-gated; task-kind registries, standalone
+generated-asset wrappers, generic graph images, pre-invocation target/pin
+authorization, pooled revisions, and mixed recovery precedence are wired.
+Audio, creator-direct HTTP routes/UI, root delegation cutover, and graph-wide
+Request Changes remain in their owning later PRs.
+
 **Owns:** new Visuals prompt/config/evals and Visuals registry file.
 
 **Deliver:**
@@ -1123,6 +1130,14 @@ graph/selection assertions, follow-up-session tests, and opt-in media smoke.
 **Depends on:** PR 9. Can proceed in parallel with PR 10.
 
 **Owns:** new Audio prompt/config/evals and Audio registry file.
+
+**Implementation status:** implemented as a task-bound Audio profile over the
+shared finite-run engine and canonical `generate_audio` /
+`fit_audio_to_picture` vocabulary. Production work records exact
+plan/brief/script dependencies; standalone creation uses the generated-assets
+service without a fabricated plan or selection; and source-targeted delivery
+revisions mint a new immutable audio lineage version. The creator-direct HTTP
+entrypoint remains intentionally owned by PR 12.
 
 **Deliver:**
 

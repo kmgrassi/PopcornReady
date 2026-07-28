@@ -61,6 +61,9 @@ export function canonicalExecutionInput(
     jobId: job.id,
     workspaceId: job.workspaceId,
     projectId: job.projectId,
+    ...(job.sessionClaimGeneration !== undefined
+      ? { sessionClaimGeneration: job.sessionClaimGeneration }
+      : {}),
   };
 }
 

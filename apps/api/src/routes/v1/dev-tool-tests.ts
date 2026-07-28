@@ -6,6 +6,7 @@
 import { Router, type RequestHandler } from "express";
 import { ApiError } from "@/core/errors";
 import { createDefaultToolRegistry } from "@/lib/orchestrator-tools/default-registry";
+import { createVisualsToolRegistry } from "@/lib/orchestrator-tools/visuals-registry";
 import { listBatteries } from "@/lib/tool-tests/batteries";
 import { runToolTestSuite } from "@/lib/tool-tests/runner";
 import type { ToolName } from "@/lib/orchestrator";
@@ -17,6 +18,13 @@ export function isToolTestHarnessEnabled(
   const flag = String(env.ENABLE_TOOL_TEST_HARNESS || "").trim().toLowerCase();
   const enabled = flag === "1" || flag === "true";
   return enabled && env.NODE_ENV !== "production";
+}
+
+export function wiredToolTestNames(): ReadonlySet<string> {
+  return new Set([
+    ...createDefaultToolRegistry().list().map((tool) => tool.name),
+    ...createVisualsToolRegistry().list().map((tool) => tool.name),
+  ]);
 }
 
 export const devToolTestsRouter = Router();
@@ -46,7 +54,7 @@ function devRoute(
 devToolTestsRouter.get(
   "/dev/tool-tests",
   devRoute(async () => {
-    const wired = new Set(createDefaultToolRegistry().list().map((tool) => tool.name));
+    const wired = wiredToolTestNames();
     const batteries = listBatteries().map((battery) => ({
       tool: battery.tool,
       wired: wired.has(battery.tool),

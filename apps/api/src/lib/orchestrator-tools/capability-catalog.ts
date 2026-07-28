@@ -20,7 +20,7 @@ interface ToolCatalogEntry {
    * never in the flat production default registry, driver stubs, flat eval
    * scenario surfaces, or the tool-test batteries (see PRODUCTION_TOOL_NAMES).
    */
-  surface?: "dispatch";
+  surface?: "dispatch" | "domain";
   /** Exact compatibility behavior for the existing run projection. */
   runProjection: {
     label: string | null;
@@ -141,7 +141,7 @@ const toolCapabilityCatalog = {
     ownerRole: "visuals",
     label: "Image Revisions",
     driverDescription:
-      "Regenerate one existing image asset from a replacement prompt, minting a new immutable version and repointing its active selections.",
+      "Regenerate one existing image asset from a replacement prompt, minting a new immutable version under the caller's surface policy.",
     execution: "sync",
     costClass: "media",
     gate: { kind: "none" },
@@ -159,6 +159,30 @@ const toolCapabilityCatalog = {
     costClass: "media",
     gate: { kind: "none" },
     runProjection: { label: "Video Edits", order: 9 },
+  },
+  generate_image_asset: {
+    capability: "standalone_image_generation",
+    ownerRole: "visuals",
+    label: "Image",
+    driverDescription:
+      "Generate one immutable standalone image in the project asset pool.",
+    execution: "async",
+    costClass: "media",
+    gate: { kind: "none" },
+    surface: "domain",
+    runProjection: { label: null, order: null },
+  },
+  generate_video_asset: {
+    capability: "standalone_video_generation",
+    ownerRole: "visuals",
+    label: "Video",
+    driverDescription:
+      "Generate one immutable standalone video segment in the project asset pool.",
+    execution: "async",
+    costClass: "media",
+    gate: { kind: "none" },
+    surface: "domain",
+    runProjection: { label: null, order: null },
   },
   generate_audio: {
     capability: "audio_generation",
@@ -303,9 +327,24 @@ export function isDispatchToolName(value: string): value is ToolName {
   return dispatchToolNameSet.has(value);
 }
 
-/** The flat production vocabulary: every catalog tool except dispatch tools. */
+/** Specialist-only tools that never appear in the legacy flat root surface. */
+export const DOMAIN_TOOL_NAMES = Object.freeze(
+  TOOL_NAMES.filter(
+    (name) => (TOOL_CAPABILITY_CATALOG[name] as ToolCatalogEntry).surface === "domain"
+  )
+);
+
+const domainToolNameSet = new Set<string>(DOMAIN_TOOL_NAMES);
+
+export function isDomainToolName(value: string): value is ToolName {
+  return domainToolNameSet.has(value);
+}
+
+/** The flat production vocabulary excludes dispatch and specialist-only tools. */
 export const PRODUCTION_TOOL_NAMES = Object.freeze(
-  TOOL_NAMES.filter((name) => !dispatchToolNameSet.has(name))
+  TOOL_NAMES.filter(
+    (name) => !dispatchToolNameSet.has(name) && !domainToolNameSet.has(name)
+  )
 );
 
 export function getToolCapability<Name extends ToolName>(

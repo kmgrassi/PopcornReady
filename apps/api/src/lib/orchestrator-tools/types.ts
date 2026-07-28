@@ -1,4 +1,7 @@
 import type { AuthContext } from "@/lib/api/v1/auth";
+import type { DomainTaskV1 } from "@popcorn/shared/domain-agent-contract";
+import type { ProjectGraphSnapshot } from "@/lib/orchestrator-context/graph-snapshot";
+import type { DomainTargetScope } from "@/lib/orchestrator-context/target-scope";
 import type {
   ToolCapabilityId,
   ToolCostClass,
@@ -102,8 +105,10 @@ export interface ToolExecutionContext {
   /** The orchestrator run driving this call — async tools' workers use it to
    * resume the run when their job completes. */
   orchestratorRunId?: string;
-  /** Durable domain-session claim copied onto causal jobs so late workers are fenced. */
   sessionClaimGeneration?: number;
+  domainTask?: DomainTaskV1;
+  domainScope?: DomainTargetScope;
+  domainSnapshot?: ProjectGraphSnapshot;
 }
 
 export interface ToolCostEstimate {

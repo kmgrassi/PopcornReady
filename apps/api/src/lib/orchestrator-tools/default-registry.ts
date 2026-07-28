@@ -50,6 +50,8 @@ import {
   type RequestApprovalDeps,
 } from "./request-approval";
 import { ToolRegistry } from "./registry";
+import type { GenerateImageAssetDeps } from "./generate-image-asset";
+import type { GenerateVideoAssetDeps } from "./generate-video-asset";
 
 export interface DefaultToolRegistryDeps {
   planShots?: Partial<PlanShotsDeps>;
@@ -70,6 +72,9 @@ export interface DefaultToolRegistryDeps {
   requestApproval?: Partial<RequestApprovalDeps>;
   assembleTimeline?: Partial<AssembleTimelineDeps>;
   publishToCatalog?: Partial<PublishToCatalogDeps>;
+  /** Specialist-only dependencies; intentionally ignored by the flat registry. */
+  generateImageAsset?: Partial<GenerateImageAssetDeps>;
+  generateVideoAsset?: Partial<GenerateVideoAssetDeps>;
 }
 
 export function createDefaultToolRegistry(

@@ -46,12 +46,15 @@ test("ElevenLabs audio helpers preserve measured MP3 durations", async () => {
   const previousFetch = globalThis.fetch;
   const bytes = mp3FrameSequence(10);
   const expectedDuration = 11520 / 44100;
+  const requestBodies: Array<Record<string, unknown>> = [];
   process.env.ELEVENLABS_API_KEY = "test-key";
-  globalThis.fetch = async () =>
-    new Response(new Uint8Array(bytes), {
+  globalThis.fetch = async (_url, init) => {
+    requestBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+    return new Response(new Uint8Array(bytes), {
       status: 200,
       headers: { "Content-Type": "audio/mpeg" },
     });
+  };
 
   try {
     const results = await Promise.all([
@@ -59,6 +62,13 @@ test("ElevenLabs audio helpers preserve measured MP3 durations", async () => {
         provider: "elevenlabs",
         kind: "audio",
         prompt: "Narration.",
+        voiceSettings: {
+          stability: 0.35,
+          similarityBoost: 0.75,
+          style: 0.35,
+          speed: 0.95,
+          useSpeakerBoost: true,
+        },
       }),
       createDialogueAudio({
         provider: "elevenlabs",
@@ -81,6 +91,13 @@ test("ElevenLabs audio helpers preserve measured MP3 durations", async () => {
     for (const result of results) {
       assert.equal(result.durationSec, expectedDuration);
     }
+    assert.deepEqual(requestBodies[0]?.voice_settings, {
+      stability: 0.35,
+      similarity_boost: 0.75,
+      style: 0.35,
+      speed: 0.95,
+      use_speaker_boost: true,
+    });
   } finally {
     if (previousKey === undefined) {
       delete process.env.ELEVENLABS_API_KEY;

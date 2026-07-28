@@ -154,14 +154,14 @@ export const editVideoAssetBattery: ToolBattery = {
           }
         }
 
-        const selected = await selectionPointsTo(
+        const sourceRemainsSelected = await selectionPointsTo(
           db,
           sandbox.projectId,
           "primary_footage",
-          editedAssetId
+          sourceAssetId
         );
-        if (!selected) {
-          failures.push("primary_footage selection did not swap to edited asset");
+        if (!sourceRemainsSelected) {
+          failures.push("video edit unexpectedly moved the primary_footage selection");
         }
         return failures;
       },

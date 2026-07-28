@@ -5,6 +5,7 @@ import {
 import {
   getActiveProjectScopedAsset as realGetActiveProjectScopedAsset,
   getActiveProjectPlan as realGetActiveProjectPlan,
+  getProjectRunGeneratedAsset as realGetProjectRunGeneratedAsset,
   type ActiveProjectPlan,
 } from "@/lib/api/v1/store";
 import type { ShotPlan } from "@popcorn/shared/types";
@@ -54,6 +55,7 @@ export interface GenerateClipJobBeat {
 export interface GenerateClipDeps {
   getActiveProjectPlan: typeof realGetActiveProjectPlan;
   getActiveProjectScopedAsset: typeof realGetActiveProjectScopedAsset;
+  getProjectRunGeneratedAsset: typeof realGetProjectRunGeneratedAsset;
   createJob: OrchestratorJobCreator["createJob"];
   runGenerateClipJob: typeof realRunGenerateClipJob;
 }
@@ -61,6 +63,7 @@ export interface GenerateClipDeps {
 const defaultDeps: GenerateClipDeps = {
   getActiveProjectPlan: realGetActiveProjectPlan,
   getActiveProjectScopedAsset: realGetActiveProjectScopedAsset,
+  getProjectRunGeneratedAsset: realGetProjectRunGeneratedAsset,
   createJob: createDurableOrchestratorJobCreator().createJob,
   runGenerateClipJob: realRunGenerateClipJob,
 };
@@ -372,12 +375,24 @@ export function createGenerateClipTool(
       const missingKeyframeBeatIds: string[] = [];
 
       for (const beatId of requestedBeatIds) {
-        const existingClip = await resolved.getActiveProjectScopedAsset({
+        const selectedClip = await resolved.getActiveProjectScopedAsset({
           workspaceId: context.auth.workspaceId,
           projectId: context.projectId,
           slotRole: `beat_clip:${beatId}`,
           expectedRole: "beat_clip",
         });
+        const existingClip =
+          selectedClip ??
+          (context.orchestratorRunId &&
+          context.sessionClaimGeneration !== undefined
+            ? await resolved.getProjectRunGeneratedAsset({
+                workspaceId: context.auth.workspaceId,
+                projectId: context.projectId,
+                orchestratorRunId: context.orchestratorRunId,
+                role: "beat_clip",
+                beatId,
+              })
+            : null);
         if (existingClip) {
           logger.info("generate_clip.beat_skipped_existing_clip", {
             workspaceId: context.auth.workspaceId,
@@ -390,12 +405,24 @@ export function createGenerateClipTool(
           continue;
         }
 
-        const keyframe = await resolved.getActiveProjectScopedAsset({
+        const selectedKeyframe = await resolved.getActiveProjectScopedAsset({
           workspaceId: context.auth.workspaceId,
           projectId: context.projectId,
           slotRole: `beat_keyframe:${beatId}`,
           expectedRole: "beat_keyframe",
         });
+        const keyframe =
+          selectedKeyframe ??
+          (context.orchestratorRunId &&
+          context.sessionClaimGeneration !== undefined
+            ? await resolved.getProjectRunGeneratedAsset({
+                workspaceId: context.auth.workspaceId,
+                projectId: context.projectId,
+                orchestratorRunId: context.orchestratorRunId,
+                role: "beat_keyframe",
+                beatId,
+              })
+            : null);
         if (!keyframe) {
           logger.warn("generate_clip.beat_missing_keyframe", {
             workspaceId: context.auth.workspaceId,
@@ -449,9 +476,7 @@ export function createGenerateClipTool(
         workspaceId: context.auth.workspaceId,
         type: "asset_generation",
         projectId: context.projectId,
-        ...(context.sessionClaimGeneration !== undefined
-          ? { sessionClaimGeneration: context.sessionClaimGeneration }
-          : {}),
+        sessionClaimGeneration: context.sessionClaimGeneration,
         ...(context.actionId
           ? { actionId: context.actionId, idempotencyKey: `action:${context.actionId}` }
           : {}),
@@ -485,6 +510,9 @@ export function createGenerateClipTool(
           workspaceId: context.auth.workspaceId,
           projectId: context.projectId,
           ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
+          ...(context.sessionClaimGeneration !== undefined
+            ? { sessionClaimGeneration: context.sessionClaimGeneration }
+            : {}),
           beats: jobBeats,
           skippedBeatIds,
           ...(input.provider ? { provider: input.provider } : {}),

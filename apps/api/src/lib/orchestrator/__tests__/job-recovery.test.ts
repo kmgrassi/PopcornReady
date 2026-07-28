@@ -12,6 +12,7 @@ function recoverableJob(status: Job["status"] = "queued"): Job {
     workspaceId: "ws_1",
     projectId: "project_1",
     type: "asset_generation",
+    sessionClaimGeneration: 7,
     status,
     progress: {
       currentStep: status === "queued" ? "queued" : "generating_assets",
@@ -134,6 +135,7 @@ test("canonical tenant and job IDs override a tampered execution envelope", () =
     jobId: job.id,
     workspaceId: job.workspaceId,
     projectId: job.projectId,
+    sessionClaimGeneration: 7,
   });
 });
 

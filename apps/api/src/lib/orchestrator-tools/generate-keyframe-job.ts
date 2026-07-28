@@ -6,6 +6,7 @@ import {
   getActiveProjectScopedAsset as realGetActiveProjectScopedAsset,
   getActiveProjectVisualAnchorPlan as realGetActiveProjectVisualAnchorPlan,
   getAsset as realGetAsset,
+  getProjectRunGeneratedAsset as realGetProjectRunGeneratedAsset,
   selectGeneratedBeatKeyframeAsset as realSelectGeneratedBeatKeyframeAsset,
   type V1Asset,
   type VisualAnchorPlan,
@@ -25,6 +26,7 @@ export interface GenerateKeyframeJobDeps {
   getActiveProjectScopedAsset: typeof realGetActiveProjectScopedAsset;
   getActiveProjectVisualAnchorPlan: typeof realGetActiveProjectVisualAnchorPlan;
   getAsset: typeof realGetAsset;
+  getProjectRunGeneratedAsset: typeof realGetProjectRunGeneratedAsset;
   generateBeatKeyframe: typeof realGenerateBeatKeyframe;
   selectGeneratedBeatKeyframeAsset: typeof realSelectGeneratedBeatKeyframeAsset;
   jobs?: Pick<OrchestratorJobWriter, "setStep" | "succeed" | "fail"> &
@@ -36,6 +38,7 @@ const defaultDeps: GenerateKeyframeJobDeps = {
   getActiveProjectScopedAsset: realGetActiveProjectScopedAsset,
   getActiveProjectVisualAnchorPlan: realGetActiveProjectVisualAnchorPlan,
   getAsset: realGetAsset,
+  getProjectRunGeneratedAsset: realGetProjectRunGeneratedAsset,
   generateBeatKeyframe: realGenerateBeatKeyframe,
   selectGeneratedBeatKeyframeAsset: realSelectGeneratedBeatKeyframeAsset,
 };
@@ -121,6 +124,8 @@ async function activeAnchorAssets(input: {
   workspaceId: string;
   projectId: string;
   beatId: string;
+  orchestratorRunId?: string;
+  sessionClaimGeneration?: number;
   visualAnchorPlan?: VisualAnchorPlan;
 }): Promise<{ anchor: VisualAnchorPlanItem; asset: V1Asset }[]> {
   const matching = (input.visualAnchorPlan?.anchors ?? []).filter((anchor) =>
@@ -129,12 +134,24 @@ async function activeAnchorAssets(input: {
   const assets: { anchor: VisualAnchorPlanItem; asset: V1Asset }[] = [];
   for (const anchor of matching) {
     const role = anchor.kind === "character" ? "character_anchor" : "scene_anchor";
-    const asset = await input.deps.getActiveProjectScopedAsset({
+    const selectedAsset = await input.deps.getActiveProjectScopedAsset({
       workspaceId: input.workspaceId,
       projectId: input.projectId,
       slotRole: `${role}:${anchor.id}`,
       expectedRole: role,
     });
+    const asset =
+      selectedAsset ??
+      (input.orchestratorRunId &&
+      input.sessionClaimGeneration !== undefined
+        ? await input.deps.getProjectRunGeneratedAsset({
+            workspaceId: input.workspaceId,
+            projectId: input.projectId,
+            orchestratorRunId: input.orchestratorRunId,
+            role,
+            slug: anchor.id,
+          })
+        : null);
     if (asset?.status === "ready") assets.push({ anchor, asset });
   }
   return assets;
@@ -145,6 +162,7 @@ export interface GenerateKeyframeJobInput {
   workspaceId: string;
   projectId: string;
   orchestratorRunId?: string;
+  sessionClaimGeneration?: number;
   plan: ShotPlan;
   planAssetId: string;
   planContentHash: string;
@@ -220,6 +238,12 @@ export async function runGenerateKeyframeJob(
         workspaceId: input.workspaceId,
         projectId: input.projectId,
         beatId,
+        ...(input.orchestratorRunId
+          ? { orchestratorRunId: input.orchestratorRunId }
+          : {}),
+        ...(input.sessionClaimGeneration !== undefined
+          ? { sessionClaimGeneration: input.sessionClaimGeneration }
+          : {}),
         ...(activeVisualAnchors?.visualAnchorPlan
           ? { visualAnchorPlan: activeVisualAnchors.visualAnchorPlan }
           : {}),
@@ -287,6 +311,9 @@ export async function runGenerateKeyframeJob(
         auth,
         projectId: input.projectId,
         beatId,
+        ...(input.sessionClaimGeneration !== undefined
+          ? { sessionClaimGeneration: input.sessionClaimGeneration }
+          : {}),
         body: {
           prompt,
           ...(provider ? { provider } : {}),
@@ -311,27 +338,29 @@ export async function runGenerateKeyframeJob(
         throw new Error(`Keyframe generation returned no assets for ${beatId}.`);
       }
       for (const assetId of assetIds) {
-        try {
-          await d.selectGeneratedBeatKeyframeAsset({
-            workspaceId: input.workspaceId,
-            projectId: input.projectId,
+        if (input.sessionClaimGeneration === undefined) {
+          try {
+            await d.selectGeneratedBeatKeyframeAsset({
+              workspaceId: input.workspaceId,
+              projectId: input.projectId,
+              beatId,
+              assetId,
+            });
+          } catch (err) {
+            const safeError = redactError(err, { defaultCode: "selection_failed" });
+            jobLogger.error("generate_keyframe_job.selection_failed", {
+              beatId,
+              assetId,
+              error: safeError,
+            });
+            throw err;
+          }
+          jobLogger.info("generate_keyframe_job.selection_applied", {
             beatId,
             assetId,
+            slotRole: `beat_keyframe:${beatId}`,
           });
-        } catch (err) {
-          const safeError = redactError(err, { defaultCode: "selection_failed" });
-          jobLogger.error("generate_keyframe_job.selection_failed", {
-            beatId,
-            assetId,
-            error: safeError,
-          });
-          throw err;
         }
-        jobLogger.info("generate_keyframe_job.selection_applied", {
-          beatId,
-          assetId,
-          slotRole: `beat_keyframe:${beatId}`,
-        });
         generatedAssetIds.push(assetId);
       }
       await jobs.reportProgress?.(input.jobId, {

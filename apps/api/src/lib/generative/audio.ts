@@ -205,6 +205,27 @@ export async function createSpeechAudio(
     text,
     model_id: model,
     ...(input.languageCode ? { language_code: input.languageCode } : {}),
+    ...(input.voiceSettings
+      ? {
+          voice_settings: {
+            ...(input.voiceSettings.stability !== undefined
+              ? { stability: input.voiceSettings.stability }
+              : {}),
+            ...(input.voiceSettings.similarityBoost !== undefined
+              ? { similarity_boost: input.voiceSettings.similarityBoost }
+              : {}),
+            ...(input.voiceSettings.style !== undefined
+              ? { style: input.voiceSettings.style }
+              : {}),
+            ...(input.voiceSettings.speed !== undefined
+              ? { speed: input.voiceSettings.speed }
+              : {}),
+            ...(input.voiceSettings.useSpeakerBoost !== undefined
+              ? { use_speaker_boost: input.voiceSettings.useSpeakerBoost }
+              : {}),
+          },
+        }
+      : {}),
   };
 
   const bytes = await elevenLabsAudioFetch({

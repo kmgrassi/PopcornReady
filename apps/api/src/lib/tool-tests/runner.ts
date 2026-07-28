@@ -13,6 +13,8 @@ import {
 } from "@/lib/orchestrator";
 import { createOrchestratorRun } from "@/lib/api/v1/orchestrator-store";
 import { createDefaultToolRegistry } from "@/lib/orchestrator-tools/default-registry";
+import { isDomainToolName } from "@/lib/orchestrator-tools/capability-catalog";
+import { createVisualsToolRegistry } from "@/lib/orchestrator-tools/visuals-registry";
 import type { ToolRegistry as RealToolRegistry } from "@/lib/orchestrator-tools/registry";
 import { getServiceSupabase } from "@/lib/supabase/clients";
 import { normalizeStatuses, subsetMismatches } from "./assertions";
@@ -70,7 +72,11 @@ export async function runToolTestCase(
   const previousProvider = process.env.LLM_PROVIDER;
   if (provider) process.env.LLM_PROVIDER = provider;
 
-  const real = options.realRegistry ?? createDefaultToolRegistry();
+  const real = options.realRegistry ?? (
+    isDomainToolName(battery.tool)
+      ? createVisualsToolRegistry()
+      : createDefaultToolRegistry()
+  );
   let sandbox: Sandbox | undefined;
 
   try {
