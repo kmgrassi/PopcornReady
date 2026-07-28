@@ -6,6 +6,7 @@ import {
   getActiveProjectScopedAsset as realGetActiveProjectScopedAsset,
   getActiveProjectPlan as realGetActiveProjectPlan,
   getProjectRunGeneratedAsset as realGetProjectRunGeneratedAsset,
+  getProjectStoryboardById as realGetProjectStoryboardById,
   type ActiveProjectPlan,
 } from "@/lib/api/v1/store";
 import type { ShotPlan } from "@popcorn/shared/types";
@@ -15,6 +16,10 @@ import { ToolInputError } from "./types";
 import { runGenerateClipJob as realRunGenerateClipJob } from "./generate-clip-job";
 import { createLogger } from "@/lib/v1/logger";
 import { estimateCostUsd as estimateGenerativeCostUsd } from "@/lib/generative/pricing";
+import {
+  resolveVisualTargets,
+  type TrustedVisualTargets,
+} from "./visual-targeting";
 
 type VideoProvider =
   | "openai"
@@ -36,6 +41,8 @@ export interface GenerateClipInput {
   seconds?: number;
   prompt?: string;
   revisionInstruction?: string;
+  /** Server-derived domain scope; never model-authored. */
+  trustedVisualTargets?: TrustedVisualTargets;
 }
 
 export interface GenerateClipOutput {
@@ -56,6 +63,7 @@ export interface GenerateClipDeps {
   getActiveProjectPlan: typeof realGetActiveProjectPlan;
   getActiveProjectScopedAsset: typeof realGetActiveProjectScopedAsset;
   getProjectRunGeneratedAsset: typeof realGetProjectRunGeneratedAsset;
+  getProjectStoryboardById: typeof realGetProjectStoryboardById;
   createJob: OrchestratorJobCreator["createJob"];
   runGenerateClipJob: typeof realRunGenerateClipJob;
 }
@@ -64,6 +72,7 @@ const defaultDeps: GenerateClipDeps = {
   getActiveProjectPlan: realGetActiveProjectPlan,
   getActiveProjectScopedAsset: realGetActiveProjectScopedAsset,
   getProjectRunGeneratedAsset: realGetProjectRunGeneratedAsset,
+  getProjectStoryboardById: realGetProjectStoryboardById,
   createJob: createDurableOrchestratorJobCreator().createJob,
   runGenerateClipJob: realRunGenerateClipJob,
 };
@@ -366,7 +375,27 @@ export function createGenerateClipTool(
       }
 
       const allBeats = new Map(planBeats(activePlan.plan).map((beat) => [beat.id, beat]));
-      const requestedBeatIds = selectedBeatIds(input, activePlan);
+      const trustedTargets = await resolveVisualTargets({
+        activePlan,
+        targets: input.trustedVisualTargets,
+        loadStoryboard: (storyboardId) =>
+          resolved.getProjectStoryboardById(
+            context.auth.workspaceId,
+            context.projectId!,
+            storyboardId
+          ),
+      });
+      const requestedBeatIds =
+        trustedTargets?.planBeatIds ?? selectedBeatIds(input, activePlan);
+      if (
+        context.domainTask &&
+        trustedTargets &&
+        requestedBeatIds.length === 0
+      ) {
+        throw new ToolInputError(
+          "No planned beats intersect the trusted task targets."
+        );
+      }
       const unknown = requestedBeatIds.filter((beatId) => !allBeats.has(beatId));
       if (unknown.length) return unknownBeats(unknown);
 

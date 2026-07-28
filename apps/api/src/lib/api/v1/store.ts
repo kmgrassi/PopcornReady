@@ -482,6 +482,7 @@ function mapStoryBlueprintRecord(row: StoryBlueprintRow): StoryBlueprintRecord {
 interface CurrentSelectionRow {
   active_asset_id: string;
   set_by_action_id?: string | null;
+  seq?: number;
 }
 
 interface GraphAssetSummaryRow {
@@ -2884,6 +2885,8 @@ export interface ActiveProjectPlan {
   assetId: string;
   /** The plan asset's content hash — the stale-detection fingerprint. */
   contentHash: string;
+  /** Current plan selection sequence. Claimed domain work requires this CAS token. */
+  selectionSeq?: number;
 }
 
 // The project's active shot plan (mirrors getActiveProjectBrief). The storyboard
@@ -2892,6 +2895,16 @@ export async function getActiveProjectPlan(
   projectId: string
 ): Promise<ActiveProjectPlan | null> {
   const db = getServiceSupabase();
+  const selected = (await runQuery(
+    "store.getActiveProjectPlan selection",
+    db
+      .from("current_selections")
+      .select("active_asset_id, seq")
+      .eq("project_id", projectId)
+      .eq("slot_role", "plan")
+      .is("slot_owner_lineage_id", null)
+      .maybeSingle()
+  )) as CurrentSelectionRow | null;
   const selectedPlanAsset = await selectedDataAsset(db, projectId, "plan", "plan");
   const selectedPlan = selectedPlanAsset ? coerceShotPlanContent(selectedPlanAsset.content) : null;
   const planAsset =
@@ -2906,7 +2919,28 @@ export async function getActiveProjectPlan(
     plan,
     assetId: planAsset.id,
     contentHash: planAsset.content_hash ?? "",
+    ...(selected?.active_asset_id === planAsset.id && selected.seq !== undefined
+      ? { selectionSeq: selected.seq }
+      : {}),
   };
+}
+
+export async function getProjectCurrentStoryboardId(
+  workspaceId: string,
+  projectId: string
+): Promise<string | null> {
+  const db = getServiceSupabase();
+  const row = await runQuery(
+    "store.getProjectCurrentStoryboardId",
+    db
+      .from("projects")
+      .select("current_story_blueprint_id")
+      .eq("workspace_id", workspaceId)
+      .eq("id", projectId)
+      .maybeSingle()
+  );
+  return (row as { current_story_blueprint_id?: string | null } | null)
+    ?.current_story_blueprint_id ?? null;
 }
 
 export interface ActiveProjectVisualAnchorPlan {
@@ -3307,6 +3341,72 @@ export async function addExportVideoAsset(input: {
 export interface PersistedStoryboardTile {
   beatId: string;
   assetId: string;
+}
+
+export interface UploadedStoryboardTile {
+  assetId: string;
+  beatId: string;
+  filename: string;
+  storageKey: string;
+  storageBucket: string;
+  visibility: "public" | "private";
+  provider: string;
+  model?: string;
+  prompt: string;
+  description?: string;
+  contentHash: string;
+}
+
+/**
+ * Upload tile bytes under deterministic ids without making graph rows visible.
+ * A claim-aware storyboard bundle transaction commits the metadata later.
+ */
+export async function uploadStoryboardTileObjects(input: {
+  workspaceId: string;
+  projectId: string;
+  tiles: GeneratedStoryboardTile[];
+  assetIds: string[];
+}): Promise<UploadedStoryboardTile[]> {
+  if (input.tiles.length !== input.assetIds.length) {
+    throw new ApiError("validation_failed", "Storyboard tile ids do not match tile count.");
+  }
+  const { writeAssetObject } = await import("../../storage/asset-write");
+  const visibility = await effectiveAssetStorageVisibility({
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    assetVisibility: "public",
+  });
+  const uploaded: UploadedStoryboardTile[] = [];
+  for (let index = 0; index < input.tiles.length; index += 1) {
+    const { asset: tile, bytes } = input.tiles[index];
+    const assetId = input.assetIds[index];
+    const beatId = tile.depicts?.beatId?.trim() ?? "";
+    if (!beatId) {
+      throw new ApiError("validation_failed", "A storyboard tile has no stable beat id.");
+    }
+    const stored = await writeAssetObject({
+      workspaceId: input.workspaceId,
+      projectId: input.projectId,
+      assetId,
+      filename: tile.media.filename,
+      bytes,
+      visibility,
+    });
+    uploaded.push({
+      assetId,
+      beatId,
+      filename: tile.media.filename,
+      storageKey: stored.storageKey,
+      storageBucket: stored.storageBucket,
+      visibility,
+      provider: tile.provenance?.provider ?? "mock",
+      ...(tile.provenance?.model ? { model: tile.provenance.model } : {}),
+      prompt: tile.provenance?.prompt ?? "",
+      ...(tile.description ? { description: tile.description } : {}),
+      contentHash: canonicalContentHash({ url: tile.media.filename, beatId }),
+    });
+  }
+  return uploaded;
 }
 
 // Persist generated storyboard tiles (one per beat) as image asset rows, each

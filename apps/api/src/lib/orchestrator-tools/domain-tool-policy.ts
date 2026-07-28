@@ -8,6 +8,7 @@ import {
 
 import type { ToolName } from "./capability-catalog";
 import { ToolInputError } from "./types";
+import type { TrustedVisualTargets } from "./visual-targeting";
 
 const PRODUCTION_VISUAL_TOOLS = new Set<ToolName>([
   "generate_anchor",
@@ -74,31 +75,31 @@ function assertPinnedVideoSource(input: {
   }
 }
 
-function targetedBeatIds(
+function targetedVisualTargets(
   task: DomainTaskV1,
   snapshot: ProjectGraphSnapshot
-): { beatIds: string[]; sceneIds: string[] } | null {
+): TrustedVisualTargets | null {
   if (task.targets.some((target) => target.kind === "project")) return null;
 
-  const beatIds = new Set<string>();
-  const sceneIds = new Set<string>();
+  const storyboardIds = new Set<string>();
+  const sourceStoryboardIds = new Set<string>();
+  const relationalBeatIds = new Set<string>();
+  const relationalSceneIds = new Set<string>();
+  const planBeatIds = new Set<string>();
   const targetedAssetIds = new Set<string>();
   const targetedLineageIds = new Set<string>();
 
   for (const target of task.targets) {
     if (target.kind === "storyboard") {
-      for (const scene of snapshot.scenes.filter(
-        (candidate) => candidate.storyboardId === target.storyboardId
-      )) {
-        sceneIds.add(scene.id);
-      }
+      storyboardIds.add(target.storyboardId);
+      sourceStoryboardIds.add(target.storyboardId);
     } else if (target.kind === "scene") {
-      sceneIds.add(target.sceneId);
+      relationalSceneIds.add(target.sceneId);
     } else if (target.kind === "beat") {
-      beatIds.add(target.beatId);
+      relationalBeatIds.add(target.beatId);
     } else if (target.kind === "panel") {
       const panel = snapshot.panels.find((candidate) => candidate.id === target.panelId);
-      if (panel) beatIds.add(panel.beatId);
+      if (panel) relationalBeatIds.add(panel.beatId);
     } else if (target.kind === "asset") {
       targetedAssetIds.add(target.assetId);
     } else if (target.kind === "lineage") {
@@ -114,25 +115,38 @@ function targetedBeatIds(
       (panel.imageAssetId && targetedAssetIds.has(panel.imageAssetId)) ||
       (panel.promptAssetId && targetedAssetIds.has(panel.promptAssetId))
     ) {
-      beatIds.add(panel.beatId);
+      relationalBeatIds.add(panel.beatId);
     }
   }
   for (const beat of snapshot.beats) {
-    if (beat.beatAssetId && targetedAssetIds.has(beat.beatAssetId)) beatIds.add(beat.id);
-    if (sceneIds.has(beat.sceneId)) beatIds.add(beat.id);
+    if (beat.beatAssetId && targetedAssetIds.has(beat.beatAssetId)) {
+      relationalBeatIds.add(beat.id);
+    }
   }
   for (const selection of snapshot.selections) {
     if (!targetedAssetIds.has(selection.activeAssetId)) continue;
     const match = /^(?:beat_keyframe|beat_storyboard|beat_clip):(.+)$/.exec(
       selection.slotRole
     );
-    if (match?.[1]) beatIds.add(match[1]);
+    if (match?.[1]) planBeatIds.add(match[1]);
   }
-  for (const beatId of beatIds) {
+  for (const beatId of relationalBeatIds) {
     const beat = snapshot.beats.find((candidate) => candidate.id === beatId);
-    if (beat) sceneIds.add(beat.sceneId);
+    if (!beat) continue;
+    relationalSceneIds.add(beat.sceneId);
   }
-  return { beatIds: [...beatIds], sceneIds: [...sceneIds] };
+  for (const sceneId of relationalSceneIds) {
+    const scene = snapshot.scenes.find((candidate) => candidate.id === sceneId);
+    if (!scene) continue;
+    sourceStoryboardIds.add(scene.storyboardId);
+  }
+  return {
+    storyboardIds: [...storyboardIds],
+    sourceStoryboardIds: [...sourceStoryboardIds],
+    sceneIds: [...relationalSceneIds],
+    beatIds: [...relationalBeatIds],
+    planBeatIds: [...planBeatIds],
+  };
 }
 
 /**
@@ -207,12 +221,16 @@ export function assertPreparedDomainToolInput(input: {
     toolName === "generate_keyframe" ||
     toolName === "generate_clip"
   ) {
-    const targets = targetedBeatIds(task, snapshot);
+    const targets = targetedVisualTargets(task, snapshot);
     if (!targets) return input.parsedInput;
+    const hasBeatTarget =
+      targets.beatIds.length > 0 ||
+      targets.planBeatIds.length > 0 ||
+      targets.sceneIds.length > 0 ||
+      targets.storyboardIds.length > 0;
     if (
       toolName === "generate_anchor" &&
-      !targets.beatIds.length &&
-      !targets.sceneIds.length
+      !hasBeatTarget
     ) {
       throw new ToolInputError(
         "generate_anchor requires project, scene, or beat scope."
@@ -220,26 +238,26 @@ export function assertPreparedDomainToolInput(input: {
     }
     if (
       (toolName === "generate_storyboard" || toolName === "generate_keyframe") &&
-      !targets.beatIds.length
+      !hasBeatTarget
     ) {
       throw new ToolInputError(
         `${toolName} requires a project, storyboard, scene, beat, panel, or beat-bound asset target.`
       );
     }
-    if (toolName === "generate_clip" && !targets.beatIds.length) {
+    if (toolName === "generate_clip" && !hasBeatTarget) {
       throw new ToolInputError(
         "generate_clip requires a project, storyboard, scene, beat, panel, or beat-bound asset target."
       );
     }
-    return {
-      ...parsed,
-      ...(targets.beatIds.length
-        ? toolName === "generate_clip"
-          ? { beatIds: targets.beatIds }
-          : { targetBeatIds: targets.beatIds }
-        : {}),
-      ...(targets.sceneIds.length ? { targetSceneIds: targets.sceneIds } : {}),
-    };
+    const prepared =
+      toolName === "generate_clip"
+        ? Object.fromEntries(
+            Object.entries(parsed).filter(
+              ([key]) => key !== "beatId" && key !== "beatIds"
+            )
+          )
+        : parsed;
+    return { ...prepared, trustedVisualTargets: targets };
   }
   return input.parsedInput;
 }

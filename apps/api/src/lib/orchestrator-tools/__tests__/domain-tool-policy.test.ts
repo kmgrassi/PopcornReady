@@ -148,20 +148,22 @@ test("project-wide Visuals primitives receive trusted beat filters", () => {
   const scopedSnapshot = {
     ...snapshot,
     scenes: [{
-      id: "scene-1",
+      id: "rel-scene-1",
       projectId: "project-1",
       storyboardId: "storyboard-1",
+      sceneIndex: 0,
     }],
     beats: [{
-      id: "beat-1",
+      id: "rel-beat-1",
       projectId: "project-1",
-      sceneId: "scene-1",
+      sceneId: "rel-scene-1",
+      beatIndex: 0,
       beatAssetId: null,
     }],
     panels: [{
       id: "panel-1",
       projectId: "project-1",
-      beatId: "beat-1",
+      beatId: "rel-beat-1",
       imageAssetId: null,
       promptAssetId: null,
     }],
@@ -185,8 +187,13 @@ test("project-wide Visuals primitives receive trusted beat filters", () => {
     }),
     {
       feedback: "Make the targeted beat warmer.",
-      targetBeatIds: ["beat-1"],
-      targetSceneIds: ["scene-1"],
+      trustedVisualTargets: {
+        storyboardIds: [],
+        sourceStoryboardIds: ["storyboard-1"],
+        sceneIds: ["rel-scene-1"],
+        beatIds: ["rel-beat-1"],
+        planBeatIds: [],
+      },
     }
   );
   const assetOnly = {

@@ -268,6 +268,31 @@ actions attributed to that exact run and stable beat/anchor identity. This
 preserves anchor → keyframe → clip self-healing without reading another run's
 pooled alternatives.
 
+Relational storyboard scene/beat/panel UUIDs are not ShotPlan identities.
+Trusted Visuals targeting retains both namespaces and resolves relational
+targets through the exact plan-bound storyboard's `sceneIndex` / `beatIndex`
+coordinates before filtering anchors, storyboard tiles, keyframes, or clips.
+A resolved target with no plan beats remains explicitly empty; beat-producing
+tools fail closed instead of treating it as an unscoped full-plan request.
+A scoped storyboard run generates only its target tiles, reuses validated
+untargeted tiles from that exact compatible attempt, and publishes a complete
+new relational storyboard. Claimed storyboard publication is one idempotent
+database transaction fenced by job, action, finite run, session claim,
+selected-plan sequence/hash, current-storyboard pointer, and the preserved
+panel identities. The transaction reconstructs the complete beat manifest from
+the selected plan and verifies every submitted panel against either a matching
+new asset provenance record or an exact preserved-panel expectation before its
+first insert. This includes exact scene coverage (including zero-beat scenes),
+beat semantics, a single plan input edge, canonical input fingerprint, and
+asset-to-beat provenance. The same transaction publishes the pointer and marks
+the job succeeded with its persisted result. Bundle and asset IDs are
+job-deterministic: an ambiguous response can replay the persisted
+fingerprint/result even after the job becomes terminal, while crash recovery
+reloads a committed bundle before provider generation can overwrite its
+objects. Stale provider completions may leave unreferenced uploaded objects for
+storage GC, but they cannot create visible assets, story rows, or move the
+project pointer.
+
 The graph `image` kind is the default only for genuinely generic stills.
 `poster`, `character_anchor`, `scene_anchor`, `beat_keyframe`,
 `beat_storyboard`, `scene_storyboard`, and `act_mockup` keep their explicit

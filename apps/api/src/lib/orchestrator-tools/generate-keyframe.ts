@@ -5,6 +5,7 @@ import {
 import {
   getActiveProjectPlan as realGetActiveProjectPlan,
   getAsset as realGetAsset,
+  getProjectStoryboardById as realGetProjectStoryboardById,
   getProjectStoryboardsForPlan as realGetProjectStoryboardsForPlan,
 } from "@/lib/api/v1/store";
 import { ApiError } from "@/lib/api/v1/errors";
@@ -19,7 +20,9 @@ import {
 } from "./storyboard-keyframe-handoff";
 import {
   shotPlanForTargetBeats,
-  storyboardForTargetBeats,
+  storyboardForTargetPlanBeats,
+  resolveVisualTargets,
+  type TrustedVisualTargets,
 } from "./visual-targeting";
 
 type KeyframeImageProvider = "openai" | "ideogram" | "gemini" | "xai" | "mock";
@@ -28,7 +31,7 @@ export interface GenerateKeyframeInput {
   provider?: KeyframeImageProvider;
   feedback?: string;
   /** Server-derived domain scope; never model-authored. */
-  targetBeatIds?: string[];
+  trustedVisualTargets?: TrustedVisualTargets;
 }
 
 export interface GenerateKeyframeOutput {
@@ -38,6 +41,7 @@ export interface GenerateKeyframeOutput {
 export interface GenerateKeyframeDeps {
   getActiveProjectPlan: typeof realGetActiveProjectPlan;
   getProjectStoryboardsForPlan: typeof realGetProjectStoryboardsForPlan;
+  getProjectStoryboardById: typeof realGetProjectStoryboardById;
   getAsset: typeof realGetAsset;
   createJob: OrchestratorJobCreator["createJob"];
   runGenerateKeyframeJob: typeof realRunGenerateKeyframeJob;
@@ -46,6 +50,7 @@ export interface GenerateKeyframeDeps {
 const defaultDeps: GenerateKeyframeDeps = {
   getActiveProjectPlan: realGetActiveProjectPlan,
   getProjectStoryboardsForPlan: realGetProjectStoryboardsForPlan,
+  getProjectStoryboardById: realGetProjectStoryboardById,
   getAsset: realGetAsset,
   createJob: createDurableOrchestratorJobCreator().createJob,
   runGenerateKeyframeJob: realRunGenerateKeyframeJob,
@@ -220,6 +225,16 @@ export function createGenerateKeyframeTool(
         context.projectId,
         active.assetId
       );
+      const targets = await resolveVisualTargets({
+        activePlan: active,
+        targets: input.trustedVisualTargets,
+        loadStoryboard: (storyboardId) =>
+          resolved.getProjectStoryboardById(
+            context.auth.workspaceId,
+            context.projectId!,
+            storyboardId
+          ),
+      });
       const loadStoryboardAsset = async (assetId: string) => {
         try {
           return await resolved.getAsset(
@@ -232,12 +247,21 @@ export function createGenerateKeyframeTool(
           throw error;
         }
       };
-      const storyboard = await firstUsableStoryboardForPlan({
-        plan: active.plan,
-        planAssetId: active.assetId,
-        storyboards,
-        loadAsset: loadStoryboardAsset,
-      });
+      const storyboard = targets?.sourceStoryboard
+        ? (await storyboardHandoffIssues({
+            plan: active.plan,
+            planAssetId: active.assetId,
+            storyboard: targets.sourceStoryboard,
+            loadAsset: loadStoryboardAsset,
+          })).length === 0
+          ? targets.sourceStoryboard
+          : null
+        : await firstUsableStoryboardForPlan({
+            plan: active.plan,
+            planAssetId: active.assetId,
+            storyboards,
+            loadAsset: loadStoryboardAsset,
+          });
       const newestIssues = storyboards[0]
         ? await storyboardHandoffIssues({
             plan: active.plan,
@@ -258,10 +282,11 @@ export function createGenerateKeyframeTool(
         });
         return storyboardRequired();
       }
-      const plan = shotPlanForTargetBeats(active.plan, input.targetBeatIds);
-      const scopedStoryboard = storyboardForTargetBeats(
+      const plan = shotPlanForTargetBeats(active.plan, targets?.planBeatIds);
+      const scopedStoryboard = storyboardForTargetPlanBeats(
+        active.plan,
         storyboard,
-        input.targetBeatIds
+        targets?.planBeatIds
       );
       if (context.domainTask && plan.scenes.length === 0) {
         throw new ToolInputError("No planned beats intersect the trusted task targets.");

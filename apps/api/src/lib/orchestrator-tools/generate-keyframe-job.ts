@@ -19,6 +19,7 @@ import { planBeats } from "@popcorn/shared/types";
 import type { ProjectStoryboard } from "@popcorn/shared/v1/types";
 import { createLogger } from "@/lib/v1/logger";
 import { redactError } from "@/lib/v1/redact";
+import { storyboardTileByPlanBeat } from "./storyboard-keyframe-handoff";
 
 type KeyframeImageProvider = "openai" | "ideogram" | "gemini" | "xai" | "mock";
 
@@ -65,27 +66,6 @@ function assetIdsFromResult(result: Awaited<ReturnType<typeof realGenerateBeatKe
   const job = result.body.job as { result?: { assetIds?: unknown } } | undefined;
   const ids = job?.result?.assetIds;
   return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [];
-}
-
-function storyboardTileByPlanBeat(
-  plan: ShotPlan,
-  storyboard: ProjectStoryboard
-): Map<string, string> {
-  const map = new Map<string, string>();
-  for (let sceneIndex = 0; sceneIndex < plan.scenes.length; sceneIndex += 1) {
-    const scene = plan.scenes[sceneIndex];
-    const sbScene = storyboard.scenes.find((candidate) => candidate.sceneIndex === sceneIndex);
-    for (let beatIndex = 0; beatIndex < scene.beats.length; beatIndex += 1) {
-      const beat = scene.beats[beatIndex];
-      const beatId = beat.id ?? beat.name;
-      const sbBeat = sbScene?.beats.find((candidate) => candidate.beatIndex === beatIndex);
-      const selectedPanel = sbBeat?.panels.find(
-        (panel) => panel.isSelected && panel.imageAssetId
-      );
-      if (selectedPanel?.imageAssetId) map.set(beatId, selectedPanel.imageAssetId);
-    }
-  }
-  return map;
 }
 
 function mentionsMinor(beat: Beat, anchors: VisualAnchorPlanItem[]): boolean {
