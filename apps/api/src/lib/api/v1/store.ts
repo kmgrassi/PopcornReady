@@ -1238,6 +1238,7 @@ export async function updateAction(
 ): Promise<V1Action> {
   const row: Record<string, unknown> = {};
   if (patch.status !== undefined) row.status = patch.status;
+  if (patch.params !== undefined) row.params = markedJson("action_params.v1", patch.params);
   if (patch.jobIds !== undefined) row.job_ids = patch.jobIds;
   if (patch.outputAssetIds !== undefined) row.output_asset_ids = patch.outputAssetIds;
   if (patch.error !== undefined) row.error = markedJson("action_error.v1", patch.error) ?? null;

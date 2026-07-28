@@ -117,6 +117,7 @@ export interface OrchestratorEngineStore {
     actionId: string,
     patch: {
       status: "running" | "applied" | "failed";
+      params?: Record<string, unknown>;
       jobIds?: string[];
       outputAssetIds?: string[];
       error?: Record<string, unknown>;
@@ -213,6 +214,7 @@ export function defaultEngineStore(): OrchestratorEngineStore {
     async markInvocation(actionId, patch) {
       await updateAction(actionId, {
         status: patch.status,
+        ...(patch.params !== undefined ? { params: patch.params } : {}),
         ...(patch.jobIds !== undefined ? { jobIds: patch.jobIds } : {}),
         ...(patch.outputAssetIds !== undefined
           ? { outputAssetIds: patch.outputAssetIds }
@@ -667,6 +669,16 @@ function invocationOutputAssetIds(result: ToolCallResult): string[] {
   return [];
 }
 
+function preparedFitActionParams(
+  input: unknown,
+  result: unknown
+): Record<string, unknown> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new Error("fit_audio_to_picture must prepare an object input.");
+  }
+  return { ...(input as Record<string, unknown>), result };
+}
+
 export function selectDomainBlockedCandidate(
   recovery: DomainRecoveryProjection
 ): DomainRecoveryProjection["blockedCandidates"][number] | undefined {
@@ -1036,6 +1048,9 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
             : "running",
       outputAssetIds: invocationOutputAssetIds(result),
       jobIds: result.status === "accepted" ? [result.jobId] : [],
+      ...(result.status === "succeeded" && decision.toolName === "fit_audio_to_picture"
+        ? { params: preparedFitActionParams(preparedInput, result.output) }
+        : {}),
       error: result.status === "failed" ? { ...result.error } : undefined,
     });
 
