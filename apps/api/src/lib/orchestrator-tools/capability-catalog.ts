@@ -282,6 +282,17 @@ const toolCapabilityCatalog = {
     surface: "dispatch",
     runProjection: { label: null, order: null },
   },
+  delegate_domains: {
+    capability: "parallel_domain_dispatch",
+    ownerRole: "creative_director",
+    label: "Parallel Specialist Assignments",
+    driverDescription: "Atomically assign independent Visuals and Audio work and wait for their durable join.",
+    execution: "async",
+    costClass: "local",
+    gate: { kind: "none" },
+    surface: "dispatch",
+    runProjection: { label: null, order: null },
+  },
 } as const satisfies Record<string, ToolCatalogEntry>;
 
 export const TOOL_CAPABILITY_CATALOG = deepFreeze(toolCapabilityCatalog);

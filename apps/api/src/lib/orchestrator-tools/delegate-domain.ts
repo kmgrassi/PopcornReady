@@ -16,6 +16,7 @@ import type {
   OrchestratorRunId,
 } from "@popcorn/shared/domain-agent-contract";
 import {
+  dispatchDomainRunBatch,
   dispatchDomainRun,
   isDomainRunLimitError,
 } from "@/lib/orchestrator/domain-run-service";
@@ -36,6 +37,22 @@ export interface DelegateDomainInput {
   budgetUsd?: number;
   /** Required terminal outputs for a Visuals assignment; trusted by schema validation. */
   requiredOutputKinds?: VisualOutputKind[];
+}
+
+export interface DelegateDomainsInput {
+  visuals: DelegateDomainInput;
+  audio: DelegateDomainInput;
+}
+
+function parseDelegateDomainsInput(input: unknown): DelegateDomainsInput {
+  if (typeof input !== "object" || input === null) {
+    throw new ToolInputError("Parallel delegation input must be an object.");
+  }
+  const record = input as Record<string, unknown>;
+  return {
+    visuals: parseDelegateInput(record.visuals, "visuals"),
+    audio: parseDelegateInput(record.audio, "audio"),
+  };
 }
 
 function parseDelegateInput(input: unknown, domain: AgentDomain): DelegateDomainInput {
@@ -315,4 +332,73 @@ export function createDelegateAudioTool(): ToolDefinition<DelegateDomainInput> {
       "Provide the objective, target beats/assets by stable id, constraints, and what to preserve. The specialist reports done, blocked, or a question. " +
       "Use this instead of generating audio yourself; you retain story, coherence, timeline, approval, and export decisions.",
   });
+}
+
+/**
+ * Root-only atomic fan-out. One reserved root action causally owns both
+ * children, so their reports can deterministically fan back into one join.
+ */
+export function createDelegateDomainsTool(): ToolDefinition<DelegateDomainsInput> {
+  return {
+    ...toolDefinitionMetadata("delegate_domains"),
+    description:
+      "Atomically assign independent Visuals and Audio work. Use only when neither assignment depends on the other's output. The creative director resumes after both persisted reports arrive.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["visuals", "audio"],
+      properties: {
+        visuals: delegateInputSchema("visuals"),
+        audio: delegateInputSchema("audio"),
+      },
+    },
+    outputSchema: { type: "object", additionalProperties: true },
+    parseInput: parseDelegateDomainsInput,
+    async execute(parsed, context): Promise<ToolCallResult> {
+      const projectId = context.projectId;
+      const rootRunId = context.orchestratorRunId;
+      const rootActionId = context.actionId;
+      if (!projectId || !rootRunId || !rootActionId) {
+        return delegationFailure(new ApiError("validation_failed", "Parallel delegation requires a reserved root action."));
+      }
+      try {
+        const assignments = ([
+          ["visuals", parsed.visuals],
+          ["audio", parsed.audio],
+        ] as const).map(([domain, assignment]) => {
+          const budgetUsd = assignment.budgetUsd ?? DELEGATION_DEFAULT_BUDGET_USD;
+          return {
+            domain,
+            inputSummary: assignment.objective,
+            budgetUsd,
+            task: buildDelegatedTask({
+              domain,
+              projectId,
+              rootRunId,
+              rootActionId,
+              creatorMessageId: context.messageId ?? rootActionId,
+              parsed: assignment,
+              budgetUsd,
+            }),
+          };
+        });
+        const dispatches = await dispatchDomainRunBatch({
+          projectId,
+          parentRunId: rootRunId,
+          rootActionId,
+          assignments,
+        });
+        const childRuns = dispatches.map((dispatch) => ({ childRunId: dispatch.runId, sessionId: dispatch.sessionId }));
+        return {
+          status: "delegated",
+          childRunId: childRuns[0]!.childRunId,
+          sessionId: childRuns[0]!.sessionId,
+          childRuns,
+          resumesWhen: "domain_report",
+        };
+      } catch (err) {
+        return delegationFailure(err);
+      }
+    },
+  };
 }

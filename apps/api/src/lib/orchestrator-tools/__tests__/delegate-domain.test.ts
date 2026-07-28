@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildDelegatedTask, createDelegateAudioTool, createDelegateVisualsTool } from "../delegate-domain";
+import {
+  buildDelegatedTask,
+  createDelegateAudioTool,
+  createDelegateDomainsTool,
+  createDelegateVisualsTool,
+} from "../delegate-domain";
 
 test("Visuals delegation requires explicit bounded terminal output kinds", () => {
   const tool = createDelegateVisualsTool();
@@ -38,4 +43,17 @@ test("Visuals delegation derives terminal requirements from the bounded output k
     { kind: "image", role: "image", minimumCount: 1 },
   ]);
   assert.ok(!task.requiredOutputs.some((output) => output.kind === "clip"));
+});
+
+test("parallel delegation accepts one independent Visuals and Audio assignment", () => {
+  const parsed = createDelegateDomainsTool().parseInput({
+    visuals: { objective: "Create the opening clips.", requiredOutputKinds: ["clip"] },
+    audio: { objective: "Score the opening." },
+  });
+  assert.deepEqual(parsed.visuals.requiredOutputKinds, ["clip"]);
+  assert.equal(parsed.audio.objective, "Score the opening.");
+  assert.throws(
+    () => createDelegateDomainsTool().parseInput({ visuals: parsed.visuals }),
+    /Delegation input must be an object/
+  );
 });

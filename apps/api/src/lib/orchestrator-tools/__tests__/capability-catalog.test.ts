@@ -42,7 +42,7 @@ const expectedProductionVocabulary: ToolName[] = [
 // Root-only dispatch tools (PR 6) join the catalog AFTER the production
 // vocabulary so legacy display orders are unchanged; they never appear on any
 // flat production surface.
-const expectedDispatchVocabulary: ToolName[] = ["delegate_visuals", "delegate_audio"];
+const expectedDispatchVocabulary: ToolName[] = ["delegate_visuals", "delegate_audio", "delegate_domains"];
 const expectedDomainVocabulary: ToolName[] = [
   "generate_image_asset",
   "generate_video_asset",
@@ -226,6 +226,7 @@ test("role registries form an exact disjoint 12/8/2 partition", () => {
     // Root-only dispatch adapters (PR 6): registered here and ONLY here.
     "delegate_visuals",
     "delegate_audio",
+    "delegate_domains",
   ]);
   assert.deepEqual(visuals, [
     "generate_anchor",

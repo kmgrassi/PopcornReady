@@ -62,7 +62,7 @@ export interface ToolError {
 }
 
 export type ToolCallResult =
-  | {
+    | {
       status: "succeeded";
       resourceIds: string[];
       artifactIds?: string[];
@@ -82,12 +82,10 @@ export type ToolCallResult =
       previewArtifactIds: string[];
     }
   | {
-      /** A delegate_* dispatch tool enqueued a finite domain run; the caller
-       * parks in the domain wait until the child's report finalization wakes
-       * its dispatch. */
       status: "delegated";
       childRunId: string;
       sessionId: string;
+      childRuns?: Array<{ childRunId: string; sessionId: string }>;
       resumesWhen: "domain_report";
     }
   | {
