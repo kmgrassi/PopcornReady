@@ -4,7 +4,7 @@ import { createAction, getStaleCandidates, listAssetSelectionRefs } from "@/lib/
 import { getOrchestratorRun } from "@/lib/api/v1/orchestrator-store";
 
 const RERUN_PROPOSAL_TOOL = "rerun_proposal";
-const IMAGE_GRAPH_KINDS = new Set(["image", "keyframe", "anchor"]);
+const IMAGE_GRAPH_KINDS = new Set(["image"]);
 
 export interface RerunProposalServiceDeps {
   getStaleCandidates: typeof getStaleCandidates;

@@ -72,19 +72,45 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_incomplete boolean;
+  v_failed boolean;
+  v_children jsonb;
 begin
-  if new.tool = 'delegate_domains'
-     and new.status in ('applied', 'failed')
-     and exists (
-       select 1 from public.orchestrator_runs child
-        where child.project_id = new.project_id
-          and child.root_action_id = new.id
-          and child.status not in ('succeeded', 'failed', 'canceled', 'timed_out', 'superseded')
-     ) then
+  -- The action row is the join mutex. Make that serialization explicit so two
+  -- terminal reports cannot both evaluate a stale sibling snapshot.
+  perform pg_advisory_xact_lock(hashtextextended(new.id::text, 0));
+  if new.tool <> 'delegate_domains' then
+    return new;
+  end if;
+  select
+    bool_or(child.status not in ('succeeded', 'failed', 'canceled', 'timed_out', 'superseded')),
+    bool_or(child.status <> 'succeeded' or coalesce(report.params -> 'outcome' ->> 'outcome', '') <> 'done'),
+    jsonb_agg(jsonb_build_object(
+      'runId', child.id,
+      'status', child.status,
+      'reportOutcome', report.params -> 'outcome' ->> 'outcome'
+    ) order by child.id)
+    into v_incomplete, v_failed, v_children
+    from public.orchestrator_runs child
+    left join public.actions report
+      on report.orchestrator_run_id = child.id and report.tool = 'domain_report'
+   where child.project_id = new.project_id and child.root_action_id = new.id;
+
+  if new.status in ('applied', 'failed') and coalesce(v_incomplete, true) then
     new.status := 'running';
     new.error := null;
     new.output_asset_ids := '{}';
-  elsif new.tool = 'delegate_domains' and new.status = 'applied' then
+  elsif new.status in ('applied', 'failed') and coalesce(v_failed, true) then
+    new.status := 'failed';
+    new.error := jsonb_build_object(
+      'schema', 'ToolError.v1',
+      'kind', 'precondition_unmet',
+      'message', 'One or more parallel domain assignments did not complete successfully.',
+      'recoverable', true,
+      'children', coalesce(v_children, '[]'::jsonb)
+    );
+  elsif new.status = 'applied' then
     select coalesce(array_agg(distinct output_id), '{}') into new.output_asset_ids
       from public.orchestrator_runs child
       join public.actions report

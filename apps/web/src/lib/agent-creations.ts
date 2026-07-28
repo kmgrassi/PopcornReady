@@ -8,8 +8,8 @@ export type CreationProposal = { sessionId: string; runId: string; gateId: strin
 export type CreationStatus = { sessionId: string | null; run: { id: string; status: string; inputSummary?: string; spentUsd?: number | null }; report: DomainReportV1 | null; outputs: Array<{ assetId: string; intrinsicRole: string }> };
 const kindFor = (goal: CreationGoal): CreatorDirectTaskKind => goal === "image" ? "image_create" : goal === "video" ? "video_create" : "soundtrack_create";
 const route = (projectId: string) => `/api/v1/projects/${encodeURIComponent(projectId)}/agent-creations`;
-export async function proposeCreation(input: { projectId: string; goal: CreationGoal; prompt: string; maximumUsd: number }) {
-  const response = await apiRequest<{ proposal: CreationProposal }>(`${route(input.projectId)}/proposals`, { method: "POST", body: { kind: kindFor(input.goal), prompt: input.prompt, maximumUsd: input.maximumUsd, referenceAssetIds: [] } });
+export async function proposeCreation(input: { projectId: string; goal: CreationGoal; prompt: string; maximumUsd: number; idempotencyKey: string }) {
+  const response = await apiRequest<{ proposal: CreationProposal }>(`${route(input.projectId)}/proposals`, { method: "POST", headers: { "Idempotency-Key": input.idempotencyKey }, body: { kind: kindFor(input.goal), prompt: input.prompt, maximumUsd: input.maximumUsd, referenceAssetIds: [] } });
   return response.proposal;
 }
 export async function confirmCreation(projectId: string, proposal: CreationProposal) {

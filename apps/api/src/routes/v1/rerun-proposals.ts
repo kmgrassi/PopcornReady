@@ -24,6 +24,7 @@ rerunProposalsRouter.post("/projects/:projectId/rerun-proposals", mutation(async
   }
   const rootRunId = typeof input.rootRunId === "string" ? input.rootRunId.trim() : undefined;
   if (!UUID_PATTERN.test(assetId)) throw new ApiError("validation_failed", "assetId must be a UUID.");
+  if (rootRunId && !UUID_PATTERN.test(rootRunId)) throw new ApiError("validation_failed", "rootRunId must be a UUID.");
   if (!message || message.length > 4_000) throw new ApiError("validation_failed", "message must be between 1 and 4000 characters.");
   const result = await createRerunProposal({
     workspaceId: auth.workspaceId,
