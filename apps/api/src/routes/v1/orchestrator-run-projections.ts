@@ -24,6 +24,7 @@ import {
   isToolName,
 } from "@/lib/orchestrator-tools/capability-catalog";
 import { redactMessage } from "@/lib/v1/redact";
+import type { CreatorRunHierarchy } from "./session-run-projection.js";
 
 const BOARD_FEEDBACK_TOOL = "board_feedback";
 const AFTER_GATE_PREFIX = "after:";
@@ -40,6 +41,7 @@ export interface GenerationRunDetail {
     stageId: string;
   }>;
   operatorDiagnostics?: GenerationJobDiagnostics[];
+  hierarchy?: CreatorRunHierarchy;
 }
 
 export interface GenerationAttentionPolicy {
