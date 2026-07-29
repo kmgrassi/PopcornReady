@@ -42,18 +42,27 @@ test("generic image participates in media embedding source generation", () => {
 });
 
 test("generic image enum and constraint/ref changes are split across migrations", () => {
+  const enumVersion = "20260727180500";
+  const wiringVersion = "20260727181000";
   const enumSql = readFileSync(
-    new URL("../../../../../../../supabase/migrations/20260727180000_generic_image_asset_kind_enum.sql", import.meta.url),
+    new URL(
+      `../../../../../../../supabase/migrations/${enumVersion}_generic_image_asset_kind_enum.sql`,
+      import.meta.url
+    ),
     "utf8"
   );
   const wiringSql = readFileSync(
-    new URL("../../../../../../../supabase/migrations/20260727181000_generic_image_asset_kind.sql", import.meta.url),
+    new URL(
+      `../../../../../../../supabase/migrations/${wiringVersion}_generic_image_asset_kind.sql`,
+      import.meta.url
+    ),
     "utf8"
   );
   const pooledRegenerationSql = readFileSync(
     new URL("../../../../../../../supabase/migrations/20260727182000_pooled_image_regeneration.sql", import.meta.url),
     "utf8"
   );
+  assert.ok(enumVersion < wiringVersion, "the enum migration must commit before its wiring");
   assert.match(enumSql, /add value if not exists 'image'/);
   assert.doesNotMatch(enumSql, /assets_kind_media/);
   assert.ok(wiringSql.includes("kind in ('image','anchor','keyframe','poster')"));

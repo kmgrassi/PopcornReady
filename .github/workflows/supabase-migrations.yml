@@ -19,6 +19,9 @@ on:
     branches: [main]
     paths:
       - "supabase/migrations/**"
+      - "scripts/validate-supabase-migrations.mjs"
+      - "scripts/validate-supabase-migrations.test.mjs"
+      - ".github/workflows/supabase-migrations.yml"
   workflow_dispatch: {}
 
 concurrency:
@@ -36,6 +39,11 @@ jobs:
       SUPABASE_PROJECT_REF: mllkugitfwasiwgbortk
     steps:
       - uses: actions/checkout@v4
+
+      - name: Validate migration versions
+        run: |
+          node --test scripts/validate-supabase-migrations.test.mjs
+          node scripts/validate-supabase-migrations.mjs
 
       - uses: supabase/setup-cli@v1
         with:
