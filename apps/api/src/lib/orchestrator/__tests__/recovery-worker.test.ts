@@ -15,6 +15,7 @@ function run(status: OrchestratorRun["status"]): OrchestratorRun {
     projectId: "project-1",
     status,
     inputSummary: "test",
+    rootExecutionProfile: "creative_director",
     spentUsd: 0,
     createdAt: "2026-07-10T00:00:00.000Z",
     updatedAt: "2026-07-10T00:00:00.000Z",
@@ -65,7 +66,7 @@ test("worker forwards a claimed domain session generation to the shared engine",
       agentSessionId: "session-1",
       sessionClaimGeneration: 7,
     }],
-    getRun: async () => ({ ...run("queued"), agentRole: "visuals" }),
+    getRun: async () => ({ ...run("queued"), agentRole: "visuals", rootExecutionProfile: undefined }),
     listGates: async () => [],
     release: async () => {},
     run: async (_id, deps) => {
@@ -103,6 +104,27 @@ test("terminal finite-run states retire a recovered dispatch without another tur
     assert.equal(called, false, `${status} must not re-enter the engine`);
     assert.deepEqual(releases, [true]);
   }
+});
+
+test("worker retires a legacy root dispatch without entering the engine", async () => {
+  const releases: boolean[] = [];
+  let enteredEngine = false;
+  await recoverOrchestratorRuns({
+    claim: async () => [{
+      dispatchId: "dispatch-legacy",
+      runId: "run-legacy",
+      workspaceId: "workspace-1",
+      leaseToken: "lease-1",
+    }],
+    getRun: async () => ({ ...run("queued"), rootExecutionProfile: "flat" }),
+    listGates: async () => assert.fail("legacy root must be refused before gate loading"),
+    release: async ({ completed }) => { releases.push(completed); },
+    run: async () => { enteredEngine = true; return run("running"); },
+    resume: async () => { enteredEngine = true; return run("running"); },
+    logger: { debug() {}, info() {}, warn() {}, error() {}, child() { return this; } },
+  });
+  assert.equal(enteredEngine, false);
+  assert.deepEqual(releases, [true]);
 });
 
 test("recovery is enabled by default and has a safe lower interval bound", () => {

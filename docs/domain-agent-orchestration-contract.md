@@ -179,17 +179,17 @@ to unconsumed outputs or targets without downstream consumers.
 
 ## Capability ownership
 
-The Creative Director hierarchy is the production default for new root work.
+The Creative Director hierarchy is the only executable profile for root work.
 The executable primitive vocabulary and its ownership, canonical labels/order,
 execution modes, cost classes, and approval-gate metadata live in
 [`apps/api/src/lib/orchestrator-tools/capability-catalog.ts`](../apps/api/src/lib/orchestrator-tools/capability-catalog.ts).
 Every rich primitive definition is checked against that catalog when it is
 registered, and the role-owned registries consume the same metadata. The
-Creative Director hierarchy is the default authority, but
-`createDefaultToolRegistry()` remains an active emergency/historical production
-compatibility surface for fallback-created and null/flat roots until roadmap PR
-0 blocks new/resumed flat work and PR 7 deletes the surface. Current role
-builders also derive owned views by filtering that flat definition set. The
+Roadmap PR 0 blocks creation, recovery, and resumption of null/flat roots.
+Terminal legacy history remains readable, while `createDefaultToolRegistry()`
+remains constructible only as historical/evaluation compatibility until roadmap
+PR 7 deletes it. Current role builders also derive owned views by filtering that
+flat definition set. The
 target refactor replaces it with canonical primitive definitions and direct
 role-owned builders; its deletion is owned by
 [`scopes/full-selective-regeneration-cutover-prs.md`](scopes/full-selective-regeneration-cutover-prs.md).

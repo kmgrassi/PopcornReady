@@ -34,6 +34,7 @@ function runFixture(over: Partial<OrchestratorRun> = {}): OrchestratorRun {
     projectId: "proj1",
     status: "queued",
     inputSummary: "make a 15s video",
+    rootExecutionProfile: "creative_director",
     spentUsd: 0,
     createdAt: "t0",
     updatedAt: "t0",
@@ -149,6 +150,12 @@ function deps(
     registry,
     jobs: { getJob: async () => null },
     resolveOwnerUserId: async () => null,
+    resolveAgentDefinition: async () => ({
+      role: "creative_director",
+      registry,
+      systemPrompt: "test creative director",
+      loadTurnContext: async () => undefined,
+    }),
     ...extra,
   };
 }

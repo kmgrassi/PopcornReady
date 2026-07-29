@@ -2,6 +2,7 @@ import {
   claimOrchestratorDispatches,
   enqueueOrchestratorDispatch,
   getOrchestratorRun,
+  isCreativeDirectorHierarchyRoot,
   listRunGates,
   recoverOrchestratorRuntimeControls,
   releaseOrchestratorDispatch,
@@ -78,6 +79,18 @@ async function processDispatch(dispatch: ClaimedOrchestratorDispatch, deps: Reco
     await deps.release({ ...dispatch, delaySeconds: 0, completed: true });
     return;
   }
+  if (
+    (run.agentRole ?? "creative_director") === "creative_director" &&
+    !isCreativeDirectorHierarchyRoot(run)
+  ) {
+    deps.logger.warn("orchestrator_worker.legacy_root_refused", {
+      runId: run.id,
+      workspaceId: dispatch.workspaceId,
+      rootExecutionProfile: run.rootExecutionProfile ?? null,
+    });
+    await deps.release({ ...dispatch, delaySeconds: 0, completed: true });
+    return;
+  }
   const gates = await deps.listGates(dispatch.runId);
   // A reached gate belongs to a human. It is deliberately removed from the
   // worker queue and is re-enqueued by the approve/reject route.
@@ -92,7 +105,7 @@ async function processDispatch(dispatch: ClaimedOrchestratorDispatch, deps: Reco
     rootExecutionProfile:
       run.agentRole === "visuals" || run.agentRole === "audio"
         ? null
-        : run.rootExecutionProfile ?? "flat",
+        : run.rootExecutionProfile ?? null,
   });
   const result = run.status === "waiting"
       ? await deps.resume(run.id, {

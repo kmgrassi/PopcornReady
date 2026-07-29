@@ -5,6 +5,7 @@ import { ApiError } from "@/core/errors";
 import type { HandlerCtx } from "@/lib/api/v1/handler";
 import { runIdempotent } from "@/lib/api/v1/idempotency";
 import {
+  assertCreativeDirectorHierarchyRoot,
   clearProjectSelections,
   cancelOrchestratorRunFamily,
   createPendingApprovalGate,
@@ -15,6 +16,7 @@ import {
   listRunActions,
   listRunGates,
   listOrchestratorRunsForProject,
+  isCreativeDirectorHierarchyRoot,
   resetGatesToPending,
   resolveGate,
   supersedeRunActions,
@@ -211,6 +213,60 @@ export function storyboardContinuationPatch(run: OrchestratorRun): UpdateOrchest
 
 export function isStoryboardAfterGate(gate: Pick<OrchestratorRunGate, "stage">): boolean {
   return gate.stage === `${AFTER_GATE_PREFIX}generate_storyboard`;
+}
+
+export function revisionRootFromProjectHistory(
+  runs: readonly OrchestratorRun[]
+): OrchestratorRun | null {
+  const rootRuns = runs.filter(
+    (candidate) => (candidate.agentRole ?? "creative_director") === "creative_director"
+  );
+  const newestRoot = rootRuns[0];
+  if (newestRoot && !isCreativeDirectorHierarchyRoot(newestRoot)) return null;
+  const latestUsable =
+    rootRuns.find(
+      (candidate) => candidate.status !== "failed" && candidate.status !== "canceled"
+    ) ??
+    null;
+  return latestUsable && isCreativeDirectorHierarchyRoot(latestUsable) ? latestUsable : null;
+}
+
+export interface ProjectRevisionRootDeps {
+  listRuns: typeof listOrchestratorRunsForProject;
+  cancelFamily: typeof cancelOrchestratorRunFamily;
+  createRun: typeof createOrchestratorRun;
+}
+
+export async function resolveProjectRevisionRoot(
+  projectId: string,
+  deps: Partial<ProjectRevisionRootDeps> = {}
+): Promise<OrchestratorRun> {
+  const resolved = {
+    listRuns: deps.listRuns ?? listOrchestratorRunsForProject,
+    cancelFamily: deps.cancelFamily ?? cancelOrchestratorRunFamily,
+    createRun: deps.createRun ?? createOrchestratorRun,
+  };
+  const runs = await resolved.listRuns(projectId);
+  const reusable = revisionRootFromProjectHistory(runs);
+  if (reusable) return reusable;
+
+  const newestLegacyRoot = runs.find(
+    (candidate) =>
+      (candidate.agentRole ?? "creative_director") === "creative_director" &&
+      !isCreativeDirectorHierarchyRoot(candidate)
+  );
+  if (
+    newestLegacyRoot &&
+    (newestLegacyRoot.status === "queued" ||
+      newestLegacyRoot.status === "running" ||
+      newestLegacyRoot.status === "waiting")
+  ) {
+    await resolved.cancelFamily({ projectId, runId: newestLegacyRoot.id });
+  }
+  return resolved.createRun({
+    projectId,
+    inputSummary: "Revise a generated asset based on user feedback.",
+  });
 }
 
 function canonicalize(value: unknown): unknown {
@@ -690,7 +746,8 @@ orchestratorRunsRouter.post(
     const projectId = requireParam(params, "projectId");
     const runId = requireParam(params, "runId");
     await requireProjectAccess(auth.workspaceId, projectId);
-    await requireProjectRun(runId, projectId);
+    const run = await requireProjectRun(runId, projectId);
+    assertCreativeDirectorHierarchyRoot(run, "approve a gate");
     const gates = await listRunGates(runId);
     const gate = gates.find((candidate) => candidate.status === "reached");
     if (gate) {
@@ -713,7 +770,8 @@ orchestratorRunsRouter.post(
     const projectId = requireParam(params, "projectId");
     const runId = requireParam(params, "runId");
     await requireProjectAccess(auth.workspaceId, projectId);
-    await requireProjectRun(runId, projectId);
+    const run = await requireProjectRun(runId, projectId);
+    assertCreativeDirectorHierarchyRoot(run, "reject a gate");
     const gates = await listRunGates(runId);
     const gate = gates.find((candidate) => candidate.status === "reached");
     if (gate) {
@@ -746,6 +804,7 @@ orchestratorRunsRouter.post(
     const runId = requireParam(params, "runId");
     await requireProjectAccess(auth.workspaceId, projectId);
     const run = await requireProjectRun(runId, projectId);
+    assertCreativeDirectorHierarchyRoot(run, "accept a board revision");
     const request = parseBoardRevisionRequest(body, runId);
     const action = await createAction({
       projectId,
@@ -792,16 +851,7 @@ orchestratorRunsRouter.post(
     const projectId = requireParam(params, "projectId");
     await requireProjectAccess(auth.workspaceId, projectId);
 
-    const runs = await listOrchestratorRunsForProject(projectId);
-    let run =
-      runs.find((candidate) => candidate.status !== "failed" && candidate.status !== "canceled") ??
-      null;
-    if (!run) {
-      run = await createOrchestratorRun({
-        projectId,
-        inputSummary: "Revise a generated asset based on user feedback.",
-      });
-    }
+    const run = await resolveProjectRevisionRoot(projectId);
 
     const request = parseBoardRevisionRequest(body, run.id);
     const action = await createAction({
@@ -850,6 +900,7 @@ orchestratorRunsRouter.post(
     const runId = requireParam(params, "runId");
     await requireProjectAccess(auth.workspaceId, projectId);
     const run = await requireProjectRun(runId, projectId);
+    assertCreativeDirectorHierarchyRoot(run, "retry after a credit update");
     if (run.status !== "failed") {
       throw new ApiError(
         "validation_failed",
@@ -894,6 +945,7 @@ orchestratorRunsRouter.post(
     const runId = requireParam(params, "runId");
     await requireProjectAccess(auth.workspaceId, projectId);
     const run = await requireProjectRun(runId, projectId);
+    assertCreativeDirectorHierarchyRoot(run, "restart from a generation stage");
 
     const stageType = parseRestartStageType(body);
     const fromOrder = GENERATION_STAGE_ORDER[stageType];

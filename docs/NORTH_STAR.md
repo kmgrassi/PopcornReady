@@ -3,8 +3,8 @@
 > **Status:** Vision + scope — **the foundation is now largely built.** This
 > remains the authoritative reference for how generation should evolve. The
 > data-model direction (§5) and the core orchestrator/tool runtime (§6–§7 P1/P2)
-> have shipped against the asset graph, and new roots use the Creative Director
-> hierarchy. The remaining generation migration is graph-aware proposal
+> have shipped against the asset graph, and every executable root uses the
+> Creative Director hierarchy. The remaining generation migration is graph-aware proposal
 > decisioning, complete kind-specific execution, Request Changes integration,
 > and deletion of fixed-stage/flat fallbacks. See
 > [`scopes/full-selective-regeneration-cutover-prs.md`](scopes/full-selective-regeneration-cutover-prs.md).
@@ -40,7 +40,8 @@ since landed. Map below (details inline per section). **§3 describes the model 
   (`supabase/migrations/20260622150000_regenerate_asset_version_rpc.sql`).
 - ✅ **One engine (§7 P1)** — the legacy Next monolith has been removed. The
   durable `driveLoop` is shared by the Creative Director and persistent Visuals
-  and Audio specialists in `apps/api`.
+  and Audio specialists in `apps/api`. Flat/null root history is terminal and
+  readable but cannot be created, recovered, or resumed.
 - 🟡 **Inspection / feedback loop (§7 P3)** — artifacts, gates, and approvals ship;
   the prompt-improving OODA loop (`docs/scopes/ooda-feedback-loop.md`) is the main
   open piece.
