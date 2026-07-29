@@ -1,5 +1,11 @@
 # Graph Rerun Decisioning PR Plan
 
+> **Status:** Historical partial scope. The read-only proposal foundation
+> described here has shipped, and this document's decision to retain
+> `restart-from` is no longer current. Use
+> [`full-selective-regeneration-cutover-prs.md`](full-selective-regeneration-cutover-prs.md)
+> for all remaining implementation and deletion work.
+
 ## Objective
 
 Replace coarse "restart from stage" behavior with graph-aware rerun proposals.

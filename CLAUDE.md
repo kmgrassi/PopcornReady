@@ -48,10 +48,11 @@ The app is **moving off the Next.js monolith** into a monorepo split. Target sta
   `current_app_user_id()`. The server talks to Supabase as the **user-scoped,
   RLS-enforced** client; `service_role` only for trusted ops.
 
-The Next monolith still runs today on the `.local/` JSON stores; **new
-DB/Storage/auth work targets the split, not the monolith.** Full plan + PR
-breakdown: [docs/scopes/supabase-cutover-prs.md](docs/scopes/supabase-cutover-prs.md).
-Identity rules: [docs/supabase-identity-and-rls.md](docs/supabase-identity-and-rls.md).
+The Next monolith has been removed. All DB, storage, auth, and generation work
+targets the active split monorepo. Historical cutover design remains in
+[docs/scopes/supabase-cutover-prs.md](docs/scopes/supabase-cutover-prs.md);
+identity rules are in
+[docs/supabase-identity-and-rls.md](docs/supabase-identity-and-rls.md).
 
 ## Code Review Attribution
 
@@ -89,12 +90,14 @@ user edits it, or the agent targets it by name, prefer relational columns/rows.
 
 ## Where things live
 
-- **Full directory map (active monorepo vs legacy `src/`):**
-  [`docs/repository-structure.md`](docs/repository-structure.md) — read this first.
-  The `src/*` bullets below describe the **legacy Next monolith**, which is being
-  removed; the active code lives in `apps/web`, `apps/api`, and `packages/*`.
-- Live generation: `src/app/api/oneshot/` (sync) + `src/lib/runs/execute.ts`.
-- Versioned/job stack: `src/lib/v1/`, `src/lib/api/v1/`, `src/app/api/v1/`.
+- **Full directory map:** [`docs/repository-structure.md`](docs/repository-structure.md)
+  — read this first. The legacy Next `src/` monolith has been removed; active
+  code lives in `apps/web`, `apps/api`, and `packages/*`.
+- Live generation and durable runs: `apps/api/src/lib/orchestrator/`,
+  `apps/api/src/lib/orchestrator-tools/`, and
+  `apps/api/src/routes/v1/orchestrator-runs.ts`.
+- API v1 store/job stack: `apps/api/src/lib/api/v1/`,
+  `apps/api/src/lib/agent-api/jobs.ts`, and `apps/api/src/routes/v1/`.
 - The agent (LLM) functions: `apps/api/src/lib/agent/` (`planEdit`,
   `critiquePlan`, `critique`, …). Generation/keyframes:
   `apps/api/src/lib/generative/`.

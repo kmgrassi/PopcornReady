@@ -27,12 +27,9 @@ states, and the trusted-origin/recipient union. Compile-time fixtures live in
 The contract supports two independently useful product paths:
 
 1. creator-direct Image, Video, Video Edit, Soundtrack, and Audio requests; and
-2. root-origin domain work if Gate 0 later approves the creative-director
-   hierarchy.
+2. root-origin domain work through the active Creative Director hierarchy.
 
-A Gate 0 `defer` decision blocks the second path and the root-specific work in
-PR 14 and later. It does not invalidate the shared session/runtime contract or
-the creator-direct path.
+Gate 0 recorded `proceed`; both paths share this session/runtime contract.
 
 ## Canonical identities
 
@@ -182,21 +179,26 @@ to unconsumed outputs or targets without downstream consumers.
 
 ## Capability ownership
 
-The current flat production registry remains authoritative for root work until
-Gate 0 says `proceed`. The executable primitive vocabulary and its ownership,
-canonical labels/order, execution modes, cost classes, and approval-gate
-metadata live in
+The Creative Director hierarchy is the production default for new root work.
+The executable primitive vocabulary and its ownership, canonical labels/order,
+execution modes, cost classes, and approval-gate metadata live in
 [`apps/api/src/lib/orchestrator-tools/capability-catalog.ts`](../apps/api/src/lib/orchestrator-tools/capability-catalog.ts).
 Every rich primitive definition is checked against that catalog when it is
-registered, and the driver stubs and real-to-driver bridge consume the same
-metadata. The existing flat `createDefaultToolRegistry()` remains the active
-production source and retains its existing definitions and insertion order.
+registered, and the role-owned registries consume the same metadata. The
+Creative Director hierarchy is the default authority, but
+`createDefaultToolRegistry()` remains an active emergency/historical production
+compatibility surface for fallback-created and null/flat roots until roadmap PR
+0 blocks new/resumed flat work and PR 7 deletes the surface. Current role
+builders also derive owned views by filtering that flat definition set. The
+target refactor replaces it with canonical primitive definitions and direct
+role-owned builders; its deletion is owned by
+[`scopes/full-selective-regeneration-cutover-prs.md`](scopes/full-selective-regeneration-cutover-prs.md).
 `regenerate_image_asset` is classified as synchronous media work: its live rich
 handler and bridge were already synchronous, while the old dormant stub
 incorrectly inferred asynchronous execution from a media-name set. The catalog
-corrects that dormant inconsistency without changing active execution.
+corrects that historical inconsistency.
 
-Role builders make the boundary executable without changing the flat root:
+Role builders make the hierarchy boundary executable:
 
 - `root-registry.ts` exposes the ten current Creative Director-owned
   primitives, including optional catalog publication;
@@ -213,17 +215,17 @@ catalog surface and remain absent from `PRODUCTION_TOOL_NAMES`, driver stubs,
 the flat default registry, and root evals. Domain registries contain no root,
 sibling, approval, assembly, or dispatch capability.
 
-Under the proposed hierarchy, responsibility is:
+Under the active hierarchy, responsibility is:
 
 | Owner | Model-visible responsibility/capabilities |
 | --- | --- |
-| Creative director, conditional | current brief, story, script, shot and visual-anchor planning; timeline assembly and critique; approval, export, and optional catalog publication; future delegation and batched dispatch after their owning PRs |
+| Creative director | current brief, story, script, shot and visual-anchor planning; timeline assembly and critique; approval, export, optional catalog publication, and domain delegation |
 | Visuals | anchor, storyboard, keyframe, clip, immutable pooled image regeneration, pinned content-aware video edit, and standalone pooled image/video generation |
 | Audio | current narration/dialogue/music/sound generation and fitting audio to picture |
 | Runtime, never model-facing | authorization, session/run claim, enqueue/lease, wait/resume, report acknowledgement, retry, cancellation, gate persistence, cost settlement, provider callback fencing |
 
-The conditional creative director retains coherence decisions; it is not only
-a router. It owns cross-modality intent, story and pacing decisions, visual
+The Creative Director retains coherence decisions; it is not only a router. It
+owns cross-modality intent, story and pacing decisions, visual
 anchor planning, assembly, critique, approval, budgets, export, and deciding
 when a domain should work. Visuals and Audio self-heal only inside their own
 capability boundary and return `blocked` or `question` across that boundary.
@@ -241,8 +243,8 @@ strings fail closed. The raw error remains unchanged for audit. Cross-domain
 blocking takes precedence when one error also advertises a local recovery, so
 required root/Audio work cannot disappear into a Visuals retry loop.
 
-Visuals execution is enabled by an explicit role allowlist; Audio remains
-queued until its profile PR. Before an invocation action exists, the engine
+Visuals and Audio execution are enabled through explicit role allowlists.
+Before an invocation action exists, the engine
 loads a fresh graph snapshot, verifies preserve pins, parses the selected tool
 once, and authorizes its stable IDs against the trusted task scope. The
 canonical parsed value is then reused for persistence, cost estimation, and
@@ -260,13 +262,14 @@ selection that happens to reference the source.
 Visuals media jobs carrying a domain session claim also leave generated
 anchors, keyframes, and clips pooled. Their exact claim fences provider work,
 but it is not authority to replace an active project slot after a long-running
-provider call. The existing flat root path retains its legacy selection writes;
-a future domain selection move requires an explicit target plus transactional
-expected-selection and active-claim checks. Later tools in the same claimed
-finite run can resolve those pooled prerequisites only through asset creation
-actions attributed to that exact run and stable beat/anchor identity. This
-preserves anchor → keyframe → clip self-healing without reading another run's
-pooled alternatives.
+provider call. Approved graph-scoped revisions require explicit output bindings,
+expected selections, and active-claim checks; the final atomic application and
+flat-path deletion are specified in
+[`scopes/full-selective-regeneration-cutover-prs.md`](scopes/full-selective-regeneration-cutover-prs.md).
+Later tools in the same claimed finite run can resolve pooled prerequisites only
+through asset creation actions attributed to that exact run and stable
+beat/anchor identity. This preserves anchor → keyframe → clip self-healing
+without reading another run's pooled alternatives.
 
 The graph `image` kind is the default only for genuinely generic stills.
 `poster`, `character_anchor`, `scene_anchor`, `beat_keyframe`,
@@ -276,7 +279,7 @@ semantic search, catalog snapshot/clone, and immutable pooled regeneration.
 
 ## Two-level and deterministic boundaries
 
-If Gate 0 approves the hierarchy, it has exactly two model-agent levels:
+The active hierarchy has exactly two model-agent levels:
 
 ```text
 creative director
