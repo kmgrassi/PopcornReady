@@ -64,6 +64,8 @@ import {
   type GenerationRunDetail,
   type RunAssetPrompt,
 } from "./orchestrator-run-projections.js";
+import { getAgentSession, getRootRunFamily } from "@/lib/api/v1/domain-session-store";
+import { projectCreatorRunHierarchy } from "./session-run-projection.js";
 import {
   downstreamActionIds,
   downstreamGateIds,
@@ -403,10 +405,43 @@ async function assembleRunDetail(
     loadRunAssetMetadata(workspaceId, projectId, actions),
     loadRunJobsForProjection({ workspaceId, projectId, actions }),
   ]);
-  return projectRunDetailFromParts(run, gates, actions, assetPrompts, {
+  const detail = projectRunDetailFromParts(run, gates, actions, assetPrompts, {
     jobs,
     includeOperatorDiagnostics,
   });
+  if (run.agentRole === "creative_director") {
+    const family = await getRootRunFamily(run.id);
+    const childActions = await Promise.all(
+      family.children.map(async (child) => [child.id, await listRunActions(child.id)] as const)
+    );
+    const childJobs = await Promise.all(
+      childActions.map(async ([childRunId, childRunActions]) => [
+        childRunId,
+        await loadRunJobsForProjection({ workspaceId, projectId, actions: childRunActions }),
+      ] as const)
+    );
+    const sessionRequests = family.children.reduce<Array<readonly [string, "visuals" | "audio"]>>(
+      (requests, child) => {
+        if (child.agentSessionId && (child.agentRole === "visuals" || child.agentRole === "audio")) {
+          requests.push([child.agentSessionId, child.agentRole]);
+        }
+        return requests;
+      },
+      []
+    );
+    const sessions = await Promise.all(
+      [...new Map(sessionRequests).entries()].map(async ([sessionId, domain]) =>
+        [sessionId, await getAgentSession(projectId, domain)] as const
+      )
+    );
+    detail.hierarchy = projectCreatorRunHierarchy({
+      family,
+      sessions: new Map(sessions.filter((entry): entry is [string, NonNullable<typeof entry[1]>] => Boolean(entry[1]))),
+      actionsByRun: new Map(childActions),
+      jobs: new Map(childJobs.flatMap(([, loaded]) => [...loaded.entries()])),
+    });
+  }
+  return detail;
 }
 
 export interface GenerationRunDetailRouteDeps {
