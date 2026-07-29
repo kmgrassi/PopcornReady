@@ -1,0 +1,150 @@
+import type {
+  RerunProposalV2,
+  RerunTarget,
+} from "@popcorn/shared/rerun-proposal";
+import { ApiError } from "@/core/errors";
+import { createAction, getProject } from "@/lib/api/v1/store";
+import {
+  createOrchestratorRun,
+  getOrchestratorRun,
+  listOrchestratorRunsForProject,
+  type OrchestratorRun,
+} from "@/lib/api/v1/orchestrator-store";
+import {
+  createRerunDecisionAdapter,
+  finalizeRerunProposal,
+  type RerunDecisionAdapter,
+} from "./rerun-decision-adapter";
+import {
+  loadRerunDecisionPacket,
+  type RerunDecisionPacket,
+} from "./rerun-decision-context";
+
+export interface RerunProposalV2ServiceDeps {
+  authorizeProject: typeof getProject;
+  getRun: typeof getOrchestratorRun;
+  listRuns: typeof listOrchestratorRunsForProject;
+  createRun: typeof createOrchestratorRun;
+  loadPacket: typeof loadRerunDecisionPacket;
+  decide: RerunDecisionAdapter;
+  createAction: typeof createAction;
+}
+
+const defaultDeps: RerunProposalV2ServiceDeps = {
+  authorizeProject: getProject,
+  getRun: getOrchestratorRun,
+  listRuns: listOrchestratorRunsForProject,
+  createRun: createOrchestratorRun,
+  loadPacket: loadRerunDecisionPacket,
+  decide: createRerunDecisionAdapter(),
+  createAction,
+};
+
+async function resolveRoot(input: {
+  projectId: string;
+  rootRunId?: string;
+  message: string;
+}, deps: RerunProposalV2ServiceDeps): Promise<OrchestratorRun> {
+  if (input.rootRunId) {
+    const run = await deps.getRun(input.rootRunId);
+    if (
+      run.projectId !== input.projectId ||
+      run.agentRole !== "creative_director" ||
+      run.rootExecutionProfile !== "creative_director" ||
+      !["queued", "running", "waiting"].includes(run.status)
+    ) {
+      throw new ApiError(
+        "validation_failed",
+        "rootRunId must identify a Creative Director root for the path project."
+      );
+    }
+    return run;
+  }
+  const existing = (await deps.listRuns(input.projectId)).find((run) =>
+    run.agentRole === "creative_director" &&
+    run.rootExecutionProfile === "creative_director" &&
+    (run.status === "queued" || run.status === "running" || run.status === "waiting")
+  );
+  if (existing) return existing;
+  const created = await deps.createRun({
+    projectId: input.projectId,
+    inputSummary: `Selective regeneration proposal: ${input.message}`,
+    // Creating the row is not execution: no orchestrator dispatch is enqueued
+    // until the proposal lifecycle activates it in a later roadmap PR.
+    status: "queued",
+  });
+  if (
+    created.agentRole !== "creative_director" ||
+    created.rootExecutionProfile !== "creative_director"
+  ) {
+    throw new ApiError(
+      "validation_failed",
+      "A Creative Director root is required before proposal decisioning."
+    );
+  }
+  return created;
+}
+
+export async function createRerunProposalV2(input: {
+  workspaceId: string;
+  projectId: string;
+  source: "request_changes" | "autonomous_review";
+  message: string;
+  targets: RerunTarget[];
+  rootRunId?: string;
+}, overrides: Partial<RerunProposalV2ServiceDeps> = {}): Promise<{
+  actionId: string;
+  proposal: RerunProposalV2;
+}> {
+  const deps = { ...defaultDeps, ...overrides };
+  // Service-role reads and the eventual action write are allowed only after the
+  // authenticated workspace/project boundary succeeds.
+  await deps.authorizeProject(input.workspaceId, input.projectId);
+  const root = await resolveRoot({
+    projectId: input.projectId,
+    rootRunId: input.rootRunId,
+    message: input.message,
+  }, deps);
+  let packet: RerunDecisionPacket;
+  packet = await deps.loadPacket({
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    rootRunId: root.id,
+    targets: input.targets,
+    userIntent: input.message,
+  });
+  let proposal: RerunProposalV2;
+  try {
+    const decision = await deps.decide(packet);
+    proposal = finalizeRerunProposal({
+      packet,
+      decision,
+      source: input.source,
+    });
+  } catch (error) {
+    if (error instanceof ApiError && error.code === "validation_failed") {
+      throw new ApiError(
+        "model_output_invalid",
+        "The Creative Director returned an invalid rerun decision.",
+        { reason: error.message }
+      );
+    }
+    throw error;
+  }
+  const action = await deps.createAction({
+    projectId: input.projectId,
+    orchestratorRunId: root.id,
+    tool: "rerun_proposal",
+    status: proposal.outcome === "no_op" ? "applied" : "proposed",
+    inputAssetIds: proposal.inspectedAssetIds,
+    rationale: proposal.rationale,
+    params: {
+      schemaVersion: "rerun_proposal_request.v2",
+      source: input.source,
+      message: input.message,
+      targets: input.targets,
+    },
+    proposal: proposal as unknown as Record<string, unknown>,
+  });
+  return { actionId: action.id, proposal };
+}
