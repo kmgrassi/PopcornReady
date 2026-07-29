@@ -92,6 +92,7 @@ pnpm dev:web                 # just the Vite SPA       (@popcorn/web)
 pnpm typecheck               # turbo: run every package's typecheck task
 pnpm test                    # turbo: run every package's test task
 pnpm lint                    # turbo: run every package's lint task
+pnpm db:migrations:validate  # reject malformed or duplicate migration versions
 ```
 
 Local dev: the API listens on `PORT` (default 4000); the web SPA (Vite, `:3000`)
@@ -104,4 +105,5 @@ wins; the API's `src/env.ts` loads it cwd-independently). Run with
 - **Web** → Netlify (`netlify.toml`)
 - **API** → Railway (`railway.toml`)
 - **DB** → Supabase; migrations applied by the `Apply Supabase migrations`
-  GitHub Action on merge to `main`.
+  GitHub Action on merge to `main`. The workflow validates unique 14-digit
+  migration versions before it connects to production.

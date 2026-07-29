@@ -5,7 +5,11 @@ const index = args.indexOf("--scope");
 const scope = index >= 0 ? args[index + 1] : "all";
 if (!new Set(["all", "web", "api", "docs"]).has(scope)) throw new Error("Use --scope all, web, api, or docs.");
 
-const commands = [["pnpm", ["agent:lint"]]];
+const commands = [
+  ["pnpm", ["agent:lint"]],
+  ["pnpm", ["db:migrations:test"]],
+  ["pnpm", ["db:migrations:validate"]],
+];
 if (scope === "all" || scope === "web") commands.push(["pnpm", ["--filter", "@popcorn/web", "typecheck"]]);
 if (scope === "all" || scope === "api") commands.push(["pnpm", ["--filter", "@popcorn/api", "typecheck"]]);
 for (const [command, commandArgs] of commands) {

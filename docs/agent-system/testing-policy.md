@@ -12,5 +12,8 @@
 - Prefer API-level assertions for contracts and browser assertions for navigation, interaction, and persistence/reload behavior.
 - Keep provider-backed and paid checks opt-in; use deterministic fixtures for required CI.
 - Update `docs/testing/e2e-test-inventory-and-gaps.md` when E2E coverage or a known gap changes.
+- Supabase migrations must use unique 14-digit filename versions. Run
+  `pnpm db:migrations:validate`; `pnpm agent:validate` and the production
+  migration workflow run this preflight before any database push.
 
 Avoid tests that only assert a mocked function was called, assertions coupled to incidental CSS or copy, shared mutable fixtures, and silent skips for required behavior.
