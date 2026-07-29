@@ -36,20 +36,17 @@ test("tool-loop feature flag is opt-in", () => {
   );
 });
 
-test("creative-director hierarchy remains opt-in until Gate 0 clears", () => {
+test("creative-director hierarchy defaults on with only an expiring emergency fallback", () => {
   const now = new Date("2026-07-28T12:00:00.000Z");
-  assert.equal(isCreativeDirectorHierarchyEnabled({}), false);
+  assert.equal(isCreativeDirectorHierarchyEnabled({}), true);
   assert.deepEqual(
-    creativeDirectorHierarchyRollout(
-      { POPCORN_CREATIVE_DIRECTOR_HIERARCHY: "true" },
-      now
-    ),
+    creativeDirectorHierarchyRollout({}, now),
     { enabled: true, fallbackUntil: null }
   );
   assert.deepEqual(
     creativeDirectorHierarchyRollout(
       {
-        POPCORN_CREATIVE_DIRECTOR_HIERARCHY: "true",
+        POPCORN_CREATIVE_DIRECTOR_HIERARCHY: "0",
         POPCORN_CREATIVE_DIRECTOR_FLAT_FALLBACK_UNTIL: "2026-07-29T12:00:00.000Z",
       },
       now
@@ -60,7 +57,6 @@ test("creative-director hierarchy remains opt-in until Gate 0 clears", () => {
   assert.deepEqual(
     creativeDirectorHierarchyRollout(
       {
-        POPCORN_CREATIVE_DIRECTOR_HIERARCHY: "true",
         POPCORN_CREATIVE_DIRECTOR_FLAT_FALLBACK: "1",
         POPCORN_CREATIVE_DIRECTOR_FLAT_FALLBACK_UNTIL: "2026-07-29T12:00:00.000Z",
       },
@@ -71,7 +67,6 @@ test("creative-director hierarchy remains opt-in until Gate 0 clears", () => {
   assert.deepEqual(
     creativeDirectorHierarchyRollout(
       {
-        POPCORN_CREATIVE_DIRECTOR_HIERARCHY: "true",
         POPCORN_CREATIVE_DIRECTOR_FLAT_FALLBACK: "true",
         POPCORN_CREATIVE_DIRECTOR_FLAT_FALLBACK_UNTIL: "not-a-date",
       },
@@ -83,7 +78,6 @@ test("creative-director hierarchy remains opt-in until Gate 0 clears", () => {
   assert.deepEqual(
     creativeDirectorHierarchyRollout(
       {
-        POPCORN_CREATIVE_DIRECTOR_HIERARCHY: "true",
         POPCORN_CREATIVE_DIRECTOR_FLAT_FALLBACK: "true",
         POPCORN_CREATIVE_DIRECTOR_FLAT_FALLBACK_UNTIL: "2026-07-29T08:00:00-04:00",
       },
@@ -95,7 +89,6 @@ test("creative-director hierarchy remains opt-in until Gate 0 clears", () => {
   assert.deepEqual(
     creativeDirectorHierarchyRollout(
       {
-        POPCORN_CREATIVE_DIRECTOR_HIERARCHY: "true",
         POPCORN_CREATIVE_DIRECTOR_FLAT_FALLBACK: "true",
         POPCORN_CREATIVE_DIRECTOR_FLAT_FALLBACK_UNTIL: "2026-07-27T12:00:00.000Z",
       },
@@ -108,7 +101,6 @@ test("creative-director hierarchy remains opt-in until Gate 0 clears", () => {
     assert.deepEqual(
       creativeDirectorHierarchyRollout(
         {
-          POPCORN_CREATIVE_DIRECTOR_HIERARCHY: "true",
           POPCORN_CREATIVE_DIRECTOR_FLAT_FALLBACK: "true",
           POPCORN_CREATIVE_DIRECTOR_FLAT_FALLBACK_UNTIL: invalidExpiry,
         },

@@ -1395,39 +1395,40 @@ their correct direct recipient.
 **Validation:** API projection, origin-recipient, web unit, browser
 desktop/mobile, behavior-focused Playwright, and E2E inventory updates.
 
-### PR 18 — Creative-director default-on rollout and soak
+### PR 18 — Creative-director default-on rollout and production observation
 
-**Depends on:** PR 17, green parity/evaluation evidence, and PR 13 so every
-production surface understands shared domain-session contention.
+**Depends on:** PR 17 and PR 13 so every production surface understands shared
+domain-session contention. Evaluation evidence remains useful observation but
+does not block cutover while the product has no production users.
 
 **Implementation status (2026-07-29):** profile pinning, an expiring emergency
-fallback, health projection, and the operator soak runbook are implemented.
-Creative-director routing remains opt-in until Gate-0 reports, required smokes,
-and the seven-day soak clear the documented default-on cutover; this code change
-does not claim those operational gates have cleared.
+fallback, health projection, and the operator observation runbook are
+implemented. Creative-director routing is now default-on for every newly
+created root so the accepted architecture can be tested in production while
+there are no production users. The flat profile remains available only through
+the expiring emergency fallback and immutable legacy/test roots.
 
 **Deliver:**
 
 - Enable creative-director/domain routing by default while retaining a
   time-bounded emergency fallback flag. Do not couple Asset Studio availability
   to this root-cutover flag.
-- Define soak duration, success/error/cost thresholds, rollback owner, and
-  monitoring for decisions, child runs, cross-origin session contention, and
-  exports.
+- Define success/error/cost thresholds, rollback owner, and monitoring for
+  decisions, child runs, cross-origin session contention, and exports.
 - Exercise every production entrypoint and Request Changes path through the new
   default without executing duplicate billable work.
-- Record the explicit cleanup decision after thresholds hold for the soak.
+- Record the explicit cleanup decision after controlled production testing.
 
 **Acceptance:** the new root path is default-on, all production entrypoints meet
-the agreed soak thresholds, standalone creation remains intact, and rollback is
-verified without data-shape divergence.
+the agreed observation thresholds, standalone creation remains intact, and
+rollback is verified without data-shape divergence.
 
 **Validation:** production-like API/E2E smoke, cross-entry contention tests,
-monitoring queries, rollback rehearsal, and recorded soak evidence.
+monitoring queries, rollback rehearsal, and recorded production-test evidence.
 
 ### PR 19 — Remove the flat root surface and synchronize as-built docs
 
-**Depends on:** PR 18 completed soak and cleanup decision.
+**Depends on:** PR 18 controlled production testing and cleanup decision.
 
 **Deliver:**
 
@@ -1500,8 +1501,8 @@ browser QA, and deployment smoke.
 - PR 14 owns the root prompt/config after domain profiles stabilize.
 - PR 17 extends the production projection/UI without replacing PR 12's Asset
   Studio contract.
-- PR 18 owns only root rollout/soak; PR 19 is the only broad cleanup and as-built
-  documentation synchronization PR.
+- PR 18 owns only root rollout/production observation; PR 19 is the only broad
+  cleanup and as-built documentation synchronization PR.
 - Avoid new route/feature `index.ts` aggregators; use explicit names such as
   `root-agent.ts`, `visuals-agent.ts`, `audio-agent.ts`,
   `domain-session-store.ts`, `agent-creations.ts`,
@@ -1510,9 +1511,11 @@ browser QA, and deployment smoke.
 ## Rollout gates
 
 Standalone API/UI activation and creative-director cutover use separate flags
-and gates. Do not enable billable standalone creation until PRs 2–13 meet their
-security, proposal, provenance, UX, and media-smoke acceptance. Do not enable
-creative-director routing by default until all are true:
+and gates. Standalone creation remains independent. On 2026-07-29, the release
+decision made creative-director routing default-on for every new root because
+there were no production users and the accepted architecture needed real
+exercise. The former pre-cutover gates below are retained as the controlled
+production observation and cleanup checklist:
 
 1. Gate 0 recorded "proceed" (2026-07-16); root decision evals meet the agreed
    non-inferiority bar against the flat root on the paired repeated-sample
@@ -1534,8 +1537,8 @@ creative-director routing by default until all are true:
 11. Raw tasks, reports, questions, jobs, gates, and actor/request metadata are
     not readable through public-project policies.
 12. No retired schema surface, untyped product JSONB, or direct-edit UI is added.
-13. The default-on path completes its defined soak before the flat path is
-    deleted.
+13. The default-on path completes controlled production testing before the flat
+    path is deleted.
 
 ## Non-goals
 

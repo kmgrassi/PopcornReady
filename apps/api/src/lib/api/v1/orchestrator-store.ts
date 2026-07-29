@@ -109,6 +109,26 @@ export interface AnonymousQuotaInput {
   limit: number;
 }
 
+export function newRootProfileInsert(
+  env: NodeJS.ProcessEnv = process.env
+): { root_execution_profile: RootExecutionProfile } {
+  return {
+    root_execution_profile: isCreativeDirectorHierarchyEnabled(env)
+      ? "creative_director"
+      : "flat",
+  };
+}
+
+export function newAnonymousRootProfileParams(
+  env: NodeJS.ProcessEnv = process.env
+): { p_root_execution_profile: RootExecutionProfile } {
+  return {
+    p_root_execution_profile: isCreativeDirectorHierarchyEnabled(env)
+      ? "creative_director"
+      : "flat",
+  };
+}
+
 export type UpdateOrchestratorRunPatch = Partial<
   Pick<OrchestratorRun, "status" | "spentUsd" | "error" | "startedAt" | "completedAt">
 > & {
@@ -261,9 +281,7 @@ export async function createOrchestratorRun(
         input_summary: input.inputSummary,
         budget_usd: input.budgetUsd ?? null,
         spent_usd: 0,
-        root_execution_profile: isCreativeDirectorHierarchyEnabled()
-          ? "creative_director"
-          : "flat",
+        ...newRootProfileInsert(),
         ...deploymentMetadata(),
         created_at: now,
         updated_at: now,
@@ -283,9 +301,6 @@ export async function createOrchestratorRunWithAnonymousQuota(
 ): Promise<OrchestratorRun> {
   const db = getServiceSupabase();
   const metadata = deploymentMetadata();
-  const rootExecutionProfile = isCreativeDirectorHierarchyEnabled()
-    ? "creative_director"
-    : "flat";
   const rows = await runQuery(
     "store.createOrchestratorRunWithAnonymousQuota",
     db.rpc("create_orchestrator_run_with_anonymous_quota", {
@@ -296,7 +311,7 @@ export async function createOrchestratorRunWithAnonymousQuota(
       p_limit: quota.limit,
       p_deploy_id: metadata.deploy_id,
       p_git_sha: metadata.git_sha,
-      p_root_execution_profile: rootExecutionProfile,
+      ...newAnonymousRootProfileParams(),
     })
   );
   const row = (rows as Array<{ run_id: string | null; quota_exceeded: boolean }>)[0];
