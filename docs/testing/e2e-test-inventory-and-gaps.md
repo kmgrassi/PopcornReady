@@ -27,8 +27,9 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
 - `specs/auth-and-routing.spec.ts` covers public auth routes, protected local
   routes, compatibility redirects, and not-found behavior.
 - `asset-studio.spec.ts` covers the production-default `/create` entry, image as
-  the default goal, proposal review without dispatch, explicit confirmation,
-  queued status, and desktop/mobile Create navigation.
+  the default goal, choice-card padding at desktop and mobile widths, proposal
+  review without dispatch, explicit confirmation, queued status, and
+  desktop/mobile Create navigation.
 - `run-progress.spec.ts` and `run-progress-actions.spec.ts` cover run progress,
   approval/rejection/cancel actions, failed/succeeded states, and recovery hints
   with mocked browser API fixtures, including truthful grouped-tool progress,

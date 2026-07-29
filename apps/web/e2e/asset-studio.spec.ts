@@ -29,6 +29,30 @@ async function mockAssetStudioProject(page: Page) {
   );
 }
 
+async function expectChoiceCardPadding(page: Page) {
+  const padding = await page.getByRole("radio").evaluateAll((inputs) => {
+    const expected = getComputedStyle(document.documentElement)
+      .getPropertyValue("--space-4")
+      .trim();
+    const cards = inputs.map((input) => {
+      const card = input.closest("label");
+      if (!card) throw new Error("Choice card radio is missing its label");
+      const style = getComputedStyle(card);
+      return {
+        inlineStart: style.paddingInlineStart,
+        inlineEnd: style.paddingInlineEnd,
+      };
+    });
+    return { expected, cards };
+  });
+
+  expect(padding.cards).toHaveLength(3);
+  for (const card of padding.cards) {
+    expect(card.inlineStart).toBe(padding.expected);
+    expect(card.inlineEnd).toBe(padding.expected);
+  }
+}
+
 test.describe("Asset Studio", () => {
   test.beforeEach(async ({ page }) => {
     await mockLocalApi(page);
@@ -96,6 +120,7 @@ test.describe("Asset Studio", () => {
         name: "Image A visual for the project asset pool.",
       }),
     ).toBeChecked();
+    await expectChoiceCardPadding(page);
 
     await page
       .getByRole("combobox", { name: "Project", exact: true })
@@ -132,5 +157,6 @@ test.describe("Asset Studio", () => {
         name: "Image A visual for the project asset pool.",
       }),
     ).toBeChecked();
+    await expectChoiceCardPadding(page);
   });
 });
