@@ -97,7 +97,7 @@ user edits it, or the agent targets it by name, prefer relational columns/rows.
   `apps/api/src/lib/orchestrator-tools/`, and
   `apps/api/src/routes/v1/orchestrator-runs.ts`.
 - API v1 store/job stack: `apps/api/src/lib/api/v1/`,
-  `apps/api/src/lib/agent-api/jobs/`, and `apps/api/src/routes/v1/`.
+  `apps/api/src/lib/agent-api/jobs.ts`, and `apps/api/src/routes/v1/`.
 - The agent (LLM) functions: `apps/api/src/lib/agent/` (`planEdit`,
   `critiquePlan`, `critique`, …). Generation/keyframes:
   `apps/api/src/lib/generative/`.

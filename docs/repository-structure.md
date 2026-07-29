@@ -65,7 +65,7 @@ Root config: `pnpm-workspace.yaml`, `turbo.json` (task graph), `tsconfig.base.js
 | The web route table / pages | `apps/web/src/App.tsx`, `apps/web/src/routes/` |
 | HTTP API endpoints | `apps/api/src/routes/v1/` |
 | The agent (LLM) functions | `packages/agent/src/` (+ `apps/api/src/lib/agent*`) |
-| Generation pipeline / jobs | `apps/api/src/lib/orchestrator/`, `orchestrator-tools/`, `generative/`, `agent-api/jobs/` |
+| Generation pipeline / jobs | `apps/api/src/lib/orchestrator/`, `orchestrator-tools/`, `generative/`, `agent-api/jobs.ts` |
 | Core types & data contracts | `packages/shared/src/types.ts`, `packages/shared/src/assets/` |
 | Domain-agent task/report contract | `packages/shared/src/domain-agent-contract.ts`, `docs/domain-agent-orchestration-contract.md` |
 | Orchestrator primitive catalog / active role registries | `apps/api/src/lib/orchestrator-tools/capability-catalog.ts`, `root-registry.ts`, `visuals-registry.ts`, `audio-registry.ts` |

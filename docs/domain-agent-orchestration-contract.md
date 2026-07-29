@@ -185,8 +185,13 @@ execution modes, cost classes, and approval-gate metadata live in
 [`apps/api/src/lib/orchestrator-tools/capability-catalog.ts`](../apps/api/src/lib/orchestrator-tools/capability-catalog.ts).
 Every rich primitive definition is checked against that catalog when it is
 registered, and the role-owned registries consume the same metadata. The
-remaining constructible flat registry is compatibility debt, not production
-authority; its deletion is owned by
+Creative Director hierarchy is the default authority, but
+`createDefaultToolRegistry()` remains an active emergency/historical production
+compatibility surface for fallback-created and null/flat roots until roadmap PR
+0 blocks new/resumed flat work and PR 7 deletes the surface. Current role
+builders also derive owned views by filtering that flat definition set. The
+target refactor replaces it with canonical primitive definitions and direct
+role-owned builders; its deletion is owned by
 [`scopes/full-selective-regeneration-cutover-prs.md`](scopes/full-selective-regeneration-cutover-prs.md).
 `regenerate_image_asset` is classified as synchronous media work: its live rich
 handler and bridge were already synchronous, while the old dormant stub

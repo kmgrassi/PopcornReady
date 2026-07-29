@@ -53,6 +53,11 @@ acceptance tests, and end with deletion of fixed-stage and flat-root fallbacks.
   historical/superseded.
 - Corrected `NORTH_STAR.md`, `CLAUDE.md`, and `repository-structure.md` to record
   that the Next monolith is gone and link to the current completion plan.
+- Addressed all five PR #832 review threads: preserved the live Request Changes
+  path until the lifecycle UI cutover, delayed real adapter registration until
+  atomic application, made `RerunProposal.v2` a discriminated outcome union with
+  fingerprinted clarification, corrected the job-store path, and documented the
+  flat registry as active compatibility production behavior until deletion.
 
 ## Validation evidence
 
@@ -61,6 +66,8 @@ acceptance tests, and end with deletion of fixed-stage and flat-root fallbacks.
 - `pnpm agent:validate -- --scope docs`: passed, including agent lint, two
   migration-validator tests, and validation of 85 Supabase migrations.
 - `git diff --check`: passed.
+- After addressing PR #832 comments, `pnpm agent:lint:fix`,
+  `pnpm agent:validate -- --scope docs`, and `git diff --check` passed again.
 
 ## Independent reviews
 
@@ -88,6 +95,14 @@ acceptance tests, and end with deletion of fixed-stage and flat-root fallbacks.
 - Wrap-up review found no unresolved roadmap, correctness, security,
   documentation, or validation blockers and independently reran
   `pnpm agent:validate -- --scope docs` successfully.
+- PR-comment research/plan review confirmed all five comments were valid and
+  recommended the same safe sequencing: parallel v2 preview without changing
+  live callers, adapter activation only in PR 5, a discriminated clarification
+  contract, the real `jobs.ts` path, and truthful flat-registry status.
+- PR-comment implementation review approved all five fixes and found no new
+  roadmap contradiction.
+- PR-comment wrap-up review independently reran docs validation and diff checks,
+  confirmed the expected five-file scope, and approved commit/push.
 
 ## Blockers and risks
 
@@ -96,5 +111,6 @@ acceptance tests, and end with deletion of fixed-stage and flat-root fallbacks.
 
 ## Next action / handoff
 
-- Commit and publish this documentation scope as a ready PR. After merge, start
-  roadmap PR 0 and PR 1 in parallel.
+- Commit and push the PR #832 review fixes, resolve the five addressed threads,
+  and wait for CI/re-review. After merge, start roadmap PR 0 and PR 1 in
+  parallel.

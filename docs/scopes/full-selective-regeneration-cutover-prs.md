@@ -188,7 +188,7 @@ Replace the intentionally non-executable `RerunProposal.v1` with a complete
 server-owned contract:
 
 ```ts
-interface RerunProposalV2 {
+interface RerunProposalBaseV2 {
   schemaVersion: "RerunProposal.v2";
   projectId: string;
   rootRunId: string;
@@ -197,9 +197,6 @@ interface RerunProposalV2 {
   targets: RerunTarget[];
   inspectedAssetIds: string[];
   candidateAffectedAssetIds: string[];
-  selectedWork: RerunWorkItem[];
-  plannedSelectionMoves: PlannedSelectionMove[];
-  plannedStoryPointerMoves: PlannedStoryPointerMove[];
   preservedAssetIds: string[];
   checklist: RerunChecklistItem[];
   pins: {
@@ -217,6 +214,41 @@ interface RerunProposalV2 {
   rationale: string;
   userFacingSummary: string;
 }
+
+type RerunProposalV2 =
+  | (RerunProposalBaseV2 & {
+      outcome: "no_op";
+      selectedWork: [];
+      plannedSelectionMoves: [];
+      plannedStoryPointerMoves: [];
+      requiresApproval: false;
+      clarification?: never;
+    })
+  | (RerunProposalBaseV2 & {
+      outcome: "ask_clarification";
+      selectedWork: [];
+      plannedSelectionMoves: [];
+      plannedStoryPointerMoves: [];
+      requiresApproval: false;
+      clarification: {
+        question: string;
+        targets: RerunTarget[];
+        options: Array<{
+          id: string;
+          label: string;
+          tradeoff: string;
+        }>;
+        answerFingerprint: string;
+      };
+    })
+  | (RerunProposalBaseV2 & {
+      outcome: "revision";
+      selectedWork: [RerunWorkItem, ...RerunWorkItem[]];
+      plannedSelectionMoves: PlannedSelectionMove[];
+      plannedStoryPointerMoves: PlannedStoryPointerMove[];
+      requiresApproval: boolean;
+      clarification?: never;
+    });
 ```
 
 The action ID is the proposal envelope identity and is returned separately as
@@ -361,8 +393,9 @@ Deterministic terminal policy:
 - `no_op` is persisted and immediately marked `applied` without approval or
   provider execution.
 - `ask_clarification` remains `proposed` and creates one bounded creator-facing
-  question. Its fingerprinted answer creates a new proposal linked to the old
-  action; it never mutates the original proposal.
+  question with explicit options and an `answerFingerprint`. The submitted
+  answer must match that fingerprint and creates a new proposal linked to the
+  old action; it never mutates the original proposal.
 - Every `request_changes` proposal with selected mutation work requires explicit
   approval.
 - An `autonomous_review` proposal may auto-run only when it is low risk,
@@ -491,14 +524,16 @@ starts immediately beside PR 1.
   - asset, selection, and story snapshot pins.
 - Add a Creative Director decision adapter that returns `no_op`,
   `ask_clarification`, or typed work items.
-- Route asset-revision and board-feedback requests into inert proposal creation
-  instead of writing an applied action and immediately enqueueing a run.
+- Add the v2 proposal/decision endpoint and services beside the live revision
+  path. Existing asset-revision and board-feedback routes, response shapes, web
+  callers, immediate enqueueing, and run polling remain unchanged until PR 6
+  ships the usable lifecycle UI and performs the atomic route cutover.
 - Reject invented, cross-project, disallowed-kind, or unpinned targets.
 - Persist proposals as immutable `rerun_proposal` actions.
 - Remove the image-only `executable`/`unavailableKinds` placeholder semantics.
-- Remove the deterministic board-feedback-to-leaf-tool shortcut; targeted board
-  feedback is ordinary Creative Director intent with a stable panel/asset
-  target.
+- Specify the deterministic board-feedback-to-leaf-tool shortcut as PR 6
+  deletion work. It stays live with the compatibility route until every caller
+  moves to Creative Director proposals.
 
 **Acceptance tests:**
 
@@ -511,6 +546,10 @@ starts immediately beside PR 1.
 - Insufficient context produces a bounded clarification, not a stage restart.
 - Invalid model output cannot invent IDs or bypass approval.
 - Proposal creation performs zero provider calls and zero selection writes.
+- The explicit v2 preview API is inert, while current Request Changes HTTP
+  responses and UI polling behavior remain unchanged.
+- Parser tests reject `no_op` with work, clarification without a question or
+  answer fingerprint, revision with no work, and model-authored policy fields.
 - Cross-workspace/project targets, unrelated root IDs, and flat/null roots fail
   closed before the service-role action write.
 - Project-scoped Request Changes server-selects or creates its hierarchy root.
@@ -528,8 +567,9 @@ starts immediately beside PR 1.
   state machine. Land deterministic fake executors for lifecycle tests.
 - Extend `DomainRequiredOutput` and domain-report outputs with the exact
   server-issued work-item/output binding identity.
-- Keep unsupported work items non-executable until their PR 3/4 adapter is
-  registered; approval cannot silently fall back to stage restart.
+- Keep every real work item non-executable until PR 5 activates its tested
+  adapter together with atomic application; approval cannot silently fall back
+  to stage restart.
 - Extend delegation inputs and server derivation to carry exact stable targets,
   candidate affected IDs, preserved assets/selections/fingerprints, proposal
   causation, approval identity, and cost ceiling into `DomainTask.v1`.
@@ -544,8 +584,8 @@ starts immediately beside PR 1.
   execution reservation and one fake dispatch.
 - A changed asset fingerprint or selection sequence returns `stale` before
   provider execution.
-- Unsupported kinds remain approved but non-executable with a typed coverage
-  error until their adapter is registered.
+- Real kinds return `coverage_unavailable` before approval, reservation, or
+  spend until PR 5 activates the complete path.
 - Changed-input idempotency-key reuse is rejected.
 - Root-run/project and target/project/workspace mismatches fail closed.
 - Actors cannot approve, reject, refresh, or execute another workspace’s
@@ -558,7 +598,8 @@ starts immediately beside PR 1.
 
 - Add kind adapters for generic images, posters, character/scene anchors,
   storyboard panels/tiles, and beat keyframes.
-- Register only these supported work items in PR 2’s executor registry.
+- Implement and test these adapters behind PR 2’s executor interface, but do not
+  register them in the production executor registry before PR 5.
 - Resolve-or-generate from proposal targets while preserving unselected and
   uploaded assets.
 - Mint immutable versions with complete beat/anchor/story input edges.
@@ -576,6 +617,8 @@ starts immediately beside PR 1.
   row’s semantic history.
 - Minor likeness routing, provider normalization, storage, cost, and embedding
   behavior continue through canonical tool services.
+- No production route can dispatch these adapters or incur provider spend before
+  PR 5.
 
 ### PR 3B — Visual clip and video-edit coverage
 
@@ -583,7 +626,8 @@ starts immediately beside PR 1.
 
 - Add kind adapters for beat clips, generic video, and pinned content-aware
   video edits.
-- Register only these supported work items in PR 2’s executor registry.
+- Implement and test these adapters behind PR 2’s executor interface, but do not
+  register them in the production executor registry before PR 5.
 - Load the approved beat, keyframe, anchor, duration, aspect, and source pins.
 - Mint `generated_from` or `edited_from` edges without overwriting source clips.
 - Fence long-running provider callbacks with the proposal/session claim.
@@ -595,6 +639,8 @@ starts immediately beside PR 1.
   active.
 - Video edits preserve the original and affect only explicitly named slots.
 - Provider retries do not duplicate billable jobs or output selection moves.
+- No production route can dispatch these adapters or incur provider spend before
+  PR 5.
 
 ### PR 3C — Audio and picture-fit coverage
 
@@ -602,7 +648,8 @@ starts immediately beside PR 1.
 
 - Add kind adapters for per-beat voice/dialogue, narration, soundtrack, sound
   effects, and fit-to-picture outputs.
-- Register only these supported work items in PR 2’s executor registry.
+- Implement and test these adapters behind PR 2’s executor interface, but do not
+  register them in the production executor registry before PR 5.
 - Preserve typed segment/story/script inputs and timing edges.
 - Allow Audio-only work to run without waking Visuals.
 - Return cross-domain timing or story preconditions to the Creative Director,
@@ -617,6 +664,8 @@ starts immediately beside PR 1.
   scenes.
 - Missing picture duration returns a typed root-owned prerequisite without
   repeated blind retries.
+- No production route can dispatch these adapters or incur provider spend before
+  PR 5.
 
 ### PR 4 — Root story, assembly, critique, and reconciliation
 
@@ -627,8 +676,8 @@ starts immediately beside PR 1.
 - Preserve stable relational scene/beat/panel row IDs. A semantic update stages
   a new immutable snapshot asset; PR 5 later points the row to it atomically
   with the approved selection moves, and the prior snapshot preserves history.
-- Register root story, assembly, and critique work items in PR 2’s executor
-  registry.
+- Implement and test root story, assembly, and critique adapters behind PR 2’s
+  executor interface, but do not register them in production before PR 5.
 - Reassemble a cut only when approved child selections or story timing changed.
 - Assemble and critique from prospective bound child/snapshot IDs while they
   remain pooled; do not require early active-selection or story-pointer moves.
@@ -644,11 +693,14 @@ starts immediately beside PR 1.
 - A duration change updates only affected audio/clip timing and the composite.
 - Reassembly creates a new cut and preserves the prior cut.
 - Critique failure is visible and retryable without replaying completed media.
+- No production route can dispatch these adapters before PR 5.
 
 ### PR 5 — Activate fan-out, atomic application, and reconciliation
 
 **Deliver:**
 
+- Register the tested PR 3/4 adapters in production only in this PR, in the same
+  deploy that enables their final atomic application.
 - Dispatch registered typed Visuals/Audio assignments, including atomic parallel
   dispatch for mixed-domain plans, and park the root on durable fan-in.
 - Validate every child output kind, target, intrinsic role, proposal causation,
@@ -686,6 +738,9 @@ browser validation requirements.
 
 - Route asset, storyboard, audio, timeline, and project-level Request Changes
   through `RerunProposal.v2`.
+- Atomically switch every existing revision/board-feedback caller from the
+  immediate-enqueue compatibility route to the proposal lifecycle, then remove
+  the old mutation behavior and deterministic leaf-tool shortcut.
 - Show the agent’s checklist, preserved objects, affected objects, estimated
   maximum cost, risk, and domain assignments before approval.
 - Support clarification, revise-proposal, approve, reject, stale-refresh,
@@ -699,6 +754,8 @@ browser validation requirements.
 - Desktop and mobile E2E cover visual-only, audio-only, mixed, clarification,
   stale proposal, rejection, retry, and successful application.
 - Expensive work cannot start before explicit confirmation.
+- A merely proposed action never produces the old “Sent”/“revising” success
+  state; UI status comes from the actual proposal lifecycle.
 - The UI may submit the visible object’s stable reference. The server resolves
   and authorizes it; clients cannot submit graph closure, selected work, costs,
   provider/tool calls, or approval policy.
@@ -712,6 +769,8 @@ browser validation requirements.
 - Delete `POST .../generation-runs/:runId/restart-from`, its route helpers,
   stage-clearing selection logic, API client method, web controls, and tests that
   encode stage restart as supported behavior.
+- Delete any revision-route compatibility helpers left after PR 6’s atomic
+  caller cutover.
 - Delete the now-unused flat profile resolver, schema variants, and historical
   health metadata left after PR 0.
 - Stop resolving null/`flat` root profiles to the all-tools registry.
@@ -858,11 +917,12 @@ ownership minimizes merge conflicts:
 | --- | --- | --- |
 | Hierarchy lock | root creation/resume/revision profile enforcement | Immediately |
 | Decision | shared proposal contract, graph context, Creative Director adapter/evals | Immediately |
-| Coordinator | proposal lifecycle, DB transitions, dispatch/fan-in, selection CAS | After PR 1 contract lands |
+| Coordinator foundation | proposal lifecycle, DB transitions, executor interfaces/fakes | After PR 1 contract lands |
 | Visual still | image/storyboard/keyframe adapters | After PR 2 execution interface lands |
 | Visual motion | clip/video-edit adapters | After PR 2 execution interface lands |
 | Audio | audio/fit adapters | After PR 2 execution interface lands |
 | Root reconciliation | story/assembly/critique completion | After kind result contract lands |
+| Production activation | adapter registration, dispatch/fan-in, atomic pointer/selection CAS | After PR 3/4 adapters are tested |
 | Web | Request Changes proposal lifecycle | Against mock PR 1/2 contracts, in parallel |
 | Cutover | deletion, operations, inventory, final smoke | After all coverage lanes are green |
 
