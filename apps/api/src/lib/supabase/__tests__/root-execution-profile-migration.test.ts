@@ -16,7 +16,7 @@ test("root execution profile is constrained and cannot change after a run starts
   assert.match(migration, /old\.root_execution_profile is not null[\s\S]*new\.root_execution_profile is distinct from old\.root_execution_profile/);
   assert.match(migration, /old\.root_execution_profile is null[\s\S]*old\.started_at is not null/);
   assert.match(migration, /drop function public\.create_orchestrator_run_with_anonymous_quota/);
-  assert.match(migration, /p_root_execution_profile text default 'creative_director'/);
+  assert.match(migration, /p_root_execution_profile text default 'flat'/);
   assert.match(migration, /p_root_execution_profile is null[\s\S]*not in \('flat', 'creative_director'\)/);
   assert.match(migration, /root_execution_profile\s*\) values[\s\S]*p_root_execution_profile/);
 });

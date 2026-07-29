@@ -1,6 +1,6 @@
 # Creative-director rollout and soak
 
-<!-- agent-summary: PR 18 makes creative-director routing default-on for newly created root runs. -->
+<!-- agent-summary: PR 18 keeps creative-director routing opt-in until Gate-0 evidence clears the default-on cutover. -->
 <!-- agent-summary: Each root run pins flat or creative_director so a rollback cannot alter in-flight behavior. -->
 <!-- agent-summary: POPCORN_CREATIVE_DIRECTOR_FLAT_FALLBACK and its UTC expiry are the only temporary emergency fallback. -->
 <!-- agent-summary: Asset Studio remains governed separately by VITE_STANDALONE_CREATION_ENABLED. -->
@@ -10,23 +10,28 @@
 
 ## Operating rule
 
-New root runs persist `root_execution_profile = creative_director`; existing
-null-profile rows remain flat. This makes profile selection auditable and
+New root runs persist their selected execution profile; existing null-profile
+rows remain flat. The hierarchy remains disabled by default until Gate-0
+evidence is recorded as cleared. This makes profile selection auditable and
 ensures an emergency fallback changes only roots created while it is active.
 Visuals and Audio execution remains available to drain existing root work and
 to serve the separately gated Asset Studio.
 
-To use the emergency flat fallback, the Creative Systems on-call must set both
-variables and record the incident/change ticket:
+After Gate 0 clears, activate hierarchy routing with
+`POPCORN_CREATIVE_DIRECTOR_HIERARCHY=1`. To use the emergency flat fallback,
+the Creative Systems on-call must set all three variables and record the
+incident/change ticket:
 
 ```sh
+POPCORN_CREATIVE_DIRECTOR_HIERARCHY=1
 POPCORN_CREATIVE_DIRECTOR_FLAT_FALLBACK=1
 POPCORN_CREATIVE_DIRECTOR_FLAT_FALLBACK_UNTIL=2026-08-04T18:00:00Z
 ```
 
-The expiry must be valid UTC and in the future. Missing, invalid, or expired
-values leave the hierarchy enabled. Remove both values after recovery; do not
-extend the expiry without a new incident record and an explicit owner.
+The expiry must be an exact, calendar-valid UTC timestamp and in the future.
+Missing, invalid, or expired values leave the hierarchy enabled. Remove the
+fallback variables after recovery; do not extend the expiry without a new
+incident record and an explicit owner.
 
 `GET /api/v1/health` reports the active default and fallback expiry. Worker
 events named `orchestrator_worker.rollout` attribute claimed root runs to their

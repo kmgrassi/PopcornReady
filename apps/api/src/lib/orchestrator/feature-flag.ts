@@ -8,21 +8,34 @@ export interface CreativeDirectorHierarchyRollout {
 }
 
 /**
- * PR 18 makes the creative-director root surface the default. Operators may
- * return to the flat root only by setting an explicit, future expiry; that
- * keeps an emergency rollback reversible and prevents it becoming a second
- * permanent production mode.
+ * Gate 0 keeps hierarchy routing opt-in until paired regression evidence is
+ * recorded as cleared. Once activated, a future-dated fallback can return new
+ * roots to flat without rewriting active roots.
  */
 export function creativeDirectorHierarchyRollout(
   env: NodeJS.ProcessEnv = process.env,
   now: Date = new Date()
 ): CreativeDirectorHierarchyRollout {
+  const hierarchyRequested = ENABLED_VALUES.has(
+    String(env.POPCORN_CREATIVE_DIRECTOR_HIERARCHY ?? "").trim().toLowerCase()
+  );
+  if (!hierarchyRequested) return { enabled: false, fallbackUntil: null };
   const fallbackRequested = ENABLED_VALUES.has(
     String(env.POPCORN_CREATIVE_DIRECTOR_FLAT_FALLBACK ?? "").trim().toLowerCase()
   );
   const fallbackUntil = String(env.POPCORN_CREATIVE_DIRECTOR_FLAT_FALLBACK_UNTIL ?? "").trim();
   const fallbackAt = UTC_TIMESTAMP.test(fallbackUntil) ? Date.parse(fallbackUntil) : Number.NaN;
-  if (fallbackRequested && Number.isFinite(fallbackAt) && fallbackAt > now.getTime()) {
+  const normalizedFallback = Number.isFinite(fallbackAt)
+    ? new Date(fallbackAt).toISOString()
+    : null;
+  const calendarValid =
+    normalizedFallback === fallbackUntil ||
+    normalizedFallback?.replace(".000Z", "Z") === fallbackUntil;
+  if (
+    fallbackRequested &&
+    calendarValid &&
+    fallbackAt > now.getTime()
+  ) {
     return { enabled: false, fallbackUntil: new Date(fallbackAt).toISOString() };
   }
   return { enabled: true, fallbackUntil: null };

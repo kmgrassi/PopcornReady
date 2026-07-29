@@ -59,7 +59,7 @@ create function public.create_orchestrator_run_with_anonymous_quota(
   p_limit integer,
   p_deploy_id text default null,
   p_git_sha text default null,
-  p_root_execution_profile text default 'creative_director'
+  p_root_execution_profile text default 'flat'
 )
 returns table (run_id uuid, quota_exceeded boolean)
 language plpgsql

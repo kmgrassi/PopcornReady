@@ -1392,11 +1392,11 @@ desktop/mobile, behavior-focused Playwright, and E2E inventory updates.
 **Depends on:** PR 17, green parity/evaluation evidence, and PR 13 so every
 production surface understands shared domain-session contention.
 
-**Implementation status (2026-07-28):** the default-on root profile, expiring
-emergency fallback, immutable per-run profile pin, health projection, and
-operator soak runbook are implemented. Production Gate-0 reports, the required
-smokes, and the seven-day soak remain release evidence; this code change does
-not claim those operational gates have cleared.
+**Implementation status (2026-07-29):** profile pinning, an expiring emergency
+fallback, health projection, and the operator soak runbook are implemented.
+Creative-director routing remains opt-in until Gate-0 reports, required smokes,
+and the seven-day soak clear the documented default-on cutover; this code change
+does not claim those operational gates have cleared.
 
 **Deliver:**
 
