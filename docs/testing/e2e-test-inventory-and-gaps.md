@@ -26,6 +26,9 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   credentials and Supabase env are provided.
 - `specs/auth-and-routing.spec.ts` covers public auth routes, protected local
   routes, compatibility redirects, and not-found behavior.
+- `asset-studio.spec.ts` covers the production-default `/create` entry, image as
+  the default goal, proposal review without dispatch, explicit confirmation,
+  queued status, and desktop/mobile Create navigation.
 - `run-progress.spec.ts` and `run-progress-actions.spec.ts` cover run progress,
   approval/rejection/cancel actions, failed/succeeded states, and recovery hints
   with mocked browser API fixtures, including truthful grouped-tool progress,
@@ -142,6 +145,7 @@ Authenticated routes:
 - `/inspiration`
 - `/library`, `/library/:tab` (`projects` and `assets` are the active tabs)
 - `/projects`, `/projects/new`, `/projects/:projectId`,
+- `/create`,
   `/projects/:projectId/concept`, `/projects/:projectId/brief`,
   `/projects/:projectId/script`,
   `/projects/:projectId/storyboard`, `/projects/:projectId/watch`,
@@ -153,14 +157,13 @@ Authenticated routes:
 - `/dev/design-system`, `/dev/generation-cards`
 
 Retired route note: `/studio` is not mounted in the current Vite route table.
-Creation currently enters through the landing prompt, the dashboard/global
-`Create new video` action, or `/projects/new`. Any future Studio restoration
-should add new E2E coverage when the route returns.
+Standalone Image, Video, and Soundtrack creation enters through the
+dashboard/global **Create new asset** action or `/create`. Full video-project
+creation remains available through the landing prompt, dashboard empty-state
+video action, and `/projects/new`.
 
-Dashboard creation note: the current authenticated flow is for a signed-in local
-user to open `/dashboard`, click `Create new video`, complete the brief and
-footage setup, then auto-start production as the flow reaches the plan step. The
-route is `/projects/new`; `/studio` remains retired.
+Dashboard creation note: the global shell Create action opens Asset Studio.
+The full video-project flow is still `/projects/new`; `/studio` remains retired.
 
 ## Recommended Harness Shape
 
@@ -228,7 +231,8 @@ Recommended next test:
 Critical flows:
 
 - A known local Supabase user can log in and reach `/dashboard`.
-- `Create new video` opens the authenticated project-creation flow.
+- A full-production CTA or direct `/projects/new` entry opens the authenticated
+  video-project flow.
 - The draft picker can create, resume, and delete drafts.
 - Brief entry persists before generation starts.
 - Footage setup supports prompt-only and uploaded/source-footage paths.
@@ -245,8 +249,26 @@ Current coverage:
 Recommended next test:
 
 - Add a local-db-backed Playwright spec: sign in with a seeded local user, click
-  `Create new video`, create a draft, submit brief and footage choices, stub or
+  the full-production CTA, create a draft, submit brief and footage choices, stub or
   mock run start, and verify navigation to the run progress route.
+
+### 2b. Standalone Asset Studio
+
+Covered:
+
+- The authenticated global Create action opens `/create` by default.
+- Image is the default creator-facing goal and maps to `image_create`.
+- Reviewing the maximum cost does not confirm or enqueue the proposal.
+- Explicit confirmation deep-links to the queued creator-direct run.
+- The mobile Create tab opens Asset Studio and retains active state.
+
+Remaining gaps:
+
+- Add mocked status fixtures for completed, failed, canceled, question, and
+  blocked outcomes.
+- Add browser coverage when optional references, Request Changes, dependency
+  attachment, and Use in project controls land.
+- Keep provider-backed image/video/audio smoke opt-in because it incurs cost.
 
 ### 3. Run Progress, Review Gates, And Recovery
 
@@ -400,7 +422,7 @@ P0:
 
 - Add a local Supabase signup/onboarding E2E that creates a fresh user and
   verifies `/api/v1/me` returns `authMode: "supabase"` and `isLocal: false`.
-- Add automated coverage for the dashboard `Create new video` flow with
+- Add automated coverage for the dashboard full-video-project flow with
   draft creation, brief, footage setup, and run-start redirect.
 - Add landing quick-start create-account flow with mocked run creation.
 - Keep `pnpm test:e2e:local-db` healthy and run it before changes touching auth,

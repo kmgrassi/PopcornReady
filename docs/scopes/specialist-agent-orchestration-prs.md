@@ -1218,6 +1218,14 @@ successor, queue, graph-scope, selection, and mocked-provider integration tests.
 **Depends on:** PR 12. This is part of the standalone track and does not require
 Gate 0 to say proceed.
 
+**Implementation status (2026-07-29):** `/create` is the default authenticated
+creation entry for standalone Image, Video, and Soundtrack requests. The
+client-only `VITE_STANDALONE_CREATION_ENABLED` rollout flag was removed after
+desktop/mobile browser coverage was added for image proposal and explicit
+confirmation. Optional references, same-session question/follow-up controls,
+blocked dependency actions, and Use in project remain follow-up scope; their
+absence must not be represented as full PR 13 acceptance.
+
 **Owns:** an outcome-oriented route such as `/create` and
 `StandaloneCreationPage.tsx`, co-located CSS Modules, typed query hooks, and
 small launch points from authenticated product surfaces.
@@ -1246,9 +1254,9 @@ small launch points from authenticated product surfaces.
 - Use TanStack Query for server state, typed client functions next to the API
   module, CSS-variable tokens, and co-located CSS Modules. Cover keyboard,
   screen-reader, reduced-motion, empty, error, desktop, and mobile behavior.
-- Ship behind a standalone-specific feature flag and enable only after the
-  direct API/media smoke and UX acceptance checks pass; it is independent of
-  the creative-director rollout flag.
+- Keep standalone creation operationally independent of the creative-director
+  rollout. Its production route is always mounted; root hierarchy rollback must
+  not hide or rewrite creator-direct Asset Studio sessions.
 
 **Acceptance:** a creator can make, inspect, revise, and reuse an image, video,
 or soundtrack without starting a full production; the result remains in the
@@ -1401,8 +1409,8 @@ does not claim those operational gates have cleared.
 **Deliver:**
 
 - Enable creative-director/domain routing by default while retaining a
-  time-bounded emergency fallback flag. Do not couple the independently managed
-  Asset Studio flag to this root-cutover flag.
+  time-bounded emergency fallback flag. Do not couple Asset Studio availability
+  to this root-cutover flag.
 - Define soak duration, success/error/cost thresholds, rollback owner, and
   monitoring for decisions, child runs, cross-origin session contention, and
   exports.

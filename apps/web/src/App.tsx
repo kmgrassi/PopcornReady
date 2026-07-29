@@ -35,10 +35,8 @@ import { SettingsPage } from "./routes/SettingsPage";
 import { TemplatesPage } from "./routes/TemplatesPage";
 import { UploadsPage } from "./routes/UploadsPage";
 import { StandaloneCreationPage } from "./routes/StandaloneCreationPage";
-import { isStandaloneCreationEnabled } from "./lib/agent-creations";
 
 const isDevHarnessEnabled = import.meta.env.DEV;
-const isStandaloneCreationRouteEnabled = isStandaloneCreationEnabled();
 const devHarnessRoutes = {
   designSystem: "/dev/design-system",
   generationCards: "/dev/generation-cards",
@@ -121,7 +119,7 @@ export function App() {
           <Route path="/library/:tab" element={<LibraryPage />} />
           <Route path="/projects" element={<RedirectWithSearch to="/library/projects" />} />
           <Route path="/projects/new" element={<ProjectCreationPage />} />
-          {isStandaloneCreationRouteEnabled ? <Route path="/create" element={<StandaloneCreationPage />} /> : null}
+          <Route path="/create" element={<StandaloneCreationPage />} />
           <Route path="/runs" element={<CollectionCompatRedirect section="runs" />} />
           <Route path="/assets" element={<RedirectWithSearch to="/library/assets" />} />
           <Route path="/outputs" element={<CollectionCompatRedirect section="outputs" />} />

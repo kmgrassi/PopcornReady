@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isStandaloneCreationEnabled } from "./agent-creations";
+import { creationKindFor } from "./agent-creations";
 
-test("Asset Studio stays opt-in until its standalone flag is enabled", () => {
-  assert.equal(isStandaloneCreationEnabled(undefined), false);
-  assert.equal(isStandaloneCreationEnabled("false"), false);
-  assert.equal(isStandaloneCreationEnabled("true"), true);
+test("Asset Studio maps creator-facing goals to creator-direct task kinds", () => {
+  assert.equal(creationKindFor("image"), "image_create");
+  assert.equal(creationKindFor("video"), "video_create");
+  assert.equal(creationKindFor("soundtrack"), "soundtrack_create");
 });

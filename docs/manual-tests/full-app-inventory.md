@@ -188,7 +188,7 @@ recovery.
 ### 3. Authenticated Shell And Settings
 
 - In the authenticated shell, verify the sidebar primary navigation includes
-  Library and Inspiration, the global `Create new video` action, and account
+  Library and Inspiration, the global `Create new asset` action, and account
   footer links for Credits & billing, Settings, and FAQs.
 - For admin-capable sessions, verify the Admin footer exposes Workbench and
   Admin evals.
@@ -214,8 +214,9 @@ recovery.
 - Open `/dashboard` in a fresh workspace.
 - Verify the empty or low-data state has clear next actions.
 - Verify whether the authenticated shell exposes the intended creation CTA:
-  - Target behavior: a primary `Create new video` action should start the
-    stepwise project-creation flow.
+  - Target behavior: `Create new asset` should open `/create` with Image selected
+    by default and Video/Soundtrack available alongside it.
+  - Full video-project production remains available at `/projects/new`.
   - Library remains available as a separate sidebar menu item.
 - If the workspace has active runs or recent outputs, verify counts and cards
   match the project/run/output links they open.
@@ -239,13 +240,13 @@ Local user setup:
 
 Creation entry:
 
-- From `/dashboard`, click `Create new video`.
+- Open `/projects/new` from a full-production CTA or by direct route.
 - Verify the user lands on the project-creation flow without leaving the
   authenticated shell.
 - If saved drafts exist, verify the start screen shows `Continue a draft`, lets
   the tester resume a draft, and lets the tester delete one without deleting a
   project.
-- Click `Create your first video` or the global `Create new video` action.
+- Click `Create your first video` when it is present.
 - Refresh the first creation screen; the shell and any draft state should recover
   without creating a duplicate project.
 
