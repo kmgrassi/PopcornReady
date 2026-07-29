@@ -85,9 +85,10 @@ The harness now also carries the Decision Gate 0 baseline for
   over `evals/gate0-baseline-runner.ts`.
 - Gate 0 itself was resolved **proceed** on 2026-07-16 on design grounds
   (modularity + observability); the paired comparison is now the
-  **non-inferiority regression bar** for the PR 18 default-on cutover — the
-  hierarchy must route at least as well as the flat root on the same paired
-  matrix. Decision, threshold, and measurements live in
+  **non-inferiority regression check** for observing the default-on hierarchy.
+  The 2026-07-29 cutover intentionally moved this from a pre-cutover gate to
+  controlled production evidence because there were no production users.
+  Decision, threshold, and measurements live in
   [`gate-0-decision-record.md`](gate-0-decision-record.md).
 
 ## How to run

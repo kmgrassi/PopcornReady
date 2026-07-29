@@ -2,8 +2,8 @@
 
 <!-- agent-summary: Gate 0 is resolved: PROCEED with the creative-director hierarchy, recorded 2026-07-16. -->
 <!-- agent-summary: The decision was made on modularity and observability grounds, not a measured decision-quality comparison. -->
-<!-- agent-summary: The decision-eval harness is repurposed as the non-inferiority regression bar for the PR 18 default-on cutover. -->
-<!-- agent-summary: Before default-on routing, the hierarchy must route at least as well as the flat root on the paired scenario matrix. -->
+<!-- agent-summary: The hierarchy became default-on 2026-07-29 so an empty production environment can test the accepted architecture. -->
+<!-- agent-summary: The decision-eval harness remains an observational regression tool rather than a pre-cutover gate. -->
 <!-- agent-summary: Run pnpm --filter @popcorn/api evals:gate0 -- --samples 5 to measure both surfaces when PR 14/18 near landing. -->
 <!-- agent-summary: The comparison is paired-scenario and fixture-only; never compare via live billable generation. -->
 <!-- agent-summary: Standalone domain creation (PRs 10-13) is a required product track that was never contingent on this gate. -->
@@ -11,7 +11,9 @@
 Status: **PROCEED — recorded 2026-07-16.** The creative-director hierarchy is
 adopted on engineering and product grounds; the "defer" branch of this gate is
 retired. The eval harness built for this gate is **repurposed as the
-non-inferiority regression bar** that the PR 18 default-on cutover must clear.
+non-inferiority regression check** for observing the default-on hierarchy.
+On 2026-07-29, the release decision changed from pre-cutover evaluation to
+controlled production testing because the product had no production users.
 
 Authoritative context:
 [`specialist-agent-orchestration-prs.md`](specialist-agent-orchestration-prs.md)
@@ -40,19 +42,18 @@ Consequences:
 
 - **PR 14 depends only on PRs 10–11** and no longer waits on a billable
   baseline study. Hierarchy work may start now.
-- Default-on creative-director routing (PR 18) still requires the
-  **non-inferiority regression bar** below, plus the scope's other rollout
-  gates.
+- Default-on creative-director routing (PR 18) is active for all new roots.
+  The **non-inferiority regression check** below remains useful evidence, but
+  no longer blocks exercising the accepted architecture in production.
 - **PRs 2–13 were never contingent on this gate.** In particular, standalone
   image/video/soundtrack creation (PRs 10–13) is a separate, required product
   track on its own product merits.
 
-## The non-inferiority regression bar (blocks PR 18 default-on, not PR 14)
+## The non-inferiority regression check
 
-The harness's role changed from adoption gate to regression bar: before
-creative-director routing is enabled **by default**, the hierarchy surface
-must route **at least as well as** the flat root on the same paired
-repeated-sample scenario matrix, across:
+The harness's role changed from adoption gate to regression check. Use it to
+compare whether the hierarchy surface routes at least as well as the flat root
+on the same paired repeated-sample scenario matrix, across:
 
 - wrong next-tool or premature-done decisions;
 - performance as project history and available tools grow;
@@ -86,10 +87,10 @@ decision LLM calls themselves.
 | Unnecessary turns / repeated failed calls | `unnecessaryTurns` + `repeatedFailedCalls` counts | PENDING | PENDING |
 | Selective regeneration with stable graph IDs | `selective_regeneration` family accuracy | PENDING | PENDING |
 
-These measurements are **not a prerequisite for starting hierarchy work**
-(PRs 14–17 development proceeds); they gate only the PR 18 default-on cutover.
-Fill the table when PR 14/18 near landing, and record the raw JSON reports
-(`--json`) alongside this file or link the run output in the PR that fills it.
+These measurements are **not a prerequisite for hierarchy development or the
+2026-07-29 production cutover**. Fill the table during controlled production
+observation, and record the raw JSON reports (`--json`) alongside this file or
+link the run output in the PR that fills it.
 
 ## How to run the regression check (opt-in, billable)
 

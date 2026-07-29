@@ -8,18 +8,14 @@ export interface CreativeDirectorHierarchyRollout {
 }
 
 /**
- * Gate 0 keeps hierarchy routing opt-in until paired regression evidence is
- * recorded as cleared. Once activated, a future-dated fallback can return new
- * roots to flat without rewriting active roots.
+ * New root runs use the creative-director hierarchy by default. A future-dated
+ * emergency fallback can return new roots to flat without rewriting active
+ * roots.
  */
 export function creativeDirectorHierarchyRollout(
   env: NodeJS.ProcessEnv = process.env,
   now: Date = new Date()
 ): CreativeDirectorHierarchyRollout {
-  const hierarchyRequested = ENABLED_VALUES.has(
-    String(env.POPCORN_CREATIVE_DIRECTOR_HIERARCHY ?? "").trim().toLowerCase()
-  );
-  if (!hierarchyRequested) return { enabled: false, fallbackUntil: null };
   const fallbackRequested = ENABLED_VALUES.has(
     String(env.POPCORN_CREATIVE_DIRECTOR_FLAT_FALLBACK ?? "").trim().toLowerCase()
   );
