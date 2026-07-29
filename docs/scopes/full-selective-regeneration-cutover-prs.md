@@ -285,7 +285,7 @@ interface SelectionSequencePin {
 }
 
 interface StorySnapshotPin {
-  rowKind: "storyboard" | "scene" | "beat" | "panel";
+  rowKind: "story_blueprint" | "story_scene" | "story_beat";
   rowId: string;
   expectedSnapshotAssetId: string | null;
 }
@@ -351,7 +351,7 @@ interface PlannedSelectionMove {
 
 interface PlannedStoryPointerMove {
   bindingId: string;
-  rowKind: "storyboard" | "scene" | "beat" | "panel";
+  rowKind: "story_blueprint" | "story_scene" | "story_beat";
   rowId: string;
   expectedSnapshotAssetId: string | null;
 }
@@ -364,11 +364,20 @@ sequence equality. A draft story row with no current snapshot uses
 `expectedSnapshotAssetId: null`; its pointer move succeeds only while that
 column remains null.
 
-The model proposes selected work, target IDs, rationale, and preservation
-choices. The server validates the ID/capability allowlist and derives selection
-moves, cost/max cost, risk, and approval policy; model output is never authority
-for those policy fields. Domain agents retain latitude to select their allowed
-primitive tools inside the approved boundary.
+These names map to the live canonical relational spine:
+`story_blueprints.asset_id`, `story_blueprint_scenes.scene_asset_id`, and
+`story_beats.beat_asset_id`. `story_panels` has image/prompt references and
+selection state, but no semantic snapshot pointer, so panel media changes use
+asset/selection bindings rather than a `PlannedStoryPointerMove`.
+
+The model proposes selected work, target IDs, rationale, preservation choices,
+and bounded clarification content. The server validates the ID/capability
+allowlist and derives selection moves, cost/max cost, risk, approval policy,
+and the clarification `answerFingerprint`; model output is never authority for
+those policy fields. The fingerprint is a canonical digest of the normalized
+question, targets, options, and all asset, selection, and story freshness pins.
+Domain agents retain latitude to select their allowed primitive tools inside
+the approved boundary.
 
 ### 4.2 Proposal lifecycle
 
@@ -548,8 +557,10 @@ starts immediately beside PR 1.
 - Proposal creation performs zero provider calls and zero selection writes.
 - The explicit v2 preview API is inert, while current Request Changes HTTP
   responses and UI polling behavior remain unchanged.
-- Parser tests reject `no_op` with work, clarification without a question or
-  answer fingerprint, revision with no work, and model-authored policy fields.
+- Parser tests reject `no_op` with work, clarification without a question,
+  revision with no work, and model-authored policy fields including the answer
+  fingerprint; server tests prove every clarification/pin change alters the
+  derived fingerprint.
 - Cross-workspace/project targets, unrelated root IDs, and flat/null roots fail
   closed before the service-role action write.
 - Project-scoped Request Changes server-selects or creates its hierarchy root.
