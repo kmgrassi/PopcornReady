@@ -7,6 +7,11 @@ is local auth:
 pnpm --filter @popcorn/web test:e2e
 ```
 
+`asset-studio.spec.ts` uses browser API fixtures to verify the production
+`/create` route, default Image selection, proposal review, explicit confirmation,
+queued status, and desktop/mobile Create navigation without spending provider
+credits.
+
 The command starts the Express API and Vite app, using:
 
 - `AUTH_MODE=local`

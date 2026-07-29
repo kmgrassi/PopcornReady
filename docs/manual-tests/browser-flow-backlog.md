@@ -35,12 +35,12 @@ Run these flows first when doing a high-confidence browser pass:
 
 ## Dashboard Project Creation
 
-Purpose: verify the authenticated creation path from dashboard into the
-stepwise project flow.
+Purpose: verify the authenticated full-video creation path into the stepwise
+project flow.
 
 - Sign in with a real local Supabase test user.
 - Open `/dashboard`.
-- Click the primary `Create new video` action.
+- Open `/projects/new` from a full-production CTA or direct route.
 - Verify the app routes to `/projects/new` without losing the authenticated
   shell.
 - If saved drafts exist, resume and delete one before starting a fresh draft.
@@ -124,7 +124,7 @@ Purpose: verify long-running generation states and user-controlled gates.
   visibly failed while the current work is labeled Recovering.
 - Verify storyboard-only completion says no video was created; only a ready,
   playable export may say Video ready.
-- From **Create new video**, leave every review checkpoint unchecked and submit
+- From the full video-project flow, leave every review checkpoint unchecked and submit
   a prompt-only 10-second run. Verify the request has no implicit storyboard
   stop, survives refresh, advances from selected storyboard tiles into
   keyframes/clips, and reaches a playable export or a truthful failed stage.

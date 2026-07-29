@@ -255,3 +255,9 @@
 - Friction or failure: The local Supabase CLI reported a running stack while its Postgres socket timed out, so the migration and same-lineage integration tests could not execute locally.
 - Suggested improvement: Keep every provider-backed revision's source/readiness checks before preflight or spend, and require tests with at least two scenes whenever a supposedly targeted media tool consumes script or plan content.
 - Follow-up: PR 12 must derive exact creator-direct Audio targets and prove root/direct successor runs reuse one serialized Audio session; rerun the Supabase-gated revision test when the local database accepts connections.
+
+### 2026-07-29T10:10:00-04:00 — WEB-20260729-ASSET-STUDIO
+- What helped: Tracing the web gate separately from the always-mounted creator-direct API kept the production cutover small, and mock-backed Playwright proved the cost proposal does not dispatch before explicit confirmation.
+- Friction or failure: The original Asset Studio worksheet recorded only unit/type checks, while the E2E harness starts an unconfigured local worker that emits Supabase errors even when every browser API path is mocked.
+- Suggested improvement: Give route-only web E2E specs a web-only server mode, or disable background recovery workers when their API routes are not part of the test.
+- Follow-up: Add provider-backed media smoke only with an approved production project and spend budget; retain optional references, follow-ups, dependency attachment, and Use in project as explicit Asset Studio gaps.

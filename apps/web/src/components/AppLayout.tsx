@@ -39,11 +39,9 @@ import {
 } from "../lib/queryClient";
 import { UploadQueueProvider } from "../lib/uploadQueue";
 import styles from "./AppLayout.module.css";
-import { isStandaloneCreationEnabled } from "../lib/agent-creations";
 
 const STORAGE_KEY = "popcorn-ready-theme";
 const DEFAULT_THEME = "popcorn";
-const assetStudioEnabled = isStandaloneCreationEnabled();
 const VALID_THEMES = new Set(["popcorn", "popcorn-warm", "popcorn-night", "popcorn-studio"]);
 
 // Primary workspace nav. Library groups the collection routes until PR 5 gives
@@ -91,8 +89,8 @@ const MOBILE_TABS: readonly MobileTabItem[] = [
   },
   {
     label: "Create",
-    to: "/projects/new",
-    activePaths: ["/projects/new"],
+    to: "/create",
+    activePaths: ["/create", "/projects/new"],
     icon: "create",
     primary: true,
   },
@@ -338,10 +336,10 @@ export function AuthenticatedAppLayout() {
           variant="secondary"
           onClick={() => {
             setNavOpen(false);
-            navigate(assetStudioEnabled ? "/create" : `/projects/new?new=${Date.now()}`);
+            navigate("/create");
           }}
         >
-          Create new video
+          Create new asset
         </Button>
 
         <nav className={styles.nav} aria-label="Dashboard">
@@ -534,7 +532,7 @@ function MobileTabBar({ activityCount }: { activityCount: number }) {
               type="button"
               className={className}
               aria-current={isActive ? "page" : undefined}
-              onClick={() => navigate(assetStudioEnabled ? "/create" : `/projects/new?new=${Date.now()}`)}
+              onClick={() => navigate(item.to)}
             >
               <MobileTabIcon name={item.icon} />
               <span>{item.label}</span>

@@ -3,7 +3,7 @@
 <!-- agent-summary: PR 18 keeps creative-director routing opt-in until Gate-0 evidence clears the default-on cutover. -->
 <!-- agent-summary: Each root run pins flat or creative_director so a rollback cannot alter in-flight behavior. -->
 <!-- agent-summary: POPCORN_CREATIVE_DIRECTOR_FLAT_FALLBACK and its UTC expiry are the only temporary emergency fallback. -->
-<!-- agent-summary: Asset Studio remains governed separately by VITE_STANDALONE_CREATION_ENABLED. -->
+<!-- agent-summary: Asset Studio is production-default and remains operationally separate from root hierarchy routing. -->
 <!-- agent-summary: The Creative Systems on-call owns rollback, evidence capture, and the PR 19 cleanup recommendation. -->
 <!-- agent-summary: A seven-day soak requires decision, child-run, contention, cost, and export thresholds to remain green. -->
 <!-- agent-summary: Record Gate-0 paired-eval reports and the final cleanup decision before removing the flat surface. -->
@@ -15,7 +15,8 @@ rows remain flat. The hierarchy remains disabled by default until Gate-0
 evidence is recorded as cleared. This makes profile selection auditable and
 ensures an emergency fallback changes only roots created while it is active.
 Visuals and Audio execution remains available to drain existing root work and
-to serve the separately gated Asset Studio.
+to serve the production-default Asset Studio independently of the root hierarchy
+rollout.
 
 After Gate 0 clears, activate hierarchy routing with
 `POPCORN_CREATIVE_DIRECTOR_HIERARCHY=1`. To use the emergency flat fallback,
