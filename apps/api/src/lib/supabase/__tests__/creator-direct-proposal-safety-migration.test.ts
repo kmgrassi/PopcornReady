@@ -9,6 +9,10 @@ const migration = readFileSync(
   resolve(testDir, "../../../../../../supabase/migrations/20260728140000_creator_direct_proposal_safety.sql"),
   "utf8"
 );
+const pgcryptoRepair = readFileSync(
+  resolve(testDir, "../../../../../../supabase/migrations/20260729170000_creator_direct_pgcrypto_schema.sql"),
+  "utf8"
+);
 
 test("creator-direct confirmations require a queued run before reserving budget", () => {
   assert.match(migration, /v_run\.status <> 'queued'/);
@@ -21,4 +25,17 @@ test("creator-direct proposal gates accept preallocated stable identities", () =
   assert.match(migration, /p_gate_id uuid/);
   assert.match(migration, /set id = p_gate_id/);
   assert.match(migration, /grant execute on function public\.create_creator_direct_proposal_gate_with_id/);
+});
+
+test("creator-direct gate decisions resolve every pgcrypto digest explicitly", () => {
+  assert.match(pgcryptoRepair, /create or replace function public\.consume_creator_direct_proposal_gate/);
+  assert.match(pgcryptoRepair, /create or replace function public\.reject_creator_direct_proposal_gate/);
+  assert.equal(pgcryptoRepair.match(/\bdigest\(/g)?.length, 4);
+  assert.equal(pgcryptoRepair.match(/extensions\.digest\(/g)?.length, 4);
+  assert.match(pgcryptoRepair, /v_run\.status <> 'queued'/);
+  assert.match(pgcryptoRepair, /creator_direct_gate_run_not_queued/);
+  assert.match(pgcryptoRepair, /revoke all on function public\.consume_creator_direct_proposal_gate/);
+  assert.match(pgcryptoRepair, /grant execute on function public\.consume_creator_direct_proposal_gate/);
+  assert.match(pgcryptoRepair, /revoke all on function public\.reject_creator_direct_proposal_gate/);
+  assert.match(pgcryptoRepair, /grant execute on function public\.reject_creator_direct_proposal_gate/);
 });
