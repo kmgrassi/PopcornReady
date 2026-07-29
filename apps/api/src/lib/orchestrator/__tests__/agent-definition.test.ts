@@ -10,6 +10,7 @@ import {
   resolveAgentDefinition,
 } from "../agent-definition";
 import { CREATIVE_DIRECTOR_SYSTEM_PROMPT } from "../creative-director-agent";
+import { ORCHESTRATOR_SYSTEM_PROMPT } from "../model";
 import type { ToolRegistry } from "../registry";
 import type { AgentDefinition } from "../agent-definition";
 
@@ -59,11 +60,10 @@ test("root definition preserves the supplied flat registry and carries no struct
   assert.equal(await definition.loadTurnContext(), undefined);
 });
 
-test("hierarchy-enabled root exposes only the creative-director surface", async () => {
+test("creative-director root profile exposes only the creative-director surface", async () => {
   const definition = await resolveAgentDefinition({
-    run: rootRun,
+    run: { ...rootRun, rootExecutionProfile: "creative_director" },
     workspaceId: "workspace-1",
-    creativeDirectorHierarchyEnabled: true,
   });
   assert.equal(definition.systemPrompt, CREATIVE_DIRECTOR_SYSTEM_PROMPT);
   assert.deepEqual([...definition.registry.keys()], [
@@ -79,9 +79,20 @@ test("hierarchy-enabled root exposes only the creative-director surface", async 
     "publish_to_catalog",
     "delegate_visuals",
     "delegate_audio",
+    "delegate_domains",
   ]);
   assert.equal(definition.registry.has("generate_clip"), false);
   assert.equal(definition.registry.has("generate_audio"), false);
+});
+
+test("a legacy root without a durable profile remains flat during fallback changes", async () => {
+  const definition = await resolveAgentDefinition({
+    run: rootRun,
+    workspaceId: "workspace-1",
+  });
+  assert.equal(definition.systemPrompt, ORCHESTRATOR_SYSTEM_PROMPT);
+  assert.equal(definition.registry.has("generate_clip"), true);
+  assert.equal(definition.registry.has("delegate_visuals"), false);
 });
 
 test("root context reports include only root-origin specialist completions", () => {

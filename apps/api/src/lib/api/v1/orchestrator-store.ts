@@ -5,6 +5,7 @@
 // shared low-level mappers come from ./store-internal.
 
 import type { AgentRole, DomainRunWaitReason } from "@popcorn/shared/domain-agent-contract";
+import { isCreativeDirectorHierarchyEnabled } from "@/lib/orchestrator/feature-flag";
 import { getServiceSupabase } from "../../supabase/clients";
 import { runQuery } from "../../supabase/db-errors";
 import { ApiError } from "./errors";
@@ -24,6 +25,7 @@ export type OrchestratorRunStatus =
   | "superseded";
 
 export type OrchestratorGateStatus = "pending" | "reached" | "approved" | "rejected";
+export type RootExecutionProfile = "flat" | "creative_director";
 
 export interface OrchestratorRun {
   id: string;
@@ -33,6 +35,8 @@ export interface OrchestratorRun {
   inputSummary: string;
   /** Persisted role selects the declarative AgentDefinition (PR 8). */
   agentRole?: AgentRole;
+  /** Immutable root surface selected at creation; domain runs intentionally omit it. */
+  rootExecutionProfile?: RootExecutionProfile;
   budgetUsd?: number;
   spentUsd: number;
   /** Why a waiting run is parked: media_job | domain | approval (PR 6). */
@@ -126,6 +130,7 @@ interface OrchestratorRunRow {
   status: OrchestratorRunStatus;
   input_summary: string;
   agent_role?: AgentRole | null;
+  root_execution_profile?: RootExecutionProfile | null;
   budget_usd: number | null;
   spent_usd: number;
   wait_reason?: DomainRunWaitReason | null;
@@ -174,6 +179,7 @@ function mapRun(row: OrchestratorRunRow): OrchestratorRun {
     updatedAt: iso(row.updated_at),
   };
   if (row.agent_role) run.agentRole = row.agent_role;
+  if (row.root_execution_profile) run.rootExecutionProfile = row.root_execution_profile;
   if (row.budget_usd != null) run.budgetUsd = row.budget_usd;
   if (row.wait_reason) run.waitReason = row.wait_reason;
   const error = unmarkedJson(row.error);
@@ -255,6 +261,9 @@ export async function createOrchestratorRun(
         input_summary: input.inputSummary,
         budget_usd: input.budgetUsd ?? null,
         spent_usd: 0,
+        root_execution_profile: isCreativeDirectorHierarchyEnabled()
+          ? "creative_director"
+          : "flat",
         ...deploymentMetadata(),
         created_at: now,
         updated_at: now,
@@ -274,6 +283,9 @@ export async function createOrchestratorRunWithAnonymousQuota(
 ): Promise<OrchestratorRun> {
   const db = getServiceSupabase();
   const metadata = deploymentMetadata();
+  const rootExecutionProfile = isCreativeDirectorHierarchyEnabled()
+    ? "creative_director"
+    : "flat";
   const rows = await runQuery(
     "store.createOrchestratorRunWithAnonymousQuota",
     db.rpc("create_orchestrator_run_with_anonymous_quota", {
@@ -284,6 +296,7 @@ export async function createOrchestratorRunWithAnonymousQuota(
       p_limit: quota.limit,
       p_deploy_id: metadata.deploy_id,
       p_git_sha: metadata.git_sha,
+      p_root_execution_profile: rootExecutionProfile,
     })
   );
   const row = (rows as Array<{ run_id: string | null; quota_exceeded: boolean }>)[0];
