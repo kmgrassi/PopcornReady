@@ -20,7 +20,7 @@ export interface CreatorRunHierarchy {
       runId: string;
       state: CreatorWorkState;
       taskKind: string | null;
-      report: { actionId: string; outcome: "done" | "blocked" | "question"; outputAssetIds: string[] } | null;
+      report: { outcome: "done" | "blocked" | "question"; outputAssetIds: string[] } | null;
       actions: Array<{ actionId: string; label: string; state: CreatorWorkState; outputAssetIds: string[]; jobs: Array<{ state: CreatorWorkState; completedItems?: number; totalItems?: number }> }>;
     }>;
   }>;
@@ -44,6 +44,7 @@ function actionState(status: string): CreatorWorkState {
 }
 
 function jobState(status: Job["status"]): CreatorWorkState {
+  if (status === "queued") return "queued";
   if (status === "succeeded") return "complete";
   if (status === "running") return "active";
   if (status === "failed") return "failed";
@@ -57,7 +58,13 @@ export function projectCreatorRunHierarchy(input: {
   actionsByRun: ReadonlyMap<string, RunActionSummary[]>;
   jobs: ReadonlyMap<string, Job>;
 }): CreatorRunHierarchy {
-  const needsDirectorDecision = input.family.children.some((child) => child.report?.outcome.outcome === "question");
+  const predecessorRunIds = new Set(
+    input.family.children.flatMap((child) => child.continuesRunId ? [child.continuesRunId] : [])
+  );
+  const isCurrent = (runId: string) => !predecessorRunIds.has(runId);
+  const needsDirectorDecision = input.family.children.some(
+    (child) => isCurrent(child.id) && child.report?.outcome.outcome === "question"
+  );
   const grouped = new Map<string, typeof input.family.children>();
   for (const child of input.family.children) {
     if (!child.agentSessionId || (child.agentRole !== "visuals" && child.agentRole !== "audio")) continue;
@@ -74,7 +81,7 @@ export function projectCreatorRunHierarchy(input: {
       const session = input.sessions.get(sessionId);
       const runs = children.map((child) => {
         const report = child.report
-          ? { actionId: child.reportActionId!, outcome: child.report.outcome.outcome, outputAssetIds: child.report.outcome.outcome === "done" ? child.report.outcome.outputs.map((output) => output.assetId) : [] }
+          ? { outcome: child.report.outcome.outcome, outputAssetIds: child.report.outcome.outcome === "done" ? child.report.outcome.outputs.map((output) => output.assetId) : [] }
           : null;
         const actions = (input.actionsByRun.get(child.id) ?? []).filter((action) => action.tool !== "domain_report").map((action) => ({
           actionId: action.id, label: toolLabel(action.tool), state: actionState(action.status), outputAssetIds: action.outputAssetIds,
@@ -82,7 +89,8 @@ export function projectCreatorRunHierarchy(input: {
         }));
         return { runId: child.id, state: stateFor(child, child.report), taskKind: child.taskKind, report, actions };
       });
-      const state = runs.find((run) => run.state === "active")?.state ?? runs.find((run) => run.state === "waiting" || run.state === "blocked" || run.state === "failed")?.state ?? runs.find((run) => run.state === "queued")?.state ?? "complete";
+      const currentRuns = runs.filter((run) => isCurrent(run.runId));
+      const state = currentRuns.find((run) => run.state === "active")?.state ?? currentRuns.find((run) => run.state === "waiting" || run.state === "blocked" || run.state === "failed")?.state ?? currentRuns.find((run) => run.state === "queued")?.state ?? "complete";
       return { sessionId, domain: session?.domain ?? children[0]!.agentRole as AgentDomain, state, runs };
     }),
   };

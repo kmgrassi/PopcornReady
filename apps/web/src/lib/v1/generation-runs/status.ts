@@ -20,7 +20,7 @@ import {
 export type CreatorWorkState = "queued" | "active" | "waiting" | "blocked" | "failed" | "complete" | "canceled";
 export interface CreatorRunHierarchy {
   root: { runId: string; state: CreatorWorkState; message: string; needsDirectorDecision: boolean };
-  sessions: Array<{ sessionId: string; domain: "visuals" | "audio"; state: CreatorWorkState; runs: Array<{ runId: string; state: CreatorWorkState; taskKind: string | null; report: { actionId: string; outcome: "done" | "blocked" | "question"; outputAssetIds: string[] } | null; actions: Array<{ actionId: string; label: string; state: CreatorWorkState; outputAssetIds: string[]; jobs: Array<{ state: CreatorWorkState; completedItems?: number; totalItems?: number }> }> }> }>;
+  sessions: Array<{ sessionId: string; domain: "visuals" | "audio"; state: CreatorWorkState; runs: Array<{ runId: string; state: CreatorWorkState; taskKind: string | null; report: { outcome: "done" | "blocked" | "question"; outputAssetIds: string[] } | null; actions: Array<{ actionId: string; label: string; state: CreatorWorkState; outputAssetIds: string[]; jobs: Array<{ state: CreatorWorkState; completedItems?: number; totalItems?: number }> }> }> }>;
 }
 
 export const ACTIVE_RUN_STATUSES: ReadonlySet<GenerationRunStatus> = new Set([
