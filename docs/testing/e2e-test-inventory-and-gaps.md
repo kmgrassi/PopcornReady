@@ -29,7 +29,9 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
 - `asset-studio.spec.ts` covers the production-default `/create` entry, image as
   the default goal, choice-card padding at desktop and mobile widths, proposal
   review without dispatch, explicit confirmation, queued status, and
-  desktop/mobile Create navigation.
+  desktop/mobile Create navigation. It also covers the accessible project picker,
+  existing/first/new-project selection, inline creation without losing the
+  prompt, list and creation failure recovery, and keyboard focus/Escape behavior.
 - `run-progress.spec.ts` and `run-progress-actions.spec.ts` cover run progress,
   approval/rejection/cancel actions, failed/succeeded states, and recovery hints
   with mocked browser API fixtures, including truthful grouped-tool progress,
@@ -262,6 +264,15 @@ Covered:
 - Reviewing the maximum cost does not confirm or enqueue the proposal.
 - Explicit confirmation deep-links to the queued creator-direct run.
 - The mobile Create tab opens Asset Studio and retains active state.
+- The project picker selects an existing project, returns focus on Escape, and
+  remains width-safe at mobile sizes.
+- People can create either their first project or another named project inline;
+  the returned project is selected immediately and the asset prompt is retained.
+- Project list and project creation failures remain actionable and retryable.
+- A delayed proposal response is discarded after its selected project changes.
+- A delayed project creation cannot override a newer project selection.
+- A failed next-page request preserves loaded project rows and can retry the
+  same cursor successfully.
 
 Remaining gaps:
 

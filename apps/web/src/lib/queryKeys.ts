@@ -34,6 +34,7 @@ export const queryKeys = {
     ["workspaces", workspaceId, "model-settings"] as const,
   projects: (params: { limit?: number; cursor?: string | null } = {}) =>
     ["projects", params] as const,
+  assetStudioProjects: () => ["asset-studio", "projects"] as const,
   project: (projectId: string) => ["projects", projectId] as const,
   projectStoryboard: (projectId: string) =>
     ["projects", projectId, "storyboard"] as const,
