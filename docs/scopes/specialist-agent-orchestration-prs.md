@@ -10,9 +10,12 @@
 <!-- agent-summary: Each finite domain assignment remains an orchestrator run, and its typed terminal report is a unique action. -->
 <!-- agent-summary: Nineteen ordered PRs cover evaluation, contracts, durability, agents, standalone creation, hierarchy, rollout, and cleanup. -->
 
-> **Status:** Proposed implementation scope. This document does not describe
-> shipped behavior. It records the target decision and an independently
-> reviewable PR sequence for approval before implementation.
+> **Status:** Historical implementation roadmap through the Creative Director
+> production cutover. The hierarchy, persistent domain sessions, Asset Studio,
+> parallel dispatch, and default-on routing have shipped. Do not continue its
+> old PR 15/19 sequencing; all remaining Request Changes, selective-regeneration,
+> flat-path deletion, and registry cleanup work is owned by
+> [`full-selective-regeneration-cutover-prs.md`](full-selective-regeneration-cutover-prs.md).
 >
 > **Sources of truth:** [`NORTH_STAR.md`](../NORTH_STAR.md),
 > [`ui-interaction-model.md`](../ui-interaction-model.md), and the asset-graph

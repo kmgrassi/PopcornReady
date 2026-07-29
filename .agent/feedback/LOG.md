@@ -261,3 +261,9 @@
 - Friction or failure: The original Asset Studio worksheet recorded only unit/type checks, while the E2E harness starts an unconfigured local worker that emits Supabase errors even when every browser API path is mocked.
 - Suggested improvement: Give route-only web E2E specs a web-only server mode, or disable background recovery workers when their API routes are not part of the test.
 - Follow-up: Add provider-backed media smoke only with an approved production project and spend budget; retain optional references, follow-ups, dependency attachment, and Use in project as explicit Asset Studio gaps.
+
+### 2026-07-29T14:30:00-04:00 — GEN-20260729-FULL-MIGRATION
+- What helped: Comparing the shipped rerun service, Request Changes route, delegation adapter, and hierarchy registry against the old scopes exposed the exact gap between “graph foundation” and executable selective regeneration.
+- Friction or failure: Multiple accepted scope documents had drifted behind `main`, and their partial PR sequences preserved fallbacks or depended on contracts that had already changed.
+- Suggested improvement: When a multi-PR architecture lane reaches a cutover, add one authoritative completion roadmap, mark partial predecessors historical, and make deletion criteria part of the same plan.
+- Follow-up: Start PR 0 (hierarchy lock) and PR 1 (model-backed graph proposal) in parallel from `docs/scopes/full-selective-regeneration-cutover-prs.md`.

@@ -3,13 +3,15 @@
 > **Status:** Vision + scope — **the foundation is now largely built.** This
 > remains the authoritative reference for how generation should evolve. The
 > data-model direction (§5) and the core orchestrator/tool runtime (§6–§7 P1/P2)
-> have shipped against the asset graph; what's left is retiring the legacy Next
-> monolith, feeding graph stale candidates into the agent's rerun decision path, and
-> closing the feedback loop (§7 P3). New work (human or agent) should align to it;
-> any deviation should be a conscious, documented decision. Last updated 2026-07-14
-> (status pass; original design 2026-06-08).
+> have shipped against the asset graph, and new roots use the Creative Director
+> hierarchy. The remaining generation migration is graph-aware proposal
+> decisioning, complete kind-specific execution, Request Changes integration,
+> and deletion of fixed-stage/flat fallbacks. See
+> [`scopes/full-selective-regeneration-cutover-prs.md`](scopes/full-selective-regeneration-cutover-prs.md).
+> New work should align to it; any deviation should be a conscious, documented
+> decision. Last updated 2026-07-29 (status pass; original design 2026-06-08).
 
-## Implementation status (2026-06-22)
+## Implementation status (2026-07-29)
 
 The 2026-06-08 original was forward-looking design; most of the foundation has
 since landed. Map below (details inline per section). **§3 describes the model we
@@ -36,9 +38,9 @@ since landed. Map below (details inline per section). **§3 describes the model 
   RPC mints a new version (same `lineage_id`, `version+1`) and repoints
   selections/panels
   (`supabase/migrations/20260622150000_regenerate_asset_version_rpc.sql`).
-- 🟡 **One engine (§7 P1)** — the orchestrator *is* the unified trunk, but the
-  legacy Next monolith (`src/app/api/oneshot`, on `.local/` JSON) still exists and
-  is being retired; new generation work targets `apps/api` (`CLAUDE.md`).
+- ✅ **One engine (§7 P1)** — the legacy Next monolith has been removed. The
+  durable `driveLoop` is shared by the Creative Director and persistent Visuals
+  and Audio specialists in `apps/api`.
 - 🟡 **Inspection / feedback loop (§7 P3)** — artifacts, gates, and approvals ship;
   the prompt-improving OODA loop (`docs/scopes/ooda-feedback-loop.md`) is the main
   open piece.
@@ -194,8 +196,7 @@ notes what superseded it.
   `regenerate_asset_version` RPC.
 - There were **two drifted pipelines** and **two `GenerationRun` definitions** (the
   sync one-shot route and the async job stack). → *Replaced by* one orchestrator
-  engine on `orchestrator_runs`; the legacy `src/app/api/oneshot` monolith still
-  exists but is being retired (§7 P1), not extended.
+  engine on `orchestrator_runs`; the legacy monolith has been deleted.
 - There were **no dependency edges**: beats had **no stable id**, and generated
   assets stored the prompt but **not the beat/anchor** they served, so "beat 3
   changed → regenerate clip 3" **could not be computed from data.** → *Replaced by*
@@ -253,9 +254,8 @@ historical — do not build on them.
    vocabulary (§6) replaces forward-only patches.
 5. ~~No central orchestrator.~~ **Shipped** — `apps/api/src/lib/orchestrator/`
    (§6, P2).
-6. ~~Two drifted run models / one mutable `default` project.~~ **Mostly shipped** —
-   one orchestrator engine on `orchestrator_runs`; the legacy Next monolith is the
-   only remaining drift and is being retired (§7 P1).
+6. ~~Two drifted run models / one mutable `default` project.~~ **Shipped** — one
+   orchestrator engine runs on `orchestrator_runs`; the legacy monolith is gone.
 
 ## 5. Target data model (now realized in the asset graph)
 
@@ -338,23 +338,25 @@ likeness" is the edge from a clip to its anchor.
 ## 7. Scope & phasing (each independently shippable — do NOT implement ahead of agreement)
 
 - **P0 — Design (this doc). ✅ Shipped.** North Star + data-model direction agreed.
-- **P1 — Foundation. ✅ Shipped** (one caveat): stable storyboard ids + the
+- **P1 — Foundation. ✅ Shipped:** stable storyboard ids + the
   dependency/provenance graph + granular idempotent generation tools are live on
-  the asset graph; the orchestrator is the single engine. **Remaining:** the legacy
-  Next monolith (`src/app/api/oneshot`, `.local/` JSON) is not yet retired — it's
-  the last of the "two pipelines."
+  the asset graph; the orchestrator is the single engine, and the legacy
+  monolith has been removed.
 - **P2 — Orchestrator agent. 🟡 Partially shipped.** The agent calls the tools via
   the run loop; initial runs are durable and autonomous through their complete
   storyboard, then require an explicit production continuation
   (`orchestrator_run_gates`), and carry a budget ceiling
   (`orchestrator_runs.budget_usd` / `spent_usd`). **Pending:** graph-based
-  "minimal re-run on any change" decisioning is not wired into the restart path
-  yet. `downstream_assets()` is exposed through stale-candidate reads, but
-  `apps/api/src/routes/v1/orchestrator-runs.ts` still restarts from fixed
-  `GENERATION_STAGE_ORDER` boundaries and clears selections.
+  "minimal re-run on any change" decisioning and execution are incomplete.
+  `downstream_assets()` and a read-only proposal foundation ship, but Request
+  Changes still bypasses that proposal and the fallback restart route uses fixed
+  `GENERATION_STAGE_ORDER` boundaries and clears selections. The accepted
+  completion plan is
+  [`scopes/full-selective-regeneration-cutover-prs.md`](scopes/full-selective-regeneration-cutover-prs.md).
 - **P3 — Inspection, gates & feedback loop. 🟡 In progress:** artifacts are visible
-  as they pop (every tool call is an `action`), and approve/regenerate-any-stage
-  ships (gates + `regenerate_asset_version`). **Open:** the approvals/edits →
+  as they pop (every tool call is an `action`), gates ship, and immutable image
+  regeneration has partial UI/API coverage. **Open:** uniform graph-aware
+  Request Changes execution across every kind, plus the approvals/edits →
   better-prompts feedback loop (`docs/scopes/ooda-feedback-loop.md`). First pass
   stays a reliable default ordering; agent latitude shines in the edit/re-run loop.
 
@@ -366,8 +368,9 @@ resolutions as the design record (the "why" behind the as-built schema).
 
 - ~~**Invalidation granularity**~~ **— DECIDED:** per-asset content fingerprints
   (with nested upstream hashes) produce a *candidate* stale set. **Shipped:** the
-  graph can compute candidates. **Pending:** the orchestrator restart path must
-  feed those IDs/provenance/candidates to the agent so it can make the final call.
+  graph can compute candidates. **Pending:** the proposal/runtime path must feed
+  those IDs/provenance/candidates to the Creative Director so it can make and
+  execute the final call.
   Stale is a signal, not a command (Principle 3, §5).
 - ~~**First pass vs edits**~~ **— DECIDED (Principle 7):** no hardcoded order;
   determinism lives in each tool's input validation, and the agent self-heals by

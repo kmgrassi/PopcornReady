@@ -6,15 +6,9 @@ conventions read [`CLAUDE.md`](../CLAUDE.md) and [`AGENTS.md`](../AGENTS.md).
 
 ## The big picture
 
-Popcorn Ready is a **pnpm + Turbo monorepo**. There are two stacks in the tree:
-
-- ✅ **Active** — the monorepo: a Vite SPA (`apps/web`), an Express API
-  (`apps/api`), and shared libraries (`packages/*`). **All new work goes here.**
-- ⚠️ **Legacy** — `src/` is the original **Next.js monolith**. Its `src/lib`
-  already moved into `packages/` and `apps/api`; `src/app` (Next routes) +
-  `src/components` linger but are **not in the monorepo build** (the workspace is
-  only `apps/*` + `packages/*`, there's no `next.config`). It's being removed
-  ("Track C"). **Do not add to `src/`.**
+Popcorn Ready is a **pnpm + Turbo monorepo**: a Vite SPA (`apps/web`), an Express
+API (`apps/api`), and shared libraries (`packages/*`). The original Next.js
+`src/` monolith has been removed; all work targets this active monorepo.
 
 The product never edits raw video — agents produce/patch a **structured
 timeline**, and rendering (Remotion) is deterministic.
@@ -59,7 +53,6 @@ docs/       NORTH_STAR.md (vision), scopes/ (design docs + PR plans), research/,
             supabase-identity-and-rls.md, repository-structure.md (this file)
 public/     static assets (brand, fonts)
 scripts/    standalone dev/eval scripts
-src/        ⚠️ legacy Next.js monolith — not in the build, being removed. Don't touch.
 ```
 
 Root config: `pnpm-workspace.yaml`, `turbo.json` (task graph), `tsconfig.base.json`,
@@ -72,10 +65,10 @@ Root config: `pnpm-workspace.yaml`, `turbo.json` (task graph), `tsconfig.base.js
 | The web route table / pages | `apps/web/src/App.tsx`, `apps/web/src/routes/` |
 | HTTP API endpoints | `apps/api/src/routes/v1/` |
 | The agent (LLM) functions | `packages/agent/src/` (+ `apps/api/src/lib/agent*`) |
-| Generation pipeline / jobs | `apps/api/src/lib/generation-run/`, `generative/`, `oneshot/` |
+| Generation pipeline / jobs | `apps/api/src/lib/orchestrator/`, `orchestrator-tools/`, `generative/`, `agent-api/jobs/` |
 | Core types & data contracts | `packages/shared/src/types.ts`, `packages/shared/src/assets/` |
 | Domain-agent task/report contract | `packages/shared/src/domain-agent-contract.ts`, `docs/domain-agent-orchestration-contract.md` |
-| Orchestrator primitive catalog / dormant role registries | `apps/api/src/lib/orchestrator-tools/capability-catalog.ts`, `root-registry.ts`, `visuals-registry.ts`, `audio-registry.ts` |
+| Orchestrator primitive catalog / active role registries | `apps/api/src/lib/orchestrator-tools/capability-catalog.ts`, `root-registry.ts`, `visuals-registry.ts`, `audio-registry.ts` |
 | Domain-safe recovery projection | `apps/api/src/lib/orchestrator/domain-recovery-projection.ts` |
 | DB schema / migrations | `supabase/migrations/` |
 | Styling conventions | `AGENTS.md` (CSS Modules + token layer) |

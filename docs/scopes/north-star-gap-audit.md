@@ -1,5 +1,11 @@
 # North Star Gap Audit
 
+> **Status:** Historical audit from 2026-06-23. The proposal foundation and
+> Creative Director hierarchy it described as future work have since shipped.
+> Use
+> [`full-selective-regeneration-cutover-prs.md`](full-selective-regeneration-cutover-prs.md)
+> for the current selective-regeneration gap and completion sequence.
+
 Audit date: 2026-06-23
 
 This audit follows the implementation gaps called out by the 2026-06-22

@@ -1,5 +1,11 @@
 # Regeneration Coverage PR Plan
 
+> **Status:** Historical partial scope. Its kind-specific input analysis remains
+> useful, but its contracts and sequencing are superseded by
+> [`full-selective-regeneration-cutover-prs.md`](full-selective-regeneration-cutover-prs.md),
+> which integrates coverage with Creative Director decisions, domain
+> delegation, transactional selection application, and fallback deletion.
+
 ## Objective
 
 Broaden regeneration from the current image-only endpoint into kind-specific,
