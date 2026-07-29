@@ -161,7 +161,8 @@ async function resolveProviderKeyInner(
     const userKey = await loadUserKey(userId, provider);
     if (userKey) return { apiKey: userKey, source: "user" };
   }
-  return { apiKey: PLATFORM_ENV[provider]?.(), source: "platform" };
+  const platformKey = PLATFORM_ENV[provider];
+  return { apiKey: platformKey?.(), source: "platform" };
 }
 
 // Convenience for provider call sites that only need the key string.

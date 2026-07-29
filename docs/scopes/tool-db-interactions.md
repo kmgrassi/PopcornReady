@@ -96,10 +96,11 @@ unwired tools return `failedUnimplemented` from `registry.ts`.
   `orchestrator-tool-invocations.json` (still a local JSON store via
   `localDir()`) onto Postgres.
 - **T2 — Make multi-table tool writes atomic.** `generate_storyboard` (and
-  future media tools) write several tables; wrap each tool's persistence in a
-  single transaction (Postgres function / RPC) so a failure can't leave a
-  partial storyboard. Pair with `runQuery` so the RPC error still surfaces as
-  `database_error`.
+  future media tools) write several tables; wrap each trusted workflow's
+  persistence in a typed direct-Postgres transaction module so a failure can't
+  leave a partial storyboard. Preserve the `database_error` tool envelope at
+  the module boundary. Do not add a new application workflow RPC; follow
+  [`database-access-boundary.md`](./database-access-boundary.md).
 - **T3 — Surface async write failures into the run/stage-item.** For job-backed
   tools, a DB write failure on completion must mark the stage item failed +
   `retryable`, not just throw into the worker. Reflect it in

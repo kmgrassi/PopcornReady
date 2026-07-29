@@ -10,6 +10,10 @@ const commands = [
   ["pnpm", ["db:migrations:test"]],
   ["pnpm", ["db:migrations:validate"]],
 ];
+if (scope === "all" || scope === "api") {
+  commands.push(["pnpm", ["db:rpc-boundary:test"]]);
+  commands.push(["pnpm", ["db:rpc-boundary:validate"]]);
+}
 if (scope === "all" || scope === "web") commands.push(["pnpm", ["--filter", "@popcorn/web", "typecheck"]]);
 if (scope === "all" || scope === "api") commands.push(["pnpm", ["--filter", "@popcorn/api", "typecheck"]]);
 for (const [command, commandArgs] of commands) {

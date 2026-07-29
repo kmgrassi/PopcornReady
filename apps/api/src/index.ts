@@ -2,6 +2,7 @@
 import "./env.js";
 import { startGuestRetentionScheduler } from "./lib/api/v1/guest-retention.js";
 import { startOrchestratorRecoveryWorker } from "./lib/orchestrator/recovery-worker.js";
+import { closePostgresPool } from "./lib/postgres/transactions.js";
 import { createServer } from "./server.js";
 
 const port = Number(process.env.PORT || 4000);
@@ -34,18 +35,37 @@ function shutdown(signal: NodeJS.Signals) {
   }, shutdownGraceMs);
   forceExit.unref();
 
-  server.close((err) => {
-    clearTimeout(forceExit);
+  void (async () => {
+    let exitCode = 0;
+    const httpError = await new Promise<Error | undefined>((resolve) => {
+      server.close((err) => resolve(err));
+    });
     const durationMs = Date.now() - startedAt;
-    if (err) {
+    if (httpError) {
       // eslint-disable-next-line no-console
-      console.error(`[api] HTTP server drain failed after ${durationMs}ms`, err);
-      process.exit(1);
+      console.error(
+        `[api] HTTP server drain failed after ${durationMs}ms`,
+        httpError
+      );
+      exitCode = 1;
+    } else {
+      // eslint-disable-next-line no-console
+      console.log(`[api] HTTP server drained in ${durationMs}ms`);
     }
-    // eslint-disable-next-line no-console
-    console.log(`[api] HTTP server drained in ${durationMs}ms`);
-    process.exit(0);
-  });
+
+    try {
+      await closePostgresPool();
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error("[api] Postgres pool drain failed", {
+        name: error instanceof Error ? error.name : "UnknownPoolDrainError",
+      });
+      exitCode = 1;
+    }
+
+    clearTimeout(forceExit);
+    process.exit(exitCode);
+  })();
 }
 
 process.on("SIGTERM", shutdown);
