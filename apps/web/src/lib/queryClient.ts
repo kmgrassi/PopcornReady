@@ -328,10 +328,12 @@ export function useCreateProjectMutation() {
       successMessage: "Project created",
       errorMessage: "Could not create project",
     },
-    onSuccess: () => {
+    onSuccess: (response) => {
       void client.invalidateQueries({ queryKey: ["projects"] });
+      void client.invalidateQueries({ queryKey: queryKeys.assetStudioProjects() });
       void client.invalidateQueries({ queryKey: ["dashboard"] });
       void client.invalidateQueries({ queryKey: ["studio", "project"] });
+      client.setQueryData(queryKeys.project(response.project.id), response);
     },
   });
 }

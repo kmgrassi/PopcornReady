@@ -262,6 +262,12 @@
 - Suggested improvement: Give route-only web E2E specs a web-only server mode, or disable background recovery workers when their API routes are not part of the test.
 - Follow-up: Add provider-backed media smoke only with an approved production project and spend budget; retain optional references, follow-ups, dependency attachment, and Use in project as explicit Asset Studio gaps.
 
+### 2026-07-29T11:57:49-04:00 — WEB-20260729-PROJECT-PICKER
+- What helped: The approved interaction mock and independent review kept the picker native to Asset Studio while exposing the cache mismatch and stale-proposal race before handoff.
+- Friction or failure: The initial custom listbox semantics exceeded the keyboard behavior implemented, and visual inspection found a mobile secondary-action label clipping that automated visibility checks did not expose.
+- Suggested improvement: Prefer disclosure plus native button semantics for searchable short lists unless the full ARIA listbox keyboard model is explicitly in scope; include label-overflow checks in responsive form-control reviews.
+- Follow-up: Consider a server-side project search parameter if workspaces routinely exceed the currently loaded project pages.
+
 ### 2026-07-29T14:30:00-04:00 — GEN-20260729-FULL-MIGRATION
 - What helped: Comparing the shipped rerun service, Request Changes route, delegation adapter, and hierarchy registry against the old scopes exposed the exact gap between “graph foundation” and executable selective regeneration.
 - Friction or failure: Multiple accepted scope documents had drifted behind `main`, and their partial PR sequences preserved fallbacks or depended on contracts that had already changed.
