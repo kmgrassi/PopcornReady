@@ -18,6 +18,12 @@
 - Follow-up: <TODO / PR / none>
 ```
 
+### 2026-07-29T00:00:00-04:00 — PR-807-20260729-01
+- What helped: Current `main` already contained the same route-helper refactor and its subsequent runtime-control updates, making the safe resolution directly inspectable.
+- Friction or failure: The old PR introduced a second helper module that would duplicate the newer ownership boundary if retained.
+- Suggested improvement: Rebase helper-extraction PRs promptly whenever their target file receives active parallel work.
+- Follow-up: none.
+
 ### 2026-07-27T16:25:00-04:00 — API-20260727-04
 - What helped: The atomic PR 6 report transaction made the missing counterpart for engine failures narrow and reviewable.
 - Friction or failure: A generic orchestrator failure update could bypass the session claim fence after a stale or malformed domain completion.

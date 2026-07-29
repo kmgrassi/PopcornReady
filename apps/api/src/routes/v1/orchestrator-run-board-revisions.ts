@@ -90,7 +90,6 @@ export async function canViewOperatorDiagnostics(
     return false;
   }
 }
-
 function optionalStringField(
   input: Record<string, unknown>,
   key: keyof BoardRevisionTarget
@@ -171,7 +170,6 @@ function parseGenerationModel(value: unknown) {
   if (!provider || !model) return undefined;
   return { provider, model };
 }
-
 export function parseBoardRevisionRequest(body: unknown, runId: string) {
   if (!isRecord(body)) {
     throw new ApiError("validation_failed", "Request body must be an object.");
