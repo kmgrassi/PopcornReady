@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { ToolExecutionContext as DriverContext } from "@/lib/orchestrator";
-import { TOOL_NAMES } from "@/lib/orchestrator";
+import { PRODUCTION_TOOL_NAMES } from "@/lib/orchestrator";
 import { ToolRegistry } from "@/lib/orchestrator-tools/registry";
 import { toolDefinitionMetadata } from "@/lib/orchestrator-tools/capability-catalog";
 import type {
@@ -40,6 +40,7 @@ const driverContext: DriverContext = {
   agentId: "agent_test",
   messageId: "msg_test",
   requestId: "req_test",
+  sessionClaimGeneration: 7,
   metadata: { harness: true },
 };
 
@@ -58,17 +59,26 @@ test("only-mode bridges a single tool and maps catalog execution to mode", () =>
   assert.equal(def?.label, "Shot Plan");
 });
 
-test("bridged execute delegates to the real registry and synthesizes auth", async () => {
+test("bridged prepare parses once and execute reuses the canonical value", async () => {
   let seen: RealContext | undefined;
+  let parses = 0;
   const real = new ToolRegistry();
-  real.register(fakeTool((_input, context) => (seen = context)));
+  const tool = fakeTool((_input, context) => (seen = context));
+  tool.parseInput = (input) => {
+    parses += 1;
+    return { goal: String((input as { goal: string }).goal).toUpperCase() };
+  };
+  real.register(tool);
   const registry = toOrchestratorRegistry(real, { only: "plan_shots" });
 
-  const result = await registry.get("plan_shots")!.execute({ goal: "hi" }, driverContext);
+  const definition = registry.get("plan_shots")!;
+  const prepared = await definition.prepareInput!({ goal: "hi" }, driverContext);
+  const result = await definition.execute(prepared, driverContext);
 
+  assert.equal(parses, 1);
   assert.equal(result.status, "succeeded");
   if (result.status === "succeeded") {
-    assert.deepEqual(result.output, { echoed: "hi" });
+    assert.deepEqual(result.output, { echoed: "HI" });
   }
   // driver context is mapped into a local AuthContext for the real tool
   assert.equal(seen?.auth.workspaceId, "ws_test");
@@ -78,6 +88,7 @@ test("bridged execute delegates to the real registry and synthesizes auth", asyn
   assert.equal(seen?.agentId, "agent_test");
   assert.equal(seen?.messageId, "msg_test");
   assert.equal(seen?.requestId, "req_test");
+  assert.equal(seen?.sessionClaimGeneration, 7);
   assert.deepEqual(seen?.metadata, { harness: true });
 });
 
@@ -91,12 +102,14 @@ test("default mode exposes only the wired tools (no stubs)", () => {
   assert.equal(registry.has("export_video"), false);
 });
 
-test("includeStubs exposes the full vocabulary with stubs for unimplemented tools", async () => {
+test("includeStubs exposes the full production vocabulary with stubs for unimplemented tools", async () => {
   const real = new ToolRegistry();
   real.register(fakeTool());
   const registry = toOrchestratorRegistry(real, { includeStubs: true });
 
-  assert.equal(registry.size, TOOL_NAMES.length);
+  // Stubs cover the flat production vocabulary only — root-only dispatch
+  // tools (delegate_*) never join the harness surface.
+  assert.equal(registry.size, PRODUCTION_TOOL_NAMES.length);
 
   // implemented tool is the real (bridged) one
   const planShots = await registry.get("plan_shots")!.execute({ goal: "x" }, driverContext);

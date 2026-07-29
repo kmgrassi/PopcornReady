@@ -3,7 +3,7 @@ import {
   ToolDefinition,
   ToolExecutionContext,
   ToolName,
-  TOOL_NAMES,
+  PRODUCTION_TOOL_NAMES,
 } from "./types";
 import {
   assertDriverToolDefinitionMetadata,
@@ -51,16 +51,20 @@ function defaultDefinition(name: ToolName): ToolDefinition {
       additionalProperties: true,
     },
     requiredResourceIds: ["projectId"],
+    prepareInput: (input) => input,
     estimateCostUsd: () => undefined,
     execute: async () => failedUnimplemented(name),
   };
 }
 
+// Driver stubs cover the flat PRODUCTION vocabulary only; root-only dispatch
+// tools (delegate_*) live exclusively in the dormant creative-director
+// registry and are never stubbed onto a flat surface.
 export function createToolRegistry(
   overrides: Partial<Record<ToolName, Partial<ToolDefinition>>> = {}
 ): ToolRegistry {
   return new Map(
-    TOOL_NAMES.map((name) => {
+    PRODUCTION_TOOL_NAMES.map((name) => {
       const base = defaultDefinition(name);
       const override = overrides[name] ?? {};
       const definition = { ...base, ...override } satisfies ToolDefinition;
@@ -68,6 +72,19 @@ export function createToolRegistry(
       return [name, definition];
     })
   );
+}
+
+export async function prepareRegisteredTool(args: {
+  registry: ToolRegistry;
+  toolName: ToolName;
+  input: unknown;
+  context: ToolExecutionContext;
+}): Promise<unknown> {
+  const tool = args.registry.get(args.toolName);
+  if (!tool) throw new Error(`Unknown orchestrator tool: ${args.toolName}`);
+  return tool.prepareInput
+    ? tool.prepareInput(args.input, args.context)
+    : args.input;
 }
 
 export async function executeRegisteredTool(args: {

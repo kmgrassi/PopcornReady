@@ -7,6 +7,7 @@ import type { ApiResult } from "@/lib/api/v1/generated-assets";
 import type { V1Asset, VisualAnchorPlan } from "@/lib/api/v1/store";
 import type { ShotPlan } from "@popcorn/shared/types";
 import type { ProjectStoryboard } from "@popcorn/shared/v1/types";
+import { createGenerateClipTool } from "../generate-clip";
 import { createGenerateKeyframeTool } from "../generate-keyframe";
 import { runGenerateKeyframeJob } from "../generate-keyframe-job";
 import { ToolInputError } from "../types";
@@ -570,6 +571,101 @@ test("runGenerateKeyframeJob generates missing beat keyframes, selects slots, an
   });
   assert.equal(resumedRun, "run_1");
   assert.ok(!spy.calls.includes("fail"));
+});
+
+test("domain keyframe completion stays pooled and cannot overwrite a newer selection", async () => {
+  const spy = jobsSpy();
+  const claims: Array<number | undefined> = [];
+  const pooledKeyframes = new Map<string, string>();
+  const anchorIdsByBeat = new Map<string, string[]>();
+  let selectionAttempts = 0;
+
+  await runGenerateKeyframeJob(
+    {
+      jobId: "job_domain",
+      workspaceId: "ws_1",
+      projectId: "proj_1",
+      orchestratorRunId: "run_domain",
+      sessionClaimGeneration: 8,
+      plan,
+      planAssetId: "plan_1",
+      planContentHash: "plan_hash",
+      storyboard,
+      provider: "mock",
+    },
+    {
+      jobs: spy.jobs,
+      getActiveProjectVisualAnchorPlan: async () => ({
+        visualAnchorPlan,
+        assetId: "vap_1",
+        contentHash: "vap_hash",
+      }),
+      getActiveProjectScopedAsset: async () => null,
+      getProjectRunGeneratedAsset: async (input) => {
+        assert.equal(input.orchestratorRunId, "run_domain");
+        return input.role === "character_anchor" &&
+          input.slug === "character_maya"
+          ? asset("char_anchor_domain", "character_anchor")
+          : null;
+      },
+      getAsset: async (_workspaceId, _projectId, assetId) =>
+        asset(assetId, "beat_storyboard"),
+      generateBeatKeyframe: async (args) => {
+        claims.push(args.sessionClaimGeneration);
+        anchorIdsByBeat.set(
+          args.beatId,
+          ((args.body as { anchorIds?: string[] }).anchorIds ?? [])
+        );
+        const assetId = `kf_domain_${claims.length}`;
+        pooledKeyframes.set(args.beatId, assetId);
+        return jobResult(assetId);
+      },
+      selectGeneratedBeatKeyframeAsset: async () => {
+        selectionAttempts += 1;
+        throw new Error("domain jobs must not append selections");
+      },
+      enqueueOrchestratorDispatch: async () => {},
+    }
+  );
+
+  assert.deepEqual(claims, [8, 8]);
+  assert.deepEqual(anchorIdsByBeat.get("beat_1"), ["char_anchor_domain"]);
+  assert.deepEqual(anchorIdsByBeat.get("beat_2"), []);
+  assert.equal(selectionAttempts, 0);
+  assert.deepEqual(spy.succeededResult, {
+    assetIds: ["kf_domain_1", "kf_domain_2"],
+    skippedAssetIds: [],
+  });
+
+  let preparedClipBeats:
+    | Array<{ beatId: string; keyframeAssetId: string }>
+    | undefined;
+  const clipTool = createGenerateClipTool({
+    getActiveProjectPlan: async () => activePlan,
+    getActiveProjectScopedAsset: async () => null,
+    getProjectRunGeneratedAsset: async (input) => {
+      if (input.role !== "beat_keyframe" || !input.beatId) return null;
+      const assetId = pooledKeyframes.get(input.beatId);
+      return assetId ? asset(assetId, "beat_keyframe", "ready", input.beatId) : null;
+    },
+    createJob: async () => queuedJob(),
+    runGenerateClipJob: async (input) => {
+      preparedClipBeats = input.beats;
+    },
+  });
+  const clipResult = (await clipTool.execute(
+    { beatId: "beat_1" },
+    {
+      auth,
+      projectId: "proj_1",
+      orchestratorRunId: "run_domain",
+      sessionClaimGeneration: 8,
+    }
+  )) as ToolCallResult;
+  assert.equal(clipResult.status, "accepted");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(preparedClipBeats?.[0]?.beatId, "beat_1");
+  assert.equal(preparedClipBeats?.[0]?.keyframeAssetId, "kf_domain_1");
 });
 
 test("runGenerateKeyframeJob skips beats with an active keyframe selection", async () => {

@@ -20,6 +20,10 @@ export interface ModelTurnInput {
   inputSummary: string;
   priorResults?: unknown[];
   registry: ToolRegistry;
+  /** Role-specific prompt selected from a durable AgentDefinition. */
+  systemPrompt?: string;
+  /** Fresh structured context; never concatenate trusted and creator data into prose. */
+  agentContext?: unknown;
   maxTokens?: number;
   resolveAssetKind?: AssetKindResolver;
 }
@@ -38,6 +42,7 @@ interface PriorToolResult {
     message?: unknown;
     unmetRequirements?: unknown;
     suggestedNextTools?: unknown;
+    domainReport?: unknown;
   };
 }
 
@@ -78,6 +83,7 @@ type AssetKindResolver = (
 export const ORCHESTRATOR_SYSTEM_PROMPT =
   "You are the Popcorn Ready video-generation orchestrator. Decide the next single server-owned tool to call. The server owns validation, persistence, jobs, authorization, provider execution, and stage state. Call at most one tool. " +
   "Each prior result reports its tool and status; a failed result also carries an `error` describing why it failed. When the most recent action failed, do not repeat the same tool with the same inputs — instead follow `error.suggestedNextTools` and satisfy every `error.unmetRequirements[].satisfyWith.tool` before retrying the failed step. " +
+  "A failed delegate_visuals or delegate_audio result can include the complete immutable `error.domainReport`: for `blocked`, use its prerequisite, requiredDomain, and targets to route recovery; for `question`, use its question, options, and fingerprint to request or apply the needed decision rather than discarding it. " +
   "Important asset roles: `generate_storyboard` creates cheap sketch `beat_storyboard` tiles for planning/review; `generate_keyframe` creates photoreal `beat_keyframe` first-frame assets required by `generate_clip`; `generate_clip` creates new motion `beat_clip` video assets for planned beats; `edit_video_asset` changes the content of an existing uploaded footage asset or generated clip and links the new asset back to the source. A missing `beat_keyframe` is fixed with `generate_keyframe`, not `generate_storyboard`, unless the keyframe tool itself says storyboard tiles are missing. " +
   "For Request Changes / board_feedback on a target asset: an image tile, keyframe, or visual anchor must use `regenerate_image_asset` with the target asset id and the user's replacement prompt. If the feedback asks to add, remove, replace, restyle, or otherwise modify content inside existing footage or a clip, call `edit_video_asset` with that target asset id as `sourceAssetId`. If the user asks for a different/new clip for a planned beat rather than changing the current source video, call `generate_clip`. " +
   "Run autonomously by default: advance the pipeline toward a finished video without pausing for confirmation. The server enforces any required stops through its own configured approval gates, so do not insert approval steps on your own — only call `request_approval` when the input explicitly asks for human approval of a stage. Never choose `request_approval` merely because a step is expensive or user-visible.";
@@ -313,6 +319,8 @@ export const orchestratorModel: OrchestratorModel = async ({
   inputSummary,
   priorResults = [],
   registry,
+  systemPrompt,
+  agentContext,
   // Headroom so reasoning models (e.g. gpt-5) have budget left for the tool call
   // after thinking; non-reasoning models only use what they need.
   maxTokens = 4000,
@@ -342,12 +350,13 @@ export const orchestratorModel: OrchestratorModel = async ({
     },
     () =>
       client.chooseTool({
-        system: ORCHESTRATOR_SYSTEM_PROMPT,
+        system: systemPrompt ?? ORCHESTRATOR_SYSTEM_PROMPT,
         userPayload: {
           projectId,
           inputSummary,
           priorResults,
           routingContext: buildRoutingContext(priorResults),
+          ...(agentContext === undefined ? {} : { agentContext }),
           instruction:
             "Choose exactly one next tool if work remains. If all work is complete, answer with a concise text summary and no tool call. " +
             "Inspect routingContext and priorResults first: if routingContext.nextToolHint is present, use that tool unless it is unavailable. " +

@@ -4,6 +4,8 @@
 // Kept separate from the ~13k-line store.ts per the cohesive-feature-file rule;
 // shared low-level mappers come from ./store-internal.
 
+import type { AgentRole, DomainRunWaitReason } from "@popcorn/shared/domain-agent-contract";
+import { isCreativeDirectorHierarchyEnabled } from "@/lib/orchestrator/feature-flag";
 import { getServiceSupabase } from "../../supabase/clients";
 import { runQuery } from "../../supabase/db-errors";
 import { ApiError } from "./errors";
@@ -23,6 +25,7 @@ export type OrchestratorRunStatus =
   | "superseded";
 
 export type OrchestratorGateStatus = "pending" | "reached" | "approved" | "rejected";
+export type RootExecutionProfile = "flat" | "creative_director";
 
 export interface OrchestratorRun {
   id: string;
@@ -30,8 +33,14 @@ export interface OrchestratorRun {
   projectId: string;
   status: OrchestratorRunStatus;
   inputSummary: string;
+  /** Persisted role selects the declarative AgentDefinition (PR 8). */
+  agentRole?: AgentRole;
+  /** Immutable root surface selected at creation; domain runs intentionally omit it. */
+  rootExecutionProfile?: RootExecutionProfile;
   budgetUsd?: number;
   spentUsd: number;
+  /** Why a waiting run is parked: media_job | domain | approval (PR 6). */
+  waitReason?: DomainRunWaitReason;
   error?: Record<string, unknown>;
   deployId?: string;
   gitSha?: string;
@@ -52,6 +61,11 @@ export interface ClaimedOrchestratorDispatch {
   runId: string;
   workspaceId: string;
   leaseToken: string;
+  /** Set when the claimed run is a session-linked finite domain run. The claim
+   * transaction reserved the session's single active-run slot; jobs launched
+   * by this dispatch must carry this durable claim generation. */
+  agentSessionId?: string;
+  sessionClaimGeneration?: number;
 }
 
 export interface OrchestratorRunGate {
@@ -102,6 +116,11 @@ export type UpdateOrchestratorRunPatch = Partial<
   clearError?: boolean;
   /** Clear the completion time with a SQL NULL when reopening a run. */
   clearCompletedAt?: boolean;
+  /**
+   * Set (or clear with null) the wait reason. The DB constrains it: only a
+   * waiting run carries one, and a root run may carry only the 'domain' wait.
+   */
+  waitReason?: DomainRunWaitReason | null;
 };
 
 interface OrchestratorRunRow {
@@ -110,8 +129,11 @@ interface OrchestratorRunRow {
   project_id: string;
   status: OrchestratorRunStatus;
   input_summary: string;
+  agent_role?: AgentRole | null;
+  root_execution_profile?: RootExecutionProfile | null;
   budget_usd: number | null;
   spent_usd: number;
+  wait_reason?: DomainRunWaitReason | null;
   error: Record<string, unknown> | null;
   deploy_id: string | null;
   git_sha: string | null;
@@ -156,7 +178,10 @@ function mapRun(row: OrchestratorRunRow): OrchestratorRun {
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
   };
+  if (row.agent_role) run.agentRole = row.agent_role;
+  if (row.root_execution_profile) run.rootExecutionProfile = row.root_execution_profile;
   if (row.budget_usd != null) run.budgetUsd = row.budget_usd;
+  if (row.wait_reason) run.waitReason = row.wait_reason;
   const error = unmarkedJson(row.error);
   if (error) run.error = error;
   if (row.deploy_id) run.deployId = row.deploy_id;
@@ -236,6 +261,9 @@ export async function createOrchestratorRun(
         input_summary: input.inputSummary,
         budget_usd: input.budgetUsd ?? null,
         spent_usd: 0,
+        root_execution_profile: isCreativeDirectorHierarchyEnabled()
+          ? "creative_director"
+          : "flat",
         ...deploymentMetadata(),
         created_at: now,
         updated_at: now,
@@ -255,6 +283,9 @@ export async function createOrchestratorRunWithAnonymousQuota(
 ): Promise<OrchestratorRun> {
   const db = getServiceSupabase();
   const metadata = deploymentMetadata();
+  const rootExecutionProfile = isCreativeDirectorHierarchyEnabled()
+    ? "creative_director"
+    : "flat";
   const rows = await runQuery(
     "store.createOrchestratorRunWithAnonymousQuota",
     db.rpc("create_orchestrator_run_with_anonymous_quota", {
@@ -265,6 +296,7 @@ export async function createOrchestratorRunWithAnonymousQuota(
       p_limit: quota.limit,
       p_deploy_id: metadata.deploy_id,
       p_git_sha: metadata.git_sha,
+      p_root_execution_profile: rootExecutionProfile,
     })
   );
   const row = (rows as Array<{ run_id: string | null; quota_exceeded: boolean }>)[0];
@@ -349,6 +381,34 @@ export async function enqueueOrchestratorDispatch(
   );
 }
 
+/** Repair finite-run control records before leasing more work after a crash. */
+export async function recoverOrchestratorRuntimeControls(): Promise<void> {
+  await runQuery(
+    "store.recoverOrchestratorRuntimeControls",
+    getServiceSupabase().rpc("recover_orchestrator_runtime_controls")
+  );
+}
+
+/** Cancel a root/direct finite-run family and fence only its causal jobs. */
+export async function cancelOrchestratorRunFamily(input: {
+  projectId: string;
+  runId: string;
+}): Promise<{ canceledRunIds: string[]; canceledJobIds: string[] }> {
+  const rows = await runQuery(
+    "store.cancelOrchestratorRunFamily",
+    getServiceSupabase().rpc("cancel_orchestrator_run_family", {
+      p_project_id: input.projectId,
+      p_run_id: input.runId,
+    })
+  );
+  const row = (rows as Array<{ canceled_run_ids: string[]; canceled_job_ids: string[] }>)[0];
+  if (!row) throw new ApiError("internal_error", "Run-family cancellation returned no result.");
+  return {
+    canceledRunIds: row.canceled_run_ids ?? [],
+    canceledJobIds: row.canceled_job_ids ?? [],
+  };
+}
+
 export async function claimOrchestratorDispatches(
   limit = 4,
   leaseSeconds = 120
@@ -363,11 +423,17 @@ export async function claimOrchestratorDispatches(
     orchestrator_run_id: string;
     workspace_id: string;
     lease_token: string;
+    agent_session_id?: string | null;
+    session_claim_generation?: number | null;
   }>).map((row) => ({
     dispatchId: row.dispatch_id,
     runId: row.orchestrator_run_id,
     workspaceId: row.workspace_id,
     leaseToken: row.lease_token,
+    ...(row.agent_session_id ? { agentSessionId: row.agent_session_id } : {}),
+    ...(row.session_claim_generation != null
+      ? { sessionClaimGeneration: Number(row.session_claim_generation) }
+      : {}),
   }));
 }
 
@@ -395,6 +461,10 @@ export async function updateOrchestratorRun(
 ): Promise<OrchestratorRun> {
   const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (patch.status !== undefined) row.status = patch.status;
+  if (patch.waitReason !== undefined) row.wait_reason = patch.waitReason;
+  // The DB requires wait_reason to travel with 'waiting' only; clear it on any
+  // explicit non-waiting transition unless the caller set it themselves.
+  else if (patch.status !== undefined && patch.status !== "waiting") row.wait_reason = null;
   if (patch.spentUsd !== undefined) row.spent_usd = patch.spentUsd;
   if (patch.clearError) row.error = null;
   else if (patch.error !== undefined) row.error = markedJson("orchestrator_error.v1", patch.error);
@@ -421,7 +491,9 @@ export async function claimOrchestratorRunResume(
     `store.claimOrchestratorRunResume ${runId}`,
     db
       .from("orchestrator_runs")
-      .update({ status: "running", updated_at: new Date().toISOString() })
+      // wait_reason travels with 'waiting' only (DB constraint); the resume
+      // claim clears the media/domain/approval wait it is leaving.
+      .update({ status: "running", wait_reason: null, updated_at: new Date().toISOString() })
       .eq("id", runId)
       .eq("status", "waiting")
       .select("*")

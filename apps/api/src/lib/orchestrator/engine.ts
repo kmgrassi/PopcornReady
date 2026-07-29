@@ -41,10 +41,41 @@ import { applyCreditTransaction, getCreditBalance } from "@/lib/api/v1/credits";
 import { ApiError } from "@/core/errors";
 import { createToolExecutionContext } from "./tool-context";
 import type { ToolCallResult, ToolName } from "./types";
-import { isToolName } from "@/lib/orchestrator-tools/capability-catalog";
+import type { AgentDomain, DomainTaskV1 } from "@popcorn/shared/domain-agent-contract";
+import {
+  isDispatchToolName,
+  isToolName,
+} from "@/lib/orchestrator-tools/capability-catalog";
 import { createLogger } from "@/lib/v1/logger";
 import { redactMessage } from "@/lib/v1/redact";
+import { getServiceSupabase } from "@/lib/supabase/clients";
+import { runQuery } from "@/lib/supabase/db-errors";
 import { uploadedFootageMetadataFromSummary } from "./uploaded-footage-selection";
+import {
+  resolveAgentDefinition,
+  buildDomainReportFromCompletion,
+  type AgentDefinition,
+  type ResolveAgentDefinitionInput,
+} from "./agent-definition";
+import {
+  failDomainRunTurn,
+  finalizeDomainTurn,
+  isStaleDomainTurnError,
+} from "./domain-run-service";
+import {
+  projectDomainRecovery,
+  type DomainRecoveryProjection,
+} from "./domain-recovery-projection";
+import {
+  loadProjectGraphSnapshot,
+  type ProjectGraphSnapshot,
+} from "@/lib/orchestrator-context/graph-snapshot";
+import {
+  assertPreservePinsCurrent,
+  buildDomainTargetScope,
+  type DomainTargetScope,
+} from "@/lib/orchestrator-context/target-scope";
+import { prepareRegisteredTool } from "./registry";
 
 // Credits charged per generation = providerCostUsd * MARGIN, at 1 credit = $0.01.
 const CREDIT_MARGIN = 2;
@@ -95,6 +126,19 @@ export interface OrchestratorEngineStore {
       error?: Record<string, unknown>;
     }
   ): Promise<void>;
+  /**
+   * Resolve the finite domain run created by a delegate_* invocation
+   * (orchestrator_runs.root_action_id linkage). Optional: fake stores that
+   * never exercise delegation may omit it, in which case a running delegation
+   * action keeps the run parked in the domain wait.
+   */
+  findDelegatedChildRun?: (
+    rootActionId: string
+  ) => Promise<{ id: string; status: string } | null>;
+  /** Batch dispatches share one root action and therefore have a durable join. */
+  findDelegatedChildRuns?: (
+    rootActionId: string
+  ) => Promise<Array<{ id: string; status: string }> >;
 }
 
 export interface JobStatusReader {
@@ -138,6 +182,24 @@ export interface EngineDeps {
   getCreditBalance?: typeof getCreditBalance;
   userHasAnyProviderKey?: typeof userHasAnyProviderKey;
   applyCreditTransaction?: typeof applyCreditTransaction;
+  /** Fail-closed rollout control: absent roles remain queued. */
+  enabledDomainRoles?: readonly AgentDomain[];
+  /** Runtime controls require an explicit claimed-domain execution opt-in. */
+  domainRuntimeEnabled?: boolean;
+  /** Durable session claim generation carried by a claimed domain dispatch. */
+  sessionClaimGeneration?: number;
+  /** Domain transport seams keep deterministic local smoke tests provider-free. */
+  finalizeDomainTurn?: typeof finalizeDomainTurn;
+  failDomainRunTurn?: typeof failDomainRunTurn;
+  /** Injectable for deterministic definition/transport tests. */
+  resolveAgentDefinition?: (
+    input: ResolveAgentDefinitionInput
+  ) => Promise<AgentDefinition>;
+  prepareDomainScope?: (input: {
+    workspaceId: string;
+    projectId: string;
+    task: DomainTaskV1;
+  }) => Promise<{ snapshot: ProjectGraphSnapshot; scope: DomainTargetScope }>;
 }
 
 export function defaultEngineStore(): OrchestratorEngineStore {
@@ -170,6 +232,27 @@ export function defaultEngineStore(): OrchestratorEngineStore {
           : {}),
         ...(patch.error !== undefined ? { error: patch.error } : {}),
       });
+    },
+    async findDelegatedChildRun(rootActionId) {
+      const data = await runQuery(
+        "engine.findDelegatedChildRun",
+        getServiceSupabase()
+          .from("orchestrator_runs")
+          .select("id, status")
+          .eq("root_action_id", rootActionId)
+          .maybeSingle()
+      );
+      return (data as { id: string; status: string } | null) ?? null;
+    },
+    async findDelegatedChildRuns(rootActionId) {
+      const data = await runQuery(
+        "engine.findDelegatedChildRuns",
+        getServiceSupabase()
+          .from("orchestrator_runs")
+          .select("id, status")
+          .eq("root_action_id", rootActionId)
+      );
+      return (data as Array<{ id: string; status: string }> | null) ?? [];
     },
   };
 }
@@ -240,6 +323,24 @@ function resolved(deps: EngineDeps) {
     getCreditBalance: deps.getCreditBalance ?? getCreditBalance,
     userHasAnyProviderKey: deps.userHasAnyProviderKey ?? userHasAnyProviderKey,
     applyCreditTransaction: deps.applyCreditTransaction ?? applyCreditTransaction,
+    enabledDomainRoles: deps.enabledDomainRoles ?? [],
+    domainRuntimeEnabled: deps.domainRuntimeEnabled ?? false,
+    sessionClaimGeneration: deps.sessionClaimGeneration,
+    finalizeDomainTurn: deps.finalizeDomainTurn ?? finalizeDomainTurn,
+    failDomainRunTurn: deps.failDomainRunTurn ?? failDomainRunTurn,
+    resolveAgentDefinition: deps.resolveAgentDefinition ?? resolveAgentDefinition,
+    prepareDomainScope:
+      deps.prepareDomainScope ??
+      (async ({ workspaceId, projectId, task }) => {
+        const snapshot = await loadProjectGraphSnapshot({ workspaceId, projectId });
+        const scope = buildDomainTargetScope({
+          snapshot,
+          targets: task.targets,
+          candidateAffectedAssetIds: task.candidateAffectedAssetIds,
+        });
+        assertPreservePinsCurrent(scope, snapshot, task.preserve);
+        return { snapshot, scope };
+      }),
     workspaceId: deps.workspaceId,
     actorId: deps.actorId,
     agentId: deps.agentId,
@@ -275,6 +376,9 @@ export async function runOrchestratorToCompletion(
 ): Promise<OrchestratorRun> {
   const r = resolved(deps);
   let run = await r.store.getOrchestratorRun(runId);
+  if (isDomainRun(run) && ((r.enabledDomainRoles.length > 0 && !domainRoleEnabled(run, r.enabledDomainRoles)) || !r.domainRuntimeEnabled || r.sessionClaimGeneration === undefined)) {
+    return run;
+  }
   if (run.status === "queued") {
     run = await r.store.updateOrchestratorRun(runId, {
       status: "running",
@@ -296,6 +400,9 @@ export async function resumeOrchestratorRun(
 ): Promise<OrchestratorRun> {
   const r = resolved(deps);
   const run = await r.store.getOrchestratorRun(runId);
+  if (isDomainRun(run) && ((r.enabledDomainRoles.length > 0 && !domainRoleEnabled(run, r.enabledDomainRoles)) || !r.domainRuntimeEnabled || r.sessionClaimGeneration === undefined)) {
+    return run;
+  }
   return resumeRun(run, r);
 }
 
@@ -432,6 +539,75 @@ async function reconcileInFlightJob(
     const stopped = await finishIfAfterGateReached(run, parkingAction.tool, r);
     if (stopped) return stopped;
   }
+
+  const delegationParked = await reconcileDelegation(run, actions, r);
+  if (delegationParked) return delegationParked;
+  return null;
+}
+
+const TERMINAL_DOMAIN_RUN_STATUSES = new Set([
+  "succeeded",
+  "failed",
+  "canceled",
+  "timed_out",
+  "superseded",
+]);
+
+// A running delegate_* action means the run parked in the domain wait. The
+// child's report finalization transaction marks the delegation action applied
+// (with the report outputs) BEFORE waking this run's dispatch, so:
+//   - child still active            -> stay parked in the domain wait;
+//   - child terminal without report -> fail the invocation recoverably so the
+//     model can re-delegate (canceled/superseded children never apply it);
+//   - child missing (crash between the invocation write and the dispatch
+//     transaction) -> fail the invocation recoverably; the retried delegation
+//     replays idempotently through the same service.
+async function reconcileDelegation(
+  run: OrchestratorRun,
+  actions: RunActionSummary[],
+  r: Resolved
+): Promise<OrchestratorRun | null> {
+  const delegation = [...actions]
+    .reverse()
+    .find((action) => action.status === "running" && isDispatchToolName(action.tool));
+  if (!delegation) return null;
+
+  if (!r.store.findDelegatedChildRun && !r.store.findDelegatedChildRuns) {
+    return park(run, r, "domain");
+  }
+  const children = r.store.findDelegatedChildRuns
+    ? await r.store.findDelegatedChildRuns(delegation.id)
+    : await r.store.findDelegatedChildRun!(delegation.id).then((child) => child ? [child] : []);
+  if (children.length === 0) {
+    await r.store.markInvocation(delegation.id, {
+      status: "failed",
+      error: {
+        kind: "provider_failed",
+        message: "Delegated assignment was never dispatched; re-delegate to retry.",
+        recoverable: true,
+      },
+    });
+    return null;
+  }
+  if (children.some((child) => !TERMINAL_DOMAIN_RUN_STATUSES.has(child.status))) {
+    logger.info("orchestrator.delegation_waiting", {
+      workspaceId: r.workspaceId,
+      projectId: run.projectId,
+      runId: run.id,
+      delegationActionId: delegation.id,
+      children,
+    });
+    return park(run, r, "domain");
+  }
+  await r.store.markInvocation(delegation.id, {
+    status: "failed",
+    error: {
+      kind: "precondition_unmet",
+      message: `Delegated run(s) ended without completing the durable join.`,
+      recoverable: true,
+      details: { children },
+    },
+  });
   return null;
 }
 
@@ -448,9 +624,10 @@ const ERROR_GUIDANCE_FIELDS = [
   "recoverable",
   "unmetRequirements",
   "suggestedNextTools",
+  "domainReport",
 ] as const;
 
-function toPriorResult(action: RunActionSummary): Record<string, unknown> {
+export function toPriorResult(action: RunActionSummary): Record<string, unknown> {
   const base: Record<string, unknown> = {
     tool: action.tool,
     status: action.status,
@@ -458,6 +635,13 @@ function toPriorResult(action: RunActionSummary): Record<string, unknown> {
   };
   if (action.tool === "board_feedback") {
     base.request = action.params;
+  }
+  if (
+    action.tool === "fit_audio_to_picture" &&
+    action.status === "applied" &&
+    action.params.result !== undefined
+  ) {
+    base.result = action.params.result;
   }
   if (action.status === "failed" && action.error) {
     const guidance: Record<string, unknown> = {};
@@ -469,10 +653,80 @@ function toPriorResult(action: RunActionSummary): Record<string, unknown> {
   return base;
 }
 
+function toDomainPriorResult(
+  action: RunActionSummary,
+  definition: AgentDefinition,
+  projectId: string
+): Record<string, unknown> {
+  const base = toPriorResult(action);
+  if (!definition.task || action.status !== "failed" || !action.error) return base;
+  if (action.error.kind !== "precondition_unmet") return base;
+  const recovery = projectDomainRecovery({
+    ownerRole: definition.role,
+    projectId,
+    trustedTargets: definition.task.targets,
+    error: action.error,
+  });
+  base.error = {
+    kind: "precondition_unmet",
+    message: "A trusted task prerequisite was not met.",
+    recoverable: true,
+    unmetRequirements: recovery.unmetRequirements,
+    suggestedNextTools: recovery.suggestedNextTools,
+  };
+  return base;
+}
+
+async function finalizeDomainReport(
+  run: OrchestratorRun,
+  report: import("@popcorn/shared/domain-agent-contract").DomainReportV1,
+  r: Resolved
+): Promise<OrchestratorRun> {
+  await r.finalizeDomainTurn({
+    projectId: run.projectId,
+    runId: run.id,
+    report,
+    expectedClaimGeneration: r.sessionClaimGeneration,
+  });
+  return r.store.getOrchestratorRun(run.id);
+}
+
+class DomainFailureTerminalizationError extends Error {
+  constructor(cause: unknown) {
+    super("Could not claim-fence the domain run failure terminalization.", { cause });
+  }
+}
+
+async function terminalizeDomainFailure(
+  run: OrchestratorRun,
+  r: Resolved,
+  error: Record<string, unknown>
+): Promise<OrchestratorRun> {
+  if (r.sessionClaimGeneration === undefined) return r.store.getOrchestratorRun(run.id);
+  try {
+    await r.failDomainRunTurn({
+      projectId: run.projectId,
+      runId: run.id,
+      error,
+      expectedClaimGeneration: r.sessionClaimGeneration,
+    });
+    return r.store.getOrchestratorRun(run.id);
+  } catch (err) {
+    if (isStaleDomainTurnError(err)) return r.store.getOrchestratorRun(run.id);
+    throw new DomainFailureTerminalizationError(err);
+  }
+}
+
 function invocationOutputAssetIds(result: ToolCallResult): string[] {
   if (result.status === "succeeded") return result.resourceIds;
   if (result.status === "waiting_for_approval") return result.previewArtifactIds;
   return [];
+}
+
+export function selectDomainBlockedCandidate(
+  recovery: DomainRecoveryProjection
+): DomainRecoveryProjection["blockedCandidates"][number] | undefined {
+  return recovery.blockedCandidates[0];
 }
 
 // Async tool jobs report their produced assets as { assetIds: string[] }.
@@ -485,6 +739,19 @@ function jobAssetIds(result: unknown): string[] {
 }
 
 type Resolved = ReturnType<typeof resolved>;
+
+function isDomainRun(run: OrchestratorRun): boolean {
+  return run.agentRole === "visuals" || run.agentRole === "audio";
+}
+
+function domainRoleEnabled(
+  run: OrchestratorRun,
+  enabledRoles: readonly AgentDomain[]
+): boolean {
+  return run.agentRole === "visuals" || run.agentRole === "audio"
+    ? enabledRoles.includes(run.agentRole)
+    : true;
+}
 
 function runMetadata(run: OrchestratorRun, r: Resolved): Record<string, unknown> | undefined {
   const metadata = {
@@ -513,11 +780,13 @@ async function driveGuardedInner(
   try {
     return await driveLoop(run, r);
   } catch (err) {
+    if (err instanceof DomainFailureTerminalizationError) throw err;
     const error = {
       kind: "provider_failed",
       message: err instanceof Error ? err.message : String(err),
       recoverable: false,
     };
+    if (isDomainRun(run)) return terminalizeDomainFailure(run, r, error);
     try {
       await finish(run, "failed", r, error);
     } catch {
@@ -531,6 +800,18 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
   for (let turn = 0; turn < r.maxTurns; turn += 1) {
     run = await r.store.getOrchestratorRun(run.id);
     if (run.status !== "running") return run;
+    if (isDomainRun(run) && ((r.enabledDomainRoles.length > 0 && !domainRoleEnabled(run, r.enabledDomainRoles)) || !r.domainRuntimeEnabled || r.sessionClaimGeneration === undefined)) {
+      return run;
+    }
+
+    const definition = await r.resolveAgentDefinition({
+      run,
+      workspaceId: r.workspaceId,
+      // A creative-director profile owns its exact surface; the definition
+      // ignores this fallback registry for that persisted profile.
+      rootRegistry: r.registry,
+      enabledDomainRoles: r.enabledDomainRoles,
+    });
 
     if (run.budgetUsd != null && run.spentUsd >= run.budgetUsd) {
       return finish(run, "failed", r, {
@@ -543,8 +824,11 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       r.store.listRunActions(run.id),
       r.store.listRunGates(run.id),
     ]);
-    const priorResults = prior.map(toPriorResult);
-    const turnRegistry = registryForRejectedGate(r.registry, gates);
+    const priorResults = prior.map((action) =>
+      definition.task ? toDomainPriorResult(action, definition, run.projectId) : toPriorResult(action)
+    );
+    const turnRegistry = registryForRejectedGate(definition.registry, gates);
+    const agentContext = await definition.loadTurnContext();
 
     let decision;
     try {
@@ -556,6 +840,8 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
           inputSummary: run.inputSummary,
           priorResults,
           registry: turnRegistry,
+          systemPrompt: definition.systemPrompt,
+          agentContext,
         }),
         r.modelTurnTimeoutMs,
         `orchestrator model turn exceeded ${r.modelTurnTimeoutMs}ms`
@@ -569,6 +855,34 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
     }
 
     if (decision.type === "done") {
+      if (definition.task) {
+        let report: import("@popcorn/shared/domain-agent-contract").DomainReportV1;
+        try {
+          report = await buildDomainReportFromCompletion({
+            runId: run.id,
+            projectId: run.projectId,
+            task: definition.task,
+            summary: decision.summary,
+            actions: prior,
+          });
+        } catch (err) {
+          return terminalizeDomainFailure(run, r, {
+            kind: "invalid_input",
+            message: err instanceof Error ? err.message : "Invalid domain completion.",
+            recoverable: false,
+          });
+        }
+        try {
+          return await finalizeDomainReport(run, report, r);
+        } catch (err) {
+          if (isStaleDomainTurnError(err)) return r.store.getOrchestratorRun(run.id);
+          return terminalizeDomainFailure(run, r, {
+            kind: "provider_failed",
+            message: err instanceof Error ? err.message : "Domain report finalization failed.",
+            recoverable: false,
+          });
+        }
+      }
       logger.info("orchestrator.done", {
         workspaceId: r.workspaceId,
         projectId: run.projectId,
@@ -616,11 +930,28 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       }
     }
 
-    // Persist the canonical invocation before the tool can mutate the graph or
-    // launch a provider job. The same UUID travels through the tool context, so
-    // asynchronous job/asset paths can attach to it instead of minting a
-    // wrapper action later.
+    // Parse and authorize once against a fresh trusted scope before persisting
+    // any invocation. The same canonical input then drives estimate + execute.
     const actionId = randomUUID();
+    let domainScope: DomainTargetScope | undefined;
+    let domainSnapshot: ProjectGraphSnapshot | undefined;
+    if (definition.task) {
+      try {
+        const prepared = await r.prepareDomainScope({
+          workspaceId: r.workspaceId,
+          projectId: run.projectId,
+          task: definition.task,
+        });
+        domainScope = prepared.scope;
+        domainSnapshot = prepared.snapshot;
+      } catch (err) {
+        return finish(run, "failed", r, {
+          kind: "invalid_input",
+          message: err instanceof Error ? err.message : String(err),
+          recoverable: false,
+        });
+      }
+    }
     const toolContext = createToolExecutionContext({
       workspaceId: r.workspaceId,
       projectId: run.projectId,
@@ -631,15 +962,34 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       agentId: r.agentId ?? "orchestrator",
       messageId: r.messageId,
       requestId: r.requestId,
+      sessionClaimGeneration: r.sessionClaimGeneration,
+      ...(definition.task ? { domainTask: definition.task } : {}),
+      ...(domainScope ? { domainScope } : {}),
+      ...(domainSnapshot ? { domainSnapshot } : {}),
       metadata: runMetadata(run, r),
     });
+    let preparedInput: unknown;
+    try {
+      preparedInput = await prepareRegisteredTool({
+        registry: turnRegistry,
+        toolName: decision.toolName,
+        input: decision.input,
+        context: toolContext,
+      });
+    } catch (err) {
+      return finish(run, "failed", r, {
+        kind: "invalid_input",
+        message: err instanceof Error ? err.message : String(err),
+        recoverable: false,
+      });
+    }
     await r.store.recordInvocation({
       actionId,
       projectId: run.projectId,
       orchestratorRunId: run.id,
       tool: decision.toolName,
       status: "running",
-      params: decision.input,
+      params: preparedInput as Record<string, unknown>,
       outputAssetIds: [],
       jobIds: [],
     });
@@ -655,7 +1005,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       const toolEstimateUsd =
         (await turnRegistry
           .get(decision.toolName)
-          ?.estimateCostUsd(decision.input, toolContext)) ?? 0;
+          ?.estimateCostUsd(preparedInput, toolContext)) ?? 0;
       if (runUserId && toolEstimateUsd > 0) {
         const estimatedCredits = Math.ceil(toolEstimateUsd * CREDIT_MARGIN * CREDITS_PER_USD);
         const balance = await r.getCreditBalance(runUserId);
@@ -701,7 +1051,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       result = await executeRegisteredTool({
         registry: turnRegistry,
         toolName: decision.toolName,
-        input: decision.input,
+        input: preparedInput,
         context: toolContext,
       });
     } catch (err) {
@@ -761,6 +1111,42 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       error: result.status === "failed" ? { ...result.error } : undefined,
     });
 
+    if (
+      result.status === "failed" &&
+      result.error.kind === "precondition_unmet" &&
+      definition.task
+    ) {
+      const recovery = projectDomainRecovery({
+        ownerRole: definition.role,
+        projectId: run.projectId,
+        trustedTargets: definition.task.targets,
+        error: result.error,
+      });
+      // A cross-domain prerequisite must not disappear merely because the same
+      // failure also advertised a local recovery candidate. Root/Audio work
+      // cannot be completed by retrying a Visuals primitive.
+      const blocked = selectDomainBlockedCandidate(recovery);
+      if (blocked) {
+        return finalizeDomainReport(
+          run,
+          {
+            schemaVersion: "DomainReport.v1",
+            outcome: {
+              outcome: "blocked",
+              precondition: {
+                requirement: "cross_domain_prerequisite",
+                because: "The requested work requires a capability outside this domain.",
+              },
+              requiredDomain: blocked.requiredDomain,
+              targets: blocked.targets,
+              reason: blocked.reason,
+            },
+          },
+          r
+        );
+      }
+    }
+
     if (result.status === "succeeded" && result.costUsd) {
       run = await r.store.updateOrchestratorRun(run.id, {
         spentUsd: run.spentUsd + result.costUsd,
@@ -810,6 +1196,23 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
     if (result.status === "succeeded") {
       const stopped = await finishIfAfterGateReached(run, decision.toolName, r);
       if (stopped) return stopped;
+    }
+
+    if (result.status === "delegated") {
+      // The dispatch transaction already durably enqueued the child run; the
+      // child's report finalization wakes this run's dispatch. Park in the
+      // domain wait (distinct from media-job/approval waits) until then.
+      logger.info("orchestrator.parked_on_delegation", {
+        workspaceId: r.workspaceId,
+        projectId: run.projectId,
+        runId: run.id,
+        turn,
+        tool: decision.toolName,
+        childRunId: "childRunId" in result ? result.childRunId : undefined,
+        sessionId: "sessionId" in result ? result.sessionId : undefined,
+        childRuns: "childRuns" in result ? result.childRuns : undefined,
+      });
+      return park(run, r, "domain");
     }
 
     if (result.status === "accepted") {
@@ -863,6 +1266,13 @@ async function finish(
   r: Resolved,
   error?: Record<string, unknown>
 ): Promise<OrchestratorRun> {
+  if (status === "failed" && isDomainRun(run)) {
+    return terminalizeDomainFailure(run, r, error ?? {
+      kind: "provider_failed",
+      message: "Domain run failed without a structured engine error.",
+      recoverable: false,
+    });
+  }
   return r.store.updateOrchestratorRun(run.id, {
     status,
     completedAt: nowIso(),
@@ -870,6 +1280,13 @@ async function finish(
   });
 }
 
-async function park(run: OrchestratorRun, r: Resolved): Promise<OrchestratorRun> {
-  return r.store.updateOrchestratorRun(run.id, { status: "waiting" });
+async function park(
+  run: OrchestratorRun,
+  r: Resolved,
+  waitReason: "domain" | null = null
+): Promise<OrchestratorRun> {
+  // The domain wait is distinct from media-job and approval waits: a root run
+  // parked on a delegated child records it durably so store/projection can
+  // distinguish "waiting on a specialist" from "waiting on a provider job".
+  return r.store.updateOrchestratorRun(run.id, { status: "waiting", waitReason });
 }

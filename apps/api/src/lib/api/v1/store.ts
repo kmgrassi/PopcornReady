@@ -57,6 +57,7 @@ import {
   type AssetMedia,
   type DataAssetRow,
   type GraphAssetKind,
+  graphKindForMediaAsset,
   type TranscriptSegmentRow,
 } from "./store-content";
 import { ApiError, notFound } from "./errors";
@@ -1604,20 +1605,17 @@ interface AssetRow {
 }
 
 function assetKindToGraphKind(asset: V1Asset): GraphAssetKind {
-  if (asset.kind === "audio") return "audio_track";
-  if (asset.kind === "image") {
-    if (asset.role === "poster") return "poster";
-    if (asset.role === "character_anchor" || asset.role === "scene_anchor") return "anchor";
-    return asset.provenance ? "keyframe" : "anchor";
-  }
-  if (asset.role === "export_video") return "render";
-  return asset.provenance ? "clip" : "source_footage";
+  return graphKindForMediaAsset({
+    kind: asset.kind,
+    role: asset.role,
+    generated: Boolean(asset.provenance),
+  });
 }
 
 function assetMediaToKind(media: AssetMedia, kind: GraphAssetKind): AssetKind {
   if (media === "image" || media === "video" || media === "audio") return media;
   if (kind === "audio_track") return "audio";
-  if (kind === "anchor" || kind === "keyframe") return "image";
+  if (kind === "image" || kind === "anchor" || kind === "keyframe" || kind === "poster") return "image";
   return "video";
 }
 
@@ -2819,6 +2817,8 @@ export async function addAudioFitCritique(input: {
   projectId: string;
   audioAssetId: string;
   audioContentHash?: string;
+  pictureAssetId?: string;
+  pictureContentHash?: string;
   planAssetId?: string;
   planContentHash?: string;
   beatId: string;
@@ -2845,13 +2845,31 @@ export async function addAudioFitCritique(input: {
           },
         ]
       : []),
+    ...(input.pictureAssetId
+      ? [
+          {
+            assetId: input.pictureAssetId,
+            relation: "input" as const,
+            role: "picture",
+            position: 2,
+            ...(input.pictureContentHash
+              ? { contentHash: input.pictureContentHash }
+              : {}),
+          },
+        ]
+      : []),
   ];
   const action = await createAction({
     projectId: input.projectId,
     orchestratorRunId: input.orchestratorRunId,
     tool: "fit_audio_to_picture",
     status: "running",
-    params: { beatId: input.beatId, audioAssetId: input.audioAssetId },
+    params: {
+      beatId: input.beatId,
+      audioAssetId: input.audioAssetId,
+      ...(input.pictureAssetId ? { pictureAssetId: input.pictureAssetId } : {}),
+      result: input.critique,
+    },
     inputAssetIds: graphInputs.map((graphInput) => graphInput.assetId),
     rationale: "Persist an audio-to-picture sync report for a voiceover segment.",
   });
@@ -2995,6 +3013,52 @@ export async function getActiveProjectScopedAsset(input: {
   );
   if (input.expectedRole && row.role !== input.expectedRole) return null;
   return mapAsset(row);
+}
+
+export async function getProjectRunGeneratedAsset(input: {
+  workspaceId: string;
+  projectId: string;
+  orchestratorRunId: string;
+  role: string;
+  beatId?: string;
+  slug?: string;
+}): Promise<V1Asset | null> {
+  const db = getServiceSupabase();
+  await requireProjectRow(db, input.workspaceId, input.projectId);
+  const actionData = await runQuery(
+    "store.getProjectRunGeneratedAsset actions",
+    db
+      .from("actions")
+      .select("id")
+      .eq("project_id", input.projectId)
+      .eq("orchestrator_run_id", input.orchestratorRunId)
+  );
+  const actionIds = ((actionData as Array<{ id: string }>) ?? []).map((row) => row.id);
+  if (actionIds.length === 0) return null;
+
+  const assetData = await runQuery(
+    "store.getProjectRunGeneratedAsset assets",
+    db
+      .from("assets")
+      .select("*")
+      .eq("project_id", input.projectId)
+      .eq("role", input.role)
+      .eq("status", "ready")
+      .in("created_by_action_id", actionIds)
+      .order("created_at", { ascending: false })
+      .limit(100)
+  );
+  const row = ((assetData as AssetRow[]) ?? []).find((candidate) => {
+    if (input.slug && candidate.slug !== input.slug) return false;
+    if (
+      input.beatId &&
+      candidate.params?.provenance?.beatId !== input.beatId
+    ) {
+      return false;
+    }
+    return true;
+  });
+  return row ? mapAsset(row) : null;
 }
 
 export async function selectGeneratedBeatKeyframeAsset(input: {
@@ -5385,6 +5449,36 @@ export async function addAsset(
   return mapAsset(data as AssetRow);
 }
 
+/**
+ * Persist generated Audio revision bytes as version+1 in the source lineage.
+ * The caller supplies the generated-asset action so provider/cost/creator
+ * provenance remains on the canonical inner action. This operation never moves
+ * a selection; task-pinned selection reconciliation is a separate boundary.
+ */
+export async function addGeneratedAudioVersion(input: {
+  workspaceId: string;
+  projectId: string;
+  sourceAssetId: string;
+  actionId: string;
+  asset: V1Asset;
+}): Promise<V1Asset> {
+  const db = getServiceSupabase();
+  const assetWithGraph = await withGraphMetadataForInsert(db, input.asset);
+  const row = assetToRow(assetWithGraph);
+  const data = await runQuery(
+    "store.addGeneratedAudioVersion",
+    db.rpc("mint_audio_asset_version", {
+      p_workspace_id: input.workspaceId,
+      p_project_id: input.projectId,
+      p_source_asset_id: input.sourceAssetId,
+      p_action_id: input.actionId,
+      p_asset: row,
+    })
+  );
+  if (!data) throw notFound(`Asset not found: ${input.sourceAssetId}`);
+  return mapAsset(data as AssetRow);
+}
+
 export async function getAsset(
   workspaceId: string,
   projectId: string,
@@ -5899,7 +5993,16 @@ export interface RegeneratedAssetMedia {
   contentHash?: string;
   durationSec?: number;
   provenance: GeneratedAssetProvenance;
+  /** False mints a pooled alternative without moving panels or selections. */
+  repointSurfaces?: boolean;
+  /** Reuse the orchestrator's canonical invocation action when present. */
+  actionId?: string;
+  orchestratorRunId?: string;
+  /** Exact active domain-session claim used by the guarded pooled RPC. */
+  sessionClaimGeneration?: number;
 }
+
+export type RegeneratedAssetResult = AssetMediaUrls & { assetId: string };
 
 // Regenerate an image asset by MINTING A NEW IMMUTABLE VERSION: a fresh row in
 // the same lineage (`version + 1`) carrying the regenerated bytes/provenance,
@@ -5912,7 +6015,7 @@ export async function applyRegeneratedAssetMedia(
   workspaceId: string,
   assetId: string,
   update: RegeneratedAssetMedia
-): Promise<AssetMediaUrls> {
+): Promise<RegeneratedAssetResult> {
   if (!isAssetIdShape(assetId)) throw notFound(`Asset not found: ${assetId}`);
   const db = getServiceSupabase();
 
@@ -5931,7 +6034,11 @@ export async function applyRegeneratedAssetMedia(
   const projectId = (current as { project_id: string }).project_id;
 
   const action = await createAction({
+    ...(update.actionId ? { id: update.actionId } : {}),
     projectId,
+    ...(update.orchestratorRunId
+      ? { orchestratorRunId: update.orchestratorRunId }
+      : {}),
     tool: "regenerate_asset",
     status: "running",
     params: {
@@ -5946,7 +6053,9 @@ export async function applyRegeneratedAssetMedia(
   try {
     data = await runQuery(
       "store.applyRegeneratedAssetMedia",
-      db.rpc("regenerate_asset_version", {
+      db.rpc(update.repointSurfaces === false
+        ? "regenerate_asset_version_pooled"
+        : "regenerate_asset_version", {
         p_workspace_id: workspaceId,
         p_old_asset_id: assetId,
         p_filename: update.filename,
@@ -5956,6 +6065,13 @@ export async function applyRegeneratedAssetMedia(
         p_content_hash: update.contentHash ?? null,
         p_duration_sec: update.durationSec ?? null,
         p_action_id: action.id,
+        ...(update.repointSurfaces === false
+          ? {
+              p_run_id: update.orchestratorRunId ?? null,
+              p_session_claim_generation:
+                update.sessionClaimGeneration ?? null,
+            }
+          : {}),
       })
     );
   } catch (err) {
@@ -5969,7 +6085,10 @@ export async function applyRegeneratedAssetMedia(
 
   const newRow = data as AssetRow;
   await updateAction(action.id, { status: "applied", outputAssetIds: [newRow.id] });
-  return assetMediaUrlsForRow(newRow);
+  return {
+    ...(await assetMediaUrlsForRow(newRow)),
+    assetId: newRow.id,
+  };
 }
 
 export async function listWorkspaceAssets(
@@ -6463,6 +6582,7 @@ export function createJob(input: {
   status?: JobStatus;
   requestId?: string;
   actionId?: string;
+  sessionClaimGeneration?: number;
   payload?: unknown;
   result?: unknown;
   idempotencyKey?: string;
@@ -6665,6 +6785,28 @@ export async function getStaleCandidates(
       ];
     }),
   };
+}
+
+/** Current selection sequence pins for one asset, used to fence rerun previews. */
+export async function listAssetSelectionRefs(
+  workspaceId: string,
+  projectId: string,
+  assetId: string
+): Promise<AssetGraphSelectionRef[]> {
+  await getAsset(workspaceId, projectId, assetId);
+  const data = await runQuery(
+    "store.listAssetSelectionRefs",
+    getRequestSupabaseOrService()
+      .from("current_selections")
+      .select("slot_owner_lineage_id, slot_role, seq")
+      .eq("project_id", projectId)
+      .eq("active_asset_id", assetId)
+  );
+  return ((data ?? []) as CurrentSelectionSummaryRow[]).map((selection) => ({
+    slotOwnerLineageId: selection.slot_owner_lineage_id,
+    slotRole: selection.slot_role,
+    seq: selection.seq,
+  }));
 }
 
 // ---------------------------------------------------------------------------

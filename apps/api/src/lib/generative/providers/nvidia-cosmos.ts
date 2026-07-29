@@ -24,6 +24,17 @@ type NvidiaCosmosResponse = {
   message?: unknown;
 };
 
+function isNvidiaCosmosResponse(value: unknown): value is NvidiaCosmosResponse {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    (record.b64_video === undefined || typeof record.b64_video === "string") &&
+    (record.seed === undefined || typeof record.seed === "number") &&
+    (record.upsampled_prompt === undefined ||
+      typeof record.upsampled_prompt === "string")
+  );
+}
+
 type NvidiaCosmosRequestBody = {
   prompt: string;
   negative_prompt?: string;
@@ -154,7 +165,7 @@ async function generateNvidiaCosmosVideo(
     body: JSON.stringify(mapToNvidiaCosmosRequest(input, prompt, imageDataUri)),
   });
 
-  const body = parseBody(await response.text()) as NvidiaCosmosResponse;
+  const body = parseBody(await response.text());
   if (!response.ok) {
     throw new Error(
       `NVIDIA Cosmos request failed (${response.status}): ${
@@ -162,7 +173,7 @@ async function generateNvidiaCosmosVideo(
       }`
     );
   }
-  if (!body.b64_video) {
+  if (!isNvidiaCosmosResponse(body) || !body.b64_video) {
     throw new Error("NVIDIA Cosmos response did not include b64_video.");
   }
 

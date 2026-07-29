@@ -6,6 +6,8 @@ import { toolDefinitionMetadata } from "./capability-catalog";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 
+const MINOR_RE = /\b(baby|boy|child|girl|kid|minor|teen|teenage|toddler|youth)\b/i;
+
 export interface RegenerateImageAssetInput {
   assetId: string;
   prompt: string;
@@ -99,10 +101,10 @@ export function createRegenerateImageAssetTool(
   return {
     ...toolDefinitionMetadata("regenerate_image_asset"),
     description:
-      "Regenerate one existing image asset from a replacement prompt. Mints a new immutable version and repoints active selections to it.",
+      "Regenerate one existing image asset from a replacement prompt. Mints a new immutable version; domain work keeps the result pooled.",
     usage: {
       preconditions: ["The target asset is an image in the current workspace."],
-      produces: ["A new immutable version of the target image, selected wherever the prior version was selected."],
+      produces: ["A new immutable version of the target image."],
       useWhen: ["Request Changes targets an existing image tile, keyframe, or visual anchor."],
     },
     inputSchema: regenerateImageAssetInputSchema,
@@ -116,14 +118,24 @@ export function createRegenerateImageAssetTool(
         workspaceId: context.auth.workspaceId,
         assetId: input.assetId,
         prompt: input.prompt,
-        ...(input.provider ? { provider: input.provider } : {}),
+        ...(MINOR_RE.test(input.prompt)
+          ? { provider: "gemini" }
+          : input.provider ? { provider: input.provider } : {}),
         ...(input.model ? { model: input.model } : {}),
         ...(context.requestId ? { requestId: context.requestId } : {}),
+        ...(context.actionId ? { actionId: context.actionId } : {}),
+        ...(context.orchestratorRunId
+          ? { orchestratorRunId: context.orchestratorRunId }
+          : {}),
+        ...(context.sessionClaimGeneration !== undefined
+          ? { sessionClaimGeneration: context.sessionClaimGeneration }
+          : {}),
+        repointSurfaces: !context.domainTask,
       });
       return {
         status: "succeeded",
-        resourceIds: [input.assetId],
-        output: { assetId: input.assetId, ...(media.url ? { url: media.url } : {}) },
+        resourceIds: [media.assetId],
+        output: { assetId: media.assetId, ...(media.url ? { url: media.url } : {}) },
       };
     },
   };

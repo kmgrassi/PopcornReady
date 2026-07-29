@@ -2,11 +2,11 @@ import { createHash } from "crypto";
 import { Router } from "express";
 import { mutation, route } from "@/core/adapter";
 import { ApiError } from "@/core/errors";
-import type { AuthContext } from "@/lib/api/v1/auth";
 import type { HandlerCtx } from "@/lib/api/v1/handler";
 import { runIdempotent } from "@/lib/api/v1/idempotency";
 import {
   clearProjectSelections,
+  cancelOrchestratorRunFamily,
   createPendingApprovalGate,
   createReachedApprovalGate,
   createOrchestratorRun,
@@ -20,7 +20,9 @@ import {
   supersedeRunActions,
   updateOrchestratorRun,
   type OrchestratorRun,
+  type OrchestratorRunGate,
   type RunActionSummary,
+  type UpdateOrchestratorRunPatch,
 } from "@/lib/api/v1/orchestrator-store";
 import {
   createAction,
@@ -29,14 +31,19 @@ import {
   getAsset,
   getJob,
   getProject,
-  getWorkspaceRole,
-  isWorkspaceAdminRole,
   recordProjectActivity,
 } from "@/lib/api/v1/store";
 import { startPosterGenerationInBackground } from "@/lib/api/v1/poster-background";
 import { parseBrief } from "@/lib/api/v1/schemas";
 import { enqueueOrchestratorDispatch } from "@/lib/orchestrator/recovery-worker";
-import { GENERATION_STAGE_ORDER, type Job } from "@popcorn/shared/v1/types";
+import {
+  GENERATION_STAGE_ORDER,
+  GATEABLE_GENERATION_STAGE_TYPES,
+  type GateableGenerationStageType,
+  type BoardRevisionTarget,
+  type GenerationStageType,
+  type Job,
+} from "@popcorn/shared/v1/types";
 import {
   BOARD_FEEDBACK_TOOL,
   boardRevisionGateIdsToReset,
@@ -44,83 +51,49 @@ import {
   boardRevisionProposal,
   boardRevisionRequiresRunResume,
   boardRevisionResumePatch,
-  parseBoardRevisionRequest,
-} from "./orchestrator-run-board-revisions.js";
-import {
-  downstreamActionIds,
-  downstreamGateIds,
+  canViewOperatorDiagnostics,
   generationActions,
-  initialRunGates,
   isInsufficientCreditsFailure,
-  isStoryboardAfterGate,
-  parseRestartStageType,
-  restartSelectionScope,
+  parseBoardRevisionRequest,
+  parseBoardRevisionTarget,
   runFailedForInsufficientCredits,
-  storyboardContinuationPatch,
-} from "./orchestrator-run-control.js";
+} from "./orchestrator-run-board-revisions.js";
 import {
   projectRun,
   projectRunDetailFromParts,
   type GenerationRunDetail,
   type RunAssetPrompt,
 } from "./orchestrator-run-projections.js";
+import { getAgentSession, getRootRunFamily } from "@/lib/api/v1/domain-session-store";
+import { projectCreatorRunHierarchy } from "./session-run-projection.js";
+import {
+  downstreamActionIds,
+  downstreamGateIds,
+  parseRestartStageType,
+  restartSelectionScope,
+} from "./orchestrator-run-restarts.js";
 
 const NO_STORE_HEADERS = { "Cache-Control": "no-store" };
 const ANONYMOUS_RUN_QUOTA_LIMIT = 1;
 const ANONYMOUS_RUN_QUOTA_WINDOW_MS = 24 * 60 * 60 * 1000;
+const AFTER_GATE_PREFIX = "after:";
 
 export const orchestratorRunsRouter = Router();
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 export {
   boardRevisionGateIdsToReset,
   boardRevisionRequiresRunResume,
   boardRevisionResumePatch,
-  parseBoardRevisionTarget,
-} from "./orchestrator-run-board-revisions.js";
-export {
+  canViewOperatorDiagnostics,
   downstreamActionIds,
   downstreamGateIds,
-  initialRunGates,
-  initialRunStopAfterTools,
   isInsufficientCreditsFailure,
-  isStoryboardAfterGate,
+  parseBoardRevisionTarget,
   restartSelectionScope,
   runFailedForInsufficientCredits,
-  stopAfterTools,
-  storyboardContinuationPatch,
-} from "./orchestrator-run-control.js";
+};
 
-export interface OperatorDiagnosticsAuthorizationDeps {
-  getWorkspaceRole: typeof getWorkspaceRole;
-  nodeEnv: string | undefined;
-}
-
-export async function canViewOperatorDiagnostics(
-  auth: AuthContext,
-  deps: Partial<OperatorDiagnosticsAuthorizationDeps> = {}
-): Promise<boolean> {
-  const nodeEnv = deps.nodeEnv ?? process.env.NODE_ENV;
-  if (auth.isLocal) {
-    // The deterministic local identity is the development workspace owner.
-    // Never let a production AUTH_MODE misconfiguration disclose diagnostics.
-    return nodeEnv !== "production";
-  }
-  if (auth.actor.type !== "user" || auth.actor.isAnonymous) return false;
-  try {
-    const role = await (deps.getWorkspaceRole ?? getWorkspaceRole)(
-      auth.workspaceId,
-      auth.actor.id
-    );
-    return isWorkspaceAdminRole(role);
-  } catch {
-    // Diagnostics are additive. Membership lookup failure must fail closed
-    // without making creator-safe generation status unavailable.
-    return false;
-  }
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function requireParam(params: Record<string, string | undefined>, name: string): string {
@@ -148,6 +121,7 @@ function anonymousRunQuotaForAuth(auth: {
   };
 }
 
+
 function promptBriefFromBody(body: unknown) {
   if (!isRecord(body)) {
     throw new ApiError("validation_failed", "Request body must be an object.");
@@ -171,6 +145,72 @@ function promptBriefFromBody(body: unknown) {
         constraints: body.constraints,
       };
   return parseBrief(source, "brief");
+}
+
+export function stopAfterTools(body: unknown): string[] {
+  if (!isRecord(body)) return [];
+  if (body.runThrough === false && typeof body.stopAfter !== "string") {
+    return ["generate_storyboard"];
+  }
+  if (typeof body.stopAfter !== "string") return [];
+  switch (body.stopAfter) {
+    case "brief_intake":
+      return ["create_or_load_brief"];
+    case "creative_plan":
+      return ["plan_visual_anchors"];
+    case "storyboard":
+      return ["generate_storyboard"];
+    case "asset_generation":
+      return ["generate_keyframe"];
+    case "audio_generation":
+      return ["fit_audio_to_picture"];
+    case "timeline_assembly":
+      return ["assemble_timeline"];
+    case "quality_review":
+      return ["critique_timeline"];
+    case "export":
+      return ["export_video"];
+    default:
+      throw new ApiError("validation_failed", "stopAfter must be a gateable generation stage.", {
+        fields: [{ path: "stopAfter", message: "Expected a gateable generation stage." }],
+      });
+  }
+}
+
+/**
+ * Every newly started production run pauses after its complete storyboard.
+ * This is server-owned policy: a client checkbox or an orchestrator decision
+ * must never be able to skip the creator's first visual review.
+ */
+export function initialRunStopAfterTools(body: unknown): string[] {
+  // `stopAfter` and review-gate payloads are legacy controls. An initial
+  // production run has exactly one boundary: a complete storyboard. They are
+  // deliberately ignored rather than becoming an earlier client-created stop.
+  void body;
+  return ["generate_storyboard"];
+}
+
+function afterGateTools(tools: string[]): string[] {
+  return tools.map((tool) => `${AFTER_GATE_PREFIX}${tool}`);
+}
+
+/** The identical gate contract used by prompt and uploaded-footage entrypoints. */
+export function initialRunGates(body: unknown): string[] {
+  return afterGateTools(initialRunStopAfterTools(body));
+}
+
+/** Re-open a storyboard-complete run so approval can continue production. */
+export function storyboardContinuationPatch(run: OrchestratorRun): UpdateOrchestratorRunPatch {
+  return {
+    status: "waiting",
+    startedAt: run.startedAt ?? new Date().toISOString(),
+    clearCompletedAt: true,
+    clearError: true,
+  };
+}
+
+export function isStoryboardAfterGate(gate: Pick<OrchestratorRunGate, "stage">): boolean {
+  return gate.stage === `${AFTER_GATE_PREFIX}generate_storyboard`;
 }
 
 function canonicalize(value: unknown): unknown {
@@ -365,10 +405,43 @@ async function assembleRunDetail(
     loadRunAssetMetadata(workspaceId, projectId, actions),
     loadRunJobsForProjection({ workspaceId, projectId, actions }),
   ]);
-  return projectRunDetailFromParts(run, gates, actions, assetPrompts, {
+  const detail = projectRunDetailFromParts(run, gates, actions, assetPrompts, {
     jobs,
     includeOperatorDiagnostics,
   });
+  if (run.agentRole === "creative_director") {
+    const family = await getRootRunFamily(run.id);
+    const childActions = await Promise.all(
+      family.children.map(async (child) => [child.id, await listRunActions(child.id)] as const)
+    );
+    const childJobs = await Promise.all(
+      childActions.map(async ([childRunId, childRunActions]) => [
+        childRunId,
+        await loadRunJobsForProjection({ workspaceId, projectId, actions: childRunActions }),
+      ] as const)
+    );
+    const sessionRequests = family.children.reduce<Array<readonly [string, "visuals" | "audio"]>>(
+      (requests, child) => {
+        if (child.agentSessionId && (child.agentRole === "visuals" || child.agentRole === "audio")) {
+          requests.push([child.agentSessionId, child.agentRole]);
+        }
+        return requests;
+      },
+      []
+    );
+    const sessions = await Promise.all(
+      [...new Map(sessionRequests).entries()].map(async ([sessionId, domain]) =>
+        [sessionId, await getAgentSession(projectId, domain)] as const
+      )
+    );
+    detail.hierarchy = projectCreatorRunHierarchy({
+      family,
+      sessions: new Map(sessions.filter((entry): entry is [string, NonNullable<typeof entry[1]>] => Boolean(entry[1]))),
+      actionsByRun: new Map(childActions),
+      jobs: new Map(childJobs.flatMap(([, loaded]) => [...loaded.entries()])),
+    });
+  }
+  return detail;
 }
 
 export interface GenerationRunDetailRouteDeps {
@@ -660,8 +733,8 @@ orchestratorRunsRouter.post(
     const projectId = requireParam(params, "projectId");
     const runId = requireParam(params, "runId");
     await requireProjectAccess(auth.workspaceId, projectId);
-    const run = await requireProjectRun(runId, projectId);
-    await stopAfterCurrentStep(run);
+    await requireProjectRun(runId, projectId);
+    await cancelOrchestratorRunFamily({ projectId, runId });
     return { status: 200, body: await assembleRunDetail(runId, auth.workspaceId, projectId) };
   })
 );

@@ -24,6 +24,7 @@ import {
 } from "../generated-assets";
 import { V1Job } from "../jobs";
 import { createProject, getAsset, listAssets } from "../store";
+import { getServiceSupabase } from "@/lib/supabase/clients";
 
 // These exercise the v1 store, which now persists to Supabase Postgres (needs a
 // live PostgREST gateway). Skipped unless Supabase env is configured; the store's
@@ -198,6 +199,77 @@ dbTest("persists actual audio duration in provenance", async () => {
   assert.equal(asset.durationSec, 5);
 });
 
+dbTest("audio revisions mint a new immutable version without overwriting source bytes", async () => {
+  const projectId = await newProjectId("immutable audio revision");
+  const sourceResult = await createGeneratedAsset({
+    auth,
+    projectId,
+    body: {
+      kind: "audio",
+      provider: "mock",
+      prompt: "The exact approved sentence.",
+      durationSec: 4,
+      audioMode: "speech",
+    },
+  });
+  const sourceId = assetIds(jobOf(sourceResult))[0];
+  const sourceBefore = await getAsset(LOCAL_WORKSPACE_ID, projectId, sourceId);
+  const sourceBytesBefore = await fs.readFile(
+    path.join(process.env.POPCORN_READY_LOCAL_DIR!, sourceBefore.storageKey!)
+  );
+
+  const revisionResult = await createGeneratedAsset({
+    auth,
+    projectId,
+    body: {
+      kind: "audio",
+      provider: "mock",
+      prompt: "The exact approved sentence.",
+      description: "Warmer delivery; unchanged words.",
+      durationSec: 4,
+      audioMode: "speech",
+      sourceAssetId: sourceId,
+      graphInputs: [
+        {
+          assetId: sourceId,
+          relation: "input",
+          role: "source",
+          position: 0,
+          contentHash: sourceBefore.contentHash,
+        },
+      ],
+    },
+  });
+
+  const revisionId = assetIds(jobOf(revisionResult))[0];
+  const [sourceAfter, revision] = await Promise.all([
+    getAsset(LOCAL_WORKSPACE_ID, projectId, sourceId),
+    getAsset(LOCAL_WORKSPACE_ID, projectId, revisionId),
+  ]);
+  const sourceBytesAfter = await fs.readFile(
+    path.join(process.env.POPCORN_READY_LOCAL_DIR!, sourceAfter.storageKey!)
+  );
+
+  assert.notEqual(revision.id, sourceAfter.id);
+  assert.notEqual(revision.storageKey, sourceAfter.storageKey);
+  assert.equal(
+    revision.graphInputs?.some(
+      (edge) => edge.assetId === sourceId && edge.role === "source"
+    ),
+    true
+  );
+  const { data: lineageRows, error: lineageError } = await getServiceSupabase()
+    .from("assets")
+    .select("id, lineage_id, version")
+    .in("id", [sourceId, revisionId])
+    .order("version", { ascending: true });
+  assert.equal(lineageError, null);
+  assert.equal(lineageRows?.length, 2);
+  assert.equal(lineageRows?.[0]?.lineage_id, lineageRows?.[1]?.lineage_id);
+  assert.equal(lineageRows?.[1]?.version, Number(lineageRows?.[0]?.version) + 1);
+  assert.deepEqual(sourceBytesAfter, sourceBytesBefore);
+});
+
 dbTest("persists provider settings used to produce the asset", async () => {
   const projectId = await newProjectId("provider settings");
 
@@ -231,6 +303,13 @@ dbTest("persists provider settings used to produce the asset", async () => {
       voiceId: "voice_123",
       outputFormat: "mp3_44100_192",
       audioMode: "speech",
+      voiceSettings: {
+        stability: 0.35,
+        similarityBoost: 0.75,
+        style: 0.35,
+        speed: 0.95,
+        useSpeakerBoost: true,
+      },
     },
   });
   const audioAsset = await getAsset(
@@ -244,6 +323,13 @@ dbTest("persists provider settings used to produce the asset", async () => {
     "mp3_44100_192"
   );
   assert.equal(audioAsset.provenance?.providerSettings?.audioMode, "speech");
+  assert.deepEqual(audioAsset.provenance?.providerSettings?.voiceSettings, {
+    stability: 0.35,
+    similarityBoost: 0.75,
+    style: 0.35,
+    speed: 0.95,
+    useSpeakerBoost: true,
+  });
 });
 
 dbTest("routes NVIDIA Cosmos video through the generated-assets adapter", async (t) => {

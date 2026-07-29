@@ -11,7 +11,10 @@ import {
   materializeAssetObject,
   type MaterializedAssetObject,
 } from "@/lib/storage/asset-read";
-import { writeAssetObject } from "@/lib/storage/asset-write";
+import {
+  deleteAssetObject,
+  writeAssetObject,
+} from "@/lib/storage/asset-write";
 import { measureAudioDurationSec } from "@/lib/generative/audio-duration";
 import { type LlmUsage } from "@popcorn/llm";
 import { withDerivedAssetKnowledge } from "./assets";
@@ -23,6 +26,14 @@ import { providerFor } from "@/lib/generative/providers";
 import { estimateCostUsd } from "@/lib/generative/pricing";
 import { recordModelCallCost } from "./model-call-costs";
 import {
+  releaseOrchestratorBudget,
+  recordOrchestratorBudgetBilling,
+  reserveOrchestratorBudget,
+  settleOrchestratorBudget,
+} from "./orchestrator-budget-controls";
+import {
+  billableUsdSoFar,
+  currentRunUserId,
   noteBillableGeneration,
   type KeyProvider,
 } from "@/lib/provider-keys/resolve";
@@ -46,11 +57,11 @@ import {
 import { AssetKind, SCHEMA_VERSIONS } from "./schemas";
 import {
   addAsset,
+  addGeneratedAudioVersion,
   canonicalizeAssetIds,
   claimProviderJobExecution,
   completeProviderJobExecution,
   createJob,
-  assertRunBudgetAllows,
   createAction,
   effectiveAssetStorageVisibility,
   getAssetFingerprintPins,
@@ -70,6 +81,7 @@ import {
   PROVIDER_KIND_SUPPORT,
   type ParsedRequest,
 } from "./generated-asset-request";
+import { getRunSessionClaim } from "./domain-session-store";
 
 export interface ApiResult {
   status: number;
@@ -80,6 +92,31 @@ export type GeneratedAssetJob = V1Job & {
   type: "asset_generation";
   actionId?: string;
 };
+
+export function resolveGeneratedAssetClaimGeneration(
+  currentClaimGeneration: number | undefined,
+  suppliedClaimGeneration: number | undefined
+): number | undefined {
+  if (
+    currentClaimGeneration !== undefined &&
+    suppliedClaimGeneration === undefined
+  ) {
+    throw new ApiError(
+      "job_failed",
+      "An active domain run requires its exact session claim generation."
+    );
+  }
+  if (
+    suppliedClaimGeneration !== undefined &&
+    suppliedClaimGeneration !== currentClaimGeneration
+  ) {
+    throw new ApiError(
+      "job_failed",
+      "The domain-session claim changed before generated-asset job creation."
+    );
+  }
+  return suppliedClaimGeneration;
+}
 
 function asGeneratedAssetJob(job: Job): GeneratedAssetJob {
   if (job.type !== "asset_generation") {
@@ -244,12 +281,35 @@ function compact<T extends object>(obj: T): T | undefined {
 }
 
 function actionToolForParsed(parsed: Pick<ParsedRequest, "kind" | "assetRole">): string {
+  if (parsed.kind === "image" && parsed.assetRole === "standalone_image") {
+    return "generate_image_asset";
+  }
+  if (parsed.kind === "video" && parsed.assetRole === "standalone_video") {
+    return "generate_video_asset";
+  }
   if (parsed.kind === "image" && parsed.assetRole === "poster") {
     return "generate_poster";
   }
   if (parsed.kind === "audio") return "generate_audio";
   if (parsed.kind === "video") return "generate_clip";
   return "generate_keyframe";
+}
+
+function generatedInputAssetIds(
+  parsed: Pick<
+    ParsedRequest,
+    "referenceAssetIds" | "anchorIds" | "graphInputs" | "editSourceAssetId" | "sourceAssetId"
+  >
+): string[] {
+  return [
+    ...new Set([
+      ...parsed.referenceAssetIds,
+      ...parsed.anchorIds,
+      ...(parsed.graphInputs ?? []).map((input) => input.assetId),
+      ...(parsed.editSourceAssetId ? [parsed.editSourceAssetId] : []),
+      ...(parsed.sourceAssetId ? [parsed.sourceAssetId] : []),
+    ]),
+  ];
 }
 
 function buildGenerationActionProposal(args: {
@@ -288,6 +348,41 @@ async function runGeneration(
   action: V1Action
 ): Promise<V1Asset> {
   const llmCostScope = generatedAssetLlmCostScope(projectId, parsed.runId, action.id);
+  let revisionSource: V1Asset | undefined;
+  if (parsed.sourceAssetId) {
+    if (parsed.kind !== "audio") {
+      throw new ApiError(
+        "asset_invalid",
+        "sourceAssetId is supported only for immutable audio revisions."
+      );
+    }
+    revisionSource = await getAsset(
+      auth.workspaceId,
+      projectId,
+      parsed.sourceAssetId
+    );
+    if (
+      revisionSource.kind !== "audio" ||
+      revisionSource.status !== "ready"
+    ) {
+      throw new ApiError(
+        revisionSource.kind !== "audio" ? "asset_invalid" : "asset_not_ready",
+        `Audio revision source must be ready audio: ${revisionSource.id}.`,
+        { assetIds: [revisionSource.id] }
+      );
+    }
+    const hasSourceEdge = parsed.graphInputs?.some(
+      (input) =>
+        input.assetId === revisionSource!.id && input.role === "source"
+    );
+    if (!hasSourceEdge) {
+      throw new ApiError(
+        "validation_failed",
+        "Audio revision requires an immutable source graph edge.",
+        { assetIds: [revisionSource.id] }
+      );
+    }
+  }
   // Resolve reference assets to local file paths the provider can read.
   const referencePaths: string[] = [];
   const materializedObjects: MaterializedAssetObject[] = [];
@@ -404,6 +499,7 @@ async function runGeneration(
     seconds: parsed.providerSeconds,
     audioMode: parsed.audioMode,
     voiceId: parsed.voiceId,
+    voiceSettings: parsed.voiceSettings,
     outputFormat: parsed.outputFormat,
     languageCode: parsed.languageCode,
     dialogueInputs: preflight.finalDialogueInputs || parsed.dialogueInputs,
@@ -581,6 +677,7 @@ async function runGeneration(
     seconds: parsed.providerSeconds,
     audioMode: parsed.audioMode,
     voiceId: parsed.voiceId,
+    voiceSettings: parsed.voiceSettings,
     outputFormat: parsed.outputFormat,
     languageCode: parsed.languageCode,
     loop: parsed.loop,
@@ -664,6 +761,88 @@ async function runGeneration(
     updatedAt: now,
   };
 
+  if (revisionSource) {
+    if (result.kind !== "audio") {
+      throw new ApiError(
+        "asset_invalid",
+        "sourceAssetId is supported only for immutable audio revisions."
+      );
+    }
+    const visibility = await effectiveAssetStorageVisibility({
+      workspaceId: auth.workspaceId,
+      projectId,
+      assetVisibility: revisionSource.visibility ?? "public",
+    });
+    const stored = await writeAssetObject({
+      workspaceId: auth.workspaceId,
+      projectId,
+      assetId: storageName,
+      filename,
+      bytes: result.bytes,
+      visibility,
+    });
+    let revised: V1Asset;
+    try {
+      revised = await addGeneratedAudioVersion({
+        workspaceId: auth.workspaceId,
+        projectId,
+        sourceAssetId: revisionSource.id,
+        actionId: action.id,
+        asset: withDerivedAssetKnowledge(
+          {
+            ...asset,
+            id: storageName,
+            status: "ready",
+            slug: null,
+            source: { type: "generated", generatedAssetId: storageName },
+            storageKey: stored.storageKey,
+            storageBucket: stored.storageBucket,
+            semanticAnalysis: undefined,
+          },
+          now
+        ),
+      });
+    } catch (error) {
+      await deleteAssetObject({
+        storageKey: stored.storageKey,
+        visibility,
+      }).catch((cleanupError) => {
+        logger.error("generated_asset.audio_revision_cleanup_failed", {
+          projectId,
+          sourceAssetId: revisionSource?.id,
+          storageKey: stored.storageKey,
+          error: {
+            message:
+              cleanupError instanceof Error
+                ? cleanupError.message
+                : String(cleanupError),
+          },
+        });
+      });
+      throw error;
+    }
+    await createAction({
+      projectId,
+      orchestratorRunId: parsed.runId,
+      tool: "store_asset_bytes",
+      status: "applied",
+      params: {
+        sourceType: "generated_audio_revision",
+        sourceAssetId: revisionSource.id,
+        provider: result.provider,
+        storageKey: stored.storageKey,
+        storageBucket: stored.storageBucket,
+        contentType: stored.contentType,
+      },
+      inputAssetIds: [revisionSource.id],
+      outputAssetIds: [revised.id],
+    });
+    void enqueueAssetEmbeddingRefresh(revised, {
+      reason: "asset_ready",
+    }).catch(() => undefined);
+    return revised;
+  }
+
   const created = await addAsset(withDerivedAssetKnowledge(asset, now), {
     createdByActionId: action.id,
   });
@@ -721,6 +900,10 @@ export interface CreateGeneratedAssetArgs {
   auth: AuthContext;
   projectId: string;
   body: unknown;
+  /** Reuse the orchestrator's preallocated canonical invocation action. */
+  actionId?: string;
+  /** Exact claimed domain-session generation; stale callers may not borrow a newer claim. */
+  sessionClaimGeneration?: number;
   // Optional stage handle when this generation runs inside a tracked run. The
   // caller (run orchestrator) is expected to have opened the matching stage
   // (asset_generation for image/video, audio_generation for audio) and to
@@ -745,8 +928,14 @@ function clipPromptPreview(value: string): string {
 export async function createGeneratedAsset(
   args: CreateGeneratedAssetArgs
 ): Promise<ApiResult> {
-  const { auth, projectId, body, progress } = args;
-  const job = await enqueueGeneratedAssetJob({ auth, projectId, body });
+  const { auth, projectId, body, actionId, sessionClaimGeneration, progress } = args;
+  const job = await enqueueGeneratedAssetJob({
+    auth,
+    projectId,
+    body,
+    actionId,
+    sessionClaimGeneration,
+  });
   const finished = await runGeneratedAssetJob({
     auth,
     projectId,
@@ -765,8 +954,14 @@ export async function createGeneratedAsset(
 export async function startGeneratedAssetJob(
   args: CreateGeneratedAssetArgs
 ): Promise<ApiResult> {
-  const { auth, projectId, body, progress } = args;
-  const job = await enqueueGeneratedAssetJob({ auth, projectId, body });
+  const { auth, projectId, body, actionId, sessionClaimGeneration, progress } = args;
+  const job = await enqueueGeneratedAssetJob({
+    auth,
+    projectId,
+    body,
+    actionId,
+    sessionClaimGeneration,
+  });
   void runGeneratedAssetJob({
     auth,
     projectId,
@@ -784,9 +979,12 @@ export async function startGeneratedAssetJob(
 }
 
 export async function enqueueGeneratedAssetJob(
-  args: Pick<CreateGeneratedAssetArgs, "auth" | "projectId" | "body">
+  args: Pick<
+    CreateGeneratedAssetArgs,
+    "auth" | "projectId" | "body" | "actionId" | "sessionClaimGeneration"
+  >
 ): Promise<V1Job> {
-  const { auth, projectId, body } = args;
+  const { auth, projectId, body, actionId, sessionClaimGeneration } = args;
 
   await getProject(auth.workspaceId, projectId); // throws not_found
   const parsed = parseGeneratedAssetRequest(body);
@@ -830,6 +1028,18 @@ export async function enqueueGeneratedAssetJob(
     );
     parsed.editSourceAssetId = editSourceAssetId;
   }
+  if (parsed.sourceAssetId) {
+    const [sourceAssetId] = await canonicalizeAssetIds(
+      auth.workspaceId,
+      projectId,
+      [parsed.sourceAssetId]
+    );
+    parsed.sourceAssetId = sourceAssetId;
+    durableBody = {
+      ...(durableBody as Record<string, unknown>),
+      sourceAssetId,
+    };
+  }
   parsed.anchorIds = await canonicalizeAssetIds(auth.workspaceId, projectId, parsed.anchorIds);
   if (parsed.graphInputs?.length) {
     const canonical = await canonicalizeAssetIds(
@@ -842,8 +1052,15 @@ export async function enqueueGeneratedAssetJob(
       assetId: canonical[index],
     }));
   }
+  // Validate domain ownership before creating an action or launching any
+  // provider work. Public/direct callers cannot borrow an active run's claim.
+  const sessionClaim = parsed.runId ? await getRunSessionClaim(parsed.runId) : null;
+  const durableClaimGeneration = resolveGeneratedAssetClaimGeneration(
+    sessionClaim?.claimGeneration,
+    sessionClaimGeneration
+  );
   const action = await createAction({
-    id: randomUUID(),
+    id: actionId ?? randomUUID(),
     projectId,
     orchestratorRunId: parsed.runId,
     tool: actionToolForParsed(parsed),
@@ -856,14 +1073,24 @@ export async function enqueueGeneratedAssetJob(
       displayName: parsed.displayName,
       slug: parsed.slug,
       durationSec: parsed.durationSec,
+      audioMode: parsed.audioMode,
+      voiceId: parsed.voiceId,
+      voiceSettings: parsed.voiceSettings,
+      forceInstrumental: parsed.forceInstrumental,
+      sourceAssetId: parsed.sourceAssetId,
       referenceAssetIds: parsed.referenceAssetIds,
       beatId: parsed.beatId,
       anchorIds: parsed.anchorIds,
+      graphInputs: parsed.graphInputs,
     },
-    inputAssetIds: parsed.referenceAssetIds,
+    inputAssetIds: generatedInputAssetIds(parsed),
     rationale: `Generate a ${parsed.kind} asset for the project.`,
   });
 
+  // A job launched under a domain-session claim carries the session's durable
+  // claim generation; finalization writes are fenced against the session's
+  // current generation so a stale, reclaimed worker cannot commit late. Runs
+  // outside a session (root runs, direct requests) carry none.
   const job = await createJob({
     workspaceId: auth.workspaceId,
     projectId,
@@ -873,6 +1100,9 @@ export async function enqueueGeneratedAssetJob(
     payload: { body: durableBody } satisfies GeneratedAssetJobInput,
     result: null,
     actionId: action.id,
+    ...(durableClaimGeneration !== undefined
+      ? { sessionClaimGeneration: durableClaimGeneration }
+      : {}),
   });
   await updateAction(action.id, { jobIds: [job.id] });
   return asGeneratedAssetJob(job);
@@ -946,6 +1176,10 @@ export async function runGeneratedAssetJob(args: {
   let item: RunStageItemHandle | null = null;
   let parsed: ParsedRequest | null = null;
   let estimatedCostUsd = 0;
+  const budgetReservationKey = `generated-asset:${running.id}`;
+  let budgetReserved = false;
+  let modelCostRecorded = false;
+  const billableBeforeUsd = billableUsdSoFar();
 
   try {
     if (!running.actionId) {
@@ -990,6 +1224,14 @@ export async function runGeneratedAssetJob(args: {
       );
       parsed.editSourceAssetId = editSourceAssetId;
     }
+    if (parsed.sourceAssetId) {
+      const [sourceAssetId] = await canonicalizeAssetIds(
+        auth.workspaceId,
+        projectId,
+        [parsed.sourceAssetId]
+      );
+      parsed.sourceAssetId = sourceAssetId;
+    }
     parsed.anchorIds = await canonicalizeAssetIds(auth.workspaceId, projectId, parsed.anchorIds);
     if (parsed.graphInputs?.length) {
       const canonical = await canonicalizeAssetIds(
@@ -1010,13 +1252,20 @@ export async function runGeneratedAssetJob(args: {
     });
     const pinnedFingerprints = await getAssetFingerprintPins(
       projectId,
-      parsed.referenceAssetIds
+      generatedInputAssetIds(parsed)
     );
-    await assertRunBudgetAllows({
-      runId: parsed.runId,
+    // The job/action were preallocated when the durable request was accepted.
+    // Reserve against the root-family ceiling before any provider call can
+    // begin; concurrent finite children serialize inside the RPC.
+    const budgetReservation = await reserveOrchestratorBudget({
       projectId,
-      additionalCostUsd: estimatedCostUsd,
+      runId: parsed.runId,
+      actionId: running.actionId,
+      jobId: running.id,
+      reservationKey: budgetReservationKey,
+      estimatedUsd: estimatedCostUsd,
     });
+    budgetReserved = budgetReservation !== null;
     action = await createAction({
       id: running.actionId,
       projectId,
@@ -1035,7 +1284,7 @@ export async function runGeneratedAssetJob(args: {
         beatId: parsed.beatId,
         anchorIds: parsed.anchorIds,
       },
-      inputAssetIds: parsed.referenceAssetIds,
+      inputAssetIds: generatedInputAssetIds(parsed),
       rationale: `Generate a ${parsed.kind} asset for the project.`,
       proposal: buildGenerationActionProposal({
         parsed,
@@ -1061,7 +1310,9 @@ export async function runGeneratedAssetJob(args: {
         unit: parsed.kind === "image" ? "images" : "seconds",
         quantity: parsed.kind === "image" ? 1 : parsed.durationSec ?? 0,
         costUsd: estimatedCostUsd,
+        idempotencyKey: budgetReservationKey,
       });
+      modelCostRecorded = true;
     }
 
     // Bind a stage item to this asset so the progress UI can show a per-asset
@@ -1082,6 +1333,16 @@ export async function runGeneratedAssetJob(args: {
     if (progress) await progress.attachJob(running.id);
 
     const asset = await runGeneration(auth, projectId, parsed, item, action);
+    const billableUsd = Math.max(0, billableUsdSoFar() - billableBeforeUsd);
+    const billingUserId = currentRunUserId();
+    if (budgetReserved && billingUserId) {
+      await recordOrchestratorBudgetBilling({
+        projectId,
+        reservationKey: budgetReservationKey,
+        billingUserId,
+        billableUsd,
+      });
+    }
     const finished = await completeProviderJobExecution({
       workspaceId: auth.workspaceId,
       projectId,
@@ -1094,6 +1355,29 @@ export async function runGeneratedAssetJob(args: {
       actionOutputAssetIds: [asset.id],
     });
     if (!finished) return getJob(auth.workspaceId, projectId, running.id).then(asGeneratedAssetJob);
+    if (budgetReserved) {
+      // The accepted request's deterministic provider estimate is the current
+      // settlement value. This replay-safe transition ensures an admitted
+      // operation never holds family headroom forever.
+      try {
+        await settleOrchestratorBudget({
+          projectId,
+          reservationKey: budgetReservationKey,
+          actualUsd: estimatedCostUsd,
+          billingUserId: billingUserId ?? undefined,
+          billableUsd,
+        });
+      } catch (settlementError) {
+        // Do not rewrite a completed provider job as failed because an
+        // accounting retry is needed; the recovery sweep can settle this
+        // durable reservation by its stable action/job identity.
+        logger.error("generated_asset.budget_settlement_failed", {
+          projectId,
+          jobId: running.id,
+          error: { message: settlementError instanceof Error ? settlementError.message : String(settlementError) },
+        });
+      }
+    }
     if (item) {
       await item.succeed({
         assetId: asset.id,
@@ -1102,6 +1386,41 @@ export async function runGeneratedAssetJob(args: {
     }
     return asGeneratedAssetJob(finished);
   } catch (err) {
+    if (budgetReserved) {
+      try {
+        if (modelCostRecorded) {
+          const billingUserId = currentRunUserId();
+          const billableUsd = Math.max(0, billableUsdSoFar() - billableBeforeUsd);
+          if (billingUserId) {
+            await recordOrchestratorBudgetBilling({
+              projectId,
+              reservationKey: budgetReservationKey,
+              billingUserId,
+              billableUsd,
+            });
+          }
+          await settleOrchestratorBudget({
+            projectId,
+            reservationKey: budgetReservationKey,
+            actualUsd: estimatedCostUsd,
+            billingUserId: billingUserId ?? undefined,
+            billableUsd,
+          });
+        } else {
+          await releaseOrchestratorBudget({
+            projectId,
+            reservationKey: budgetReservationKey,
+            reason: "pre_provider_failure",
+          });
+        }
+      } catch (releaseError) {
+        logger.error("generated_asset.budget_release_failed", {
+          projectId,
+          jobId: running.id,
+          error: { message: releaseError instanceof Error ? releaseError.message : String(releaseError) },
+        });
+      }
+    }
     const apiErr =
       err instanceof ApiError
         ? err

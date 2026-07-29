@@ -495,6 +495,13 @@ export interface Job<TInput = unknown, TResult = unknown> {
   error: JobError | null;
   /** Canonical action that initiated this job, when it came from a tool invocation. */
   actionId?: string;
+  /**
+   * The agent session's durable claim generation copied at launch when the
+   * launching run held a domain-session claim. Finalization writes are fenced
+   * against the session's current generation so a stale, reclaimed worker
+   * cannot commit late.
+   */
+  sessionClaimGeneration?: number;
   idempotencyKey?: string;
   createdAt: string;
   updatedAt: string;
@@ -599,6 +606,7 @@ export type GenerationRunStatus = JobStatus;
 export type GenerationRunActivityState =
   | "working"
   | "waiting_on_job"
+  | "waiting_on_domain"
   | "recovering";
 
 // Ordered stage types a run can move through. Individual runs may skip stages

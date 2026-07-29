@@ -62,7 +62,10 @@ class FakeStore implements OrchestratorEngineStore {
     return { ...this.run };
   }
   async updateOrchestratorRun(_id: string, patch: UpdateOrchestratorRunPatch) {
-    this.run = { ...this.run, ...patch };
+    const { waitReason, ...rest } = patch;
+    this.run = { ...this.run, ...rest };
+    if (waitReason) this.run.waitReason = waitReason;
+    else if (waitReason === null) delete this.run.waitReason;
     return { ...this.run };
   }
   async claimOrchestratorRunResume() {
@@ -173,6 +176,62 @@ const ok = (resourceIds: string[] = [], costUsd?: number): ToolCallResult => ({
 });
 
 // ---------- tests ----------
+
+test("prepares once before persistence and reuses the canonical input", async () => {
+  const store = new FakeStore(runFixture());
+  const { model } = scriptedModel([
+    { type: "tool_call", toolName: "plan_shots", input: { prompt: " raw " } },
+    { type: "done" },
+  ]);
+  let prepareCalls = 0;
+  let estimateInput: unknown;
+  let executeInput: unknown;
+  const registry: ToolRegistry = new Map([[
+    "plan_shots",
+    {
+      ...driverToolDefinitionMetadata("plan_shots"),
+      description: "",
+      inputSchema: {},
+      outputSchema: {},
+      requiredResourceIds: [],
+      prepareInput: (input) => {
+        prepareCalls += 1;
+        return { prompt: String((input as { prompt: string }).prompt).trim() };
+      },
+      estimateCostUsd: (input) => {
+        estimateInput = input;
+        return 0;
+      },
+      execute: async (input) => {
+        executeInput = input;
+        return ok(["asset-plan"]);
+      },
+    },
+  ]]);
+
+  await runOrchestratorToCompletion("run1", deps(store, model, registry));
+
+  assert.equal(prepareCalls, 1);
+  assert.deepEqual(store.actions[0]?.params, { prompt: "raw" });
+  assert.equal(estimateInput, executeInput);
+  assert.equal(estimateInput, store.actions[0]?.params);
+});
+
+test("prepare failure creates no invocation action", async () => {
+  const store = new FakeStore(runFixture());
+  const { model } = scriptedModel([
+    { type: "tool_call", toolName: "plan_shots", input: { unsupported: true } },
+  ]);
+  const registry = fakeRegistry({ plan_shots: () => ok(["asset-plan"]) });
+  registry.get("plan_shots")!.prepareInput = () => {
+    throw new Error("unsupported input");
+  };
+
+  const result = await runOrchestratorToCompletion("run1", deps(store, model, registry));
+
+  assert.equal(result.status, "failed");
+  assert.equal(store.actions.length, 0);
+});
 
 test("drives tool→tool→done and persists one action per executed tool", async () => {
   const store = new FakeStore(runFixture());
@@ -1024,10 +1083,8 @@ test("a rejected gate prevents a later-stage tool from executing", async () => {
   assert.equal(run.status, "failed");
   assert.equal(planShotsExecuted, false);
   assert.equal(store.gates[0].status, "rejected");
-  assert.equal(store.actions.length, 1);
-  assert.equal(store.actions[0].tool, "plan_shots");
-  assert.equal(store.actions[0].status, "failed");
-  assert.match((store.actions[0].error as { message?: string }).message ?? "", /Unknown orchestrator tool/);
+  // Parse/preflight failures happen before invocation persistence.
+  assert.equal(store.actions.length, 0);
 });
 
 test("an async rejected gate parks on the job, then parks for review after job success", async () => {

@@ -4,6 +4,7 @@ export const ASSET_EMBEDDING_SOURCE_RULES_VERSION = "assetEmbeddingSource.v1";
 
 export type EmbeddableAssetKind =
   | "source_footage"
+  | "image"
   | "anchor"
   | "keyframe"
   | "poster"
@@ -63,6 +64,7 @@ const DATA_KINDS = new Set<GraphAssetKind>([
 
 const MEDIA_KINDS = new Set<GraphAssetKind>([
   "source_footage",
+  "image",
   "anchor",
   "keyframe",
   "poster",

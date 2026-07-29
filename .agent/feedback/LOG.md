@@ -18,6 +18,36 @@
 - Follow-up: <TODO / PR / none>
 ```
 
+### 2026-07-29T00:00:00-04:00 — PR-807-20260729-01
+- What helped: Current `main` already contained the same route-helper refactor and its subsequent runtime-control updates, making the safe resolution directly inspectable.
+- Friction or failure: The old PR introduced a second helper module that would duplicate the newer ownership boundary if retained.
+- Suggested improvement: Rebase helper-extraction PRs promptly whenever their target file receives active parallel work.
+- Follow-up: none.
+
+### 2026-07-27T16:25:00-04:00 — API-20260727-04
+- What helped: The atomic PR 6 report transaction made the missing counterpart for engine failures narrow and reviewable.
+- Friction or failure: A generic orchestrator failure update could bypass the session claim fence after a stale or malformed domain completion.
+- Suggested improvement: Keep every finite-domain terminal path behind an explicitly claim-fenced transport RPC and exercise it through the documented no-provider smoke before activation.
+- Follow-up: Add write-scope authorization plus a local-Supabase full lifecycle smoke in the rollout PR.
+
+### 2026-07-28T12:00:00-04:00 — WEB-20260728-PR13
+- What helped: PR 12's explicit proposal and confirmation routes made the client boundary narrow and reviewable.
+- Friction or failure: The initial dependency branch was only a placeholder; implementation could begin only after PR 820 supplied the actual contract.
+- Suggested improvement: Merge or publish typed web-facing API contracts with API PRs so dependent UI worktrees do not need to infer response shapes.
+- Follow-up: Enable the UI only after an API-side standalone feature flag and the remaining creator-direct follow-up endpoints exist.
+
+### 2026-07-27T15:50:00-04:00 — API-20260727-04
+- What helped: The merged PR 6/7 seams made it possible to prove the active root remains unchanged while introducing a fail-closed declarative domain configuration.
+- Friction or failure: Independent implementation review exposed that context isolation is not write authorization and that session claim generations can disappear across an adapter boundary.
+- Suggested improvement: Add an end-to-end contract test that follows the session generation from dispatch claim through bridge, job creation, callback, and terminal report before any domain runtime flag can be introduced.
+- Follow-up: PR 8 continuation must add tool-write scope guards and provider-job claim propagation before activation.
+
+### 2026-07-27T15:30:00-04:00 — API-20260727-02
+- What helped: Thread-aware review retrieval plus the existing local transport suite made each lifecycle defect directly reproducible at the database boundary.
+- Friction or failure: The local PostgREST stack intermittently returned an unstructured upstream error during the pre-existing concurrent idempotency drift test, even though the focused root, cancellation, and retry cases passed serially.
+- Suggested improvement: Make the local integration runner serialize shared-stack tests by default and surface PostgREST upstream response bodies for failed RPC assertions.
+- Follow-up: none.
+
 ### 2026-07-14T12:32:20-04:00 — API-20260714-02
 - What helped: Treating the dispatch lease as the single turn owner exposed the inline-completion race clearly.
 - Friction or failure: Inline provider completion could race invocation parking and wake duplicate engine turns.
@@ -155,6 +185,12 @@
 - Suggested improvement: Keep correlation IDs and durable identities as separate typed fields, and test both engine-reserved and direct-tool execution paths whenever a new durable link is added.
 - Follow-up: Retain the remaining PR 5 cross-instance reservation, provider-claim, crash-recovery, and generated-asset provenance work as explicit blockers.
 
+### 2026-07-16T16:00:00-04:00 — API-20260716-07
+- What helped: Pure helper extraction and facade re-exports kept the route refactor behavior-preserving and easy to validate.
+- Friction or failure: The branch's worksheet identifier collided with an unrelated main-branch worksheet during conflict resolution, so the branch record was renamed before committing.
+- Suggested improvement: Reserve worksheet IDs across parallel worktrees before implementation begins.
+- Follow-up: Keep the run-detail loading boundary as a separate future extraction.
+
 ### 2026-07-16T14:35:00-04:00 — PR-CARETAKER-20260716-02
 - What helped: Rebase conflict inspection exposed a shared worksheet identifier rather than a product-code conflict.
 - Friction or failure: Independent PRs used the same worksheet ID, which also collides with the worksheet tag namespace after merge.
@@ -172,6 +208,11 @@
 - Friction or failure: Treating either renewal rejection or a false renewal result as final ownership loss skipped a valid token-fenced completion and could discard a successful response.
 - Suggested improvement: Let the database token predicate make the final completion decision; use renewal only to extend an active lease, not to preemptively suppress completion.
 - Follow-up: Keep provider-job claim fencing as the remaining protection for external side effects after a process crash.
+### 2026-07-16T16:35:00-04:00 — TYPE-20260716-01
+- What helped: A focused JSON sidecar boundary and a direct storage test made the type-safety improvement small and observable.
+- Friction or failure: The API package test script always runs the full suite, exposing three unrelated baseline failures before the focused test was run directly.
+- Suggested improvement: Add package-level support for selecting a single test file without appending the full glob.
+- Follow-up: None for this PR; the full-suite failures remain outside this change.
 
 ### 2026-07-16T16:05:00-04:00 — API-20260716-06-provider-claim
 - What helped: Separating the provider-launch fence from the existing recovery lease made the ambiguous external-call crash window explicit.
@@ -190,3 +231,27 @@
 - Friction or failure: Claim renewal previously updated only lease metadata, leaving run observability's progress timestamp stale during healthy long-running provider work.
 - Suggested improvement: Normalize durable job inputs at enqueue time and keep lease heartbeats mirrored into the projection fields used by operators.
 - Follow-up: Re-run the focused API checks in CI or a worktree with dependencies installed.
+
+### 2026-07-24T15:02:11Z — API-20260723-01
+- What helped: Starting from the route's existing validation made the type improvement small and preserved the API error contract; the focused parser tests gave direct evidence for both valid and invalid bodies.
+- Friction or failure: The worktree began without dependencies, and the full API suite still reports two unrelated guest-retention migration failures; the configured independent-review adapter is unavailable.
+- Suggested improvement: Keep a lightweight request-body type at each API boundary and export pure parsers so route validation can be tested without database setup.
+- Follow-up: Revisit the two guest-retention migration failures separately; configure an independent reviewer for future workflow checkpoints.
+
+### 2026-07-27T10:15:00-04:00 — API-20260727-01
+- What helped: The PR 4 schema tests and the merged #801/#805 slices made the remaining PR 5 surface (session store, claim transitions, fencing) very cleanly separable; exercising real store modules against the local stack caught behavior a mock suite would have missed.
+- Friction or failure: Eight truly concurrent identical PK upserts through the local Kong gateway intermittently 502 ("invalid response from upstream server"); the bounded store retry the engine already uses is also the right fix in tests. The DB-gated generated-assets suite fails on a fresh local reset because its hard-coded workspace id is not seeded.
+- Suggested improvement: Seed the local stack with the LOCAL_WORKSPACE_ID fixture (or make those tests create their workspace) so the Supabase-gated API suites are runnable after `supabase db reset --local`.
+- Follow-up: PR 6 consumes claim/release + completeDomainRun for the turn-boundary dispatch transaction.
+
+### 2026-07-27T15:30:00Z — API-20260727-03
+- What helped: PR 5's claim/release/wake primitives composed directly into the two new SQL transactions; deterministic run ids (sha256 of the idempotency key) let the database's primary keys serialize concurrent duplicate dispatches with a one-retry replay in the service.
+- Friction or failure: Adding delegate_visuals/delegate_audio to the typed catalog rippled through every flat surface (driver stubs, batteries, eval scenario tool lists, bridge stubs); the PRODUCTION_TOOL_NAMES/DISPATCH_TOOL_NAMES split contained it. The full API suite carries three pre-existing failures (guest-retention x2, discover public-id) — confirmed identical on unmodified origin/main via git stash.
+- Suggested improvement: When extending a shared vocabulary, land the surface marker and the split name lists in the same change so "nothing user-visible changes in production" is an assertable invariant.
+- Follow-up: PR 8 wires driveLoop domain completion to finalizeDomainTurn (replacing the fake report producer); PR 12 reuses dispatchDomainRun's gateStage/enqueue=false quote mode for creator-direct proposals.
+
+### 2026-07-27T18:10:00Z — API-20260727-PR11
+- What helped: Independent implementation review caught four authority/ordering failures that focused happy-path tests missed, including provider spend before source validation and beat audio consuming unrelated script scenes.
+- Friction or failure: The local Supabase CLI reported a running stack while its Postgres socket timed out, so the migration and same-lineage integration tests could not execute locally.
+- Suggested improvement: Keep every provider-backed revision's source/readiness checks before preflight or spend, and require tests with at least two scenes whenever a supposedly targeted media tool consumes script or plan content.
+- Follow-up: PR 12 must derive exact creator-direct Audio targets and prove root/direct successor runs reuse one serialized Audio session; rerun the Supabase-gated revision test when the local database accepts connections.

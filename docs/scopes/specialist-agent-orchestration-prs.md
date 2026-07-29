@@ -18,7 +18,7 @@
 > [`ui-interaction-model.md`](../ui-interaction-model.md), and the asset-graph
 > rules in [`CLAUDE.md`](../../CLAUDE.md) remain authoritative. PR 2 records the
 > shared domain contracts without overriding the central-agent principle; the
-> hierarchy-specific North Star amendment moves to Gate-0-approved PR 14.
+> hierarchy-specific North Star amendment landed in Gate-0-approved PR 14.
 
 ## Objective
 
@@ -740,7 +740,7 @@ protects against and what non-inferiority result clears the PR 18 cutover.
 **Validation:** deterministic eval unit tests plus repeated opt-in real-model
 decision reports.
 
-### PR 2 — Shared domain-agent contract and proposed hierarchy record
+### PR 2 — Shared domain-agent contract and hierarchy record
 
 **Depends on:** this scope being approved. It may proceed in parallel with PR 1
 and does not require the hierarchy result to be “proceed.”
@@ -751,9 +751,9 @@ and does not require the hierarchy result to be “proceed.”
   one reused `driveLoop`, graph-as-state, turn-boundary communication, both
   trusted origins, and the creator-direct entry path.
 - Record the creative-director hierarchy, two-level limit, root coherence
-  ownership, and proposed North Star changes as **conditional on Gate 0**. Do
-  not amend the active central-agent principle or present the hierarchy as an
-  approved architecture when Gate 0 is deferred.
+  ownership, and proposed North Star changes as **conditional on Gate 0**.
+  PR 14 promotes this record after the recorded `proceed` decision and amends
+  the active North Star principles.
 - Define `AgentRole`, `DomainTask.v1`, `DomainReport.v1`, report payloads, and
   runtime assignment states in a focused shared module.
 - Define the domain assignment identifier as the finite
@@ -1028,6 +1028,12 @@ and opt-in real-provider routing tests.
 
 **Depends on:** PR 8.
 
+**Implementation status:** implemented on the finite-run runtime. Budget admission
+is keyed to the existing run/action/job identities; cost and credit records stay
+canonical; creator-direct confirmation is durable and one-use; and causal
+cancellation/recovery controls are wired before domain profiles can use live
+provider work.
+
 **Deliver:**
 
 - Reserve child-run budget atomically against the root/direct ceiling before
@@ -1069,6 +1075,13 @@ No domain agent may be enabled against live provider work before this PR.
 ### PR 10 — Visuals domain profile
 
 **Depends on:** PR 9.
+
+**Implementation status:** implemented on the shared finite-run runtime.
+Visuals-only activation is role-gated; task-kind registries, standalone
+generated-asset wrappers, generic graph images, pre-invocation target/pin
+authorization, pooled revisions, and mixed recovery precedence are wired.
+Audio, creator-direct HTTP routes/UI, root delegation cutover, and graph-wide
+Request Changes remain in their owning later PRs.
 
 **Owns:** new Visuals prompt/config/evals and Visuals registry file.
 
@@ -1117,6 +1130,14 @@ graph/selection assertions, follow-up-session tests, and opt-in media smoke.
 **Depends on:** PR 9. Can proceed in parallel with PR 10.
 
 **Owns:** new Audio prompt/config/evals and Audio registry file.
+
+**Implementation status:** implemented as a task-bound Audio profile over the
+shared finite-run engine and canonical `generate_audio` /
+`fit_audio_to_picture` vocabulary. Production work records exact
+plan/brief/script dependencies; standalone creation uses the generated-assets
+service without a fabricated plan or selection; and source-targeted delivery
+revisions mint a new immutable audio lineage version. The creator-direct HTTP
+entrypoint remains intentionally owned by PR 12.
 
 **Deliver:**
 
@@ -1262,7 +1283,9 @@ parallel with PRs 12–13 because all three reuse the same stable domain contrac
   leaf media/provider tool.
 - Support fresh projects, partial projects, resumes, multi-domain requests,
   blocked prerequisites, creative questions, and queued creator-direct work.
-- Ship behind a temporary hierarchy feature flag, off by default.
+- Ship behind a temporary hierarchy feature flag, off by default. Treat the
+  flag as deployment-stable while hierarchy-origin runs or their child
+  dispatches remain active; drain those runs before disabling it.
 - Compare decisions only; never execute flat and hierarchical billable work in
   shadow mode.
 
@@ -1368,6 +1391,12 @@ desktop/mobile, behavior-focused Playwright, and E2E inventory updates.
 
 **Depends on:** PR 17, green parity/evaluation evidence, and PR 13 so every
 production surface understands shared domain-session contention.
+
+**Implementation status (2026-07-29):** profile pinning, an expiring emergency
+fallback, health projection, and the operator soak runbook are implemented.
+Creative-director routing remains opt-in until Gate-0 reports, required smokes,
+and the seven-day soak clear the documented default-on cutover; this code change
+does not claim those operational gates have cleared.
 
 **Deliver:**
 

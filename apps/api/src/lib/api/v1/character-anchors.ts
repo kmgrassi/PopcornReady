@@ -71,6 +71,7 @@ export interface GenerateCharacterAnchorArgs {
   projectId: string;
   characterId: string;
   body: unknown;
+  sessionClaimGeneration?: number;
   deps?: Partial<CharacterAnchorDeps>;
 }
 
@@ -153,6 +154,9 @@ export async function generateCharacterAnchor(
     auth,
     projectId,
     body: generatedAssetBody,
+    ...(args.sessionClaimGeneration !== undefined
+      ? { sessionClaimGeneration: args.sessionClaimGeneration }
+      : {}),
   });
 }
 

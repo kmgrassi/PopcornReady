@@ -58,6 +58,23 @@ pnpm --filter @popcorn/api test:tools -- --tool plan_shots --provider anthropic
 pnpm --filter @popcorn/api test:tools -- --tool create_or_load_brief --keep   # skip teardown
 ```
 
+### Specialist-domain loop smoke (no provider calls)
+
+PR 8 has a deterministic manual smoke for the role-configured loop. It enables
+a claimed Visuals turn only inside the test, uses a scripted `question` model
+completion, and verifies that the session claim generation is passed to the
+domain-report finalization boundary. It creates no provider job and does not
+contact Supabase:
+
+```sh
+pnpm --filter @popcorn/api exec tsx --test src/lib/orchestrator/__tests__/agent-definition.test.ts
+```
+
+This is a deterministic loop smoke, not a local-Supabase lifecycle test. Keep
+the domain runtime feature gate disabled outside these tests until the later
+rollout work adds tool-write target-scope enforcement and a local-Supabase
+failure/reclaim lifecycle smoke.
+
 ## Adding a battery
 
 One file per tool lives in `specs/`. To add cases for a tool you just wired,
@@ -87,8 +104,9 @@ export const myToolBattery: ToolBattery = {
 };
 ```
 
-Then import it in `batteries.ts`. A startup check fails loudly if any vocabulary
-tool lacks a battery.
+Then import it in `batteries.ts`. A startup check fails loudly if any flat
+production or specialist-only domain tool lacks a battery. Root-only dispatch
+adapters are covered by runtime/service tests instead.
 
 ### Case fields
 
@@ -112,5 +130,5 @@ tool lacks a battery.
 | `bridge.ts` | adapts the real `orchestrator-tools` registry to the driver registry |
 | `sandbox.ts` / `sandbox-guard.ts` | throwaway workspace lifecycle + delete guard |
 | `runner.ts` | runs a case/suite end-to-end |
-| `batteries.ts` | aggregates one battery per `TOOL_NAMES` entry |
+| `batteries.ts` | aggregates one battery per flat-production or domain-only tool |
 | `specs/*.ts` | one battery per tool |

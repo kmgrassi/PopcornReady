@@ -109,6 +109,7 @@ async function generateAnchorAsset(input: {
   provider?: AnchorImageProvider;
   graphInputs: GraphAssetInput[];
   orchestratorRunId?: string;
+  sessionClaimGeneration?: number;
 }): Promise<string[]> {
   const prompt = promptForAnchor(input.anchor);
   if (input.anchor.kind === "character") {
@@ -129,6 +130,9 @@ async function generateAnchorAsset(input: {
         graphInputs: input.graphInputs,
         ...(input.orchestratorRunId ? { runId: input.orchestratorRunId } : {}),
       },
+      ...(input.sessionClaimGeneration !== undefined
+        ? { sessionClaimGeneration: input.sessionClaimGeneration }
+        : {}),
     });
     return assetIdsFromResult(result);
   }
@@ -148,6 +152,9 @@ async function generateAnchorAsset(input: {
       graphInputs: input.graphInputs,
       ...(input.orchestratorRunId ? { runId: input.orchestratorRunId } : {}),
     },
+    ...(input.sessionClaimGeneration !== undefined
+      ? { sessionClaimGeneration: input.sessionClaimGeneration }
+      : {}),
   });
   return assetIdsFromResult(result);
 }
@@ -157,6 +164,7 @@ export interface GenerateAnchorJobInput {
   workspaceId: string;
   projectId: string;
   orchestratorRunId?: string;
+  sessionClaimGeneration?: number;
   visualAnchorPlan: VisualAnchorPlan;
   visualAnchorPlanAssetId: string;
   visualAnchorPlanContentHash: string;
@@ -226,18 +234,21 @@ export async function runGenerateAnchorJob(
         provider,
         graphInputs,
         orchestratorRunId: input.orchestratorRunId,
+        sessionClaimGeneration: input.sessionClaimGeneration,
       });
       if (assetIds.length === 0) {
         throw new Error(`Anchor generation returned no assets for ${anchor.id}.`);
       }
       for (const assetId of assetIds) {
-        await d.selectGeneratedAnchorAsset({
-          workspaceId: input.workspaceId,
-          projectId: input.projectId,
-          assetId,
-          role,
-          anchorId: anchor.id,
-        });
+        if (input.sessionClaimGeneration === undefined) {
+          await d.selectGeneratedAnchorAsset({
+            workspaceId: input.workspaceId,
+            projectId: input.projectId,
+            assetId,
+            role,
+            anchorId: anchor.id,
+          });
+        }
         generatedAssetIds.push(assetId);
       }
       const completedItems = index + 1;

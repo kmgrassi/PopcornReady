@@ -32,6 +32,10 @@ interface ProviderApiKeyRow {
   updated_at: string;
 }
 
+interface ProviderApiKeyRequestBody {
+  apiKey?: unknown;
+}
+
 function isProvider(value: string): value is Provider {
   return (PROVIDERS as readonly string[]).includes(value);
 }
@@ -44,14 +48,14 @@ function readProvider(value: unknown): Provider {
   return provider;
 }
 
-function readBodyObject(body: unknown): Record<string, unknown> {
+export function readBodyObject(body: unknown): ProviderApiKeyRequestBody {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     throw new ApiError("validation_failed", "Request body must be an object.");
   }
-  return body as Record<string, unknown>;
+  return body;
 }
 
-function readKey(body: Record<string, unknown>): string {
+export function readKey(body: ProviderApiKeyRequestBody): string {
   const key = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
   if (key.length < 8) {
     throw new ApiError("validation_failed", "Enter an API key with at least 8 characters.");

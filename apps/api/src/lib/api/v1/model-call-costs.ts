@@ -24,6 +24,8 @@ export interface RecordModelCallCostInput {
   costUsd: number;
   /** false once cost is a measured/reconciled figure rather than a modeled rate. */
   isEstimate?: boolean;
+  /** Stable provider/model-call identity; makes crash retries a no-op. */
+  idempotencyKey?: string;
 }
 
 export async function recordModelCallCost(
@@ -33,7 +35,7 @@ export async function recordModelCallCost(
     "store.recordModelCallCost",
     getServiceSupabase()
       .from("model_call_costs")
-      .insert({
+      .upsert({
         project_id: input.projectId,
         action_id: input.actionId ?? null,
         run_id: input.runId ?? null,
@@ -45,7 +47,8 @@ export async function recordModelCallCost(
         output_tokens: input.outputTokens ?? null,
         cost_usd: input.costUsd,
         is_estimate: input.isEstimate ?? true,
-      })
+        idempotency_key: input.idempotencyKey ?? null,
+      }, { onConflict: "idempotency_key", ignoreDuplicates: true })
   );
 }
 

@@ -1,9 +1,10 @@
-import { TOOL_NAMES, type ToolName } from "../types";
+import { PRODUCTION_TOOL_NAMES, type ToolName } from "../types";
 import type { DecisionScenario, PriorResult } from "./types";
 
-// The model always sees the full tool vocabulary; the scenario's state (priorResults)
-// is what should steer the choice.
-const ALL_TOOLS: ToolName[] = [...TOOL_NAMES];
+// The model always sees the full FLAT production vocabulary; the scenario's
+// state (priorResults) is what should steer the choice. Root-only dispatch
+// tools (delegate_*) belong to the hierarchy fixture, never the flat baseline.
+const ALL_TOOLS: ToolName[] = [...PRODUCTION_TOOL_NAMES];
 const GOAL = "Make a 15-second 9:16 video about a skateboarding puppy.";
 
 function applied(tool: ToolName, assetId?: string): PriorResult {

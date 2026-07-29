@@ -14,6 +14,13 @@ interface ToolCatalogEntry {
   execution: ToolExecutionMode;
   costClass: ToolCostClass;
   gate: ToolGateMetadata;
+  /**
+   * "dispatch" marks a root-only turn-boundary tool (delegate_*). Dispatch
+   * tools are registered ONLY in the dormant creative-director registry —
+   * never in the flat production default registry, driver stubs, flat eval
+   * scenario surfaces, or the tool-test batteries (see PRODUCTION_TOOL_NAMES).
+   */
+  surface?: "dispatch" | "domain";
   /** Exact compatibility behavior for the existing run projection. */
   runProjection: {
     label: string | null;
@@ -134,7 +141,7 @@ const toolCapabilityCatalog = {
     ownerRole: "visuals",
     label: "Image Revisions",
     driverDescription:
-      "Regenerate one existing image asset from a replacement prompt, minting a new immutable version and repointing its active selections.",
+      "Regenerate one existing image asset from a replacement prompt, minting a new immutable version under the caller's surface policy.",
     execution: "sync",
     costClass: "media",
     gate: { kind: "none" },
@@ -152,6 +159,30 @@ const toolCapabilityCatalog = {
     costClass: "media",
     gate: { kind: "none" },
     runProjection: { label: "Video Edits", order: 9 },
+  },
+  generate_image_asset: {
+    capability: "standalone_image_generation",
+    ownerRole: "visuals",
+    label: "Image",
+    driverDescription:
+      "Generate one immutable standalone image in the project asset pool.",
+    execution: "async",
+    costClass: "media",
+    gate: { kind: "none" },
+    surface: "domain",
+    runProjection: { label: null, order: null },
+  },
+  generate_video_asset: {
+    capability: "standalone_video_generation",
+    ownerRole: "visuals",
+    label: "Video",
+    driverDescription:
+      "Generate one immutable standalone video segment in the project asset pool.",
+    execution: "async",
+    costClass: "media",
+    gate: { kind: "none" },
+    surface: "domain",
+    runProjection: { label: null, order: null },
   },
   generate_audio: {
     capability: "audio_generation",
@@ -224,6 +255,44 @@ const toolCapabilityCatalog = {
     gate: { kind: "none" },
     runProjection: { label: "Publish", order: 16 },
   },
+  // Turn-boundary dispatch capabilities (specialist-agents PR 6). Appended
+  // after the legacy vocabulary so existing displayOrder values are unchanged.
+  // Root-only: registered exclusively by createRootToolRegistry (dormant).
+  delegate_visuals: {
+    capability: "visuals_dispatch",
+    ownerRole: "creative_director",
+    label: "Visuals Assignment",
+    driverDescription:
+      "Assign a bounded visual-production task to the persistent Visuals specialist session.",
+    execution: "async",
+    costClass: "local",
+    gate: { kind: "none" },
+    surface: "dispatch",
+    runProjection: { label: null, order: null },
+  },
+  delegate_audio: {
+    capability: "audio_dispatch",
+    ownerRole: "creative_director",
+    label: "Audio Assignment",
+    driverDescription:
+      "Assign a bounded audio-production task to the persistent Audio specialist session.",
+    execution: "async",
+    costClass: "local",
+    gate: { kind: "none" },
+    surface: "dispatch",
+    runProjection: { label: null, order: null },
+  },
+  delegate_domains: {
+    capability: "parallel_domain_dispatch",
+    ownerRole: "creative_director",
+    label: "Parallel Specialist Assignments",
+    driverDescription: "Atomically assign independent Visuals and Audio work and wait for their durable join.",
+    execution: "async",
+    costClass: "local",
+    gate: { kind: "none" },
+    surface: "dispatch",
+    runProjection: { label: null, order: null },
+  },
 } as const satisfies Record<string, ToolCatalogEntry>;
 
 export const TOOL_CAPABILITY_CATALOG = deepFreeze(toolCapabilityCatalog);
@@ -250,6 +319,44 @@ const toolNameSet = new Set<string>(TOOL_NAMES);
 export function isToolName(value: string): value is ToolName {
   return toolNameSet.has(value);
 }
+
+/**
+ * Root-only turn-boundary dispatch tools (surface: "dispatch"). They exist in
+ * the catalog for typing/metadata but must never appear on a flat production
+ * surface: not in the default registry, driver stubs, flat eval scenarios, or
+ * the tool-test batteries.
+ */
+export const DISPATCH_TOOL_NAMES = Object.freeze(
+  TOOL_NAMES.filter(
+    (name) => (TOOL_CAPABILITY_CATALOG[name] as ToolCatalogEntry).surface === "dispatch"
+  )
+);
+
+const dispatchToolNameSet = new Set<string>(DISPATCH_TOOL_NAMES);
+
+export function isDispatchToolName(value: string): value is ToolName {
+  return dispatchToolNameSet.has(value);
+}
+
+/** Specialist-only tools that never appear in the legacy flat root surface. */
+export const DOMAIN_TOOL_NAMES = Object.freeze(
+  TOOL_NAMES.filter(
+    (name) => (TOOL_CAPABILITY_CATALOG[name] as ToolCatalogEntry).surface === "domain"
+  )
+);
+
+const domainToolNameSet = new Set<string>(DOMAIN_TOOL_NAMES);
+
+export function isDomainToolName(value: string): value is ToolName {
+  return domainToolNameSet.has(value);
+}
+
+/** The flat production vocabulary excludes dispatch and specialist-only tools. */
+export const PRODUCTION_TOOL_NAMES = Object.freeze(
+  TOOL_NAMES.filter(
+    (name) => !dispatchToolNameSet.has(name) && !domainToolNameSet.has(name)
+  )
+);
 
 export function getToolCapability<Name extends ToolName>(
   name: Name

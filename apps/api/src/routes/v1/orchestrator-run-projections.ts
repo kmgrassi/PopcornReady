@@ -24,6 +24,7 @@ import {
   isToolName,
 } from "@/lib/orchestrator-tools/capability-catalog";
 import { redactMessage } from "@/lib/v1/redact";
+import type { CreatorRunHierarchy } from "./session-run-projection.js";
 
 const BOARD_FEEDBACK_TOOL = "board_feedback";
 const AFTER_GATE_PREFIX = "after:";
@@ -40,6 +41,7 @@ export interface GenerationRunDetail {
     stageId: string;
   }>;
   operatorDiagnostics?: GenerationJobDiagnostics[];
+  hierarchy?: CreatorRunHierarchy;
 }
 
 export interface GenerationAttentionPolicy {
@@ -426,9 +428,13 @@ export function projectRun(
     ? undefined
     : recovering
       ? "recovering" as const
-      : run.status === "waiting" && latestAction?.jobIds.length
-        ? "waiting_on_job" as const
-        : "working" as const;
+      // The domain wait is distinct from media-job waits: the run is parked on
+      // a delegated specialist assignment, not a provider job.
+      : run.status === "waiting" && run.waitReason === "domain"
+        ? "waiting_on_domain" as const
+        : run.status === "waiting" && latestAction?.jobIds.length
+          ? "waiting_on_job" as const
+          : "working" as const;
   const currentStageType =
     reviewGate?.stageType ??
     (status === "succeeded"
