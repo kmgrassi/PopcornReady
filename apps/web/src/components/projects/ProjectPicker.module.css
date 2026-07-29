@@ -11,7 +11,7 @@
 .trigger {
   display: flex;
   width: 100%;
-  min-height: 48px;
+  min-height: var(--space-8);
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
@@ -96,7 +96,7 @@
 .search,
 .createForm input {
   width: 100%;
-  min-height: 44px;
+  min-height: var(--touch-target-min);
   box-sizing: border-box;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -125,7 +125,7 @@
 
 .option {
   display: flex;
-  min-height: 44px;
+  min-height: var(--touch-target-min);
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
@@ -167,7 +167,7 @@
 .createToggle {
   display: flex;
   width: 100%;
-  min-height: 48px;
+  min-height: var(--space-8);
   align-items: center;
   gap: var(--space-2);
   border: 0;
@@ -188,6 +188,11 @@
 
 .createToggle:focus-visible {
   box-shadow: inset var(--ring);
+}
+
+.createToggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .message,
@@ -211,6 +216,19 @@
 .loadMore {
   width: 100%;
   border-radius: 0;
+}
+
+.paginationError {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  color: var(--muted);
+}
+
+.paginationError p {
+  margin: 0;
 }
 
 .createForm {

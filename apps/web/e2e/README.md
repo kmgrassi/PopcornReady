@@ -12,7 +12,9 @@ pnpm --filter @popcorn/web test:e2e
 explicit confirmation, queued status, desktop/mobile Create navigation, project
 picker keyboard behavior, existing/first/new-project selection, and project-list
 and creation failure recovery. It also verifies that an in-flight cost proposal
-cannot reappear after its project changes, without spending provider credits.
+cannot reappear after its project changes, a delayed project creation cannot
+override a newer selection, and pagination failures preserve loaded projects,
+without spending provider credits.
 
 The command starts the Express API and Vite app, using:
 

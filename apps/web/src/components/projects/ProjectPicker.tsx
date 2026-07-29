@@ -6,7 +6,6 @@ import {
   useRef,
   useState,
   type FormEvent,
-  type KeyboardEvent,
 } from "react";
 import { Button } from "../ui/Button";
 import styles from "./ProjectPicker.module.css";
@@ -17,6 +16,7 @@ interface ProjectPickerProps {
   selectedName?: string;
   isLoading: boolean;
   error: Error | null;
+  loadMoreError: Error | null;
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
   isCreating: boolean;
@@ -34,6 +34,7 @@ export function ProjectPicker({
   selectedName,
   isLoading,
   error,
+  loadMoreError,
   hasNextPage,
   isFetchingNextPage,
   isCreating,
@@ -51,6 +52,7 @@ export function ProjectPicker({
   const searchRef = useRef<HTMLInputElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const createAttemptRef = useRef(0);
   const [isOpen, setIsOpen] = useState(false);
   const [mode, setMode] = useState<"list" | "create">("list");
   const [search, setSearch] = useState("");
@@ -66,6 +68,7 @@ export function ProjectPicker({
   }, [projects, search]);
 
   function closePicker({ returnFocus = true } = {}) {
+    createAttemptRef.current += 1;
     setIsOpen(false);
     setMode("list");
     setSearch("");
@@ -78,7 +81,7 @@ export function ProjectPicker({
   function openPicker() {
     const nextMode =
       !isLoading && !error && projects.length === 0 ? "create" : "list";
-    if (nextMode === "create") onResetCreateError();
+    if (nextMode === "create" && !isCreating) onResetCreateError();
     setIsOpen(true);
     setMode(nextMode);
   }
@@ -103,11 +106,23 @@ export function ProjectPicker({
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [isOpen]);
 
-  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key !== "Escape") return;
-    event.preventDefault();
-    closePicker();
-  }
+  useEffect(() => {
+    if (!isOpen) return;
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      closePicker();
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen]);
+
+  useEffect(
+    () => () => {
+      createAttemptRef.current += 1;
+    },
+    [],
+  );
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -118,12 +133,16 @@ export function ProjectPicker({
       return;
     }
     setValidationError(null);
+    const attempt = createAttemptRef.current + 1;
+    createAttemptRef.current = attempt;
     try {
       const project = await onCreate(name);
+      if (createAttemptRef.current !== attempt) return;
       onChange(project.id);
       setProjectName("");
       closePicker();
     } catch {
+      if (createAttemptRef.current !== attempt) return;
       nameRef.current?.focus();
     }
   }
@@ -137,7 +156,7 @@ export function ProjectPicker({
         : "Create your first project");
 
   return (
-    <div className={styles.field} ref={rootRef} onKeyDown={handleKeyDown}>
+    <div className={styles.field} ref={rootRef}>
       <span id={labelId} className={styles.label}>
         Project
       </span>
@@ -217,7 +236,19 @@ export function ProjectPicker({
                         : "No loaded projects match that search."}
                     </p>
                   ) : null}
-                  {hasNextPage ? (
+                  {loadMoreError ? (
+                    <div className={styles.paginationError}>
+                      <p role="alert">More projects could not be loaded.</p>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        isLoading={isFetchingNextPage}
+                        onClick={onLoadMore}
+                      >
+                        Retry loading more
+                      </Button>
+                    </div>
+                  ) : hasNextPage ? (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -234,8 +265,9 @@ export function ProjectPicker({
               <button
                 type="button"
                 className={styles.createToggle}
+                disabled={isCreating}
                 onClick={() => {
-                  onResetCreateError();
+                  if (!isCreating) onResetCreateError();
                   setMode("create");
                   setValidationError(null);
                 }}
@@ -251,6 +283,7 @@ export function ProjectPicker({
                 ref={nameRef}
                 id={`${panelId}-name`}
                 value={projectName}
+                disabled={isCreating}
                 onChange={(event) => {
                   onResetCreateError();
                   setProjectName(event.target.value);

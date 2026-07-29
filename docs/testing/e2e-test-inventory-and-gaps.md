@@ -270,6 +270,9 @@ Covered:
   the returned project is selected immediately and the asset prompt is retained.
 - Project list and project creation failures remain actionable and retryable.
 - A delayed proposal response is discarded after its selected project changes.
+- A delayed project creation cannot override a newer project selection.
+- A failed next-page request preserves loaded project rows and can retry the
+  same cursor successfully.
 
 Remaining gaps:
 

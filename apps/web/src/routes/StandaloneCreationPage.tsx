@@ -177,7 +177,10 @@ export function StandaloneCreationPage() {
           value={projectId}
           selectedName={selectedName}
           isLoading={projectsQuery.isLoading}
-          error={projectsQuery.error}
+          error={projectsQuery.data ? null : projectsQuery.error}
+          loadMoreError={
+            projectsQuery.isFetchNextPageError ? projectsQuery.error : null
+          }
           hasNextPage={Boolean(projectsQuery.hasNextPage)}
           isFetchingNextPage={projectsQuery.isFetchingNextPage}
           isCreating={createProject.isPending}

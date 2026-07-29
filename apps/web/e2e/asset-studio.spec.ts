@@ -217,6 +217,53 @@ test.describe("Asset Studio", () => {
     expect(proposedProjectId).toBe(createdProject.id);
   });
 
+  test("does not let a delayed project creation override a newer selection", async ({
+    page,
+  }) => {
+    const delayedProject = {
+      ...project,
+      id: "project_delayed",
+      name: "Delayed project",
+    };
+    let releaseCreate: (() => void) | undefined;
+    const createReleased = new Promise<void>((resolve) => {
+      releaseCreate = resolve;
+    });
+    let markCreateStarted: (() => void) | undefined;
+    const createStarted = new Promise<void>((resolve) => {
+      markCreateStarted = resolve;
+    });
+
+    await page.route("**/api/v1/projects", async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      markCreateStarted?.();
+      await createReleased;
+      await fulfillJson(route, { project: delayedProject }, 201);
+    });
+
+    await page.goto("/create");
+    const projectTrigger = await openProjectPicker(page);
+    await page.getByRole("button", { name: "Create new project" }).click();
+    await page.getByLabel("Project name").fill(delayedProject.name);
+    await page.getByRole("button", { name: "Create project" }).click();
+    await createStarted;
+
+    await page.keyboard.press("Escape");
+    await expect(projectTrigger).toBeFocused();
+    await projectTrigger.click();
+    await page.getByRole("button", { name: project.name, exact: true }).click();
+    await expect(projectTrigger).toHaveAccessibleName(`Project ${project.name}`);
+
+    releaseCreate?.();
+    await expect(page.getByRole("status")).toContainText("Project created");
+    await expect(projectTrigger).toHaveAccessibleName(`Project ${project.name}`);
+    await projectTrigger.click();
+    await expect(
+      page.getByRole("button", { name: delayedProject.name, exact: true }),
+    ).toBeVisible();
+    await expect(projectTrigger).toHaveAccessibleName(`Project ${project.name}`);
+  });
+
   test("does not surface a proposal after its project changes in flight", async ({
     page,
   }) => {
@@ -355,6 +402,65 @@ test.describe("Asset Studio", () => {
       page.getByRole("button", { name: project.name, exact: true }),
     ).toBeVisible();
     expect(listAttempts).toBe(2);
+  });
+
+  test("keeps loaded projects visible when loading the next page fails", async ({
+    page,
+  }) => {
+    const secondProject = {
+      ...project,
+      id: "project_second_page",
+      name: "Second page project",
+    };
+    let nextPageAttempts = 0;
+    await page.unroute("**/api/v1/projects?**");
+    await page.route("**/api/v1/projects?**", (route) => {
+      const cursor = new URL(route.request().url()).searchParams.get("cursor");
+      if (!cursor) {
+        return fulfillJson(route, {
+          projects: [project],
+          pagination: { limit: 100, nextCursor: "cursor_page_2" },
+        });
+      }
+      nextPageAttempts += 1;
+      if (nextPageAttempts === 1) {
+        return fulfillJson(
+          route,
+          {
+            error: {
+              code: "project_page_failed",
+              message: "The next project page is unavailable.",
+              retryable: true,
+            },
+          },
+          400,
+        );
+      }
+      return fulfillJson(route, {
+        projects: [secondProject],
+        pagination: { limit: 100, nextCursor: null },
+      });
+    });
+
+    await page.goto("/create");
+    await openProjectPicker(page);
+    const picker = page.getByLabel("Choose or create a project");
+    await expect(
+      picker.getByRole("button", { name: project.name, exact: true }),
+    ).toBeVisible();
+    await picker.getByRole("button", { name: "Load more projects" }).click();
+
+    await expect(
+      picker.getByRole("alert").getByText("More projects could not be loaded."),
+    ).toBeVisible();
+    await expect(
+      picker.getByRole("button", { name: project.name, exact: true }),
+    ).toBeVisible();
+    await picker.getByRole("button", { name: "Retry loading more" }).click();
+    await expect(
+      picker.getByRole("button", { name: secondProject.name, exact: true }),
+    ).toBeVisible();
+    expect(nextPageAttempts).toBe(2);
   });
 
   test("keeps a project name after creation fails and allows retry", async ({ page }) => {

@@ -17,6 +17,8 @@ continue into cost review without losing their prompt.
 Acceptance requires existing-project selection, inline first/new-project creation,
 loading/error/retry states, proposal reset on project changes, keyboard Escape/focus
 behavior, mobile-safe layout, and observable Playwright coverage.
+PR review follow-up also requires stale project-create completions to preserve
+newer selections and pagination failures to preserve already-loaded rows.
 
 ## Context and source-of-truth documents
 
@@ -59,6 +61,10 @@ behavior, mobile-safe layout, and observable Playwright coverage.
   creation failures; stale in-flight proposals; keyboard behavior; and mobile
   layout.
 - Updated the E2E README and inventory.
+- Addressed all three PR #831 review threads: guarded delayed create completion,
+  separated pagination failures from blocking initial-load errors, and replaced
+  reviewed raw control heights with shared design tokens.
+- Added delayed-create and next-page failure/retry Playwright regressions.
 
 ## Validation evidence
 
@@ -73,6 +79,12 @@ behavior, mobile-safe layout, and observable Playwright coverage.
   clipped mobile create label was found, fixed, and rechecked.
 - The local browser/E2E server logged the known unconfigured Supabase recovery
   worker noise; all Asset Studio browser requests under test were mocked.
+- PR review follow-up: exact delayed-create Chromium regression passed 3/3
+  repeated; the full focused Asset Studio suite passed 11/11 across Chromium,
+  mobile Chrome, and mobile Safari.
+- PR review follow-up: `pnpm agent:lint:fix` and
+  `pnpm agent:validate -- --scope web` passed, including agent lint, migration
+  tests (2/2), migration scan (85 migrations), and web typecheck.
 
 ## Independent reviews
 
@@ -88,6 +100,16 @@ behavior, mobile-safe layout, and observable Playwright coverage.
 - Wrap-up: approved with no findings. The reviewer independently reran web
   validation, confirmed the documentation and feedback claims, and found the
   final diff clean and ready for publication.
+- PR review follow-up research/plan: approved with conditions around create
+  attempt invalidation, usable-data error classification, cursor-specific retry,
+  token scope, and settlement-aware tests; all conditions were incorporated.
+- PR review follow-up implementation: initial review reproduced an Escape focus
+  gap during pending creation. After moving Escape handling to the document
+  while open and strengthening settlement evidence, re-review approved with no
+  remaining findings.
+- PR review follow-up wrap-up: approved with all three GitHub comments traced to
+  code, observable regressions, documentation, and independently rerun web
+  validation.
 
 ## Blockers and risks
 
@@ -98,5 +120,5 @@ behavior, mobile-safe layout, and observable Playwright coverage.
 
 ## Next action / handoff
 
-Commit the implementation, worksheet, feedback, and documentation together; tag
-the commit, push the branch, and open the ready PR.
+Commit and push the fixes to PR #831, then report the three addressed threads
+ready for reviewer verification and resolution.
