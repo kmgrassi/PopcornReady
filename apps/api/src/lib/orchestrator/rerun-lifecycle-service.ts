@@ -648,6 +648,9 @@ export async function executeRerunProposal(input: {
             ...(result.reconciliationActionId
               ? { reconciliationActionId: result.reconciliationActionId }
               : {}),
+            ...(result.providerResult
+              ? { providerResult: result.providerResult }
+              : {}),
           };
           await deps.parkWorkItem({
             projectId: input.projectId,
