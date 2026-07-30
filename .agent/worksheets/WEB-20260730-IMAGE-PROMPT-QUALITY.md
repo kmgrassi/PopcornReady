@@ -5,7 +5,7 @@
 <!-- agent-summary: A fast text model rewrites image prompts before the cost proposal is created. -->
 <!-- agent-summary: The UI shows the exact effective prompt and provides a default-on bypass toggle. -->
 <!-- agent-summary: Video and soundtrack requests remain unchanged. -->
-<!-- agent-summary: Tests cover enhancement, bypass, stale responses, and observable prompt quality. -->
+<!-- agent-summary: Tests cover enhancement policy constraints, bypass, stale responses, and provenance. -->
 <!-- agent-summary: Link independent reviews, validation evidence, feedback, and the ready PR here. -->
 
 ## Goal and acceptance criteria
@@ -67,11 +67,12 @@ and the user-provided image-prompt quality rubric.
   src/routes/v1/__tests__/agent-creations.test.ts` — 11/11 passed.
 - `pnpm --filter @popcorn/api typecheck` — passed.
 - `pnpm --filter @popcorn/web typecheck` — passed.
-- `pnpm --filter @popcorn/web test` — 34/34 passed.
+- `pnpm --filter @popcorn/web test` — 36/36 passed after adding direct proposal-
+  payload mapping coverage.
 - `pnpm --filter @popcorn/web build` — passed; retained the existing large-
   chunk warning for the 1.82 MB application bundle.
 - `pnpm --filter @popcorn/web exec playwright test
-  e2e/asset-studio.spec.ts --project=chromium --project=mobile-chrome` — 13/13
+  e2e/asset-studio.spec.ts --project=chromium --project=mobile-chrome` — 14/14
   passed across desktop and mobile.
 - Manual in-app browser inspection at desktop and 390-by-844 mobile widths
   confirmed the default-on control, readable hierarchy, mobile bottom-nav
@@ -110,6 +111,14 @@ and the user-provided image-prompt quality rubric.
   wording/assertion update, and this final worksheet pass resolve all findings.
   The reviewer found no other correctness, authorization, cost, idempotency,
   stale-response, accessibility, or provenance defect.
+- A later PR-record audit aligned the scope wording with the visible-text
+  policy and documented dedicated delayed prompt/goal changes as a focused E2E
+  gap; project and enhancement-toggle invalidation remain directly covered.
+- A parallel PR implementation audit split API, web, and records into distinct
+  ownership lanes. API and UI behavior required no correction; the web lane
+  added unit coverage for image enable/bypass payloads and non-image omission,
+  while the records lane made the precision updates above. The combined
+  follow-up passed web tests, agent lint, all-scope validation, and diff checks.
 
 ## Blockers and risks
 
@@ -121,4 +130,6 @@ and the user-provided image-prompt quality rubric.
 
 ## Next action / handoff
 
-Ready PR: https://github.com/kmgrassi/PopcornReady/pull/845
+Implementation PR (merged): https://github.com/kmgrassi/PopcornReady/pull/845
+
+Parallel-audit follow-up PR: https://github.com/kmgrassi/PopcornReady/pull/846

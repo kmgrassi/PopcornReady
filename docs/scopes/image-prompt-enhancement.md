@@ -21,7 +21,8 @@ The policy favors one coherent visual idea; physical relationships; useful
 composition and camera choices; understandable lighting; specific materials and
 surface texture; restrained color and detail hierarchy; and believable
 imperfection. It replaces empty quality praise with visible decisions and must
-not invent people, products, logos, words, brand facts, or plot points.
+not invent people, products, logos, visible text, lettering, copy, brand facts,
+or plot points.
 
 ## Proposal and provenance contract
 
@@ -75,5 +76,7 @@ rather than claiming that no model work has occurred.
 
 Required coverage includes policy/output validation, exact bypass, non-image
 pass-through, typed failure, default-on browser state, effective-prompt preview,
-and stale-response invalidation when the creator changes the prompt, goal,
-project, or enhancement toggle.
+and stale-response invalidation when the creator changes the project or
+enhancement toggle. Prompt and goal changes use the same proposal-reset path;
+dedicated delayed-response browser cases for those two inputs remain a focused
+coverage gap.
