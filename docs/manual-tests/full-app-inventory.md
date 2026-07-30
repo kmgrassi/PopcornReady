@@ -113,6 +113,7 @@ passes should use a separate managed QA account.
 Public routes:
 
 - `/` landing page with prompt-to-video intake.
+- `/auth/callback` for the hosted authentication redirect.
 - `/login`, `/signup`.
 - `/sprite`.
 - `/p/:projectId` public read-only project share view.
@@ -120,11 +121,13 @@ Public routes:
 Authenticated routes:
 
 - `/dashboard`.
+- `/activity`.
 - `/inspiration`.
 - `/library`, `/library/projects`, `/library/assets`.
 - Compatibility redirects: `/projects`, `/runs`, `/assets`, `/outputs`;
   project-scoped runs/outputs redirect to project detail anchors.
 - `/projects/:projectId`, `/projects/:projectId/storyboard`,
+  `/projects/:projectId/media`,
   `/projects/:projectId/watch`, `/projects/:projectId/runs/:runId`.
 - `/projects/:projectId/concept`, `/projects/:projectId/brief`,
   `/projects/:projectId/script`.
@@ -132,7 +135,8 @@ Authenticated routes:
 - `/uploads`, `/templates`, `/brand`, `/account`, `/settings`, `/faq`.
 - `/evals`, which redirects to `/admin/evals`.
 - `/admin`, `/admin/evals` for admin-capable sessions.
-- Dev-only visual routes: `/dev/design-system`, `/dev/generation-cards`.
+- Dev-only visual routes: `/dev/design-system`, `/dev/generation-cards`,
+  `/dev/landing-upload`, `/dev/media-gallery`, `/dev/video-edit`.
 
 Retired route note: `/studio` is not currently mounted in the Vite route table.
 Older manual-test instructions that start with `/studio` should be treated as
@@ -413,7 +417,8 @@ This is the current creation entry point while `/studio` is retired.
 - Open `/storyboard`; it should redirect to `/library/projects`.
 - Open `/projects/:projectId/watch`:
   - Project with playable output should show video controls and metadata.
-  - Project without playable output redirects to `/projects/:projectId#runs`.
+  - Project without playable output stays on the Watch URL and explains why no
+    playable output is available.
 
 ### 10. Uploads, Templates, Brand Kit, Anchors
 

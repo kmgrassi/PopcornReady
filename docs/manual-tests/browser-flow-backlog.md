@@ -154,8 +154,6 @@ surfaces.
 - For a project without playable output, verify Outputs/Watch are replaced by a
   visible reason and the direct Watch URL renders the same no-output state.
 - For a project with playable output, verify video controls and metadata.
-- For a project without playable output, verify it redirects to
-  `/projects/:projectId#runs`.
 
 ## Library, Media Viewer, And Regeneration
 

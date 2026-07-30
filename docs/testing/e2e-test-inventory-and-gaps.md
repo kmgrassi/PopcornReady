@@ -8,7 +8,7 @@
 <!-- agent-summary: Async dispatch races require local Supabase concurrency coverage when no safe live completion is available. -->
 <!-- agent-summary: Keep remaining gaps concrete, behavior-focused, and tied to the smallest useful next test. -->
 
-Date: 2026-07-14
+Last reconciled with the active route table: 2026-07-30
 
 This inventory covers the active split app described in `CLAUDE.md`: the Vite
 React SPA in `apps/web` and the Express API in `apps/api`. New end-to-end work
@@ -59,7 +59,12 @@ pnpm test:e2e:local-db
 That command runs Playwright against local Supabase/Postgres with
 `DB_BACKEND=supabase`.
 
-## Production Verification: Specialist Foundations (2026-07-14)
+## Historical Production Verification: Specialist Foundations (2026-07-14)
+
+This section is point-in-time evidence, not the current production coverage
+contract. The proposed separation between living coverage and immutable
+per-release evidence is in
+[Production Browser Testing for Agents](../scopes/production-browser-agent-testing.md).
 
 The detailed production-safe pass after GitHub PRs 782, 783, and 784 merged ran
 on their merge snapshot `08feca51cdadd302f6e5590a222b2ce9e1157d3b`. After
@@ -137,6 +142,7 @@ Limits and remaining gaps:
 Public routes:
 
 - `/`
+- `/auth/callback`
 - `/login`
 - `/signup`
 - `/sprite`
@@ -145,19 +151,22 @@ Public routes:
 Authenticated routes:
 
 - `/dashboard`
+- `/activity`
 - `/inspiration`
 - `/library`, `/library/:tab` (`projects` and `assets` are the active tabs)
 - `/projects`, `/projects/new`, `/projects/:projectId`,
 - `/create`,
   `/projects/:projectId/concept`, `/projects/:projectId/brief`,
   `/projects/:projectId/script`,
-  `/projects/:projectId/storyboard`, `/projects/:projectId/watch`,
+  `/projects/:projectId/storyboard`, `/projects/:projectId/media`,
+  `/projects/:projectId/watch`,
   `/projects/:projectId/runs/:runId`
 - `/runs`, `/assets`, `/outputs`
 - `/anchors`, `/anchors/mine`, `/anchors/:entryId`
 - `/uploads`, `/templates`, `/brand`, `/account`, `/settings`, `/faq`
 - `/evals`, `/admin`, `/admin/evals`
-- `/dev/design-system`, `/dev/generation-cards`
+- Dev-only: `/dev/design-system`, `/dev/generation-cards`,
+  `/dev/landing-upload`, `/dev/media-gallery`, `/dev/video-edit`
 
 Retired route note: `/studio` is not mounted in the current Vite route table.
 Standalone Image, Video, and Soundtrack creation enters through the
@@ -169,6 +178,12 @@ Dashboard creation note: the global shell Create action opens Asset Studio.
 The full video-project flow is still `/projects/new`; `/studio` remains retired.
 
 ## Recommended Harness Shape
+
+The implementation plan for true deployed production coverage is
+[Production Browser Testing for Agents](../scopes/production-browser-agent-testing.md).
+Until its release identity and remote runner land, "hosted" means hosted
+Supabase authentication against locally started web/API binaries, not a browser
+test of the deployed Netlify/Railway pair.
 
 - Keep `apps/web` as the owner of browser E2E.
 - Keep the default suite fast: local auth, mocked/seeded browser API fixtures,

@@ -18,3 +18,10 @@
 | `false-confidence-audits.md` | Tests that do not prove behavior | Test skeptic |
 | `performance-and-visual-regression.md` | Baselines, profiling, visual checks | Performance engineer |
 | `commit-sweeps.md` | Higher-level review across commits | Maintainer |
+
+## Active implementation proposals
+
+- [Production Browser Testing for Agents](../scopes/production-browser-agent-testing.md)
+  scopes deployed release identity, remote browser smoke, isolated production
+  mutations, cleanup, provider budgets, and agent-run evidence. It is a proposal,
+  not live production-testing authority.
