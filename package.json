@@ -26,6 +26,8 @@
     "db:local:test:e2e": "AUTH_MODE=supabase POPCORN_E2E_AUTH_MODE=supabase node scripts/with-local-supabase-env.mjs pnpm --filter @popcorn/web test:e2e",
     "db:migrations:test": "node --test scripts/validate-supabase-migrations.test.mjs",
     "db:migrations:validate": "node scripts/validate-supabase-migrations.mjs",
+    "db:rpc-boundary:test": "node --test scripts/validate-api-rpc-boundary.test.mjs",
+    "db:rpc-boundary:validate": "node scripts/validate-api-rpc-boundary.mjs",
     "prod:storyboard": "node scripts/start-storyboard-from-prompt.mjs",
     "agent:lint": "node scripts/agent-lint.mjs",
     "agent:lint:fix": "node scripts/agent-lint.mjs --fix",

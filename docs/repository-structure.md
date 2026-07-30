@@ -38,6 +38,7 @@ apps/
                            orchestrator/ orchestrator-tools/ tool-tests/ oneshot/ eval/
                            assets/ edit-graph/ provenance/ store.ts supabase/ v1/
                            uploaded-footage.ts
+    src/lib/postgres/     lazy direct-Postgres pool + trusted transaction helper
 
 packages/   shared workspace libraries (apps import them as `@popcorn/* : workspace:*`)
   shared/    (@popcorn/shared)    core types + data contracts: types.ts,
@@ -71,6 +72,7 @@ Root config: `pnpm-workspace.yaml`, `turbo.json` (task graph), `tsconfig.base.js
 | Orchestrator primitive catalog / active role registries | `apps/api/src/lib/orchestrator-tools/capability-catalog.ts`, `root-registry.ts`, `visuals-registry.ts`, `audio-registry.ts` |
 | Domain-safe recovery projection | `apps/api/src/lib/orchestrator/domain-recovery-projection.ts` |
 | DB schema / migrations | `supabase/migrations/` |
+| API database-access boundary | `docs/scopes/database-access-boundary.md`, `apps/api/src/lib/postgres/transactions.ts` |
 | Styling conventions | `AGENTS.md` (CSS Modules + token layer) |
 | Identity / RLS model | `docs/supabase-identity-and-rls.md` |
 | Vision / target architecture | `docs/NORTH_STAR.md`, `CLAUDE.md` |

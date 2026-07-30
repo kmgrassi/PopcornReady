@@ -103,6 +103,11 @@ RLS recursion. Follow `current_app_user_id()`.
 - Server-side code uses the **service_role** key, which **bypasses RLS**. It is
   responsible for enforcing tenancy itself (e.g. filtering by workspace). Use it
   for trusted writes like creating invite rows (`auth_id = NULL`).
+- Reviewed trusted multi-table workflows may instead use the API's direct
+  Postgres transaction helper. A direct connection also bypasses user RLS and
+  must enforce tenancy explicitly; never substitute it for the request-scoped
+  authenticated client. See
+  [`docs/scopes/database-access-boundary.md`](scopes/database-access-boundary.md).
 - The browser / signed-in client runs as `authenticated`, so **RLS is enforced**
   and `auth.uid()` is populated.
 

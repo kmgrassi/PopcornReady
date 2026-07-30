@@ -71,11 +71,17 @@ const serviceRoleKey = findValue(
   ["auth.service_role_key", "auth.serviceRoleKey", "SERVICE_ROLE_KEY"],
   /(^|\.)(service_role|service_role_key|serviceRoleKey)$/i
 );
+const databaseUrl = findValue(
+  flat,
+  ["DB_URL", "db.url"],
+  /(^|\.)db(_|\.)?url$/i
+);
 
 const missing = [];
 if (!supabaseUrl) missing.push("api.url");
 if (!anonKey) missing.push("auth.anon_key");
 if (!serviceRoleKey) missing.push("auth.service_role_key");
+if (!databaseUrl) missing.push("DB_URL");
 
 if (missing.length > 0) {
   console.error(`Supabase status is missing required local values: ${missing.join(", ")}`);
@@ -96,6 +102,9 @@ const env = {
   SUPABASE_URL: supabaseUrl,
   SUPABASE_ANON_KEY: anonKey,
   SUPABASE_SERVICE_ROLE_KEY: serviceRoleKey,
+  // Always use the URL reported by the local CLI. Never inherit a hosted
+  // DATABASE_URL into a command explicitly routed through the local wrapper.
+  DATABASE_URL: databaseUrl,
   VITE_SUPABASE_ENV: "default",
   VITE_SUPABASE_URL: supabaseUrl,
   VITE_SUPABASE_ANON_KEY: anonKey,

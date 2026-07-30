@@ -16,7 +16,7 @@ Read [`AGENT_WORKFLOW.md`](AGENT_WORKFLOW.md) first. Then use this router; `CLAU
 | --- | --- | --- |
 | Any code or documentation change | `CLAUDE.md`, `docs/repository-structure.md`, `AGENT_WORKFLOW.md` | Worksheet, targeted test, `pnpm agent:validate` |
 | UI, routes, CSS | `apps/web/PRODUCT.md`, `apps/web/DESIGN.md`, `docs/ui-interaction-model.md` | Run web app, inspect browser, relevant Playwright test; use the Impeccable skill |
-| API, auth, Supabase, migrations | `docs/supabase-identity-and-rls.md`, relevant `docs/scopes/*` | API test or smoke; local Supabase check when persistence/auth changes |
+| API, auth, Supabase, migrations | `docs/supabase-identity-and-rls.md`, `docs/scopes/database-access-boundary.md`, relevant `docs/scopes/*` | API test or smoke; local Supabase check when persistence/auth changes |
 | Generation, tools, orchestration | `docs/NORTH_STAR.md`, relevant orchestrator scope, `apps/api/src/lib/tool-tests/README.md` | Unit tests plus opt-in tool smoke when changing live tool behavior |
 | E2E or manual testing | `docs/testing/e2e-test-inventory-and-gaps.md`, `apps/web/e2e/README.md` | Update inventory and add a behavior-focused test or documented gap |
 | Performance / visual behavior | `docs/agent-system/performance-and-visual-regression.md` | Capture before/after evidence when relevant |
@@ -25,6 +25,17 @@ Read [`AGENT_WORKFLOW.md`](AGENT_WORKFLOW.md) first. Then use this router; `CLAU
 ## Documentation contract
 
 System documentation is self-healing: when behavior, ownership, commands, constraints, or coverage changes, update the authoritative document in the same commit. New or substantially rewritten system documents begin with a title and seven `agent-summary` lines so agents can find the right document with `rg`. Legacy documents are migrated when they are materially touched.
+
+## Database access boundary
+
+- Keep user-scoped reads and writes on the request Supabase client so RLS
+  evaluates the authenticated session.
+- Do not add a new application workflow `.rpc()` target. Trusted multi-table
+  workflows migrate incrementally to typed direct-Postgres transaction modules.
+- Postgres-native triggers, RLS helpers, integrity checks, and reviewed search
+  functions may remain database functions.
+- Update `docs/scopes/database-access-boundary.md` and the checked RPC allowlist
+  whenever an existing target is intentionally added, removed, or reclassified.
 
 ## Code Review Attribution
 

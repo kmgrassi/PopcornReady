@@ -45,8 +45,11 @@ The app is **moving off the Next.js monolith** into a monorepo split. Target sta
   stack, Supabase access, and the harper-server-style auth middleware.
 - **Data/auth:** **Supabase** (Postgres + Storage + Auth). App identity is
   `public.users.id`; `auth.uid()` maps to it only inside RLS via
-  `current_app_user_id()`. The server talks to Supabase as the **user-scoped,
-  RLS-enforced** client; `service_role` only for trusted ops.
+  `current_app_user_id()`. The server uses Supabase as the **user-scoped,
+  RLS-enforced** path and a small direct Postgres pool for reviewed trusted
+  transactions; `service_role` remains for trusted operations during the
+  incremental migration. See
+  [`docs/scopes/database-access-boundary.md`](docs/scopes/database-access-boundary.md).
 
 The Next monolith has been removed. All DB, storage, auth, and generation work
 targets the active split monorepo. Historical cutover design remains in
