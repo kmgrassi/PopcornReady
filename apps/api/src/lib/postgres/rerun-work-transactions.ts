@@ -1,9 +1,7 @@
 import { createHash } from "node:crypto";
 import { ApiError } from "@/core/errors";
-import {
-  domainOutputAssetKind,
-  type DomainOutputKind,
-} from "@popcorn/shared/domain-agent-contract";
+import type { BoundRequiredOutput } from "@popcorn/shared/rerun-proposal";
+import { rerunOutputAssetKinds } from "@/lib/orchestrator/rerun-output-asset-kind";
 import {
   assertLiveLease,
   lifecycleTransaction,
@@ -49,6 +47,7 @@ type DurableCallbackResult = {
     reconciliationActionId?: string;
     primitiveActionIds?: string[];
     budgetReservationKeys?: string[];
+    providerResult?: unknown;
   } | null;
 };
 
@@ -62,6 +61,7 @@ function callbackResult(row: Record<string, unknown>): DurableCallbackResult {
       primitiveActionIds: row.primitive_action_ids,
       budgetReservationKeys: row.budget_reservation_keys,
       outputs: row.binding_results,
+      providerResult: row.callback_result,
     }
     : null;
   return {
@@ -421,12 +421,12 @@ export async function completeWorkTransaction(input: {
           where id=$1 and project_id=$2`,
         [binding.assetId, input.projectId]
       );
-      const expectedKind = domainOutputAssetKind(
-        binding.kind as DomainOutputKind
+      const expectedKinds = rerunOutputAssetKinds(
+        binding as unknown as BoundRequiredOutput
       );
       if (
         !asset.rows[0] ||
-        asset.rows[0].kind !== expectedKind ||
+        !expectedKinds.includes(asset.rows[0].kind) ||
         asset.rows[0].role !== binding.intrinsicRole
       ) {
         throw new ApiError(
@@ -622,7 +622,13 @@ export async function completeWorkTransaction(input: {
                 and primitive.orchestrator_run_id=
                   coalesce($4::uuid,$5::uuid)
                 and primitive.tool<>'domain_report'
-                and primitive.status='applied'
+                and (
+                  primitive.status='applied'
+                  or (
+                    primitive.id=$8
+                    and primitive.status='running'
+                  )
+                )
                 and budget.parent_reservation_id=$6
                 and budget.reservation_key=any($7)
                 and budget.orchestrator_run_id=coalesce($4::uuid,$5::uuid)
@@ -632,6 +638,7 @@ export async function completeWorkTransaction(input: {
               callback.primitive_action_ids, callback.child_run_id,
               execution.root_run_id, execution.budget_reservation_id,
               callback.budget_reservation_keys,
+              work.dispatch_action_id,
             ]
           );
           caused ||= Boolean(evidence.rowCount);
@@ -647,7 +654,13 @@ export async function completeWorkTransaction(input: {
               and aa.direction='output' and aa.action_id=any($3::uuid[])
               and primitive.orchestrator_run_id=coalesce($4::uuid,$5::uuid)
               and primitive.tool<>'domain_report'
-              and primitive.status='applied'
+              and (
+                primitive.status='applied'
+                or (
+                  primitive.id=$8
+                  and primitive.status='running'
+                )
+              )
               and budget.parent_reservation_id=$6
               and budget.reservation_key=any($7)
               and budget.status='settled' limit 1`,
@@ -655,6 +668,7 @@ export async function completeWorkTransaction(input: {
             input.projectId, binding.assetId, input.primitiveActionIds,
             input.childRunId ?? null, execution.root_run_id,
             execution.budget_reservation_id, input.budgetReservationKeys,
+            work.dispatch_action_id,
           ]
         );
         caused = Boolean(evidence.rowCount);
