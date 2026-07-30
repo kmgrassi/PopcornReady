@@ -319,6 +319,82 @@ dbTest("audio revisions mint a new immutable version without overwriting source 
   assert.deepEqual(sourceBytesAfter, sourceBytesBefore);
 });
 
+dbTest("image revisions mint a pooled immutable version in the source lineage", async () => {
+  const projectId = await newProjectId("immutable image revision");
+  const sourceResult = await createGeneratedAsset({
+    auth,
+    projectId,
+    body: {
+      kind: "image",
+      provider: "mock",
+      prompt: "Original keyframe.",
+      assetRole: "beat_keyframe",
+    },
+  });
+  const sourceId = assetIds(jobOf(sourceResult))[0]!;
+  const source = await getAsset(LOCAL_WORKSPACE_ID, projectId, sourceId);
+  const revisionResult = await createGeneratedAsset({
+    auth,
+    projectId,
+    body: {
+      kind: "image",
+      provider: "mock",
+      prompt: "Warmer keyframe.",
+      assetRole: "beat_keyframe",
+      sourceAssetId: sourceId,
+      referenceAssetIds: [sourceId],
+      graphInputs: [{
+        assetId: sourceId,
+        relation: "input",
+        role: "source",
+        position: 0,
+        contentHash: source.contentHash,
+      }],
+    },
+  });
+  const revisionId = assetIds(jobOf(revisionResult))[0]!;
+  const { data, error } = await getServiceSupabase()
+    .from("assets")
+    .select("id,lineage_id,version")
+    .in("id", [sourceId, revisionId])
+    .order("version");
+  assert.equal(error, null);
+  assert.equal(data?.length, 2);
+  assert.equal(data?.[0]?.lineage_id, data?.[1]?.lineage_id);
+  assert.equal(data?.[1]?.version, Number(data?.[0]?.version) + 1);
+});
+
+dbTest("approved input pins are revalidated after durable provider claim", async () => {
+  const projectId = await newProjectId("stale image pin");
+  const sourceResult = await createGeneratedAsset({
+    auth,
+    projectId,
+    body: { kind: "image", provider: "mock", prompt: "Pinned source." },
+  });
+  const sourceId = assetIds(jobOf(sourceResult))[0]!;
+  const source = await getAsset(LOCAL_WORKSPACE_ID, projectId, sourceId);
+  await expectApiError(
+    createGeneratedAsset({
+      auth,
+      projectId,
+      expectedAssetPins: [{
+        assetId: sourceId,
+        contentHash: `${source.contentHash}-stale`,
+        inputsFingerprint: source.inputsFingerprint ?? null,
+      }],
+      body: {
+        kind: "image",
+        provider: "mock",
+        prompt: "Must not call provider.",
+        referenceAssetIds: [sourceId],
+      },
+    }),
+    "validation_failed"
+  );
+  const { items } = await listAssets(LOCAL_WORKSPACE_ID, projectId, 50, null);
+  assert.equal(items.length, 1);
+});
+
 dbTest("persists provider settings used to produce the asset", async () => {
   const projectId = await newProjectId("provider settings");
 

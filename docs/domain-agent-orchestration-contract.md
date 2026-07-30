@@ -386,6 +386,23 @@ through asset creation actions attributed to that exact run and stable
 beat/anchor identity. This preserves anchor → keyframe → clip self-healing
 without reading another run's pooled alternatives.
 
+The selective-regeneration visual-still adapter follows the same boundary for
+generic images, posters, character/scene anchors, storyboard tiles, and beat
+keyframes. It accepts only exact PR 2 output bindings. An existing image must be
+both inspected and fingerprint-pinned; an absent slot may generate only from
+explicitly pinned story, beat, storyboard, and anchor inputs in the approved
+work item. The adapter dispatches one bounded Visuals child with the persisted
+approval fingerprint, exact pins and bindings, and fenced rerun-callback
+metadata, then returns its durable handle as accepted work. Child tools use the
+durable canonical generated-assets path; exact approved fingerprints can be
+stored with the job and checked again after its provider claim. Terminal
+domain-report callback processing derives the child action/output/budget
+causation before PR 2 completes the work. The adapter never uses the PR 2
+work-dispatch action as a provider primitive and is deliberately absent from
+the production executor registry until PR 4 supplies proposal-aware child
+finalization and PR 5 can atomically apply approved selection and story-pointer
+moves.
+
 The graph `image` kind is the default only for genuinely generic stills.
 `poster`, `character_anchor`, `scene_anchor`, `beat_keyframe`,
 `beat_storyboard`, `scene_storyboard`, and `act_mockup` keep their explicit
