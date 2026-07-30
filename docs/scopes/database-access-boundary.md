@@ -40,11 +40,11 @@ failure interpretation live in
 
 ## Current inventory (2026-07-30)
 
-- Production database catalog, `public` schema: **100 functions**.
-- Trigger-backed functions: **34**.
-- Non-trigger functions: **66**.
-- `SECURITY DEFINER` functions: **78**.
-- Active API production runtime: **47 `.rpc()` expressions targeting 48
+- Production database catalog, `public` schema: **119 functions**.
+- Trigger-backed functions: **36**.
+- Non-trigger functions: **83**.
+- `SECURITY DEFINER` functions: **96**.
+- Active API production runtime: **63 `.rpc()` expressions targeting 64
   distinct functions**.
 - Internal test-sandbox support: **2 expressions targeting one additional
   function**, `delete_test_sandbox`.
@@ -58,6 +58,14 @@ The 2026-07-30 relation scan observed **411 literal `.from()` calls** and the
 checked boundary permits **no dynamic calls**. Retired storyboards, generation-stage tables,
 composition/edit-graph tables, timelines, and brief versions are prohibited
 runtime targets.
+
+The durable selective-regeneration proposal lifecycle is a reviewed integrity
+exception. Its 15 API-called functions keep approval, freshness, budget
+admission, leases, executor-step callbacks, recovery, and terminal settlement
+inside locked database transitions. They are service-role only and expose no
+provider adapter. Moving that family to direct TypeScript transactions would
+require one equivalent transaction/locking boundary and belongs in a separate
+database-access migration after the least-privilege role is available.
 
 ## Direct Postgres safety rules
 
