@@ -313,6 +313,9 @@ function estimateOutputCostUsd(
       durationSec: outputDurationSec(output, packet),
     });
   }
+  if (output.kind === "story_snapshot") return 0.2;
+  if (output.kind === "composite") return 0.12;
+  if (output.kind === "critique") return 0.1;
   return 0;
 }
 

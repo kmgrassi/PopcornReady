@@ -11,6 +11,10 @@ const roleMigrationPath = path.resolve(
   process.cwd(),
   "../../supabase/migrations/20260730170000_rerun_lifecycle_postgres_role.sql"
 );
+const graphRoleMigrationPath = path.resolve(
+  process.cwd(),
+  "../../supabase/migrations/20260730174000_rerun_atomic_graph_role.sql"
+);
 
 test("rerun lifecycle migration fences approval, successor, execution, and work identity", async () => {
   const migration = await readFile(migrationPath, "utf8");
@@ -75,6 +79,20 @@ test("popcorn_api gets exact lifecycle columns and no workflow-routine authority
     migration,
     /work\.dispatch_action_id = orchestrator_runs\.root_action_id[\s\S]*approvalContext,executionReservationId/
   );
+});
+
+test("atomic graph role grants append and a bounded story-pointer function", async () => {
+  const migration = await readFile(graphRoleMigrationPath, "utf8");
+  assert.match(migration, /grant insert \([\s\S]*\) on table public\.selections/);
+  assert.doesNotMatch(migration, /grant update\s+on table public\.selections/i);
+  assert.match(migration, /revoke update on table public\.story_blueprints/);
+  assert.match(migration, /create or replace function public\.apply_rerun_story_pointer/);
+  assert.match(migration, /security definer/);
+  assert.match(migration, /work\.status = 'completed'/);
+  assert.match(migration, /binding->>'assetId' = p_new_asset_id::text/);
+  assert.match(migration, /grant execute on function public\.apply_rerun_story_pointer/);
+  assert.match(migration, /actions\.tool = 'rerun_execution'/);
+  assert.match(migration, /actions\.status = 'running'/);
 });
 
 test("proposal ceilings use the canonical budget ledger without double-counting settled children", async () => {

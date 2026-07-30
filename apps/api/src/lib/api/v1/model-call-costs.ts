@@ -68,3 +68,17 @@ export async function sumRunCostUsd(runId: string): Promise<number> {
     0
   );
 }
+
+export async function sumActionCostUsd(actionId: string): Promise<number> {
+  const rows = await runQuery(
+    "store.sumActionCostUsd",
+    getServiceSupabase()
+      .from("model_call_costs")
+      .select("cost_usd")
+      .eq("action_id", actionId)
+  );
+  return ((rows ?? []) as Array<{ cost_usd: number | null }>).reduce(
+    (sum, row) => sum + (row.cost_usd ?? 0),
+    0
+  );
+}

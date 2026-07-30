@@ -457,6 +457,7 @@ async function finalizeLocked(
   const params = {
     schema_version: "action_params.v1",
     schemaVersion: "RerunExecution.v1",
+    executionReservationId: execution.id,
     proposalActionId: execution.proposal_action_id,
     outcome: input.outcome,
     childRunIds: childRuns,
@@ -485,11 +486,20 @@ async function finalizeLocked(
       tool: string;
       status: string;
       params_match: boolean;
+      inputs_match: boolean;
+      outputs_match: boolean;
     }>(
       `select project_id,orchestrator_run_id,tool,status,
-              params=$2::jsonb as params_match
+              params=$2::jsonb as params_match,
+              input_asset_ids=$3::uuid[] as inputs_match,
+              output_asset_ids=$4::uuid[] as outputs_match
          from public.actions where id=$1 for update`,
-      [input.reconciliationActionId, JSON.stringify(reconciliationParams)]
+      [
+        input.reconciliationActionId,
+        JSON.stringify(reconciliationParams),
+        proposal.input_asset_ids,
+        outputs,
+      ]
     );
     if (existingReconciliation.rows[0]) {
       const existing = existingReconciliation.rows[0];
@@ -498,7 +508,9 @@ async function finalizeLocked(
         existing.orchestrator_run_id !== execution.root_run_id ||
         existing.tool !== "rerun_reconciliation" ||
         existing.status !== "applied" ||
-        !existing.params_match
+        !existing.params_match ||
+        !existing.inputs_match ||
+        !existing.outputs_match
       ) {
         throw new ApiError(
           "idempotency_conflict",
@@ -544,6 +556,7 @@ async function finalizeLocked(
   if (input.outcome === "applied") {
     await applyResolvedRerunGraphMoves(client, {
       projectId: input.projectId,
+      executionReservationId: execution.id,
       executionActionId: input.executionActionId,
       moves,
     });

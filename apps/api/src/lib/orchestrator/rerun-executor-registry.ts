@@ -90,10 +90,6 @@ export interface RerunKindExecutor {
   execute(context: RerunExecutorContext): Promise<RerunExecutorResult>;
 }
 
-/**
- * PR 2 production registry is deliberately inert. PRs 3A/3B/3C may implement
- * adapters behind this interface, but PR 5 owns their production activation.
- */
 export class RerunExecutorRegistry {
   private readonly executors = new Map<string, RerunKindExecutor>();
 
@@ -152,8 +148,6 @@ export class RerunExecutorRegistry {
     }));
   }
 }
-
-export const productionRerunExecutorRegistry = new RerunExecutorRegistry();
 
 function canonicalJson(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);

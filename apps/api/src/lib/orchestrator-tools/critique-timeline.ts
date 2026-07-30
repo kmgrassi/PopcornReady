@@ -109,7 +109,7 @@ export function parseCritiqueTimelineInput(input: unknown): CritiqueTimelineInpu
   return {};
 }
 
-function isTimeline(value: unknown): value is Timeline {
+export function isTimeline(value: unknown): value is Timeline {
   if (!isRecord(value)) return false;
   return (
     typeof value.aspectRatio === "string" &&
@@ -118,7 +118,7 @@ function isTimeline(value: unknown): value is Timeline {
   );
 }
 
-function planFromTimeline(timeline: Timeline): ShotPlan {
+export function planFromTimeline(timeline: Timeline): ShotPlan {
   const beatsByName = new Map<string, { id?: string; name: string; intent: string }>();
   for (const segment of timeline.segments) {
     const name = segment.role || segment.beatId || "beat";
@@ -145,7 +145,7 @@ function planFromTimeline(timeline: Timeline): ShotPlan {
   };
 }
 
-function assetToClip(asset: V1Asset): Clip {
+export function assetToClip(asset: V1Asset): Clip {
   return {
     id: asset.id,
     filename: asset.filename,
@@ -159,6 +159,27 @@ function assetToClip(asset: V1Asset): Clip {
       "",
     source: asset.source.type === "generated" ? "generated" : "upload",
   };
+}
+
+export async function critiqueTimelineDraft(input: {
+  timeline: Timeline;
+  assets: V1Asset[];
+  critique?: typeof realCritique;
+}): Promise<{
+  report: Awaited<ReturnType<typeof realCritique>>["report"];
+  clips: Clip[];
+}> {
+  const referencedClipIds = new Set(input.timeline.segments.map((segment) => segment.clipId));
+  const clips = input.assets
+    .filter((asset) => referencedClipIds.has(asset.id))
+    .map(assetToClip);
+  const result = await (input.critique ?? realCritique)({
+    plan: planFromTimeline(input.timeline),
+    timeline: input.timeline,
+    clips,
+    storyContext: null,
+  });
+  return { report: result.report, clips };
 }
 
 function missingProject(): ToolCallResult<CritiqueTimelineOutput> {
@@ -231,22 +252,16 @@ export function createCritiqueTimelineTool(
       });
       if (!activeTimeline || !isTimeline(activeTimeline.timeline)) return timelineRequired();
 
-      const referencedClipIds = new Set(activeTimeline.timeline.segments.map((s) => s.clipId));
       const assetsPage = await resolved.listAssets(
         context.auth.workspaceId,
         context.projectId,
         1000,
         null
       );
-      const clips = assetsPage.items
-        .filter((asset) => referencedClipIds.has(asset.id))
-        .map(assetToClip);
-
-      const critique = await resolved.critique({
-        plan: planFromTimeline(activeTimeline.timeline),
+      const critique = await critiqueTimelineDraft({
         timeline: activeTimeline.timeline,
-        clips,
-        storyContext: null,
+        assets: assetsPage.items,
+        critique: resolved.critique,
       });
 
       const { critiqueAssetId } = await resolved.addProjectTimelineCritique({
