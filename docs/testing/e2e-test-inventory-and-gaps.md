@@ -35,8 +35,9 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
 - `run-progress.spec.ts` and `run-progress-actions.spec.ts` cover run progress,
   approval/rejection/cancel actions, failed/succeeded states, and recovery hints
   with mocked browser API fixtures, including truthful grouped-tool progress,
-  between-action copy, job item/provider activity, and progressive local-admin
-  diagnostics.
+  between-action copy, job item/provider activity, progressive local-admin
+  diagnostics, and response-driven review-gate transitions that clear feedback
+  without racing page reloads.
 - `specs/library-collections.spec.ts` covers Library pagination, filters, media
   viewer, visibility mutation behavior, and watch links with mocked fixtures.
 - `inspiration-poster.spec.ts` covers opening a generated story poster in the

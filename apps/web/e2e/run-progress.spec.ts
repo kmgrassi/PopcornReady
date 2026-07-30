@@ -66,48 +66,9 @@ async function getVisibleStageRail(page: Page) {
 }
 
 async function fillReviewFeedback(page: Page, note: string) {
-  const legacyFeedback = page.getByLabel("Feedback");
-  if (await legacyFeedback.isVisible().catch(() => false)) {
-    await legacyFeedback.fill(note);
-    return;
-  }
-
-  await page.getByRole("button", { name: "Request changes" }).click();
-  await page.getByLabel("What should change?").fill(note);
-}
-
-async function submitReviewChanges(page: Page) {
-  const sendChanges = page.getByRole("button", { name: "Send changes" });
-  if (await sendChanges.isVisible().catch(() => false)) {
-    await sendChanges.click();
-    return;
-  }
-  await page.getByRole("button", { name: "Request changes" }).click();
-}
-
-async function requestReviewChanges(page: Page, note: string) {
-  const legacyFeedback = page.getByLabel("Feedback");
-  if (await legacyFeedback.isVisible()) {
-    await legacyFeedback.fill(note);
-    await page.getByRole("button", { name: "Request changes" }).click();
-    return;
-  }
-
-  await page.getByRole("button", { name: "Request changes" }).click();
-  await page.getByLabel("What should change?").fill(note);
-  await page.getByRole("button", { name: "Send changes" }).click();
-}
-
-async function expectReviewFeedbackCleared(page: Page) {
-  const feedback = page.getByLabel(/^(Feedback|What should change\?)$/);
-  await expect
-    .poll(async () => {
-      if ((await feedback.count()) === 0) return "";
-      const first = feedback.first();
-      if (!(await first.isVisible().catch(() => false))) return "";
-      return first.inputValue();
-    })
-    .toBe("");
+  const feedback = page.getByLabel("Feedback");
+  await expect(feedback).toBeVisible();
+  await feedback.fill(note);
 }
 
 test("polls an active run, cancels it, and clears the recovery hint @mobile", async ({ page }) => {
@@ -499,10 +460,21 @@ test("submits review-gate approve and reject actions with notes @mobile", async 
   await expect(page.getByRole("button", { name: "Request changes" })).toBeVisible();
 
   await fillReviewFeedback(page, "Keep the close-up, simplify the transition.");
-  await page.getByRole("button", { name: "Approve and continue" }).click();
+  await Promise.all([
+    page.waitForResponse((response) => {
+      const request = response.request();
+      return (
+        request.method() === "POST" &&
+        new URL(response.url()).pathname === `${apiRunPath}/approve` &&
+        response.ok()
+      );
+    }),
+    page.getByRole("button", { name: "Approve and continue" }).click(),
+  ]);
 
-  await expectReviewFeedbackCleared(page);
   await expect(page.getByText("Visuals are in progress.")).toBeVisible();
+  await expect(page.getByText("Needs review")).toHaveCount(0);
+  await expect(page.getByLabel("Feedback")).toHaveCount(0);
   expect(requests).toContainEqual({
     action: "approve",
     body: { note: "Keep the close-up, simplify the transition." },
@@ -521,10 +493,23 @@ test("submits review-gate approve and reject actions with notes @mobile", async 
     message: "Storyboard is ready for review.",
   });
   await page.reload();
-  await requestReviewChanges(page, "Make the ending less busy.");
-
-  await expectReviewFeedbackCleared(page);
   await expect(page.getByText("Needs review")).toBeVisible();
+  await fillReviewFeedback(page, "Make the ending less busy.");
+  await Promise.all([
+    page.waitForResponse((response) => {
+      const request = response.request();
+      return (
+        request.method() === "POST" &&
+        new URL(response.url()).pathname === `${apiRunPath}/reject` &&
+        response.ok()
+      );
+    }),
+    page.getByRole("button", { name: "Request changes" }).click(),
+  ]);
+
+  await expect(page.getByText("Regenerating storyboard with feedback.")).toBeVisible();
+  await expect(page.getByText("Needs review")).toBeVisible();
+  await expect(page.getByLabel("Feedback")).toHaveValue("");
   expect(requests).toContainEqual({
     action: "reject",
     body: { stageType: "storyboard", note: "Make the ending less busy." },
