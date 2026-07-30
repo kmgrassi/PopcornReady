@@ -28,8 +28,10 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   routes, compatibility redirects, and not-found behavior.
 - `asset-studio.spec.ts` covers the production-default `/create` entry, image as
   the default goal, choice-card padding at desktop and mobile widths, proposal
-  review without dispatch, explicit confirmation, queued status, and
-  desktop/mobile Create navigation. It also covers the accessible project picker,
+  review without dispatch, default-on image-prompt refinement, the exact
+  effective-prompt preview, creator bypass, stale refinement invalidation,
+  explicit confirmation, queued status, and desktop/mobile Create navigation.
+  It also covers the accessible project picker,
   existing/first/new-project selection, inline creation without losing the
   prompt, list and creation failure recovery, and keyboard focus/Escape behavior.
 - `run-progress.spec.ts` and `run-progress-actions.spec.ts` cover run progress,
@@ -284,6 +286,11 @@ Covered:
 - The authenticated global Create action opens `/create` by default.
 - Image is the default creator-facing goal and maps to `image_create`.
 - Reviewing the maximum cost does not confirm or enqueue the proposal.
+- Image prompt improvement is on by default; the exact effective prompt is
+  visible before confirmation, and disabling it sends the creator's prompt
+  unchanged.
+- A delayed refined proposal is discarded if prompt improvement is disabled
+  while the request is in flight.
 - Explicit confirmation deep-links to the queued creator-direct run.
 - The mobile Create tab opens Asset Studio and retains active state.
 - The project picker selects an existing project, returns focus on Escape, and

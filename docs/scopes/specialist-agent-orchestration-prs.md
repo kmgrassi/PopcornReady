@@ -1225,9 +1225,13 @@ Gate 0 to say proceed.
 creation entry for standalone Image, Video, and Soundtrack requests. The
 client-only `VITE_STANDALONE_CREATION_ENABLED` rollout flag was removed after
 desktop/mobile browser coverage was added for image proposal and explicit
-confirmation. Optional references, same-session question/follow-up controls,
-blocked dependency actions, and Use in project remain follow-up scope; their
-absence must not be represented as full PR 13 acceptance.
+confirmation. Image requests now use the default-on, proposal-bound art-direction
+pass documented in
+[`image-prompt-enhancement.md`](image-prompt-enhancement.md), with an exact
+creator bypass and read-only effective-prompt review. Optional references,
+same-session question/follow-up controls, blocked dependency actions, and Use in
+project remain follow-up scope; their absence must not be represented as full
+PR 13 acceptance.
 
 **Owns:** an outcome-oriented route such as `/create` and
 `StandaloneCreationPage.tsx`, co-located CSS Modules, typed query hooks, and
@@ -1242,6 +1246,11 @@ small launch points from authenticated product surfaces.
   provider/model/seed controls, tool names, or a raw domain-task editor.
 - Require explicit proposal confirmation before launch. Show cost/credit impact
   and allow rejection or revision without dispatching billable work.
+- For Image, default to a fast text-model art-direction pass inside the
+  idempotent proposal operation. Keep the original prompt editable, show the
+  exact effective prompt before confirmation, preserve both in proposal
+  provenance, and provide an exact opt-out. This text pass may occur during
+  review; the confirmed maximum remains the asset-generation boundary.
 - Transition into an observe-first session view with skeleton/loading states,
   queued/active/waiting/blocked/failed/canceled states, durable progress,
   provenance, cost, alternatives, and immutable outputs.
