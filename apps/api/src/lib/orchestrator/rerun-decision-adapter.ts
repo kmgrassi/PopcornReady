@@ -8,6 +8,7 @@ import type {
 } from "@popcorn/shared/rerun-proposal";
 import { createHash } from "node:crypto";
 import { ApiError } from "@/core/errors";
+import { estimateCostUsd as estimateGenerativeCostUsd } from "@/lib/generative/pricing";
 import { getLlmClient, type LlmClient } from "@/lib/llm";
 import { CREATIVE_DIRECTOR_SYSTEM_PROMPT } from "./creative-director-agent";
 import type { RerunDecisionPacket } from "./rerun-decision-context";
@@ -110,6 +111,8 @@ function authorizedTargetKeys(packet: RerunDecisionPacket): Set<string> {
     ...packet.story.scenes.map((row) => `scene:${row.id}`),
     ...packet.story.beats.map((row) => `beat:${row.id}`),
     ...packet.story.panels.map((row) => `panel:${row.id}`),
+    ...packet.timelineItems.map((row) => `timeline_item:${row.id}`),
+    ...packet.transcriptSegments.map((row) => `transcript_segment:${row.id}`),
     ...packet.pins.selections.map((pin) =>
       `selection:${pin.slotOwnerLineageId ?? "project"}:${pin.slotRole}`),
   ]);
@@ -212,12 +215,14 @@ function storyMoveForOutput(
 ): PlannedStoryPointerMove | null {
   if (output.kind !== "story_snapshot") return null;
   const rowKind =
-    output.target.kind === "storyboard" ? "storyboard" :
+    output.target.kind === "project" ? "story_blueprint" :
+      output.target.kind === "storyboard" ? "storyboard" :
       output.target.kind === "scene" ? "story_scene" :
         output.target.kind === "beat" ? "story_beat" : null;
   if (!rowKind) return null;
   const rowId =
-    output.target.kind === "storyboard" ? output.target.storyboardId :
+    output.target.kind === "project" ? packet.story.blueprint?.id ?? "" :
+      output.target.kind === "storyboard" ? output.target.storyboardId :
       output.target.kind === "scene" ? output.target.sceneId :
         output.target.kind === "beat" ? output.target.beatId : "";
   const pin = packet.pins.storySnapshots.find((candidate) =>
@@ -233,16 +238,95 @@ function storyMoveForOutput(
   };
 }
 
-function estimateForWork(work: RerunWorkItem[]) {
+function outputDurationSec(
+  output: BoundRequiredOutput,
+  packet: RerunDecisionPacket
+): number {
+  const target = output.target;
+  if (target.kind === "asset") {
+    return packet.assets.find((asset) => asset.id === target.assetId)?.durationSec ?? 8;
+  }
+  if (target.kind === "timeline_item") {
+    const row = packet.timelineItems.find((item) => item.id === target.timelineItemId);
+    if (row?.sourceInSec != null && row.sourceOutSec != null) {
+      return Math.max(0, row.sourceOutSec - row.sourceInSec) || 8;
+    }
+  }
+  if (target.kind === "transcript_segment") {
+    const row = packet.transcriptSegments.find(
+      (segment) => segment.id === target.transcriptSegmentId
+    );
+    if (row) return Math.max(0, row.endSec - row.startSec) || 8;
+  }
+  if (target.kind === "beat") {
+    return packet.story.beats.find((beat) => beat.id === target.beatId)?.durationSec ?? 8;
+  }
+  if (target.kind === "scene") {
+    return packet.story.scenes.find((scene) => scene.id === target.sceneId)?.durationSec ?? 8;
+  }
+  if (target.kind === "selection") {
+    const pin = packet.pins.selections.find((candidate) =>
+      candidate.slotOwnerLineageId === target.slotOwnerLineageId &&
+      candidate.slotRole === target.slotRole);
+    const selectedAsset = pin?.expectedActiveAssetId
+      ? packet.assets.find((asset) => asset.id === pin.expectedActiveAssetId)
+      : undefined;
+    if (selectedAsset?.durationSec != null) return selectedAsset.durationSec;
+    const beatId = target.slotRole.split(":")[1];
+    if (beatId) {
+      return packet.story.beats.find((beat) => beat.id === beatId)?.durationSec ?? 8;
+    }
+  }
+  if (target.kind === "project") {
+    const timelineDuration = packet.timelineItems.reduce((total, item) => {
+      if (item.sourceInSec == null || item.sourceOutSec == null) return total;
+      return total + Math.max(0, item.sourceOutSec - item.sourceInSec);
+    }, 0);
+    if (timelineDuration > 0) return timelineDuration;
+    const storyDuration = packet.story.beats.reduce(
+      (total, beat) => total + Math.max(0, beat.durationSec ?? 0),
+      0
+    );
+    if (storyDuration > 0) return storyDuration;
+  }
+  return 8;
+}
+
+function estimateOutputCostUsd(
+  output: BoundRequiredOutput,
+  packet: RerunDecisionPacket
+): number {
+  if (["image", "poster", "anchor", "keyframe"].includes(output.kind)) {
+    return estimateGenerativeCostUsd({ provider: "openai", kind: "image" });
+  }
+  if (output.kind === "clip") {
+    return estimateGenerativeCostUsd({
+      provider: "openai",
+      kind: "video",
+      durationSec: outputDurationSec(output, packet),
+    });
+  }
+  if (output.kind === "audio_track") {
+    return estimateGenerativeCostUsd({
+      provider: "elevenlabs",
+      kind: "audio",
+      durationSec: outputDurationSec(output, packet),
+    });
+  }
+  return 0;
+}
+
+function estimateForWork(work: RerunWorkItem[], packet: RerunDecisionPacket) {
   const outputs = work.flatMap((item) => item.requiredOutputs);
   const mediaCount = outputs.filter((output) =>
     ["image", "poster", "anchor", "keyframe", "clip", "render", "audio_track"].includes(output.kind)
   ).length;
-  const modelCount = work.filter((item) => item.owner === "creative_director").length;
-  const costUsd = Number((mediaCount * 0.5 + modelCount * 0.02).toFixed(2));
+  const costUsd = Number(
+    outputs.reduce((total, output) => total + estimateOutputCostUsd(output, packet), 0).toFixed(4)
+  );
   return {
     costUsd,
-    maxCostUsd: Number((Math.max(costUsd, 0.01) * 1.25).toFixed(2)),
+    maxCostUsd: costUsd === 0 ? 0 : Number((costUsd * 1.25).toFixed(4)),
     latencyClass: mediaCount > 0 ? "media" as const : "interactive" as const,
   };
 }
@@ -338,7 +422,7 @@ export function finalizeRerunProposal(input: {
       "A revision cannot bind multiple outputs to the same story pointer."
     );
   }
-  const estimate = estimateForWork(selectedWork);
+  const estimate = estimateForWork(selectedWork, packet);
   const owners = new Set(selectedWork.map((work) => work.owner));
   const storyMutation = selectedWork.some((work) => work.kind === "revise_story");
   const risk =

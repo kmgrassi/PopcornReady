@@ -169,7 +169,9 @@ authorized packet of targets, graph neighbors, canonical story rows, actions,
 timeline items, transcript segments, domain reports, capabilities, budget, and
 pins. Timeline and transcript targets carry their bounded semantic row plus the
 backing graph assets; project targets seed current selections and canonical
-story/timeline/transcript assets. Its structured decision may
+story/timeline/transcript assets. Any bounded timeline item or transcript
+segment actually included in that packet is an authorized model-selected work
+target; rows omitted by the bounds remain unauthorized. Its structured decision may
 choose only semantic work, preservation, clarification, rationale, and summary.
 The server validates every stable ID and owner/output capability, then issues
 work-item/output binding identities and derives pins, selection/story-pointer
@@ -196,7 +198,21 @@ identity and fences its pinned plan through typed
 `story_blueprints.provenance.planAssetId`; the retired `storyboards` table is
 never restored.
 `story_panels` has media references and selection state but no semantic snapshot
-pointer; panel revisions therefore use asset/selection bindings.
+pointer; panel revisions therefore use asset/selection bindings. A project-level
+whole-story `story_snapshot` output binds the current story blueprint row and
+its `story_blueprints.asset_id` pin.
+
+Absent selection slots are authorized only when the server recognizes the
+canonical project role or a role keyed by an existing beat, scene, or asset
+lineage. Those slots receive the initial CAS pin
+`expectedActiveAssetId: null, expectedSeq: 0`; arbitrary client- or
+model-invented slot names remain invalid. Creator-facing media quotes use the
+same provider/kind pricing table as generation. Timed clip and audio estimates
+use the bounded target duration when available and the canonical generation
+default otherwise. Until an approved executor binding names an override,
+proposal quotes use the tool defaults: OpenAI for images/clips and ElevenLabs
+for audio. `maxCostUsd` is derived from that canonical quote rather than an
+output count.
 
 Approved proposal execution is one database-fenced lifecycle. The execution
 reservation owns the post-approval Creative Director root, proposal budget

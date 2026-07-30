@@ -360,7 +360,10 @@ interface PlannedStoryPointerMove {
 For an absent selection slot, the pin uses
 `expectedActiveAssetId: null, expectedSeq: 0`; the final transaction succeeds
 only if no current selection exists. Existing slots require exact active ID and
-sequence equality. A draft story row with no current snapshot uses
+sequence equality. The server may issue that absent-slot pin only for its
+closed catalog of canonical project roles or roles derived from an existing
+beat, scene, or asset lineage; a caller cannot authorize an arbitrary slot by
+naming it. A draft story row with no current snapshot uses
 `expectedSnapshotAssetId: null`; its pointer move succeeds only while that
 column remains null.
 
@@ -370,6 +373,8 @@ These names map to the live canonical relational spine:
 The compatibility `storyboard` projection has the same `story_blueprints` row
 identity and fences its source plan through typed
 `story_blueprints.provenance.planAssetId`; no retired table is restored.
+A project-targeted `story_snapshot` is the whole-story revision case and moves
+the pinned `story_blueprints.asset_id` pointer.
 `story_panels` has image/prompt references and selection state, but no semantic
 snapshot pointer, so panel media changes use asset/selection bindings rather
 than a `PlannedStoryPointerMove`.
@@ -380,6 +385,13 @@ allowlist and derives selection moves, cost/max cost, risk, approval policy,
 and the clarification `answerFingerprint`; model output is never authority for
 those policy fields. The fingerprint is a canonical digest of the normalized
 question, targets, options, and all asset, selection, and story freshness pins.
+Timeline items and transcript segments included in a bounded project packet are
+part of the server allowlist, so the Creative Director can choose those
+semantic rows without widening authority beyond the packet. Media cost and
+maximum-cost fields use the canonical provider/kind pricing table and bounded
+target duration (or the generation default), never a flat per-output price.
+Before PR 2 binds a concrete executor override, previews use the same defaults
+as the generation tools: OpenAI for image/clip outputs and ElevenLabs for audio.
 Domain agents retain latitude to select their allowed primitive tools inside
 the approved boundary.
 
