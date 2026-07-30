@@ -666,6 +666,16 @@ starts immediately beside PR 1.
 
 ### PR 3B — Visual clip and video-edit coverage
 
+**Implementation status (2026-07-30):** the dormant PR 3B executors live behind
+the PR 2 interface and dispatch exact beat-clip, standalone-video, and
+asset-edit bindings as bounded Visuals child runs. Child tasks preserve the
+approved pins and callback identity; canonical child provider primitives own
+durable jobs, proposal-family budget admission, and immutable pooled outputs.
+Terminal domain reporting derives exact primitive/reservation/output causation
+for the fenced lifecycle callback. The adapters never apply parent dispatch
+actions or move selections, and the production registry remains empty pending
+PR 5.
+
 **Deliver:**
 
 - Add kind adapters for beat clips, generic video, and pinned content-aware

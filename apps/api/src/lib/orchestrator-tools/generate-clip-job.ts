@@ -67,6 +67,13 @@ function graphInputsForBeat(beat: GenerateClipJobBeat): GraphAssetInput[] {
       position: 0,
       ...(beat.keyframeContentHash ? { contentHash: beat.keyframeContentHash } : {}),
     },
+    {
+      assetId: beat.keyframeAssetId,
+      relation: "input",
+      role: "generated_from",
+      position: 1,
+      ...(beat.keyframeContentHash ? { contentHash: beat.keyframeContentHash } : {}),
+    },
   ];
 }
 

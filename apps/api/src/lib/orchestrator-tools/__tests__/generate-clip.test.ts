@@ -176,6 +176,129 @@ test("generate_clip queues only beats without an active clip", async () => {
   assert.equal(kicked?.provider, "mock");
 });
 
+test("visuals_revision generates the exact requested beat even when its clip is active", async () => {
+  const assetLookups: string[] = [];
+  let jobInput:
+    | {
+        execution: {
+          input: { beats: Array<{ beatId: string; keyframeAssetId: string }> };
+        };
+      }
+    | undefined;
+  const tool = createGenerateClipTool({
+    getActiveProjectPlan: async () => activePlan,
+    getActiveProjectScopedAsset: async (input) => {
+      assetLookups.push(input.slotRole);
+      if (input.expectedRole === "beat_clip") {
+        return asset({
+          id: "active_clip_2",
+          kind: "video",
+          role: "beat_clip",
+        });
+      }
+      if (input.expectedRole === "beat_keyframe") {
+        return asset({
+          id: "kf_beat_2",
+          kind: "image",
+          role: "beat_keyframe",
+          contentHash: "kf_hash_2",
+        });
+      }
+      return null;
+    },
+    getProjectRunGeneratedAsset: async () => null,
+    createJob: async (input) => {
+      jobInput = input as unknown as typeof jobInput;
+      return queuedJob();
+    },
+    runGenerateClipJob: async () => {},
+  });
+
+  const result = (await tool.execute(
+    { beatId: "beat_2", revisionInstruction: "Make the move more energetic." },
+    {
+      auth,
+      projectId: "proj_1",
+      orchestratorRunId: "visuals_run_1",
+      sessionClaimGeneration: 2,
+      domainTask: { taskKind: "visuals_revision" } as never,
+    }
+  )) as ToolCallResult;
+
+  assert.equal(result.status, "accepted");
+  assert.deepEqual(assetLookups, ["beat_keyframe:beat_2"]);
+  assert.deepEqual(
+    jobInput?.execution.input.beats.map((beat) => ({
+      beatId: beat.beatId,
+      keyframeAssetId: beat.keyframeAssetId,
+    })),
+    [{ beatId: "beat_2", keyframeAssetId: "kf_beat_2" }]
+  );
+});
+
+test("visuals_revision reuses a same-child clip after a crash without reusing the active selection", async () => {
+  const assetLookups: string[] = [];
+  const runLookups: Array<{ runId: string; beatId?: string }> = [];
+  let jobCalls = 0;
+  const tool = createGenerateClipTool({
+    getActiveProjectPlan: async () => activePlan,
+    getActiveProjectScopedAsset: async (input) => {
+      assetLookups.push(input.slotRole);
+      if (input.expectedRole === "beat_clip") {
+        return asset({
+          id: "active_old_clip",
+          kind: "video",
+          role: "beat_clip",
+        });
+      }
+      return null;
+    },
+    getProjectRunGeneratedAsset: async (input) => {
+      runLookups.push({
+        runId: input.orchestratorRunId,
+        beatId: input.beatId,
+      });
+      return asset({
+        id: "same_child_clip",
+        kind: "video",
+        role: "beat_clip",
+      });
+    },
+    createJob: async () => {
+      jobCalls += 1;
+      return queuedJob();
+    },
+    runGenerateClipJob: async () => {
+      throw new Error("must not launch a duplicate provider job");
+    },
+  });
+
+  const result = (await tool.execute(
+    { beatId: "beat_2" },
+    {
+      auth,
+      projectId: "proj_1",
+      orchestratorRunId: "visuals_run_1",
+      sessionClaimGeneration: 2,
+      domainTask: { taskKind: "visuals_revision" } as never,
+    }
+  )) as ToolCallResult;
+
+  assert.equal(result.status, "succeeded");
+  assert.deepEqual(assetLookups, []);
+  assert.deepEqual(runLookups, [{
+    runId: "visuals_run_1",
+    beatId: "beat_2",
+  }]);
+  assert.equal(jobCalls, 0);
+  if (result.status === "succeeded") {
+    assert.deepEqual(
+      (result.output as { skippedBeatIds?: string[] } | undefined)?.skippedBeatIds,
+      ["beat_2"]
+    );
+  }
+});
+
 test("generate_clip omits provider so workspace settings can resolve it", async () => {
   let kicked: { provider?: string; model?: string } | undefined;
   const tool = createGenerateClipTool({
@@ -287,6 +410,13 @@ test("runGenerateClipJob generates clips with keyframe graph inputs, selects the
       relation: "input",
       role: "beat_keyframe",
       position: 0,
+      contentHash: "kf_hash",
+    },
+    {
+      assetId: "kf_1",
+      relation: "input",
+      role: "generated_from",
+      position: 1,
       contentHash: "kf_hash",
     },
   ]);
