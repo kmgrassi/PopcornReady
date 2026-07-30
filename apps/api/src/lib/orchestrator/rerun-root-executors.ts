@@ -3,7 +3,6 @@ import {
   releaseOrchestratorBudget as realReleaseBudget,
   settleOrchestratorBudget as realSettleBudget,
 } from "@/lib/api/v1/orchestrator-budget-controls";
-import { updateAction as realUpdateAction } from "@/lib/api/v1/store";
 import type {
   BoundRequiredOutput,
   PlannedStoryPointerMove,
@@ -76,7 +75,6 @@ export interface RootRerunExecutorServices {
   assembleProspectiveCut(input: RootAssemblyRequest): Promise<RootServiceResult>;
   critiqueProspectiveCut(input: RootCritiqueRequest): Promise<RootServiceResult>;
   estimateCritiqueUsd(input: RootCritiqueRequest): number;
-  updateAction: typeof realUpdateAction;
   settleBudget: typeof realSettleBudget;
   releaseBudget: typeof realReleaseBudget;
 }
@@ -322,21 +320,19 @@ async function executeService(input: {
     throw error;
   }
   const actualUsd = measuredCost(result.actualCostUsd);
+  // Provider spend is a fact once the service returns. Settle it durably before
+  // surfacing an estimate overage so no terminal failure strands a reservation.
+  await input.services.settleBudget({
+    projectId: input.context.projectId,
+    reservationKey,
+    actualUsd,
+  });
   if (actualUsd > input.estimatedUsd) {
     throw new ApiError(
       "budget_exceeded",
       "Root service actual cost exceeded its approved child reservation."
     );
   }
-  await input.services.updateAction(input.context.fence.dispatchActionId, {
-    status: "applied",
-    outputAssetIds: [result.assetId],
-  });
-  await input.services.settleBudget({
-    projectId: input.context.projectId,
-    reservationKey,
-    actualUsd,
-  });
   return {
     status: "succeeded",
     outputs: [{
@@ -344,13 +340,15 @@ async function executeService(input: {
       assetId: result.assetId,
       intrinsicRole: result.intrinsicRole,
     }],
-    primitiveActionIds: [
-      input.context.fence.dispatchActionId,
-      ...(result.followupProposalActionId
-        ? [result.followupProposalActionId]
-        : []),
-    ],
+    primitiveActionIds: [input.context.fence.dispatchActionId],
     budgetReservationKeys: [reservationKey],
+    ...(result.followupProposalActionId
+      ? {
+        providerResult: {
+          followupProposalActionId: result.followupProposalActionId,
+        },
+      }
+      : {}),
   };
 }
 

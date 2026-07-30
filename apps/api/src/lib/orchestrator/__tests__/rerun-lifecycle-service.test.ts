@@ -120,6 +120,9 @@ function harness(input: {
   let reserves = 0;
   let finalOutcome: "applied" | "failed" | null = null;
   let parked = 0;
+  let lastParked: Parameters<RerunLifecycleDeps["parkWorkItem"]>[0] | null = null;
+  let lastCompleted: Parameters<RerunLifecycleDeps["completeWorkItem"]>[0] | null =
+    null;
   const deps: RerunLifecycleDeps = {
     authorizeProject: async () => ({}) as never,
     getProposal: async () => proposalAction,
@@ -195,8 +198,11 @@ function harness(input: {
       callback_results: input.callbackResults ?? [],
       replayed: dispatches > 0,
     }),
-    completeWorkItem: async () => {},
-    parkWorkItem: async () => { parked += 1; },
+    completeWorkItem: async (request) => { lastCompleted = request; },
+    parkWorkItem: async (request) => {
+      parked += 1;
+      lastParked = request;
+    },
     parkExecution: async () => {},
     failWorkItem: async () => {},
     reserveChildBudget: async () => ({ reservationId: "child-budget-1", replayed: false }),
@@ -224,6 +230,8 @@ function harness(input: {
     get reserves() { return reserves; },
     get finalOutcome() { return finalOutcome; },
     get parked() { return parked; },
+    get lastParked() { return lastParked; },
+    get lastCompleted() { return lastCompleted; },
   };
 }
 
@@ -832,6 +840,47 @@ test("a durable completed executor step is skipped after a process crash", async
   assert.equal(result.status, "applied");
   assert.equal(imageCalls, 0);
   assert.equal(videoCalls, 1);
+});
+
+test("inert follow-up metadata survives parking but never enters complete-work causation", async () => {
+  const registry = new RerunExecutorRegistry([
+    createFakeRerunExecutor({
+      kind: "revise_visuals",
+      execute: async ({ workItem }) => ({
+        status: "succeeded",
+        outputs: workItem.requiredOutputs.map((output) => ({
+          ...output,
+          assetId: "output-asset-1",
+          intrinsicRole: output.role,
+        })),
+        primitiveActionIds: ["dispatch-action-1"],
+        budgetReservationKeys: ["budget-key-1"],
+        providerResult: { followupProposalActionId: "proposal-followup" },
+      }),
+    }),
+  ]);
+  const state = harness({ registry });
+  await approveRerunProposal({
+    workspaceId: "workspace-1",
+    actorId: "actor-1",
+    projectId: "project-1",
+    actionId: "proposal-1",
+    approvedMaxCostUsd: 0,
+  }, state.deps);
+  const result = await executeRerunProposal({
+    workspaceId: "workspace-1",
+    actorId: "actor-1",
+    projectId: "project-1",
+    actionId: "proposal-1",
+    idempotencyKey: "followup-metadata",
+  }, state.deps);
+
+  assert.equal(result.status, "applied");
+  assert.deepEqual(
+    state.lastParked?.completedCallbacks?.[0]?.result.providerResult,
+    { followupProposalActionId: "proposal-followup" }
+  );
+  assert.deepEqual(state.lastCompleted?.primitiveActionIds, ["dispatch-action-1"]);
 });
 
 test("a job-backed pending step reparks instead of becoming a failure", async () => {
