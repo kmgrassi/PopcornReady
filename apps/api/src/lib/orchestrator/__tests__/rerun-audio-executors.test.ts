@@ -24,9 +24,9 @@ import {
   rerunExecutorCallbackToken,
 } from "../rerun-callback-fence";
 import {
-  productionRerunExecutorRegistry,
   type RerunExecutorContext,
 } from "../rerun-executor-registry";
+import { productionRerunExecutorRegistry } from "../rerun-production-registry";
 
 const projectTarget = {
   kind: "project" as const,
@@ -145,7 +145,7 @@ function context(
   };
 }
 
-test("Audio production dispatch keeps exact proposal scope and remains inactive in production", async () => {
+test("Audio production dispatch keeps exact proposal scope and is active in production", async () => {
   const workItem = audioWork();
   const dispatches: DispatchDomainRunInput[] = [];
   const reserves: Array<{ reservationKey: string; estimatedUsd: number }> = [];
@@ -187,11 +187,7 @@ test("Audio production dispatch keeps exact proposal scope and remains inactive 
     AUDIO_PRODUCTION_RERUN_EXECUTOR_ID
   );
   assert.deepEqual(reserves, []);
-  assert.throws(
-    () => productionRerunExecutorRegistry.preflight([workItem]),
-    (error: unknown) =>
-      error instanceof ApiError && error.code === "coverage_unavailable"
-  );
+  assert.doesNotThrow(() => productionRerunExecutorRegistry.preflight([workItem]));
 });
 
 test("Audio child scope is derived only from the executor's bound outputs", async () => {

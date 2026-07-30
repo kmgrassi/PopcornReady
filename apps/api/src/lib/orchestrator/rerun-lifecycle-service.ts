@@ -8,11 +8,11 @@ import { getProject } from "@/lib/api/v1/store";
 import * as lifecycleStore from "@/lib/api/v1/rerun-lifecycle-store";
 import { createRerunProposalV2 } from "./rerun-proposal-v2-service";
 import {
-  productionRerunExecutorRegistry,
   type BoundExecutorOutput,
   RerunExecutorRegistry,
   validateBoundExecutorOutputs,
 } from "./rerun-executor-registry";
+import { productionRerunExecutorRegistry } from "./rerun-production-registry";
 import {
   rerunExecutorCallbackToken,
   rerunExecutorCallbackTokenHash,

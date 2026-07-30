@@ -66,6 +66,7 @@ export function resolveRerunGraphMoves(
       !expectedBinding ||
       expectedBinding.workItemId !== binding.workItemId ||
       expectedBinding.role !== binding.role ||
+      expectedBinding.role !== binding.intrinsicRole ||
       byBinding.has(binding.bindingId)
     ) {
       throw new ApiError(
@@ -123,6 +124,7 @@ export async function applyResolvedRerunGraphMoves(
   client: PoolClient,
   input: {
     projectId: string;
+    executionReservationId: string;
     executionActionId: string;
     moves: ResolvedRerunGraphMoves;
   }
@@ -135,7 +137,7 @@ export async function applyResolvedRerunGraphMoves(
     const assets = await client.query<{ id: string }>(
       `select id from public.assets
         where project_id=$1 and id=any($2::uuid[])
-        order by id for share`,
+        order by id`,
       [input.projectId, assetIds]
     );
     if (assets.rowCount !== assetIds.length) {
@@ -146,12 +148,14 @@ export async function applyResolvedRerunGraphMoves(
     }
   }
 
-  if (input.moves.selections.length > 0) {
-    // Selection heads are append-only. This matches proposal admission and
-    // prevents an insert between the final head read and the appended CAS row.
-    await client.query("lock table public.selections in share row exclusive mode");
-  }
   for (const move of input.moves.selections) {
+    // Serialize lifecycle writers per logical slot without granting the API
+    // role table-wide UPDATE. The unique (slot,seq) index remains the final CAS
+    // arbiter for any non-lifecycle writer that does not take this advisory lock.
+    await client.query(
+      "select pg_advisory_xact_lock(hashtextextended($1,0))",
+      [`rerun-selection:${input.projectId}:${selectionKey(move)}`]
+    );
     const current = (await client.query<{
       active_asset_id: string;
       seq: number;
@@ -175,20 +179,32 @@ export async function applyResolvedRerunGraphMoves(
         `Selection ${selectionKey(move)} did not produce a new asset.`
       );
     }
-    await client.query(
-      `insert into public.selections(
-         project_id,slot_owner_lineage_id,slot_role,seq,
-         active_asset_id,set_by_action_id
-       ) values ($1,$2,$3,$4,$5,$6)`,
-      [
-        input.projectId,
-        move.slotOwnerLineageId,
-        move.slotRole,
-        move.expectedSeq + 1,
-        move.activeAssetId,
-        input.executionActionId,
-      ]
-    );
+    try {
+      await client.query(
+        `insert into public.selections(
+           project_id,slot_owner_lineage_id,slot_role,seq,
+           active_asset_id,set_by_action_id
+         ) values ($1,$2,$3,$4,$5,$6)`,
+        [
+          input.projectId,
+          move.slotOwnerLineageId,
+          move.slotRole,
+          move.expectedSeq + 1,
+          move.activeAssetId,
+          input.executionActionId,
+        ]
+      );
+    } catch (error) {
+      if (
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        error.code === "23505"
+      ) {
+        stale(`Selection ${selectionKey(move)} changed during atomic application.`);
+      }
+      throw error;
+    }
   }
 
   for (const move of input.moves.storyPointers) {
@@ -197,28 +213,28 @@ export async function applyResolvedRerunGraphMoves(
       current = (await client.query<{ snapshot_asset_id: string | null }>(
         `select asset_id as snapshot_asset_id
            from public.story_blueprints
-          where project_id=$1 and id=$2 for update`,
+          where project_id=$1 and id=$2`,
         [input.projectId, move.rowId]
       )).rows[0]?.snapshot_asset_id;
     } else if (move.rowKind === "storyboard") {
       current = (await client.query<{ snapshot_asset_id: string | null }>(
         `select nullif(provenance->>'planAssetId','')::uuid as snapshot_asset_id
            from public.story_blueprints
-          where project_id=$1 and id=$2 for update`,
+          where project_id=$1 and id=$2`,
         [input.projectId, move.rowId]
       )).rows[0]?.snapshot_asset_id;
     } else if (move.rowKind === "story_scene") {
       current = (await client.query<{ snapshot_asset_id: string | null }>(
         `select scene_asset_id as snapshot_asset_id
            from public.story_blueprint_scenes
-          where project_id=$1 and id=$2 for update`,
+          where project_id=$1 and id=$2`,
         [input.projectId, move.rowId]
       )).rows[0]?.snapshot_asset_id;
     } else {
       current = (await client.query<{ snapshot_asset_id: string | null }>(
         `select beat_asset_id as snapshot_asset_id
            from public.story_beats
-          where project_id=$1 and id=$2 for update`,
+          where project_id=$1 and id=$2`,
         [input.projectId, move.rowId]
       )).rows[0]?.snapshot_asset_id;
     }
@@ -234,33 +250,19 @@ export async function applyResolvedRerunGraphMoves(
         `Story pointer ${storyKey(move)} did not produce a new snapshot.`
       );
     }
-    if (move.rowKind === "story_blueprint") {
-      await client.query(
-        `update public.story_blueprints set asset_id=$3
-          where project_id=$1 and id=$2`,
-        [input.projectId, move.rowId, move.snapshotAssetId]
-      );
-    } else if (move.rowKind === "storyboard") {
-      await client.query(
-        `update public.story_blueprints
-            set provenance=jsonb_set(
-              provenance,'{planAssetId}',to_jsonb($3::text),true
-            )
-          where project_id=$1 and id=$2`,
-        [input.projectId, move.rowId, move.snapshotAssetId]
-      );
-    } else if (move.rowKind === "story_scene") {
-      await client.query(
-        `update public.story_blueprint_scenes set scene_asset_id=$3
-          where project_id=$1 and id=$2`,
-        [input.projectId, move.rowId, move.snapshotAssetId]
-      );
-    } else {
-      await client.query(
-        `update public.story_beats set beat_asset_id=$3
-          where project_id=$1 and id=$2`,
-        [input.projectId, move.rowId, move.snapshotAssetId]
-      );
-    }
+    await client.query(
+      `select public.apply_rerun_story_pointer(
+         $1,$2,$3,$4,$5,$6,$7
+       )`,
+      [
+        input.projectId,
+        input.executionReservationId,
+        input.executionActionId,
+        move.rowKind,
+        move.rowId,
+        move.expectedSnapshotAssetId,
+        move.snapshotAssetId,
+      ]
+    );
   }
 }

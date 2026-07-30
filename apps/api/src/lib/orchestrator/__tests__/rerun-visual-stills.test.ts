@@ -7,9 +7,9 @@ import type {
 } from "@popcorn/shared/rerun-proposal";
 import { ApiError } from "@/core/errors";
 import {
-  productionRerunExecutorRegistry,
   type RerunExecutorContext,
 } from "../rerun-executor-registry";
+import { productionRerunExecutorRegistry } from "../rerun-production-registry";
 import {
   createVisualStillRerunExecutor,
   VISUAL_STILL_OUTPUT_KINDS,
@@ -127,7 +127,7 @@ function context(input: {
   };
 }
 
-test("visual still adapter claims only PR 3A kinds while production stays inert", () => {
+test("visual still adapter claims only PR 3A kinds and is active in production", () => {
   const executor = createVisualStillRerunExecutor({ dispatch: async () => {
     throw new Error("not called");
   } });
@@ -138,10 +138,8 @@ test("visual still adapter claims only PR 3A kinds while production stays inert"
     executor.supports(proposal().selectedWork[0]!, output({ kind: "clip" })),
     false
   );
-  assert.throws(
-    () => productionRerunExecutorRegistry.preflight(proposal().selectedWork),
-    (error: unknown) =>
-      error instanceof ApiError && error.code === "coverage_unavailable"
+  assert.doesNotThrow(() =>
+    productionRerunExecutorRegistry.preflight(proposal().selectedWork)
   );
 });
 

@@ -15,9 +15,9 @@ import {
   VIDEO_STANDALONE_RERUN_EXECUTOR_ID,
 } from "../rerun-video-executor";
 import {
-  productionRerunExecutorRegistry,
   type RerunExecutorContext,
 } from "../rerun-executor-registry";
+import { productionRerunExecutorRegistry } from "../rerun-production-registry";
 
 const projectTarget = {
   kind: "project" as const,
@@ -306,7 +306,7 @@ test("missing approval fingerprint fails before child dispatch", async () => {
   assert.deepEqual(harness.calls, []);
 });
 
-test("retry reuses the exact child dispatch identity and production remains inactive", async () => {
+test("retry reuses the exact child dispatch identity with production coverage active", async () => {
   const workItem = visualsWork(projectTarget, "primary_video");
   const harness = dispatchHarness();
   const executor = createVideoRerunExecutors({
@@ -324,9 +324,5 @@ test("retry reuses the exact child dispatch identity and production remains inac
       "execution-1:work-video:video",
     ]
   );
-  assert.throws(
-    () => productionRerunExecutorRegistry.preflight([workItem]),
-    (error: unknown) =>
-      error instanceof ApiError && error.code === "coverage_unavailable"
-  );
+  assert.doesNotThrow(() => productionRerunExecutorRegistry.preflight([workItem]));
 });

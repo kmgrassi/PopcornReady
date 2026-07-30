@@ -42,7 +42,7 @@ function readinessRunner(
               idempotency_insert: true,
               reserve_execute: true,
               wake_execute: true,
-              policy_count: 21,
+              policy_count: 26,
               ...overrides,
             },
           ],

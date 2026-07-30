@@ -777,6 +777,16 @@ picture scope.
 
 ### PR 5 — Activate fan-out, atomic application, and reconciliation
 
+**Implementation status (2026-07-30):** The complete PR 3/4 adapter family is
+composed in the production registry. Work-item dispatch overlaps behind durable
+callback fences, while all outputs remain pooled until terminal finalization.
+The direct Postgres finalizer now resolves every approved move through exact
+durable bindings, revalidates selection/story heads, and commits selection
+appends, typed story pointers, reconciliation, terminal action, and settled
+actual cost together. Stale state and cost overage fall back to a failed
+terminal execution with no graph moves. See
+`docs/scopes/selective-regeneration-activation-contract.md`.
+
 **Deliver:**
 
 - Register the tested PR 3/4 adapters in production only in this PR, in the same
