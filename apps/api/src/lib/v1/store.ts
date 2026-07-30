@@ -474,14 +474,27 @@ function timelineToAssetRow(
 export function createSupabaseStore(
   db: SupabaseClient = getServiceSupabase()
 ): V1Store {
+  type StoreTable = "projects" | "assets" | "jobs";
+
+  function fromStoreTable(table: StoreTable) {
+    switch (table) {
+      case "projects":
+        return db.from("projects");
+      case "assets":
+        return db.from("assets");
+      case "jobs":
+        return db.from("jobs");
+    }
+  }
+
   async function getOne<Row>(
-    table: string,
+    table: StoreTable,
     column: string,
     value: string
   ): Promise<Row | null> {
     const data = await runQuery(
       `v1 store.get ${table}`,
-      db.from(table).select("*").eq(column, value).single(),
+      fromStoreTable(table).select("*").eq(column, value).single(),
       { allowMissing: true }
     );
     return (data as Row) ?? null;
@@ -490,7 +503,7 @@ export function createSupabaseStore(
   // Create-or-update keyed on the DB-generated id. A caller-supplied id only
   // updates an existing row; first saves always omit `id` so Postgres assigns it.
   async function saveWithGeneratedId<Row extends { id: string }>(
-    table: string,
+    table: StoreTable,
     row: Row
   ): Promise<string> {
     if (row.id) {
@@ -499,8 +512,7 @@ export function createSupabaseStore(
         const { id, ...updates } = row;
         await runQuery(
           `v1 store.save ${table}`,
-          db
-            .from(table)
+          fromStoreTable(table)
             .update(updates as Record<string, unknown>)
             .eq("id", id)
             .select("id")
@@ -513,8 +525,7 @@ export function createSupabaseStore(
     void _omit;
     const data = await runQuery(
       `v1 store.save ${table}`,
-      db
-        .from(table)
+      fromStoreTable(table)
         .insert(insertable as Record<string, unknown>)
         .select("id")
         .single()

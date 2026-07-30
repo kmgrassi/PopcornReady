@@ -105,12 +105,12 @@ immutable; lifecycle/cost/output/error fields may update.
 
 ## 3. Story spine, composition & jobs
 
-> **Target model — story-spine unification in progress.** This section describes
-> the unified `act → scene → beat → panel` spine. Live migrations still carry the
-> separate `storyboards` / `storyboard_scenes` tables until the migration PRs land;
-> see [`scopes/story-spine-unification.md`](scopes/story-spine-unification.md). The
-> "storyboard" survives as a **UI view** of this spine (act mockups + beat panels),
-> not its own table family.
+> **Live model — story-spine unification shipped.** The migration chain removed
+> the separate `storyboards` / `storyboard_scenes` /
+> `storyboard_beats` / `storyboard_panels` tables. The "storyboard" survives as a
+> **UI view** of this spine (act mockups + beat panels), not its own table
+> family. Historical migration decisions remain in
+> [`scopes/story-spine-unification.md`](scopes/story-spine-unification.md).
 
 The story spine is one FK-linked hierarchy under the project's story blueprint:
 the narrative arc (acts/scenes) and the operational/visual layer (beats/panels)

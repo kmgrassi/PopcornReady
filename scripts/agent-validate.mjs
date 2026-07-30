@@ -13,6 +13,8 @@ const commands = [
 if (scope === "all" || scope === "api") {
   commands.push(["pnpm", ["db:rpc-boundary:test"]]);
   commands.push(["pnpm", ["db:rpc-boundary:validate"]]);
+  commands.push(["pnpm", ["db:relations:test"]]);
+  commands.push(["pnpm", ["db:relations:validate"]]);
 }
 if (scope === "all" || scope === "web") commands.push(["pnpm", ["--filter", "@popcorn/web", "typecheck"]]);
 if (scope === "all" || scope === "api") commands.push(["pnpm", ["--filter", "@popcorn/api", "typecheck"]]);

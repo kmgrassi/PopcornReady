@@ -40,8 +40,15 @@ function findValue(flat, exactPaths, fallbackPattern) {
 const status = spawnSync("supabase", ["status", "-o", "json"], {
   cwd: repoRoot,
   encoding: "utf8",
+  timeout: 20_000,
 });
 
+if (status.error?.code === "ETIMEDOUT") {
+  console.error(
+    "Timed out after 20 seconds waiting for `supabase status -o json`. Check that Docker is responsive, then retry."
+  );
+  process.exit(1);
+}
 if (status.status !== 0) {
   console.error(status.stderr || status.stdout);
   console.error(
