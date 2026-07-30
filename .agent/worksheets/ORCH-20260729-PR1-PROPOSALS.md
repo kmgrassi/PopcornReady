@@ -32,14 +32,19 @@ preview and every live Request Changes/board-feedback route until PR 6.
   pins, and planned pointer moves are server-derived.
 - Keep the adapter injectable so observable tests use deterministic decisions
   and never contact a provider.
-- Restrict story pointer moves to the three live canonical semantic snapshot
-  heads; panels use asset/selection bindings.
+- Restrict story pointer moves to the four typed semantic snapshot heads:
+  blueprint asset, storyboard plan, scene asset, and beat asset; panels use
+  asset/selection bindings.
 - Issue a unique binding ID for every proposed output, including duplicate
   kind/role pairs; PR 2 must preserve that identity through task/report output.
 - Derive clarification answer fingerprints exclusively on the server from the
   normalized question/options/targets and every freshness pin.
 - Fail closed when an asset target is active in multiple selection slots; the
   model must name the intended selection target.
+- Keep inert proposals unbound when no active hierarchy root exists; never
+  create queued transport state during preview.
+- Resolve project, timeline-item, and transcript-segment targets to bounded
+  semantic rows and backing graph assets before graph closure.
 
 ## Changes
 
@@ -54,13 +59,20 @@ preview and every live Request Changes/board-feedback route until PR 6.
   risk, and approval policy.
 - Added an explicit inert `/rerun-proposals/v2` route beside the unchanged v1
   and live Request Changes paths.
+- Addressed four PR review threads: removed queued ghost-root creation, added
+  semantic target/backing-asset resolution, reserved explicit story rows before
+  the story budget remainder, and rejected contradictory no-op checklists.
+- Follow-up review separated storyboard plan pins from blueprint pins and made
+  large project packets reserve semantic backing assets before selection heads,
+  then omit any semantic row whose backing asset/pin did not fit the bound.
 
 ## Validation evidence
 
 - `pnpm --filter @popcorn/api typecheck` — passed.
 - `pnpm --filter @popcorn/shared typecheck` — passed.
 - `pnpm --filter @popcorn/shared test:types` — passed.
-- Focused v1/v2 proposal/parser/context/HTTP smoke tests — 22 passed.
+- Focused v1/v2 proposal/parser/context/HTTP smoke tests — 25 passed after PR
+  review changes.
 - `pnpm agent:lint:fix` — passed.
 - `pnpm db:migrations:validate` — passed (85 migrations).
 - `pnpm --filter @popcorn/web typecheck` — passed.
@@ -89,6 +101,14 @@ preview and every live Request Changes/board-feedback route until PR 6.
   explicit pins fail closed instead of fabricating null/sequence-zero state.
 - Final independent re-review approved the corrected implementation with no
   remaining blockers.
+- PR review follow-up is being validated locally; per handoff instructions the
+  GitHub threads remain unresolved and no reply/commit/push is performed here.
+- Review follow-up validation passed: API/shared/web typechecks, shared type
+  tests, agent lint/validation, migration validation (85), focused API smoke,
+  and `git diff --check`.
+- Independent follow-up review found storyboard/blueprint pin aliasing and a
+  project-scale semantic/backing-asset budget mismatch; both are covered by
+  distinct-identity and >120-selection regressions.
 
 ## Blockers and risks
 
@@ -100,4 +120,5 @@ preview and every live Request Changes/board-feedback route until PR 6.
 
 ## Next action / handoff
 
-- Publish the ready stacked PR and hand its URL/commit to the roadmap owner.
+- Hand the uncommitted review fixes and validation evidence to the roadmap
+  owner for final review, commit, push, and thread resolution.

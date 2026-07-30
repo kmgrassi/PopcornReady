@@ -29,6 +29,8 @@ export const RERUN_CONTEXT_LIMITS = Object.freeze({
   actions: 30,
   terminalReports: 12,
   storyRows: 80,
+  timelineItems: 80,
+  transcriptSegments: 80,
   inputsPerAsset: 24,
   selectionRefsPerAsset: 16,
   selectionPins: 100,
@@ -40,7 +42,7 @@ export interface RerunDecisionPacket {
   schemaVersion: "RerunDecisionPacket.v1";
   projectId: string;
   rootRun: {
-    id: string;
+    id: string | null;
     status: string;
     spentUsd: number;
     budgetUsd: number | null;
@@ -76,6 +78,8 @@ export interface RerunDecisionPacket {
     beats: ProjectGraphSnapshot["beats"];
     panels: ProjectGraphSnapshot["panels"];
   };
+  timelineItems: RerunTimelineItem[];
+  transcriptSegments: RerunTranscriptSegment[];
   recentActions: Array<{
     id: string;
     tool: string;
@@ -116,6 +120,8 @@ export interface RerunDecisionPacket {
     actions: boolean;
     terminalReports: boolean;
     storyRows: boolean;
+    timelineItems: boolean;
+    transcriptSegments: boolean;
     assetInputs: boolean;
     selectionRefs: boolean;
     selectionPins: boolean;
@@ -124,12 +130,34 @@ export interface RerunDecisionPacket {
 
 export interface BuildRerunDecisionPacketInput {
   snapshot: ProjectGraphSnapshot;
-  rootRun: OrchestratorRun;
+  rootRun: OrchestratorRun | null;
   targets: RerunTarget[];
   userIntent: string;
-  timelineItemIds?: ReadonlySet<string>;
-  transcriptSegmentIds?: ReadonlySet<string>;
+  timelineAssetId?: string;
+  timelineItems?: RerunTimelineItem[];
+  transcriptSegments?: RerunTranscriptSegment[];
   recentActions?: Awaited<ReturnType<typeof listRunActions>>;
+}
+
+export interface RerunTimelineItem {
+  id: string;
+  clipAssetId: string;
+  beatId: string | null;
+  sourceInSec: number | null;
+  sourceOutSec: number | null;
+  role: string | null;
+  reason: string | null;
+  caption: string | null;
+}
+
+export interface RerunTranscriptSegment {
+  id: string;
+  transcriptAssetId: string;
+  position: number;
+  startSec: number;
+  endSec: number;
+  text: string;
+  speaker: string | null;
 }
 
 function targetKey(target: RerunTarget): string {
@@ -154,7 +182,7 @@ function storyPinKey(pin: StorySnapshotPin): string {
 }
 
 function targetStoryPinKey(target: RerunTarget): string | null {
-  if (target.kind === "storyboard") return `story_blueprint:${target.storyboardId}`;
+  if (target.kind === "storyboard") return `storyboard:${target.storyboardId}`;
   if (target.kind === "scene") return `story_scene:${target.sceneId}`;
   if (target.kind === "beat") return `story_beat:${target.beatId}`;
   return null;
@@ -172,6 +200,40 @@ function dedupe<T>(values: T[], key: (value: T) => string): T[] {
 
 function bounded<T>(values: T[], limit: number): { values: T[]; truncated: boolean } {
   return { values: values.slice(0, limit), truncated: values.length > limit };
+}
+
+function semanticRowsForTargets(
+  input: BuildRerunDecisionPacketInput,
+  targets: RerunTarget[]
+) {
+  const projectTargeted = targets.some((target) => target.kind === "project");
+  const timelineItemsById = new Map(
+    (input.timelineItems ?? []).map((row) => [row.id, row])
+  );
+  const explicitTimelineItems = targets.flatMap((target) =>
+    target.kind === "timeline_item"
+      ? [timelineItemsById.get(target.timelineItemId)].filter(
+        (row): row is RerunTimelineItem => Boolean(row)
+      )
+      : []);
+  const timelineItems = bounded(dedupe([
+    ...explicitTimelineItems,
+    ...(projectTargeted ? input.timelineItems ?? [] : []),
+  ], (row) => row.id), RERUN_CONTEXT_LIMITS.timelineItems);
+  const transcriptSegmentsById = new Map(
+    (input.transcriptSegments ?? []).map((row) => [row.id, row])
+  );
+  const explicitTranscriptSegments = targets.flatMap((target) =>
+    target.kind === "transcript_segment"
+      ? [transcriptSegmentsById.get(target.transcriptSegmentId)].filter(
+        (row): row is RerunTranscriptSegment => Boolean(row)
+      )
+      : []);
+  const transcriptSegments = bounded(dedupe([
+    ...explicitTranscriptSegments,
+    ...(projectTargeted ? input.transcriptSegments ?? [] : []),
+  ], (row) => row.id), RERUN_CONTEXT_LIMITS.transcriptSegments);
+  return { timelineItems, transcriptSegments };
 }
 
 function compactText(value: string | undefined): string | null {
@@ -196,6 +258,25 @@ function assertAuthorizedTargets(input: BuildRerunDecisionPacketInput, targets: 
   const sceneIds = new Set(snapshot.scenes.map((row) => row.id));
   const beatIds = new Set(snapshot.beats.map((row) => row.id));
   const panelIds = new Set(snapshot.panels.map((row) => row.id));
+  const timelineItemsById = new Map(
+    (input.timelineItems ?? []).map((row) => [row.id, row])
+  );
+  const transcriptSegmentsById = new Map(
+    (input.transcriptSegments ?? []).map((row) => [row.id, row])
+  );
+  const authorizedTimelineItemIds = new Set(
+    [...timelineItemsById.values()]
+      .filter((row) =>
+        input.timelineAssetId != null &&
+        assetIds.has(input.timelineAssetId) &&
+        assetIds.has(row.clipAssetId))
+      .map((row) => row.id)
+  );
+  const authorizedTranscriptSegmentIds = new Set(
+    [...transcriptSegmentsById.values()]
+      .filter((row) => assetIds.has(row.transcriptAssetId))
+      .map((row) => row.id)
+  );
   const selectionIds = new Set(
     snapshot.selections.map((selection) =>
       `${selection.slotOwnerLineageId ?? "project"}:${selection.slotRole}`)
@@ -215,9 +296,9 @@ function assertAuthorizedTargets(input: BuildRerunDecisionPacketInput, targets: 
       (target.kind === "selection" &&
         selectionIds.has(`${target.slotOwnerLineageId ?? "project"}:${target.slotRole}`)) ||
       (target.kind === "timeline_item" &&
-        Boolean(input.timelineItemIds?.has(target.timelineItemId))) ||
+        authorizedTimelineItemIds.has(target.timelineItemId)) ||
       (target.kind === "transcript_segment" &&
-        Boolean(input.transcriptSegmentIds?.has(target.transcriptSegmentId))) ||
+        authorizedTranscriptSegmentIds.has(target.transcriptSegmentId)) ||
       (target.kind === "export" && assetIds.has(target.exportId));
     if (!exists) {
       throw new ApiError("validation_failed", `Rerun target is not authorized: ${targetKey(target)}`);
@@ -225,9 +306,31 @@ function assertAuthorizedTargets(input: BuildRerunDecisionPacketInput, targets: 
   }
 }
 
-function targetAssetIds(snapshot: ProjectGraphSnapshot, targets: RerunTarget[]): string[] {
+function targetAssetIds(input: BuildRerunDecisionPacketInput, targets: RerunTarget[]): string[] {
+  const { snapshot } = input;
   const ids: string[] = [];
-  for (const target of targets) {
+  // Reserve backing assets for explicit targets before a broad project target
+  // fills the inspected-asset budget.
+  const orderedTargets = [
+    ...targets.filter((target) => target.kind !== "project"),
+    ...targets.filter((target) => target.kind === "project"),
+  ];
+  for (const target of orderedTargets) {
+    if (target.kind === "project") {
+      ids.push(
+        ...(input.timelineAssetId ? [input.timelineAssetId] : []),
+        ...(input.timelineItems ?? []).map((row) => row.clipAssetId),
+        ...(input.transcriptSegments ?? []).map((row) => row.transcriptAssetId),
+        ...snapshot.selections.map((selection) => selection.activeAssetId),
+        ...(snapshot.storyBlueprint?.assetId ? [snapshot.storyBlueprint.assetId] : []),
+        ...(snapshot.storyBlueprint?.briefAssetId ? [snapshot.storyBlueprint.briefAssetId] : []),
+        ...snapshot.storyboards.flatMap((row) => row.planAssetId ? [row.planAssetId] : []),
+        ...snapshot.scenes.flatMap((row) => row.sceneAssetId ? [row.sceneAssetId] : []),
+        ...snapshot.beats.flatMap((row) => row.beatAssetId ? [row.beatAssetId] : []),
+        ...snapshot.panels.flatMap((row) =>
+          [row.imageAssetId, row.promptAssetId].filter((id): id is string => Boolean(id)))
+      );
+    }
     if (target.kind === "asset") ids.push(target.assetId);
     if (target.kind === "lineage") {
       ids.push(...snapshot.assets.filter((asset) => asset.lineageId === target.lineageId).map((asset) => asset.id));
@@ -254,6 +357,23 @@ function targetAssetIds(snapshot: ProjectGraphSnapshot, targets: RerunTarget[]):
         candidate.slotOwnerLineageId === target.slotOwnerLineageId &&
         candidate.slotRole === target.slotRole);
       if (row) ids.push(row.activeAssetId);
+    }
+    if (target.kind === "timeline_item") {
+      const row = input.timelineItems?.find((candidate) => candidate.id === target.timelineItemId);
+      if (input.timelineAssetId) ids.push(input.timelineAssetId);
+      if (row) {
+        ids.push(row.clipAssetId);
+        const beat = row.beatId
+          ? snapshot.beats.find((candidate) => candidate.id === row.beatId)
+          : undefined;
+        if (beat?.beatAssetId) ids.push(beat.beatAssetId);
+      }
+    }
+    if (target.kind === "transcript_segment") {
+      const row = input.transcriptSegments?.find(
+        (candidate) => candidate.id === target.transcriptSegmentId
+      );
+      if (row) ids.push(row.transcriptAssetId);
     }
     if (target.kind === "export") ids.push(target.exportId);
   }
@@ -313,18 +433,26 @@ function collectGraphNeighborhood(snapshot: ProjectGraphSnapshot, seedIds: strin
 }
 
 export function buildRerunDecisionPacket(input: BuildRerunDecisionPacketInput): RerunDecisionPacket {
-  if (input.rootRun.projectId !== input.snapshot.projectId ||
-      input.rootRun.agentRole !== "creative_director" ||
-      input.rootRun.rootExecutionProfile !== "creative_director" ||
-      !["queued", "running", "waiting"].includes(input.rootRun.status)) {
+  if (input.rootRun && (
+    input.rootRun.projectId !== input.snapshot.projectId ||
+    input.rootRun.agentRole !== "creative_director" ||
+    input.rootRun.rootExecutionProfile !== "creative_director" ||
+    !["queued", "running", "waiting"].includes(input.rootRun.status)
+  )) {
     throw new ApiError("validation_failed", "rootRunId must be a Creative Director root for this project.");
   }
   const targets = dedupe(input.targets, targetKey);
   if (targets.length === 0 || targets.length > RERUN_CONTEXT_LIMITS.targets) {
     throw new ApiError("validation_failed", "Rerun proposals require between 1 and 20 unique targets.");
   }
-  assertAuthorizedTargets(input, targets);
-  const seeds = targetAssetIds(input.snapshot, targets);
+  const semanticCandidates = semanticRowsForTargets(input, targets);
+  const boundedInput: BuildRerunDecisionPacketInput = {
+    ...input,
+    timelineItems: semanticCandidates.timelineItems.values,
+    transcriptSegments: semanticCandidates.transcriptSegments.values,
+  };
+  assertAuthorizedTargets(boundedInput, targets);
+  const seeds = targetAssetIds(boundedInput, targets);
   const graph = collectGraphNeighborhood(input.snapshot, seeds);
   const downstream = bounded(
     [...graph.downstreamDepth.entries()].sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0])),
@@ -410,12 +538,67 @@ export function buildRerunDecisionPacket(input: BuildRerunDecisionPacketInput): 
       .reverse(),
     RERUN_CONTEXT_LIMITS.terminalReports
   );
-  const storyRows = input.snapshot.storyboards.length + input.snapshot.scenes.length +
-    input.snapshot.beats.length + input.snapshot.panels.length;
   const storyBudget = RERUN_CONTEXT_LIMITS.storyRows;
-  const storyboards = input.snapshot.storyboards.slice(0, storyBudget);
+  type StoryEntry =
+    | { kind: "storyboard"; id: string }
+    | { kind: "scene"; id: string }
+    | { kind: "beat"; id: string }
+    | { kind: "panel"; id: string };
+  const storyEntryKey = (entry: StoryEntry) => `${entry.kind}:${entry.id}`;
+  const explicitStoryEntries: StoryEntry[] = targets.flatMap((target) => {
+    if (target.kind === "storyboard") {
+      return [{ kind: "storyboard" as const, id: target.storyboardId }];
+    }
+    if (target.kind === "scene") {
+      const scene = input.snapshot.scenes.find((row) => row.id === target.sceneId);
+      return [
+        { kind: "scene" as const, id: target.sceneId },
+        ...(scene ? [{ kind: "storyboard" as const, id: scene.storyboardId }] : []),
+      ];
+    }
+    if (target.kind === "beat") {
+      const beat = input.snapshot.beats.find((row) => row.id === target.beatId);
+      const scene = beat
+        ? input.snapshot.scenes.find((row) => row.id === beat.sceneId)
+        : undefined;
+      return [
+        { kind: "beat" as const, id: target.beatId },
+        ...(beat ? [{ kind: "scene" as const, id: beat.sceneId }] : []),
+        ...(scene ? [{ kind: "storyboard" as const, id: scene.storyboardId }] : []),
+      ];
+    }
+    if (target.kind === "panel") {
+      const panel = input.snapshot.panels.find((row) => row.id === target.panelId);
+      const beat = panel
+        ? input.snapshot.beats.find((row) => row.id === panel.beatId)
+        : undefined;
+      const scene = beat
+        ? input.snapshot.scenes.find((row) => row.id === beat.sceneId)
+        : undefined;
+      return [
+        { kind: "panel" as const, id: target.panelId },
+        ...(panel ? [{ kind: "beat" as const, id: panel.beatId }] : []),
+        ...(beat ? [{ kind: "scene" as const, id: beat.sceneId }] : []),
+        ...(scene ? [{ kind: "storyboard" as const, id: scene.storyboardId }] : []),
+      ];
+    }
+    return [];
+  });
+  const allStoryEntries: StoryEntry[] = [
+    ...input.snapshot.storyboards.map((row) => ({ kind: "storyboard" as const, id: row.id })),
+    ...input.snapshot.scenes.map((row) => ({ kind: "scene" as const, id: row.id })),
+    ...input.snapshot.beats.map((row) => ({ kind: "beat" as const, id: row.id })),
+    ...input.snapshot.panels.map((row) => ({ kind: "panel" as const, id: row.id })),
+  ];
+  const selectedStoryEntries = bounded(
+    dedupe([...explicitStoryEntries, ...allStoryEntries], storyEntryKey),
+    storyBudget
+  );
+  const selectedStoryKeys = new Set(selectedStoryEntries.values.map(storyEntryKey));
+  const storyboards = input.snapshot.storyboards.filter((row) =>
+    selectedStoryKeys.has(`storyboard:${row.id}`));
   const scenes = input.snapshot.scenes
-    .slice(0, Math.max(0, storyBudget - storyboards.length))
+    .filter((row) => selectedStoryKeys.has(`scene:${row.id}`))
     .map((scene) => ({
       ...scene,
       ...(scene.title ? { title: scene.title.slice(0, RERUN_CONTEXT_LIMITS.summaryText) } : {}),
@@ -424,7 +607,7 @@ export function buildRerunDecisionPacket(input: BuildRerunDecisionPacketInput): 
         : {}),
     }));
   const beats = input.snapshot.beats
-    .slice(0, Math.max(0, storyBudget - storyboards.length - scenes.length))
+    .filter((row) => selectedStoryKeys.has(`beat:${row.id}`))
     .map((beat) => ({
       ...beat,
       intent: beat.intent.slice(0, RERUN_CONTEXT_LIMITS.summaryText),
@@ -438,15 +621,19 @@ export function buildRerunDecisionPacket(input: BuildRerunDecisionPacketInput): 
         ? { narration: beat.narration.slice(0, RERUN_CONTEXT_LIMITS.summaryText) }
         : {}),
     }));
-  const panels = input.snapshot.panels.slice(
-    0, Math.max(0, storyBudget - storyboards.length - scenes.length - beats.length)
-  );
+  const panels = input.snapshot.panels.filter((row) =>
+    selectedStoryKeys.has(`panel:${row.id}`));
   const allStorySnapshots: StorySnapshotPin[] = [
     ...(input.snapshot.storyBlueprint ? [{
       rowKind: "story_blueprint" as const,
       rowId: input.snapshot.storyBlueprint.id,
       expectedSnapshotAssetId: input.snapshot.storyBlueprint.assetId,
     }] : []),
+    ...input.snapshot.storyboards.map((storyboard) => ({
+      rowKind: "storyboard" as const,
+      rowId: storyboard.id,
+      expectedSnapshotAssetId: storyboard.planAssetId,
+    })),
     ...input.snapshot.scenes.map((scene) => ({
       rowKind: "story_scene" as const,
       rowId: scene.id,
@@ -506,14 +693,21 @@ export function buildRerunDecisionPacket(input: BuildRerunDecisionPacketInput): 
     ...explicitSelectionPins,
     ...allSelectionPins,
   ], selectionPinKey), RERUN_CONTEXT_LIMITS.selectionPins);
+  const inspectedIds = new Set(assets.map((asset) => asset.id));
+  const timelineItems = semanticCandidates.timelineItems.values.filter((row) =>
+    input.timelineAssetId != null &&
+    inspectedIds.has(input.timelineAssetId) &&
+    inspectedIds.has(row.clipAssetId));
+  const transcriptSegments = semanticCandidates.transcriptSegments.values.filter((row) =>
+    inspectedIds.has(row.transcriptAssetId));
   return {
     schemaVersion: "RerunDecisionPacket.v1",
     projectId: input.snapshot.projectId,
     rootRun: {
-      id: input.rootRun.id,
-      status: input.rootRun.status,
-      spentUsd: input.rootRun.spentUsd,
-      budgetUsd: input.rootRun.budgetUsd ?? null,
+      id: input.rootRun?.id ?? null,
+      status: input.rootRun?.status ?? "unbound",
+      spentUsd: input.rootRun?.spentUsd ?? 0,
+      budgetUsd: input.rootRun?.budgetUsd ?? null,
     },
     userIntent: input.userIntent,
     targets,
@@ -527,6 +721,8 @@ export function buildRerunDecisionPacket(input: BuildRerunDecisionPacketInput): 
       beats,
       panels,
     },
+    timelineItems,
+    transcriptSegments,
     recentActions: actions.values.map((action) => ({
       id: action.id,
       tool: action.tool,
@@ -564,7 +760,13 @@ export function buildRerunDecisionPacket(input: BuildRerunDecisionPacketInput): 
       relatedAssets: related.truncated,
       actions: actions.truncated,
       terminalReports: reports.truncated,
-      storyRows: storyRows > storyBudget || storySnapshots.truncated,
+      storyRows: selectedStoryEntries.truncated || storySnapshots.truncated,
+      timelineItems:
+        semanticCandidates.timelineItems.truncated ||
+        timelineItems.length < semanticCandidates.timelineItems.values.length,
+      transcriptSegments:
+        semanticCandidates.transcriptSegments.truncated ||
+        transcriptSegments.length < semanticCandidates.transcriptSegments.values.length,
       assetInputs: assetInputsTruncated,
       selectionRefs: selectionRefsTruncated,
       selectionPins: selectionPins.truncated,
@@ -573,20 +775,44 @@ export function buildRerunDecisionPacket(input: BuildRerunDecisionPacketInput): 
 }
 
 export function canonicalTimelineItemIds(value: unknown): Set<string> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return new Set();
+  return new Set(canonicalTimelineItems(value).map((row) => row.id));
+}
+
+export function canonicalTimelineItems(value: unknown): RerunTimelineItem[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
   const segments = (value as { segments?: unknown }).segments;
-  if (!Array.isArray(segments)) return new Set();
-  return new Set(segments.flatMap((segment) => {
+  if (!Array.isArray(segments)) return [];
+  return segments.flatMap((segment) => {
     if (!segment || typeof segment !== "object" || Array.isArray(segment)) return [];
-    const id = (segment as { id?: unknown }).id;
-    return typeof id === "string" && id.length > 0 && id.length <= 128 ? [id] : [];
-  }));
+    const row = segment as Record<string, unknown>;
+    const id = row.id;
+    const clipAssetId = row.clipId;
+    if (typeof id !== "string" || id.length === 0 || id.length > 128 ||
+        typeof clipAssetId !== "string" || clipAssetId.length === 0 ||
+        clipAssetId.length > 200) {
+      return [];
+    }
+    const numberOrNull = (candidate: unknown) =>
+      typeof candidate === "number" && Number.isFinite(candidate) ? candidate : null;
+    const textOrNull = (candidate: unknown) =>
+      typeof candidate === "string" ? compactText(candidate) : null;
+    return [{
+      id,
+      clipAssetId,
+      beatId: typeof row.beatId === "string" ? row.beatId : null,
+      sourceInSec: numberOrNull(row.sourceInSec),
+      sourceOutSec: numberOrNull(row.sourceOutSec),
+      role: textOrNull(row.role),
+      reason: textOrNull(row.reason),
+      caption: textOrNull(row.caption),
+    }];
+  });
 }
 
 export async function loadRerunDecisionPacket(input: {
   workspaceId: string;
   projectId: string;
-  rootRunId: string;
+  rootRunId?: string;
   targets: RerunTarget[];
   userIntent: string;
 }): Promise<RerunDecisionPacket> {
@@ -595,15 +821,15 @@ export async function loadRerunDecisionPacket(input: {
     projectId: input.projectId,
   });
   const recentRunIds = [...new Set([
-    input.rootRunId,
+    ...(input.rootRunId ? [input.rootRunId] : []),
     ...snapshot.runs
       .slice()
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(0, 10)
       .map((run) => run.id),
   ])];
-  const [rootRun, actions, timeline, transcriptSegmentIds, canonicalStory] = await Promise.all([
-    getOrchestratorRun(input.rootRunId),
+  const [rootRun, actions, timeline, transcriptSegments, canonicalStory] = await Promise.all([
+    input.rootRunId ? getOrchestratorRun(input.rootRunId) : Promise.resolve(null),
     Promise.all(recentRunIds.map((runId) => listRunActions(runId))).then((actionLists) => {
       const byId = new Map(actionLists.flat().map((action) => [action.id, action]));
       return [...byId.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -612,7 +838,11 @@ export async function loadRerunDecisionPacket(input: {
       workspaceId: input.workspaceId,
       projectId: input.projectId,
     }),
-    listTranscriptSegmentIds(input.projectId),
+    listTranscriptSegments(
+      input.projectId,
+      input.targets.flatMap((target) =>
+        target.kind === "transcript_segment" ? [target.transcriptSegmentId] : [])
+    ),
     getProjectStoryboard(input.workspaceId, input.projectId),
   ]);
   // The shared graph snapshot still carries legacy storyboard compatibility
@@ -672,20 +902,62 @@ export async function loadRerunDecisionPacket(input: {
     rootRun,
     targets: input.targets,
     userIntent: input.userIntent,
-    timelineItemIds: canonicalTimelineItemIds(timeline?.timeline),
-    transcriptSegmentIds: new Set(transcriptSegmentIds),
+    ...(timeline ? {
+      timelineAssetId: timeline.assetId,
+      timelineItems: canonicalTimelineItems(timeline.timeline),
+    } : {}),
+    transcriptSegments,
     recentActions: actions,
   });
 }
 
-async function listTranscriptSegmentIds(projectId: string): Promise<string[]> {
-  const rows = await runQuery(
-    "rerunDecisionContext.listTranscriptSegmentIds",
-    getServiceSupabase()
-      .from("transcript_segments")
-      .select("id")
-      .eq("project_id", projectId)
-      .limit(500)
+async function listTranscriptSegments(
+  projectId: string,
+  explicitSegmentIds: string[]
+): Promise<RerunTranscriptSegment[]> {
+  const db = getServiceSupabase();
+  const columns = "id, transcript_asset_id, position, start_sec, end_sec, text, speaker";
+  const [explicitRows, remainderRows] = await Promise.all([
+    explicitSegmentIds.length > 0
+      ? runQuery(
+        "rerunDecisionContext.listTranscriptSegments explicit",
+        db
+          .from("transcript_segments")
+          .select(columns)
+          .eq("project_id", projectId)
+          .in("id", explicitSegmentIds)
+      )
+      : Promise.resolve([]),
+    runQuery(
+      "rerunDecisionContext.listTranscriptSegments remainder",
+      db
+        .from("transcript_segments")
+        .select(columns)
+        .eq("project_id", projectId)
+        .order("position", { ascending: true })
+        .limit(500)
+    ),
+  ]);
+  type TranscriptSegmentRow = {
+    id: string;
+    transcript_asset_id: string;
+    position: number;
+    start_sec: number;
+    end_sec: number;
+    text: string;
+    speaker: string | null;
+  };
+  const rows = dedupe(
+    [...(explicitRows ?? []), ...(remainderRows ?? [])] as TranscriptSegmentRow[],
+    (row) => row.id
   );
-  return ((rows ?? []) as Array<{ id: string }>).map((row) => row.id);
+  return rows.map((row) => ({
+    id: row.id,
+    transcriptAssetId: row.transcript_asset_id,
+    position: row.position,
+    startSec: row.start_sec,
+    endSec: row.end_sec,
+    text: row.text.slice(0, RERUN_CONTEXT_LIMITS.summaryText),
+    speaker: compactText(row.speaker ?? undefined),
+  }));
 }

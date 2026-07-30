@@ -33,6 +33,30 @@ is insufficient if one asset can carry unbounded inputs or selection references,
 or if routine actions can evict terminal domain reports. Each nested collection
 now has its own deterministic deduplication, budget, and truncation evidence.
 
+Preview persistence must also remain separate from run transport. A queued
+orchestrator row is observable active work even when no dispatch exists, so an
+inert proposal cannot create one merely to obtain an attribution ID. Nullable
+action attribution is the honest state until approval creates executable work.
+
+Stable target IDs are not sufficient model context on their own. Timeline and
+transcript targets must resolve to bounded semantic rows and backing assets
+before graph closure, while broad project context must seed its current
+selection/story/timeline/transcript heads. Explicit targets and story rows are
+reserved before bounded remainder so scale cannot silently erase the requested
+meaning or its freshness pins.
+
+Logical story targets cannot share a pointer identity merely because one
+projection currently aliases their IDs. Blueprint asset freshness and
+storyboard plan freshness are separate pins and separate planned moves; PR 2
+must compare-and-swap the row kind named by the proposal.
+
+At project scale, semantic-row and asset budgets must be allocated together.
+The packet now chooses bounded timeline/transcript rows first, reserves their
+backing assets ahead of selection-head remainder, and finally removes any row
+whose required backing asset and asset pin did not fit. This preserves the
+invariant that every semantic fact shown to the model is executable against a
+freshness-fenced graph node.
+
 ## Follow-up
 
 Roadmap PR 2 must carry each server-issued `bindingId`, `workItemId`, target, and

@@ -28,6 +28,8 @@ const packet: RerunDecisionPacket = {
   candidateAffectedAssetIds: [],
   relatedAssetIds: [],
   story: { blueprint: null, storyboards: [], scenes: [], beats: [], panels: [] },
+  timelineItems: [],
+  transcriptSegments: [],
   recentActions: [],
   terminalDomainReports: [],
   capabilities: [],
@@ -35,6 +37,7 @@ const packet: RerunDecisionPacket = {
   truncation: {
     assets: false, downstreamCandidates: false, relatedAssets: false,
     actions: false, terminalReports: false, storyRows: false,
+    timelineItems: false, transcriptSegments: false,
     assetInputs: false, selectionRefs: false, selectionPins: false,
   },
 };
@@ -44,7 +47,6 @@ function deps(overrides: Record<string, unknown> = {}) {
     authorizeProject: async () => ({ id: "p" }) as never,
     getRun: async () => root,
     listRuns: async () => [root],
-    createRun: async () => root,
     loadPacket: async () => packet,
     decide: async () => ({
       outcome: "no_op" as const,
@@ -135,8 +137,13 @@ test("workspace authorization and root mismatch fail before packet/model/action 
   assert.deepEqual([packetLoads, writes], [0, 0]);
 });
 
-test("project-scoped preview selects an existing hierarchy root without creating or enqueueing work", async () => {
+test("project-scoped preview without an active root persists unbound and creates no ghost run", async () => {
   let createdRuns = 0;
+  let persisted: CreateActionInput | undefined;
+  const unboundPacket: RerunDecisionPacket = {
+    ...packet,
+    rootRun: { id: null, status: "unbound", spentUsd: 0, budgetUsd: null },
+  };
   const result = await createRerunProposalV2({
     workspaceId: "w",
     projectId: "p",
@@ -144,10 +151,20 @@ test("project-scoped preview selects an existing hierarchy root without creating
     message: "Review",
     targets: [{ kind: "project", projectId: "p" }],
   }, deps({
+    listRuns: async () => [],
     createRun: async () => { createdRuns += 1; return root; },
+    loadPacket: async (input: { rootRunId?: string }) => {
+      assert.equal(input.rootRunId, undefined);
+      return unboundPacket;
+    },
+    createAction: async (input: CreateActionInput) => {
+      persisted = input;
+      return { id: "proposal-action" } as never;
+    },
   }));
   assert.equal(createdRuns, 0);
-  assert.equal(result.proposal.rootRunId, "root");
+  assert.equal(result.proposal.rootRunId, null);
+  assert.equal(persisted?.orchestratorRunId, undefined);
 });
 
 test("invalid model output becomes a typed upstream failure and never writes an action", async () => {
