@@ -86,6 +86,7 @@ export interface RunActionSummary {
   tool: string;
   status: string;
   params: Record<string, unknown>;
+  rationale?: string;
   outputAssetIds: string[];
   jobIds: string[];
   error?: Record<string, unknown>;
@@ -195,6 +196,7 @@ interface RunActionRow {
   tool: string;
   status: string;
   params: Record<string, unknown> | null;
+  rationale?: string | null;
   output_asset_ids: string[] | null;
   job_ids: string[] | null;
   error: Record<string, unknown> | null;
@@ -254,6 +256,7 @@ function mapRunAction(row: RunActionRow): RunActionSummary {
     supersededAt: row.superseded_at ?? null,
   };
   const error = unmarkedJson(row.error);
+  if (row.rationale) summary.rationale = row.rationale;
   if (error) summary.error = error;
   return summary;
 }

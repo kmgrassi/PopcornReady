@@ -163,6 +163,53 @@ against an approved maximum, and only then enqueues a billable run. A pending
 quote is not a queued run, and a creator-direct quote must not be represented
 as `waiting` for runtime approval.
 
+Graph-scoped production revision previews use the discriminated
+`RerunProposal.v2` contract. The Creative Director receives a bounded, freshly
+authorized packet of targets, graph neighbors, canonical story rows, actions,
+timeline items, transcript segments, domain reports, capabilities, budget, and
+pins. Timeline and transcript targets carry their bounded semantic row plus the
+backing graph assets; project targets seed current selections and canonical
+story/timeline/transcript assets. Any bounded timeline item or transcript
+segment actually included in that packet is an authorized model-selected work
+target; rows omitted by the bounds remain unauthorized. Its structured decision may
+choose only semantic work, preservation, clarification, rationale, and summary.
+The server validates every stable ID and owner/output capability, then issues
+work-item/output binding identities and derives pins, selection/story-pointer
+moves, cost, risk, approval policy, and clarification answer fingerprints. The
+fingerprint covers the normalized question, targets, options, and every asset,
+selection, and story freshness pin; the model cannot author it. Preview
+creation is inert: it does not enqueue a run, call a provider, or move a
+selection. When no active hierarchy root exists, the preview action remains
+unbound (`actions.orchestrator_run_id` is null and `rootRunId` is null); approval
+and execution create the successor root later. Preview creation never inserts a
+queued run.
+
+`BoundRequiredOutput.bindingId` is the output identity even when multiple
+outputs share a kind and role. Roadmap PR 2 extends `DomainRequiredOutput` and
+the corresponding `DomainReport.v1` output entry with the same `bindingId`,
+`workItemId`, target, and ordinal. Neither the coordinator nor a specialist may
+reconstruct a binding from `assetId + role`.
+
+Story pointer pins refer only to the live relational columns that are semantic
+snapshot heads: `story_blueprints.asset_id`, `storyboards.plan_asset_id`,
+`story_blueprint_scenes.scene_asset_id`, and `story_beats.beat_asset_id`.
+`story_panels` has media references and selection state but no semantic snapshot
+pointer; panel revisions therefore use asset/selection bindings. A project-level
+whole-story `story_snapshot` output binds the current story blueprint row and
+its `story_blueprints.asset_id` pin.
+
+Absent selection slots are authorized only when the server recognizes the
+canonical project role or a role keyed by an existing beat, scene, or asset
+lineage. Those slots receive the initial CAS pin
+`expectedActiveAssetId: null, expectedSeq: 0`; arbitrary client- or
+model-invented slot names remain invalid. Creator-facing media quotes use the
+same provider/kind pricing table as generation. Timed clip and audio estimates
+use the bounded target duration when available and the canonical generation
+default otherwise. Until an approved executor binding names an override,
+proposal quotes use the tool defaults: OpenAI for images/clips and ElevenLabs
+for audio. `maxCostUsd` is derived from that canonical quote rather than an
+output count.
+
 ## Entry-path contract
 
 Creator-direct requests are authenticated and project-scoped. A global Create
