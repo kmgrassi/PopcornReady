@@ -638,6 +638,20 @@ starts immediately beside PR 1.
 
 ### PR 3A — Visual still, storyboard, and keyframe coverage
 
+> **Implementation status:** the provider-disabled adapter slice implements
+> exact-bound generic image, poster, anchor, storyboard-tile, and keyframe
+> execution behind the PR 2 interface. Existing pinned stills mint immutable
+> pooled versions; absent targets require explicit pinned graph inputs and use
+> a deterministic canonical generated-assets job. The adapter passes the
+> persisted approval fingerprint, exact pins/bindings, and fenced callback to a
+> bounded Visuals child, then returns an accepted durable handle. Child
+> primitives revalidate durable asset pins at the provider claim and own their
+> parent-linked reservations. The production registry remains empty.
+> Root-owned semantic story-snapshot execution and final pointer/selection
+> application stay coordinated with PR 4 and PR 5 respectively; PR 4 also owns
+> the proposal-child finalization exception that leaves dispatch application to
+> PR 2 `completeWork`.
+
 **Deliver:**
 
 - Add kind adapters for generic images, posters, character/scene anchors,

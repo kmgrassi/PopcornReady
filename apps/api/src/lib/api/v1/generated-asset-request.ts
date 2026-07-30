@@ -43,7 +43,7 @@ export interface ParsedRequest {
   providerSeconds?: number;
   referenceAssetIds: string[];
   editSourceAssetId?: string;
-  /** Audio-only immutable revision source; new bytes mint version+1 in this lineage. */
+  /** Immutable image/audio revision source; new bytes mint version+1 in this lineage. */
   sourceAssetId?: string;
   beatId?: string;
   anchorIds: string[];
@@ -366,7 +366,7 @@ export function parseGeneratedAssetRequest(body: unknown): ParsedRequest {
         ? body.editSourceAssetId.trim()
         : undefined,
     sourceAssetId:
-      kind === "audio" &&
+      (kind === "image" || kind === "audio") &&
       typeof body.sourceAssetId === "string" &&
       body.sourceAssetId.trim()
         ? body.sourceAssetId.trim()
