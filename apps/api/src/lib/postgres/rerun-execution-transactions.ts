@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
+import type { RerunProposalV2 } from "@popcorn/shared/rerun-proposal";
 import { ApiError } from "@/core/errors";
 import {
   assertLiveLease,
@@ -9,6 +10,12 @@ import {
   requireRow,
   type LockedExecution,
 } from "./rerun-lifecycle-common";
+import {
+  applyResolvedRerunGraphMoves,
+  resolveRerunGraphMoves,
+  type DurableRerunBinding,
+  type ResolvedRerunGraphMoves,
+} from "./rerun-graph-application";
 
 export interface ExecutionLease {
   reservationId: string;
@@ -338,7 +345,7 @@ async function finalizeLocked(
   }
   assertLiveLease(execution, input.leaseToken, input.leaseGeneration);
   const proposal = requireRow((await client.query<{
-    id: string; proposal: Record<string, unknown>; input_asset_ids: string[];
+    id: string; proposal: RerunProposalV2; input_asset_ids: string[];
   }>("select id, proposal, input_asset_ids from public.actions where id=$1", [
     execution.proposal_action_id,
   ])).rows, "Rerun proposal not found.");
@@ -379,19 +386,6 @@ async function finalizeLocked(
     if (!input.reconciliationActionId) {
       throw new ApiError("validation_failed", "Applied rerun requires terminal reconciliation.");
     }
-    const reconciliation = await client.query(
-      `select 1 from public.actions where id=$1 and project_id=$2
-        and orchestrator_run_id=$3 and tool='rerun_reconciliation'
-        and status='applied' and params->>'proposalActionId'=$4
-        and params->>'executionReservationId'=$5`,
-      [
-        input.reconciliationActionId, input.projectId, execution.root_run_id,
-        execution.proposal_action_id, execution.id,
-      ]
-    );
-    if (!reconciliation.rowCount) {
-      throw new ApiError("validation_failed", "Applied rerun requires terminal reconciliation.");
-    }
     const unsettled = await client.query(
       `select 1 from public.orchestrator_budget_reservations
         where parent_reservation_id=$1 and status='reserved' limit 1`,
@@ -407,19 +401,24 @@ async function finalizeLocked(
       where parent_reservation_id=$1 and status='settled'`,
     [execution.budget_reservation_id]
   )).rows[0]?.actual ?? 0);
-  if (cost > execution.approved_max_cost_usd) {
+  if (
+    input.outcome === "applied" &&
+    cost > execution.approved_max_cost_usd
+  ) {
     throw new ApiError("budget_exceeded", "Actual cost exceeds approved ceiling.");
   }
   const work = await client.query<{
     output_asset_ids: string[];
+    binding_results: DurableRerunBinding[];
     child_run_id: string | null;
     status: string;
     work_item_id: string;
     error: unknown;
   }>(
-    `select output_asset_ids, child_run_id, status, work_item_id, error
+    `select output_asset_ids, binding_results, child_run_id,
+            status, work_item_id, error
        from public.rerun_execution_work_items
-      where execution_reservation_id=$1 order by work_item_id`,
+      where execution_reservation_id=$1 order by work_item_id for update`,
     [execution.id]
   );
   const outputs = [...new Set(work.rows.flatMap((row) => row.output_asset_ids ?? []))];
@@ -433,6 +432,28 @@ async function finalizeLocked(
     ...work.rows.flatMap((row) => row.child_run_id ? [row.child_run_id] : []),
     ...callbackChildren.rows.map((row) => row.child_run_id),
   ])];
+  const moves: ResolvedRerunGraphMoves = input.outcome === "applied"
+    ? resolveRerunGraphMoves(
+      proposal.proposal,
+      work.rows.flatMap((row) => row.binding_results ?? [])
+    )
+    : { selections: [], storyPointers: [] };
+  const movedSelections = moves.selections.map((move) => ({
+    bindingId: move.bindingId,
+    slotOwnerLineageId: move.slotOwnerLineageId,
+    slotRole: move.slotRole,
+    beforeAssetId: move.expectedActiveAssetId,
+    beforeSeq: move.expectedSeq,
+    activeAssetId: move.activeAssetId,
+    seq: move.expectedSeq + 1,
+  }));
+  const movedStoryPointers = moves.storyPointers.map((move) => ({
+    bindingId: move.bindingId,
+    rowKind: move.rowKind,
+    rowId: move.rowId,
+    beforeSnapshotAssetId: move.expectedSnapshotAssetId,
+    snapshotAssetId: move.snapshotAssetId,
+  }));
   const params = {
     schema_version: "action_params.v1",
     schemaVersion: "RerunExecution.v1",
@@ -440,13 +461,71 @@ async function finalizeLocked(
     outcome: input.outcome,
     childRunIds: childRuns,
     outputAssetIds: outputs,
-    movedSelections: [],
+    movedSelections,
+    movedStoryPointers,
     preservedAssetIds: proposal.proposal.preservedAssetIds ?? [],
     failedWorkItems: work.rows.filter((row) => row.status === "failed")
       .map((row) => ({ workItemId: row.work_item_id, error: row.error })),
     actualCostUsd: cost,
     reconciliationActionId: input.reconciliationActionId ?? null,
   };
+  if (input.outcome === "applied") {
+    const reconciliationParams = {
+      schema_version: "action_params.v1",
+      schemaVersion: "RerunReconciliation.v1",
+      proposalActionId: execution.proposal_action_id,
+      executionReservationId: execution.id,
+      movedSelections,
+      movedStoryPointers,
+      actualCostUsd: cost,
+    };
+    const existingReconciliation = await client.query<{
+      project_id: string;
+      orchestrator_run_id: string;
+      tool: string;
+      status: string;
+      params_match: boolean;
+    }>(
+      `select project_id,orchestrator_run_id,tool,status,
+              params=$2::jsonb as params_match
+         from public.actions where id=$1 for update`,
+      [input.reconciliationActionId, JSON.stringify(reconciliationParams)]
+    );
+    if (existingReconciliation.rows[0]) {
+      const existing = existingReconciliation.rows[0];
+      if (
+        existing.project_id !== input.projectId ||
+        existing.orchestrator_run_id !== execution.root_run_id ||
+        existing.tool !== "rerun_reconciliation" ||
+        existing.status !== "applied" ||
+        !existing.params_match
+      ) {
+        throw new ApiError(
+          "idempotency_conflict",
+          "Reconciliation action replay changed."
+        );
+      }
+    } else {
+      await client.query(
+        `insert into public.actions(
+           id,schema_version,project_id,orchestrator_run_id,tool,status,params,
+           input_asset_ids,rationale,proposal,job_ids,output_asset_ids
+         ) values (
+           $1,'action.v1',$2,$3,'rerun_reconciliation','applied',$4::jsonb,
+           $5,'Atomic selective-regeneration graph reconciliation.',
+           null,'{}',$6
+         )`,
+        [
+          input.reconciliationActionId,
+          input.projectId,
+          execution.root_run_id,
+          JSON.stringify(reconciliationParams),
+          proposal.input_asset_ids,
+          outputs,
+        ]
+      );
+    }
+  }
   await client.query(
     `insert into public.actions (
        id,schema_version,project_id,orchestrator_run_id,tool,status,params,
@@ -455,12 +534,24 @@ async function finalizeLocked(
        'Terminal selective-regeneration execution result.',null,'{}',$7,$8::jsonb)`,
     [
       input.executionActionId, input.projectId, execution.root_run_id,
-      input.outcome, JSON.stringify(params), proposal.input_asset_ids,
+      input.outcome === "applied" ? "running" : input.outcome,
+      JSON.stringify(params), proposal.input_asset_ids,
       outputs, input.outcome === "failed"
         ? JSON.stringify({ schema_version: "action_error.v1", ...(input.error ?? {}) })
         : null,
     ]
   );
+  if (input.outcome === "applied") {
+    await applyResolvedRerunGraphMoves(client, {
+      projectId: input.projectId,
+      executionActionId: input.executionActionId,
+      moves,
+    });
+    await client.query(
+      "update public.actions set status='applied' where id=$1 and status='running'",
+      [input.executionActionId]
+    );
+  }
   await client.query(
     `insert into public.action_assets(project_id,action_id,asset_id,direction,role,ordinal)
      select $1,$2,asset_id,'output','rerun_output',ordinal-1
