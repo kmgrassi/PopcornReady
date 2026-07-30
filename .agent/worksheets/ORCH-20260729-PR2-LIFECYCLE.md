@@ -137,6 +137,11 @@ adapter may register or spend in this slice.
   least-privilege capability/readiness surface, database-clock fences, global
   lock order, causation parity, and replay behavior and returned approved with
   no remaining findings.
+- Main-integration review verified the clean `origin/main..HEAD` scope, static
+  story-pin queries, direct-Postgres RPC inventory, and centralized output-kind
+  mapping at both report and durable work-completion boundaries. Its focused
+  reviewer run passed 27 tests and returned approved with no actionable
+  findings.
 - `pnpm agent:validate -- --scope all` — passed after hardening.
 - `pnpm db:rpc-boundary:test` and `pnpm db:rpc-boundary:validate` — passed with
   48 production targets across 47 expressions.
