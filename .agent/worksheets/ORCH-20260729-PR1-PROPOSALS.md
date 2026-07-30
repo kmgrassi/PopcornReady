@@ -65,6 +65,10 @@ preview and every live Request Changes/board-feedback route until PR 6.
 - Follow-up review separated storyboard plan pins from blueprint pins and made
   large project packets reserve semantic backing assets before selection heads,
   then omit any semantic row whose backing asset/pin did not fit the bound.
+- PR #837 review follow-up authorizes retained project-level semantic rows,
+  derives quotes from canonical timed media pricing, issues null/sequence-zero
+  pins only for server-recognized empty slots, and binds project-level story
+  snapshots to the story blueprint pointer.
 
 ## Validation evidence
 
@@ -113,10 +117,14 @@ preview and every live Request Changes/board-feedback route until PR 6.
   patch-equivalent to the reviewed originals, the `main...HEAD` range contains
   no unrelated source, and the PR 0 base-only retarget preserves its existing
   implementation.
+- Independent PR #837 review approved all four follow-up fixes: bounded semantic
+  authorization, fail-closed empty-slot recognition, canonical default-provider
+  timed pricing, and project-to-blueprint snapshot binding.
 
 ## Main integration validation
 
-- Focused proposal parser/context/service/in-process HTTP tests — 25 passed.
+- Focused proposal parser/context/service/in-process HTTP tests — 29 passed
+  after PR #837 review changes.
 - API, shared, and web typechecks — passed.
 - Shared contract type tests — passed.
 - `pnpm agent:lint:fix` — passed.

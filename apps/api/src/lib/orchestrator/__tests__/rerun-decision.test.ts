@@ -480,6 +480,54 @@ test("storyboard revisions bind the storyboard plan pointer, not a distinct blue
   }]);
 });
 
+test("project story revisions bind the whole-story snapshot to the blueprint pointer", () => {
+  const storyPacket = packet();
+  storyPacket.targets = [project("p")];
+  storyPacket.story.blueprint = {
+    id: "blueprint-1",
+    projectId: "p",
+    assetId: "blueprint-current",
+    briefAssetId: null,
+    status: "draft",
+  };
+  storyPacket.pins.storySnapshots = [{
+    rowKind: "story_blueprint",
+    rowId: "blueprint-1",
+    expectedSnapshotAssetId: "blueprint-current",
+  }];
+  const decision = parseRerunModelDecision({
+    ...baseDecision(),
+    outcome: "revision",
+    checklist: [{
+      target: project("p"),
+      decision: "change",
+      reason: "Revise the premise.",
+    }],
+    selectedWork: [{
+      owner: "creative_director",
+      kind: "revise_story",
+      targets: [project("p")],
+      requiredOutputs: [{
+        target: project("p"),
+        kind: "story_snapshot",
+        role: "story_blueprint",
+        ordinal: 0,
+      }],
+    }],
+  });
+  const proposal = finalizeRerunProposal({
+    packet: storyPacket,
+    decision,
+    source: "request_changes",
+  });
+  assert.deepEqual(proposal.plannedStoryPointerMoves, [{
+    bindingId: "binding-1",
+    rowKind: "story_blueprint",
+    rowId: "blueprint-1",
+    expectedSnapshotAssetId: "blueprint-current",
+  }]);
+});
+
 test("explicit selection outputs fail closed instead of fabricating an absent sequence pin", () => {
   const missingPinPacket = packet();
   const selectionTarget: RerunTarget = {
@@ -515,6 +563,134 @@ test("explicit selection outputs fail closed instead of fabricating an absent se
     decision,
     source: "request_changes",
   }), /missing its current sequence pin/);
+});
+
+test("server-pinned empty selection outputs produce null-sequence-zero CAS moves", () => {
+  const emptySlotPacket = packet();
+  const selectionTarget: RerunTarget = {
+    kind: "selection",
+    projectId: "p",
+    slotOwnerLineageId: null,
+    slotRole: "soundtrack:main",
+  };
+  emptySlotPacket.targets = [selectionTarget];
+  emptySlotPacket.pins.selections = [{
+    slotOwnerLineageId: null,
+    slotRole: "soundtrack:main",
+    expectedActiveAssetId: null,
+    expectedSeq: 0,
+  }];
+  const decision = parseRerunModelDecision({
+    ...baseDecision(),
+    outcome: "revision",
+    checklist: [{
+      target: selectionTarget,
+      decision: "change",
+      reason: "Add the first soundtrack.",
+    }],
+    selectedWork: [{
+      owner: "audio",
+      kind: "revise_audio",
+      targets: [selectionTarget],
+      requiredOutputs: [{
+        target: selectionTarget,
+        kind: "audio_track",
+        role: "soundtrack",
+        ordinal: 0,
+      }],
+    }],
+  });
+  const proposal = finalizeRerunProposal({
+    packet: emptySlotPacket,
+    decision,
+    source: "request_changes",
+  });
+  assert.deepEqual(proposal.plannedSelectionMoves, [{
+    bindingId: "binding-1",
+    slotOwnerLineageId: null,
+    slotRole: "soundtrack:main",
+    expectedActiveAssetId: null,
+    expectedSeq: 0,
+  }]);
+});
+
+test("project packets authorize exposed semantic rows and quote canonical timed media costs", () => {
+  const projectPacket = packet();
+  const timelineTarget: RerunTarget = {
+    kind: "timeline_item",
+    projectId: "p",
+    timelineItemId: "segment-1",
+  };
+  const transcriptTarget: RerunTarget = {
+    kind: "transcript_segment",
+    projectId: "p",
+    transcriptSegmentId: "transcript-1",
+  };
+  projectPacket.targets = [project("p")];
+  projectPacket.timelineItems = [{
+    id: "segment-1",
+    clipAssetId: "clip",
+    beatId: null,
+    sourceInSec: 1,
+    sourceOutSec: 5,
+    role: "opening",
+    reason: null,
+    caption: null,
+  }];
+  projectPacket.transcriptSegments = [{
+    id: "transcript-1",
+    transcriptAssetId: "audio",
+    position: 0,
+    startSec: 2,
+    endSec: 4,
+    text: "Opening narration",
+    speaker: "Narrator",
+  }];
+  const decision = parseRerunModelDecision({
+    ...baseDecision(),
+    outcome: "revision",
+    checklist: [{
+      target: project("p"),
+      decision: "change",
+      reason: "Tighten the opening.",
+    }],
+    selectedWork: [{
+      owner: "visuals",
+      kind: "revise_visuals",
+      targets: [timelineTarget, project("p")],
+      requiredOutputs: [{
+        target: timelineTarget,
+        kind: "clip",
+        role: "opening_clip",
+        ordinal: 0,
+      }, {
+        target: project("p"),
+        kind: "poster",
+        role: "poster",
+        ordinal: 0,
+      }],
+    }, {
+      owner: "audio",
+      kind: "revise_audio",
+      targets: [transcriptTarget],
+      requiredOutputs: [{
+        target: transcriptTarget,
+        kind: "audio_track",
+        role: "narration",
+        ordinal: 0,
+      }],
+    }],
+  });
+  const proposal = finalizeRerunProposal({
+    packet: projectPacket,
+    decision,
+    source: "request_changes",
+  });
+  assert.deepEqual(proposal.estimate, {
+    costUsd: 2.07,
+    maxCostUsd: 2.5875,
+    latencyClass: "media",
+  });
 });
 
 test("audio-only and mixed decisions retain the Creative Director ownership boundary", () => {

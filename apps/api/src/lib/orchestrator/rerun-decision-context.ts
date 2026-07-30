@@ -241,6 +241,46 @@ function compactText(value: string | undefined): string | null {
   return value.trim().slice(0, RERUN_CONTEXT_LIMITS.summaryText);
 }
 
+const PROJECT_SELECTION_ROLES = new Set([
+  "brief",
+  "plan",
+  "visual_anchors",
+  "cut",
+  "poster",
+  "story_blueprint",
+  "soundtrack:main",
+  "script_draft",
+  "critique",
+  "export_video",
+]);
+const ASSET_OWNED_SELECTION_ROLES = new Set([
+  "anchor",
+  "beat_keyframe",
+  "beat_clip",
+  "voiceover",
+]);
+
+function isServerRecognizedSelectionSlot(
+  snapshot: ProjectGraphSnapshot,
+  target: Extract<RerunTarget, { kind: "selection" }>
+): boolean {
+  if (target.slotOwnerLineageId !== null) {
+    return snapshot.assets.some((asset) =>
+      asset.lineageId === target.slotOwnerLineageId) &&
+      ASSET_OWNED_SELECTION_ROLES.has(target.slotRole);
+  }
+  if (PROJECT_SELECTION_ROLES.has(target.slotRole)) return true;
+  const [prefix, stableId, extra] = target.slotRole.split(":");
+  if (!stableId || extra !== undefined) return false;
+  if (["beat_keyframe", "beat_clip", "voiceover", "audio_fit"].includes(prefix)) {
+    return snapshot.beats.some((beat) => beat.id === stableId);
+  }
+  if (prefix === "scene_anchor") {
+    return snapshot.scenes.some((scene) => scene.id === stableId);
+  }
+  return false;
+}
+
 function boundedParams(value: Record<string, unknown>): Record<string, unknown> {
   const serialized = JSON.stringify(value);
   if (serialized.length <= RERUN_CONTEXT_LIMITS.actionParamsChars) return value;
@@ -294,7 +334,8 @@ function assertAuthorizedTargets(input: BuildRerunDecisionPacketInput, targets: 
       (target.kind === "beat" && beatIds.has(target.beatId)) ||
       (target.kind === "panel" && panelIds.has(target.panelId)) ||
       (target.kind === "selection" &&
-        selectionIds.has(`${target.slotOwnerLineageId ?? "project"}:${target.slotRole}`)) ||
+        (selectionIds.has(`${target.slotOwnerLineageId ?? "project"}:${target.slotRole}`) ||
+          isServerRecognizedSelectionSlot(snapshot, target))) ||
       (target.kind === "timeline_item" &&
         authorizedTimelineItemIds.has(target.timelineItemId)) ||
       (target.kind === "transcript_segment" &&
@@ -665,30 +706,37 @@ export function buildRerunDecisionPacket(input: BuildRerunDecisionPacketInput): 
     ...explicitStoryPins,
     ...allStorySnapshots,
   ], storyPinKey), RERUN_CONTEXT_LIMITS.storyRows);
-  const allSelectionPins = dedupe(input.snapshot.selections
-    .filter((selection) => inspected.values.includes(selection.activeAssetId))
-    .map((selection) => ({
-      slotOwnerLineageId: selection.slotOwnerLineageId,
-      slotRole: selection.slotRole,
-      expectedActiveAssetId: selection.activeAssetId,
-      expectedSeq: selection.seq,
-    })), (pin) =>
-    `${pin.slotOwnerLineageId ?? "project"}:${pin.slotRole}`);
+  const allSelectionPins: RerunDecisionPacket["pins"]["selections"] = dedupe(
+    input.snapshot.selections
+      .filter((selection) => inspected.values.includes(selection.activeAssetId))
+      .map((selection) => ({
+        slotOwnerLineageId: selection.slotOwnerLineageId,
+        slotRole: selection.slotRole,
+        expectedActiveAssetId: selection.activeAssetId,
+        expectedSeq: selection.seq,
+      })),
+    (pin) =>
+      `${pin.slotOwnerLineageId ?? "project"}:${pin.slotRole}`);
   const selectionPinKey = (pin: RerunDecisionPacket["pins"]["selections"][number]) =>
     `${pin.slotOwnerLineageId ?? "project"}:${pin.slotRole}`;
   const selectionPinsByKey = new Map(allSelectionPins.map((pin) => [selectionPinKey(pin), pin]));
-  const explicitSelectionPins = targets.flatMap((target) => {
-    if (target.kind !== "selection") return [];
-    const key = `${target.slotOwnerLineageId ?? "project"}:${target.slotRole}`;
-    const pin = selectionPinsByKey.get(key);
-    if (!pin) {
-      throw new ApiError(
-        "validation_failed",
-        `Requested selection target is missing its current sequence pin: ${key}.`
-      );
+  const explicitSelectionPins: RerunDecisionPacket["pins"]["selections"] = targets.flatMap(
+    (target) => {
+      if (target.kind !== "selection") return [];
+      const key = `${target.slotOwnerLineageId ?? "project"}:${target.slotRole}`;
+      const pin = selectionPinsByKey.get(key);
+      if (pin) return [pin];
+      if (!isServerRecognizedSelectionSlot(input.snapshot, target)) {
+        throw new ApiError("validation_failed", `Requested selection target is invalid: ${key}.`);
+      }
+      return [{
+        slotOwnerLineageId: target.slotOwnerLineageId,
+        slotRole: target.slotRole,
+        expectedActiveAssetId: null,
+        expectedSeq: 0,
+      }];
     }
-    return [pin];
-  });
+  );
   const selectionPins = bounded(dedupe([
     ...explicitSelectionPins,
     ...allSelectionPins,

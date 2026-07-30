@@ -57,6 +57,24 @@ whose required backing asset and asset pin did not fit. This preserves the
 invariant that every semantic fact shown to the model is executable against a
 freshness-fenced graph node.
 
+Authorization must also cover model choices within the bounded packet, not
+only the request's original targets. Exposing timeline and transcript rows while
+rejecting them as selected work gives the model context it cannot act on. The
+safe boundary is exactly the retained semantic rows, with their already-retained
+backing-asset pins.
+
+An absent selection is real freshness state, but only after the server derives
+the slot identity from its canonical role catalog and existing stable rows or
+lineages. That produces a truthful null/sequence-zero CAS pin without turning a
+free-form slot string into write authority.
+
+Creator-facing quotes cannot use a parallel price model. Mapping bound outputs
+to the existing provider/kind estimator and deriving timed duration from the
+authorized target keeps preview ceilings aligned with the tools that will
+execute them. Whole-story snapshots have a similar canonical mapping:
+project-level story work points to the story blueprint row, rather than leaving
+its output pooled and unselected.
+
 ## Follow-up
 
 Roadmap PR 2 must carry each server-issued `bindingId`, `workItemId`, target, and

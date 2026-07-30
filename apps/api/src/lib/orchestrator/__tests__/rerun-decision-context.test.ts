@@ -266,6 +266,59 @@ test("explicit selection and story targets retain their real pins beyond snapsho
   assert.equal(storyPacket.truncation.storyRows, true);
 });
 
+test("server-recognized empty selection slots receive an initial CAS pin", () => {
+  const graph = snapshot(1);
+  graph.selections = [];
+  const posterTarget = {
+    kind: "selection" as const,
+    projectId: "p",
+    slotOwnerLineageId: null,
+    slotRole: "poster",
+  };
+  const posterPacket = buildRerunDecisionPacket({
+    snapshot: graph,
+    rootRun: root,
+    userIntent: "Create the first poster",
+    targets: [posterTarget],
+  });
+  assert.deepEqual(posterPacket.pins.selections, [{
+    slotOwnerLineageId: null,
+    slotRole: "poster",
+    expectedActiveAssetId: null,
+    expectedSeq: 0,
+  }]);
+
+  const narrationPacket = buildRerunDecisionPacket({
+    snapshot: graph,
+    rootRun: root,
+    userIntent: "Add narration to the opening beat",
+    targets: [{
+      kind: "selection",
+      projectId: "p",
+      slotOwnerLineageId: null,
+      slotRole: "voiceover:beat-1",
+    }],
+  });
+  assert.deepEqual(narrationPacket.pins.selections, [{
+    slotOwnerLineageId: null,
+    slotRole: "voiceover:beat-1",
+    expectedActiveAssetId: null,
+    expectedSeq: 0,
+  }]);
+
+  assert.throws(() => buildRerunDecisionPacket({
+    snapshot: graph,
+    rootRun: root,
+    userIntent: "Invent a slot",
+    targets: [{
+      kind: "selection",
+      projectId: "p",
+      slotOwnerLineageId: null,
+      slotRole: "arbitrary:slot",
+    }],
+  }), /not authorized/);
+});
+
 test("storyboard targets pin their distinct plan pointer instead of the blueprint pointer", () => {
   const graph = snapshot(2);
   graph.storyBlueprint = {
