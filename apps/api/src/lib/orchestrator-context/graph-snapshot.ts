@@ -363,8 +363,9 @@ function snapshotInputs(raw: unknown): SnapshotAssetInput[] {
 }
 
 export function createSupabaseGraphSnapshotReader(
-  db: () => SupabaseClient = getServiceSupabase
+  getDatabase: () => SupabaseClient = getServiceSupabase
 ): GraphSnapshotReader {
+  const db = () => getDatabase();
   return {
     async getAuthorizedProject(workspaceId, projectId) {
       const data = await runQuery(
@@ -498,7 +499,7 @@ export function createSupabaseGraphSnapshotReader(
       ).map((row) => ({
         id: row.id,
         projectId: row.project_id,
-        status: row.status,
+        status: row.status === "approved" ? "approved" : "ready",
         planAssetId:
           typeof row.provenance?.planAssetId === "string"
             ? row.provenance.planAssetId

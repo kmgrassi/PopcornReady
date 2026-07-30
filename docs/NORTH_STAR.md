@@ -23,10 +23,10 @@ since landed. Map below (details inline per section). **§3 describes the model 
   stale-candidate query
   (`supabase/migrations/20260610120000_asset_graph_model.sql`). It is now the
   authoritative model — see the **Asset-Graph Migration Rule** in `CLAUDE.md`.
-- ✅ **Stable ids on every node (§4)** — the unified story spine
+- ✅ **Stable ids on every node (§4)** — the unified relational story spine
   (`story_blueprint_scenes` / `story_beats` / `story_panels`) carries stable ids
   and links to immutable asset snapshots via `*_asset_id`
-  (`supabase/migrations/20260624130000_story_spine_schema_backfill.sql`).
+  (`supabase/migrations/20260624150000_story_spine_additive.sql`).
 - ✅ **Orchestrator + tools (§6; §7 P2)** — a durable run loop, autonomous through
   storyboard and explicitly continued into production
   (`apps/api/src/lib/orchestrator/engine.ts`; `orchestrator_runs` /

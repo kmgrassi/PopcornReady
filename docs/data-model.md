@@ -105,11 +105,12 @@ immutable; lifecycle/cost/output/error fields may update.
 
 ## 3. Story spine, composition & jobs
 
-> **Live model — story-spine unification shipped.** The migration chain removed
-> the separate `storyboards` / `storyboard_scenes` /
-> `storyboard_beats` / `storyboard_panels` tables. The "storyboard" survives as a
-> **UI view** of this spine (act mockups + beat panels), not its own table
-> family. Historical migration decisions remain in
+> **Live model — unified story spine.** The canonical hierarchy is
+> `story_blueprints → story_blueprint_scenes → story_beats → story_panels`.
+> Migration `20260624170000_drop_legacy_storyboard_tables.sql` removed the
+> former `storyboards` / `storyboard_*` family. The "storyboard" survives as a
+> **UI/API projection** of this spine (act mockups + beat panels), not its own
+> table family. See
 > [`scopes/story-spine-unification.md`](scopes/story-spine-unification.md).
 
 The story spine is one FK-linked hierarchy under the project's story blueprint:

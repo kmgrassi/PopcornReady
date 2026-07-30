@@ -46,8 +46,9 @@ pnpm --filter @popcorn/api exec tsx --test \
 ```
 
 It executes the production query builder through a recording Supabase client
-and proves the unified story-spine relation names, selected columns, explicit
-project predicates, non-empty conditional reads, and mapped snapshot rows.
+and proves the unified story-spine relation names, exact selected columns,
+explicit project predicates, compatibility status/provenance handling, and
+mapped story rows.
 
 ## Local Supabase schema and RLS contract
 
