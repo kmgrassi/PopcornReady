@@ -109,16 +109,35 @@ preview and every live Request Changes/board-feedback route until PR 6.
 - Independent follow-up review found storyboard/blueprint pin aliasing and a
   project-scale semantic/backing-asset budget mismatch; both are covered by
   distinct-identity and >120-selection regressions.
+- Independent integration review confirmed both replayed commits are
+  patch-equivalent to the reviewed originals, the `main...HEAD` range contains
+  no unrelated source, and the PR 0 base-only retarget preserves its existing
+  implementation.
+
+## Main integration validation
+
+- Focused proposal parser/context/service/in-process HTTP tests — 25 passed.
+- API, shared, and web typechecks — passed.
+- Shared contract type tests — passed.
+- `pnpm agent:lint:fix` — passed.
+- `pnpm db:migrations:validate` — passed (86 migrations).
+- `pnpm agent:validate -- --scope all` — passed.
+- `git diff --check origin/main..HEAD` — passed.
 
 ## Blockers and risks
 
-- This PR is stacked on the scope PR and intentionally does not activate
-  execution. PR 0 independently hard-locks all root creation to the hierarchy.
+- The original PR was stacked on the scope PR and intentionally does not
+  activate execution. After GitHub merged it into that already-merged branch,
+  the two reviewed implementation commits were replayed unchanged onto current
+  `main` in `codex/selective-regen-pr1-main-integration`.
+- PR 0 independently hard-locks all root creation to the hierarchy. Its open PR
+  was retargeted from the scope branch to `main`; no replacement implementation
+  or rebase was required.
 - No Supabase credentials are present in this isolated worktree, so the API path
   smoke uses a real in-process HTTP server plus deterministic service seams. No
   provider-backed smoke is required or authorized for this inert PR.
 
 ## Next action / handoff
 
-- Hand the uncommitted review fixes and validation evidence to the roadmap
-  owner for final review, commit, push, and thread resolution.
+- Merge the ready integration PR into `main`, then merge the separately
+  retargeted PR 0 hierarchy lock. PR 2 can then build on both foundations.
