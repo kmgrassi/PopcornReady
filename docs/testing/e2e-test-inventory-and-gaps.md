@@ -132,6 +132,22 @@ Limits and remaining gaps:
   assertion fails. These tests and source files were outside PRs 782-784; the
   affected specialist suites remain green.
 
+PR 7B root-profile retirement coverage:
+
+- A migration contract test verifies legacy-family classification, causal
+  cancellation, unresolved-gate closure, succeeded/failed root supersession,
+  active rerun work/callback assertions, exact grants and role-only policies,
+  profile-free routine replacement, no-`CASCADE` drop, and PostgREST reload.
+- The required local database matrix includes both a clean 95-migration replay
+  and a seeded PR 7A (`20260730180000`) upgrade. It proves migrated legacy
+  storyboard and credit-retry fixtures cannot reopen while valid hierarchy
+  approval/retry controls still work.
+- The upgrade smoke also exercises direct superseded-row rejection, the
+  seven-argument anonymous quota RPC, the profile-free reservation RPC,
+  creator-direct readiness, health, and the five retired route families.
+- This database migration does not add a browser-visible route or control, so a
+  new Playwright case is not required.
+
 ## Development Data Modes
 
 - `AUTH_MODE=local` resolves every request to the deterministic local developer

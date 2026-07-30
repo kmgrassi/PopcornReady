@@ -8,9 +8,9 @@
 <!-- agent-summary: The cutover deletes restart-from-stage, the flat-root fallback, and obsolete compatibility UI. -->
 <!-- agent-summary: Completion requires graph-focused tests, Request Changes E2E, migration validation, and a controlled smoke. -->
 
-> **Status (2026-07-30):** PRs 1–6 and the non-destructive PR 7A application
-> cleanup are implemented on the final stack. PR 7B is the only remaining
-> deployment and must wait until PR 7A is fully rolled out.
+> **Status (2026-07-30):** PRs 1–7B are implemented on the final stack. PR 7B
+> is ready for review but must not merge or deploy until PR 7A is fully rolled
+> out.
 > This document supersedes the incomplete sequencing in
 > [`graph-rerun-decisioning-prs.md`](graph-rerun-decisioning-prs.md) and
 > [`regeneration-coverage-prs.md`](regeneration-coverage-prs.md). Those documents
@@ -75,13 +75,14 @@ After cutover:
 - Legacy revision/stage-restart routes and the flat production runtime are
   deleted.
 
-### Remaining cleanup
+### Final destructive cleanup
 
-PR 7B removes the temporary rolling-deploy trigger,
-`root_execution_profile`, profile-bound database signatures, constraints,
-policies, grants, readiness allowance, and transitional monitoring only after
-all PR 7A application instances are deployed. It does not add or change product
-behavior.
+PR 7B is implemented as the separately reviewed destructive deployment. It
+supersedes historical flat/null roots, closes their unresolved gates, fences
+active family work, and removes the temporary rolling-deploy trigger,
+`root_execution_profile`, profile-bound database logic, constraints, policies,
+grants, readiness allowance, and transitional monitoring. It does not add a
+second product path.
 
 ## 3. Non-Negotiable Design Rules
 
@@ -845,16 +846,16 @@ lands.
 ### PR 7 — Forward cutover and delete the old paths
 
 **Implementation status (2026-07-30):** PR 7 is split into two forward
-deployments. PR 7A is implemented locally: it removes callers, compatibility
+deployments. PR 7A removes callers, compatibility
 routes, the flat registry/driver/prompt, and application routing dependence on
 `root_execution_profile`. Its replay-safe PREP
 migration re-terminalizes active legacy families and temporarily fills the
 profile only for omitted Creative Director root inserts, so old and new binaries
-can overlap without misclassifying Visuals or Audio children. PR 7B runs only
-after PR 7A is fully deployed and removes that trigger, the retained profile
-column, and profile-bound database signatures, constraints, policies, and
-grants. The retired hierarchy health fields and CLI restart command were already
-removed in the provisional cleanup.
+can overlap without misclassifying Visuals or Audio children. PR 7B is
+implemented but runs only after PR 7A is fully deployed. It makes historical
+legacy roots structurally non-resumable, removes the trigger and retained
+profile schema, and restores exact role-only privilege checks. The retired
+hierarchy health fields and CLI restart command were removed in PR 7A.
 
 **Deliver:**
 
