@@ -74,6 +74,7 @@ export interface RerunProposalActionRecord {
   proposal: RerunProposalV2;
   inputAssetIds: string[];
   rationale: string | null;
+  failure: { code: string; message: string } | null;
 }
 
 interface ActionRow {
@@ -86,6 +87,7 @@ interface ActionRow {
   proposal: Record<string, unknown> | null;
   input_asset_ids: string[];
   rationale: string | null;
+  error: Record<string, unknown> | null;
 }
 
 function mapProposalAction(row: ActionRow): RerunProposalActionRecord {
@@ -97,6 +99,19 @@ function mapProposalAction(row: ActionRow): RerunProposalActionRecord {
   ) {
     throw new ApiError("validation_failed", "Action is not a RerunProposal.v2 envelope.");
   }
+  const rawError = unmarkedJson(row.error) as Record<string, unknown> | undefined;
+  const failure = rawError
+    ? {
+        code:
+          typeof rawError.code === "string"
+            ? rawError.code
+            : "rerun_execution_failed",
+        message:
+          typeof rawError.message === "string"
+            ? rawError.message
+            : "The requested changes could not be completed.",
+      }
+    : null;
   return {
     id: row.id,
     projectId: row.project_id,
@@ -106,6 +121,7 @@ function mapProposalAction(row: ActionRow): RerunProposalActionRecord {
     proposal,
     inputAssetIds: row.input_asset_ids,
     rationale: row.rationale,
+    failure,
   };
 }
 
@@ -117,7 +133,7 @@ export async function getRerunProposalAction(input: {
   const row = await runLifecycleQuery(
     "rerunLifecycleStore.getProposal",
     db.from("actions").select(
-      "id, project_id, orchestrator_run_id, tool, status, params, proposal, input_asset_ids, rationale"
+      "id, project_id, orchestrator_run_id, tool, status, params, proposal, input_asset_ids, rationale, error"
     ).eq("id", input.actionId).eq("project_id", input.projectId).maybeSingle()
   ) as ActionRow | null;
   if (!row) throw new ApiError("not_found", `Rerun proposal not found: ${input.actionId}`);
@@ -308,6 +324,37 @@ export async function getRerunProposalApproval(input: {
     approvalActionId: row.id,
     approvedMaxCostUsd: Number(params.approvedMaxCostUsd),
     approvalFingerprint: String(params.approvalFingerprint),
+  };
+}
+
+export async function getLatestRerunExecution(input: {
+  projectId: string;
+  proposalActionId: string;
+}): Promise<{
+  reservationId: string;
+  status: "reserved" | "running" | "waiting" | "completed" | "failed" | "canceled";
+  executionActionId: string | null;
+  updatedAt: string;
+} | null> {
+  const row = await runLifecycleQuery(
+    "rerunLifecycleStore.getExecution",
+    getServiceSupabaseForStore().from("rerun_execution_reservations")
+      .select("id, status, execution_result_action_id, updated_at")
+      .eq("project_id", input.projectId)
+      .eq("proposal_action_id", input.proposalActionId)
+      .maybeSingle()
+  ) as {
+    id: string;
+    status: "reserved" | "running" | "waiting" | "completed" | "failed" | "canceled";
+    execution_result_action_id: string | null;
+    updated_at: string;
+  } | null;
+  if (!row) return null;
+  return {
+    reservationId: row.id,
+    status: row.status,
+    executionActionId: row.execution_result_action_id,
+    updatedAt: row.updated_at,
   };
 }
 

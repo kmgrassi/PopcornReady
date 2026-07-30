@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { mutation } from "@/core/adapter";
+import { mutation, route } from "@/core/adapter";
 import { ApiError } from "@/core/errors";
 import { createRerunProposal } from "@/lib/orchestrator/rerun-proposal-service";
 import { createRerunProposalV2 } from "@/lib/orchestrator/rerun-proposal-v2-service";
@@ -11,6 +11,12 @@ import {
   rejectRerunProposal,
 } from "@/lib/orchestrator/rerun-lifecycle-service";
 import { parseRerunTarget } from "@/lib/orchestrator/rerun-decision";
+import {
+  getLatestRerunExecution,
+  getRerunProposalAction,
+  getRerunProposalApproval,
+} from "@/lib/api/v1/rerun-lifecycle-store";
+import { getProject } from "@/lib/api/v1/store";
 
 export const rerunProposalsRouter = Router();
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -18,6 +24,13 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3
 function required(params: Record<string, string | undefined>, name: string) {
   const value = params[name];
   if (!value) throw new ApiError("validation_failed", `${name} is required.`);
+  return value;
+}
+
+export function parseRerunProposalActionId(value: unknown) {
+  if (typeof value !== "string" || !UUID_PATTERN.test(value)) {
+    throw new ApiError("validation_failed", "actionId must be a UUID.");
+  }
   return value;
 }
 
@@ -156,6 +169,36 @@ rerunProposalsRouter.post("/projects/:projectId/rerun-proposals/v2", mutation(as
   });
   return { status: 201, body: result };
 }));
+
+rerunProposalsRouter.get(
+  "/projects/:projectId/rerun-proposals/v2/:actionId",
+  route(async ({ auth }, params) => {
+    const projectId = required(params, "projectId");
+    const actionId = parseRerunProposalActionId(required(params, "actionId"));
+    await getProject(auth.workspaceId, projectId);
+    const [action, approval, execution] = await Promise.all([
+      getRerunProposalAction({ projectId, actionId }),
+      getRerunProposalApproval({ projectId, proposalActionId: actionId }),
+      getLatestRerunExecution({ projectId, proposalActionId: actionId }),
+    ]);
+    return {
+      status: 200,
+      body: {
+        actionId: action.id,
+        status: action.status,
+        proposal: action.proposal,
+        approval: approval
+          ? {
+              approvalActionId: approval.approvalActionId,
+              approvedMaxCostUsd: approval.approvedMaxCostUsd,
+            }
+          : null,
+        execution,
+        failure: action.failure,
+      },
+    };
+  })
+);
 
 rerunProposalsRouter.post(
   "/projects/:projectId/rerun-proposals/v2/:actionId/approve",

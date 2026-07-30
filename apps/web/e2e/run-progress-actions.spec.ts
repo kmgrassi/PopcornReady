@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import {
   e2eProjectId,
   installRunProgressRoutes,
+  installRerunProposalRoute,
   makeRunDetail,
   reviewGate,
 } from "./fixtures/run-progress";
@@ -26,15 +27,6 @@ async function fillReviewFeedback(page: Page, note: string) {
 
   await page.getByRole("button", { name: "Request changes" }).click();
   await page.getByLabel("What should change?").fill(note);
-}
-
-async function submitReviewChanges(page: Page) {
-  const sendChanges = page.getByRole("button", { name: "Send changes" });
-  if (await sendChanges.isVisible().catch(() => false)) {
-    await sendChanges.click();
-    return;
-  }
-  await page.getByRole("button", { name: "Request changes" }).click();
 }
 
 test.describe("run progress actions", () => {
@@ -100,7 +92,7 @@ test.describe("run progress actions", () => {
     await expect(page.getByRole("status").getByText("Generation was canceled.")).toBeVisible();
   });
 
-  test("approve and reject review gates post feedback and clear the note", async ({ page }) => {
+  test("approves review gates and opens durable change proposals", async ({ page }) => {
     const gated = makeRunDetail("run-gated", {
       status: "running",
       reviewGate: reviewGate("quality_review"),
@@ -123,24 +115,28 @@ test.describe("run progress actions", () => {
 
     const gatedAgain = makeRunDetail("run-reject", {
       status: "running",
-      reviewGate: reviewGate("quality_review"),
-      message: "Quality review is waiting for approval.",
+      reviewGate: reviewGate("brief_intake"),
+      currentStageType: "brief_intake",
+      message: "Concept is waiting for approval.",
     });
     const rejectRoutes = await installRunProgressRoutes(page, { detail: gatedAgain });
+    const proposalRequests = await installRerunProposalRoute(page, {
+      expectedTarget: { kind: "project", projectId: e2eProjectId },
+      summary: "Revise the concept",
+    });
 
     await page.goto(`/projects/${e2eProjectId}/runs/${gatedAgain.run.runId}`);
     await fillReviewFeedback(page, "Regenerate with a stronger ending.");
-    await submitReviewChanges(page);
+    await page.getByRole("button", { name: "Request changes" }).click();
+    await page.getByRole("button", { name: "Preview changes" }).click();
 
-    await expect.poll(() => rejectRoutes.actionBodies[0]).toEqual({
-      action: "reject",
-      body: {
-        stageType: "quality_review",
-        note: "Regenerate with a stronger ending.",
-      },
+    await expect(page.getByRole("heading", { name: "Revise the concept" })).toBeVisible();
+    await expect.poll(() => proposalRequests[0]).toEqual({
+      message: "Regenerate with a stronger ending.",
+      rootRunId: gatedAgain.run.runId,
+      targets: [{ kind: "project", projectId: e2eProjectId }],
     });
-    await expect(page.getByText("Feedback received. Regenerating this stage.")).toBeVisible();
-    await expect(page.getByLabel(/^(Feedback|What should change\?)$/)).toBeHidden();
+    expect(rejectRoutes.actionBodies).toEqual([]);
   });
 
   test("failed runs and successful studio-linked runs render the right recovery paths", async ({

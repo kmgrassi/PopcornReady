@@ -10,24 +10,18 @@ import type {
   StoryboardScene,
 } from "@popcorn/shared/v1/types";
 import { AiAssetFeedbackDialog } from "../ai-edit/AiAssetFeedbackDialog";
-import dialogStyles from "../ai-edit/AiAssetFeedbackDialog.module.css";
 import { RegenerateImageButton } from "../media/RegenerateImageButton";
 import { ImageWithSkeleton } from "../ui/ImageWithSkeleton";
-import { modelPurposeForAssetKind } from "../../lib/modelOptions";
 import styles from "./StoryboardBoard.module.css";
 
 interface StoryboardBoardProps {
+  projectId: string;
   runId: string;
   items: GenerationStageItem[];
   storyboard?: ProjectStoryboard | null;
-  pendingTargetKey?: string | null;
   activeTargetKeys?: string[];
-  error?: string | null;
-  onFeedback: (input: {
-    message: string;
-    target: BoardRevisionTarget;
-    generationModel?: { provider: string; model: string };
-  }) => Promise<void>;
+  onExecutionStarted?: (target: BoardRevisionTarget) => Promise<void> | void;
+  onExecutionSettled?: (target: BoardRevisionTarget) => Promise<void> | void;
 }
 
 interface Tile {
@@ -142,13 +136,13 @@ function statusLabel(item?: GenerationStageItem, beat?: StoryboardBeat): string 
 }
 
 export function StoryboardBoard({
+  projectId,
   runId,
   items,
   storyboard,
-  pendingTargetKey,
   activeTargetKeys = [],
-  error,
-  onFeedback,
+  onExecutionStarted,
+  onExecutionSettled,
 }: StoryboardBoardProps) {
   const visualItems = items.filter((item) => VISUAL_KINDS.has(item.kind));
   const tiles = useMemo(
@@ -162,8 +156,6 @@ export function StoryboardBoard({
 
   if (tiles.length === 0) return null;
 
-  const selectedKey = selectedTile ? targetKey(selectedTile.target) : null;
-  const selectedPending = Boolean(selectedKey && pendingTargetKey === selectedKey);
   const selectedSubtitle = selectedTile
     ? [selectedTile.sceneLabel, selectedTile.intent].filter(Boolean).join(" - ")
     : null;
@@ -180,17 +172,10 @@ export function StoryboardBoard({
         </div>
       </header>
 
-      {error ? (
-        <p className={styles.error} role="alert">
-          {error}
-        </p>
-      ) : null}
-
       <div className={styles.grid}>
         {tiles.map((tile, index) => {
           const key = targetKey(tile.target);
-          const regenerating =
-            pendingTargetKey === key || activeTargetKeys.includes(key);
+          const regenerating = activeTargetKeys.includes(key);
           const regenAssetId = tile.target.assetId ?? tile.item?.assetId;
           const canRegenerate =
             !tile.mediaUrl && tile.item?.kind === "image" && Boolean(regenAssetId);
@@ -243,21 +228,18 @@ export function StoryboardBoard({
       </div>
       <AiAssetFeedbackDialog
         open={Boolean(selectedTile)}
+        projectId={projectId}
+        rootRunId={runId}
+        target={selectedTile?.target ?? null}
         title={selectedTile?.label ?? "Edit asset"}
         subtitle={selectedSubtitle}
         initialMessage={selectedTile?.prompt}
-        pending={selectedPending}
-        error={selectedTile ? error : null}
-        modelPurpose={
-          selectedTile?.item?.kind ? modelPurposeForAssetKind(selectedTile.item.kind) : null
-        }
-        onClose={() => {
-          if (!selectedPending) setSelectedTile(null);
+        onClose={() => setSelectedTile(null)}
+        onExecutionStarted={(executedTarget) => {
+          void onExecutionStarted?.(executedTarget);
         }}
-        onSubmit={async (message, generationModel) => {
-          if (!selectedTile) return;
-          await onFeedback({ message, target: selectedTile.target, generationModel });
-          setSelectedTile(null);
+        onExecutionSettled={(executedTarget) => {
+          void onExecutionSettled?.(executedTarget);
         }}
         asset={
           selectedTile?.mediaUrl ? (
@@ -278,7 +260,7 @@ export function StoryboardBoard({
               />
             )
           ) : (
-            <div className={dialogStyles.assetPlaceholder}>No preview available.</div>
+            <div className={styles.assetPlaceholder}>No preview available.</div>
           )
         }
       />

@@ -824,6 +824,16 @@ terminal execution with no graph moves. See
 This is UI work and must follow the Impeccable skill, product/design docs, and
 browser validation requirements.
 
+**Implementation status (2026-07-30):** implemented in the stacked PR 6
+worktree. Every live web caller now opens the durable proposal lifecycle,
+including project, storyboard, generated asset, run-review, and Studio review
+surfaces. The web persists action identity per exact target and recovers
+proposal/approval/execution state through the authenticated lifecycle read
+endpoint. User-facing restart-stage controls, direct review rejection, timeline
+revision, and provider/model selection have been removed. PR 7 deletes the now
+unreferenced client/API compatibility implementations after this caller cutover
+lands.
+
 **Deliver:**
 
 - Route asset, storyboard, audio, timeline, and project-level Request Changes

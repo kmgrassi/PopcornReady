@@ -79,7 +79,7 @@
   }
 }
 
-/* Review gate card — approve/reject for a paused mid-run gate. */
+/* Review gate card — approve or open durable changes for a paused run. */
 .gate {
   display: flex;
   flex-direction: column;
@@ -89,6 +89,23 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface-2);
+}
+
+.gateProposalPreview {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: var(--space-2);
+  min-height: 280px;
+  width: 100%;
+  padding: var(--space-4);
+  color: var(--text);
+  text-align: center;
+}
+
+.gateProposalPreview p {
+  margin: 0;
+  color: var(--muted);
 }
 
 .gateHeading {

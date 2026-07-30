@@ -315,8 +315,8 @@ test("reveals server-authorized operator diagnostics progressively @mobile", asy
   await expect(rail.getByText("2", { exact: true })).toBeVisible();
 });
 
-test("opens generated asset feedback in a modal and posts the targeted revision @mobile", async ({ page }) => {
-  let revisionRequestBody: unknown = null;
+test("opens generated asset feedback and previews an exact durable proposal @mobile", async ({ page }) => {
+  let proposalRequestBody: unknown = null;
   let getCount = 0;
   let detail = runDetail({
     status: "running",
@@ -344,29 +344,38 @@ test("opens generated asset feedback in a modal and posts the targeted revision 
     getCount += 1;
     await route.fulfill({ json: detail });
   });
-  await page.route(`**${apiRunPath}/board-revisions`, async (route) => {
-    revisionRequestBody = await route.request().postDataJSON();
-    detail = runDetail({
-      status: "running",
-      stageType: "audio_generation",
-      progressPercent: 88,
-      message: "Revision is running.",
-      stageItems: detail.stageItems,
-    });
+  await page.route(`**/api/v1/projects/${projectId}/rerun-proposals/v2`, async (route) => {
+    proposalRequestBody = await route.request().postDataJSON();
+    const target = {
+      kind: "asset",
+      projectId,
+      assetId: "asset-score-1",
+    };
     await route.fulfill({
+      status: 201,
       json: {
-        revision: {
-          id: "revision-1",
-          message: "Make the score less dramatic.",
-          target: {
-            scope: "tile",
-            runId,
-            stageId: "stage-audio_generation",
-            itemId: "item-score-1",
-            assetId: "asset-score-1",
-            label: "Score bed",
-          },
-          createdAt: now,
+        actionId: "22222222-2222-4222-8222-222222222222",
+        proposal: {
+          schemaVersion: "RerunProposal.v2",
+          projectId,
+          rootRunId: runId,
+          source: "request_changes",
+          userIntent: "Make the score less dramatic.",
+          targets: [target],
+          inspectedAssetIds: ["asset-score-1"],
+          candidateAffectedAssetIds: ["asset-score-1"],
+          preservedAssetIds: [],
+          checklist: [{ target, decision: "change", reason: "Revise this score." }],
+          pins: { assets: [], selections: [], storySnapshots: [] },
+          estimate: { costUsd: 0.1, maxCostUsd: 0.2, latencyClass: "interactive" },
+          risk: "low",
+          requiresApproval: true,
+          rationale: "Only the selected score needs to change.",
+          userFacingSummary: "Revise the selected score",
+          outcome: "revision",
+          selectedWork: [],
+          plannedSelectionMoves: [],
+          plannedStoryPointerMoves: [],
         },
       },
     });
@@ -381,34 +390,26 @@ test("opens generated asset feedback in a modal and posts the targeted revision 
   const dialog = page.getByRole("dialog", { name: "Score bed" });
   await expect(dialog).toBeVisible();
 
-  const feedback = dialog.getByLabel("Generation prompt");
-  await expect(feedback).toHaveValue(
-    "Warm cinematic score with a dramatic orchestral swell."
-  );
+  const feedback = dialog.getByLabel("What should change?");
   await feedback.fill("Make the score less dramatic.");
   await expect.poll(() => getCount).toBeGreaterThan(1);
   await expect(dialog).toBeVisible();
   await expect(feedback).toHaveValue("Make the score less dramatic.");
 
-  await dialog.getByRole("button", { name: "Send to AI" }).click();
-
-  await expect(dialog).toHaveCount(0);
-  await expect.poll(() => getCount).toBeGreaterThan(2);
-  await expect(page.getByText("Revision is running.")).toBeVisible();
-  expect(revisionRequestBody).toEqual({
+  await dialog.getByRole("button", { name: "Preview changes" }).click();
+  await expect(dialog.getByRole("heading", { name: "Revise the selected score" })).toBeVisible();
+  expect(proposalRequestBody).toEqual({
     message: "Make the score less dramatic.",
-    target: {
-      scope: "tile",
-      runId,
-      stageId: "stage-audio_generation",
-      itemId: "item-score-1",
+    rootRunId: runId,
+    targets: [{
+      kind: "asset",
+      projectId,
       assetId: "asset-score-1",
-      label: "Score bed",
-    },
+    }],
   });
 });
 
-test("submits review-gate approve and reject actions with notes @mobile", async ({ page }) => {
+test("submits review-gate approval and previews durable requested changes @mobile", async ({ page }) => {
   const requests: Array<{ action: string; body: unknown }> = [];
   let detail = runDetail({
     status: "running",
@@ -436,21 +437,38 @@ test("submits review-gate approve and reject actions with notes @mobile", async 
     });
     await route.fulfill({ json: detail });
   });
-  await page.route(`**${apiRunPath}/reject`, async (route) => {
-    requests.push({ action: "reject", body: await route.request().postDataJSON() });
-    detail = runDetail({
-      status: "running",
-      stageType: "storyboard",
-      progressPercent: 35,
-      reviewGate: {
-        stageId: "stage-storyboard",
-        stageType: "storyboard",
-        state: "awaiting_review",
-        enteredAt: now,
+  let proposalRequestBody: unknown = null;
+  await page.route(`**/api/v1/projects/${projectId}/rerun-proposals/v2`, async (route) => {
+    proposalRequestBody = await route.request().postDataJSON();
+    const target = { kind: "project", projectId };
+    await route.fulfill({
+      status: 201,
+      json: {
+        actionId: "22222222-2222-4222-8222-222222222222",
+        proposal: {
+          schemaVersion: "RerunProposal.v2",
+          projectId,
+          rootRunId: runId,
+          source: "request_changes",
+          userIntent: "Make the ending less busy.",
+          targets: [target],
+          inspectedAssetIds: [],
+          candidateAffectedAssetIds: [],
+          preservedAssetIds: [],
+          checklist: [{ target, decision: "change", reason: "Revise this review boundary." }],
+          pins: { assets: [], selections: [], storySnapshots: [] },
+          estimate: { costUsd: 0.1, maxCostUsd: 0.2, latencyClass: "interactive" },
+          risk: "low",
+          requiresApproval: true,
+          rationale: "The requested change will run through the durable lifecycle.",
+          userFacingSummary: "Revise the concept review",
+          outcome: "revision",
+          selectedWork: [],
+          plannedSelectionMoves: [],
+          plannedStoryPointerMoves: [],
+        },
       },
-      message: "Regenerating storyboard with feedback.",
     });
-    await route.fulfill({ json: detail });
   });
 
   await page.goto(runPath);
@@ -482,38 +500,29 @@ test("submits review-gate approve and reject actions with notes @mobile", async 
 
   detail = runDetail({
     status: "running",
-    stageType: "storyboard",
-    progressPercent: 35,
+    stageType: "brief_intake",
+    progressPercent: 10,
     reviewGate: {
-      stageId: "stage-storyboard",
-      stageType: "storyboard",
+      stageId: "stage-brief_intake",
+      stageType: "brief_intake",
       state: "awaiting_review",
       enteredAt: now,
     },
-    message: "Storyboard is ready for review.",
+    message: "Concept is ready for review.",
   });
   await page.reload();
   await expect(page.getByText("Needs review")).toBeVisible();
   await fillReviewFeedback(page, "Make the ending less busy.");
-  await Promise.all([
-    page.waitForResponse((response) => {
-      const request = response.request();
-      return (
-        request.method() === "POST" &&
-        new URL(response.url()).pathname === `${apiRunPath}/reject` &&
-        response.ok()
-      );
-    }),
-    page.getByRole("button", { name: "Request changes" }).click(),
-  ]);
+  await page.getByRole("button", { name: "Request changes" }).click();
+  await page.getByRole("button", { name: "Preview changes" }).click();
 
-  await expect(page.getByText("Regenerating storyboard with feedback.")).toBeVisible();
-  await expect(page.getByText("Needs review")).toBeVisible();
-  await expect(page.getByLabel("Feedback")).toHaveValue("");
-  expect(requests).toContainEqual({
-    action: "reject",
-    body: { stageType: "storyboard", note: "Make the ending less busy." },
+  await expect(page.getByRole("heading", { name: "Revise the concept review" })).toBeVisible();
+  expect(proposalRequestBody).toEqual({
+    message: "Make the ending less busy.",
+    rootRunId: runId,
+    targets: [{ kind: "project", projectId }],
   });
+  expect(requests.some((request) => request.action === "reject")).toBe(false);
 });
 
 test("shows a stored recovery hint while loading and then renders failure details @mobile", async ({

@@ -3,17 +3,22 @@ import type { Clip, Project, Timeline, TimelineSegment } from "@popcorn/shared/t
 import { DEFAULT_DURATION_POLICY } from "@popcorn/shared/audio-alignment";
 import {
   GENERATION_STAGE_LABELS,
+  type BoardRevisionTarget,
   type GenerationStage,
 } from "@popcorn/shared/v1/types";
+import { RerunProposalDialog } from "../ai-edit/RerunProposalDialog";
+import { cutSelectionRerunTarget } from "../../lib/rerunTargets";
 import { Button } from "../ui/Button";
 import { PreviewPanel } from "../editor/PreviewPanel";
 import { PreviewPlayer } from "../PreviewPlayer";
 import { TimelinePanel } from "./TimelinePanel";
-import type { BriefDraft, ReviewFeedbackTarget } from "./useStudioFlow";
+import type { BriefDraft } from "./useStudioFlow";
 import styles from "./ReviewStep.module.css";
 
 interface ReviewStepProps {
   draft: BriefDraft;
+  projectId: string;
+  rootRunId?: string | null;
   project: Project | null | undefined;
   timeline: Timeline | null | undefined;
   timelineId?: string;
@@ -22,7 +27,6 @@ interface ReviewStepProps {
   segmentNotes: Record<string, string>;
   loading: boolean;
   error?: string;
-  onFeedback(note: string, target?: ReviewFeedbackTarget): Promise<void>;
   onSegmentChange(segmentId: string, patch: Partial<TimelineSegment>): void;
   onSegmentNoteChange(segmentId: string, note: string): void;
   onExport(): void;
@@ -50,6 +54,8 @@ function statusLabel(status: GenerationStage["status"]) {
 
 export function ReviewStep({
   draft,
+  projectId,
+  rootRunId,
   project,
   timeline,
   timelineId,
@@ -58,30 +64,32 @@ export function ReviewStep({
   segmentNotes,
   loading,
   error,
-  onFeedback,
   onSegmentChange,
   onSegmentNoteChange,
   onExport,
 }: ReviewStepProps) {
   const [note, setNote] = useState("");
-  const [pending, setPending] = useState(false);
-  const [feedbackError, setFeedbackError] = useState<string | null>(null);
-  const [sent, setSent] = useState(false);
+  const [proposalOpen, setProposalOpen] = useState(false);
   const [targetSegmentId, setTargetSegmentId] = useState("whole_cut");
   const hasTimeline = !!timeline && timeline.segments.length > 0;
   const selectedSegment =
     targetSegmentId === "whole_cut"
       ? null
       : timeline?.segments.find((segment) => segment.id === targetSegmentId) ?? null;
-  const feedbackTarget: ReviewFeedbackTarget =
-    selectedSegment
+  const proposalTarget: BoardRevisionTarget | null = selectedSegment
+    ? selectedSegment.beatId
       ? {
-          scope: "segment",
-          segmentId: selectedSegment.id,
+          scope: "tile",
+          runId: rootRunId ?? undefined,
           beatId: selectedSegment.beatId,
           label: selectedSegment.role,
         }
-      : { scope: "whole_cut" };
+      : null
+    : null;
+  const directProposalTarget =
+    !selectedSegment && timelineId
+      ? cutSelectionRerunTarget(projectId)
+      : null;
   const completedStages = [...stages]
     .sort((left, right) => left.order - right.order)
     .filter((stage) => stage.status === "succeeded" || stage.completedAt || stage.reviewedAt);
@@ -97,23 +105,6 @@ export function ReviewStep({
       value: hasTimeline ? formatDuration(timelineDuration(timeline)) : `${draft.targetLengthSec}s target`,
     },
   ].filter((item) => item.value);
-
-  async function sendFeedback() {
-    if (!note.trim() || pending) return;
-    setPending(true);
-    setFeedbackError(null);
-    setSent(false);
-    try {
-      await onFeedback(note, feedbackTarget);
-      setSent(true);
-    } catch (sendError) {
-      setFeedbackError(
-        sendError instanceof Error ? sendError.message : "Could not send feedback.",
-      );
-    } finally {
-      setPending(false);
-    }
-  }
 
   return (
     <section className={styles.review} aria-labelledby="studio-review-heading">
@@ -213,7 +204,6 @@ export function ReviewStep({
                   value={targetSegmentId}
                   onChange={(event) => {
                     setTargetSegmentId(event.target.value);
-                    setSent(false);
                   }}
                 >
                   <option value="whole_cut">Whole cut</option>
@@ -229,7 +219,6 @@ export function ReviewStep({
                 value={note}
                 onChange={(event) => {
                   setNote(event.target.value);
-                  setSent(false);
                 }}
                 placeholder={
                   selectedSegment
@@ -241,23 +230,26 @@ export function ReviewStep({
               <div className={styles.feedbackActions}>
                 <Button
                   variant="secondary"
-                  onClick={sendFeedback}
-                  disabled={!note.trim() || pending || !timelineId}
+                  onClick={() => setProposalOpen(true)}
+                  disabled={
+                    !note.trim() ||
+                    !timelineId ||
+                    (!proposalTarget && !directProposalTarget)
+                  }
                 >
-                  {pending ? "Sending..." : "Regenerate with feedback"}
+                  Review proposed changes
                 </Button>
                 {!timelineId ? (
                   <span className={styles.hint}>
                     Feedback will activate once the run exposes a timeline id.
                   </span>
                 ) : null}
-                {sent ? <span className={styles.hint}>Feedback sent.</span> : null}
+                {selectedSegment && !selectedSegment.beatId ? (
+                  <span className={styles.hint}>
+                    This segment needs a beat identity before it can be revised safely.
+                  </span>
+                ) : null}
               </div>
-              {feedbackError ? (
-                <p className="new-project-error" role="alert">
-                  {feedbackError}
-                </p>
-              ) : null}
             </div>
           ) : null}
         </div>
@@ -274,6 +266,27 @@ export function ReviewStep({
           />
         ) : null}
       </div>
+      <RerunProposalDialog
+        open={proposalOpen}
+        projectId={projectId}
+        rootRunId={rootRunId}
+        target={proposalTarget}
+        rerunTarget={directProposalTarget}
+        title={selectedSegment ? `Change ${selectedSegment.role}` : "Change the whole cut"}
+        subtitle="The Creative Director will preview the affected picture and audio before approval."
+        initialMessage={note}
+        onClose={() => setProposalOpen(false)}
+        asset={
+          <div className={styles.proposalPreview}>
+            <strong>{selectedSegment ? selectedSegment.role : "Whole cut"}</strong>
+            <p>
+              {selectedSegment
+                ? `Beat ${selectedSegment.beatId ?? "unresolved"}`
+                : `${formatDuration(timelineDuration(timeline))} assembled timeline`}
+            </p>
+          </div>
+        }
+      />
     </section>
   );
 }

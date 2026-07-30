@@ -7,6 +7,7 @@ import {
   parseCreateRerunProposalV2Request,
   parseExecuteRerunProposalRequest,
   parseRefreshRerunProposalRequest,
+  parseRerunProposalActionId,
 } from "../rerun-proposals";
 
 test("in-process HTTP preview path parses v2 and returns an inert proposal envelope", async (t) => {
@@ -81,6 +82,17 @@ test("v2 HTTP parser rejects malformed targets before service work", () => {
     message: "Change it",
     targets: [{ kind: "project", projectId: "project-a" }],
   }, "project-a"), /source is server-derived/);
+});
+
+test("durable lifecycle reads reject malformed proposal action identities", () => {
+  assert.equal(
+    parseRerunProposalActionId("22222222-2222-4222-8222-222222222222"),
+    "22222222-2222-4222-8222-222222222222"
+  );
+  assert.throws(
+    () => parseRerunProposalActionId("not-an-action"),
+    /actionId must be a UUID/
+  );
 });
 
 test("in-process lifecycle HTTP contract keeps approval, refresh, and execution bounded", async (t) => {

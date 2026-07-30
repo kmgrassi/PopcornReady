@@ -6,6 +6,7 @@ import {
 } from "@popcorn/shared/v1/types";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../ui/Button";
+import { RerunProposalDialog } from "../ai-edit/RerunProposalDialog";
 import { StatusChecklist } from "../ui/StatusChecklist";
 import { StudioEmptyState } from "./StudioEmptyState";
 import { STEP_LABELS, StudioStepper } from "./StudioStepper";
@@ -31,6 +32,7 @@ import {
   useStudioDraftQuery,
   useStudioDraftsQuery,
 } from "../../lib/draftStoreQuery";
+import { reviewProposalTarget as resolveReviewProposalTarget } from "../../lib/reviewProposalTarget";
 import styles from "./StudioShell.module.css";
 
 const LOCAL_DRAFT_ID = "local";
@@ -386,6 +388,7 @@ function StudioFlowView({
   const navigate = useNavigate();
   const [isRedirectingToRun, setIsRedirectingToRun] = useState(autoStartGeneration);
   const [startRunTimedOut, setStartRunTimedOut] = useState(false);
+  const [gateProposalOpen, setGateProposalOpen] = useState(false);
   const autoStartRequestedRef = useRef(false);
   const flow = useStudioFlow({
     initialBrief,
@@ -591,6 +594,12 @@ function StudioFlowView({
     const runStatus = flow.run?.status ?? "queued";
     const items = buildChecklistItems(flow.stages, runStatus);
     const gate = flow.run?.reviewGate ?? null;
+    const gateProposalTarget = gate
+      ? resolveReviewProposalTarget({
+          stageType: gate.stageType,
+          runId: flow.run?.runId,
+        })
+      : null;
     const canRecover = TERMINAL_RECOVERABLE_RUN_STATUSES.includes(runStatus);
     return (
       <main className={styles.shell}>
@@ -613,7 +622,28 @@ function StudioFlowView({
             <GateCard
               stageType={gate.stageType}
               onApprove={() => flow.approveGate()}
-              onReject={() => flow.rejectGate()}
+              onRequestChanges={
+                gateProposalTarget
+                  ? () => setGateProposalOpen(true)
+                  : undefined
+              }
+            />
+          ) : null}
+          {gate && flow.projectId && gateProposalTarget ? (
+            <RerunProposalDialog
+              open={gateProposalOpen}
+              projectId={flow.projectId}
+              rootRunId={flow.run?.runId}
+              target={gateProposalTarget}
+              title={`Change ${GENERATION_STAGE_LABELS[gate.stageType].toLowerCase()}`}
+              subtitle="Preview the exact work and maximum cost before revising this checkpoint."
+              onClose={() => setGateProposalOpen(false)}
+              asset={
+                <div className={styles.gateProposalPreview}>
+                  <strong>{GENERATION_STAGE_LABELS[gate.stageType]}</strong>
+                  <p>The current checkpoint remains unchanged until you approve.</p>
+                </div>
+              }
             />
           ) : null}
           {canRecover ? (
@@ -651,6 +681,8 @@ function StudioFlowView({
         ) : (
           <ReviewStep
             draft={flow.brief}
+            projectId={flow.projectId ?? ""}
+            rootRunId={flow.run?.runId}
             project={flow.reviewProject}
             timeline={flow.reviewTimeline}
             timelineId={flow.reviewTimelineId}
@@ -659,7 +691,6 @@ function StudioFlowView({
             segmentNotes={flow.reviewSegmentNotes}
             loading={flow.reviewLoading}
             error={flow.reviewError ?? flow.error}
-            onFeedback={flow.requestRevision}
             onSegmentChange={flow.updateReviewSegment}
             onSegmentNoteChange={flow.updateReviewSegmentNote}
             onExport={() => guardedGoToStep("export")}
@@ -847,18 +878,18 @@ function RunRecoveryCard({
 }
 
 /**
- * GateCard — approve/reject controls for a paused mid-run review gate. Keeps the
+ * GateCard — approve/change controls for a paused mid-run review gate. Keeps the
  * gate actionable inside the `generating` view so gated runs aren't stranded.
  * (A richer feedback box lands with PR 6 / the stepwise-story-generation scope.)
  */
 function GateCard({
   stageType,
   onApprove,
-  onReject,
+  onRequestChanges,
 }: {
   stageType: GateableGenerationStageType;
   onApprove: () => void;
-  onReject: () => void;
+  onRequestChanges?: () => void;
 }) {
   return (
     <div className={styles.gate}>
@@ -869,10 +900,24 @@ function GateCard({
         <Button variant="cta" onClick={onApprove}>
           Approve &amp; continue
         </Button>
-        <Button variant="secondary" onClick={onReject}>
-          Reject / regenerate
+        <Button
+          variant="secondary"
+          onClick={onRequestChanges}
+          disabled={!onRequestChanges}
+          title={
+            onRequestChanges
+              ? undefined
+              : "Open the run and select a generated object to request changes."
+          }
+        >
+          Request changes
         </Button>
       </div>
+      {!onRequestChanges ? (
+        <p className="muted">
+          Open the run and select a generated object to request changes safely.
+        </p>
+      ) : null}
     </div>
   );
 }
