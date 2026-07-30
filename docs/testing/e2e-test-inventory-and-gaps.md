@@ -97,7 +97,9 @@ Observed results:
   while their required fields were empty, and the unknown route rendered the
   Vite not-found placeholder.
 - The existing failed run retained its status, 50% progress, readable failure,
-  completed storyboard assets, restart controls, and familiar stage labels. A
+  completed storyboard assets and familiar stage labels. The historical
+  restart controls described by that deployment are now deleted; current
+  coverage asserts Request Changes proposal behavior instead. A
   390-by-844 mobile emulation showed no document-level horizontal overflow on
   the dashboard or run-detail route.
 - Contract type checks, the catalog/registry/recovery/projection suite (27/27),

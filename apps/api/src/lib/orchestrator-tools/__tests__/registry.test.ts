@@ -141,7 +141,7 @@ test("registry rejects duplicate tool names", () => {
   );
 });
 
-test("default registry exposes plan_shots metadata", () => {
+test("test-only aggregate exposes plan_shots metadata", () => {
   const registry = createTestToolRegistry({ planShots: planShotsDeps() });
   const definition = registry.get("plan_shots");
 
@@ -513,7 +513,7 @@ test("registry parses input before running cost estimate hook", async () => {
   assert.equal(estimate.unit, "model_call");
 });
 
-test("default registry exposes assemble_timeline metadata", () => {
+test("test-only aggregate exposes assemble_timeline metadata", () => {
   const registry = createTestToolRegistry({
     assembleTimeline: {
       getActiveProjectPlan: async () => null,

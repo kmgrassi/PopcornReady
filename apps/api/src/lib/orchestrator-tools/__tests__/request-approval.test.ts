@@ -65,7 +65,7 @@ test("request_approval rejects a step that cannot rerun on rejection", () => {
   );
 });
 
-test("default registry exposes request_approval as an approval tool", () => {
+test("test-only aggregate exposes request_approval as an approval tool", () => {
   const registry = createTestToolRegistry({
     requestApproval: {
       createReachedApprovalGate: async () => reachedGate(),

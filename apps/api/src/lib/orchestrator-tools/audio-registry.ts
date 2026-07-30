@@ -20,7 +20,7 @@ export interface AudioRegistryProfile {
 /**
  * Without a profile this remains the PR 3 ownership view. A finite Audio run
  * passes its trusted task and receives task-bound definitions under the same
- * canonical names; the flat default registry is untouched.
+ * canonical names without exposing any sibling or root capability.
  */
 export function createAudioToolRegistry(
   deps: ToolRegistryDeps = {},

@@ -1,8 +1,6 @@
 import type {
   AssetKind,
   AssetStatus,
-  BoardRevisionRequest,
-  BoardRevisionResponse,
   BriefVersion,
   CompositionMode,
   JobStatus,
@@ -22,8 +20,6 @@ import type { Project } from "@popcorn/shared/types";
 export type {
   AssetKind,
   AssetStatus,
-  BoardRevisionRequest,
-  BoardRevisionResponse,
   BriefVersion,
   CompositionMode,
   JobStatus,
@@ -348,13 +344,6 @@ export interface RegisterProjectUploadResponse {
   asset: V1Asset;
   job: GenerationJob;
 }
-
-export interface RejectGenerationRunInput {
-  stageType?: GateableGenerationStageType;
-  note?: string;
-}
-
-export type CreateTimelineRevisionInput = string | BoardRevisionRequest;
 
 export interface StartGenerationRunInput {
   brief: VideoBriefInput;

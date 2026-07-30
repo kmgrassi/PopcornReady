@@ -296,11 +296,11 @@ Role builders make the hierarchy boundary executable:
   and
 - `audio-registry.ts` exposes only audio generation and picture fitting.
 
-The three role registries are an exact, disjoint 12/8/2 partition of the
-current 22-tool catalog. The two standalone tools have a specialist-only
-catalog surface and remain absent from `PRODUCTION_TOOL_NAMES`, driver stubs,
-the flat default registry, and root evals. Domain registries contain no root,
-sibling, approval, assembly, or dispatch capability.
+The three role registries are an exact, disjoint 13/8/2 partition of the
+current 23-tool catalog. The two standalone tools have a specialist-only
+catalog surface and remain absent from `PRODUCTION_TOOL_NAMES` and root evals.
+Production never constructs an all-tools registry. Domain registries contain
+no root, sibling, approval, assembly, or dispatch capability.
 
 Under the active hierarchy, responsibility is:
 

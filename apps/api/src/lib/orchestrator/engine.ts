@@ -3,8 +3,8 @@
 // durable state (orchestrator_runs + its actions), not a live process — each call
 // loads the run, drives turns until it parks (async job / approval gate) or
 // finishes, then exits. Re-entry (resume) is the same loop re-applied. Deliberately
-// calls model + executeRegisteredTool directly (rather than runToolLoopTurn) so it
-// can pause BEFORE a gated tool executes.
+// calls the model and registered tools directly so it can pause before a gated
+// tool executes.
 //
 // All side effects are injectable (store, jobs, model, registry) so the loop is
 // unit-testable with fakes — no DB, no network.

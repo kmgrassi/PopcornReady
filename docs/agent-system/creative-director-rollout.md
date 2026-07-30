@@ -74,6 +74,7 @@ group by 1 having count(*) > 1;
 ## Evidence and final cleanup
 
 Record the cutover start UTC, production test results, dashboard snapshots, and
-any incident. The health metadata is removed. The remainder of roadmap PR 7
-removes the historical flat registry, profile type, and profile column after
-every production caller ignores them.
+any incident. The health metadata, historical flat registry, and application
+profile type are removed in PR 7A. Its temporary root-aware insert trigger
+supports the rolling deploy; PR 7B removes that trigger and the retained profile
+column only after every production caller ignores it.
