@@ -4,8 +4,8 @@
 <!-- agent-summary: Trusted multi-table server workflows migrate from RPCs to TypeScript transactions. -->
 <!-- agent-summary: New application workflow RPC targets are prohibited by a checked allowlist. -->
 <!-- agent-summary: Triggers, RLS helpers, integrity functions, and database-native search may remain in Postgres. -->
-<!-- agent-summary: Direct Postgres connections bypass user RLS and require explicit tenancy enforcement. -->
-<!-- agent-summary: DATABASE_URL is optional until a direct transaction is invoked. -->
+<!-- agent-summary: Direct Postgres has no request JWT; role policies and explicit tenancy predicates are required. -->
+<!-- agent-summary: Production DATABASE_URL uses the least-privilege popcorn_api session-pooler role. -->
 <!-- agent-summary: Migrate one service-role workflow family per PR after a least-privilege role exists. -->
 
 This document owns the boundary between Supabase's Data API and direct
@@ -37,7 +37,7 @@ validator.
 - Trigger-backed functions: **34**.
 - Non-trigger functions: **66**.
 - `SECURITY DEFINER` functions: **78**.
-- Active API production runtime: **48 `.rpc()` expressions targeting 49
+- Active API production runtime: **47 `.rpc()` expressions targeting 48
   distinct functions**.
 - Internal test-sandbox support: **2 expressions targeting one additional
   function**, `delete_test_sandbox`.
@@ -49,13 +49,17 @@ allowlist.
 
 ## Direct Postgres safety rules
 
-`DATABASE_URL` is server-only. The pool is lazy, so the API can boot and serve
-paths that do not use direct Postgres when it is absent. The first direct
-transaction fails clearly if it is missing or its bounded pool settings are
-invalid.
+`DATABASE_URL` is server-only. The pool is lazy, but production readiness now
+requires the creator-direct confirmation role capabilities before Railway
+promotes a deployment. Non-production processes may still boot without the URL;
+the first direct transaction then fails clearly if it is missing or its bounded
+pool settings are invalid.
 
-A direct connection as `postgres`, the schema owner, or another privileged
-role bypasses RLS and ordinary grants. Therefore:
+A direct connection carries no request JWT identity. A connection as `postgres`,
+the schema owner, or a `BYPASSRLS` role bypasses policies entirely. The
+production `popcorn_api` role deliberately remains `NOBYPASSRLS`; it has
+role-specific policies and column grants only for reviewed transaction modules.
+Therefore:
 
 - never pass a direct client into browser/request code that expects RLS;
 - require workspace/project predicates in every trusted query;
@@ -63,9 +67,13 @@ role bypasses RLS and ordinary grants. Therefore:
 - provision a dedicated least-privilege API database role before the first
   production workflow conversion;
 - grant that role only the tables, sequences, and routines required by the
-  migrated module.
+  migrated module;
+- keep workspace/project/actor predicates in the SQL even when a role-specific
+  policy permits the reviewed row family.
 
-The connection string must retain the SSL parameters supplied by Supabase.
+The connection string must retain the SSL parameters supplied by Supabase. The
+current Node `pg` driver requires
+`sslmode=require&uselibpqcompat=true` for the Supavisor certificate chain.
 Persistent API processes should use the direct connection when their network
 supports it, otherwise Supavisor **session mode on port 5432**. This foundation
 does not support transaction-mode pooler URLs because it owns a persistent
@@ -88,17 +96,39 @@ Use `withTransaction("stable.operation.name", async (client) => ...)` from
 The pool is small and bounded, applies connection/idle/statement timeouts, and
 closes after the HTTP server drains during shutdown.
 
+## Creator-direct confirmation transaction
+
+`apps/api/src/lib/postgres/creator-direct-confirmation.ts` owns the trusted
+confirmation workflow formerly orchestrated by
+`consume_creator_direct_proposal_gate`. It authorizes and locks the
+workspace/project/actor gate before replay lookup, preserves PostgreSQL's
+canonical numeric digest representation, locks the queued creator-direct run,
+and records gate consumption plus idempotency in one transaction.
+
+`reserve_orchestrator_run_budget` and `wake_orchestrator_dispatch` remain
+database-native routines. They are reusable budget/locking and lease-safe queue
+integrity primitives, not HTTP workflow orchestration. The role receives direct
+`EXECUTE` grants only for those two routines in this module.
+
+Production health checks the exact role, its safe attributes and lack of role
+memberships/ownership, the absence of extra effective table or column
+privileges, named RLS policies, and routine grants once and caches only a
+successful result. This prevents Railway's caller deployment from becoming
+healthy before the independent Supabase migration workflow has installed the
+required capabilities.
+
 ## Incremental migration sequence
 
-1. Provision and test the least-privilege production API database role.
-2. Choose one existing service-role workflow RPC family.
+1. Provision and test the least-privilege production API database role. ✅
+2. Choose one existing service-role workflow RPC family. ✅ Creator-direct
+   confirmation.
 3. Copy its transaction and lock semantics into a typed TypeScript module.
 4. Add unit tests plus an observable local Postgres integration test.
 5. Switch the single caller, compare behavior, and remove the retired RPC
    target from the allowlist.
 6. Retire the database function only after no deployed caller uses it.
 
-Creator-direct proposal confirmation is a good early candidate after the role
-exists because its transaction, locking, budget reservation, and idempotency
-semantics are already explicit. It must migrate separately from the incident
-repair that restored production.
+The legacy `consume_creator_direct_proposal_gate` function remains during the
+rolling deployment observation window, but it has no API runtime caller and is
+no longer in the checked RPC allowlist. Retire it only after the direct caller
+has been deployed and observed.

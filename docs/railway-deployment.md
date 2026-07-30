@@ -100,14 +100,21 @@ ELEVENLABS_API_KEY=...
 ELEVENLABS_VOICE_ID=JBFqnCBsd6RMkjVDRZzb
 ```
 
-The direct-Postgres foundation is currently dark: no production workflow
-requires `DATABASE_URL` yet, so it remains optional. Before the first workflow
-cutover, provision a dedicated least-privilege API database role and set its
-Supabase dashboard connection string as `DATABASE_URL`, retaining the supplied
-SSL parameters. Prefer the direct connection when Railway has compatible
-networking; otherwise use Supavisor session mode on port 5432. Do not configure
-the transaction-mode pooler URL for this persistent application pool. See
+Creator-direct proposal confirmation uses direct Postgres, so production
+requires `DATABASE_URL`. Use the dedicated `popcorn_api` role and retain the
+Supabase SSL parameters. For the current Node `pg` driver, the Supavisor URL
+must include `sslmode=require&uselibpqcompat=true`. Prefer the direct connection
+when Railway has compatible networking; otherwise use Supavisor session mode on
+port 5432. Do not configure the transaction-mode pooler URL for this persistent
+application pool. See
 [`docs/scopes/database-access-boundary.md`](scopes/database-access-boundary.md).
+
+The Railway health route checks the creator-direct role, rejects unsafe role
+attributes, memberships, ownership, or extra effective table/column privileges,
+and requires the named RLS policies plus routine execution grants before
+returning 200. Because Supabase migrations and Railway builds run independently,
+a deployment remains unhealthy—and Railway keeps the prior version serving—
+until the additive role migration is visible.
 
 Notes:
 
