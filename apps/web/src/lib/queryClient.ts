@@ -15,7 +15,6 @@ import type {
 import {
   v1Api,
   type CreateProviderSmokeAssetInput,
-  type CreateTimelineRevisionInput,
   type CreateProjectInput,
   type MeResponse,
   type ModelSettingPurpose,
@@ -776,13 +775,6 @@ export function useStartUploadedFootageGenerationRunMutation(projectId: string) 
       void client.invalidateQueries({ queryKey: ["dashboard"] });
       void client.invalidateQueries({ queryKey: ["workspaces"] });
     },
-  });
-}
-
-export function useCreateTimelineRevisionMutation(projectId: string, timelineId: string) {
-  return useMutation({
-    mutationFn: (input: CreateTimelineRevisionInput) =>
-      v1Api.createTimelineRevision(projectId, timelineId, input),
   });
 }
 

@@ -11,8 +11,6 @@ import { ButtonLink } from "../components/ui/Button";
 import { ImageWithSkeleton } from "../components/ui/ImageWithSkeleton";
 import { EmptyState, ErrorState } from "../components/ui/StateCard";
 import { useProjectQuery, useProjectStoryboardQuery } from "../lib/queryClient";
-import { v1Api } from "../lib/api-client";
-import { modelPurposeForAssetKind } from "../lib/modelOptions";
 import styles from "./ProjectStepPage.module.css";
 
 type ProjectStep = "concept" | "brief" | "script";
@@ -59,8 +57,6 @@ export function ProjectStepPage({ step }: { step: ProjectStep }) {
     Boolean(projectId && step === "script")
   );
   const [activeEdit, setActiveEdit] = useState<ActiveEdit | null>(null);
-  const [pending, setPending] = useState(false);
-  const [editError, setEditError] = useState<string | null>(null);
   const [sentLabel, setSentLabel] = useState<string | null>(null);
 
   const project = projectQuery.data?.project ?? null;
@@ -77,28 +73,6 @@ export function ProjectStepPage({ step }: { step: ProjectStep }) {
 
   const loading = projectQuery.isLoading || (step === "script" && storyboardQuery.isLoading);
   const error = projectQuery.error ?? (step === "script" ? storyboardQuery.error : null);
-
-  async function submitEdit(
-    message: string,
-    generationModel?: { provider: string; model: string }
-  ) {
-    if (!activeEdit || !projectId) return;
-    setPending(true);
-    setEditError(null);
-    try {
-      await v1Api.createProjectAssetRevision(projectId, {
-        message,
-        target: editTarget(activeEdit.item, project?.brief ?? null),
-        generationModel,
-      });
-      setSentLabel(activeEdit.item.label);
-      setActiveEdit(null);
-    } catch (err) {
-      setEditError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setPending(false);
-    }
-  }
 
   return (
     <main className={styles.shell}>
@@ -159,7 +133,6 @@ export function ProjectStepPage({ step }: { step: ProjectStep }) {
             step={step}
             storyboard={storyboard}
             onEdit={(item) => {
-              setEditError(null);
               setSentLabel(null);
               setActiveEdit({
                 item,
@@ -180,7 +153,6 @@ export function ProjectStepPage({ step }: { step: ProjectStep }) {
                   item={field}
                   key={field.id}
                   onClick={() => {
-                    setEditError(null);
                     setSentLabel(null);
                     setActiveEdit({
                       item: field,
@@ -202,19 +174,22 @@ export function ProjectStepPage({ step }: { step: ProjectStep }) {
 
       <AiAssetFeedbackDialog
         open={Boolean(activeEdit)}
-        title={activeEdit?.title ?? "Edit with AI"}
-        subtitle={activeEdit?.subtitle}
-        pending={pending}
-        error={editError}
-        modelPurpose={
-          activeEdit?.item.kind === "poster"
-            ? modelPurposeForAssetKind("image")
+        projectId={projectId}
+        target={
+          activeEdit
+            ? editTarget(activeEdit.item, project?.brief ?? null)
             : null
         }
-        onClose={() => {
-          if (!pending) setActiveEdit(null);
+        title={activeEdit?.title ?? "Edit with AI"}
+        subtitle={activeEdit?.subtitle}
+        onExecutionStarted={() => {
+          if (activeEdit) setSentLabel(activeEdit.item.label);
         }}
-        onSubmit={submitEdit}
+        onExecutionSettled={() => {
+          void projectQuery.refetch();
+          void storyboardQuery.refetch();
+        }}
+        onClose={() => setActiveEdit(null)}
         asset={activeEdit ? <EditPreview item={activeEdit.item} project={project} /> : null}
       />
     </main>

@@ -20,7 +20,6 @@ import { createAndStartRun, type StartRunResult } from "../../lib/startRun";
 import type { SelectedFootage } from "../../lib/upload";
 import { useUpdateGenerationRunMutation } from "../../lib/queryClient";
 import {
-  useStudioCreateTimelineRevisionMutation,
   useStudioGenerationRunQuery,
   useStudioReviewCutQuery,
 } from "./studioQueries";
@@ -153,10 +152,6 @@ export interface StudioFlow {
    * Re-polls immediately so the generating view reflects the resumed run.
    */
   approveGate(note?: string): Promise<void>;
-  /** Reject the active run's review gate (regenerate the gated stage). No-op when not gated. */
-  rejectGate(note?: string): Promise<void>;
-  /** Sends review feedback to the timeline revision endpoint when a timeline exists. */
-  requestRevision(note: string, target?: ReviewFeedbackTarget): Promise<void>;
   /** Applies inline review edits to the loaded timeline so preview/export use the current cut. */
   updateReviewSegment(segmentId: string, patch: Partial<TimelineSegment>): void;
   /** Stores per-segment review notes next to the timeline editor. */
@@ -180,17 +175,10 @@ export interface StepProps {
   completeDraft?(): Promise<void>;
 }
 
-export interface ReviewFeedbackTarget {
-  scope: "whole_cut" | "segment";
-  segmentId?: string;
-  beatId?: string;
-  label?: string;
-}
-
 /**
  * The shell shows the terminal `review` state only on a SUCCEEDED run. A mid-run
  * review gate is NOT terminal — the run stays in `generating`, where the gate
- * card exposes approve/reject (see `approveGate`/`rejectGate`). Treating a gate
+ * card exposes approval and proposal-based Request Changes. Treating a gate
  * as "review-ready" stranded gated runs in a read-only panel with no way to
  * continue.
  */
@@ -268,10 +256,6 @@ export function useStudioFlow(options: UseStudioFlowOptions = {}): StudioFlow {
     resultArtifacts: detail?.resultArtifacts ?? [],
     enabled: state === "review",
   });
-  const createRevision = useStudioCreateTimelineRevisionMutation(
-    activeProjectId,
-    reviewTimelineId ?? "",
-  );
   const reviewSourceKey = useRef<string | null>(null);
 
   useEffect(() => {
@@ -468,11 +452,6 @@ export function useStudioFlow(options: UseStudioFlowOptions = {}): StudioFlow {
     (note?: string) => resolveGate("approve", note),
     [resolveGate],
   );
-  const rejectGate = useCallback(
-    (note?: string) => resolveGate("reject", note),
-    [resolveGate],
-  );
-
   useEffect(() => {
     if (state !== "review" || !reviewCutQuery.data) return;
     const nextSourceKey = `${activeProjectId}:${activeRunId}:${reviewCutQuery.data.timelineId ?? "project"}`;
@@ -488,36 +467,6 @@ export function useStudioFlow(options: UseStudioFlowOptions = {}): StudioFlow {
     reviewCutQuery.data,
     state,
   ]);
-
-  const requestRevision = useCallback(
-    async (note: string, target?: ReviewFeedbackTarget) => {
-      const message = note.trim();
-      if (!message || !projectId || !reviewTimelineId) return;
-      setError(undefined);
-      try {
-        if (target?.scope !== "segment") {
-          await createRevision.mutateAsync(message);
-          return;
-        }
-
-        const targetLines = [
-          "Target: beat/timeline segment",
-          target.segmentId ? `Segment id: ${target.segmentId}` : null,
-          target.beatId ? `Beat id: ${target.beatId}` : null,
-          target.label ? `Label: ${target.label}` : null,
-        ].filter(Boolean);
-        await createRevision.mutateAsync(`${targetLines.join("\n")}\n\nFeedback: ${message}`);
-      } catch (revisionError) {
-        setError(
-          revisionError instanceof Error
-            ? revisionError.message
-            : "Could not send timeline feedback."
-        );
-        throw revisionError;
-      }
-    },
-    [createRevision, projectId, reviewTimelineId],
-  );
 
   const updateReviewSegment = useCallback(
     (segmentId: string, patch: Partial<TimelineSegment>) => {
@@ -574,12 +523,10 @@ export function useStudioFlow(options: UseStudioFlowOptions = {}): StudioFlow {
       resetGeneration,
       retryGeneration,
       approveGate,
-      rejectGate,
-      requestRevision,
       updateReviewSegment,
       updateReviewSegmentNote,
       completeDraft,
     }),
-    [state, step, brief, run, stages, resultArtifacts, projectId, reviewProject, reviewTimeline, reviewTimelineId, reviewSegmentNotes, runQuery.isLoading, reviewCutQuery.isLoading, reviewCutQuery.error, error, goTo, back, next, update, startGeneration, resetGeneration, retryGeneration, approveGate, rejectGate, requestRevision, updateReviewSegment, updateReviewSegmentNote, completeDraft],
+    [state, step, brief, run, stages, resultArtifacts, projectId, reviewProject, reviewTimeline, reviewTimelineId, reviewSegmentNotes, runQuery.isLoading, reviewCutQuery.isLoading, reviewCutQuery.error, error, goTo, back, next, update, startGeneration, resetGeneration, retryGeneration, approveGate, updateReviewSegment, updateReviewSegmentNote, completeDraft],
   );
 }

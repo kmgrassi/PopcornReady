@@ -25,10 +25,6 @@ interface StageRailProps {
     error?: string | null;
     onStop: () => void;
   };
-  restartAction?: {
-    pendingStageType?: GenerationStageType | null;
-    onRestart: (stageType: GenerationStageType) => void;
-  };
   stageLinks?: Partial<Record<string, string>>;
   showUpcomingStages?: boolean;
 }
@@ -232,7 +228,6 @@ export function StageRail({
   stages,
   reviewGate,
   stopAction,
-  restartAction,
   stageLinks,
   showUpcomingStages = false,
 }: StageRailProps) {
@@ -406,32 +401,6 @@ export function StageRail({
                       </>
                     ) : (
                       "Stop here"
-                    )}
-                  </button>
-                </div>
-              ) : null}
-              {restartAction &&
-              stage &&
-              (status === "succeeded" ||
-                status === "failed" ||
-                status === "canceled" ||
-                awaitingReview) ? (
-                <div className={styles.stageControlRow}>
-                  <button
-                    type="button"
-                    className={styles.stageRestartButton}
-                    onClick={() => restartAction.onRestart(stage.type)}
-                    disabled={restartAction.pendingStageType != null}
-                    aria-busy={restartAction.pendingStageType === stage.type || undefined}
-                    aria-label={`Restart the run from the ${visibleStage.label} stage`}
-                  >
-                    {restartAction.pendingStageType === stage.type ? (
-                      <>
-                        <LoadingDot />
-                        Restarting...
-                      </>
-                    ) : (
-                      "Restart from here"
                     )}
                   </button>
                 </div>

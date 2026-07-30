@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import type {
   BoardRevisionTarget,
@@ -12,7 +12,6 @@ import { AssetImage } from "../components/media/AssetImage";
 import { Button, ButtonLink } from "../components/ui/Button";
 import { EmptyState, ErrorState } from "../components/ui/StateCard";
 import {
-  useGenerationRunQuery,
   useProjectQuery,
   useProjectGenerationRunsQuery,
   useProjectStoryboardQuery,
@@ -22,8 +21,6 @@ import { useGenerateSceneWireframeMutation } from "../lib/sceneWireframe";
 import styles from "./StoryboardPage.module.css";
 
 type SceneWireframeMutation = ReturnType<typeof useGenerateSceneWireframeMutation>;
-
-const TERMINAL_RUN_STATUSES = new Set(["succeeded", "failed", "canceled"]);
 
 interface EditTarget {
   target: BoardRevisionTarget;
@@ -45,27 +42,7 @@ export function StoryboardPage() {
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
   // Beats whose panel the agent is currently revising (skeleton + live update).
   const [revisingBeats, setRevisingBeats] = useState<Set<string>>(() => new Set());
-  const [revisionRunId, setRevisionRunId] = useState<string | null>(null);
   const sceneWireframe = useGenerateSceneWireframeMutation(projectId ?? "");
-
-  // Poll the revision run; useGenerationRunQuery auto-polls while it's active.
-  const revisionRunQuery = useGenerationRunQuery(
-    projectId ?? "",
-    revisionRunId ?? "",
-    Boolean(projectId && revisionRunId),
-  );
-  const revisionStatus = revisionRunQuery.data?.run.status;
-
-  // When the revision run settles, pull the updated panel image and clear the
-  // skeletons.
-  useEffect(() => {
-    if (!revisionRunId || !revisionStatus) return;
-    if (TERMINAL_RUN_STATUSES.has(revisionStatus)) {
-      void refetchStoryboard();
-      setRevisingBeats(new Set());
-      setRevisionRunId(null);
-    }
-  }, [revisionRunId, revisionStatus, refetchStoryboard]);
 
   if (!projectId) return <Navigate to="/library/projects" replace />;
 
@@ -206,14 +183,15 @@ export function StoryboardPage() {
         sourcePrompt={editTarget?.sourcePrompt}
         initialPrompt={editTarget?.initialPrompt}
         onClose={() => setEditTarget(null)}
-        onSubmitted={(runId) => {
-          // Mark the edited beat's panel as out of sync (skeleton) and poll the
-          // run until it settles, then live-update the image.
+        onExecutionStarted={() => {
           const beatId = editTarget?.target.beatId;
           if (beatId) {
             setRevisingBeats((current) => new Set(current).add(beatId));
           }
-          setRevisionRunId(runId);
+        }}
+        onExecutionSettled={() => {
+          void refetchStoryboard();
+          setRevisingBeats(new Set());
         }}
       />
     </main>

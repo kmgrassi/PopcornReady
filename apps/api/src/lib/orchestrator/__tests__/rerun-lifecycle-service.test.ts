@@ -89,6 +89,7 @@ function action(
     proposal,
     inputAssetIds: ["asset-1"],
     rationale: proposal.rationale,
+    failure: null,
   };
 }
 
