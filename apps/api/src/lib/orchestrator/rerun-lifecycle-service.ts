@@ -757,19 +757,13 @@ export async function executeRerunProposal(input: {
   const terminalFailures = results.filter(
     (result) => result.status === "terminal_failure"
   );
-  const reconciliationActionIds = results
-    .filter((result) => result.status === "completed")
-    .map((result) => result.reconciliationActionId)
-    .filter((id): id is string => Boolean(id));
-  const distinctReconciliationActionIds = [...new Set(reconciliationActionIds)];
   const executionActionId = deterministicUuid(
     "rerun-execution",
     lease.reservationId
   );
   if (
     failures.length > 0 ||
-    terminalFailures.length > 0 ||
-    distinctReconciliationActionIds.length > 1
+    terminalFailures.length > 0
   ) {
     await deps.finalizeExecution({
       projectId: input.projectId,
@@ -784,9 +778,6 @@ export async function executeRerunProposal(input: {
               ? failure.reason.message
               : "Executor failed."),
           ...terminalFailures.map((failure) => failure.reason),
-          ...(distinctReconciliationActionIds.length > 1
-            ? ["conflicting reconciliation actions"]
-            : []),
         ],
       },
     });
@@ -807,24 +798,44 @@ export async function executeRerunProposal(input: {
       replayed: false,
     };
   }
-  const reconciliationActionId = distinctReconciliationActionIds[0] ??
-    await deps.ensureReconciliation({
+  const reconciliationActionId = deterministicUuid(
+    "rerun-reconciliation",
+    lease.reservationId
+  );
+  try {
+    await deps.finalizeExecution({
       projectId: input.projectId,
-      proposalActionId: action.id,
-      rootRunId,
       lease,
-      reconciliationActionId: deterministicUuid(
-        "rerun-reconciliation",
-        lease.reservationId
-      ),
+      executionActionId,
+      outcome: "applied",
+      reconciliationActionId,
     });
-  await deps.finalizeExecution({
-    projectId: input.projectId,
-    lease,
-    executionActionId,
-    outcome: "applied",
-    reconciliationActionId,
-  });
+  } catch (error) {
+    if (
+      !(error instanceof ApiError) ||
+      !["stale_proposal", "budget_exceeded"].includes(error.code)
+    ) {
+      throw error;
+    }
+    await deps.finalizeExecution({
+      projectId: input.projectId,
+      lease,
+      executionActionId,
+      outcome: "failed",
+      error: {
+        kind: error.code,
+        message: error.message,
+        recoverable: error.code === "stale_proposal",
+      },
+    });
+    return {
+      actionId: action.id,
+      reservationId: lease.reservationId,
+      executionActionId,
+      status: "failed" as const,
+      replayed: false,
+    };
+  }
   return {
     actionId: action.id,
     reservationId: lease.reservationId,
