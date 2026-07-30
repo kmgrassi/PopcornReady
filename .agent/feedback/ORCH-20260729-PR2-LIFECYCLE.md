@@ -42,6 +42,13 @@ obtain an ID makes inert preview visible as active work and complicates
 refresh, rejection, and stale-proposal cleanup. Nullable attribution plus
 transactional root materialization keeps that boundary explicit.
 
+Stacked pull requests also need an explicit eventual-main audit. A GitHub
+"merged" state only proves that the change entered its configured base branch;
+it does not prove that the payload reached the repository default branch.
+Before starting dependent adapter work, compare the reviewed payload commits
+against `origin/main` and create a clean integration replay when the stack base
+was never promoted.
+
 PR review exposed that changing from PostgREST `.rpc()` to `pg` is not itself
 a database-boundary migration. Workflow statements, replay checks, lock
 ordering, and recovery must move into the typed transaction while triggers and

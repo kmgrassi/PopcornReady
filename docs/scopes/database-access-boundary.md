@@ -54,7 +54,7 @@ backlog by itself: identity helpers, searches, and database integrity functions
 can remain RPCs. Each migration PR should remove its retired target from the
 allowlist.
 
-The 2026-07-30 relation scan observed **411 literal `.from()` calls** and the
+The 2026-07-30 relation scan observed **424 literal `.from()` calls** and the
 checked boundary permits **no dynamic calls**. Retired storyboards, generation-stage tables,
 composition/edit-graph tables, timelines, and brief versions are prohibited
 runtime targets.

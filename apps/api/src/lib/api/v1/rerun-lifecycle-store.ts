@@ -246,22 +246,27 @@ export async function assertRerunProposalFresh(
       throw new ApiError("stale_proposal", "A selection moved after proposal creation.");
     }
   }
-  const storyTables = {
-    storyboard: ["story_blueprints", "provenance"],
-    story_blueprint: ["story_blueprints", "asset_id"],
-    story_scene: ["story_blueprint_scenes", "scene_asset_id"],
-    story_beat: ["story_beats", "beat_asset_id"],
-  } as const;
   for (const pin of action.proposal.pins.storySnapshots) {
-    const [table, column] = storyTables[pin.rowKind];
+    const query = pin.rowKind === "storyboard"
+      ? db.from("story_blueprints").select("id, project_id, provenance")
+      : pin.rowKind === "story_blueprint"
+        ? db.from("story_blueprints").select("id, project_id, asset_id")
+        : pin.rowKind === "story_scene"
+          ? db.from("story_blueprint_scenes")
+            .select("id, project_id, scene_asset_id")
+          : db.from("story_beats").select("id, project_id, beat_asset_id");
     const row = await runLifecycleQuery(
       `rerunLifecycleStore.fresh ${pin.rowKind}`,
-      db.from(table).select(`id, project_id, ${column}`)
+      query
         .eq("id", pin.rowId).eq("project_id", action.projectId).maybeSingle()
     ) as Record<string, unknown> | null;
     const currentSnapshotAssetId = pin.rowKind === "storyboard"
       ? ((row?.provenance as { planAssetId?: string } | undefined)?.planAssetId ?? null)
-      : (row?.[column] ?? null);
+      : pin.rowKind === "story_blueprint"
+        ? (row?.asset_id ?? null)
+        : pin.rowKind === "story_scene"
+          ? (row?.scene_asset_id ?? null)
+          : (row?.beat_asset_id ?? null);
     if (!row || currentSnapshotAssetId !== pin.expectedSnapshotAssetId) {
       throw new ApiError("stale_proposal", "A story snapshot moved after proposal creation.");
     }

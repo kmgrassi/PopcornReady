@@ -143,6 +143,31 @@ type CreatorDirectVisualOutputKinds<
 export type AudioOutputKind = "audio_track" | "audio_fit";
 export type DomainOutputKind = VisualsOutputKind | AudioOutputKind;
 
+/**
+ * Stored graph-asset kind that can satisfy a semantic domain output binding.
+ * Several proposal-level output kinds describe intent rather than the graph
+ * kind emitted by their executor.
+ */
+export function domainOutputAssetKind(kind: DomainOutputKind): string {
+  switch (kind) {
+    case "image":
+    case "poster":
+    case "anchor":
+    case "storyboard":
+    case "keyframe":
+      return "image";
+    case "clip":
+      return "video";
+    case "audio_track":
+      return "audio";
+    case "audio_fit":
+      return "critique";
+    case "composite":
+    case "render":
+      return kind;
+  }
+}
+
 interface DomainRequiredOutputBase<OutputKind extends DomainOutputKind> {
   kind: OutputKind;
   role: string;
