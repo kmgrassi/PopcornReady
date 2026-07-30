@@ -110,6 +110,9 @@ Acceptance requires:
   actions, `completeWork` alone applies a running dispatch, successor identity
   is not primitive causation, measured overages settle first, and tests prove a
   replay reuses one staged asset and one durable settlement.
+- Independent re-review approved commit `d3ee7480`, including the exact running
+  dispatch exception, domain-finalization trigger, inert follow-up metadata,
+  measured-overage settlement, and crash-replay coverage.
 
 ## Blockers and risks
 
@@ -118,5 +121,5 @@ Acceptance requires:
 
 ## Next action / handoff
 
-- Run implementation review, application smoke, repository validation, and
-  publish the ready stacked PR.
+- Ready stacked PR [#847](https://github.com/kmgrassi/PopcornReady/pull/847)
+  targets `codex/selective-regen-pr2-main-integration`; merge after PR #844.
