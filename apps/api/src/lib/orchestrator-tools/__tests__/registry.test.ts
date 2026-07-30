@@ -7,7 +7,7 @@ import type { ShotPlan } from "@popcorn/shared/types";
 import type { V1Action, V1Asset } from "@/lib/api/v1/store";
 import { createAssembleTimelineTool } from "../assemble-timeline";
 import { createBriefInputSchema } from "../create-or-load-brief";
-import { createDefaultToolRegistry } from "../default-registry";
+import { createTestToolRegistry } from "./test-registry";
 import {
   createPlanShotsTool,
   persistedShotPlanSchema,
@@ -142,7 +142,7 @@ test("registry rejects duplicate tool names", () => {
 });
 
 test("default registry exposes plan_shots metadata", () => {
-  const registry = createDefaultToolRegistry({ planShots: planShotsDeps() });
+  const registry = createTestToolRegistry({ planShots: planShotsDeps() });
   const definition = registry.get("plan_shots");
 
   assert.equal(definition.name, "plan_shots");
@@ -191,7 +191,7 @@ test("plan_shots output schema describes the post-processed plan ids", () => {
 test("plan_shots validates input before reading the brief or calling the agent", async () => {
   let planCalls = 0;
   let briefCalls = 0;
-  const registry = createDefaultToolRegistry({
+  const registry = createTestToolRegistry({
     planShots: planShotsDeps({
       planEdit: async () => {
         planCalls += 1;
@@ -221,7 +221,7 @@ test("plan_shots validates input before reading the brief or calling the agent",
 
 test("plan_shots returns precondition_unmet (suggesting the brief) when none exists", async () => {
   let planCalls = 0;
-  const registry = createDefaultToolRegistry({
+  const registry = createTestToolRegistry({
     planShots: planShotsDeps({
       getActiveProjectBrief: async () => null,
       planEdit: async () => {
@@ -278,7 +278,7 @@ test("plan_shots derives the plan from the brief and persists it with brief prov
         groundingInputs?: { assetId: string; role?: string; contentHash?: string }[];
       }
     | undefined;
-  const registry = createDefaultToolRegistry({
+  const registry = createTestToolRegistry({
     planShots: planShotsDeps({
       getActiveProjectBrief: async () => activeBrief,
       planEdit: async (input) => {
@@ -366,7 +366,7 @@ test("plan_shots incorporates and records a matching story blueprint and script"
       scenes: [{ title: "Backyard", narration: "One more try.", dialogue: [{ characterName: "Maya", text: "You can do it." }] }],
     },
   } as unknown as Awaited<ReturnType<PlanShotsDeps["getActiveProjectScriptDraft"]>>;
-  const registry = createDefaultToolRegistry({
+  const registry = createTestToolRegistry({
     planShots: planShotsDeps({
       getActiveProjectStoryBlueprint: async () => storyBlueprint,
       getActiveProjectScriptDraft: async () => scriptDraft,
@@ -409,7 +409,7 @@ test("plan_shots ignores a script from an older blueprint", async () => {
     scriptDraftId: "script_old", assetId: "script_asset_old", contentHash: "script_hash_old",
     scriptDraft: { storyBlueprintId: "blueprint_old", scenes: [{ title: "Old scene", narration: "Do not use this.", dialogue: [] }] },
   } as unknown as Awaited<ReturnType<PlanShotsDeps["getActiveProjectScriptDraft"]>>;
-  const registry = createDefaultToolRegistry({
+  const registry = createTestToolRegistry({
     planShots: planShotsDeps({
       getActiveProjectStoryBlueprint: async () => storyBlueprint,
       getActiveProjectScriptDraft: async () => olderScript,
@@ -428,7 +428,7 @@ test("plan_shots ignores a script from an older blueprint", async () => {
 test("plan_shots forwards transcript and moment grounding into the planner prompt", async () => {
   let footageGrounding: string | null | undefined;
   let groundingInputs: unknown;
-  const registry = createDefaultToolRegistry({
+  const registry = createTestToolRegistry({
     planShots: planShotsDeps({
       planEdit: async (input) => {
         footageGrounding = input.footageGrounding;
@@ -501,7 +501,7 @@ test("plan_shots forwards transcript and moment grounding into the planner promp
 });
 
 test("registry parses input before running cost estimate hook", async () => {
-  const registry = createDefaultToolRegistry({ planShots: planShotsDeps() });
+  const registry = createTestToolRegistry({ planShots: planShotsDeps() });
 
   const estimate = await registry.estimateCost(
     "plan_shots",
@@ -514,7 +514,7 @@ test("registry parses input before running cost estimate hook", async () => {
 });
 
 test("default registry exposes assemble_timeline metadata", () => {
-  const registry = createDefaultToolRegistry({
+  const registry = createTestToolRegistry({
     assembleTimeline: {
       getActiveProjectPlan: async () => null,
     },

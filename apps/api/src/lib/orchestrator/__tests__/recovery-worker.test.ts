@@ -15,7 +15,6 @@ function run(status: OrchestratorRun["status"]): OrchestratorRun {
     projectId: "project-1",
     status,
     inputSummary: "test",
-    rootExecutionProfile: "creative_director",
     spentUsd: 0,
     createdAt: "2026-07-10T00:00:00.000Z",
     updatedAt: "2026-07-10T00:00:00.000Z",
@@ -77,7 +76,7 @@ test("worker forwards a claimed domain session generation to the shared engine",
       agentSessionId: "session-1",
       sessionClaimGeneration: 7,
     }],
-    getRun: async () => ({ ...run("queued"), agentRole: "visuals", rootExecutionProfile: undefined }),
+    getRun: async () => ({ ...run("queued"), agentRole: "visuals" }),
     listGates: async () => [],
     release: async () => {},
     run: async (_id, deps) => {
@@ -117,75 +116,17 @@ test("terminal finite-run states retire a recovered dispatch without another tur
   }
 });
 
-test("worker retires a legacy root dispatch without entering the engine", async () => {
-  const events: string[] = [];
-  const canceled: Array<{ projectId: string; runId: string }> = [];
-  let enteredEngine = false;
-  await recoverOrchestratorRuns({
-    claim: async () => [{
-      dispatchId: "dispatch-legacy",
-      runId: "run-legacy",
-      workspaceId: "workspace-1",
-      leaseToken: "lease-1",
-    }],
-    getRun: async () => ({
-      ...run("queued"),
-      id: "run-legacy",
-      rootExecutionProfile: "flat",
-    }),
-    cancelFamily: async (input) => {
-      events.push("cancel");
-      canceled.push(input);
-      return { canceledRunIds: [input.runId], canceledJobIds: [] };
-    },
-    listGates: async () => assert.fail("legacy root must be refused before gate loading"),
-    release: async ({ completed }) => { events.push(`release:${completed}`); },
-    run: async () => { enteredEngine = true; return run("running"); },
-    resume: async () => { enteredEngine = true; return run("running"); },
-    logger: { debug() {}, info() {}, warn() {}, error() {}, child() { return this; } },
-  });
-  assert.equal(enteredEngine, false);
-  assert.deepEqual(canceled, [{ projectId: "project-1", runId: "run-legacy" }]);
-  assert.deepEqual(events, ["cancel", "release:true"]);
-});
-
-test("failed legacy-family cancellation never retires the dispatch as completed", async () => {
-  const releases: boolean[] = [];
-  await recoverOrchestratorRuns({
-    claim: async () => [{
-      dispatchId: "dispatch-legacy",
-      runId: "run-legacy",
-      workspaceId: "workspace-1",
-      leaseToken: "lease-1",
-    }],
-    getRun: async () => ({
-      ...run("queued"),
-      id: "run-legacy",
-      rootExecutionProfile: undefined,
-    }),
-    cancelFamily: async () => {
-      throw new Error("cancellation unavailable");
-    },
-    listGates: async () => assert.fail("legacy root must be refused before gate loading"),
-    release: async ({ completed }) => { releases.push(completed); },
-    run: async () => assert.fail("legacy root must not enter the engine"),
-    resume: async () => assert.fail("legacy root must not enter the engine"),
-    logger: { debug() {}, info() {}, warn() {}, error() {}, child() { return this; } },
-  });
-  assert.deepEqual(releases, [false]);
-});
-
 test("recovery is enabled by default and has a safe lower interval bound", () => {
   assert.equal(isOrchestratorRecoveryEnabled({}), true);
   assert.equal(isOrchestratorRecoveryEnabled({ ORCHESTRATOR_RECOVERY_ENABLED: "false" }), false);
   assert.equal(orchestratorRecoveryIntervalMs({ ORCHESTRATOR_RECOVERY_INTERVAL_MS: "10" }), 1_000);
 });
 
-test("worker logs the persisted root profile rather than a mutable process flag", async () => {
+test("worker logs the durable agent role", async () => {
   let rolloutLog: Record<string, unknown> | undefined;
   await recoverOrchestratorRuns({
     claim: async () => [{ dispatchId: "dispatch-root", runId: "run-root", workspaceId: "workspace-1", leaseToken: "lease-1" }],
-    getRun: async () => ({ ...run("queued"), rootExecutionProfile: "creative_director" }),
+    getRun: async () => run("queued"),
     listGates: async () => [],
     release: async () => {},
     run: async () => run("succeeded"),
@@ -197,7 +138,7 @@ test("worker logs the persisted root profile rather than a mutable process flag"
       warn() {}, error() {}, child() { return this; },
     },
   });
-  assert.equal(rolloutLog?.rootExecutionProfile, "creative_director");
+  assert.equal(rolloutLog?.agentRole, "creative_director");
 });
 
 test("failed ticks back off exponentially and cap at 30s", () => {

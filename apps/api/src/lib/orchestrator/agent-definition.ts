@@ -17,7 +17,7 @@ import {
   type OrchestratorRun,
 } from "@/lib/api/v1/orchestrator-store";
 import { getDomainRun, getRootRunFamily, type RootRunFamily } from "@/lib/api/v1/domain-session-store";
-import { createDefaultToolRegistry, type DefaultToolRegistryDeps } from "@/lib/orchestrator-tools/default-registry";
+import type { ToolRegistryDeps } from "@/lib/orchestrator-tools/registry-deps";
 import { createRootToolRegistry } from "@/lib/orchestrator-tools/root-registry";
 import { createAudioToolRegistry } from "@/lib/orchestrator-tools/audio-registry";
 import { createVisualsToolRegistry } from "@/lib/orchestrator-tools/visuals-registry";
@@ -25,7 +25,6 @@ import { isDispatchToolName } from "@/lib/orchestrator-tools/capability-catalog"
 import { toOrchestratorRegistry } from "@/lib/orchestrator-tools/to-orchestrator-registry";
 import { loadDomainTurnProjection } from "@/lib/orchestrator-context/domain-projection";
 import type { ToolRegistry } from "./registry";
-import { ORCHESTRATOR_SYSTEM_PROMPT } from "./model";
 import { VISUALS_SYSTEM_PROMPT } from "./visuals-profile";
 import type { RunActionSummary } from "@/lib/api/v1/orchestrator-store";
 import { getServiceSupabase } from "@/lib/supabase/clients";
@@ -48,7 +47,7 @@ export interface ResolveAgentDefinitionInput {
   workspaceId: string;
   /** Test seams may supply the exact root registry without changing its behavior. */
   rootRegistry?: ToolRegistry;
-  registryDeps?: DefaultToolRegistryDeps;
+  registryDeps?: ToolRegistryDeps;
   /** Domain execution is fail-closed and role-aware. */
   enabledDomainRoles?: readonly AgentDomain[];
   /** Root-only test seam; production reads the durable root/child linkage. */
@@ -90,44 +89,31 @@ export function assertDomainRegistry(role: "visuals" | "audio", registry: ToolRe
 
 function rootDefinition(input: ResolveAgentDefinitionInput): AgentDefinition {
   assertCreativeDirectorHierarchyRoot(input.run, "resolve a production agent");
-  // PR 7 deletes the historical flat resolver. Until then it remains
-  // constructible below for audit/eval compatibility but unreachable from a
-  // production run because the hierarchy assertion above fails closed.
-  if (input.run.rootExecutionProfile === "creative_director") {
-    return {
-      role: "creative_director",
-      // The rollout must not be widened by a caller-supplied legacy registry.
-      // Root profile tests use the catalog-backed registry directly.
-      registry: toOrchestratorRegistry(createRootToolRegistry(input.registryDeps)),
-      systemPrompt: CREATIVE_DIRECTOR_SYSTEM_PROMPT,
-      loadTurnContext: async () => {
-        const [graph, family] = await Promise.all([
-          loadRootGraphProjection({
-          workspaceId: input.workspaceId,
-          projectId: input.run.projectId,
-          }),
-          (input.loadRootRunFamily ?? getRootRunFamily)(input.run.id),
-        ]);
-        return {
-          ...graph,
-          runtime: {
-            rootRunId: input.run.id,
-            status: input.run.status,
-            spentUsd: input.run.spentUsd,
-            budgetUsd: input.run.budgetUsd ?? null,
-            domainReports: compactRootDomainReports({ rootRunId: input.run.id, family }),
-          },
-        };
-      },
-    };
-  }
   return {
     role: "creative_director",
-    // Preserve the active root path byte-for-byte in behavior. PR 14 owns the
-    // separate root delegation registry and must opt into it explicitly.
-    registry: input.rootRegistry ?? toOrchestratorRegistry(createDefaultToolRegistry(input.registryDeps)),
-    systemPrompt: ORCHESTRATOR_SYSTEM_PROMPT,
-    loadTurnContext: async () => undefined,
+    registry:
+      input.rootRegistry ??
+      toOrchestratorRegistry(createRootToolRegistry(input.registryDeps)),
+    systemPrompt: CREATIVE_DIRECTOR_SYSTEM_PROMPT,
+    loadTurnContext: async () => {
+      const [graph, family] = await Promise.all([
+        loadRootGraphProjection({
+          workspaceId: input.workspaceId,
+          projectId: input.run.projectId,
+        }),
+        (input.loadRootRunFamily ?? getRootRunFamily)(input.run.id),
+      ]);
+      return {
+        ...graph,
+        runtime: {
+          rootRunId: input.run.id,
+          status: input.run.status,
+          spentUsd: input.run.spentUsd,
+          budgetUsd: input.run.budgetUsd ?? null,
+          domainReports: compactRootDomainReports({ rootRunId: input.run.id, family }),
+        },
+      };
+    },
   };
 }
 

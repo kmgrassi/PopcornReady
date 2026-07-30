@@ -12,7 +12,8 @@ import { createAudioToolRegistry } from "@/lib/orchestrator-tools/audio-registry
 import { createRootToolRegistry } from "@/lib/orchestrator-tools/root-registry";
 import { createVisualsToolRegistry } from "@/lib/orchestrator-tools/visuals-registry";
 import { composeToolDescription } from "@/lib/orchestrator-tools/to-orchestrator-registry";
-import { buildRoutingContext, ORCHESTRATOR_SYSTEM_PROMPT } from "../model";
+import { buildRoutingContext } from "../model";
+import { CREATIVE_DIRECTOR_SYSTEM_PROMPT } from "../creative-director-agent";
 import { getLlmClient } from "@/lib/llm";
 import {
   classifyDecision,
@@ -249,7 +250,7 @@ export function createRealFixtureDecisionModel(): FixtureDecisionModel {
   return async ({ scenarioId, inputSummary, priorResults, tools }) => {
     const client = getLlmClient();
     const decision = await client.chooseTool({
-      system: ORCHESTRATOR_SYSTEM_PROMPT,
+      system: CREATIVE_DIRECTOR_SYSTEM_PROMPT,
       userPayload: {
         projectId: scenarioId,
         inputSummary,

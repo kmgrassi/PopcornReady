@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { AuthContext } from "@/lib/api/v1/auth";
-import { createDefaultToolRegistry } from "../default-registry";
+import { createTestToolRegistry } from "./test-registry";
 import {
   createRequestApprovalTool,
   parseRequestApprovalInput,
@@ -66,7 +66,7 @@ test("request_approval rejects a step that cannot rerun on rejection", () => {
 });
 
 test("default registry exposes request_approval as an approval tool", () => {
-  const registry = createDefaultToolRegistry({
+  const registry = createTestToolRegistry({
     requestApproval: {
       createReachedApprovalGate: async () => reachedGate(),
     },

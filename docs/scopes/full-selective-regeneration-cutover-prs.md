@@ -899,11 +899,16 @@ relational story spine without overwriting visual scene media.
 
 ### PR 7 — Forward cutover and delete the old paths
 
-**Provisional status:** The retired hierarchy rollout fields have been removed
-from health, and the CLI no longer offers stage restart. The restart endpoint,
-web callers, compatibility routes, flat registry/profile implementation, and
-schema cleanup remain intentionally deferred until PR 5 and PR 6 establish the
-final stack.
+**Implementation status:** PR 7 is split into two forward deployments. PR 7A
+removes callers, compatibility routes, the flat registry/driver/prompt, and all
+application dependence on `root_execution_profile`. Its replay-safe PREP
+migration re-terminalizes active legacy families and temporarily fills the
+profile only for omitted Creative Director root inserts, so old and new binaries
+can overlap without misclassifying Visuals or Audio children. PR 7B runs only
+after PR 7A is fully deployed and removes that trigger, the retained profile
+column, and profile-bound database signatures, constraints, policies, and
+grants. The retired hierarchy health fields and CLI restart command were already
+removed in the provisional cleanup.
 
 **Deliver:**
 
@@ -924,9 +929,10 @@ final stack.
   compatibility path after role-specific routing owns all callers.
 - Migrate nonterminal historical/test flat roots to `canceled` or `superseded`;
   keep terminal rows readable as history but never resumable.
-- Drop `root_execution_profile` and its shared TypeScript type after all
-  nonterminal flat/null rows are terminalized. Terminal run/action history
-  remains readable without routing metadata.
+- In PR 7A, remove the shared TypeScript type and application reads/writes, then
+  deploy the root-aware compatibility trigger. In PR 7B, after PR 7A is fully
+  deployed, drop `root_execution_profile` and its database-only compatibility
+  surface. Terminal run/action history remains readable without routing metadata.
 - Delete obsolete stage-order UI projections that exist only to drive restart.
 - Update North Star, interaction, run-projection, testing inventory, operations,
   and rollout docs to describe the single remaining path.

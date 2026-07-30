@@ -6,20 +6,26 @@ import { randomUUID } from "node:crypto";
 
 import {
   orchestratorModel,
-  runToolLoopTurn,
   type OrchestratorRun,
   type ToolInvocationStatus,
-  type ToolLoopTurnResult,
 } from "@/lib/orchestrator";
+import { AUDIO_AGENT_SYSTEM_PROMPT } from "@/lib/orchestrator/audio-agent";
+import { CREATIVE_DIRECTOR_SYSTEM_PROMPT } from "@/lib/orchestrator/creative-director-agent";
+import { VISUALS_SYSTEM_PROMPT } from "@/lib/orchestrator/visuals-profile";
 import { createOrchestratorRun } from "@/lib/api/v1/orchestrator-store";
-import { createDefaultToolRegistry } from "@/lib/orchestrator-tools/default-registry";
-import { isDomainToolName } from "@/lib/orchestrator-tools/capability-catalog";
+import { createAudioToolRegistry } from "@/lib/orchestrator-tools/audio-registry";
+import { getToolCapability } from "@/lib/orchestrator-tools/capability-catalog";
+import { createRootToolRegistry } from "@/lib/orchestrator-tools/root-registry";
 import { createVisualsToolRegistry } from "@/lib/orchestrator-tools/visuals-registry";
 import type { ToolRegistry as RealToolRegistry } from "@/lib/orchestrator-tools/registry";
 import { getServiceSupabase } from "@/lib/supabase/clients";
 import { normalizeStatuses, subsetMismatches } from "./assertions";
 import { toOrchestratorRegistry } from "./bridge";
 import { createSandbox, sweepOrphanSandboxes, teardownSandbox } from "./sandbox";
+import {
+  runToolTestTurn,
+  type ToolLoopTurnResult,
+} from "./single-turn";
 import type {
   AssertionResult,
   Sandbox,
@@ -72,10 +78,13 @@ export async function runToolTestCase(
   const previousProvider = process.env.LLM_PROVIDER;
   if (provider) process.env.LLM_PROVIDER = provider;
 
+  const ownerRole = getToolCapability(battery.tool).ownerRole;
   const real = options.realRegistry ?? (
-    isDomainToolName(battery.tool)
+    ownerRole === "visuals"
       ? createVisualsToolRegistry()
-      : createDefaultToolRegistry()
+      : ownerRole === "audio"
+        ? createAudioToolRegistry()
+        : createRootToolRegistry()
   );
   let sandbox: Sandbox | undefined;
 
@@ -100,7 +109,7 @@ export async function runToolTestCase(
       updatedAt: persistedRun.updatedAt,
     };
 
-    const turn = await runToolLoopTurn({
+    const turn = await runToolTestTurn({
       run,
       workspaceId: sandbox.workspaceId,
       actorId: "tool_test",
@@ -109,7 +118,12 @@ export async function runToolTestCase(
       priorResults: testCase.priorResults,
       registry,
       model: orchestratorModel,
-      env: { ...process.env, POPCORN_ORCHESTRATOR_TOOL_LOOP: "1" },
+      systemPrompt:
+        ownerRole === "visuals"
+          ? VISUALS_SYSTEM_PROMPT
+          : ownerRole === "audio"
+            ? AUDIO_AGENT_SYSTEM_PROMPT
+            : CREATIVE_DIRECTOR_SYSTEM_PROMPT,
     });
 
     const completedTurn = turn.status === "completed_turn" ? turn.turn : undefined;
