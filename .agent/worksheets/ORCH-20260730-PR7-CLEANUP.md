@@ -1,129 +1,99 @@
 # Worksheet: ORCH-20260730-PR7-CLEANUP
 
-<!-- agent-summary: Prepare the final selective-regeneration cleanup without racing the active PR 5 and PR 6 branches. -->
-<!-- agent-summary: Remove only legacy surfaces that are behaviorally independent on the PR 2 integration base. -->
-<!-- agent-summary: Do not edit files currently changed by the PR 6 UI and lifecycle cutover. -->
-<!-- agent-summary: Defer route and schema deletion until every legacy caller has moved to proposals. -->
-<!-- agent-summary: Remove the retired creative-director rollout health projection and CLI stage-restart command now. -->
-<!-- agent-summary: Recheck active branch overlap before each provisional commit and before the final stack. -->
-<!-- agent-summary: Keep this branch unpublished until PR 5 and PR 6 establish the final stack. -->
+<!-- agent-summary: PR 7A is the non-destructive application cleanup stacked on final PR 6 head 3430cec7. -->
+<!-- agent-summary: Legacy revision and stage-restart routes, clients, and controls are deleted. -->
+<!-- agent-summary: Production registry construction is role-owned; flat runtime compatibility is deleted. -->
+<!-- agent-summary: Application code routes by agent role and no longer reads or writes root_execution_profile. -->
+<!-- agent-summary: A replay-safe PREP migration keeps older binaries compatible during the rolling deploy. -->
+<!-- agent-summary: Creator-direct readiness tolerates but does not require the temporary profile grants. -->
+<!-- agent-summary: PR 7B separately removes the compatibility trigger, profile schema, grants, and monitoring. -->
 
 ## Goal and acceptance criteria
 
-Complete PR 7A as the non-destructive application cutover, then leave PR 7B's
-schema deletion for a separately deployed forward migration.
+Complete the forward application cutover after the proposal lifecycle, executor,
+adapter, activation, and Request Changes PRs:
 
-- The health response no longer advertises the retired creative-director
-  hierarchy rollout or fallback window.
-- The legacy stage-restart command is no longer offered by the API CLI or its
-  command reference.
-- Production has no flat/all-tools registry, generic root prompt, deterministic
-  board-feedback router, or opt-in legacy tool-loop driver.
-- Application code neither reads nor writes `root_execution_profile`.
-- The PREP migration preserves the column and DB contracts while filling it
-  only for omitted Creative Director root inserts and re-terminalizing active
-  legacy families.
-- No active PR 6 file or stack-dependent API/UI route is edited.
-- Targeted tests, API typecheck, an API health smoke, and repository validation
-  pass before handoff.
+- remove every production caller and endpoint for reject/restart-from-stage,
+  board revision, asset revision, and timeline revision;
+- remove the flat aggregate registry, generic root prompt, deterministic
+  board-feedback router, legacy driver, and feature flag;
+- construct only explicit Creative Director, Visuals, and Audio registries;
+- remove application profile types, reads, writes, health fields, and routing;
+- preserve rolling-deploy safety without reintroducing legacy application
+  behavior; and
+- leave destructive profile-schema removal to PR 7B after PR 7A is fully
+  deployed.
 
-## Context and source-of-truth documents
+## Stack and ownership
 
-`AGENTS.md`, `AGENT_WORKFLOW.md`, `CLAUDE.md`,
-`docs/repository-structure.md`, `docs/agent-system/README.md`, and
-`docs/scopes/full-selective-regeneration-cutover-prs.md`.
+This branch is based on final PR 6 commit `3430cec7`, which is stacked on final
+PR 5 commit `fc941092`. Its pull request must target
+`codex/selective-regen-pr6-ui` so the diff contains only PR 7A.
 
-## Overlap inventory
+Source-of-truth documents consulted and updated:
 
-Direct active PR 6 files excluded from this branch:
+- `AGENTS.md`, `AGENT_WORKFLOW.md`, and `CLAUDE.md`
+- `docs/repository-structure.md`
+- `docs/NORTH_STAR.md`
+- `docs/domain-agent-orchestration-contract.md`
+- `docs/agent-system/README.md`
+- `docs/agent-system/creative-director-rollout.md`
+- `docs/scopes/full-selective-regeneration-cutover-prs.md`
+- `docs/testing/e2e-test-inventory-and-gaps.md`
 
-- `apps/api/src/lib/api/v1/rerun-lifecycle-store.ts`
-- `apps/api/src/routes/v1/rerun-proposals.ts`
-- `apps/web/src/lib/api-client/v1-api.ts`
-- `packages/shared/src/rerun-proposal.ts`
-- `apps/web/src/components/ai-edit/RerunProposalDialog.tsx`
-- `apps/web/src/components/ai-edit/RerunProposalDialog.module.css`
-- `apps/web/src/lib/rerunProposalQueries.ts`
-- PR 6's worksheet and feedback record
+## Implementation decisions
 
-Stack-dependent legacy callers and route deletion also deferred:
-
-- `AssetEditModal`, `ProgressView`, `studioQueries`, `queryClient`,
-  `ProjectDetailPage`, `ProjectStepPage`, `RunProgressPage`, `StageRail`, and
-  their web tests
-- `orchestrator-runs.ts`, `orchestrator-run-board-revisions.ts`, and the
-  timeline revision endpoints
-- restart selection clearing, retired schema callers, flat profile removal,
-  historical-root terminalization, and the `root_execution_profile` drop
-
-## PR 7A completion plan
-
-1. Replace filtering of a constructible flat registry with explicit role-owned
-   builders and remove the eager engine fallback.
-2. Remove application profile reads/writes and add the non-destructive rolling
-   compatibility migration.
-3. Stack the completed PR 6 caller cutover and delete the legacy restart and
-   revision API/client surfaces.
-4. Run focused registry, migration, orchestrator, route-404, typecheck, API
-   smoke, lint, and full repository validation.
-5. Obtain independent implementation and wrap-up review, commit locally, and
-   leave unpublished for the integration owner to restack on final PR 5/PR 6.
-
-## Decisions
-
-- A file being disjoint is insufficient if deleting it would break an active
-  caller. Those changes remain deferred.
-- `feature-flag.ts` remains temporarily because the flat tool-loop driver still
-  consumes `isOrchestratorToolLoopEnabled`; only the retired hierarchy exports
-  are removed.
-- The CLI removal intentionally precedes endpoint deletion so new manual use no
-  longer starts legacy stage restarts while the compatibility route remains for
-  the PR 6 migration window.
-- PR 7A and PR 7B are separate deployments. PR 7A retains every profile-bound
-  database function, constraint, policy, grant, and column needed by an older
-  application binary; PR 7B owns their destructive removal after rollout.
+1. Role registries own their primitive definitions directly through neutral
+   registry dependencies. The only aggregate registry is test-only.
+2. Engine startup has no eager all-tools registry or default fallback.
+3. Root execution is identified by durable `agent_role`; application code does
+   not know the historical profile column.
+4. The PREP migration fills the retained profile only when an older or newer
+   caller omits it for a Creative Director root. It does not label Visuals or
+   Audio children.
+5. Existing profile constraints, routines, policies, and grants remain for
+   older binaries until PR 7B. Readiness therefore permits the exact
+   transitional SELECT/INSERT profile grants but does not require them, so the
+   same PR 7A binary is healthy before and after PR 7B.
+6. Legacy HTTP paths are absent rather than redirected. Request Changes enters
+   only through the durable proposal lifecycle shipped by PR 6.
 
 ## Validation evidence
 
-- The focused orchestrator tool-loop suite passes (8/8), proving the retained
-  opt-in tool-loop flag and driver behavior are unchanged.
-- `pnpm --filter @popcorn/api typecheck` passes.
-- CLI help runs locally and no longer lists `run restart`.
-- A development API served `/api/v1/health` with HTTP 200. The response retained
-  `status`, `authMode`, `commit`, `creatorDirectDatabase`, and `time`, and
-  omitted `creativeDirectorHierarchy` and `fallbackUntil`.
-- `pnpm agent:lint:fix` and full `pnpm agent:validate` pass, including both app
-  typechecks, 90 migration checks, workflow policy, and database boundaries.
-- A fresh PR 6 status check found no file overlap with this patch. PR 6 had
-  expanded into additional web callers, reinforcing the decision to defer all
-  UI and compatibility-route deletion.
+- API and web typechecks pass on the final stack.
+- Focused API coverage passes 122/122 across registry ownership, durable
+  orchestration/recovery, proposal transactions, migration safety, route
+  removal, observability, and historical projections.
+- Focused web target-mapping coverage passes 5/5.
+- A live local API smoke returned HTTP 200 for health and HTTP 404 for all five
+  retired route families.
+- `pnpm agent:lint:fix` changed no files.
+- `pnpm agent:validate` passes, including both app typechecks and the complete
+  94-migration chain.
+- The focused creator-direct readiness suite passes 10/10 after the
+  mixed-schema privilege adjustment.
+- A fresh post-review `pnpm agent:lint:fix` and `pnpm agent:validate` pass,
+  including both app typechecks and the complete 94-migration chain.
 
-## Independent reviews
+## Independent review
 
-- Research/plan: the cutover audit confirmed the final PR 7 removal inventory
-  and the two-deploy schema sequence; this provisional plan adopted its
-  caller-first boundary.
-- Implementation: approved the split as behaviorally safe and confirmed no
-  current PR 6 file overlap. The reviewer required the rollout system doc,
-  scope status, worksheet evidence, and feedback record to accompany the code;
-  all are now included. The reviewer also requested an explicit health-contract
-  check; the local HTTP smoke recorded above verifies both retained and removed
-  fields.
-- Wrap-up: approved with no actionable findings. The reviewer confirmed the
-  retired health helpers have no repository consumers, the unrelated tool-loop
-  flag remains intact, CLI removal is coherent with retaining the live web
-  compatibility route, and the documentation accurately marks deferred work.
-  The shared roadmap status paragraph may conflict during the final stack and
-  must be reconciled rather than blindly accepted.
+- Research and plan review established the two-deploy PR 7A/PR 7B sequence and
+  the rolling compatibility constraint.
+- Implementation review verified the route/runtime removal and found one
+  mixed-schema readiness issue: the PR 7A binary still required the profile
+  grant that PR 7B will remove.
+- The fix removes the profile from required privilege inventory while narrowly
+  allowing only its temporary SELECT/INSERT grants; unrelated excess
+  `orchestrator_runs` privileges remain rejected.
+- Wrap-up review also identified and prompted correction of stale North Star,
+  domain contract, rollout, testing-inventory, and worksheet claims.
 
-## Blockers and risks
+## Remaining risk and handoff
 
-- The final PR 7 stack cannot be assembled until PR 5 and PR 6 finish.
-- Removing the API restart/revision routes on the PR 2 base would break current
-  web callers, so that work is deliberately not part of this provisional
-  commit.
-
-## Next action / handoff
-
-Complete wrap-up review, commit the disjoint cleanup, and retain the branch
-locally for later rebasing and completion on top of PR 5 and PR 6.
+PR 7B must not deploy until PR 7A is fully rolled out. It owns removal of the
+temporary trigger, `root_execution_profile` column, profile-bound database
+signatures/constraints/policies/grants, transitional readiness allowance, and
+profile-based monitoring queries. Before dropping the profile fence, PR 7B must
+make terminal flat/null rows structurally non-resumable and prove storyboard
+approval and insufficient-credit retry cannot reopen them. Terminal historical
+runs remain readable.

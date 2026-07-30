@@ -257,28 +257,26 @@ digest/idempotency approval.
 
 Untargeted outputs enter the project's immutable asset pool and do not move a
 production selection. Only an explicitly targeted, pinned, and transactionally
-revalidated request may append a selection. Follow-ups reuse the same domain
-session. Before graph-scoped Request Changes lands, direct changes are limited
-to unconsumed outputs or targets without downstream consumers.
+revalidated proposal may append a selection. Follow-ups reuse the same domain
+session. Request Changes resolves graph scope through the proposal lifecycle;
+direct provider edits do not bypass that lifecycle.
 
 ## Capability ownership
 
-The Creative Director hierarchy is the only executable profile for root work.
+The Creative Director hierarchy is the only executable ownership model for root
+work.
 The executable primitive vocabulary and its ownership, canonical labels/order,
 execution modes, cost classes, and approval-gate metadata live in
 [`apps/api/src/lib/orchestrator-tools/capability-catalog.ts`](../apps/api/src/lib/orchestrator-tools/capability-catalog.ts).
 Every rich primitive definition is checked against that catalog when it is
 registered, and the role-owned registries consume the same metadata. The
-Roadmap PR 0 blocks creation, recovery, and resumption of null/flat roots.
-The database rejects every new nonterminal null/flat root, including direct
-service-role inserts from an older process during a rolling deploy; recovery
-causally cancels any refused legacy family before retiring its dispatch.
-Terminal legacy history remains readable, while `createDefaultToolRegistry()`
-remains constructible only as historical/evaluation compatibility until roadmap
-PR 7 deletes it. Current role builders also derive owned views by filtering that
-flat definition set. The
-target refactor replaces it with canonical primitive definitions and direct
-role-owned builders; its deletion is owned by
+database rejects every new nonterminal null/flat root, including direct
+service-role inserts from an older process during a rolling deploy. Terminal
+legacy history remains readable but cannot be created, recovered, or resumed.
+Production registry construction is role-owned; the flat aggregate registry,
+generic root prompt, deterministic feedback router, and legacy tool-loop driver
+are deleted. A temporary database-only profile compatibility bridge remains
+through PR 7A and is removed by the separately deployed PR 7B described in
 [`scopes/full-selective-regeneration-cutover-prs.md`](scopes/full-selective-regeneration-cutover-prs.md).
 `regenerate_image_asset` is classified as synchronous media work: its live rich
 handler and bridge were already synchronous, while the old dormant stub

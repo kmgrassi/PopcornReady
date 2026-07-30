@@ -115,9 +115,10 @@ Limits and remaining gaps:
 
 - PR 782 intentionally has no runtime or UI path. Its origin, recipient,
   identifier, task, report, and state guarantees are compile-time contracts.
-- PR 784 keeps the flat production registry active. The root, Visuals, and Audio
-  registries plus cross-domain recovery projection are dormant and cannot be
-  claimed as production specialist-agent behavior yet.
+- Historical PR 784 evidence: that PR kept the flat production registry active,
+  so its then-dormant role registries could not yet be claimed as production
+  specialist-agent behavior. The later hierarchy cutover activated role-owned
+  registries, and PR 7A deleted the flat production registry.
 - No already-running production job completed during the safe observation
   window. PR 783's exact live completion race was therefore verified by unit and
   local-Supabase concurrency tests, not by starting billable production work.
