@@ -44,7 +44,7 @@ failure interpretation live in
 - Trigger-backed functions: **36**.
 - Non-trigger functions: **83**.
 - `SECURITY DEFINER` functions: **96**.
-- Active API production runtime: **63 `.rpc()` expressions targeting 64
+- Active API production runtime: **47 `.rpc()` expressions targeting 48
   distinct functions**.
 - Internal test-sandbox support: **2 expressions targeting one additional
   function**, `delete_test_sandbox`.
@@ -59,18 +59,18 @@ checked boundary permits **no dynamic calls**. Retired storyboards, generation-s
 composition/edit-graph tables, timelines, and brief versions are prohibited
 runtime targets.
 
-The durable selective-regeneration proposal lifecycle is a reviewed integrity
-exception. Its 15 API-called functions keep approval, freshness, budget
-admission, leases, executor-step callbacks, recovery, and terminal settlement
-inside locked database transitions. They are service-role only and expose no
-provider adapter. Moving that family to direct TypeScript transactions would
-require one equivalent transaction/locking boundary and belongs in a separate
-database-access migration after the least-privilege role is available.
+The durable rerun-proposal lifecycle is the second direct-Postgres workflow
+family. Approval, refresh, execution admission, leases, work/callback
+reservations, child-budget admission, cancellation, reconciliation, and
+terminal cost settlement run as typed `popcorn_api` transactions. The API does
+not call the corresponding service-role workflow routines. PostgreSQL retains
+the lifecycle transition trigger, budget-admission trigger, constraints, RLS,
+and the narrow pin-freshness locking function.
 
 ## Direct Postgres safety rules
 
 `DATABASE_URL` is server-only. The pool is lazy, but production readiness now
-requires the creator-direct confirmation role capabilities before Railway
+requires the exact creator-direct and rerun-lifecycle role capabilities before Railway
 promotes a deployment. Non-production processes may still boot without the URL;
 the first direct transaction then fails clearly if it is missing or its bounded
 pool settings are invalid.

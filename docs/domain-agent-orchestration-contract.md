@@ -231,6 +231,13 @@ Callback fences are active before a provider launch, fast callbacks are safe,
 and changed, expired, canceled, or duplicate callback payloads fail closed.
 Real executors remain unregistered until the activation PR.
 
+Lifecycle mutations use least-privilege `popcorn_api` direct-Postgres
+transactions with a fixed proposal/execution/work/callback lock order. RLS,
+constraints, transition and budget-admission triggers, and the pin-freshness
+lock remain database-enforced. Applied terminalization always requires a
+durable root `rerun_reconciliation` action, and worker/recovery fences use the
+database clock.
+
 Every child operation reserves through the canonical budget ledger under the
 proposal ceiling. Child-owned primitive actions reserve against their exact
 child run only after proving parent root, work dispatch, proposal, and execution

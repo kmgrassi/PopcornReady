@@ -1333,21 +1333,17 @@ begin
   if p_outcome not in ('completed', 'failed') then
     raise exception 'invalid rerun callback outcome' using errcode = '22023';
   end if;
-  select callback.*
-    into v_callback
-    from public.rerun_execution_callbacks callback
-    join public.rerun_execution_work_items work
-      on work.id = callback.work_reservation_id
-   where callback.project_id = p_project_id
-     and callback.execution_reservation_id = p_reservation_id
-     and work.work_item_id = p_work_item_id
-     and callback.executor_id = p_executor_id
-   for update of callback;
-  if not found then raise exception 'rerun callback not found' using errcode = 'P0002'; end if;
   select * into v_execution from public.rerun_execution_reservations
-   where id = v_callback.execution_reservation_id for update;
+   where id = p_reservation_id and project_id = p_project_id for update;
+  if not found then raise exception 'rerun callback not found' using errcode = 'P0002'; end if;
   select * into v_work from public.rerun_execution_work_items
-   where id = v_callback.work_reservation_id for update;
+   where execution_reservation_id = p_reservation_id
+     and work_item_id = p_work_item_id for update;
+  if not found then raise exception 'rerun callback not found' using errcode = 'P0002'; end if;
+  select * into v_callback from public.rerun_execution_callbacks
+   where work_reservation_id = v_work.id
+     and executor_id = p_executor_id for update;
+  if not found then raise exception 'rerun callback not found' using errcode = 'P0002'; end if;
   if v_callback.callback_generation is distinct from p_callback_generation
      or v_callback.callback_token_hash is distinct from
        encode(extensions.digest(p_callback_token, 'sha256'), 'hex') then
@@ -1927,7 +1923,9 @@ begin
   end if;
   if v_execution.status <> 'running'
      or v_execution.lease_token is distinct from p_lease_token
-     or v_execution.lease_generation is distinct from p_lease_generation then
+     or v_execution.lease_generation is distinct from p_lease_generation
+     or v_execution.lease_expires_at is null
+     or v_execution.lease_expires_at <= now() then
     raise exception 'stale_rerun_execution_lease' using errcode = '55000';
   end if;
   select * into v_proposal from public.actions where id = v_execution.proposal_action_id;
@@ -2180,14 +2178,13 @@ begin
   update public.rerun_execution_callbacks
      set status = 'canceled'
    where execution_reservation_id = p_reservation_id and status = 'pending';
-  -- Temporarily restore the same fence solely for the atomic failure finalizer.
-  if v_execution.lease_token is null then
-    update public.rerun_execution_reservations
-       set lease_token = gen_random_uuid(), lease_generation = lease_generation + 1,
-           lease_expires_at = now() + interval '1 minute', status = 'running'
-     where id = p_reservation_id
-     returning * into v_execution;
-  end if;
+  -- Recovery never reuses a worker fence. Mint a fresh, short-lived fence
+  -- solely for the atomic failure finalizer.
+  update public.rerun_execution_reservations
+     set lease_token = gen_random_uuid(), lease_generation = lease_generation + 1,
+         lease_expires_at = now() + interval '1 minute', status = 'running'
+   where id = p_reservation_id
+   returning * into v_execution;
   return public.finalize_rerun_execution(
     p_project_id, p_reservation_id, v_execution.lease_token,
     v_execution.lease_generation, p_execution_action_id, 'failed', null,

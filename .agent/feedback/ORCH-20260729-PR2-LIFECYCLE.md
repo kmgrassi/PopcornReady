@@ -42,6 +42,13 @@ obtain an ID makes inert preview visible as active work and complicates
 refresh, rejection, and stale-proposal cleanup. Nullable attribution plus
 transactional root materialization keeps that boundary explicit.
 
+PR review exposed that changing from PostgREST `.rpc()` to `pg` is not itself
+a database-boundary migration. Workflow statements, replay checks, lock
+ordering, and recovery must move into the typed transaction while triggers and
+narrow integrity routines remain in PostgreSQL. Lease validity must use
+database `now()`, terminal replays must compare the full durable payload, and
+all paths touching execution/work/callback rows need one global lock order.
+
 ## Follow-up
 
 PRs 3A, 3B, 3C, and 4 should implement adapters against the capability-level
