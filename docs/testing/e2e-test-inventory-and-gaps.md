@@ -283,6 +283,9 @@ Covered:
 
 Remaining gaps:
 
+- Add dedicated delayed-proposal cases for prompt and goal changes. They share
+  the proposal-reset path already exercised by project and prompt-refinement
+  changes, but are not asserted independently.
 - Add mocked status fixtures for completed, failed, canceled, question, and
   blocked outcomes.
 - Add browser coverage when optional references, Request Changes, dependency
