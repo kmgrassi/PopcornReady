@@ -11,6 +11,8 @@ interface ReadinessRow extends QueryResultRow {
   owns_no_protected_tables: boolean;
   no_table_wide_privileges: boolean;
   no_forbidden_column_privileges: boolean;
+  lifecycle_access_exact: boolean;
+  lifecycle_routine_boundary: boolean;
   projects_read: boolean;
   runs_read: boolean;
   runs_lock: boolean;
@@ -36,7 +38,88 @@ const REQUIRED_POLICIES = [
   "orchestrator_run_gates_popcorn_api_confirmation_update",
   "idempotency_popcorn_api_confirmation_select",
   "idempotency_popcorn_api_confirmation_insert",
+  "actions_popcorn_api_rerun_select",
+  "actions_popcorn_api_rerun_insert",
+  "actions_popcorn_api_rerun_update",
+  "action_assets_popcorn_api_rerun_select",
+  "action_assets_popcorn_api_rerun_insert",
+  "assets_popcorn_api_rerun_select",
+  "rerun_reservations_popcorn_api_all",
+  "rerun_work_popcorn_api_all",
+  "rerun_callbacks_popcorn_api_all",
+  "rerun_successors_popcorn_api_all",
+  "rerun_budget_popcorn_api_all",
+  "orchestrator_runs_popcorn_api_rerun_select",
+  "orchestrator_runs_popcorn_api_rerun_insert",
+  "orchestrator_runs_popcorn_api_rerun_update",
 ];
+
+const LIFECYCLE_COLUMN_PRIVILEGES = {
+  assets: {
+    SELECT: ["id","kind","project_id","role"],
+    INSERT: [],
+    UPDATE: [],
+  },
+  orchestrator_runs: {
+    SELECT: ["agent_role","budget_usd","id","origin_kind","parent_run_id","project_id","root_action_id","root_execution_profile","spent_usd","status","task_params"],
+    INSERT: ["agent_role","budget_usd","input_summary","project_id","root_execution_profile","schema_version","spent_usd","status"],
+    UPDATE: ["completed_at","error","started_at","status","updated_at"],
+  },
+  actions: {
+    SELECT: ["error","id","input_asset_ids","orchestrator_run_id","output_asset_ids","params","project_id","proposal","rationale","status","tool"],
+    INSERT: ["error","id","input_asset_ids","job_ids","orchestrator_run_id","output_asset_ids","params","project_id","proposal","rationale","schema_version","status","tool"],
+    UPDATE: ["error","output_asset_ids","status"],
+  },
+  action_assets: {
+    SELECT: ["action_id","asset_id","direction","project_id"],
+    INSERT: ["action_id","asset_id","direction","ordinal","project_id","role"],
+    UPDATE: [],
+  },
+  rerun_execution_reservations: {
+    SELECT: ["approval_action_id","approved_max_cost_usd","budget_reservation_id","execution_result_action_id","id","idempotency_key","lease_expires_at","lease_generation","lease_token","owns_materialized_root","project_id","proposal_action_id","request_fingerprint","root_run_id","status"],
+    INSERT: ["approval_action_id","approved_max_cost_usd","budget_reservation_id","idempotency_key","owns_materialized_root","project_id","proposal_action_id","request_fingerprint","root_run_id"],
+    UPDATE: ["execution_result_action_id","lease_expires_at","lease_generation","lease_token","status","updated_at"],
+  },
+  rerun_execution_work_items: {
+    SELECT: ["accepted_callbacks","binding_results","blocked_precondition","budget_reservation_keys","child_run_id","dispatch_action_id","error","execution_reservation_id","id","lease_generation","output_asset_ids","primitive_action_ids","project_id","reconciliation_action_id","report_action_id","request_fingerprint","status","work_item_id"],
+    INSERT: ["dispatch_action_id","execution_reservation_id","lease_generation","project_id","request_fingerprint","status","work_item_id"],
+    UPDATE: ["accepted_callbacks","binding_results","blocked_precondition","budget_reservation_keys","child_run_id","error","output_asset_ids","primitive_action_ids","reconciliation_action_id","report_action_id","status","updated_at"],
+  },
+  rerun_execution_callbacks: {
+    SELECT: ["binding_results","binding_subset","budget_reservation_keys","callback_generation","callback_result","callback_token_hash","child_run_id","execution_reservation_id","executor_id","expires_at","id","job_ids","primitive_action_ids","project_id","reconciliation_action_id","report_action_id","status","work_reservation_id"],
+    INSERT: ["binding_subset","callback_generation","callback_token_hash","execution_reservation_id","executor_id","project_id","work_reservation_id"],
+    UPDATE: ["binding_results","budget_reservation_keys","callback_result","child_run_id","completed_at","job_ids","primitive_action_ids","reconciliation_action_id","report_action_id","status"],
+  },
+  rerun_proposal_successors: {
+    SELECT: ["cause","prior_proposal_action_id","project_id","request_fingerprint","successor_proposal_action_id"],
+    INSERT: ["cause","prior_proposal_action_id","project_id","request_fingerprint","successor_proposal_action_id"],
+    UPDATE: [],
+  },
+  orchestrator_budget_reservations: {
+    SELECT: ["action_id","actual_usd","estimated_usd","id","job_id","orchestrator_run_id","parent_reservation_id","project_id","proposal_action_id","reservation_key","reservation_scope","root_run_id","status"],
+    INSERT: ["action_id","estimated_usd","job_id","orchestrator_run_id","parent_reservation_id","project_id","proposal_action_id","reservation_key","reservation_scope","root_run_id"],
+    UPDATE: ["released_at","status","updated_at"],
+  },
+} as const;
+
+const RETIRED_LIFECYCLE_ROUTINES = [
+  "public.approve_rerun_proposal(uuid,uuid,uuid,text,double precision,text,boolean)",
+  "public.reject_rerun_proposal(uuid,uuid)",
+  "public.create_rerun_proposal_successor(uuid,uuid,uuid,text,text,uuid,jsonb,jsonb,uuid[],text,public.action_status)",
+  "public.reserve_rerun_proposal_execution(uuid,uuid,uuid,text,text,double precision,text)",
+  "public.claim_rerun_execution_lease(uuid,uuid,integer)",
+  "public.renew_rerun_execution_lease(uuid,uuid,uuid,integer,integer)",
+  "public.reserve_rerun_work_item(uuid,uuid,uuid,integer,text,text,uuid,jsonb,jsonb)",
+  "public.reserve_rerun_child_budget(uuid,uuid,text,uuid,uuid,uuid,text,double precision)",
+  "public.park_rerun_work_item(uuid,uuid,uuid,integer,text,jsonb,jsonb,jsonb,jsonb,uuid[],text[])",
+  "public.park_rerun_execution(uuid,uuid,uuid,integer)",
+  "public.record_rerun_executor_callback(uuid,uuid,text,text,text,integer,text,jsonb)",
+  "public.complete_rerun_work_item(uuid,uuid,uuid,integer,text,uuid,uuid,uuid,jsonb,uuid[],text[])",
+  "public.fail_rerun_work_item(uuid,uuid,uuid,integer,text,jsonb)",
+  "public.finalize_rerun_execution(uuid,uuid,uuid,integer,uuid,text,uuid,jsonb)",
+  "public.recover_rerun_execution(uuid,uuid,uuid,text)",
+  "public.cancel_rerun_execution(uuid,uuid,uuid,text)",
+] as const;
 
 export function createCreatorDirectDatabaseReadiness(
   runTransaction: TransactionRunner = withTransaction,
@@ -135,7 +218,7 @@ export function createCreatorDirectDatabaseReadiness(
                    from (
                      values
                        ('projects', array['id', 'workspace_id']::text[], array[]::text[], array[]::text[]),
-                       ('orchestrator_runs', array['id', 'project_id', 'origin_kind', 'status']::text[], array['updated_at']::text[], array[]::text[]),
+                       ('orchestrator_runs', array['id','project_id','origin_kind','status','parent_run_id','root_action_id','task_params','agent_role','root_execution_profile','budget_usd','spent_usd']::text[], array['updated_at','status','started_at','completed_at','error']::text[], array['schema_version','project_id','status','input_summary','budget_usd','spent_usd','agent_role','root_execution_profile']::text[]),
                        ('orchestrator_run_gates', array['id', 'orchestrator_run_id', 'subject_proposal_action_id', 'gate_kind', 'project_id', 'actor_id', 'request_digest', 'approved_max_usd', 'approval_token_hash', 'expires_at', 'token_consumed_at', 'status']::text[], array['status', 'token_consumed_at', 'decided_at', 'updated_at']::text[], array[]::text[]),
                        ('idempotency', array['scope', 'key', 'body_hash', 'response_body']::text[], array[]::text[], array['scope', 'key', 'body_hash', 'status', 'response_body']::text[])
                    ) as allowed(table_name, select_columns, update_columns, insert_columns)
@@ -162,6 +245,43 @@ export function createCreatorDirectDatabaseReadiness(
                     current_user, c.oid, a.attname, 'REFERENCES'
                   )
                ) as no_forbidden_column_privileges,
+               not exists (
+                 select 1
+                   from jsonb_each($3::jsonb) expected_table
+                   cross join lateral jsonb_each(expected_table.value)
+                     expected_privilege
+                  where exists (
+                    select 1
+                      from jsonb_array_elements_text(expected_privilege.value)
+                        required_column
+                     where not has_column_privilege(
+                       current_user,
+                       format('public.%I', expected_table.key),
+                       required_column,
+                       expected_privilege.key
+                     )
+                  )
+                  or exists (
+                    select 1
+                      from information_schema.column_privileges actual
+                     where actual.grantee = current_user
+                       and actual.table_schema = 'public'
+                       and actual.table_name = expected_table.key
+                       and actual.privilege_type = expected_privilege.key
+                       and not expected_privilege.value ? actual.column_name
+                  )
+               ) as lifecycle_access_exact,
+               has_function_privilege(
+                 current_user,
+                 'public.assert_rerun_proposal_pins_fresh(uuid,uuid)',
+                 'EXECUTE'
+               )
+               and not exists (
+                 select 1 from unnest($4::text[]) routine(signature)
+                  where has_function_privilege(
+                    current_user, routine.signature, 'EXECUTE'
+                  )
+               ) as lifecycle_routine_boundary,
                has_column_privilege(current_user, 'public.projects', 'id', 'SELECT')
                  and has_column_privilege(current_user, 'public.projects', 'workspace_id', 'SELECT')
                  as projects_read,
@@ -225,7 +345,17 @@ export function createCreatorDirectDatabaseReadiness(
                 "orchestrator_runs",
                 "orchestrator_run_gates",
                 "idempotency",
+                "actions",
+                "action_assets",
+                "assets",
+                "rerun_execution_reservations",
+                "rerun_execution_work_items",
+                "rerun_execution_callbacks",
+                "rerun_proposal_successors",
+                "orchestrator_budget_reservations",
               ],
+              JSON.stringify(LIFECYCLE_COLUMN_PRIVILEGES),
+              RETIRED_LIFECYCLE_ROUTINES,
             ]
           );
           return result.rows[0] ?? null;
@@ -241,6 +371,8 @@ export function createCreatorDirectDatabaseReadiness(
           row.owns_no_protected_tables &&
           row.no_table_wide_privileges &&
           row.no_forbidden_column_privileges &&
+          row.lifecycle_access_exact &&
+          row.lifecycle_routine_boundary &&
           row.projects_read &&
           row.runs_read &&
           row.runs_lock &&

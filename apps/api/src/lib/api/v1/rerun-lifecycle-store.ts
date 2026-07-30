@@ -10,6 +10,28 @@ import {
   type SupabaseErrorLike,
   type SupabaseResult,
 } from "@/lib/supabase/db-errors";
+import { withTransaction } from "@/lib/postgres/transactions";
+import {
+  cancelExecutionTransaction,
+  claimExecutionTransaction,
+  finalizeExecutionTransaction,
+  parkExecutionTransaction,
+  renewExecutionTransaction,
+  reserveExecutionTransaction,
+} from "@/lib/postgres/rerun-execution-transactions";
+import {
+  completeWorkTransaction,
+  failWorkTransaction,
+  parkWorkTransaction,
+  recordCallbackTransaction,
+  reserveChildBudgetTransaction,
+  reserveWorkTransaction,
+} from "@/lib/postgres/rerun-work-transactions";
+import {
+  approveRerunProposalTransaction,
+  createRerunProposalSuccessorDirectTransaction,
+  rejectRerunProposalTransaction,
+} from "@/lib/postgres/rerun-proposal-transactions";
 
 async function runLifecycleQuery<T>(
   operation: string,
@@ -255,24 +277,7 @@ export async function approveRerunProposal(input: {
   approvalFingerprint: string;
   autonomous: boolean;
 }) {
-  const rows = await runLifecycleQuery(
-    "rerunLifecycleStore.approve",
-    getServiceSupabaseForStore().rpc("approve_rerun_proposal", {
-      p_project_id: input.projectId,
-      p_proposal_action_id: input.proposalActionId,
-      p_approval_action_id: input.approvalActionId,
-      p_actor_id: input.actorId,
-      p_approved_max_cost_usd: input.approvedMaxCostUsd,
-      p_approval_fingerprint: input.approvalFingerprint,
-      p_autonomous: input.autonomous,
-    })
-  ) as Array<{
-    proposal_status: RerunProposalLifecycleStatus;
-    approval_action_id: string | null;
-    replayed: boolean;
-    stale: boolean;
-  }>;
-  return rows[0]!;
+  return approveRerunProposalTransaction(input);
 }
 
 export async function getRerunProposalApproval(input: {
@@ -305,13 +310,7 @@ export async function rejectRerunProposal(input: {
   projectId: string;
   proposalActionId: string;
 }) {
-  return runLifecycleQuery(
-    "rerunLifecycleStore.reject",
-    getServiceSupabaseForStore().rpc("reject_rerun_proposal", {
-      p_project_id: input.projectId,
-      p_proposal_action_id: input.proposalActionId,
-    })
-  ) as Promise<RerunProposalLifecycleStatus>;
+  return rejectRerunProposalTransaction(input);
 }
 
 export async function createRerunProposalSuccessor(input: {
@@ -326,23 +325,7 @@ export async function createRerunProposalSuccessor(input: {
   inputAssetIds: string[];
   rationale: string;
 }) {
-  const rows = await runLifecycleQuery(
-    "rerunLifecycleStore.createSuccessor",
-    getServiceSupabaseForStore().rpc("create_rerun_proposal_successor", {
-      p_project_id: input.projectId,
-      p_prior_action_id: input.priorActionId,
-      p_successor_action_id: input.successorActionId,
-      p_request_fingerprint: input.requestFingerprint,
-      p_cause: input.cause,
-      p_orchestrator_run_id: input.rootRunId,
-      p_params: input.params,
-      p_proposal: input.proposal,
-      p_input_asset_ids: input.inputAssetIds,
-      p_rationale: input.rationale,
-      p_successor_status: input.proposal.outcome === "no_op" ? "applied" : "proposed",
-    })
-  ) as Array<{ successor_action_id: string; replayed: boolean }>;
-  return rows[0]!;
+  return createRerunProposalSuccessorDirectTransaction(input);
 }
 
 export interface RerunLease {
@@ -361,75 +344,21 @@ export async function reserveRerunExecution(input: {
   approvedMaxCostUsd: number;
   approvalFingerprint: string;
 }) {
-  const rows = await runLifecycleQuery(
-    "rerunLifecycleStore.reserveExecution",
-    getServiceSupabaseForStore().rpc("reserve_rerun_proposal_execution", {
-      p_project_id: input.projectId,
-      p_proposal_action_id: input.proposalActionId,
-      p_approval_action_id: input.approvalActionId,
-      p_idempotency_key: input.idempotencyKey,
-      p_request_fingerprint: input.requestFingerprint,
-      p_approved_max_cost_usd: input.approvedMaxCostUsd,
-      p_approval_fingerprint: input.approvalFingerprint,
-    })
-  ) as Array<{
-    reservation_id: string | null;
-    budget_reservation_id: string | null;
-    root_run_id: string | null;
-    status: string;
-    lease_generation: number;
-    execution_result_action_id: string | null;
-    replayed: boolean;
-  }>;
-  return rows[0]!;
+  return reserveExecutionTransaction(input);
 }
 
 export async function claimRerunExecution(input: {
   projectId: string;
   reservationId: string;
 }): Promise<RerunLease | null> {
-  const rows = await runLifecycleQuery(
-    "rerunLifecycleStore.claimExecution",
-    getServiceSupabaseForStore().rpc("claim_rerun_execution_lease", {
-      p_project_id: input.projectId,
-      p_reservation_id: input.reservationId,
-      p_lease_seconds: 60,
-    })
-  ) as Array<{
-    reservation_id: string;
-    lease_token: string | null;
-    lease_generation: number;
-    lease_expires_at: string | null;
-    parked: boolean;
-  }>;
-  const row = rows[0]!;
-  if (row.parked) return null;
-  if (!row.lease_token || !row.lease_expires_at) {
-    throw new ApiError("internal_error", "Claimed execution lease is incomplete.");
-  }
-  return {
-    reservationId: row.reservation_id,
-    leaseToken: row.lease_token,
-    leaseGeneration: row.lease_generation,
-    leaseExpiresAt: row.lease_expires_at,
-  };
+  return claimExecutionTransaction(input);
 }
 
 export async function renewRerunExecution(input: {
   projectId: string;
   lease: RerunLease;
 }): Promise<RerunLease> {
-  const leaseExpiresAt = await runLifecycleQuery(
-    "rerunLifecycleStore.renewExecution",
-    getServiceSupabaseForStore().rpc("renew_rerun_execution_lease", {
-      p_project_id: input.projectId,
-      p_reservation_id: input.lease.reservationId,
-      p_lease_token: input.lease.leaseToken,
-      p_lease_generation: input.lease.leaseGeneration,
-      p_lease_seconds: 60,
-    })
-  ) as string;
-  return { ...input.lease, leaseExpiresAt };
+  return renewExecutionTransaction(input);
 }
 
 export async function reserveRerunWorkItem(input: {
@@ -445,45 +374,31 @@ export async function reserveRerunWorkItem(input: {
     generation: number;
     requiredOutputs: unknown[];
   }>;
-}) {
-  const rows = await runLifecycleQuery(
-    "rerunLifecycleStore.reserveWork",
-    getServiceSupabaseForStore().rpc("reserve_rerun_work_item", {
-      p_project_id: input.projectId,
-      p_reservation_id: input.lease.reservationId,
-      p_lease_token: input.lease.leaseToken,
-      p_lease_generation: input.lease.leaseGeneration,
-      p_work_item_id: input.workItemId,
-      p_request_fingerprint: input.requestFingerprint,
-      p_dispatch_action_id: input.dispatchActionId,
-      p_dispatch_params: input.dispatchParams,
-      p_callback_fences: input.callbackFences,
-    })
-  ) as Array<{
-    work_reservation_id: string;
-    work_status: "reserved" | "running" | "completed" | "failed" | "canceled";
-    child_run_id: string | null;
-    report_action_id: string | null;
-    reconciliation_action_id: string | null;
-    binding_results: unknown[] | null;
-    primitive_action_ids: string[] | null;
-    budget_reservation_keys: string[] | null;
-    callback_results: Array<{
-      executorId: string;
-      status: "completed" | "failed" | "canceled" | "pending";
-      result: {
-        outputs?: unknown[];
-        childRunId?: string;
-        reportActionId?: string;
-        reconciliationActionId?: string;
-        primitiveActionIds?: string[];
-        budgetReservationKeys?: string[];
-      } | null;
-      jobIds: string[];
-    }>;
-    replayed: boolean;
+}): Promise<{
+  work_reservation_id: string;
+  work_status: "reserved" | "running" | "completed" | "failed" | "canceled";
+  child_run_id: string | null;
+  report_action_id: string | null;
+  reconciliation_action_id: string | null;
+  binding_results: unknown[] | null;
+  primitive_action_ids: string[] | null;
+  budget_reservation_keys: string[] | null;
+  callback_results: Array<{
+    executorId: string;
+    status: "completed" | "failed" | "canceled" | "pending";
+    result: {
+      outputs?: unknown[];
+      childRunId?: string;
+      reportActionId?: string;
+      reconciliationActionId?: string;
+      primitiveActionIds?: string[];
+      budgetReservationKeys?: string[];
+    } | null;
+    jobIds: string[];
   }>;
-  return rows[0]!;
+  replayed: boolean;
+}> {
+  return reserveWorkTransaction(input);
 }
 
 export async function completeRerunWorkItem(input: {
@@ -497,22 +412,7 @@ export async function completeRerunWorkItem(input: {
   primitiveActionIds: string[];
   budgetReservationKeys: string[];
 }): Promise<void> {
-  await runLifecycleQuery(
-    "rerunLifecycleStore.completeWork",
-    getServiceSupabaseForStore().rpc("complete_rerun_work_item", {
-      p_project_id: input.projectId,
-      p_reservation_id: input.lease.reservationId,
-      p_lease_token: input.lease.leaseToken,
-      p_lease_generation: input.lease.leaseGeneration,
-      p_work_item_id: input.workItemId,
-      p_child_run_id: input.childRunId ?? null,
-      p_report_action_id: input.reportActionId ?? null,
-      p_reconciliation_action_id: input.reconciliationActionId ?? null,
-      p_binding_results: input.bindingResults,
-      p_primitive_action_ids: input.primitiveActionIds,
-      p_budget_reservation_keys: input.budgetReservationKeys,
-    })
-  );
+  await completeWorkTransaction(input);
 }
 
 export async function parkRerunWorkItem(input: {
@@ -536,37 +436,14 @@ export async function parkRerunWorkItem(input: {
   budgetReservationKeys: string[];
   bindingResults: unknown[];
 }): Promise<void> {
-  await runLifecycleQuery(
-    "rerunLifecycleStore.parkWork",
-    getServiceSupabaseForStore().rpc("park_rerun_work_item", {
-      p_project_id: input.projectId,
-      p_reservation_id: input.lease.reservationId,
-      p_lease_token: input.lease.leaseToken,
-      p_lease_generation: input.lease.leaseGeneration,
-      p_work_item_id: input.workItemId,
-      p_accepted_callbacks: input.acceptedCallbacks ?? null,
-      p_completed_callbacks: input.completedCallbacks ?? null,
-      p_blocked_precondition: input.blockedPrecondition ?? null,
-      p_primitive_action_ids: input.primitiveActionIds,
-      p_budget_reservation_keys: input.budgetReservationKeys,
-      p_partial_binding_results: input.bindingResults,
-    })
-  );
+  await parkWorkTransaction(input);
 }
 
 export async function parkRerunExecution(input: {
   projectId: string;
   lease: RerunLease;
 }): Promise<void> {
-  await runLifecycleQuery(
-    "rerunLifecycleStore.parkExecution",
-    getServiceSupabaseForStore().rpc("park_rerun_execution", {
-      p_project_id: input.projectId,
-      p_reservation_id: input.lease.reservationId,
-      p_lease_token: input.lease.leaseToken,
-      p_lease_generation: input.lease.leaseGeneration,
-    })
-  );
+  await parkExecutionTransaction(input);
 }
 
 export async function recordRerunExecutorCallback(input: {
@@ -579,19 +456,7 @@ export async function recordRerunExecutorCallback(input: {
   outcome: "completed" | "failed";
   result: Record<string, unknown>;
 }): Promise<boolean> {
-  return runLifecycleQuery(
-    "rerunLifecycleStore.recordCallback",
-    getServiceSupabaseForStore().rpc("record_rerun_executor_callback", {
-      p_project_id: input.projectId,
-      p_reservation_id: input.reservationId,
-      p_work_item_id: input.workItemId,
-      p_executor_id: input.executorId,
-      p_callback_token: input.callbackToken,
-      p_callback_generation: input.callbackGeneration,
-      p_outcome: input.outcome,
-      p_result: input.result,
-    })
-  ) as Promise<boolean>;
+  return recordCallbackTransaction(input);
 }
 
 export async function reserveRerunChildBudget(input: {
@@ -604,21 +469,7 @@ export async function reserveRerunChildBudget(input: {
   reservationKey: string;
   estimatedUsd: number;
 }): Promise<{ reservationId: string; replayed: boolean }> {
-  const rows = await runLifecycleQuery(
-    "rerunLifecycleStore.reserveChildBudget",
-    getServiceSupabaseForStore().rpc("reserve_rerun_child_budget", {
-      p_project_id: input.projectId,
-      p_execution_reservation_id: input.executionReservationId,
-      p_work_item_id: input.workItemId,
-      p_action_id: input.actionId,
-      p_child_run_id: input.childRunId ?? null,
-      p_job_id: input.jobId ?? null,
-      p_reservation_key: input.reservationKey,
-      p_estimated_usd: input.estimatedUsd,
-    })
-  ) as Array<{ reservation_id: string; replayed: boolean }>;
-  const row = rows[0]!;
-  return { reservationId: row.reservation_id, replayed: row.replayed };
+  return reserveChildBudgetTransaction(input);
 }
 
 export async function listCompletedRerunBindings(input: {
@@ -636,23 +487,129 @@ export async function listCompletedRerunBindings(input: {
   return rows.flatMap((row) => row.binding_results ?? []);
 }
 
+export async function ensureRerunReconciliation(input: {
+  projectId: string;
+  proposalActionId: string;
+  rootRunId: string;
+  lease: RerunLease;
+  reconciliationActionId: string;
+}): Promise<string> {
+  return withTransaction(
+    "rerunLifecycleStore.ensureReconciliation",
+    async (client) => {
+      const execution = await client.query<{
+        proposal_action_id: string;
+        root_run_id: string;
+        status: string;
+      }>(
+        `select proposal_action_id, root_run_id, status
+           from public.rerun_execution_reservations
+          where id = $1
+            and project_id = $2
+            and lease_token = $3
+            and lease_generation = $4
+            and lease_expires_at > now()
+          for update`,
+        [
+          input.lease.reservationId,
+          input.projectId,
+          input.lease.leaseToken,
+          input.lease.leaseGeneration,
+        ]
+      );
+      const reservation = execution.rows[0];
+      if (
+        !reservation ||
+        reservation.status !== "running" ||
+        reservation.proposal_action_id !== input.proposalActionId ||
+        reservation.root_run_id !== input.rootRunId
+      ) {
+        throw new ApiError(
+          "idempotency_in_progress",
+          "Another execution worker owns the active lease."
+        );
+      }
+      const incomplete = await client.query<{ incomplete: boolean }>(
+        `select exists (
+           select 1
+             from public.rerun_execution_work_items
+            where execution_reservation_id = $1
+              and status <> 'completed'
+         ) as incomplete`,
+        [input.lease.reservationId]
+      );
+      if (incomplete.rows[0]?.incomplete) {
+        throw new ApiError(
+          "validation_failed",
+          "Rerun execution has incomplete bound work."
+        );
+      }
+      const params = {
+        schema_version: "action_params.v1",
+        schemaVersion: "RerunReconciliation.v1",
+        proposalActionId: input.proposalActionId,
+        executionReservationId: input.lease.reservationId,
+      };
+      const existing = await client.query<{
+        project_id: string;
+        orchestrator_run_id: string;
+        tool: string;
+        status: string;
+        params: Record<string, unknown>;
+      }>(
+        `select project_id, orchestrator_run_id, tool, status, params
+           from public.actions
+          where id = $1
+          for update`,
+        [input.reconciliationActionId]
+      );
+      if (existing.rows[0]) {
+        const action = existing.rows[0];
+        if (
+          action.project_id !== input.projectId ||
+          action.orchestrator_run_id !== input.rootRunId ||
+          action.tool !== "rerun_reconciliation" ||
+          action.status !== "applied" ||
+          action.params.proposalActionId !== input.proposalActionId ||
+          action.params.executionReservationId !== input.lease.reservationId
+        ) {
+          throw new ApiError(
+            "idempotency_conflict",
+            "Reconciliation action was reused with different input."
+          );
+        }
+        return input.reconciliationActionId;
+      }
+      await client.query(
+        `insert into public.actions (
+           id, schema_version, project_id, orchestrator_run_id, tool, status,
+           params, input_asset_ids, rationale, proposal, job_ids,
+           output_asset_ids
+         ) values (
+           $1, 'action.v1', $2, $3, 'rerun_reconciliation', 'applied',
+           $4::jsonb, '{}'::uuid[],
+           'Coordinator-confirmed terminal rerun reconciliation.',
+           null, '{}'::uuid[], '{}'::uuid[]
+         )`,
+        [
+          input.reconciliationActionId,
+          input.projectId,
+          input.rootRunId,
+          JSON.stringify(params),
+        ]
+      );
+      return input.reconciliationActionId;
+    }
+  );
+}
+
 export async function failRerunWorkItem(input: {
   projectId: string;
   lease: RerunLease;
   workItemId: string;
   error: Record<string, unknown>;
 }): Promise<void> {
-  await runLifecycleQuery(
-    "rerunLifecycleStore.failWork",
-    getServiceSupabaseForStore().rpc("fail_rerun_work_item", {
-      p_project_id: input.projectId,
-      p_reservation_id: input.lease.reservationId,
-      p_lease_token: input.lease.leaseToken,
-      p_lease_generation: input.lease.leaseGeneration,
-      p_work_item_id: input.workItemId,
-      p_error: input.error,
-    })
-  );
+  await failWorkTransaction(input);
 }
 
 export async function finalizeRerunExecution(input: {
@@ -663,19 +620,7 @@ export async function finalizeRerunExecution(input: {
   reconciliationActionId?: string;
   error?: Record<string, unknown>;
 }): Promise<string> {
-  return runLifecycleQuery(
-    "rerunLifecycleStore.finalize",
-    getServiceSupabaseForStore().rpc("finalize_rerun_execution", {
-      p_project_id: input.projectId,
-      p_reservation_id: input.lease.reservationId,
-      p_lease_token: input.lease.leaseToken,
-      p_lease_generation: input.lease.leaseGeneration,
-      p_execution_action_id: input.executionActionId,
-      p_outcome: input.outcome,
-      p_reconciliation_action_id: input.reconciliationActionId ?? null,
-      p_error: input.error ?? null,
-    })
-  ) as Promise<string>;
+  return finalizeExecutionTransaction(input);
 }
 
 export async function cancelRerunExecution(input: {
@@ -684,13 +629,5 @@ export async function cancelRerunExecution(input: {
   executionActionId: string;
   reason: string;
 }): Promise<string> {
-  return runLifecycleQuery(
-    "rerunLifecycleStore.cancel",
-    getServiceSupabaseForStore().rpc("cancel_rerun_execution", {
-      p_project_id: input.projectId,
-      p_proposal_action_id: input.proposalActionId,
-      p_execution_action_id: input.executionActionId,
-      p_reason: input.reason,
-    })
-  ) as Promise<string>;
+  return cancelExecutionTransaction(input);
 }

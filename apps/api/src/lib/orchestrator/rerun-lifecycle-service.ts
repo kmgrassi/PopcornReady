@@ -62,6 +62,7 @@ export interface RerunLifecycleDeps {
   failWorkItem: typeof lifecycleStore.failRerunWorkItem;
   reserveChildBudget: typeof lifecycleStore.reserveRerunChildBudget;
   listCompletedBindings: typeof lifecycleStore.listCompletedRerunBindings;
+  ensureReconciliation: typeof lifecycleStore.ensureRerunReconciliation;
   finalizeExecution: typeof lifecycleStore.finalizeRerunExecution;
   cancelExecution: typeof lifecycleStore.cancelRerunExecution;
   createProposal: typeof createRerunProposalV2;
@@ -87,6 +88,7 @@ const defaultDeps: RerunLifecycleDeps = {
   failWorkItem: lifecycleStore.failRerunWorkItem,
   reserveChildBudget: lifecycleStore.reserveRerunChildBudget,
   listCompletedBindings: lifecycleStore.listCompletedRerunBindings,
+  ensureReconciliation: lifecycleStore.ensureRerunReconciliation,
   finalizeExecution: lifecycleStore.finalizeRerunExecution,
   cancelExecution: lifecycleStore.cancelRerunExecution,
   createProposal: createRerunProposalV2,
@@ -785,13 +787,23 @@ export async function executeRerunProposal(input: {
       replayed: false,
     };
   }
-  const reconciliationActionId = distinctReconciliationActionIds[0];
+  const reconciliationActionId = distinctReconciliationActionIds[0] ??
+    await deps.ensureReconciliation({
+      projectId: input.projectId,
+      proposalActionId: action.id,
+      rootRunId,
+      lease,
+      reconciliationActionId: deterministicUuid(
+        "rerun-reconciliation",
+        lease.reservationId
+      ),
+    });
   await deps.finalizeExecution({
     projectId: input.projectId,
     lease,
     executionActionId,
     outcome: "applied",
-    ...(reconciliationActionId ? { reconciliationActionId } : {}),
+    reconciliationActionId,
   });
   return {
     actionId: action.id,
