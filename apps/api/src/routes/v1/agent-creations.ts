@@ -5,6 +5,7 @@ import { mutation, route } from "@/core/adapter";
 import { ApiError } from "@/core/errors";
 import { createAction, getAsset, getProject } from "@/lib/api/v1/store";
 import { getDomainRun, listSessionRuns } from "@/lib/api/v1/domain-session-store";
+import { confirmCreatorDirectProposal } from "@/lib/postgres/creator-direct-confirmation";
 import { getServiceSupabase } from "@/lib/supabase/clients";
 import { runQuery } from "@/lib/supabase/db-errors";
 import { cancelDomainRun, dispatchDomainRun } from "@/lib/orchestrator/domain-run-service";
@@ -121,10 +122,9 @@ agentCreationsRouter.post("/projects/:projectId/agent-creations/proposals/:gateI
   const projectId = string(params.projectId, "projectId", 128); const value = object(body);
   const requestDigest = string(value.requestDigest, "requestDigest", 128); const approvalToken = string(value.approvalToken, "approvalToken", 256); const maximumUsd = Number(value.maximumUsd);
   const key = req.header("Idempotency-Key"); if (!key) throw new ApiError("validation_failed", "Idempotency-Key is required to confirm a proposal.");
-  const rows = await runQuery("agentCreations.confirmProposal", getServiceSupabase().rpc("consume_creator_direct_proposal_gate", { p_gate_id: string(params.gateId, "gateId", 128), p_project_id: projectId, p_actor_id: auth.actor.id, p_request_digest: requestDigest, p_approved_max_usd: maximumUsd, p_approval_token: approvalToken, p_idempotency_key: key }));
-  const row = (rows as Array<{ run_id: string; dispatch_enqueued: boolean }>)[0]; if (!row) throw new ApiError("validation_failed", "Proposal confirmation was rejected.");
-  const run = await getDomainRun(projectId, row.run_id); if (!run?.agentSessionId) throw new ApiError("not_found", "Creator-direct run not found.");
-  return { status: 202, body: { sessionId: run.agentSessionId, runId: run.id, enqueued: row.dispatch_enqueued } };
+  const confirmation = await confirmCreatorDirectProposal({ workspaceId: auth.workspaceId, projectId, actorId: auth.actor.id, gateId: string(params.gateId, "gateId", 128), requestDigest, approvedMaxUsd: maximumUsd, approvalToken, idempotencyKey: key });
+  const run = await getDomainRun(projectId, confirmation.runId); if (!run?.agentSessionId) throw new ApiError("not_found", "Creator-direct run not found.");
+  return { status: 202, body: { sessionId: run.agentSessionId, runId: run.id, enqueued: confirmation.dispatchEnqueued } };
 }));
 
 agentCreationsRouter.get("/projects/:projectId/agent-creations/:runId", route(async ({ auth }, params) => {
