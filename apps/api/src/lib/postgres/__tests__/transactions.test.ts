@@ -13,29 +13,41 @@ type Step = string;
 
 function fakePool(options: {
   failAt?: "connect" | "BEGIN" | "COMMIT" | "ROLLBACK";
-  callbackError?: Error;
+  alsoFailAt?: "BEGIN" | "COMMIT" | "ROLLBACK";
+  failureErrors?: Partial<
+    Record<"connect" | "BEGIN" | "COMMIT" | "ROLLBACK", unknown>
+  >;
 }) {
   const steps: Step[] = [];
+  const releasedWith: Array<Error | boolean | undefined> = [];
   const client = {
     async query(sql: string) {
       steps.push(sql);
-      if (options.failAt === sql) throw new Error(`${sql} failed`);
+      if (options.failAt === sql || options.alsoFailAt === sql) {
+        throw options.failureErrors?.[
+          sql as "BEGIN" | "COMMIT" | "ROLLBACK"
+        ] ?? new Error(`${sql} failed`);
+      }
       return { rows: [], rowCount: 0 };
     },
-    release() {
-      steps.push("release");
+    release(error?: Error | boolean) {
+      releasedWith.push(error);
+      steps.push(error ? "release(error)" : "release");
     },
   };
   const pool = {
     async connect() {
       steps.push("connect");
-      if (options.failAt === "connect") throw new Error("connect failed");
+      if (options.failAt === "connect") {
+        throw options.failureErrors?.connect ?? new Error("connect failed");
+      }
       return client;
     },
   };
   return {
     pool: pool as unknown as Pick<Pool, "connect">,
     client: client as unknown as PoolClient,
+    releasedWith,
     steps,
   };
 }
@@ -95,23 +107,56 @@ test("BEGIN failure releases without issuing rollback", async () => {
   assert.deepEqual(fixture.steps, ["connect", "BEGIN", "release"]);
 });
 
-test("rollback failure preserves the original callback error object", async () => {
+for (const primaryFailure of ["callback", "COMMIT"] as const) {
+  test(`rollback failure evicts the client while preserving the original ${primaryFailure} error`, async () => {
+    const original = new Error(`${primaryFailure} failed`);
+    const rollbackError = new Error("ROLLBACK failed");
+    const fixture = fakePool({
+      failAt: primaryFailure === "COMMIT" ? "COMMIT" : "ROLLBACK",
+      alsoFailAt: primaryFailure === "COMMIT" ? "ROLLBACK" : undefined,
+      failureErrors: {
+        COMMIT: original,
+        ROLLBACK: rollbackError,
+      },
+    });
+    await assert.rejects(
+      createTransactionRunner(fixture.pool)("test.rollback", async () => {
+        fixture.steps.push("callback");
+        if (primaryFailure === "callback") throw original;
+      }),
+      (error: unknown) => error === original
+    );
+    assert.deepEqual(
+      fixture.steps,
+      [
+        "connect",
+        "BEGIN",
+        "callback",
+        "COMMIT",
+        "ROLLBACK",
+        "release(error)",
+      ].filter(
+        (step) => primaryFailure === "COMMIT" || step !== "COMMIT"
+      )
+    );
+    assert.equal(fixture.releasedWith.length, 1);
+    assert.equal(fixture.releasedWith[0], rollbackError);
+  });
+}
+
+test("a non-Error rollback failure still evicts the client", async () => {
   const original = new Error("callback failed");
-  const fixture = fakePool({ failAt: "ROLLBACK" });
+  const fixture = fakePool({
+    failAt: "ROLLBACK",
+    failureErrors: { ROLLBACK: "connection lost" },
+  });
   await assert.rejects(
-    createTransactionRunner(fixture.pool)("test.rollback", async () => {
-      fixture.steps.push("callback");
+    createTransactionRunner(fixture.pool)("test.rollback.nonError", async () => {
       throw original;
     }),
     (error: unknown) => error === original
   );
-  assert.deepEqual(fixture.steps, [
-    "connect",
-    "BEGIN",
-    "callback",
-    "ROLLBACK",
-    "release",
-  ]);
+  assert.equal(fixture.releasedWith[0], true);
 });
 
 test("pool acquisition failure has no client to release", async () => {

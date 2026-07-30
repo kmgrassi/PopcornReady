@@ -95,6 +95,53 @@ function literalTargets(expression) {
   return null;
 }
 
+function unwrapParentheses(expression) {
+  let current = expression;
+  while (ts.isParenthesizedExpression(current)) {
+    current = current.expression;
+  }
+  return current;
+}
+
+function isStaticRpcMember(node) {
+  if (ts.isPropertyAccessExpression(node)) {
+    return node.name.text === "rpc";
+  }
+  if (ts.isElementAccessExpression(node)) {
+    const members = node.argumentExpression
+      ? literalTargets(node.argumentExpression)
+      : null;
+    return members?.includes("rpc") ?? false;
+  }
+  return false;
+}
+
+function isDirectCallCallee(node) {
+  let current = node;
+  while (
+    ts.isParenthesizedExpression(current.parent) &&
+    current.parent.expression === current
+  ) {
+    current = current.parent;
+  }
+  return (
+    ts.isCallExpression(current.parent) &&
+    current.parent.expression === current
+  );
+}
+
+function bindingKey(node) {
+  const key = node.propertyName ?? node.name;
+  if (
+    ts.isIdentifier(key) ||
+    ts.isStringLiteral(key) ||
+    ts.isNoSubstitutionTemplateLiteral(key)
+  ) {
+    return key.text;
+  }
+  return null;
+}
+
 export function inspectRpcSource(source, fileName = "fixture.ts") {
   const errors = [];
   const targets = [];
@@ -111,13 +158,36 @@ export function inspectRpcSource(source, fileName = "fixture.ts") {
   );
 
   function visit(node) {
+    if (
+      isStaticRpcMember(node) &&
+      !isDirectCallCallee(node)
+    ) {
+      const location = sourceFile.getLineAndCharacterOfPosition(node.getStart());
+      errors.push(
+        `${fileName}:${location.line + 1}: RPC members may only be used as direct call callees; aliases are prohibited`
+      );
+    }
+    if (ts.isBindingElement(node) && bindingKey(node) === "rpc") {
+      const location = sourceFile.getLineAndCharacterOfPosition(node.getStart());
+      errors.push(
+        `${fileName}:${location.line + 1}: destructuring RPC aliases is prohibited`
+      );
+    }
     if (ts.isCallExpression(node)) {
+      const callee = unwrapParentheses(node.expression);
+      if (ts.isIdentifier(callee) && callee.text === "rpc") {
+        const location = sourceFile.getLineAndCharacterOfPosition(
+          node.getStart()
+        );
+        errors.push(
+          `${fileName}:${location.line + 1}: aliased RPC calls are prohibited`
+        );
+      }
       let isRpcCall =
-        ts.isPropertyAccessExpression(node.expression) &&
-        node.expression.name.text === "rpc";
-      if (ts.isElementAccessExpression(node.expression)) {
-        const members = node.expression.argumentExpression
-          ? literalTargets(node.expression.argumentExpression)
+        isStaticRpcMember(callee);
+      if (ts.isElementAccessExpression(callee)) {
+        const members = callee.argumentExpression
+          ? literalTargets(callee.argumentExpression)
           : null;
         if (!members) {
           const location = sourceFile.getLineAndCharacterOfPosition(

@@ -46,6 +46,32 @@ test("extracts quoted and template bracket-access RPC calls", () => {
   assert.deepEqual(result.targets, ["quoted_bracket", "template_bracket"]);
 });
 
+test("extracts nested parenthesized RPC calls", () => {
+  const result = inspectRpcSource(`
+    (((db.rpc)))("parenthesized", {});
+    ((db["rpc"]))("bracket_parenthesized", {});
+  `);
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.expressions, 2);
+  assert.deepEqual(result.targets, [
+    "parenthesized",
+    "bracket_parenthesized",
+  ]);
+});
+
+test("rejects bound, assigned, bracket, and destructured RPC aliases", () => {
+  for (const source of [
+    'const rpc = client.rpc.bind(client); rpc("new_workflow", {});',
+    'const invoke = client.rpc; invoke("new_workflow", {});',
+    'const invoke = client["rpc"]; invoke("new_workflow", {});',
+    'const { rpc } = client; rpc("new_workflow", {});',
+    'const { rpc: invoke } = client; invoke("new_workflow", {});',
+  ]) {
+    const result = inspectRpcSource(source);
+    assert.match(result.errors.join("\n"), /alias/i);
+  }
+});
+
 test("rejects dynamic element-access calls that could conceal RPCs", () => {
   const result = inspectRpcSource("db[member](target, {});");
   assert.match(

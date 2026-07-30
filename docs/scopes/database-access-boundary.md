@@ -25,9 +25,10 @@ that is hard to type, test, observe, and evolve.
 
 No new application workflow RPC target may be added under `apps/api/src`
 without updating `scripts/validate-api-rpc-boundary.mjs` and this document in
-the same reviewed PR. Dynamic RPC target names, dynamic element-access calls
-that could conceal an RPC, and NUL-containing TypeScript sources fail
-validation. `pnpm agent:validate -- --scope api` runs the boundary test and
+the same reviewed PR. Dynamic RPC target names, aliased RPC members, dynamic
+element-access calls that could conceal an RPC, and NUL-containing TypeScript
+sources fail validation. Parenthesized direct calls remain valid and are
+inventoried. `pnpm agent:validate -- --scope api` runs the boundary test and
 validator.
 
 ## Current inventory (2026-07-29)
@@ -81,7 +82,8 @@ Use `withTransaction("stable.operation.name", async (client) => ...)` from
 4. commits on success;
 5. rolls back after callback or commit failure;
 6. releases in all acquired-client cases;
-7. preserves the original failure if rollback also fails.
+7. preserves the original failure if rollback also fails, while evicting the
+   transaction-poisoned client from the pool.
 
 The pool is small and bounded, applies connection/idle/statement timeouts, and
 closes after the HTTP server drains during shutdown.

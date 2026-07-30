@@ -87,6 +87,7 @@ export function createTransactionRunner(pool: TransactionPool) {
   ): Promise<T> {
     const client = (await pool.connect()) as TransactionClient;
     let began = false;
+    let releaseError: Error | boolean | undefined;
 
     try {
       await client.query("BEGIN");
@@ -99,6 +100,8 @@ export function createTransactionRunner(pool: TransactionPool) {
         try {
           await client.query("ROLLBACK");
         } catch (rollbackError) {
+          releaseError =
+            rollbackError instanceof Error ? rollbackError : true;
           console.error("[db] Postgres rollback failed", {
             operation,
             name:
@@ -110,7 +113,7 @@ export function createTransactionRunner(pool: TransactionPool) {
       }
       throw error;
     } finally {
-      client.release();
+      client.release(releaseError);
     }
   };
 }
