@@ -1,4 +1,5 @@
 import {
+  cancelOrchestratorRunFamily,
   claimOrchestratorDispatches,
   enqueueOrchestratorDispatch,
   getOrchestratorRun,
@@ -40,6 +41,7 @@ export function orchestratorRecoveryIntervalMs(env: NodeJS.ProcessEnv = process.
 }
 
 export interface RecoveryWorkerDeps {
+  cancelFamily: typeof cancelOrchestratorRunFamily;
   claim: typeof claimOrchestratorDispatches;
   release: typeof releaseOrchestratorDispatch;
   getRun: typeof getOrchestratorRun;
@@ -51,6 +53,7 @@ export interface RecoveryWorkerDeps {
 }
 
 const defaults: RecoveryWorkerDeps = {
+  cancelFamily: cancelOrchestratorRunFamily,
   claim: claimOrchestratorDispatches,
   release: releaseOrchestratorDispatch,
   getRun: getOrchestratorRun,
@@ -88,6 +91,11 @@ async function processDispatch(dispatch: ClaimedOrchestratorDispatch, deps: Reco
       workspaceId: dispatch.workspaceId,
       rootExecutionProfile: run.rootExecutionProfile ?? null,
     });
+    // Defense in depth for rolling deploys and imported history: terminalize
+    // the refused causal family before retiring its only dispatch. The database
+    // boundary rejects new nonterminal legacy roots, but an already-claimed row
+    // from an older process must never be left permanently active.
+    await deps.cancelFamily({ projectId: run.projectId, runId: run.id });
     await deps.release({ ...dispatch, delaySeconds: 0, completed: true });
     return;
   }

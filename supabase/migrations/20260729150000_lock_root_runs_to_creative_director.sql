@@ -1,6 +1,19 @@
 -- Selective-regeneration roadmap PR 0: flat/null roots are readable history,
 -- never executable work. This migration is intentionally replay-safe.
 
+-- Install the write fence before the one-time cleanup. NOT VALID preserves
+-- readable historical rows while PostgreSQL still enforces the constraint for
+-- every concurrent insert/update from an older process during a rolling deploy.
+alter table public.orchestrator_runs
+  drop constraint if exists orchestrator_runs_nonterminal_root_profile_check;
+
+alter table public.orchestrator_runs
+  add constraint orchestrator_runs_nonterminal_root_profile_check check (
+    agent_role <> 'creative_director'
+    or root_execution_profile is not distinct from 'creative_director'
+    or status in ('succeeded', 'failed', 'canceled', 'timed_out', 'superseded')
+  ) not valid;
+
 do $$
 declare
   v_root record;
@@ -16,6 +29,9 @@ begin
   end loop;
 end;
 $$;
+
+alter table public.orchestrator_runs
+  validate constraint orchestrator_runs_nonterminal_root_profile_check;
 
 with recursive legacy_family(id) as (
   select r.id

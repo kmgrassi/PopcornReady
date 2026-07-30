@@ -25,6 +25,22 @@ test("hierarchy lock migration causally cancels only nonterminal legacy root fam
   assert.doesNotMatch(migration, /set root_execution_profile\s*=/);
 });
 
+test("rolling deploys cannot insert another nonterminal flat or null root", async () => {
+  const migration = await readFile(migrationPath, "utf8");
+  const fence = migration.indexOf(
+    "add constraint orchestrator_runs_nonterminal_root_profile_check"
+  );
+  const sweep = migration.indexOf("perform public.cancel_orchestrator_run_family");
+  const validation = migration.indexOf(
+    "validate constraint orchestrator_runs_nonterminal_root_profile_check"
+  );
+  assert.ok(fence >= 0 && sweep > fence && validation > sweep);
+  assert.match(
+    migration,
+    /agent_role <> 'creative_director'[\s\S]*root_execution_profile is not distinct from 'creative_director'[\s\S]*status in \('succeeded', 'failed', 'canceled', 'timed_out', 'superseded'\)[\s\S]*not valid/
+  );
+});
+
 test("the invoked family cancellation covers children, jobs, claims, and reservations", async () => {
   const [migration, cancellationMigration] = await Promise.all([
     readFile(migrationPath, "utf8"),

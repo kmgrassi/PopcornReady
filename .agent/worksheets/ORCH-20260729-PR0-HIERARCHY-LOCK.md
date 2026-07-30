@@ -47,6 +47,10 @@ without mutating immutable execution profiles.
 - The replay-safe migration terminalizes every nonterminal legacy root through
   the canonical family-cancellation function, then recursively closes dispatch
   leases for the root and all descendants.
+- A database constraint is installed before the cancellation sweep so an older
+  API process in a rolling deploy cannot insert another nonterminal flat/null
+  root. The recovery worker also causally cancels any refused legacy family
+  before completing its claimed dispatch.
 - Root-history selection filters domain children before choosing a reusable
   root, while the flat registry and profile column remain as historical
   compatibility surfaces until roadmap PR 7.
@@ -83,6 +87,9 @@ without mutating immutable execution profiles.
   with regression coverage.
 - Wrap-up: independently approved with no blockers after the implementation
   findings were resolved and the full validation rerun passed.
+- PR review follow-up identified a rolling-deploy race between the one-time
+  cancellation sweep and older direct inserts. The database write fence plus
+  runtime defense-in-depth cancellation close that race with focused coverage.
 
 ## Blockers and risks
 

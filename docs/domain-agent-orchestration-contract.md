@@ -186,6 +186,9 @@ execution modes, cost classes, and approval-gate metadata live in
 Every rich primitive definition is checked against that catalog when it is
 registered, and the role-owned registries consume the same metadata. The
 Roadmap PR 0 blocks creation, recovery, and resumption of null/flat roots.
+The database rejects every new nonterminal null/flat root, including direct
+service-role inserts from an older process during a rolling deploy; recovery
+causally cancels any refused legacy family before retiring its dispatch.
 Terminal legacy history remains readable, while `createDefaultToolRegistry()`
 remains constructible only as historical/evaluation compatibility until roadmap
 PR 7 deletes it. Current role builders also derive owned views by filtering that

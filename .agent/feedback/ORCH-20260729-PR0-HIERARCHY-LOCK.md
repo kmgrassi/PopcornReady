@@ -16,7 +16,9 @@ reservations, and dispatch leases, so migration and runtime replacement should
 reuse the canonical family-cancellation boundary and explicitly close any
 durable surface that boundary does not own. Likewise, project history must be
 filtered to root roles before “latest” selection; a newer domain child is not a
-candidate root.
+candidate root. One-time cleanup is also insufficient during a rolling deploy:
+install the database write fence before sweeping historical rows, and make the
+runtime refusal path terminalize the causal family before retiring its dispatch.
 
 ## Follow-up
 
