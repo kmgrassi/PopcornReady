@@ -279,3 +279,21 @@
 - Friction or failure: Multiple accepted scope documents had drifted behind `main`, and their partial PR sequences preserved fallbacks or depended on contracts that had already changed.
 - Suggested improvement: When a multi-PR architecture lane reaches a cutover, add one authoritative completion roadmap, mark partial predecessors historical, and make deletion criteria part of the same plan.
 - Follow-up: Start PR 0 (hierarchy lock) and PR 1 (model-backed graph proposal) in parallel from `docs/scopes/full-selective-regeneration-cutover-prs.md`.
+
+### 2026-07-30T15:15:00-04:00 — ORCH-20260730-PR3A-VISUAL-STILLS
+- What helped: PR 2's capability-level executor interface let still coverage land in one isolated file while exact bindings, inert production registration, and canonical pooled regeneration remained independently testable.
+- Friction or failure: Output capability names (`poster`, `anchor`, `keyframe`) do not equal graph asset kinds (`image`), and the fresh parallel worktree needed an offline dependency install before focused tests could run.
+- Suggested improvement: Keep one shared output-capability-to-graph-kind map beside the executor coordinator and initialize roadmap worktrees from the offline pnpm cache before implementation.
+- Follow-up: PR 5 should activate this adapter only after shared kind normalization and atomic selection/story-pointer application are present.
+- Review correction: The first adapter used synchronous regeneration and the
+  root work-dispatch action, which could repeat spend after a crash and failed
+  PR 2 child-causation predicates. The corrected seam dispatches a bounded
+  Visuals child and reuses the durable generated-asset job with provider-bound
+  pin checks and one child reservation.
+- Follow-up ownership: PR 4 owns the shared proposal-child finalization rule
+  that prevents ordinary domain finalization from applying a PR 2 dispatch
+  action before fenced work completion.
+- Second review correction: Lifecycle adapters must return an accepted bounded
+  child with the persisted approval fingerprint and rerun-callback fence; they
+  must not manually claim/finalize that child, because terminal report handling
+  is what derives exact primitive and settled-budget causation.

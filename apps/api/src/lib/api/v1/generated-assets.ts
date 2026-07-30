@@ -58,10 +58,12 @@ import { AssetKind, SCHEMA_VERSIONS } from "./schemas";
 import {
   addAsset,
   addGeneratedAudioVersion,
+  applyRegeneratedAssetMedia,
   canonicalizeAssetIds,
   claimProviderJobExecution,
   completeProviderJobExecution,
   createJob,
+  createOrGetJob,
   createAction,
   effectiveAssetStorageVisibility,
   getAssetFingerprintPins,
@@ -350,10 +352,10 @@ async function runGeneration(
   const llmCostScope = generatedAssetLlmCostScope(projectId, parsed.runId, action.id);
   let revisionSource: V1Asset | undefined;
   if (parsed.sourceAssetId) {
-    if (parsed.kind !== "audio") {
+    if (parsed.kind !== "audio" && parsed.kind !== "image") {
       throw new ApiError(
         "asset_invalid",
-        "sourceAssetId is supported only for immutable audio revisions."
+        "sourceAssetId is supported only for immutable image or audio revisions."
       );
     }
     revisionSource = await getAsset(
@@ -362,12 +364,12 @@ async function runGeneration(
       parsed.sourceAssetId
     );
     if (
-      revisionSource.kind !== "audio" ||
+      revisionSource.kind !== parsed.kind ||
       revisionSource.status !== "ready"
     ) {
       throw new ApiError(
-        revisionSource.kind !== "audio" ? "asset_invalid" : "asset_not_ready",
-        `Audio revision source must be ready audio: ${revisionSource.id}.`,
+        revisionSource.kind !== parsed.kind ? "asset_invalid" : "asset_not_ready",
+        `Revision source must be ready ${parsed.kind}: ${revisionSource.id}.`,
         { assetIds: [revisionSource.id] }
       );
     }
@@ -378,7 +380,7 @@ async function runGeneration(
     if (!hasSourceEdge) {
       throw new ApiError(
         "validation_failed",
-        "Audio revision requires an immutable source graph edge.",
+        "Immutable revision requires a source graph edge.",
         { assetIds: [revisionSource.id] }
       );
     }
@@ -762,10 +764,10 @@ async function runGeneration(
   };
 
   if (revisionSource) {
-    if (result.kind !== "audio") {
+    if (result.kind !== revisionSource.kind) {
       throw new ApiError(
         "asset_invalid",
-        "sourceAssetId is supported only for immutable audio revisions."
+        "Revision output kind must match its immutable source."
       );
     }
     const visibility = await effectiveAssetStorageVisibility({
@@ -781,6 +783,30 @@ async function runGeneration(
       bytes: result.bytes,
       visibility,
     });
+    if (result.kind === "image") {
+      try {
+        const revised = await applyRegeneratedAssetMedia(
+          auth.workspaceId,
+          revisionSource.id,
+          {
+            filename,
+            storageKey: stored.storageKey,
+            storageBucket: stored.storageBucket,
+            contentHash: asset.contentHash,
+            provenance,
+            repointSurfaces: false,
+            actionId: action.id,
+          }
+        );
+        return getAsset(auth.workspaceId, projectId, revised.assetId);
+      } catch (error) {
+        await deleteAssetObject({
+          storageKey: stored.storageKey,
+          visibility,
+        }).catch(() => undefined);
+        throw error;
+      }
+    }
     let revised: V1Asset;
     try {
       revised = await addGeneratedAudioVersion({
@@ -904,6 +930,12 @@ export interface CreateGeneratedAssetArgs {
   actionId?: string;
   /** Exact claimed domain-session generation; stale callers may not borrow a newer claim. */
   sessionClaimGeneration?: number;
+  /** Stable primitive key used by proposal execution retries. */
+  idempotencyKey?: string;
+  /** Exact asset state approved by the proposal, rechecked after provider claim. */
+  expectedAssetPins?: GeneratedAssetInputPin[];
+  /** Proposal-owned budget admission; avoids a second canonical reservation. */
+  budget?: GeneratedAssetBudgetAdmission;
   // Optional stage handle when this generation runs inside a tracked run. The
   // caller (run orchestrator) is expected to have opened the matching stage
   // (asset_generation for image/video, audio_generation for audio) and to
@@ -913,6 +945,24 @@ export interface CreateGeneratedAssetArgs {
 
 interface GeneratedAssetJobInput {
   body: unknown;
+  expectedAssetPins?: GeneratedAssetInputPin[];
+}
+
+export interface GeneratedAssetInputPin {
+  assetId: string;
+  contentHash: string | null;
+  inputsFingerprint: string | null;
+}
+
+export interface GeneratedAssetBudgetAdmission {
+  reservationKey: string;
+  approvedMaxUsd: number;
+  reserve(input: {
+    actionId: string;
+    jobId: string;
+    reservationKey: string;
+    estimatedUsd: number;
+  }): Promise<unknown>;
 }
 
 const PROMPT_PREVIEW_MAX = 240;
@@ -928,18 +978,31 @@ function clipPromptPreview(value: string): string {
 export async function createGeneratedAsset(
   args: CreateGeneratedAssetArgs
 ): Promise<ApiResult> {
-  const { auth, projectId, body, actionId, sessionClaimGeneration, progress } = args;
+  const {
+    auth,
+    projectId,
+    body,
+    actionId,
+    sessionClaimGeneration,
+    idempotencyKey,
+    expectedAssetPins,
+    budget,
+    progress,
+  } = args;
   const job = await enqueueGeneratedAssetJob({
     auth,
     projectId,
     body,
     actionId,
     sessionClaimGeneration,
+    idempotencyKey,
+    expectedAssetPins,
   });
   const finished = await runGeneratedAssetJob({
     auth,
     projectId,
     jobId: job.id,
+    budget,
     progress,
   });
   if (finished.status === "failed") {
@@ -954,18 +1017,31 @@ export async function createGeneratedAsset(
 export async function startGeneratedAssetJob(
   args: CreateGeneratedAssetArgs
 ): Promise<ApiResult> {
-  const { auth, projectId, body, actionId, sessionClaimGeneration, progress } = args;
+  const {
+    auth,
+    projectId,
+    body,
+    actionId,
+    sessionClaimGeneration,
+    idempotencyKey,
+    expectedAssetPins,
+    budget,
+    progress,
+  } = args;
   const job = await enqueueGeneratedAssetJob({
     auth,
     projectId,
     body,
     actionId,
     sessionClaimGeneration,
+    idempotencyKey,
+    expectedAssetPins,
   });
   void runGeneratedAssetJob({
     auth,
     projectId,
     jobId: job.id,
+    budget,
     progress,
   }).catch((err) => {
     logger.error("generated_asset.background_job_failed", {
@@ -981,10 +1057,24 @@ export async function startGeneratedAssetJob(
 export async function enqueueGeneratedAssetJob(
   args: Pick<
     CreateGeneratedAssetArgs,
-    "auth" | "projectId" | "body" | "actionId" | "sessionClaimGeneration"
+    | "auth"
+    | "projectId"
+    | "body"
+    | "actionId"
+    | "sessionClaimGeneration"
+    | "idempotencyKey"
+    | "expectedAssetPins"
   >
 ): Promise<V1Job> {
-  const { auth, projectId, body, actionId, sessionClaimGeneration } = args;
+  const {
+    auth,
+    projectId,
+    body,
+    actionId,
+    sessionClaimGeneration,
+    idempotencyKey,
+    expectedAssetPins,
+  } = args;
 
   await getProject(auth.workspaceId, projectId); // throws not_found
   const parsed = parseGeneratedAssetRequest(body);
@@ -1052,6 +1142,30 @@ export async function enqueueGeneratedAssetJob(
       assetId: canonical[index],
     }));
   }
+  let durableAssetPins = expectedAssetPins;
+  if (expectedAssetPins?.length) {
+    const canonical = await canonicalizeAssetIds(
+      auth.workspaceId,
+      projectId,
+      expectedAssetPins.map((pin) => pin.assetId)
+    );
+    durableAssetPins = expectedAssetPins.map((pin, index) => ({
+      ...pin,
+      assetId: canonical[index]!,
+    }));
+    const inputs = new Set(generatedInputAssetIds(parsed));
+    const pins = new Set(durableAssetPins.map((pin) => pin.assetId));
+    if (
+      pins.size !== durableAssetPins.length ||
+      inputs.size !== pins.size ||
+      [...inputs].some((assetId) => !pins.has(assetId))
+    ) {
+      throw new ApiError(
+        "validation_failed",
+        "Durable asset pins must exactly cover generated-asset inputs."
+      );
+    }
+  }
   // Validate domain ownership before creating an action or launching any
   // provider work. Public/direct callers cannot borrow an active run's claim.
   const sessionClaim = parsed.runId ? await getRunSessionClaim(parsed.runId) : null;
@@ -1091,19 +1205,26 @@ export async function enqueueGeneratedAssetJob(
   // claim generation; finalization writes are fenced against the session's
   // current generation so a stale, reclaimed worker cannot commit late. Runs
   // outside a session (root runs, direct requests) carry none.
-  const job = await createJob({
+  const createJobInput = {
     workspaceId: auth.workspaceId,
     projectId,
     type: "asset_generation",
     status: "queued",
     progress: { currentStep: "queued", percent: 0 },
-    payload: { body: durableBody } satisfies GeneratedAssetJobInput,
+    payload: {
+      body: durableBody,
+      ...(durableAssetPins?.length ? { expectedAssetPins: durableAssetPins } : {}),
+    } satisfies GeneratedAssetJobInput,
     result: null,
     actionId: action.id,
+    ...(idempotencyKey ? { idempotencyKey } : {}),
     ...(durableClaimGeneration !== undefined
       ? { sessionClaimGeneration: durableClaimGeneration }
       : {}),
-  });
+  } as const;
+  const job = idempotencyKey
+    ? (await createOrGetJob(createJobInput)).job
+    : await createJob(createJobInput);
   await updateAction(action.id, { jobIds: [job.id] });
   return asGeneratedAssetJob(job);
 }
@@ -1123,9 +1244,10 @@ export async function runGeneratedAssetJob(args: {
   auth: AuthContext;
   projectId: string;
   jobId: string;
+  budget?: GeneratedAssetBudgetAdmission;
   progress?: RunStageHandle;
 }): Promise<GeneratedAssetJob> {
-  const { auth, projectId, jobId, progress } = args;
+  const { auth, projectId, jobId, budget, progress } = args;
   await getProject(auth.workspaceId, projectId); // throws not_found
 
   const job = await getJob(auth.workspaceId, projectId, jobId);
@@ -1176,7 +1298,8 @@ export async function runGeneratedAssetJob(args: {
   let item: RunStageItemHandle | null = null;
   let parsed: ParsedRequest | null = null;
   let estimatedCostUsd = 0;
-  const budgetReservationKey = `generated-asset:${running.id}`;
+  const budgetReservationKey =
+    budget?.reservationKey ?? `generated-asset:${running.id}`;
   let budgetReserved = false;
   let modelCostRecorded = false;
   const billableBeforeUsd = billableUsdSoFar();
@@ -1189,6 +1312,19 @@ export async function runGeneratedAssetJob(args: {
       );
     }
     parsed = parseGeneratedAssetRequest(generatedAssetJobInput(generatedJob).body);
+    for (const pin of generatedAssetJobInput(generatedJob).expectedAssetPins ?? []) {
+      const current = await getAsset(auth.workspaceId, projectId, pin.assetId);
+      if (
+        (current.contentHash ?? null) !== pin.contentHash ||
+        (current.inputsFingerprint ?? null) !== pin.inputsFingerprint
+      ) {
+        throw new ApiError(
+          "validation_failed",
+          `Approved asset input changed before provider execution: ${pin.assetId}.`,
+          { assetIds: [pin.assetId], reason: "stale_asset_pin" }
+        );
+      }
+    }
     if (!parsed.providerWasExplicit) {
       const resolved = await resolveWorkspaceGenerationModel({
         workspaceId: auth.workspaceId,
@@ -1250,6 +1386,13 @@ export async function runGeneratedAssetJob(args: {
       durationSec: parsed.durationSec,
       model: parsed.model,
     });
+    if (budget && estimatedCostUsd > budget.approvedMaxUsd) {
+      throw new ApiError(
+        "budget_exceeded",
+        "Canonical provider estimate exceeds the approved proposal maximum.",
+        { estimatedCostUsd, approvedMaxCostUsd: budget.approvedMaxUsd }
+      );
+    }
     const pinnedFingerprints = await getAssetFingerprintPins(
       projectId,
       generatedInputAssetIds(parsed)
@@ -1257,15 +1400,25 @@ export async function runGeneratedAssetJob(args: {
     // The job/action were preallocated when the durable request was accepted.
     // Reserve against the root-family ceiling before any provider call can
     // begin; concurrent finite children serialize inside the RPC.
-    const budgetReservation = await reserveOrchestratorBudget({
-      projectId,
-      runId: parsed.runId,
-      actionId: running.actionId,
-      jobId: running.id,
-      reservationKey: budgetReservationKey,
-      estimatedUsd: estimatedCostUsd,
-    });
-    budgetReserved = budgetReservation !== null;
+    if (budget) {
+      await budget.reserve({
+        actionId: running.actionId,
+        jobId: running.id,
+        reservationKey: budgetReservationKey,
+        estimatedUsd: estimatedCostUsd,
+      });
+      budgetReserved = true;
+    } else {
+      const budgetReservation = await reserveOrchestratorBudget({
+        projectId,
+        runId: parsed.runId,
+        actionId: running.actionId,
+        jobId: running.id,
+        reservationKey: budgetReservationKey,
+        estimatedUsd: estimatedCostUsd,
+      });
+      budgetReserved = budgetReservation !== null;
+    }
     action = await createAction({
       id: running.actionId,
       projectId,
