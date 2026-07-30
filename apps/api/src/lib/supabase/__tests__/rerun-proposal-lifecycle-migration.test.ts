@@ -7,6 +7,10 @@ const migrationPath = path.resolve(
   process.cwd(),
   "../../supabase/migrations/20260729160000_rerun_proposal_lifecycle.sql"
 );
+const roleMigrationPath = path.resolve(
+  process.cwd(),
+  "../../supabase/migrations/20260730170000_rerun_lifecycle_postgres_role.sql"
+);
 
 test("rerun lifecycle migration fences approval, successor, execution, and work identity", async () => {
   const migration = await readFile(migrationPath, "utf8");
@@ -29,6 +33,40 @@ test("rerun lifecycle migration fences approval, successor, execution, and work 
   assert.match(migration, /binding_subset jsonb not null/);
   assert.match(migration, /cardinality\(callback\.job_ids\) > 0/);
   assert.match(migration, /parked boolean/);
+  assert.match(
+    migration,
+    /status <> 'running'[\s\S]*lease_expires_at <= now\(\)/
+  );
+  assert.match(
+    migration,
+    /select \* into v_execution[\s\S]*for update;[\s\S]*select \* into v_work[\s\S]*for update;[\s\S]*select \* into v_callback[\s\S]*for update;/
+  );
+  assert.match(
+    migration,
+    /Recovery never reuses a worker fence[\s\S]*lease_generation = lease_generation \+ 1/
+  );
+});
+
+test("popcorn_api gets exact lifecycle columns and no workflow-routine authority", async () => {
+  const migration = await readFile(roleMigrationPath, "utf8");
+  assert.doesNotMatch(
+    migration,
+    /grant\s+(?:select|insert|update)(?:\s*,\s*(?:select|insert|update))*\s+on table public\.(?:actions|assets|rerun_|orchestrator_budget)/i
+  );
+  assert.match(migration, /grant select \([\s\S]*\) on table public\.actions/);
+  assert.match(
+    migration,
+    /grant select \([\s\S]*\) on table public\.rerun_execution_reservations/
+  );
+  assert.match(
+    migration,
+    /grant execute on function public\.assert_rerun_proposal_pins_fresh/
+  );
+  assert.match(
+    migration,
+    /revoke all on function public\.finalize_rerun_execution[\s\S]*from popcorn_api/
+  );
+  assert.match(migration, /assets_popcorn_api_rerun_select/);
 });
 
 test("proposal ceilings use the canonical budget ledger without double-counting settled children", async () => {

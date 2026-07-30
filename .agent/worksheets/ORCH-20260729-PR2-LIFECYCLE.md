@@ -71,25 +71,35 @@ adapter may register or spend in this slice.
   The v1 Request Changes path remains unchanged.
 - Updated the domain-orchestration contract and selective-regeneration roadmap
   with the durable lifecycle and downstream adapter boundary.
-- Added the 15 service-role-only lifecycle transitions to the exact API RPC
-  inventory and documented why locked lifecycle integrity remains a reviewed
-  database-boundary exception.
+- Replaced all 15 lifecycle RPC call sites with typed direct-Postgres
+  transactions under the exact `popcorn_api` column/RLS capability surface.
+  The API inventory returned to 47 expressions / 48 targets.
+- Addressed PR 839 threads `PRRT_kwDOSqQ6Xc6VJvzU`,
+  `PRRT_kwDOSqQ6Xc6VJvzb`, `PRRT_kwDOSqQ6Xc6VJvzd`, and
+  `PRRT_kwDOSqQ6Xc6VJvzg`: direct transactions, database-clock terminal
+  fences/fresh recovery generation, mandatory root reconciliation, and
+  execution → work → callback lock ordering.
 
 ## Validation evidence
 
 - `pnpm --filter @popcorn/api typecheck` — passed.
 - `pnpm --filter @popcorn/shared typecheck` — passed.
-- Focused lifecycle, route, delegation, agent-definition, and migration tests:
-  38 passed.
-- Clean local Supabase replay applied all 87 migrations, including
-  `20260729160000_rerun_proposal_lifecycle.sql`.
+- Final direct-transaction, lifecycle-service, readiness, and migration
+  regression set: 34 passed.
+- Clean local Supabase reset applied all 89 migrations, including
+  `20260729160000_rerun_proposal_lifecycle.sql` and
+  `20260730170000_rerun_lifecycle_postgres_role.sql`.
+- The direct `popcorn_api` regression passed expired-worker rejection, fresh
+  recovery fencing, exact/canonical callback and failure replay, DB-clock
+  callback expiry, forged child-budget/output rejection, mandatory
+  reconciliation, and concurrent replay/finalization without deadlock.
 - Local database lifecycle integration suite passed all eight cases after the
   final executor-step additions: concurrent admission/idempotency, null-root
   exact refresh, shared-root budget settlement and causation, stale storyboard
   pins, lease/callback/cancel/root-ownership recovery, blocked-work terminal
   release, expired-worker callback repark, and two independently persisted
   child executor steps with exact primitive budgets and crash replay. A clean
-  database reset applied all 87 migrations before the final run.
+  database reset applied all 89 migrations before the final run.
 - Full API suite: 989 passed, 123 skipped, 3 todo, and 4 unrelated baseline
   failures (two missing historical guest-retention migration fixtures, the
   existing discover UUID assertion, and the existing orchestrator projection
@@ -119,11 +129,13 @@ adapter may register or spend in this slice.
   callbacks after worker expiry.
 - Final independent review verified the step-backed reconciliation path
   end-to-end and returned merge-ready with no remaining actionable findings.
-- Post-rebase sanity review verified all 15 lifecycle RPC expressions map to
-  their exact allowlisted service-role-only targets and found no issue.
+- PR 839 re-review verified the complete typed-transaction port, exact
+  least-privilege capability/readiness surface, database-clock fences, global
+  lock order, causation parity, and replay behavior and returned approved with
+  no remaining findings.
 - `pnpm agent:validate -- --scope all` — passed after hardening.
 - `pnpm db:rpc-boundary:test` and `pnpm db:rpc-boundary:validate` — passed with
-  64 production targets across 63 expressions.
+  48 production targets across 47 expressions.
 
 ## Blockers and risks
 
@@ -131,4 +143,5 @@ adapter may register or spend in this slice.
 
 ## Next action / handoff
 
-- Complete final independent review, validation, and ready PR publication.
+- Push the reviewed PR 839 update and resolve its four superseded review
+  threads after the remote commit and checks are visible.

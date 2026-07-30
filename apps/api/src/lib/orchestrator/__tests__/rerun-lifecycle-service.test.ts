@@ -153,6 +153,7 @@ function harness(input: {
       successor_action_id: "successor-1",
       replayed: false,
     }),
+    ensureReconciliation: async (request) => request.reconciliationActionId,
     reserveExecution: async (request) => {
       reserves += 1;
       if (reservation) {
