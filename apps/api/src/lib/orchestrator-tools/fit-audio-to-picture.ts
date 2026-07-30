@@ -4,6 +4,13 @@ import {
   type AudioFitRequest,
   type AudioFitResponse,
 } from "@/lib/api/v1/audio-fit";
+import {
+  releaseOrchestratorBudget as realReleaseBudget,
+  settleOrchestratorBudget as realSettleBudget,
+} from "@/lib/api/v1/orchestrator-budget-controls";
+import {
+  reserveRerunChildBudget as realReserveRerunChildBudget,
+} from "@/lib/api/v1/rerun-lifecycle-store";
 import { toolDefinitionMetadata } from "./capability-catalog";
 import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
@@ -13,10 +20,16 @@ export type FitAudioToPictureOutput = AudioFitResponse;
 
 export interface FitAudioToPictureDeps {
   fitProjectAudioToPicture: typeof realFitProjectAudioToPicture;
+  reserveRerunChildBudget: typeof realReserveRerunChildBudget;
+  settleBudget: typeof realSettleBudget;
+  releaseBudget: typeof realReleaseBudget;
 }
 
 const defaultDeps: FitAudioToPictureDeps = {
   fitProjectAudioToPicture: realFitProjectAudioToPicture,
+  reserveRerunChildBudget: realReserveRerunChildBudget,
+  settleBudget: realSettleBudget,
+  releaseBudget: realReleaseBudget,
 };
 
 const str = { type: "string" } as const;
@@ -106,18 +119,65 @@ export function createFitAudioToPictureTool(
     }),
     async execute(input, context) {
       if (!context.projectId) return missingProject();
-      const result = await resolved.fitProjectAudioToPicture({
-        auth: context.auth,
-        projectId: context.projectId,
-        request: input,
-        orchestratorRunId: context.orchestratorRunId,
-      });
-      return {
-        status: "succeeded",
-        resourceIds: [result.critiqueAssetId],
-        artifactIds: [result.critiqueAssetId],
-        output: result,
-      };
+      const callback = context.domainTask?.approvalContext?.rerunCallback;
+      const executionReservationId =
+        context.domainTask?.approvalContext?.executionReservationId;
+      const reservationKey = callback && context.actionId
+        ? `rerun-local-tool:${context.actionId}`
+        : undefined;
+      if (callback) {
+        if (
+          !executionReservationId ||
+          !context.orchestratorRunId ||
+          !context.actionId ||
+          !reservationKey
+        ) {
+          throw new ToolInputError(
+            "Proposal picture fit is missing durable child causation."
+          );
+        }
+        await resolved.reserveRerunChildBudget({
+          projectId: context.projectId,
+          executionReservationId,
+          workItemId: callback.workItemId,
+          actionId: context.actionId,
+          childRunId: context.orchestratorRunId,
+          reservationKey,
+          estimatedUsd: 0,
+        });
+      }
+      try {
+        const result = await resolved.fitProjectAudioToPicture({
+          auth: context.auth,
+          projectId: context.projectId,
+          request: input,
+          orchestratorRunId: context.orchestratorRunId,
+          actionId: context.actionId,
+          selectResult: callback ? false : undefined,
+        });
+        if (reservationKey) {
+          await resolved.settleBudget({
+            projectId: context.projectId,
+            reservationKey,
+            actualUsd: 0,
+          });
+        }
+        return {
+          status: "succeeded",
+          resourceIds: [result.critiqueAssetId],
+          artifactIds: [result.critiqueAssetId],
+          output: result,
+        };
+      } catch (error) {
+        if (reservationKey) {
+          await resolved.releaseBudget({
+            projectId: context.projectId,
+            reservationKey,
+            reason: "rerun_audio_fit_failed",
+          });
+        }
+        throw error;
+      }
     },
   };
 }

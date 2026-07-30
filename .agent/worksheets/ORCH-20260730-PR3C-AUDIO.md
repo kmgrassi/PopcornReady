@@ -42,12 +42,17 @@ Visuals for Audio-only work, and keep production execution disabled until PR 5.
 - Projected the approved work item into one exact `DomainTask.v1`, including
   proposal/approval/execution causation, graph pins, output bindings, and a
   runtime-only callback fence.
-- Reserved a deterministic child budget before domain dispatch and partitioned
-  the approved maximum across billable bindings without rounding above the
-  creator-approved cap.
+- Routed each canonical generated-asset provider claim into a nested child
+  reservation under the proposal ceiling using the exact child run, primitive
+  action, and provider job. Deterministic picture-fit reserves and settles one
+  zero-cost child operation.
 - Recorded terminal domain reports through the proposal callback transaction;
-  exact binding validation rejects extra, missing, or rebound outputs, while a
-  late callback that lost cancellation/retry ownership cannot advance state.
+  exact binding validation rejects extra, missing, or rebound outputs, and the
+  callback derives its primitive actions and settled budget keys from durable
+  output causation. A late callback that lost cancellation/retry ownership
+  cannot advance state.
+- Kept fit critiques pooled by reusing the engine's child action without
+  appending the legacy active `audio_fit:*` selection.
 - Required picture-fit work to name one exact beat. Unsupported semantic scope
   returns a typed Creative Director prerequisite instead of broadening Audio.
 - Corrected proposal delegation preserve projection to use graph content hashes
@@ -58,27 +63,37 @@ Visuals for Audio-only work, and keep production execution disabled until PR 5.
 
 - `pnpm agent:lint:fix`
 - `pnpm --filter @popcorn/api typecheck`
-- `pnpm exec tsx --test` over Audio profile, proposal delegation, Audio rerun
-  executor, and rerun lifecycle-focused suites: 24 passing after the final
-  fit/callback hardening; earlier lifecycle coverage brought the combined
-  focused total to 39 passing.
-- Full repository validation, application-path smoke, and independent
-  implementation/wrap-up review remain pending.
+- `pnpm exec tsx --test` over Audio fit, Audio profile, proposal delegation,
+  generated-asset nested admission, Audio rerun executor, and rerun
+  lifecycle-focused suites: 52 passing with 8 database-gated tests skipped
+  when local Supabase is not configured across the final focused runs.
+- Full repository validation and application-path smoke passed before the
+  independent review. The review found three DB-causation/accounting blockers;
+  the nested canonical reservation, pooled fit, and callback-causation changes
+  above resolve them. Final independent re-review approved the hardened lane.
 
 ## Independent reviews
 
 - Research/plan checkpoint reviewer slots were occupied by the three explicit
-  parallel cutover lanes. Request an independent implementation and wrap-up
-  review as soon as a slot becomes available.
+  parallel cutover lanes; an independent adapter agent performed the
+  implementation and wrap-up reviews once its lane reached validation.
+- Independent implementation review initially requested changes: domain
+  callbacks lacked DB-provable primitive/budget causation, budget allocation
+  bypassed canonical pricing, and fit retries could duplicate a critique.
+- Final re-review approved after canonical nested provider reservations,
+  exact execution-parent causation loading, pooled zero-cost fit admission, and
+  deterministic fit artifact replay were implemented.
 
 ## Blockers and risks
 
 - PR 3C depends on PR 2 reaching `main`; the implementation branch is stacked
-  on the PR 2 integration head and will be retargeted after that merge.
+  on the clean PR 2 integration head.
+- PR 4's dispatch-finalization guard must land before PR 5 activates any
+  proposal-origin domain adapter; it prevents ordinary child finalization from
+  applying the shared work dispatch before fenced `completeWork`.
 - Provider-backed production spend is not authorized for this adapter-only PR.
 
 ## Next action / handoff
 
-- Rebase the payload onto the clean PR 2 integration branch, request
-  independent implementation review, run full validation and a provider-neutral
-  API smoke, then publish a ready stacked PR.
+- Publish the approved ready stacked PR and keep the production registry inert
+  until PR 4's dispatch guard and PR 5's activation land.

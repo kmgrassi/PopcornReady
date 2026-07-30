@@ -39,19 +39,6 @@ export function rerunExecutorCallbackTokenHash(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-export function rerunChildBudgetReservationKey(input: {
-  executionReservationId: string;
-  workItemId: string;
-  executorId: string;
-}): string {
-  return [
-    "rerun-child",
-    input.executionReservationId,
-    input.workItemId,
-    input.executorId,
-  ].join(":");
-}
-
 export function audioRerunExecutorIdForTask(
   taskKind: AudioProductionTaskKind
 ): string {

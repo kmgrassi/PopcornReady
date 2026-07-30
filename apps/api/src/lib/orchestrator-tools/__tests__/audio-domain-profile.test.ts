@@ -665,3 +665,92 @@ test("fit rejects project-wide authority without exact audio, picture, and beat 
     /explicit trusted audio, picture, and beat/
   );
 });
+
+test("proposal picture fit stays pooled and settles one zero-cost child reservation", async () => {
+  const baseTask = audioTask("audio_fit", [
+    { kind: "beat", projectId, beatId: "beat_1" },
+    { kind: "asset", projectId, assetId: "audio_source" },
+    { kind: "asset", projectId, assetId: "picture_1" },
+  ]);
+  const task = {
+    ...baseTask,
+    approvalContext: {
+      proposalActionId: "proposal_1" as never,
+      approvalActionId: "approval_1" as never,
+      executionReservationId: "execution_1",
+      approvedBudgetUsd: 1,
+      approvalFingerprint: "approval_fingerprint",
+      rerunCallback: {
+        executorId: "rerun:audio-fit:v1",
+        workItemId: "work_audio",
+        generation: 1,
+      },
+    },
+  } satisfies Extract<DomainTaskV1, { domain: "audio" }>;
+  const reservations: Record<string, unknown>[] = [];
+  const settlements: Record<string, unknown>[] = [];
+  let serviceInput: Record<string, unknown> | undefined;
+  const tool = createAudioDomainFitTool(task, {
+    loadSnapshot: async () => snapshot(),
+    reserveRerunChildBudget: async (input) => {
+      reservations.push(input);
+      return { reservationId: "budget_1", replayed: false };
+    },
+    settleBudget: async (input) => {
+      settlements.push(input);
+      return { settled: true, runId: "child_run_1", actualUsd: 0 };
+    },
+    releaseBudget: async () => ({
+      released: true,
+      runId: "child_run_1",
+    }),
+    fitProjectAudioToPicture: async (input) => {
+      serviceInput = input as unknown as Record<string, unknown>;
+      return {
+        audioAssetId: "audio_source",
+        beatId: "beat_1",
+        critiqueAssetId: "critique_1",
+        verdict: "ok",
+        requiresApproval: false,
+        placement: { startSec: 0, endSec: 5 },
+        retime: { applied: false, factor: 1, maxRetime: 0.1 },
+        reasons: [],
+        metrics: {
+          audioDurationSec: 5,
+          targetDurationSec: 5,
+          durationDeltaSec: 0,
+        },
+      };
+    },
+  });
+
+  const result = await tool.execute({
+    audioAssetId: "audio_source",
+    pictureAssetId: "picture_1",
+    beatId: "beat_1",
+  }, {
+    auth,
+    projectId,
+    orchestratorRunId: "child_run_1",
+    actionId: "fit_action_1",
+    domainTask: task,
+  });
+
+  assert.equal(result.status, "succeeded");
+  assert.equal(serviceInput?.selectResult, false);
+  assert.equal(serviceInput?.actionId, "fit_action_1");
+  assert.deepEqual(reservations, [{
+    projectId,
+    executionReservationId: "execution_1",
+    workItemId: "work_audio",
+    actionId: "fit_action_1",
+    childRunId: "child_run_1",
+    reservationKey: "rerun-local-tool:fit_action_1",
+    estimatedUsd: 0,
+  }]);
+  assert.deepEqual(settlements, [{
+    projectId,
+    reservationKey: "rerun-local-tool:fit_action_1",
+    actualUsd: 0,
+  }]);
+});

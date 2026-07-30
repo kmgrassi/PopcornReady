@@ -21,7 +21,6 @@ import {
 import {
   AUDIO_FIT_RERUN_EXECUTOR_ID,
   AUDIO_PRODUCTION_RERUN_EXECUTOR_ID,
-  rerunChildBudgetReservationKey,
   rerunExecutorCallbackToken,
 } from "../rerun-callback-fence";
 import {
@@ -187,20 +186,41 @@ test("Audio production dispatch keeps exact proposal scope and remains inactive 
     dispatches[0]?.task.approvalContext?.rerunCallback?.executorId,
     AUDIO_PRODUCTION_RERUN_EXECUTOR_ID
   );
-  assert.deepEqual(
-    dispatches[0]?.task.approvalContext?.rerunCallback?.budgetReservationKeys,
-    [rerunChildBudgetReservationKey({
-      executionReservationId: "execution-1",
-      workItemId: "work-audio",
-      executorId: AUDIO_PRODUCTION_RERUN_EXECUTOR_ID,
-    })]
-  );
-  assert.deepEqual(reserves.map((entry) => entry.estimatedUsd), [1]);
+  assert.deepEqual(reserves, []);
   assert.throws(
     () => productionRerunExecutorRegistry.preflight([workItem]),
     (error: unknown) =>
       error instanceof ApiError && error.code === "coverage_unavailable"
   );
+});
+
+test("Audio child scope is derived only from the executor's bound outputs", async () => {
+  const baseWorkItem = audioWork();
+  const workItem = {
+    ...baseWorkItem,
+    targets: [projectTarget, beatTarget],
+  };
+  const dispatches: DispatchDomainRunInput[] = [];
+  const executor = createAudioRerunExecutors({
+    dispatch: async (input) => {
+      dispatches.push(input);
+      return {
+        runId: "audio-child-1",
+        sessionId: "audio-session-1",
+        sessionSequence: 1,
+        created: true,
+        gateId: null,
+        dispatchEnqueued: true,
+      };
+    },
+  }).find(
+    (candidate) => candidate.id === AUDIO_PRODUCTION_RERUN_EXECUTOR_ID
+  )!;
+
+  const result = await executor.execute(context(workItem));
+
+  assert.equal(result.status, "accepted");
+  assert.deepEqual(dispatches[0]?.task.targets, [beatTarget]);
 });
 
 test("unsupported Audio semantic targets block back to the Creative Director", async () => {
@@ -282,13 +302,6 @@ test("terminal bound Audio report records the exact fenced lifecycle callback", 
         executorId: AUDIO_PRODUCTION_RERUN_EXECUTOR_ID,
         workItemId: "work-audio",
         generation: 1,
-        budgetReservationKeys: [
-          rerunChildBudgetReservationKey({
-            executionReservationId: "execution-1",
-            workItemId: "work-audio",
-            executorId: AUDIO_PRODUCTION_RERUN_EXECUTOR_ID,
-          }),
-        ],
       },
     },
     acceptanceCriteria: ["Warmer delivery."],
@@ -335,7 +348,10 @@ test("terminal bound Audio report records the exact fenced lifecycle callback", 
   }, async (input) => {
     callbacks.push(input);
     return false;
-  });
+  }, async () => ({
+    primitiveActionIds: ["primitive-audio-1"],
+    budgetReservationKeys: ["generated-asset:job-audio-1"],
+  }));
 
   assert.equal(callbacks.length, 1);
   assert.deepEqual(callbacks[0], {
@@ -354,9 +370,8 @@ test("terminal bound Audio report records the exact fenced lifecycle callback", 
       providerResult: { domainReport: report },
       childRunId: "audio-child-1",
       reportActionId: "report-1",
-      primitiveActionIds: [],
-      budgetReservationKeys:
-        task.approvalContext?.rerunCallback?.budgetReservationKeys,
+      primitiveActionIds: ["primitive-audio-1"],
+      budgetReservationKeys: ["generated-asset:job-audio-1"],
       outputs: [output],
     },
   });
@@ -393,7 +408,6 @@ test("terminal blocked Audio report records a failed callback without outputs", 
         executorId: AUDIO_PRODUCTION_RERUN_EXECUTOR_ID,
         workItemId: "work-audio",
         generation: 1,
-        budgetReservationKeys: [],
       },
     },
     acceptanceCriteria: ["Warmer delivery."],
@@ -472,7 +486,6 @@ test("a stale child callback loses the fence without failing domain finalization
         executorId: AUDIO_PRODUCTION_RERUN_EXECUTOR_ID,
         workItemId: "work-audio",
         generation: 1,
-        budgetReservationKeys: [],
       },
     },
     acceptanceCriteria: ["Warmer delivery."],

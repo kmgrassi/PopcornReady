@@ -26,6 +26,8 @@ const COMPOSITION_PLAN_ROLE = "composition_plan";
 
 export interface InsertDataAssetInput {
   db: SupabaseClient;
+  /** Caller-reserved immutable identity for replay-safe local artifacts. */
+  id?: string;
   workspaceId: string;
   projectId: string;
   kind:
