@@ -15,5 +15,9 @@
 - Supabase migrations must use unique 14-digit filename versions. Run
   `pnpm db:migrations:validate`; `pnpm agent:validate` and the production
   migration workflow run this preflight before any database push.
+- Database read-boundary changes follow
+  [`docs/testing/database-contract-tests.md`](../testing/database-contract-tests.md):
+  keep the retired-relation guard always on, then separately prove real local
+  schema access and authenticated RLS with concrete non-empty fixtures.
 
 Avoid tests that only assert a mocked function was called, assertions coupled to incidental CSS or copy, shared mutable fixtures, and silent skips for required behavior.

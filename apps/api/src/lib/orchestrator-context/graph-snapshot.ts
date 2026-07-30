@@ -17,6 +17,7 @@
 // and PR 7 must not edit them (scope merge-conflict plan).
 
 import type { AgentDomain, AgentRole } from "@popcorn/shared/domain-agent-contract";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { getServiceSupabase } from "../supabase/clients";
 import { runQuery } from "../supabase/db-errors";
@@ -361,8 +362,10 @@ function snapshotInputs(raw: unknown): SnapshotAssetInput[] {
   return inputs;
 }
 
-export function createSupabaseGraphSnapshotReader(): GraphSnapshotReader {
-  const db = () => getServiceSupabase();
+export function createSupabaseGraphSnapshotReader(
+  getDatabase: () => SupabaseClient = getServiceSupabase
+): GraphSnapshotReader {
+  const db = () => getDatabase();
   return {
     async getAuthorizedProject(workspaceId, projectId) {
       const data = await runQuery(
@@ -482,8 +485,8 @@ export function createSupabaseGraphSnapshotReader(): GraphSnapshotReader {
       const data = await runQuery(
         "orchestratorContext.listStoryboards",
         db()
-          .from("storyboards")
-          .select("id, project_id, status, plan_asset_id")
+          .from("story_blueprints")
+          .select("id, project_id, status, provenance")
           .eq("project_id", projectId)
       );
       return (
@@ -491,13 +494,16 @@ export function createSupabaseGraphSnapshotReader(): GraphSnapshotReader {
           id: string;
           project_id: string;
           status: string;
-          plan_asset_id: string | null;
+          provenance: Record<string, unknown> | null;
         }>) ?? []
       ).map((row) => ({
         id: row.id,
         projectId: row.project_id,
-        status: row.status,
-        planAssetId: row.plan_asset_id,
+        status: row.status === "approved" ? "approved" : "ready",
+        planAssetId:
+          typeof row.provenance?.planAssetId === "string"
+            ? row.provenance.planAssetId
+            : null,
       }));
     },
 
@@ -505,9 +511,9 @@ export function createSupabaseGraphSnapshotReader(): GraphSnapshotReader {
       const data = await runQuery(
         "orchestratorContext.listScenes",
         db()
-          .from("storyboard_scenes")
+          .from("story_blueprint_scenes")
           .select(
-            "id, project_id, storyboard_id, scene_index, title, summary, duration_sec, scene_asset_id, status"
+            "id, project_id, story_blueprint_id, position, title, summary, target_duration_sec, scene_asset_id, status"
           )
           .eq("project_id", projectId)
       );
@@ -515,22 +521,24 @@ export function createSupabaseGraphSnapshotReader(): GraphSnapshotReader {
         (data as Array<{
           id: string;
           project_id: string;
-          storyboard_id: string;
-          scene_index: number;
+          story_blueprint_id: string;
+          position: number;
           title: string | null;
           summary: string | null;
-          duration_sec: number | null;
+          target_duration_sec: number | null;
           scene_asset_id: string | null;
           status: string;
         }>) ?? []
       ).map((row) => ({
         id: row.id,
         projectId: row.project_id,
-        storyboardId: row.storyboard_id,
-        sceneIndex: row.scene_index,
+        storyboardId: row.story_blueprint_id,
+        sceneIndex: row.position,
         ...(row.title ? { title: row.title } : {}),
         ...(row.summary ? { summary: row.summary } : {}),
-        ...(row.duration_sec != null ? { durationSec: row.duration_sec } : {}),
+        ...(row.target_duration_sec != null
+          ? { durationSec: row.target_duration_sec }
+          : {}),
         sceneAssetId: row.scene_asset_id,
         status: row.status,
       }));
@@ -540,7 +548,7 @@ export function createSupabaseGraphSnapshotReader(): GraphSnapshotReader {
       const data = await runQuery(
         "orchestratorContext.listBeats",
         db()
-          .from("storyboard_beats")
+          .from("story_beats")
           .select(
             "id, project_id, scene_id, beat_index, intent, visual_description, dialogue_summary, narration, duration_sec, status, beat_asset_id"
           )
@@ -579,7 +587,7 @@ export function createSupabaseGraphSnapshotReader(): GraphSnapshotReader {
       const data = await runQuery(
         "orchestratorContext.listPanels",
         db()
-          .from("storyboard_panels")
+          .from("story_panels")
           .select(
             "id, project_id, beat_id, panel_index, image_asset_id, prompt_asset_id, status, is_selected, approved_at"
           )

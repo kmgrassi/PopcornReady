@@ -23,10 +23,10 @@ since landed. Map below (details inline per section). **§3 describes the model 
   stale-candidate query
   (`supabase/migrations/20260610120000_asset_graph_model.sql`). It is now the
   authoritative model — see the **Asset-Graph Migration Rule** in `CLAUDE.md`.
-- ✅ **Stable ids on every node (§4)** — relational storyboards
-  (`storyboard_scenes` / `storyboard_beats` / `storyboard_panels`) carry stable ids
-  and link to immutable asset snapshots via `*_asset_id`
-  (`supabase/migrations/20260610130000_storyboard_relational_model.sql`).
+- ✅ **Stable ids on every node (§4)** — the unified relational story spine
+  (`story_blueprint_scenes` / `story_beats` / `story_panels`) carries stable ids
+  and links to immutable asset snapshots via `*_asset_id`
+  (`supabase/migrations/20260624150000_story_spine_additive.sql`).
 - ✅ **Orchestrator + tools (§6; §7 P2)** — a durable run loop, autonomous through
   storyboard and explicitly continued into production
   (`apps/api/src/lib/orchestrator/engine.ts`; `orchestrator_runs` /
@@ -234,10 +234,10 @@ historical — do not build on them.
 - **Actions = the agent decision log.** `actions` records every tool invocation
   (`tool`, `params`, `input_asset_ids`, `output_asset_ids`, `rationale`,
   `proposal`, `status`, cost) — the provenance of *why the agent did what it did*.
-- **Relational product surfaces over the graph.** `storyboard_scenes` /
-  `storyboard_beats` / `storyboard_panels` are first-class rows with **stable ids**
-  that link to immutable asset snapshots via `*_asset_id`; a semantic beat edit is
-  forced to mint a new snapshot (`storyboard_beats_require_snapshot`), which moves
+- **Relational product surfaces over the graph.** `story_blueprint_scenes` /
+  `story_beats` / `story_panels` are first-class rows with **stable ids** that
+  link to immutable asset snapshots via `*_asset_id`; a semantic beat edit is
+  forced to mint a new snapshot (`story_beats_require_snapshot`), which moves
   the fingerprint and makes downstream assets stale.
 
 **Formerly "missing" — now shipped:**

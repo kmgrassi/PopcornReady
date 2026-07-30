@@ -1,6 +1,14 @@
 # Story Spine Unification — Scope
 
-Status: draft / scoping
+<!-- agent-summary: Historical design record for the shipped unified story spine. -->
+<!-- agent-summary: Live structure is story_blueprints → story_blueprint_acts → story_blueprint_scenes → story_beats → story_panels. -->
+<!-- agent-summary: Legacy storyboard container, scene, beat, and panel tables were retired on 2026-06-24. -->
+<!-- agent-summary: Beat and panel ids were preserved during backfill so asset selections and lineage remain valid. -->
+<!-- agent-summary: Current runtime callers must use the unified spine and must not restore compatibility tables. -->
+<!-- agent-summary: EditGraph retirement shipped; remaining EditPlan retirement work is tracked separately. -->
+<!-- agent-summary: Treat pre-migration current-state and readiness sections below as historical decision context. -->
+
+Status: implemented / historical design record
 Owner: TBD
 Related: [docs/NORTH_STAR.md](../NORTH_STAR.md), [docs/ui-interaction-model.md](../ui-interaction-model.md)
 
@@ -17,7 +25,7 @@ The "storyboard" and "storyboard scenes" **concepts survive for the UI** — the
 become a *visual fidelity/view* of the unified spine (act-level mockups, beat-level
 panels), not their own table family.
 
-## Current state
+## Historical pre-migration state
 
 Three independently-minted structures describe "the scenes/beats of a video":
 
@@ -264,11 +272,11 @@ docs in this branch. "Request Changes" is now the canonical name of the interact
 5. **Retire EditGraph**: delete edit-graph.ts, `edit_graphs` table + v1 store surface,
    legacy patch agent functions. **Applied.**
 
-### PR 3 readiness audit
+### Historical PR 3 readiness audit
 
-PR 3 is a destructive schema cleanup and must not land before PRs 1 and 2 are
-present in the target branch. On current `main` as of June 24, 2026, those
-prerequisites are not yet present:
+This was the destructive-cleanup gate before the unified story-spine migrations
+landed on June 24, 2026. The prerequisites and drop migration have since shipped;
+the bullets below are retained as historical review evidence:
 
 - No migration has created `story_beats` or `story_panels`.
 - `story_blueprint_scenes` has not absorbed the storyboard scene fields needed
