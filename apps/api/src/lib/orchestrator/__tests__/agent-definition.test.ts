@@ -10,7 +10,6 @@ import {
   resolveAgentDefinition,
 } from "../agent-definition";
 import { CREATIVE_DIRECTOR_SYSTEM_PROMPT } from "../creative-director-agent";
-import { ORCHESTRATOR_SYSTEM_PROMPT } from "../model";
 import type { ToolRegistry } from "../registry";
 import type { AgentDefinition } from "../agent-definition";
 
@@ -20,6 +19,7 @@ const rootRun: OrchestratorRun = {
   projectId: "project-1",
   status: "queued",
   inputSummary: "make a short film",
+  rootExecutionProfile: "creative_director",
   spentUsd: 0,
   createdAt: "2026-07-27T00:00:00.000Z",
   updatedAt: "2026-07-27T00:00:00.000Z",
@@ -48,7 +48,7 @@ const visualTask = {
   responseRecipient: { kind: "creative_director" },
 } as unknown as DomainTaskV1;
 
-test("root definition preserves the supplied flat registry and carries no structured context", async () => {
+test("root definition ignores a supplied flat registry and uses hierarchy context", async () => {
   const registry: ToolRegistry = new Map();
   const definition = await resolveAgentDefinition({
     run: rootRun,
@@ -56,8 +56,7 @@ test("root definition preserves the supplied flat registry and carries no struct
     rootRegistry: registry,
   });
   assert.equal(definition.role, "creative_director");
-  assert.equal(definition.registry, registry);
-  assert.equal(await definition.loadTurnContext(), undefined);
+  assert.notEqual(definition.registry, registry);
 });
 
 test("creative-director root profile exposes only the creative-director surface", async () => {
@@ -85,14 +84,14 @@ test("creative-director root profile exposes only the creative-director surface"
   assert.equal(definition.registry.has("generate_audio"), false);
 });
 
-test("a legacy root without a durable profile remains flat during fallback changes", async () => {
-  const definition = await resolveAgentDefinition({
-    run: rootRun,
-    workspaceId: "workspace-1",
-  });
-  assert.equal(definition.systemPrompt, ORCHESTRATOR_SYSTEM_PROMPT);
-  assert.equal(definition.registry.has("generate_clip"), true);
-  assert.equal(definition.registry.has("delegate_visuals"), false);
+test("a legacy root without a durable profile cannot resolve an agent definition", async () => {
+  await assert.rejects(
+    resolveAgentDefinition({
+      run: { ...rootRun, rootExecutionProfile: undefined },
+      workspaceId: "workspace-1",
+    }),
+    /legacy history/
+  );
 });
 
 test("root context reports include only root-origin specialist completions", () => {

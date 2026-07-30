@@ -5,7 +5,6 @@
 // shared low-level mappers come from ./store-internal.
 
 import type { AgentRole, DomainRunWaitReason } from "@popcorn/shared/domain-agent-contract";
-import { isCreativeDirectorHierarchyEnabled } from "@/lib/orchestrator/feature-flag";
 import { getServiceSupabase } from "../../supabase/clients";
 import { runQuery } from "../../supabase/db-errors";
 import { ApiError } from "./errors";
@@ -26,6 +25,7 @@ export type OrchestratorRunStatus =
 
 export type OrchestratorGateStatus = "pending" | "reached" | "approved" | "rejected";
 export type RootExecutionProfile = "flat" | "creative_director";
+const CREATIVE_DIRECTOR_ROOT_PROFILE = "creative_director" as const;
 
 export interface OrchestratorRun {
   id: string;
@@ -110,23 +110,39 @@ export interface AnonymousQuotaInput {
 }
 
 export function newRootProfileInsert(
-  env: NodeJS.ProcessEnv = process.env
+  _env: NodeJS.ProcessEnv = process.env
 ): { root_execution_profile: RootExecutionProfile } {
-  return {
-    root_execution_profile: isCreativeDirectorHierarchyEnabled(env)
-      ? "creative_director"
-      : "flat",
-  };
+  return { root_execution_profile: CREATIVE_DIRECTOR_ROOT_PROFILE };
 }
 
 export function newAnonymousRootProfileParams(
-  env: NodeJS.ProcessEnv = process.env
+  _env: NodeJS.ProcessEnv = process.env
 ): { p_root_execution_profile: RootExecutionProfile } {
-  return {
-    p_root_execution_profile: isCreativeDirectorHierarchyEnabled(env)
-      ? "creative_director"
-      : "flat",
-  };
+  return { p_root_execution_profile: CREATIVE_DIRECTOR_ROOT_PROFILE };
+}
+
+/**
+ * Root work may execute only on an explicitly pinned Creative Director root.
+ * Null and flat profiles remain readable history; omission never widens them.
+ */
+export function isCreativeDirectorHierarchyRoot(
+  run: Pick<OrchestratorRun, "agentRole" | "rootExecutionProfile">
+): boolean {
+  return (
+    (run.agentRole ?? "creative_director") === "creative_director" &&
+    run.rootExecutionProfile === CREATIVE_DIRECTOR_ROOT_PROFILE
+  );
+}
+
+export function assertCreativeDirectorHierarchyRoot(
+  run: Pick<OrchestratorRun, "id" | "agentRole" | "rootExecutionProfile">,
+  operation: string
+): void {
+  if (isCreativeDirectorHierarchyRoot(run)) return;
+  throw new ApiError(
+    "validation_failed",
+    `Run ${run.id} is legacy history and cannot ${operation}. Start a new Creative Director run.`
+  );
 }
 
 export type UpdateOrchestratorRunPatch = Partial<

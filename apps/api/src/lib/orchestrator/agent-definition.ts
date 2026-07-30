@@ -7,7 +7,10 @@
 import type { AgentDomain, AgentRole, DomainTaskV1 } from "@popcorn/shared/domain-agent-contract";
 import type { DomainReportV1 } from "@popcorn/shared/domain-agent-contract";
 import { createHash } from "node:crypto";
-import type { OrchestratorRun } from "@/lib/api/v1/orchestrator-store";
+import {
+  assertCreativeDirectorHierarchyRoot,
+  type OrchestratorRun,
+} from "@/lib/api/v1/orchestrator-store";
 import { getDomainRun, getRootRunFamily, type RootRunFamily } from "@/lib/api/v1/domain-session-store";
 import { createDefaultToolRegistry, type DefaultToolRegistryDeps } from "@/lib/orchestrator-tools/default-registry";
 import { createRootToolRegistry } from "@/lib/orchestrator-tools/root-registry";
@@ -81,8 +84,10 @@ export function assertDomainRegistry(role: "visuals" | "audio", registry: ToolRe
 }
 
 function rootDefinition(input: ResolveAgentDefinitionInput): AgentDefinition {
-  // Existing rows predate PR 18 and therefore have no durable profile; they
-  // remain flat so a rollback/config change cannot rewrite an in-flight run.
+  assertCreativeDirectorHierarchyRoot(input.run, "resolve a production agent");
+  // PR 7 deletes the historical flat resolver. Until then it remains
+  // constructible below for audit/eval compatibility but unreachable from a
+  // production run because the hierarchy assertion above fails closed.
   if (input.run.rootExecutionProfile === "creative_director") {
     return {
       role: "creative_director",

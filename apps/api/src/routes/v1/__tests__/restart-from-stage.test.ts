@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { GENERATION_STAGE_ORDER } from "@popcorn/shared/v1/types";
 import type {
+  OrchestratorRun,
   OrchestratorRunGate,
   RunActionSummary,
 } from "@/lib/api/v1/orchestrator-store";
@@ -9,8 +10,28 @@ import {
   downstreamActionIds,
   downstreamGateIds,
   isInsufficientCreditsFailure,
+  resolveProjectRevisionRoot,
+  revisionRootFromProjectHistory,
   restartSelectionScope,
 } from "../orchestrator-runs";
+
+function run(
+  id: string,
+  rootExecutionProfile: OrchestratorRun["rootExecutionProfile"],
+  status: OrchestratorRun["status"] = "succeeded"
+): OrchestratorRun {
+  return {
+    id,
+    schemaVersion: "orchestrator_run.v1",
+    projectId: "project-1",
+    status,
+    inputSummary: "test",
+    rootExecutionProfile,
+    spentUsd: 0,
+    createdAt: "t0",
+    updatedAt: "t0",
+  };
+}
 
 function action(id: string, tool: string): RunActionSummary {
   return { id, tool, status: "applied", params: {}, outputAssetIds: [], jobIds: [], createdAt: "t0" };
@@ -104,4 +125,60 @@ test("credit recovery accepts only a failed insufficient-credit action", () => {
     }),
     false,
   );
+});
+
+test("project Request Changes replaces the latest usable legacy root", () => {
+  assert.equal(
+    revisionRootFromProjectHistory([
+      run("flat-latest", "flat", "running"),
+      run("hierarchy-older", "creative_director", "succeeded"),
+    ]),
+    null
+  );
+  assert.equal(
+    revisionRootFromProjectHistory([run("null-latest", undefined, "waiting")]),
+    null
+  );
+  assert.equal(
+    revisionRootFromProjectHistory([
+      run("flat-terminal-latest", "flat", "canceled"),
+      run("hierarchy-older", "creative_director", "succeeded"),
+    ]),
+    null
+  );
+});
+
+test("project Request Changes may reuse only an explicit hierarchy root", () => {
+  const hierarchy = run("hierarchy", "creative_director", "succeeded");
+  assert.equal(revisionRootFromProjectHistory([hierarchy]), hierarchy);
+});
+
+test("a newer domain child does not hide the reusable hierarchy root", () => {
+  const hierarchy = run("hierarchy", "creative_director", "running");
+  const child = {
+    ...run("visuals-child", undefined, "running"),
+    agentRole: "visuals" as const,
+  };
+  assert.equal(revisionRootFromProjectHistory([child, hierarchy]), hierarchy);
+});
+
+test("project Request Changes cancels a live legacy family before replacement", async () => {
+  const legacy = run("legacy", "flat", "waiting");
+  const replacement = run("replacement", "creative_director", "queued");
+  const canceled: Array<{ projectId: string; runId: string }> = [];
+  const created: string[] = [];
+  const resolved = await resolveProjectRevisionRoot("project-1", {
+    listRuns: async () => [legacy],
+    cancelFamily: async (input) => {
+      canceled.push(input);
+      return { canceledRunIds: [legacy.id], canceledJobIds: ["job-1"] };
+    },
+    createRun: async (input) => {
+      created.push(input.projectId);
+      return replacement;
+    },
+  });
+  assert.equal(resolved, replacement);
+  assert.deepEqual(canceled, [{ projectId: "project-1", runId: "legacy" }]);
+  assert.deepEqual(created, ["project-1"]);
 });

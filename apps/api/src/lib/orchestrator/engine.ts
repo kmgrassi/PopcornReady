@@ -12,6 +12,7 @@
 import { createAction, updateAction } from "@/lib/api/v1/store";
 import { randomUUID } from "node:crypto";
 import {
+  assertCreativeDirectorHierarchyRoot,
   getOrchestratorRun,
   claimOrchestratorRunResume,
   listRunActions,
@@ -376,6 +377,9 @@ export async function runOrchestratorToCompletion(
 ): Promise<OrchestratorRun> {
   const r = resolved(deps);
   let run = await r.store.getOrchestratorRun(runId);
+  if (!isDomainRun(run)) {
+    assertCreativeDirectorHierarchyRoot(run, "start or continue");
+  }
   if (isDomainRun(run) && ((r.enabledDomainRoles.length > 0 && !domainRoleEnabled(run, r.enabledDomainRoles)) || !r.domainRuntimeEnabled || r.sessionClaimGeneration === undefined)) {
     return run;
   }
@@ -400,6 +404,9 @@ export async function resumeOrchestratorRun(
 ): Promise<OrchestratorRun> {
   const r = resolved(deps);
   const run = await r.store.getOrchestratorRun(runId);
+  if (!isDomainRun(run)) {
+    assertCreativeDirectorHierarchyRoot(run, "resume");
+  }
   if (isDomainRun(run) && ((r.enabledDomainRoles.length > 0 && !domainRoleEnabled(run, r.enabledDomainRoles)) || !r.domainRuntimeEnabled || r.sessionClaimGeneration === undefined)) {
     return run;
   }

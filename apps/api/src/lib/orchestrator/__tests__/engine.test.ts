@@ -28,6 +28,7 @@ function runFixture(over: Partial<OrchestratorRun> = {}): OrchestratorRun {
     projectId: "proj1",
     status: "queued",
     inputSummary: "make a 15s video about a skateboarding puppy",
+    rootExecutionProfile: "creative_director",
     spentUsd: 0,
     createdAt: "t0",
     updatedAt: "t0",
@@ -165,6 +166,12 @@ function deps(store: FakeStore, model: OrchestratorModel, registry: ToolRegistry
     registry,
     jobs: { getJob: async () => null },
     resolveOwnerUserId: async () => null,
+    resolveAgentDefinition: async () => ({
+      role: "creative_director",
+      registry,
+      systemPrompt: "test creative director",
+      loadTurnContext: async () => undefined,
+    }),
     ...extra,
   };
 }
@@ -176,6 +183,28 @@ const ok = (resourceIds: string[] = [], costUsd?: number): ToolCallResult => ({
 });
 
 // ---------- tests ----------
+
+test("engine start and resume refuse legacy roots before a model turn", async () => {
+  let modelCalled = false;
+  const model: OrchestratorModel = async () => {
+    modelCalled = true;
+    return { type: "done", summary: "must not run", model: "mock" };
+  };
+  const registry = fakeRegistry({});
+  const flatStore = new FakeStore(runFixture({ rootExecutionProfile: "flat" }));
+  await assert.rejects(
+    runOrchestratorToCompletion("run1", deps(flatStore, model, registry)),
+    /legacy history/
+  );
+  const nullStore = new FakeStore(
+    runFixture({ status: "waiting", rootExecutionProfile: undefined })
+  );
+  await assert.rejects(
+    resumeOrchestratorRun("run1", deps(nullStore, model, registry)),
+    /legacy history/
+  );
+  assert.equal(modelCalled, false);
+});
 
 test("prepares once before persistence and reuses the canonical input", async () => {
   const store = new FakeStore(runFixture());

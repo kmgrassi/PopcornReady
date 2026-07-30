@@ -36,7 +36,7 @@ test("tool-loop feature flag is opt-in", () => {
   );
 });
 
-test("creative-director hierarchy defaults on with only an expiring emergency fallback", () => {
+test("creative-director hierarchy is unconditional and ignores retired fallback variables", () => {
   const now = new Date("2026-07-28T12:00:00.000Z");
   assert.equal(isCreativeDirectorHierarchyEnabled({}), true);
   assert.deepEqual(
@@ -52,7 +52,7 @@ test("creative-director hierarchy defaults on with only an expiring emergency fa
       now
     ),
     { enabled: true, fallbackUntil: null },
-    "an expiry alone cannot activate emergency fallback"
+    "an expiry alone cannot change root ownership"
   );
   assert.deepEqual(
     creativeDirectorHierarchyRollout(
@@ -62,7 +62,7 @@ test("creative-director hierarchy defaults on with only an expiring emergency fa
       },
       now
     ),
-    { enabled: false, fallbackUntil: "2026-07-29T12:00:00.000Z" }
+    { enabled: true, fallbackUntil: null }
   );
   assert.deepEqual(
     creativeDirectorHierarchyRollout(
@@ -73,7 +73,7 @@ test("creative-director hierarchy defaults on with only an expiring emergency fa
       now
     ),
     { enabled: true, fallbackUntil: null },
-    "an invalid rollback value must fail back to the safe default-on route"
+    "invalid retired values cannot change root ownership"
   );
   assert.deepEqual(
     creativeDirectorHierarchyRollout(
@@ -84,7 +84,7 @@ test("creative-director hierarchy defaults on with only an expiring emergency fa
       now
     ),
     { enabled: true, fallbackUntil: null },
-    "the emergency expiry must be an explicit UTC timestamp"
+    "timezone syntax cannot change root ownership"
   );
   assert.deepEqual(
     creativeDirectorHierarchyRollout(
@@ -95,7 +95,7 @@ test("creative-director hierarchy defaults on with only an expiring emergency fa
       now
     ),
     { enabled: true, fallbackUntil: null },
-    "an expired fallback cannot leave the flat root enabled"
+    "expired values cannot change root ownership"
   );
   for (const invalidExpiry of ["2026-02-31T12:00:00Z", "2026-07-29T24:00:00Z"]) {
     assert.deepEqual(
