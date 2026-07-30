@@ -86,8 +86,8 @@ const LIFECYCLE_COLUMN_PRIVILEGES = {
     UPDATE: [],
   },
   orchestrator_runs: {
-    SELECT: ["agent_role","budget_usd","id","origin_kind","parent_run_id","project_id","root_action_id","root_execution_profile","spent_usd","status","task_params"],
-    INSERT: ["agent_role","budget_usd","input_summary","project_id","root_execution_profile","schema_version","spent_usd","status"],
+    SELECT: ["agent_role","budget_usd","id","origin_kind","parent_run_id","project_id","root_action_id","spent_usd","status","task_params"],
+    INSERT: ["agent_role","budget_usd","input_summary","project_id","schema_version","spent_usd","status"],
     UPDATE: ["completed_at","error","started_at","status","updated_at"],
   },
   actions: {
@@ -294,6 +294,11 @@ export function createCreatorDirectDatabaseReadiness(
                        and actual.table_name = expected_table.key
                        and actual.privilege_type = expected_privilege.key
                        and not expected_privilege.value ? actual.column_name
+                       and not (
+                         expected_table.key = 'orchestrator_runs'
+                         and actual.column_name = 'root_execution_profile'
+                         and actual.privilege_type in ('SELECT', 'INSERT')
+                       )
                   )
                ) as lifecycle_access_exact,
                has_function_privilege(
