@@ -68,13 +68,18 @@ test.describe("Asset Studio", () => {
 
   test("creates an image only after explicit cost confirmation", async ({ page }) => {
     let proposalKind: string | null = null;
+    let proposalPrompt: string | null = null;
+    let improvePrompt: boolean | null = null;
     let confirmationCount = 0;
 
     await page.route(
       `**/api/v1/projects/${project.id}/agent-creations/proposals`,
       async (route) => {
         const request = route.request();
-        proposalKind = request.postDataJSON().kind;
+        const body = request.postDataJSON();
+        proposalKind = body.kind;
+        proposalPrompt = body.prompt;
+        improvePrompt = body.improvePrompt;
         expect(request.headers()["idempotency-key"]).toMatch(/^asset-studio:proposal:/);
         await fulfillJson(
           route,
@@ -87,6 +92,9 @@ test.describe("Asset Studio", () => {
               maximumUsd: 10,
               approvalToken: "approval_image",
               expiresAt: "2026-07-29T18:00:00.000Z",
+              effectivePrompt:
+                "Editorial close-up of popcorn falling into a stoneware bowl. Soft window light from camera-left, restrained amber palette, visible salt crystals, and shallow incidental crumbs.",
+              enhancementApplied: true,
             },
           },
           201,
@@ -142,7 +150,14 @@ test.describe("Asset Studio", () => {
 
     await expect(page.getByRole("heading", { name: "Review before starting" })).toBeVisible();
     expect(proposalKind).toBe("image_create");
+    expect(proposalPrompt).toBe("An amber-lit editorial popcorn still");
+    expect(improvePrompt).toBe(true);
     expect(confirmationCount).toBe(0);
+    await expect(page.getByText("Original", { exact: true })).toBeVisible();
+    await expect(page.getByText("Refined prompt", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText(/Editorial close-up of popcorn falling into a stoneware bowl/),
+    ).toBeVisible();
 
     await page.getByRole("button", { name: "Confirm and start" }).click();
 
@@ -151,6 +166,99 @@ test.describe("Asset Studio", () => {
     );
     await expect(page.getByText("queued", { exact: true })).toBeVisible();
     expect(confirmationCount).toBe(1);
+  });
+
+  test("lets the creator bypass image prompt improvement exactly", async ({ page }) => {
+    const originalPrompt = "Flat-lay photo of three blue ceramic buttons";
+    let requestBody: Record<string, unknown> | null = null;
+
+    await page.route(
+      `**/api/v1/projects/${project.id}/agent-creations/proposals`,
+      async (route) => {
+        requestBody = route.request().postDataJSON();
+        await fulfillJson(
+          route,
+          {
+            proposal: {
+              sessionId: "session_bypass",
+              runId: "run_bypass",
+              gateId: "gate_bypass",
+              requestDigest: "digest_bypass",
+              maximumUsd: 10,
+              approvalToken: "approval_bypass",
+              expiresAt: "2026-07-29T18:00:00.000Z",
+              effectivePrompt: originalPrompt,
+              enhancementApplied: false,
+            },
+          },
+          201,
+        );
+      },
+    );
+
+    await page.goto("/create");
+    await openProjectPicker(page);
+    await page.getByRole("button", { name: project.name, exact: true }).click();
+    await page
+      .getByLabel("What should it feel like?", { exact: true })
+      .fill(originalPrompt);
+    const improve = page.getByRole("checkbox", {
+      name: /Improve image prompt/,
+    });
+    await expect(improve).toBeChecked();
+    await improve.uncheck();
+    await page.getByRole("button", { name: "Review cost" }).click();
+
+    await expect(page.getByText("Prompt", { exact: true })).toBeVisible();
+    await expect(page.getByText("Refined prompt", { exact: true })).toHaveCount(0);
+    expect(requestBody).toMatchObject({
+      kind: "image_create",
+      prompt: originalPrompt,
+      improvePrompt: false,
+    });
+  });
+
+  test("keeps the image form actionable when prompt improvement fails", async ({
+    page,
+  }) => {
+    await page.route(
+      `**/api/v1/projects/${project.id}/agent-creations/proposals`,
+      (route) =>
+        fulfillJson(
+          route,
+          {
+            error: {
+              code: "model_output_invalid",
+              message:
+                "We couldn't improve this image prompt. Retry, or turn off Improve image prompt to continue with your original request.",
+            },
+          },
+          502,
+        ),
+    );
+
+    await page.goto("/create");
+    await openProjectPicker(page);
+    await page.getByRole("button", { name: project.name, exact: true }).click();
+    const prompt = page.getByLabel("What should it feel like?", { exact: true });
+    await prompt.fill("A precise campaign still");
+    await page.getByRole("button", { name: "Review cost" }).click();
+
+    await expect(page.locator("section").getByRole("alert")).toContainText(
+      "turn off Improve image prompt",
+    );
+    await expect(
+      page.getByPlaceholder(
+        "A quiet amber-lit close-up of popcorn falling into a bowl",
+      ),
+    ).toHaveValue("A precise campaign still");
+    await expect(
+      page.getByRole("checkbox", { name: /Improve image prompt/ }),
+    ).toBeChecked();
+    await expect(page.getByRole("button", { name: "Review cost" })).toBeEnabled();
+    await expect(
+      page.getByRole("heading", { name: "Review before starting" }),
+    ).toHaveCount(0);
   });
 
   test("creates and immediately uses a new project without losing the prompt", async ({
@@ -329,6 +437,63 @@ test.describe("Asset Studio", () => {
     await expect(page.getByRole("button", { name: "Review cost" })).toBeEnabled();
     await expect(
       page.getByRole("heading", { name: "Review before starting" }),
+    ).toHaveCount(0);
+  });
+
+  test("does not surface a stale enhancement failure after improvement is disabled in flight", async ({
+    page,
+  }) => {
+    let releaseProposal: (() => void) | undefined;
+    const proposalReleased = new Promise<void>((resolve) => {
+      releaseProposal = resolve;
+    });
+    let markProposalStarted: (() => void) | undefined;
+    const proposalStarted = new Promise<void>((resolve) => {
+      markProposalStarted = resolve;
+    });
+
+    await page.route(
+      `**/api/v1/projects/${project.id}/agent-creations/proposals`,
+      async (route) => {
+        markProposalStarted?.();
+        await proposalReleased;
+        await fulfillJson(
+          route,
+          {
+            error: {
+              code: "model_output_invalid",
+              message:
+                "We couldn't improve this image prompt. Retry, or turn off Improve image prompt to continue with your original request.",
+            },
+          },
+          502,
+        );
+      },
+    );
+
+    await page.goto("/create");
+    await openProjectPicker(page);
+    await page.getByRole("button", { name: project.name, exact: true }).click();
+    await page
+      .getByLabel("What should it feel like?", { exact: true })
+      .fill("A precise campaign still");
+    await page.getByRole("button", { name: "Review cost" }).click();
+    await proposalStarted;
+
+    await page
+      .getByRole("checkbox", { name: /Improve image prompt/ })
+      .uncheck();
+    releaseProposal?.();
+
+    await expect(page.getByRole("button", { name: "Review cost" })).toBeEnabled();
+    await expect(
+      page.getByRole("heading", { name: "Review before starting" }),
+    ).toHaveCount(0);
+    await expect(page.locator("section").getByRole("alert")).toHaveCount(0);
+    await expect(
+      page
+        .getByRole("region", { name: "bottom notifications" })
+        .getByText("turn off Improve image prompt"),
     ).toHaveCount(0);
   });
 

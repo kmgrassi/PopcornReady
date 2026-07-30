@@ -9,12 +9,13 @@ pnpm --filter @popcorn/web test:e2e
 
 `asset-studio.spec.ts` uses browser API fixtures to verify the production
 `/create` route, default Image selection, choice-card padding, proposal review,
+default-on prompt refinement, exact effective-prompt preview, creator bypass,
 explicit confirmation, queued status, desktop/mobile Create navigation, project
 picker keyboard behavior, existing/first/new-project selection, and project-list
 and creation failure recovery. It also verifies that an in-flight cost proposal
-cannot reappear after its project changes, a delayed project creation cannot
-override a newer selection, and pagination failures preserve loaded projects,
-without spending provider credits.
+cannot reappear after its project or refinement setting changes, a delayed
+project creation cannot override a newer selection, and pagination failures
+preserve loaded projects, without spending provider credits.
 
 The command starts the Express API and Vite app, using:
 

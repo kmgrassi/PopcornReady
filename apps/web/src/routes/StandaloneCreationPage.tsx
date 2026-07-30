@@ -46,7 +46,9 @@ export function StandaloneCreationPage() {
   const [goal, setGoal] = useState<CreationGoal>("image");
   const [projectId, setProjectId] = useState(params.get("projectId") ?? "");
   const [prompt, setPrompt] = useState("");
+  const [improvePrompt, setImprovePrompt] = useState(true);
   const [proposal, setProposal] = useState<CreationProposal | null>(null);
+  const [proposalError, setProposalError] = useState<Error | null>(null);
   const [proposalKey, setProposalKey] = useState(
     () => `asset-studio:proposal:${crypto.randomUUID()}`,
   );
@@ -110,6 +112,7 @@ export function StandaloneCreationPage() {
   const resetProposal = () => {
     proposalVersion.current += 1;
     setProposal(null);
+    setProposalError(null);
     setProposalKey(`asset-studio:proposal:${crypto.randomUUID()}`);
   };
   const selectProject = (nextProjectId: string) => {
@@ -122,15 +125,25 @@ export function StandaloneCreationPage() {
   async function reviewCost() {
     if (!canPropose) return;
     const requestedVersion = proposalVersion.current;
-    const nextProposal = await propose.mutateAsync({
-      projectId,
-      goal,
-      prompt: prompt.trim(),
-      maximumUsd: 10,
-      idempotencyKey: proposalKey,
-    });
-    if (proposalVersion.current === requestedVersion) {
-      setProposal(nextProposal);
+    setProposalError(null);
+    try {
+      const nextProposal = await propose.mutateAsync({
+        projectId,
+        goal,
+        prompt: prompt.trim(),
+        improvePrompt,
+        maximumUsd: 10,
+        idempotencyKey: proposalKey,
+      });
+      if (proposalVersion.current === requestedVersion) {
+        setProposal(nextProposal);
+      }
+    } catch (error) {
+      if (proposalVersion.current === requestedVersion) {
+        setProposalError(
+          error instanceof Error ? error : new Error(String(error)),
+        );
+      }
     }
   }
 
@@ -140,15 +153,15 @@ export function StandaloneCreationPage() {
     setParams({ projectId, runId: result.runId });
   }
 
-  const error = propose.error ?? confirm.error;
+  const error = proposalError ?? confirm.error;
 
   return (
     <main className={styles.page}>
       <header className={styles.header}>
         <h1>Make an asset for your project</h1>
         <p>
-          Describe the outcome. You confirm the maximum cost before anything
-          starts.
+          Describe the outcome. For images, a quick prompt-refinement pass runs
+          during review. No asset generation starts until you confirm the cost.
         </p>
       </header>
       <section className={styles.form}>
@@ -206,13 +219,47 @@ export function StandaloneCreationPage() {
           />
         </label>
 
+        {goal === "image" ? (
+          <label className={styles.enhancementControl}>
+            <input
+              type="checkbox"
+              checked={improvePrompt}
+              onChange={(event) => {
+                setImprovePrompt(event.target.checked);
+                resetProposal();
+              }}
+            />
+            <span>
+              <strong>Improve image prompt</strong>
+              <small>
+                Adds concrete composition, lighting, materials, and restraint
+                while preserving your idea.
+              </small>
+            </span>
+          </label>
+        ) : null}
+
         {proposal ? (
           <section className={styles.proposal} aria-live="polite">
             <h2>Review before starting</h2>
             <p>
-              This request can spend up to ${proposal.maximumUsd.toFixed(2)}.
-              Nothing has started yet.
+              Asset generation can spend up to ${proposal.maximumUsd.toFixed(2)}.
+              Asset generation has not begun.
             </p>
+            <div className={styles.promptReview}>
+              {proposal.enhancementApplied ? (
+                <>
+                  <span>Original</span>
+                  <p>{prompt.trim()}</p>
+                  <span>Refined prompt</span>
+                </>
+              ) : (
+                <span>Prompt</span>
+              )}
+              <p className={styles.effectivePrompt}>
+                {proposal.effectivePrompt || prompt.trim()}
+              </p>
+            </div>
             <div className={styles.actions}>
               <Button
                 variant="cta"
@@ -235,7 +282,9 @@ export function StandaloneCreationPage() {
             isLoading={propose.isPending}
             onClick={() => void reviewCost()}
           >
-            Review cost
+            {propose.isPending && goal === "image" && improvePrompt
+              ? "Improving prompt..."
+              : "Review cost"}
           </Button>
         )}
         {error ? (
