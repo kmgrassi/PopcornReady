@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import { ApiError } from "@/core/errors";
 import {
+  domainOutputAssetKind,
+  type DomainOutputKind,
+} from "@popcorn/shared/domain-agent-contract";
+import {
   assertLiveLease,
   lifecycleTransaction,
   lockExecution,
@@ -417,9 +421,9 @@ export async function completeWorkTransaction(input: {
           where id=$1 and project_id=$2`,
         [binding.assetId, input.projectId]
       );
-      const expectedKind = binding.kind === "storyboard"
-        ? "image"
-        : binding.kind === "audio_fit" ? "critique" : binding.kind;
+      const expectedKind = domainOutputAssetKind(
+        binding.kind as DomainOutputKind
+      );
       if (
         !asset.rows[0] ||
         asset.rows[0].kind !== expectedKind ||

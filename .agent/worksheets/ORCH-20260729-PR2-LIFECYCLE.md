@@ -74,6 +74,10 @@ adapter may register or spend in this slice.
 - Replaced all 15 lifecycle RPC call sites with typed direct-Postgres
   transactions under the exact `popcorn_api` column/RLS capability surface.
   The API inventory returned to 47 expressions / 48 targets.
+- Centralized semantic-output validation for both domain completion and durable
+  work completion. Image, poster, anchor, storyboard, and keyframe bindings map
+  to stored `image` assets; clip maps to `video`; audio track maps to `audio`;
+  audio fit maps to `critique`; composite and render retain their graph kinds.
 - Addressed PR 839 threads `PRRT_kwDOSqQ6Xc6VJvzU`,
   `PRRT_kwDOSqQ6Xc6VJvzb`, `PRRT_kwDOSqQ6Xc6VJvzd`, and
   `PRRT_kwDOSqQ6Xc6VJvzg`: direct transactions, database-clock terminal
@@ -136,6 +140,16 @@ adapter may register or spend in this slice.
 - `pnpm agent:validate -- --scope all` — passed after hardening.
 - `pnpm db:rpc-boundary:test` and `pnpm db:rpc-boundary:validate` — passed with
   48 production targets across 47 expressions.
+- Main integration replay: focused lifecycle, transaction, readiness,
+  migration, HTTP, and semantic-output normalization tests passed after
+  replaying the two reviewed PR 2 commits onto current `origin/main` (38
+  passed).
+- Main integration replay: API/shared typechecks, migration tests/validation
+  (90 migrations), RPC boundary tests/validation, and
+  `pnpm agent:validate -- --scope all` passed.
+- Main integration replay: relation boundary tests/validation passed at 424
+  literal calls and zero dynamic calls; the development API health smoke on
+  port 4012 returned `status: ok` with the creative-director hierarchy enabled.
 
 ## Blockers and risks
 
@@ -143,5 +157,17 @@ adapter may register or spend in this slice.
 
 ## Next action / handoff
 
-- Push the reviewed PR 839 update and resolve its four superseded review
-  threads after the remote commit and checks are visible.
+- Merge the ready main-targeted integration PR. PRs 3A, 3B, 3C, and 4 must
+  target this integration branch while it is open, or rebase onto `main` after
+  it lands, so they inherit the reviewed PR 2 transaction and executor
+  contracts without carrying the old stacked PR 1 history.
+
+## Main integration replay
+
+PR 839 was reviewed and merged into
+`codex/selective-regen-pr1-main-integration`, not into `main`. After PRs 835 and
+837 landed, the reviewed PR 2 payload commits were replayed onto current
+`origin/main` as a clean main-targeted branch. The reconciliation preserved the
+current relation-validation boundary, PR 0 hierarchy lock, and PR 1 canonical
+story-pointer semantics. PR 1's already-landed merge-resolution commit was
+empty on current main and was intentionally skipped.

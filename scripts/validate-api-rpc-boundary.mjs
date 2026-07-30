@@ -10,9 +10,7 @@ const apiSourceRoot = join(repoRoot, "apps/api/src");
 export const PRODUCTION_RPC_TARGETS = new Set([
   "abandon_idempotency_record",
   "allocate_agent_session_sequence",
-  "approve_rerun_proposal",
   "apply_credit_transaction",
-  "cancel_rerun_execution",
   "cancel_domain_run",
   "cancel_orchestrator_run_family",
   "claim_agent_session_run",
@@ -20,7 +18,6 @@ export const PRODUCTION_RPC_TARGETS = new Set([
   "claim_job_recovery",
   "claim_orchestrator_dispatches",
   "claim_provider_job_execution",
-  "claim_rerun_execution_lease",
   "claim_purgeable_anonymous_users",
   "complete_idempotency_record",
   "complete_provider_job_execution",
@@ -28,12 +25,9 @@ export const PRODUCTION_RPC_TARGETS = new Set([
   "create_domain_run_dispatch",
   "create_domain_run_dispatch_batch",
   "create_orchestrator_run_with_anonymous_quota",
-  "create_rerun_proposal_successor",
   "current_app_user_id",
   "downstream_assets",
   "fail_domain_run_turn",
-  "fail_rerun_work_item",
-  "finalize_rerun_execution",
   "finalize_domain_run_turn",
   "mint_audio_asset_version",
   "owner_tier",
@@ -41,23 +35,17 @@ export const PRODUCTION_RPC_TARGETS = new Set([
   "purge_anonymous_user_rows",
   "purge_expired_anonymous_projects",
   "record_orchestrator_budget_billing",
-  "record_rerun_executor_callback",
   "recover_anonymous_workspace",
   "recover_orchestrator_runtime_controls",
   "regenerate_asset_version",
   "regenerate_asset_version_pooled",
-  "reject_rerun_proposal",
   "release_agent_session_run",
   "release_orchestrator_dispatch",
   "release_orchestrator_run_budget",
   "renew_idempotency_record",
   "renew_provider_job_execution",
-  "renew_rerun_execution_lease",
   "reserve_idempotency_record",
   "reserve_orchestrator_run_budget",
-  "reserve_rerun_child_budget",
-  "reserve_rerun_proposal_execution",
-  "reserve_rerun_work_item",
   "search_project_asset_embeddings",
   "search_public_asset_embeddings",
   "search_public_assets",
@@ -66,9 +54,6 @@ export const PRODUCTION_RPC_TARGETS = new Set([
   "search_storyboard_chunks",
   "select_empty_project_poster_from_first_frame",
   "settle_orchestrator_run_budget",
-  "complete_rerun_work_item",
-  "park_rerun_execution",
-  "park_rerun_work_item",
   "update_active_job",
   "wake_orchestrator_dispatch",
 ]);
@@ -288,9 +273,9 @@ export function validateRepositoryRpcBoundary() {
       .includes("/lib/test-sandboxes/"),
   }));
   const result = validateRpcInventory(sources);
-  if (result.productionExpressions !== 63) {
+  if (result.productionExpressions !== 47) {
     result.errors.push(
-      `Expected 63 production RPC expressions, found ${result.productionExpressions}`
+      `Expected 47 production RPC expressions, found ${result.productionExpressions}`
     );
   }
   if (result.sandboxExpressions !== 2) {

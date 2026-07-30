@@ -4,7 +4,12 @@
 // report. It selects the model-visible surface and fresh context for an already
 // claimed run. PR 6 remains the sole domain-report finalization boundary.
 
-import type { AgentDomain, AgentRole, DomainTaskV1 } from "@popcorn/shared/domain-agent-contract";
+import {
+  domainOutputAssetKind,
+  type AgentDomain,
+  type AgentRole,
+  type DomainTaskV1,
+} from "@popcorn/shared/domain-agent-contract";
 import type { DomainReportV1 } from "@popcorn/shared/domain-agent-contract";
 import { createHash } from "node:crypto";
 import {
@@ -259,10 +264,7 @@ async function validatedOutputs(input: {
       const required = bound.find((candidate) => candidate.bindingId === bindingId);
       if (!required) throw new Error("Domain completion claimed a binding outside its task.");
       const row = rows.find((candidate) => candidate.id === assetId);
-      const expectedAssetKind =
-        required.kind === "storyboard" ? "image" :
-          required.kind === "audio_fit" ? "critique" :
-            required.kind;
+      const expectedAssetKind = domainOutputAssetKind(required.kind);
       if (!row || row.kind !== expectedAssetKind) {
         throw new Error(`Domain completion output ${assetId} does not satisfy binding ${bindingId}.`);
       }
