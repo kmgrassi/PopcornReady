@@ -1,5 +1,6 @@
 import type {
   BoundRequiredOutput,
+  RerunTarget,
   RerunWorkItem,
 } from "@popcorn/shared/rerun-proposal";
 import { ApiError } from "@/core/errors";
@@ -12,7 +13,6 @@ import {
   AUDIO_FIT_RERUN_EXECUTOR_ID,
   AUDIO_PRODUCTION_RERUN_EXECUTOR_ID,
   AUDIO_REVISION_RERUN_EXECUTOR_ID,
-  rerunChildBudgetReservationKey,
 } from "./rerun-callback-fence";
 import type {
   RerunExecutorContext,
@@ -34,6 +34,33 @@ function isAudioWorkItem(workItem: RerunWorkItem): workItem is AudioWorkItem {
   return workItem.owner === "audio" && workItem.kind === "revise_audio";
 }
 
+function targetIdentity(target: RerunTarget): string {
+  switch (target.kind) {
+    case "project":
+      return `project:${target.projectId}`;
+    case "storyboard":
+      return `storyboard:${target.storyboardId}`;
+    case "scene":
+      return `scene:${target.sceneId}`;
+    case "beat":
+      return `beat:${target.beatId}`;
+    case "panel":
+      return `panel:${target.panelId}`;
+    case "asset":
+      return `asset:${target.assetId}`;
+    case "lineage":
+      return `lineage:${target.lineageId}`;
+    case "timeline_item":
+      return `timeline_item:${target.timelineItemId}`;
+    case "export":
+      return `export:${target.exportId}`;
+    case "selection":
+      return `selection:${target.slotOwnerLineageId ?? "project"}:${target.slotRole}`;
+    case "transcript_segment":
+      return `transcript_segment:${target.transcriptSegmentId}`;
+  }
+}
+
 function subsetWorkItem(
   context: RerunExecutorContext
 ): AudioWorkItem {
@@ -43,8 +70,17 @@ function subsetWorkItem(
       "Audio executor received non-Audio rerun work."
     );
   }
+  const targets = context.requiredOutputs.flatMap((output, index, outputs) =>
+    outputs.findIndex(
+      (candidate) =>
+        targetIdentity(candidate.target) === targetIdentity(output.target)
+    ) === index
+      ? [output.target]
+      : []
+  );
   return {
     ...context.workItem,
+    targets,
     requiredOutputs: [...context.requiredOutputs],
   };
 }
@@ -59,36 +95,6 @@ function isSupportedAudioTarget(output: BoundRequiredOutput): boolean {
     output.target.kind === "asset" ||
     output.target.kind === "timeline_item"
   );
-}
-
-function allocatedBudgetUsd(context: RerunExecutorContext): number {
-  const billable = context.proposal.selectedWork
-    .flatMap((work) => work.requiredOutputs)
-    .filter((output) =>
-      [
-        "image",
-        "poster",
-        "anchor",
-        "keyframe",
-        "clip",
-        "render",
-        "audio_track",
-      ].includes(output.kind)
-    )
-    .sort((left, right) =>
-      left.ordinal - right.ordinal ||
-      left.bindingId.localeCompare(right.bindingId)
-    );
-  if (billable.length === 0) return 0;
-  const totalUnits = Math.round(context.approvedMaxCostUsd * 10_000);
-  const quotient = Math.floor(totalUnits / billable.length);
-  const remainder = totalUnits % billable.length;
-  const selected = new Set(context.requiredOutputs.map((output) => output.bindingId));
-  const units = billable.reduce((sum, output, index) =>
-    sum + (selected.has(output.bindingId)
-      ? quotient + (index < remainder ? 1 : 0)
-      : 0), 0);
-  return units / 10_000;
 }
 
 function pins(context: RerunExecutorContext) {
@@ -146,21 +152,6 @@ function createExecutor(input: {
         proposal: context.proposal,
         workItem,
       });
-      const reservationKey = rerunChildBudgetReservationKey({
-        executionReservationId: context.fence.executionReservationId,
-        workItemId: workItem.workItemId,
-        executorId: input.id,
-      });
-      const estimatedUsd = allocatedBudgetUsd(context);
-      const budgetReservationKeys: string[] = [];
-      if (estimatedUsd > 0) {
-        await context.reserveBudget({
-          actionId: context.fence.dispatchActionId,
-          reservationKey,
-          estimatedUsd,
-        });
-        budgetReservationKeys.push(reservationKey);
-      }
       const task = {
         ...delegatedTask,
         approvalContext: {
@@ -169,7 +160,6 @@ function createExecutor(input: {
             executorId: input.id,
             workItemId: workItem.workItemId,
             generation: context.fence.callbackGeneration,
-            budgetReservationKeys,
           },
         },
       };
@@ -178,7 +168,7 @@ function createExecutor(input: {
         domain: "audio",
         task,
         inputSummary: context.proposal.userFacingSummary,
-        budgetUsd: estimatedUsd,
+        budgetUsd: context.approvedMaxCostUsd,
         origin: {
           kind: "creative_director",
           parentRunId: context.rootRunId,
@@ -194,7 +184,7 @@ function createExecutor(input: {
         // finalization records the fenced callback using the same child id.
         jobIds: [`domain-run:${child.runId}`],
         primitiveActionIds: [],
-        budgetReservationKeys,
+        budgetReservationKeys: [],
       };
     },
   };

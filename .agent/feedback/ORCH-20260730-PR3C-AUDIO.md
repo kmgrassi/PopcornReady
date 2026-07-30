@@ -14,9 +14,11 @@ The safest domain-to-proposal bridge is an immutable report callback rather
 than a second provider-specific completion path. Persisting the proposal fence
 with the child task lets ordinary domain finalization recover after process
 failure, and exact output bindings prevent the specialist from reconstructing
-authority from role names or array order. Picture fit needs an especially
-narrow root-resolved beat target because Audio cannot infer story/picture scope
-without crossing its ownership boundary.
+authority from role names or array order. The callback must recover, rather
+than fabricate, the child primitive actions and settled provider reservations:
+the database deliberately rejects a domain report whose output lacks both.
+Picture fit needs an especially narrow root-resolved beat target because Audio
+cannot infer story/picture scope without crossing its ownership boundary.
 
 ## Follow-up
 

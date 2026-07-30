@@ -21,7 +21,7 @@
 //     as a structured envelope (see assetContextEnvelope / unpackAssetContext).
 //     `assets` stores METADATA only — the bytes live in storage (separate PR).
 
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { databaseError, runQuery } from "../../supabase/db-errors";
 import { sumRunCostUsd } from "./model-call-costs";
@@ -1304,6 +1304,7 @@ async function insertDataAsset(input: InsertDataAssetInput): Promise<DataAssetRo
   const content = markedContent(contentSchemaKind, input.content);
   const inputs = input.inputs ?? [];
   const row: Record<string, unknown> = {
+    ...(input.id ? { id: input.id } : {}),
     schema_version: "asset.v2",
     workspace_id: input.workspaceId,
     project_id: input.projectId,
@@ -1323,11 +1324,39 @@ async function insertDataAsset(input: InsertDataAssetInput): Promise<DataAssetRo
   if (input.lineageId) row.lineage_id = input.lineageId;
   if (input.version) row.version = input.version;
 
-  const data = await runQuery(
+  const inserted = await runQuery(
     `store.insertDataAsset ${input.kind}`,
-    input.db.from("assets").insert(row).select("*").single()
+    input.id
+      ? input.db
+        .from("assets")
+        .upsert(row, { onConflict: "id", ignoreDuplicates: true })
+        .select("*")
+        .maybeSingle()
+      : input.db.from("assets").insert(row).select("*").single()
+  );
+  const data = inserted ?? await runQuery(
+    `store.insertDataAsset replay ${input.kind}`,
+    input.db
+      .from("assets")
+      .select("*")
+      .eq("id", input.id!)
+      .eq("project_id", input.projectId)
+      .single()
   );
   return data as DataAssetRow;
+}
+
+export function audioFitCritiqueArtifactId(actionId: string): string {
+  const digest = createHash("sha256")
+    .update(`audio-fit-critique\u0000${actionId}`)
+    .digest("hex");
+  return [
+    digest.slice(0, 8),
+    digest.slice(8, 12),
+    `4${digest.slice(13, 16)}`,
+    `8${digest.slice(17, 20)}`,
+    digest.slice(20, 32),
+  ].join("-");
 }
 
 function transcriptSegmentFromRow(row: TranscriptSegmentRow): TranscriptSegment {
@@ -2824,6 +2853,9 @@ export async function addAudioFitCritique(input: {
   beatId: string;
   critique: unknown;
   orchestratorRunId?: string;
+  actionId?: string;
+  /** Proposal execution keeps the critique pooled until atomic application. */
+  selectResult?: boolean;
 }): Promise<{ critiqueAssetId: string }> {
   const db = getServiceSupabase();
   const graphInputs: GraphAssetInput[] = [
@@ -2860,6 +2892,7 @@ export async function addAudioFitCritique(input: {
       : []),
   ];
   const action = await createAction({
+    id: input.actionId,
     projectId: input.projectId,
     orchestratorRunId: input.orchestratorRunId,
     tool: "fit_audio_to_picture",
@@ -2875,6 +2908,9 @@ export async function addAudioFitCritique(input: {
   });
   const asset = await insertDataAsset({
     db,
+    ...(input.actionId
+      ? { id: audioFitCritiqueArtifactId(input.actionId) }
+      : {}),
     workspaceId: input.workspaceId,
     projectId: input.projectId,
     kind: "critique",
@@ -2884,13 +2920,15 @@ export async function addAudioFitCritique(input: {
     inputs: graphInputs,
     createdByActionId: action.id,
   });
-  await setActiveProjectScopedAssetSelection(
-    db,
-    input.projectId,
-    `audio_fit:${input.beatId}`,
-    asset.id,
-    action.id
-  );
+  if (input.selectResult !== false) {
+    await setActiveProjectScopedAssetSelection(
+      db,
+      input.projectId,
+      `audio_fit:${input.beatId}`,
+      asset.id,
+      action.id
+    );
+  }
   await updateAction(action.id, {
     status: "applied",
     outputAssetIds: [asset.id],
