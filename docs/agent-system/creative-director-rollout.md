@@ -21,8 +21,8 @@ recovery, and explicit resume reject legacy roots because their gates and
 actions cannot be transplanted safely. Visuals and Audio sessions retain their
 existing serialized creator-direct and root-origin behavior.
 
-`GET /api/v1/health` continues to report the hierarchy as unconditionally
-enabled until roadmap PR 7 removes the historical rollout projection. Worker
+`GET /api/v1/health` reports liveness and creator-direct database readiness; it
+no longer exposes the retired hierarchy rollout or fallback window. Worker
 events attribute claimed hierarchy roots to their persisted profile and
 explicitly log refused legacy dispatches; domain runs retain their own
 role/session attribution.
@@ -74,5 +74,6 @@ group by 1 having count(*) > 1;
 ## Evidence and final cleanup
 
 Record the cutover start UTC, production test results, dashboard snapshots, and
-any incident. Roadmap PR 7 removes the historical flat registry, profile type,
-profile column, and health metadata after every production caller ignores them.
+any incident. The health metadata is removed. The remainder of roadmap PR 7
+removes the historical flat registry, profile type, and profile column after
+every production caller ignores them.

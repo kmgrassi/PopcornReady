@@ -140,7 +140,6 @@ Global: --api <origin> --token <jwt> --json
   run approve --project <id> --run <id> [--note <text>]
   run reject  --project <id> --run <id> [--note <text>]
   run cancel  --project <id> --run <id>
-  run restart --project <id> --run <id> --stage <stageType>
 
   discover projects [--limit 24]
   discover assets   [--limit 24 --kind image|video|audio]
@@ -236,14 +235,8 @@ async function main() {
         const body = str(opts, "note") ? { note: str(opts, "note") } : {};
         return out(cfg, await api(cfg, "POST", `${baseRun}/${runId}/${sub}`, body));
       }
-      if (sub === "restart") {
-        return out(
-          cfg,
-          await api(cfg, "POST", `${baseRun}/${runId}/restart-from`, { stageType: required(opts, "stage") })
-        );
-      }
       if (sub === "watch") return watchRun(cfg, baseRun, runId, opts);
-      return fail("usage: run start|get|watch|approve|reject|cancel|restart");
+      return fail("usage: run start|get|watch|approve|reject|cancel");
     }
 
     case "discover": {

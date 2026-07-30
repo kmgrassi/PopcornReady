@@ -53,7 +53,6 @@ run start  --project <id> --prompt <text> [--gates a,b --budget <usd>]
 run get    --project <id> --run <id>
 run watch  --project <id> --run <id> [--interval 4 --timeout 1800]   # polls until terminal/gate
 run approve|reject|cancel --project <id> --run <id> [--note <text>]
-run restart --project <id> --run <id> --stage <stageType>
 
 discover projects|assets [--limit 24 --kind image|video|audio]
 
