@@ -17,11 +17,11 @@ on:
     branches: [main]
   workflow_dispatch: {}
 
-# Serialize verification in push order. The Railway integration owns deployment;
-# this job only waits for production to report the matching commit.
+# Railway deploys the latest main commit, so stop polling for an older SHA when
+# a newer main push supersedes it.
 concurrency:
-  group: railway-production-verify
-  cancel-in-progress: false
+  group: railway-production-verify-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   verify:

@@ -1,5 +1,13 @@
 # Web E2E Tests
 
+<!-- agent-summary: This document owns Playwright coverage across the split Vite SPA and Express API. -->
+<!-- agent-summary: The default suite uses local auth and starts both application servers. -->
+<!-- agent-summary: Local Supabase parity runs through the dedicated local-database command. -->
+<!-- agent-summary: Hosted auth and PWA checks use explicit opt-in production-preview modes. -->
+<!-- agent-summary: GitHub runs E2E for runtime-affecting pull requests and main pushes. -->
+<!-- agent-summary: Superseded runs cancel, jobs have a 15-minute cap, and failure reports upload. -->
+<!-- agent-summary: Required checks need a successful no-op path before workflow filters are enabled. -->
+
 This suite covers split-app browser behavior with Playwright. The default mode
 is local auth:
 
@@ -68,6 +76,20 @@ pnpm --filter @popcorn/web test:e2e:pwa
 
 That command validates the web app manifest, confirms the share-target service
 worker registers, and simulates the OS share-target POST with a fixture file.
+
+## GitHub Actions runner policy
+
+The `Web E2E` workflow runs for pull requests and `main` pushes that include
+runtime-affecting files. Changes made only to Markdown files and `.agent/**`
+records skip the workflow. A newer commit to the same pull request or branch
+cancels its superseded run, and each job has a 15-minute runner budget.
+Playwright reports upload only after an ordinary test failure; cancellation or
+job timeout may end before an artifact can be preserved.
+
+The workflow-level path filter is safe while Web E2E is not a required branch
+check. Before making it required, replace the filter with a path-classifier or
+no-op job that reports success for documentation-only changes; otherwise GitHub
+can leave the required check absent or pending.
 
 Use `PLAYWRIGHT_WEB_PORT` or `POPCORN_E2E_WEB_PORT`, and
 `POPCORN_E2E_API_PORT`, to override the default ports when running beside

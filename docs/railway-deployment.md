@@ -199,6 +199,13 @@ healthcheckPath = "/api/v1/health"
 Railway calls this path during deployment and only marks the new deployment
 active once it returns HTTP 200.
 
+The `Verify API Deploy (Railway)` GitHub workflow builds the API and polls this
+health route until production reports the exact `main` commit. Because Railway
+deploys the latest `main` state, a newer push cancels verification of an older
+SHA; the newest run remains responsible for proving what is live. Database and
+hosted-auth mutation workflows stay serialized and are never canceled in
+progress.
+
 ## File storage limitation
 
 Local development can still store project state and media on the local

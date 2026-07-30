@@ -7,6 +7,7 @@ if (!new Set(["all", "web", "api", "docs"]).has(scope)) throw new Error("Use --s
 
 const commands = [
   ["pnpm", ["agent:lint"]],
+  ["pnpm", ["ci:workflows:test"]],
   ["pnpm", ["db:migrations:test"]],
   ["pnpm", ["db:migrations:validate"]],
 ];
