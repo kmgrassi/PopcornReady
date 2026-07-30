@@ -12,9 +12,15 @@ import { ApiError } from "@/core/errors";
 import type {
   ActionId,
   AgentDomain,
+  AudioOutputKind,
   DomainTaskV1,
   OrchestratorRunId,
+  VisualsOutputKind,
 } from "@popcorn/shared/domain-agent-contract";
+import type {
+  RerunProposalV2,
+  RerunWorkItem,
+} from "@popcorn/shared/rerun-proposal";
 import {
   dispatchDomainRunBatch,
   dispatchDomainRun,
@@ -25,7 +31,9 @@ import type { ToolCallResult, ToolDefinition } from "./types";
 import { ToolInputError } from "./types";
 
 const DELEGATION_DEFAULT_BUDGET_USD = 5;
-const VISUAL_OUTPUT_KINDS = ["image", "anchor", "keyframe", "clip", "composite", "render"] as const;
+const VISUAL_OUTPUT_KINDS = [
+  "image", "poster", "anchor", "storyboard", "keyframe", "clip", "composite", "render",
+] as const;
 type VisualOutputKind = (typeof VISUAL_OUTPUT_KINDS)[number];
 
 export interface DelegateDomainInput {
@@ -202,6 +210,128 @@ export function buildDelegatedTask(input: {
     requiredOutputs: [{ kind: "audio_track", role: "primary", minimumCount: 1 }],
     allowedOutputKinds: ["audio_track"],
   } as DomainTaskV1;
+}
+
+/**
+ * Proposal execution never reparses model delegation prose. The coordinator
+ * supplies the exact approved work item and its immutable scope.
+ */
+export function buildProposalDelegatedTask(input: {
+  projectId: string;
+  rootRunId: string;
+  delegationActionId: string;
+  creatorMessageId: string;
+  proposalActionId: string;
+  approvalActionId: string;
+  executionReservationId: string;
+  approvalFingerprint: string;
+  proposal: Extract<RerunProposalV2, { outcome: "revision" }>;
+  workItem: Extract<RerunWorkItem, { owner: "visuals" | "audio" }>;
+}): DomainTaskV1 {
+  if (
+    input.proposal.projectId !== input.projectId ||
+    (input.proposal.rootRunId !== null &&
+      input.proposal.rootRunId !== input.rootRunId) ||
+    input.workItem.targets.some((target) => target.projectId !== input.projectId) ||
+    input.workItem.requiredOutputs.some((output) =>
+      output.workItemId !== input.workItem.workItemId ||
+      output.target.projectId !== input.projectId)
+  ) {
+    throw new ToolInputError("Proposal delegation membership is invalid.");
+  }
+  const budgetUsd = input.proposal.estimate.maxCostUsd;
+  const common = {
+    schemaVersion: "DomainTask.v1" as const,
+    objective: input.proposal.userFacingSummary,
+    instruction: input.proposal.userIntent,
+    targets: input.workItem.targets,
+    creativeConstraints: {},
+    preserve: {
+      assetIds: input.proposal.preservedAssetIds,
+      selections: input.proposal.pins.selections.flatMap((pin) =>
+        pin.expectedActiveAssetId
+          ? [{
+            slotRole: pin.slotRole,
+            slotKey: `${pin.slotOwnerLineageId ?? "project"}:${pin.slotRole}`,
+            activeAssetId: pin.expectedActiveAssetId,
+            sequence: pin.expectedSeq,
+          }]
+          : []),
+      fingerprints: input.proposal.pins.assets.map((pin) => ({
+        assetId: pin.assetId,
+        value: pin.inputsFingerprint ?? pin.contentHash ?? "unhashed",
+      })),
+      pins: [
+        ...input.proposal.pins.assets.map((pin) => ({
+          kind: "asset" as const,
+          id: pin.assetId,
+          fingerprint: pin.inputsFingerprint ?? pin.contentHash ?? undefined,
+        })),
+        ...input.proposal.pins.selections.map((pin) => ({
+          kind: "selection" as const,
+          id: `${pin.slotOwnerLineageId ?? "project"}:${pin.slotRole}:${pin.expectedSeq}`,
+          fingerprint: pin.expectedActiveAssetId ?? undefined,
+        })),
+      ],
+    },
+    candidateAffectedAssetIds: input.proposal.candidateAffectedAssetIds,
+    budgetUsd,
+    approvalContext: {
+      proposalActionId: input.proposalActionId as ActionId,
+      approvalActionId: input.approvalActionId as ActionId,
+      executionReservationId: input.executionReservationId,
+      approvedBudgetUsd: budgetUsd,
+      approvalFingerprint: input.approvalFingerprint,
+    },
+    acceptanceCriteria: input.proposal.checklist
+      .filter((item) => item.decision === "change")
+      .map((item) => item.reason),
+    origin: {
+      kind: "creative_director" as const,
+      rootRunId: input.rootRunId as OrchestratorRunId,
+      rootActionId: input.delegationActionId as ActionId,
+      creatorMessageId: input.creatorMessageId,
+    },
+    responseRecipient: { kind: "creative_director" as const },
+  };
+  if (input.workItem.owner === "visuals") {
+    const requiredOutputs = input.workItem.requiredOutputs.map((output) => {
+      if (!VISUAL_OUTPUT_KINDS.includes(output.kind as VisualOutputKind)) {
+        throw new ToolInputError(`Unsupported bound Visuals output ${output.kind}.`);
+      }
+      return {
+        ...output,
+        kind: output.kind as VisualsOutputKind,
+        minimumCount: 1,
+      };
+    });
+    return {
+      ...common,
+      domain: "visuals",
+      taskKind: "visuals_revision",
+      requiredOutputs,
+      allowedOutputKinds: [...new Set(requiredOutputs.map((output) => output.kind))],
+    };
+  }
+  const requiredOutputs = input.workItem.requiredOutputs.map((output) => {
+    if (output.kind !== "audio_track" && output.kind !== "audio_fit") {
+      throw new ToolInputError(`Unsupported bound Audio output ${output.kind}.`);
+    }
+    return {
+      ...output,
+      kind: output.kind as AudioOutputKind,
+      minimumCount: 1,
+    };
+  });
+  return {
+    ...common,
+    domain: "audio",
+    taskKind: requiredOutputs.every((output) => output.kind === "audio_fit")
+      ? "audio_fit"
+      : "audio_revision",
+    requiredOutputs,
+    allowedOutputKinds: [...new Set(requiredOutputs.map((output) => output.kind))],
+  };
 }
 
 function delegationFailure(err: unknown): ToolCallResult {

@@ -21,6 +21,8 @@ export type ApiErrorCode =
   | "timeline_invalid"
   | "job_not_cancelable"
   | "budget_exceeded"
+  | "coverage_unavailable"
+  | "stale_proposal"
   | "job_failed"
   | "render_failed"
   | "model_output_invalid"
@@ -51,6 +53,8 @@ const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
   timeline_invalid: 400,
   job_not_cancelable: 409,
   budget_exceeded: 409,
+  coverage_unavailable: 409,
+  stale_proposal: 409,
   job_failed: 422,
   render_failed: 500,
   model_output_invalid: 502,

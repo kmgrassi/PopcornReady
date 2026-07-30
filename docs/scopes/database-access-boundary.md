@@ -31,13 +31,13 @@ sources fail validation. Parenthesized direct calls remain valid and are
 inventoried. `pnpm agent:validate -- --scope api` runs the boundary test and
 validator.
 
-## Current inventory (2026-07-29)
+## Current inventory (2026-07-30)
 
-- Production database catalog, `public` schema: **100 functions**.
-- Trigger-backed functions: **34**.
-- Non-trigger functions: **66**.
-- `SECURITY DEFINER` functions: **78**.
-- Active API production runtime: **48 `.rpc()` expressions targeting 49
+- Production database catalog, `public` schema: **119 functions**.
+- Trigger-backed functions: **36**.
+- Non-trigger functions: **83**.
+- `SECURITY DEFINER` functions: **96**.
+- Active API production runtime: **63 `.rpc()` expressions targeting 64
   distinct functions**.
 - Internal test-sandbox support: **2 expressions targeting one additional
   function**, `delete_test_sandbox`.
@@ -46,6 +46,14 @@ The API target inventory is exact and enforced. It is not the migration
 backlog by itself: identity helpers, searches, and database integrity functions
 can remain RPCs. Each migration PR should remove its retired target from the
 allowlist.
+
+The durable selective-regeneration proposal lifecycle is a reviewed integrity
+exception. Its 15 API-called functions keep approval, freshness, budget
+admission, leases, executor-step callbacks, recovery, and terminal settlement
+inside locked database transitions. They are service-role only and expose no
+provider adapter. Moving that family to direct TypeScript transactions would
+require one equivalent transaction/locking boundary and belongs in a separate
+database-access migration after the least-privilege role is available.
 
 ## Direct Postgres safety rules
 

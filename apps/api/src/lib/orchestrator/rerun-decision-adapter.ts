@@ -20,7 +20,7 @@ import {
 const OUTPUT_KINDS = {
   creative_director: new Set(["story_snapshot", "composite", "critique"]),
   visuals: new Set(["image", "poster", "anchor", "keyframe", "clip", "composite", "render"]),
-  audio: new Set(["audio_track"]),
+  audio: new Set(["audio_track", "audio_fit"]),
 } as const;
 
 export type RerunDecisionAdapter = (

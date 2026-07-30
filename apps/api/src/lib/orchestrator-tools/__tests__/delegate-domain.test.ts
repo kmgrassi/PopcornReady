@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { RerunProposalV2, RerunWorkItem } from "@popcorn/shared/rerun-proposal";
 
 import {
   buildDelegatedTask,
+  buildProposalDelegatedTask,
   createDelegateAudioTool,
   createDelegateDomainsTool,
   createDelegateVisualsTool,
@@ -56,4 +58,76 @@ test("parallel delegation accepts one independent Visuals and Audio assignment",
     () => createDelegateDomainsTool().parseInput({ visuals: parsed.visuals }),
     /Delegation input must be an object/
   );
+});
+
+test("proposal delegation carries exact scope, bindings, preserves, and approval causation", () => {
+  const target = {
+    kind: "transcript_segment" as const,
+    projectId: "project-1",
+    transcriptSegmentId: "segment-1",
+  };
+  const audioWork: Extract<RerunWorkItem, { owner: "audio" }> = {
+    workItemId: "audio-work",
+    owner: "audio",
+    kind: "revise_audio",
+    targets: [target],
+    requiredOutputs: [{
+      bindingId: "fit-binding",
+      workItemId: "audio-work",
+      target,
+      kind: "audio_fit",
+      role: "picture-fit-critique",
+      ordinal: 0,
+    }],
+  };
+  const proposal = {
+    schemaVersion: "RerunProposal.v2" as const,
+    projectId: "project-1",
+    rootRunId: "root-1",
+    source: "request_changes" as const,
+    userIntent: "Shorten the narration.",
+    targets: [target],
+    inspectedAssetIds: ["audio-1"],
+    candidateAffectedAssetIds: ["cut-1"],
+    preservedAssetIds: ["music-1"],
+    checklist: [{ target, decision: "change" as const, reason: "Shorten it." }],
+    pins: {
+      assets: [{ assetId: "audio-1", contentHash: "hash", inputsFingerprint: "inputs" }],
+      selections: [],
+      storySnapshots: [],
+    },
+    estimate: { costUsd: 1, maxCostUsd: 2, latencyClass: "media" as const },
+    risk: "medium" as const,
+    requiresApproval: true,
+    rationale: "Audio-only revision.",
+    userFacingSummary: "Shorten narration and fit it to picture.",
+    outcome: "revision" as const,
+    selectedWork: [audioWork],
+    plannedSelectionMoves: [],
+    plannedStoryPointerMoves: [],
+  } satisfies RerunProposalV2;
+  const task = buildProposalDelegatedTask({
+    projectId: "project-1",
+    rootRunId: "root-1",
+    delegationActionId: "delegation-1",
+    creatorMessageId: "message-1",
+    proposalActionId: "proposal-1",
+    approvalActionId: "approval-1",
+    executionReservationId: "execution-1",
+    approvalFingerprint: "approval-fingerprint",
+    proposal,
+    workItem: proposal.selectedWork[0],
+  });
+  assert.equal(task.domain, "audio");
+  assert.equal(task.taskKind, "audio_fit");
+  assert.deepEqual(task.targets, [target]);
+  assert.deepEqual(task.candidateAffectedAssetIds, ["cut-1"]);
+  assert.deepEqual(task.preserve.assetIds, ["music-1"]);
+  assert.deepEqual(task.requiredOutputs[0], {
+    ...proposal.selectedWork[0].requiredOutputs[0],
+    minimumCount: 1,
+  });
+  assert.equal(task.approvalContext?.approvalActionId, "approval-1");
+  assert.equal(task.approvalContext?.executionReservationId, "execution-1");
+  assert.equal(task.origin.rootActionId, "delegation-1");
 });
