@@ -10,16 +10,19 @@
 
 ## Goal and acceptance criteria
 
-Prepare the disjoint portion of PR 7 while PR 5 and PR 6 are still active.
-The provisional patch must reduce retired compatibility surface without deleting
-anything that an active caller or in-flight branch still needs.
+Complete PR 7A as the non-destructive application cutover, then leave PR 7B's
+schema deletion for a separately deployed forward migration.
 
 - The health response no longer advertises the retired creative-director
   hierarchy rollout or fallback window.
 - The legacy stage-restart command is no longer offered by the API CLI or its
   command reference.
-- The still-live opt-in flat tool-loop flag remains unchanged until its driver
-  and registry can be removed together on the final stack.
+- Production has no flat/all-tools registry, generic root prompt, deterministic
+  board-feedback router, or opt-in legacy tool-loop driver.
+- Application code neither reads nor writes `root_execution_profile`.
+- The PREP migration preserves the column and DB contracts while filling it
+  only for omitted Creative Director root inserts and re-terminalizing active
+  legacy families.
 - No active PR 6 file or stack-dependent API/UI route is edited.
 - Targeted tests, API typecheck, an API health smoke, and repository validation
   pass before handoff.
@@ -53,16 +56,18 @@ Stack-dependent legacy callers and route deletion also deferred:
 - restart selection clearing, retired schema callers, flat profile removal,
   historical-root terminalization, and the `root_execution_profile` drop
 
-## Plan
+## PR 7A completion plan
 
-1. Remove the unconditional creative-director rollout compatibility projection
-   from health and its dead helper/test coverage.
-2. Remove the CLI `run restart` command and command-reference entry while
-   leaving the API route for still-active UI callers.
-3. Run focused orchestrator tests, API typecheck, a local health smoke, lint,
-   and full repository validation.
-4. Obtain independent implementation and wrap-up review, commit the provisional
-   patch, and leave it unpublished until the final stack is available.
+1. Replace filtering of a constructible flat registry with explicit role-owned
+   builders and remove the eager engine fallback.
+2. Remove application profile reads/writes and add the non-destructive rolling
+   compatibility migration.
+3. Stack the completed PR 6 caller cutover and delete the legacy restart and
+   revision API/client surfaces.
+4. Run focused registry, migration, orchestrator, route-404, typecheck, API
+   smoke, lint, and full repository validation.
+5. Obtain independent implementation and wrap-up review, commit locally, and
+   leave unpublished for the integration owner to restack on final PR 5/PR 6.
 
 ## Decisions
 
@@ -74,6 +79,9 @@ Stack-dependent legacy callers and route deletion also deferred:
 - The CLI removal intentionally precedes endpoint deletion so new manual use no
   longer starts legacy stage restarts while the compatibility route remains for
   the PR 6 migration window.
+- PR 7A and PR 7B are separate deployments. PR 7A retains every profile-bound
+  database function, constraint, policy, grant, and column needed by an older
+  application binary; PR 7B owns their destructive removal after rollout.
 
 ## Validation evidence
 

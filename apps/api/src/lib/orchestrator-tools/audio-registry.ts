@@ -1,6 +1,4 @@
 import type { DomainTaskV1 } from "@popcorn/shared/domain-agent-contract";
-import type { DefaultToolRegistryDeps } from "./default-registry";
-import { createOwnedToolRegistry } from "./owned-registry";
 import { ToolRegistry } from "./registry";
 import {
   audioTaskForRegistry,
@@ -9,6 +7,9 @@ import {
   type AudioDomainFitDeps,
   type AudioDomainToolDeps,
 } from "./audio-domain-tools";
+import { createGenerateAudioTool } from "./generate-audio";
+import { createFitAudioToPictureTool } from "./fit-audio-to-picture";
+import type { ToolRegistryDeps } from "./registry-deps";
 
 export interface AudioRegistryProfile {
   task: DomainTaskV1;
@@ -22,10 +23,15 @@ export interface AudioRegistryProfile {
  * canonical names; the flat default registry is untouched.
  */
 export function createAudioToolRegistry(
-  deps: DefaultToolRegistryDeps = {},
+  deps: ToolRegistryDeps = {},
   profile?: AudioRegistryProfile
 ): ToolRegistry {
-  if (!profile) return createOwnedToolRegistry("audio", deps);
+  if (!profile) {
+    const registry = new ToolRegistry();
+    registry.register(createGenerateAudioTool(deps.generateAudio));
+    registry.register(createFitAudioToPictureTool(deps.fitAudioToPicture));
+    return registry;
+  }
   const task = audioTaskForRegistry(profile.task);
   const registry = new ToolRegistry();
   registry.register(

@@ -19,3 +19,10 @@ to delete while another branch is moving its callers.
 Before completing PR 7, regenerate both inventories: changed files on the PR 6
 branch and runtime references to restart, revision, flat-profile, registry, and
 tool-loop compatibility surfaces.
+
+## PR 7A follow-up lesson
+
+Destructive schema cleanup needs a deployment boundary, not merely a migration
+ordering note. The pre-drop application must stop naming the retired column
+while a temporary root-aware insert trigger supports mixed old/new binaries.
+Only a later forward deploy may remove the trigger and column.

@@ -96,7 +96,6 @@ test("a transient store read is retried instead of failing the run", async () =>
     projectId: "proj1",
     status: "queued",
     inputSummary: "make a short video",
-    rootExecutionProfile: "creative_director",
     spentUsd: 0,
     createdAt: "t0",
     updatedAt: "t0",

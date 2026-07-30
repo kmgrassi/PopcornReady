@@ -477,7 +477,6 @@ export function buildRerunDecisionPacket(input: BuildRerunDecisionPacketInput): 
   if (input.rootRun && (
     input.rootRun.projectId !== input.snapshot.projectId ||
     input.rootRun.agentRole !== "creative_director" ||
-    input.rootRun.rootExecutionProfile !== "creative_director" ||
     !["queued", "running", "waiting"].includes(input.rootRun.status)
   )) {
     throw new ApiError("validation_failed", "rootRunId must be a Creative Director root for this project.");

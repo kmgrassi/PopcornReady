@@ -195,7 +195,7 @@ export async function assertRerunProposalAuthority(
   const root = await runLifecycleQuery(
     "rerunLifecycleStore.assertAuthority root",
     db.from("orchestrator_runs")
-      .select("id, project_id, agent_role, root_execution_profile")
+      .select("id, project_id, agent_role")
       .eq("id", action.rootRunId)
       .eq("project_id", action.projectId)
       .maybeSingle()
@@ -203,12 +203,10 @@ export async function assertRerunProposalAuthority(
     id: string;
     project_id: string;
     agent_role: string;
-    root_execution_profile: string | null;
   } | null;
   if (
     !root ||
-    root.agent_role !== "creative_director" ||
-    root.root_execution_profile !== "creative_director"
+    root.agent_role !== "creative_director"
   ) {
     throw new ApiError("validation_failed", "Proposal root is not an authorized Creative Director root.");
   }

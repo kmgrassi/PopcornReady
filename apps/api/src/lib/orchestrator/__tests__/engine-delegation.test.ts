@@ -34,7 +34,6 @@ function runFixture(over: Partial<OrchestratorRun> = {}): OrchestratorRun {
     projectId: "proj1",
     status: "queued",
     inputSummary: "make a 15s video",
-    rootExecutionProfile: "creative_director",
     spentUsd: 0,
     createdAt: "t0",
     updatedAt: "t0",

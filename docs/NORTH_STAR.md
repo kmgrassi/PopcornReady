@@ -31,7 +31,8 @@ since landed. Map below (details inline per section). **§3 describes the model 
   storyboard and explicitly continued into production
   (`apps/api/src/lib/orchestrator/engine.ts`; `orchestrator_runs` /
   `orchestrator_run_gates` tables), drives the registered tool surface
-  (`apps/api/src/lib/orchestrator-tools/default-registry.ts`). **Pending:** restart
+  through explicit Creative Director, Visuals, and Audio registries
+  (`apps/api/src/lib/orchestrator-tools/*-registry.ts`). **Pending:** restart
   / rerun decisions still need to consume `downstream_assets()` stale candidates
   instead of relying on the fixed stage restart path.
 - ✅ **Regeneration = a new immutable version (§5)** — the `regenerate_asset_version`
@@ -320,11 +321,13 @@ historical — do not build on them.
 
 ## 6. Tool surface (capabilities the orchestrator calls — shipped)
 
-Realized as the orchestrator tool registry
-(`apps/api/src/lib/orchestrator-tools/default-registry.ts`), driven by the run
-loop in `apps/api/src/lib/orchestrator/engine.ts`. The executable registry is the
-source of truth for the currently registered vocabulary; documentation must not
-freeze a hand-maintained count. Its capabilities cover planning, media
+Realized as three role-owned orchestrator registries
+(`apps/api/src/lib/orchestrator-tools/root-registry.ts`,
+`visuals-registry.ts`, and `audio-registry.ts`), driven by the shared run loop
+in `apps/api/src/lib/orchestrator/engine.ts`. Production never constructs an
+all-tools registry. The executable role registries are the source of truth for
+the currently registered vocabulary; documentation must not freeze a
+hand-maintained count. Their capabilities cover planning, media
 generation and revision, assembly, critique, approval, export, and optional
 publication. Image regeneration uses immutable versioning; broader regeneration
 coverage across kinds is still filling in.
