@@ -31,7 +31,14 @@ sources fail validation. Parenthesized direct calls remain valid and are
 inventoried. `pnpm agent:validate -- --scope api` runs the boundary test and
 validator.
 
-## Current inventory (2026-07-29)
+Production Data API relation targets have a second checked boundary:
+`scripts/validate-api-db-relations.mjs` rejects calls to explicitly retired
+tables and rejects dynamic or aliased `.from()` targets. The validator is not an
+RLS test; local owner/outsider/anonymous coverage remains separate. Commands and
+failure interpretation live in
+[`docs/testing/database-contract-tests.md`](../testing/database-contract-tests.md).
+
+## Current inventory (2026-07-30)
 
 - Production database catalog, `public` schema: **100 functions**.
 - Trigger-backed functions: **34**.
@@ -46,6 +53,11 @@ The API target inventory is exact and enforced. It is not the migration
 backlog by itself: identity helpers, searches, and database integrity functions
 can remain RPCs. Each migration PR should remove its retired target from the
 allowlist.
+
+The 2026-07-30 relation scan observed **411 literal `.from()` calls** and the
+checked boundary permits **no dynamic calls**. Retired storyboards, generation-stage tables,
+composition/edit-graph tables, timelines, and brief versions are prohibited
+runtime targets.
 
 ## Direct Postgres safety rules
 

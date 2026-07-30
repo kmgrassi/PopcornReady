@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -230,28 +229,26 @@ test("production graph reader projects the unified story spine without retired t
       )
     )
   );
-  assert.match(
-    fixture.calls[0]?.selected ?? "",
-    /id, project_id, status, provenance/
-  );
-  assert.match(
-    fixture.calls[1]?.selected ?? "",
-    /story_blueprint_id, position/
-  );
-
-  const source = readFileSync(
-    new URL("../graph-snapshot.ts", import.meta.url),
-    "utf8"
-  );
-  for (const retiredTable of [
-    "storyboards",
-    "storyboard_scenes",
-    "storyboard_beats",
-    "storyboard_panels",
-  ]) {
-    assert.doesNotMatch(
-      source,
-      new RegExp(`\\.from\\([\"']${retiredTable}[\"']\\)`)
+  const expectedSelections = new Map([
+    ["story_blueprints", "id, project_id, status, provenance"],
+    [
+      "story_blueprint_scenes",
+      "id, project_id, story_blueprint_id, position, title, summary, target_duration_sec, scene_asset_id, status",
+    ],
+    [
+      "story_beats",
+      "id, project_id, scene_id, beat_index, intent, visual_description, dialogue_summary, narration, duration_sec, status, beat_asset_id",
+    ],
+    [
+      "story_panels",
+      "id, project_id, beat_id, panel_index, image_asset_id, prompt_asset_id, status, is_selected, approved_at",
+    ],
+  ]);
+  for (const call of fixture.calls) {
+    assert.equal(
+      call.selected,
+      expectedSelections.get(call.table),
+      `${call.table} must select only current-schema columns`
     );
   }
 });

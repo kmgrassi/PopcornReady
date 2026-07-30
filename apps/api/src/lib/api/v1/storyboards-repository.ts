@@ -124,10 +124,15 @@ export async function nextIndex(
   parentId: string,
   indexColumn: "position" | "beat_index" | "panel_index"
 ): Promise<number> {
+  const relation =
+    table === "story_blueprint_scenes"
+      ? db.from("story_blueprint_scenes")
+      : table === "story_beats"
+        ? db.from("story_beats")
+        : db.from("story_panels");
   const data = await runQuery(
     `storyboards.nextIndex ${table}`,
-    db
-      .from(table)
+    relation
       .select(indexColumn)
       .eq(parentColumn, parentId)
       .order(indexColumn, { ascending: false })
@@ -150,10 +155,15 @@ export async function swapIndex(input: {
 }): Promise<boolean> {
   if (input.fromIndex === input.toIndex) return true;
 
+  const relation = () =>
+    input.table === "story_blueprint_scenes"
+      ? input.db.from("story_blueprint_scenes")
+      : input.table === "story_beats"
+        ? input.db.from("story_beats")
+        : input.db.from("story_panels");
   const occupant = await runQuery(
     `storyboards.swapIndex ${input.table} lookup`,
-    input.db
-      .from(input.table)
+    relation()
       .select("id")
       .eq("project_id", input.projectId)
       .eq(input.parentColumn, input.parentId)
@@ -173,8 +183,7 @@ export async function swapIndex(input: {
   ] as Array<[string, number]>) {
     await runQuery(
       `storyboards.swapIndex ${input.table}`,
-      input.db
-        .from(input.table)
+      relation()
         .update({ [input.indexColumn]: index })
         .eq("project_id", input.projectId)
         .eq("id", rowId)
