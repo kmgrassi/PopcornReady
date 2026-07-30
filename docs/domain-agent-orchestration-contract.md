@@ -190,9 +190,13 @@ the corresponding `DomainReport.v1` output entry with the same `bindingId`,
 `workItemId`, target, and ordinal. Neither the coordinator nor a specialist may
 reconstruct a binding from `assetId + role`.
 
-Story pointer pins refer only to the live relational columns that are semantic
-snapshot heads: `story_blueprints.asset_id`, `storyboards.plan_asset_id`,
+Story pointer pins refer only to live relational snapshot heads:
+`story_blueprints.asset_id`,
 `story_blueprint_scenes.scene_asset_id`, and `story_beats.beat_asset_id`.
+The compatibility `storyboard` projection uses the same `story_blueprints` row
+identity and fences its pinned plan through typed
+`story_blueprints.provenance.planAssetId`; the retired `storyboards` table is
+never restored.
 `story_panels` has media references and selection state but no semantic snapshot
 pointer; panel revisions therefore use asset/selection bindings. A project-level
 whole-story `story_snapshot` output binds the current story blueprint row and
@@ -209,6 +213,32 @@ default otherwise. Until an approved executor binding names an override,
 proposal quotes use the tool defaults: OpenAI for images/clips and ElevenLabs
 for audio. `maxCostUsd` is derived from that canonical quote rather than an
 output count.
+
+Approved proposal execution is one database-fenced lifecycle. The execution
+reservation owns the post-approval Creative Director root, proposal budget
+ceiling, idempotency fingerprint, renewable worker lease, and terminal result
+action. Capability executors are selected per bound output rather than by the
+coarse Visuals/Audio work kind, so still, motion, audio, and root adapters can
+land independently and a mixed work item can be composed without registry
+collisions. Executors return `succeeded`, durable `accepted`, or typed `blocked`
+results. Each relational `(execution, work item, executor)` step persists its
+exact binding subset, child/report identity, primitive actions, budget keys, and
+outputs before the work item fans in. Completed steps replay without invoking
+their executor again. A typed blocked prerequisite terminalizes the current
+execution and releases its ceiling so the Creative Director can author a
+refreshed successor; it is never parked indefinitely or retried blindly.
+Callback fences are active before a provider launch, fast callbacks are safe,
+and changed, expired, canceled, or duplicate callback payloads fail closed.
+Real executors remain unregistered until the activation PR.
+
+Every child operation reserves through the canonical budget ledger under the
+proposal ceiling. Child-owned primitive actions reserve against their exact
+child run only after proving parent root, work dispatch, proposal, and execution
+causation. Terminal actual cost is derived from settled child reservations,
+never accepted from an HTTP or executor payload. Reconciliation must identify
+the exact proposal and execution reservation, and domain completion must prove
+proposal approval context, child-root/action causation, the exact bound report
+outputs, and primitive action-to-asset attribution.
 
 ## Entry-path contract
 

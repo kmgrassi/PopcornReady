@@ -97,8 +97,8 @@ test("rejects a target outside the supplied boundary", () => {
 test("repository inventory remains at the reviewed boundary", () => {
   const result = validateRepositoryRpcBoundary();
   assert.deepEqual(result.errors, []);
-  assert.equal(result.productionTargets.size, 48);
-  assert.equal(result.productionExpressions, 47);
+  assert.equal(result.productionTargets.size, 64);
+  assert.equal(result.productionExpressions, 63);
   assert.equal(result.sandboxTargets.size, 1);
   assert.equal(result.sandboxExpressions, 2);
 });
