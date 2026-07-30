@@ -183,6 +183,68 @@ test("question completion derives trusted targets and a server fingerprint", asy
   }
 });
 
+test("bound completion carries the exact server-issued output identity into the report", async () => {
+  const boundTarget = {
+    kind: "asset" as const,
+    projectId: "project-1",
+    assetId: "source-1",
+  };
+  const boundTask = {
+    ...visualTask,
+    targets: [boundTarget],
+    requiredOutputs: [{
+      bindingId: "binding-1",
+      workItemId: "work-1",
+      target: boundTarget,
+      kind: "clip",
+      role: "revised-clip",
+      ordinal: 0,
+      minimumCount: 1,
+    }],
+  } as DomainTaskV1;
+  const report = await buildDomainReportFromCompletion({
+    runId: "domain-run",
+    projectId: "project-1",
+    task: boundTask,
+    actions: [],
+    summary: JSON.stringify({
+      outcome: "done",
+      outputs: [{ bindingId: "binding-1", assetId: "clip-2" }],
+      acceptanceEvidence: [{
+        criterion: "Produce one approved clip.",
+        satisfied: true,
+        evidence: "Bound clip exists.",
+        assetIds: ["clip-2"],
+      }],
+      sessionSummary: "Bound clip complete.",
+    }),
+  }, {
+    validatedOutputs: async () => [{
+      bindingId: "binding-1",
+      workItemId: "work-1",
+      target: boundTarget,
+      kind: "clip",
+      role: "revised-clip",
+      ordinal: 0,
+      assetId: "clip-2",
+      intrinsicRole: "revised-clip",
+    }],
+  });
+  assert.equal(report.outcome.outcome, "done");
+  if (report.outcome.outcome === "done") {
+    assert.deepEqual(report.outcome.outputs[0], {
+      bindingId: "binding-1",
+      workItemId: "work-1",
+      target: boundTarget,
+      kind: "clip",
+      role: "revised-clip",
+      ordinal: 0,
+      assetId: "clip-2",
+      intrinsicRole: "revised-clip",
+    });
+  }
+});
+
 test("disabled domain runtime does not invoke a model or tool", async () => {
   const run = { ...rootRun, id: "visual-run", agentRole: "visuals" as const };
   const store = {

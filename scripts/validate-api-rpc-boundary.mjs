@@ -21,7 +21,6 @@ export const PRODUCTION_RPC_TARGETS = new Set([
   "claim_purgeable_anonymous_users",
   "complete_idempotency_record",
   "complete_provider_job_execution",
-  "consume_creator_direct_proposal_gate",
   "create_creator_direct_proposal_gate_with_id",
   "create_domain_run_dispatch",
   "create_domain_run_dispatch_batch",
@@ -274,9 +273,9 @@ export function validateRepositoryRpcBoundary() {
       .includes("/lib/test-sandboxes/"),
   }));
   const result = validateRpcInventory(sources);
-  if (result.productionExpressions !== 48) {
+  if (result.productionExpressions !== 47) {
     result.errors.push(
-      `Expected 48 production RPC expressions, found ${result.productionExpressions}`
+      `Expected 47 production RPC expressions, found ${result.productionExpressions}`
     );
   }
   if (result.sandboxExpressions !== 2) {

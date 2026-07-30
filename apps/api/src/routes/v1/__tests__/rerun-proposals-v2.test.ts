@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
 import test from "node:test";
 import express from "express";
-import { parseCreateRerunProposalV2Request } from "../rerun-proposals";
+import {
+  parseApproveRerunProposalRequest,
+  parseCreateRerunProposalV2Request,
+  parseExecuteRerunProposalRequest,
+  parseRefreshRerunProposalRequest,
+} from "../rerun-proposals";
 
 test("in-process HTTP preview path parses v2 and returns an inert proposal envelope", async (t) => {
   const inertEffects = { providerCalls: 0, selectionWrites: 0, enqueueCalls: 0 };
@@ -76,4 +81,51 @@ test("v2 HTTP parser rejects malformed targets before service work", () => {
     message: "Change it",
     targets: [{ kind: "project", projectId: "project-a" }],
   }, "project-a"), /source is server-derived/);
+});
+
+test("in-process lifecycle HTTP contract keeps approval, refresh, and execution bounded", async (t) => {
+  const app = express();
+  app.use(express.json());
+  app.post("/approve", (req, res) =>
+    res.json(parseApproveRerunProposalRequest(req.body)));
+  app.post("/refresh", (req, res) =>
+    res.json(parseRefreshRerunProposalRequest(req.body)));
+  app.post("/execute", (req, res) =>
+    res.json(parseExecuteRerunProposalRequest(req.body)));
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise<void>((resolve) => server.once("listening", resolve));
+  t.after(() => server.close());
+  const port = (server.address() as AddressInfo).port;
+  const post = (path: string, body: unknown) => fetch(`http://127.0.0.1:${port}${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const approve = await post("/approve", { approvedMaxCostUsd: 2 });
+  assert.deepEqual(await approve.json(), { approvedMaxCostUsd: 2 });
+  const refresh = await post("/refresh", {
+    idempotencyKey: "refresh-1",
+    message: "Use the warm option.",
+    clarificationAnswer: {
+      answerFingerprint: "fingerprint-1",
+      optionId: "warm",
+    },
+  });
+  assert.deepEqual(await refresh.json(), {
+    idempotencyKey: "refresh-1",
+    message: "Use the warm option.",
+    clarificationAnswer: {
+      answerFingerprint: "fingerprint-1",
+      optionId: "warm",
+    },
+  });
+  const execute = await post("/execute", { idempotencyKey: "execute-1" });
+  assert.deepEqual(await execute.json(), { idempotencyKey: "execute-1" });
+  assert.throws(
+    () => parseExecuteRerunProposalRequest({
+      idempotencyKey: "execute-1",
+      approvedMaxCostUsd: 0,
+    }),
+    /approvedMaxCostUsd is unsupported/
+  );
 });

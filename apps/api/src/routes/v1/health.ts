@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { authMode } from "@/lib/api/v1/auth";
 import { creativeDirectorHierarchyRollout } from "@/lib/orchestrator/feature-flag";
+import { creatorDirectDatabaseReadiness } from "@/lib/postgres/creator-direct-readiness";
 
 export const healthRouter = Router();
 
@@ -11,10 +12,11 @@ export const healthRouter = Router();
 // for older CLI-driven deploys. The verification workflow polls this field
 // until prod serves the pushed commit, so "what commit is live?" is answerable
 // with one curl.
-healthRouter.get("/health", (req, res) => {
+healthRouter.get("/health", async (req, res) => {
   const hierarchy = creativeDirectorHierarchyRollout();
-  res.status(200).json({
-    status: "ok",
+  const database = await creatorDirectDatabaseReadiness();
+  res.status(database.ready ? 200 : 503).json({
+    status: database.ready ? "ok" : "unavailable",
     authMode: authMode(),
     commit:
       process.env.RAILWAY_GIT_COMMIT_SHA ?? process.env.APP_COMMIT_SHA ?? null,
@@ -22,6 +24,7 @@ healthRouter.get("/health", (req, res) => {
       enabled: hierarchy.enabled,
       fallbackUntil: hierarchy.fallbackUntil,
     },
+    creatorDirectDatabase: database,
     time: new Date().toISOString(),
   });
 });

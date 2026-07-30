@@ -368,15 +368,16 @@ naming it. A draft story row with no current snapshot uses
 column remains null.
 
 These names map to the live canonical relational spine:
-`story_blueprints.asset_id`, `storyboards.plan_asset_id`,
+`story_blueprints.asset_id`,
 `story_blueprint_scenes.scene_asset_id`, and `story_beats.beat_asset_id`.
-Blueprint and storyboard IDs are distinct identities even when a projection
-temporarily gives them the same value; a storyboard target always pins and
-moves its own plan pointer. A project-targeted `story_snapshot` is the
-whole-story revision case and moves the pinned story blueprint pointer.
-`story_panels` has image/prompt references and
-selection state, but no semantic snapshot pointer, so panel media changes use
-asset/selection bindings rather than a `PlannedStoryPointerMove`.
+The compatibility `storyboard` projection has the same `story_blueprints` row
+identity and fences its source plan through typed
+`story_blueprints.provenance.planAssetId`; no retired table is restored.
+A project-targeted `story_snapshot` is the whole-story revision case and moves
+the pinned `story_blueprints.asset_id` pointer.
+`story_panels` has image/prompt references and selection state, but no semantic
+snapshot pointer, so panel media changes use asset/selection bindings rather
+than a `PlannedStoryPointerMove`.
 
 The model proposes selected work, target IDs, rationale, preservation choices,
 and bounded clarification content. The server validates the ID/capability
@@ -593,8 +594,15 @@ starts immediately beside PR 1.
 - Database-enforce lifecycle transitions and immutable decision fields.
 - Revalidate all pins and budget before enqueueing any billable child work.
 - Reserve a proposal execution idempotency key and approved maximum cost.
-- Define the kind-executor registry, output-binding contract, and coordinator
-  state machine. Land deterministic fake executors for lifecycle tests.
+- Define a bound-output capability executor registry, output-binding contract,
+  and coordinator state machine. Mixed work items compose non-overlapping
+  capability executors; synchronous success, durable async acceptance, and
+  typed blocked prerequisites are distinct results. Persist each relational
+  executor step's binding subset, child/report, primitive actions, budget keys,
+  and outputs before fan-in; completed steps never redispatch after recovery.
+  Blocked prerequisites terminalize and release the ceiling for a successor
+  proposal rather than waiting without a durable resolver. Land deterministic
+  fake executors for lifecycle tests.
 - Extend `DomainRequiredOutput` and domain-report outputs with the exact
   server-issued work-item/output binding identity.
 - Keep every real work item non-executable until PR 5 activates its tested
@@ -606,7 +614,9 @@ starts immediately beside PR 1.
 - Link proposal -> delegation actions -> child runs -> primitive actions ->
   output assets using existing durable identities and `action_assets`.
 - Make cancellation, worker retry, duplicate approval, and duplicate provider
-  callback safe.
+  callback safe. Persist callback fences before provider launch, renew execution
+  leases during long work, and derive terminal actual cost only from settled
+  child reservations under the proposal ceiling.
 
 **Acceptance tests:**
 
@@ -621,6 +631,9 @@ starts immediately beside PR 1.
 - Actors cannot approve, reject, refresh, or execute another workspace’s
   proposal.
 - Clarification answer and refresh preserve causation by action ID.
+- Local-DB tests prove concurrent reservation/budget admission, post-approval
+  root materialization, lease takeover, callback replay, terminal failure
+  release, settled actuals, and strict reconciliation/child causation.
 
 ### PR 3A — Visual still, storyboard, and keyframe coverage
 

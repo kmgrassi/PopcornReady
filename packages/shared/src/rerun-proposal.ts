@@ -1,4 +1,4 @@
-import type { DomainTarget } from "./domain-agent-contract";
+import type { DomainTaskTarget } from "./domain-agent-contract";
 
 /**
  * Durable, server-derived contract for a graph-scoped Request Changes preview.
@@ -37,19 +37,7 @@ export interface CreateRerunProposalRequest {
   rootRunId?: string;
 }
 
-export type RerunTarget =
-  | DomainTarget
-  | {
-      kind: "selection";
-      projectId: string;
-      slotOwnerLineageId: string | null;
-      slotRole: string;
-    }
-  | {
-      kind: "transcript_segment";
-      projectId: string;
-      transcriptSegmentId: string;
-    };
+export type RerunTarget = DomainTaskTarget;
 
 export interface AssetFingerprintPin {
   assetId: string;
@@ -191,4 +179,33 @@ export interface CreateRerunProposalV2Request {
   message: string;
   targets: RerunTarget[];
   rootRunId?: string;
+}
+
+export type RerunProposalLifecycleStatus =
+  | "proposed"
+  | "approved"
+  | "rejected"
+  | "running"
+  | "applied"
+  | "failed";
+
+export interface RerunProposalApprovalV1 {
+  schemaVersion: "RerunProposalApproval.v1";
+  proposalActionId: string;
+  approvalActionId: string;
+  approvedMaxCostUsd: number;
+  approvalFingerprint: string;
+}
+
+export interface RerunExecutionReservationV1 {
+  schemaVersion: "RerunExecutionReservation.v1";
+  reservationId: string;
+  proposalActionId: string;
+  projectId: string;
+  idempotencyKey: string;
+  requestFingerprint: string;
+  approvedMaxCostUsd: number;
+  status: "reserved" | "running" | "completed" | "failed" | "canceled";
+  leaseGeneration: number;
+  leaseExpiresAt: string | null;
 }
