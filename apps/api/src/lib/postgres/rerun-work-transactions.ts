@@ -1,9 +1,7 @@
 import { createHash } from "node:crypto";
 import { ApiError } from "@/core/errors";
-import {
-  domainOutputAssetKind,
-  type DomainOutputKind,
-} from "@popcorn/shared/domain-agent-contract";
+import type { BoundRequiredOutput } from "@popcorn/shared/rerun-proposal";
+import { rerunOutputAssetKinds } from "@/lib/orchestrator/rerun-output-asset-kind";
 import {
   assertLiveLease,
   lifecycleTransaction,
@@ -421,12 +419,12 @@ export async function completeWorkTransaction(input: {
           where id=$1 and project_id=$2`,
         [binding.assetId, input.projectId]
       );
-      const expectedKind = domainOutputAssetKind(
-        binding.kind as DomainOutputKind
+      const expectedKinds = rerunOutputAssetKinds(
+        binding as unknown as BoundRequiredOutput
       );
       if (
         !asset.rows[0] ||
-        asset.rows[0].kind !== expectedKind ||
+        !expectedKinds.includes(asset.rows[0].kind) ||
         asset.rows[0].role !== binding.intrinsicRole
       ) {
         throw new ApiError(
