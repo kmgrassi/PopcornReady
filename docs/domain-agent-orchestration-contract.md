@@ -361,6 +361,19 @@ edit requires an asset target, an asset pin, and a trusted fingerprint that
 matches the fresh graph. It mints an `edited_from` clip and never swaps every
 selection that happens to reference the source.
 
+The dormant selective-video adapters dispatch approved beat clips, standalone
+video, and content-aware edits as bounded Visuals child runs. The child task
+carries the exact proposal/approval/execution identity, asset/selection/story
+pins, required-output bindings, executor/work-item identity, and callback
+generation. Canonical child tools mint immutable pooled outputs: beat clips
+retain their `beat_keyframe` input and add a `generated_from` edge, while edits
+retain the original and add `edited_from`. Child provider primitives own
+provider admission, idempotency, and proposal-family budget reservation.
+Terminal domain reporting derives their exact actions, settled reservations,
+and bound outputs for the fenced lifecycle callback. The adapter never applies
+the parent dispatch action or moves selections and is not production-registered
+before PR 5.
+
 Visuals media jobs carrying a domain session claim also leave generated
 anchors, keyframes, and clips pooled. Their exact claim fences provider work,
 but it is not authority to replace an active project slot after a long-running
