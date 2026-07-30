@@ -212,7 +212,7 @@ function storyMoveForOutput(
 ): PlannedStoryPointerMove | null {
   if (output.kind !== "story_snapshot") return null;
   const rowKind =
-    output.target.kind === "storyboard" ? "story_blueprint" :
+    output.target.kind === "storyboard" ? "storyboard" :
       output.target.kind === "scene" ? "story_scene" :
         output.target.kind === "beat" ? "story_beat" : null;
   if (!rowKind) return null;

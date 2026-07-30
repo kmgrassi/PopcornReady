@@ -229,6 +229,9 @@ export function parseRerunModelDecision(value: unknown): RerunModelDecision {
   if (outcome === "no_op") {
     if (selectedWork.length > 0) fail("no_op cannot contain work.");
     if (input.clarification !== undefined) fail("no_op cannot contain clarification.");
+    if (base.checklist.some((item) => item.decision !== "preserve")) {
+      fail("no_op checklist entries must all preserve their targets.");
+    }
     return { ...base, outcome, selectedWork: [] };
   }
   if (outcome === "ask_clarification") {

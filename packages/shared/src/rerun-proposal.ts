@@ -66,7 +66,7 @@ export interface SelectionSequencePin {
 
 export interface StorySnapshotPin {
   /** Canonical live relational pointer; story_panels have no semantic snapshot pointer. */
-  rowKind: "story_blueprint" | "story_scene" | "story_beat";
+  rowKind: "story_blueprint" | "storyboard" | "story_scene" | "story_beat";
   rowId: string;
   expectedSnapshotAssetId: string | null;
 }
@@ -123,7 +123,7 @@ export interface PlannedSelectionMove {
 
 export interface PlannedStoryPointerMove {
   bindingId: string;
-  rowKind: "story_blueprint" | "story_scene" | "story_beat";
+  rowKind: "story_blueprint" | "storyboard" | "story_scene" | "story_beat";
   rowId: string;
   expectedSnapshotAssetId: string | null;
 }
@@ -131,7 +131,8 @@ export interface PlannedStoryPointerMove {
 export interface RerunProposalBaseV2 {
   schemaVersion: "RerunProposal.v2";
   projectId: string;
-  rootRunId: string;
+  /** Active hierarchy run anchoring this preview, or null until execution creates one. */
+  rootRunId: string | null;
   source: "request_changes" | "autonomous_review";
   userIntent: string;
   targets: RerunTarget[];

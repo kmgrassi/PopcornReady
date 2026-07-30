@@ -166,7 +166,10 @@ as `waiting` for runtime approval.
 Graph-scoped production revision previews use the discriminated
 `RerunProposal.v2` contract. The Creative Director receives a bounded, freshly
 authorized packet of targets, graph neighbors, canonical story rows, actions,
-domain reports, capabilities, budget, and pins. Its structured decision may
+timeline items, transcript segments, domain reports, capabilities, budget, and
+pins. Timeline and transcript targets carry their bounded semantic row plus the
+backing graph assets; project targets seed current selections and canonical
+story/timeline/transcript assets. Its structured decision may
 choose only semantic work, preservation, clarification, rationale, and summary.
 The server validates every stable ID and owner/output capability, then issues
 work-item/output binding identities and derives pins, selection/story-pointer
@@ -174,7 +177,10 @@ moves, cost, risk, approval policy, and clarification answer fingerprints. The
 fingerprint covers the normalized question, targets, options, and every asset,
 selection, and story freshness pin; the model cannot author it. Preview
 creation is inert: it does not enqueue a run, call a provider, or move a
-selection.
+selection. When no active hierarchy root exists, the preview action remains
+unbound (`actions.orchestrator_run_id` is null and `rootRunId` is null); approval
+and execution create the successor root later. Preview creation never inserts a
+queued run.
 
 `BoundRequiredOutput.bindingId` is the output identity even when multiple
 outputs share a kind and role. Roadmap PR 2 extends `DomainRequiredOutput` and
@@ -183,7 +189,7 @@ the corresponding `DomainReport.v1` output entry with the same `bindingId`,
 reconstruct a binding from `assetId + role`.
 
 Story pointer pins refer only to the live relational columns that are semantic
-snapshot heads: `story_blueprints.asset_id`,
+snapshot heads: `story_blueprints.asset_id`, `storyboards.plan_asset_id`,
 `story_blueprint_scenes.scene_asset_id`, and `story_beats.beat_asset_id`.
 `story_panels` has media references and selection state but no semantic snapshot
 pointer; panel revisions therefore use asset/selection bindings.

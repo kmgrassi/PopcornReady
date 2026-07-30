@@ -11,6 +11,8 @@ import { parseRerunModelDecision } from "../rerun-decision";
 const project = (id: string): RerunTarget => ({ kind: "project", projectId: id });
 const asset = (projectId: string, assetId: string): RerunTarget =>
   ({ kind: "asset", projectId, assetId });
+const storyboard = (projectId: string, storyboardId: string): RerunTarget =>
+  ({ kind: "storyboard", projectId, storyboardId });
 
 function baseDecision() {
   return {
@@ -22,6 +24,16 @@ function baseDecision() {
 }
 
 test("strict parser enforces the discriminated outcomes and rejects model-authored policy", () => {
+  assert.throws(() => parseRerunModelDecision({
+    ...baseDecision(),
+    outcome: "no_op",
+    selectedWork: [],
+    checklist: [{
+      target: project("p"),
+      decision: "change",
+      reason: "Contradicts no-op.",
+    }],
+  }), /no_op checklist entries must all preserve/);
   assert.throws(() => parseRerunModelDecision({
     ...baseDecision(),
     outcome: "no_op",
@@ -155,6 +167,8 @@ function packet(): RerunDecisionPacket {
     candidateAffectedAssetIds: ["clip"],
     relatedAssetIds: [],
     story: { blueprint: null, storyboards: [], scenes: [], beats: [], panels: [] },
+    timelineItems: [],
+    transcriptSegments: [],
     recentActions: [],
     terminalDomainReports: [],
     capabilities: [],
@@ -185,6 +199,8 @@ function packet(): RerunDecisionPacket {
       actions: false,
       terminalReports: false,
       storyRows: false,
+      timelineItems: false,
+      transcriptSegments: false,
       assetInputs: false,
       selectionRefs: false,
       selectionPins: false,
@@ -404,6 +420,64 @@ test("asset outputs active in multiple slots require an explicit selection targe
     decision,
     source: "request_changes",
   }), /active in multiple slots/);
+});
+
+test("storyboard revisions bind the storyboard plan pointer, not a distinct blueprint pin", () => {
+  const storyPacket = packet();
+  storyPacket.targets = [storyboard("p", "storyboard-1")];
+  storyPacket.story.blueprint = {
+    id: "blueprint-1",
+    projectId: "p",
+    assetId: "blueprint-asset",
+    briefAssetId: null,
+    status: "draft",
+  };
+  storyPacket.story.storyboards = [{
+    id: "storyboard-1",
+    projectId: "p",
+    status: "draft",
+    planAssetId: "plan-current",
+  }];
+  storyPacket.pins.storySnapshots = [{
+    rowKind: "story_blueprint",
+    rowId: "blueprint-1",
+    expectedSnapshotAssetId: "blueprint-asset",
+  }, {
+    rowKind: "storyboard",
+    rowId: "storyboard-1",
+    expectedSnapshotAssetId: "plan-current",
+  }];
+  const decision = parseRerunModelDecision({
+    ...baseDecision(),
+    outcome: "revision",
+    checklist: [{
+      target: storyboard("p", "storyboard-1"),
+      decision: "change",
+      reason: "Revise the storyboard plan.",
+    }],
+    selectedWork: [{
+      owner: "creative_director",
+      kind: "revise_story",
+      targets: [storyboard("p", "storyboard-1")],
+      requiredOutputs: [{
+        target: storyboard("p", "storyboard-1"),
+        kind: "story_snapshot",
+        role: "storyboard_plan",
+        ordinal: 0,
+      }],
+    }],
+  });
+  const proposal = finalizeRerunProposal({
+    packet: storyPacket,
+    decision,
+    source: "request_changes",
+  });
+  assert.deepEqual(proposal.plannedStoryPointerMoves, [{
+    bindingId: "binding-1",
+    rowKind: "storyboard",
+    rowId: "storyboard-1",
+    expectedSnapshotAssetId: "plan-current",
+  }]);
 });
 
 test("explicit selection outputs fail closed instead of fabricating an absent sequence pin", () => {

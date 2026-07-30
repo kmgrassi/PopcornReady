@@ -5,7 +5,6 @@ import type {
 import { ApiError } from "@/core/errors";
 import { createAction, getProject } from "@/lib/api/v1/store";
 import {
-  createOrchestratorRun,
   getOrchestratorRun,
   listOrchestratorRunsForProject,
   type OrchestratorRun,
@@ -24,7 +23,6 @@ export interface RerunProposalV2ServiceDeps {
   authorizeProject: typeof getProject;
   getRun: typeof getOrchestratorRun;
   listRuns: typeof listOrchestratorRunsForProject;
-  createRun: typeof createOrchestratorRun;
   loadPacket: typeof loadRerunDecisionPacket;
   decide: RerunDecisionAdapter;
   createAction: typeof createAction;
@@ -34,7 +32,6 @@ const defaultDeps: RerunProposalV2ServiceDeps = {
   authorizeProject: getProject,
   getRun: getOrchestratorRun,
   listRuns: listOrchestratorRunsForProject,
-  createRun: createOrchestratorRun,
   loadPacket: loadRerunDecisionPacket,
   decide: createRerunDecisionAdapter(),
   createAction,
@@ -43,8 +40,7 @@ const defaultDeps: RerunProposalV2ServiceDeps = {
 async function resolveRoot(input: {
   projectId: string;
   rootRunId?: string;
-  message: string;
-}, deps: RerunProposalV2ServiceDeps): Promise<OrchestratorRun> {
+}, deps: RerunProposalV2ServiceDeps): Promise<OrchestratorRun | null> {
   if (input.rootRunId) {
     const run = await deps.getRun(input.rootRunId);
     if (
@@ -66,23 +62,10 @@ async function resolveRoot(input: {
     (run.status === "queued" || run.status === "running" || run.status === "waiting")
   );
   if (existing) return existing;
-  const created = await deps.createRun({
-    projectId: input.projectId,
-    inputSummary: `Selective regeneration proposal: ${input.message}`,
-    // Creating the row is not execution: no orchestrator dispatch is enqueued
-    // until the proposal lifecycle activates it in a later roadmap PR.
-    status: "queued",
-  });
-  if (
-    created.agentRole !== "creative_director" ||
-    created.rootExecutionProfile !== "creative_director"
-  ) {
-    throw new ApiError(
-      "validation_failed",
-      "A Creative Director root is required before proposal decisioning."
-    );
-  }
-  return created;
+  // Preview state is not transport state. PR 2 creates the executable root only
+  // after approval; creating a queued row here would expose a never-dispatched
+  // ghost run as active generation.
+  return null;
 }
 
 export async function createRerunProposalV2(input: {
@@ -103,13 +86,12 @@ export async function createRerunProposalV2(input: {
   const root = await resolveRoot({
     projectId: input.projectId,
     rootRunId: input.rootRunId,
-    message: input.message,
   }, deps);
   let packet: RerunDecisionPacket;
   packet = await deps.loadPacket({
     workspaceId: input.workspaceId,
     projectId: input.projectId,
-    rootRunId: root.id,
+    ...(root ? { rootRunId: root.id } : {}),
     targets: input.targets,
     userIntent: input.message,
   });
@@ -133,7 +115,7 @@ export async function createRerunProposalV2(input: {
   }
   const action = await deps.createAction({
     projectId: input.projectId,
-    orchestratorRunId: root.id,
+    ...(root ? { orchestratorRunId: root.id } : {}),
     tool: "rerun_proposal",
     status: proposal.outcome === "no_op" ? "applied" : "proposed",
     inputAssetIds: proposal.inspectedAssetIds,

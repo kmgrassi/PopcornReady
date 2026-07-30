@@ -191,7 +191,7 @@ server-owned contract:
 interface RerunProposalBaseV2 {
   schemaVersion: "RerunProposal.v2";
   projectId: string;
-  rootRunId: string;
+  rootRunId: string | null;
   source: "request_changes" | "autonomous_review";
   userIntent: string;
   targets: RerunTarget[];
@@ -285,7 +285,7 @@ interface SelectionSequencePin {
 }
 
 interface StorySnapshotPin {
-  rowKind: "story_blueprint" | "story_scene" | "story_beat";
+  rowKind: "story_blueprint" | "storyboard" | "story_scene" | "story_beat";
   rowId: string;
   expectedSnapshotAssetId: string | null;
 }
@@ -351,7 +351,7 @@ interface PlannedSelectionMove {
 
 interface PlannedStoryPointerMove {
   bindingId: string;
-  rowKind: "story_blueprint" | "story_scene" | "story_beat";
+  rowKind: "story_blueprint" | "storyboard" | "story_scene" | "story_beat";
   rowId: string;
   expectedSnapshotAssetId: string | null;
 }
@@ -365,8 +365,11 @@ sequence equality. A draft story row with no current snapshot uses
 column remains null.
 
 These names map to the live canonical relational spine:
-`story_blueprints.asset_id`, `story_blueprint_scenes.scene_asset_id`, and
-`story_beats.beat_asset_id`. `story_panels` has image/prompt references and
+`story_blueprints.asset_id`, `storyboards.plan_asset_id`,
+`story_blueprint_scenes.scene_asset_id`, and `story_beats.beat_asset_id`.
+Blueprint and storyboard IDs are distinct identities even when a projection
+temporarily gives them the same value; a storyboard target always pins and
+moves its own plan pointer. `story_panels` has image/prompt references and
 selection state, but no semantic snapshot pointer, so panel media changes use
 asset/selection bindings rather than a `PlannedStoryPointerMove`.
 
@@ -523,6 +526,8 @@ starts immediately beside PR 1.
   timeline-item, or audio-segment IDs.
 - Build a bounded context containing:
   - target summaries and active selection references;
+  - canonical timeline-item and transcript-segment semantic rows plus their
+    backing assets;
   - upstream inputs and edge relations;
   - downstream stale candidates with depth;
   - same-lineage versions and shared anchor/story/scene siblings;
@@ -558,12 +563,14 @@ starts immediately beside PR 1.
 - The explicit v2 preview API is inert, while current Request Changes HTTP
   responses and UI polling behavior remain unchanged.
 - Parser tests reject `no_op` with work, clarification without a question,
-  revision with no work, and model-authored policy fields including the answer
-  fingerprint; server tests prove every clarification/pin change alters the
-  derived fingerprint.
-- Cross-workspace/project targets, unrelated root IDs, and flat/null roots fail
-  closed before the service-role action write.
-- Project-scoped Request Changes server-selects or creates its hierarchy root.
+  a non-preserve checklist entry on `no_op`, revision with no work, and
+  model-authored policy fields including the answer fingerprint; server tests
+  prove every clarification/pin change alters the derived fingerprint.
+- Cross-workspace/project targets and explicit unrelated, terminal, flat, or
+  null-profile root IDs fail closed before the service-role action write.
+- Project-scoped Request Changes reuses an active hierarchy root when present.
+  Without one, its preview action and proposal remain unbound until approved
+  execution creates a successor; preview creation never inserts a queued run.
   A run-scoped board request may use only the path-authorized hierarchy run.
 
 ### PR 2 — Durable proposal lifecycle and executor interfaces
