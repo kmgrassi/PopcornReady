@@ -230,6 +230,7 @@ export interface DomainApprovalContext {
     executorId: string;
     workItemId: string;
     generation: number;
+    budgetReservationKeys: readonly string[];
   };
 }
 

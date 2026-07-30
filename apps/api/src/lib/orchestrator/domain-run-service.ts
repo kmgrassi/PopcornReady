@@ -36,6 +36,10 @@ import type {
   DomainReportV1,
   DomainTaskV1,
 } from "@popcorn/shared/domain-agent-contract";
+import type {
+  BoundRequiredOutput,
+  RerunWorkItem,
+} from "@popcorn/shared/rerun-proposal";
 import { ApiError } from "@/core/errors";
 import { getServiceSupabase } from "@/lib/supabase/clients";
 import { runQuery } from "@/lib/supabase/db-errors";
@@ -46,6 +50,14 @@ import {
   type CompletionRecipient,
   type DomainRunRecord,
 } from "@/lib/api/v1/domain-session-store";
+import { recordRerunExecutorCallback } from "@/lib/api/v1/rerun-lifecycle-store";
+import {
+  rerunExecutorCallbackToken,
+} from "./rerun-callback-fence";
+import {
+  type BoundExecutorOutput,
+  validateBoundExecutorOutputs,
+} from "./rerun-executor-registry";
 import {
   buildSessionSummaryCasUpdate,
   compactSessionHistory,
@@ -407,6 +419,95 @@ function reportOutputs(report: DomainReportV1): Array<{ assetId: string; role: s
   }));
 }
 
+export async function recordProposalExecutorCallback(
+  input: {
+    projectId: string;
+    run: DomainRunRecord;
+    reportActionId: string;
+    report: DomainReportV1;
+  },
+  recordCallback: typeof recordRerunExecutorCallback =
+    recordRerunExecutorCallback
+): Promise<void> {
+  const task = input.run.taskParams;
+  const approval = task?.approvalContext;
+  const callback = approval?.rerunCallback;
+  const reservationId = approval?.executionReservationId;
+  if (!task || !callback || !reservationId) return;
+  const requiredOutputs = task.requiredOutputs.filter((output) =>
+    output.bindingId !== undefined &&
+    output.workItemId === callback.workItemId
+  );
+  if (requiredOutputs.length !== task.requiredOutputs.length) {
+    throw new ApiError(
+      "validation_failed",
+      "Rerun domain task contains an unbound callback output."
+    );
+  }
+  const token = rerunExecutorCallbackToken({
+    executionReservationId: reservationId,
+    workItemId: callback.workItemId,
+    executorId: callback.executorId,
+  });
+  let outcome: "completed" | "failed" = "failed";
+  let outputs: BoundExecutorOutput[] = [];
+  if (input.report.outcome.outcome === "done") {
+    outputs = input.report.outcome.outputs.flatMap((output) =>
+      output.bindingId !== undefined &&
+      output.workItemId !== undefined &&
+      output.target !== undefined &&
+      output.kind !== undefined &&
+      output.role !== undefined &&
+      output.ordinal !== undefined
+        ? [output as BoundExecutorOutput]
+        : []
+    );
+    const callbackWorkItem: RerunWorkItem = task.domain === "audio"
+      ? {
+          workItemId: callback.workItemId,
+          owner: "audio",
+          kind: "revise_audio",
+          targets: [...task.targets],
+          requiredOutputs: requiredOutputs as unknown as BoundRequiredOutput[],
+        }
+      : {
+          workItemId: callback.workItemId,
+          owner: "visuals",
+          kind: "revise_visuals",
+          targets: [...task.targets],
+          requiredOutputs: requiredOutputs as unknown as BoundRequiredOutput[],
+        };
+    validateBoundExecutorOutputs(callbackWorkItem, outputs);
+    outcome = "completed";
+  }
+  try {
+    await recordCallback({
+      projectId: input.projectId,
+      reservationId,
+      workItemId: callback.workItemId,
+      executorId: callback.executorId,
+      callbackToken: token,
+      callbackGeneration: callback.generation,
+      outcome,
+      result: {
+        providerResult: { domainReport: input.report },
+        childRunId: input.run.id,
+        reportActionId: input.reportActionId,
+        primitiveActionIds: [],
+        budgetReservationKeys: callback.budgetReservationKeys,
+        outputs,
+      },
+    });
+  } catch (error) {
+    if (error instanceof ApiError && error.code === "idempotency_in_progress") {
+      // Cancellation or lease takeover won the fence. The immutable outputs
+      // remain pooled, but the stale child cannot advance proposal state.
+      return;
+    }
+    throw error;
+  }
+}
+
 function summaryEvent(
   run: DomainRunRecord,
   report: DomainReportV1,
@@ -525,6 +626,12 @@ export async function finalizeDomainTurn(
     wokeParent: row.woke_parent,
     summaryApplied: row.summary_applied,
   };
+  await recordProposalExecutorCallback({
+    projectId: input.projectId,
+    run,
+    reportActionId: finalization.reportActionId,
+    report: input.report,
+  });
   if (finalization.wokeParent && finalization.parentRunId && input.onParentWake) {
     await input.onParentWake(finalization.parentRunId);
   }

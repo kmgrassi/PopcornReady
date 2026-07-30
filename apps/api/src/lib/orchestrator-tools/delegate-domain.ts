@@ -252,15 +252,15 @@ export function buildProposalDelegatedTask(input: {
         pin.expectedActiveAssetId
           ? [{
             slotRole: pin.slotRole,
-            slotKey: `${pin.slotOwnerLineageId ?? "project"}:${pin.slotRole}`,
+            slotKey: pin.slotOwnerLineageId ?? pin.slotRole,
             activeAssetId: pin.expectedActiveAssetId,
             sequence: pin.expectedSeq,
           }]
           : []),
-      fingerprints: input.proposal.pins.assets.map((pin) => ({
-        assetId: pin.assetId,
-        value: pin.inputsFingerprint ?? pin.contentHash ?? "unhashed",
-      })),
+      fingerprints: input.proposal.pins.assets.flatMap((pin) =>
+        pin.contentHash
+          ? [{ assetId: pin.assetId, value: pin.contentHash }]
+          : []),
       pins: [
         ...input.proposal.pins.assets.map((pin) => ({
           kind: "asset" as const,
@@ -328,7 +328,9 @@ export function buildProposalDelegatedTask(input: {
     domain: "audio",
     taskKind: requiredOutputs.every((output) => output.kind === "audio_fit")
       ? "audio_fit"
-      : "audio_revision",
+      : requiredOutputs.every((output) => output.target.kind === "asset")
+        ? "audio_revision"
+        : "audio_production",
     requiredOutputs,
     allowedOutputKinds: [...new Set(requiredOutputs.map((output) => output.kind))],
   };
