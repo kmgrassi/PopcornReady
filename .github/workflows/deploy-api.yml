@@ -20,7 +20,7 @@ on:
 # Railway deploys the latest main commit, so stop polling for an older SHA when
 # a newer main push supersedes it.
 concurrency:
-  group: railway-production-verify
+  group: railway-production-verify-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

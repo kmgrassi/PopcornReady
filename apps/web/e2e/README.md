@@ -1,5 +1,13 @@
 # Web E2E Tests
 
+<!-- agent-summary: This document owns Playwright coverage across the split Vite SPA and Express API. -->
+<!-- agent-summary: The default suite uses local auth and starts both application servers. -->
+<!-- agent-summary: Local Supabase parity runs through the dedicated local-database command. -->
+<!-- agent-summary: Hosted auth and PWA checks use explicit opt-in production-preview modes. -->
+<!-- agent-summary: GitHub runs E2E for runtime-affecting pull requests and main pushes. -->
+<!-- agent-summary: Superseded runs cancel, jobs have a 15-minute cap, and failure reports upload. -->
+<!-- agent-summary: Required checks need a successful no-op path before workflow filters are enabled. -->
+
 This suite covers split-app browser behavior with Playwright. The default mode
 is local auth:
 

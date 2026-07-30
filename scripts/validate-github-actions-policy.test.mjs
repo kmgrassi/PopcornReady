@@ -64,7 +64,11 @@ test("deployment verification cancels obsolete polling, not database mutations",
   const deploy = liveYaml(".github/workflows/deploy-api.yml");
   assert.match(
     deploy,
-    /concurrency:\n  group: railway-production-verify\n  cancel-in-progress: true/,
+    /concurrency:\n  group: railway-production-verify-\$\{\{ github\.ref \}\}\n  cancel-in-progress: true/,
+  );
+  assert.match(
+    deploy,
+    /jobs:\n  verify:\n    runs-on: ubuntu-latest\n    timeout-minutes: 30\n    if: github\.ref == 'refs\/heads\/main'\n    steps:/,
   );
 
   for (const workflowPath of [
