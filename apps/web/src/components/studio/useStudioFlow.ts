@@ -417,22 +417,14 @@ export function useStudioFlow(options: UseStudioFlowOptions = {}): StudioFlow {
     setError(runQuery.error instanceof Error ? runQuery.error.message : String(runQuery.error));
   }, [runQuery.error]);
 
-  const resolveGate = useCallback(
-    async (action: "approve" | "reject", note?: string) => {
+  const approveGate = useCallback(
+    async (note?: string) => {
       if (!projectId || !run?.runId || !run.reviewGate) return;
       setError(undefined);
       try {
         const data = await updateRun.mutateAsync({
-          action,
-          body:
-            action === "reject"
-              ? {
-                  stageType: run.reviewGate.stageType,
-                  ...(note?.trim() ? { note: note.trim() } : {}),
-                }
-              : note?.trim()
-                ? { note: note.trim() }
-                : undefined,
+          action: "approve",
+          body: note?.trim() ? { note: note.trim() } : undefined,
         });
         setRun(data.run);
         setStages(data.stages);
@@ -446,11 +438,6 @@ export function useStudioFlow(options: UseStudioFlowOptions = {}): StudioFlow {
       }
     },
     [projectId, run?.runId, run?.reviewGate, runQuery, updateRun],
-  );
-
-  const approveGate = useCallback(
-    (note?: string) => resolveGate("approve", note),
-    [resolveGate],
   );
   useEffect(() => {
     if (state !== "review" || !reviewCutQuery.data) return;

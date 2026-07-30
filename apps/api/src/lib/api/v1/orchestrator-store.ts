@@ -87,7 +87,7 @@ export interface RunActionSummary {
   error?: Record<string, unknown>;
   createdAt: string;
   updatedAt?: string;
-  /** Set when the action was superseded by a restart-from-stage. */
+  /** Historical marker retained for readable action projections. */
   supersededAt?: string | null;
 }
 
@@ -639,8 +639,7 @@ export async function listRunActions(runId: string): Promise<RunActionSummary[]>
       .eq("orchestrator_run_id", runId)
       .order("created_at", { ascending: true })
   );
-  // Superseded actions (from a restart-from-stage) are hidden from the action
-  // log so the orchestrator re-derives and re-runs those stages.
+  // Superseded historical actions are hidden from the model-visible log.
   return ((data as RunActionRow[]) ?? [])
     .map(mapRunAction)
     .filter((action) => !action.supersededAt);
@@ -671,30 +670,4 @@ export async function resetGatesToPending(gateIds: string[]): Promise<void> {
       .update({ status: "pending", updated_at: new Date().toISOString() })
       .in("id", gateIds)
   );
-}
-
-// Clear active selections for the given slot roles so the asset tools regenerate
-// instead of reusing the superseded outputs. Beat selections (beat_keyframe:*,
-// beat_clip:*) carry no producing-action link, so they must be cleared by slot
-// role, not by action id. Deletes every row for the slot (current_selections is
-// "latest seq wins", so a leftover prior row would still skip regeneration). The
-// produced assets stay in the pool; only the active pointer is removed.
-export async function clearProjectSelections(
-  projectId: string,
-  exactRoles: string[],
-  rolePrefixes: string[]
-): Promise<void> {
-  const db = getServiceSupabase();
-  if (exactRoles.length > 0) {
-    await runQuery(
-      "store.clearProjectSelections exact",
-      db.from("selections").delete().eq("project_id", projectId).in("slot_role", exactRoles)
-    );
-  }
-  for (const prefix of rolePrefixes) {
-    await runQuery(
-      `store.clearProjectSelections ${prefix}`,
-      db.from("selections").delete().eq("project_id", projectId).like("slot_role", `${prefix}%`)
-    );
-  }
 }

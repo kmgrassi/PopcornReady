@@ -105,23 +105,15 @@ function RunProgress({
     setReviewFeedbackNote("");
   }, [reviewGateKey]);
 
-  async function runAction(action: "approve" | "reject" | "cancel", note?: string) {
+  async function runAction(action: "approve" | "cancel", note?: string) {
     if (actionPending) return;
     setActionError(null);
     try {
       const trimmedNote = note?.trim();
-      const body =
-        action === "reject" && payload?.run.reviewGate
-          ? {
-              stageType: payload.run.reviewGate.stageType,
-              ...(trimmedNote ? { note: trimmedNote } : {}),
-            }
-          : action === "approve" && trimmedNote
-            ? { note: trimmedNote }
-            : undefined;
+      const body = action === "approve" && trimmedNote ? { note: trimmedNote } : undefined;
       const data = await updateRun.mutateAsync({ action, body });
       applyPayload(data);
-      if (action === "approve" || action === "reject") {
+      if (action === "approve") {
         setReviewFeedbackNote("");
       }
       if (action === "cancel" && data.run.status === "canceled") {

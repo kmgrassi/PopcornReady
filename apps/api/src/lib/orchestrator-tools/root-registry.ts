@@ -17,11 +17,9 @@ import { ToolRegistry } from "./registry";
 import type { ToolRegistryDeps } from "./registry-deps";
 
 /**
- * Dormant Creative Director registry boundary; not wired into production.
- * The root view of the shared flat definitions PLUS the root-only
- * delegate_visuals/delegate_audio dispatch adapters (PR 6) — the dispatch
- * tools are registered here and ONLY here, never in the flat production
- * default registry or any domain registry.
+ * Creative Director registry boundary. Root-owned planning/reconciliation and
+ * delegate_* dispatch tools are registered here and ONLY here, never in a
+ * domain registry.
  */
 export function createRootToolRegistry(
   deps: ToolRegistryDeps = {}

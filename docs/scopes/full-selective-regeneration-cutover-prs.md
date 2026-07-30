@@ -83,25 +83,12 @@ After cutover:
    selections as part of generation. Domain jobs correctly leave alternatives
    pooled, but approved targeted moves need one transactional expected-selection
    contract.
-6. **Request Changes is not the only production edit path.** The web still
-   exposes restart-from-stage behavior.
-7. **The old runtime remains recoverable.** An expiring environment fallback can
-   still create flat-root runs, and legacy rows can still resolve the all-tools
-   registry.
-8. **The completion docs are fragmented.** Older scopes describe already-shipped
+6. **The completion docs are fragmented.** Older scopes describe already-shipped
    proposal and hierarchy work as missing and explicitly preserve the fallback
    this roadmap must remove.
-9. **Request Changes bypasses the proposal.** The current asset-revision route
-   writes `board_feedback` as already applied, revives a prior run, and enqueues
-   it immediately. The web modal calls that route directly, so no graph closure,
-   estimate, approval, or pin protects the change.
-10. **Delegation drops graph scope.** The current domain task builder emits a
+7. **Delegation drops graph scope.** The current domain task builder emits a
     project-only target with empty candidate, preservation, fingerprint, and
     selection-pin fields even though `DomainTask.v1` can carry them.
-11. **A flat-era shortcut runs before role routing.** Deterministic board-tile
-    feedback maps directly to the leaf `regenerate_image_asset` tool before the
-    role-owned decision path. That tool is not part of the Creative Director
-    registry and must not bypass proposal/delegation.
 
 ## 3. Non-Negotiable Design Rules
 
@@ -899,9 +886,10 @@ relational story spine without overwriting visual scene media.
 
 ### PR 7 — Forward cutover and delete the old paths
 
-**Implementation status:** PR 7 is split into two forward deployments. PR 7A
-removes callers, compatibility routes, the flat registry/driver/prompt, and all
-application dependence on `root_execution_profile`. Its replay-safe PREP
+**Implementation status (2026-07-30):** PR 7 is split into two forward
+deployments. PR 7A is implemented locally: it removes callers, compatibility
+routes, the flat registry/driver/prompt, and application routing dependence on
+`root_execution_profile`. Its replay-safe PREP
 migration re-terminalizes active legacy families and temporarily fills the
 profile only for omitted Creative Director root inserts, so old and new binaries
 can overlap without misclassifying Visuals or Audio children. PR 7B runs only

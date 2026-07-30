@@ -7,7 +7,6 @@
 // route is missing instead of throwing an opaque fetch error.
 
 import {
-  type GateableGenerationStageType,
   GenerationErrorSummary,
   GenerationRun,
 } from "@popcorn/shared/v1/types";
@@ -31,11 +30,6 @@ export interface RetryGenerationRunOptions {
   // leaves the granularity to V1 — surface both so callers can pick.
   stageId?: string;
   itemId?: string;
-}
-
-export interface RejectGenerationRunOptions {
-  stageType?: GateableGenerationStageType;
-  note?: string;
 }
 
 type JsonRecord = Record<string, unknown>;
@@ -198,28 +192,6 @@ export class GenerationRunClient {
       response,
       isGenerationRunDetail,
       "Generation-run approve response was malformed.",
-    );
-  }
-
-  async rejectRun(
-    projectId: string,
-    runId: string,
-    options: RejectGenerationRunOptions = {},
-    signal?: AbortSignal,
-  ): Promise<GenerationRunDetail> {
-    const body: Partial<Record<"stageType" | "note", string>> = {};
-    if (options.stageType) body.stageType = options.stageType;
-    if (options.note) body.note = options.note;
-    const response = await this.request(
-      "POST",
-      `/api/v1/projects/${encodeURIComponent(projectId)}/generation-runs/${encodeURIComponent(runId)}/reject`,
-      body,
-      signal,
-    );
-    return readJson(
-      response,
-      isGenerationRunDetail,
-      "Generation-run reject response was malformed.",
     );
   }
 
