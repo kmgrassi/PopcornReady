@@ -171,6 +171,10 @@ The full video-project flow is still `/projects/new`; `/studio` remains retired.
 ## Recommended Harness Shape
 
 - Keep `apps/web` as the owner of browser E2E.
+- In GitHub Actions, cancel superseded Web E2E runs for the same pull request or
+  branch, skip Markdown/agent-record-only changes, cap the job at 15 minutes,
+  and retain failure reports. The path filter must be replaced by a successful
+  no-op job before Web E2E becomes a required branch check.
 - Keep the default suite fast: local auth, mocked/seeded browser API fixtures,
   and local Supabase only where persistence/auth behavior matters.
 - Use the local-first DB command for integration smoke that should exercise real

@@ -1,0 +1,80 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+
+function liveYaml(path) {
+  return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("#"))
+    .join("\n");
+}
+
+function pathIgnoreBlocks(workflow) {
+  const lines = workflow.split("\n");
+  const blocks = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    if (lines[index] !== "    paths-ignore:") continue;
+    const paths = [];
+    for (index += 1; index < lines.length; index += 1) {
+      const match = lines[index].match(/^      - "([^"]+)"$/);
+      if (!match) {
+        index -= 1;
+        break;
+      }
+      paths.push(match[1]);
+    }
+    blocks.push(paths);
+  }
+  return blocks;
+}
+
+test("Web E2E bounds runner usage without narrowing runtime coverage", () => {
+  const workflow = liveYaml(".github/workflows/web-e2e.yml");
+
+  assert.match(
+    workflow,
+    /  pull_request:\n    paths-ignore:/,
+    "pull requests should skip only Markdown and agent-record-only changes",
+  );
+  assert.match(
+    workflow,
+    /  push:\n    branches: \[main\]\n    paths-ignore:/,
+    "main pushes should skip only Markdown and agent-record-only changes",
+  );
+  assert.deepEqual(pathIgnoreBlocks(workflow), [
+    ["**/*.md", ".agent/**"],
+    ["**/*.md", ".agent/**"],
+  ]);
+  assert.match(
+    workflow,
+    /concurrency:\n  group: web-e2e-\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}\n  cancel-in-progress: true/,
+  );
+  assert.match(
+    workflow,
+    /jobs:\n  smoke:\n    runs-on: ubuntu-latest\n    timeout-minutes: 15/,
+  );
+  assert.match(
+    workflow,
+    /- name: Upload Playwright report\n        if: failure\(\)\n        uses: actions\/upload-artifact@v4/,
+  );
+  assert.doesNotMatch(workflow, /^\s+paths:/m);
+});
+
+test("deployment verification cancels obsolete polling, not database mutations", () => {
+  const deploy = liveYaml(".github/workflows/deploy-api.yml");
+  assert.match(
+    deploy,
+    /concurrency:\n  group: railway-production-verify\n  cancel-in-progress: true/,
+  );
+
+  for (const workflowPath of [
+    ".github/workflows/supabase-auth-url-config.yml",
+    ".github/workflows/supabase-migrations.yml",
+  ]) {
+    assert.match(
+      liveYaml(workflowPath),
+      /concurrency:\n  group: [^\n]+\n  cancel-in-progress: false/,
+      `${workflowPath} must not cancel a live production mutation`,
+    );
+  }
+});
