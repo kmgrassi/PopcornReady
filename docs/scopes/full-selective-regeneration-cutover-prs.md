@@ -899,6 +899,12 @@ relational story spine without overwriting visual scene media.
 
 ### PR 7 — Forward cutover and delete the old paths
 
+**Provisional status:** The retired hierarchy rollout fields have been removed
+from health, and the CLI no longer offers stage restart. The restart endpoint,
+web callers, compatibility routes, flat registry/profile implementation, and
+schema cleanup remain intentionally deferred until PR 5 and PR 6 establish the
+final stack.
+
 **Deliver:**
 
 - Delete `POST .../generation-runs/:runId/restart-from`, its route helpers,
