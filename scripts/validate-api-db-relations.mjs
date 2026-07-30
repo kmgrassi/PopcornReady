@@ -63,9 +63,19 @@ function literalTargets(expression) {
   return null;
 }
 
-function unwrapParentheses(expression) {
+function isTransparentExpression(node) {
+  return (
+    ts.isParenthesizedExpression(node) ||
+    ts.isAsExpression(node) ||
+    ts.isTypeAssertionExpression(node) ||
+    ts.isNonNullExpression(node) ||
+    ts.isSatisfiesExpression(node)
+  );
+}
+
+function unwrapTransparentExpressions(expression) {
   let current = expression;
-  while (ts.isParenthesizedExpression(current)) current = current.expression;
+  while (isTransparentExpression(current)) current = current.expression;
   return current;
 }
 
@@ -81,7 +91,7 @@ function fromMember(node) {
 }
 
 function memberOwner(member) {
-  return unwrapParentheses(member.expression);
+  return unwrapTransparentExpressions(member.expression);
 }
 
 function isNonDatabaseFrom(member) {
@@ -101,7 +111,7 @@ function isNonDatabaseFrom(member) {
 function isDirectCallCallee(node) {
   let current = node;
   while (
-    ts.isParenthesizedExpression(current.parent) &&
+    isTransparentExpression(current.parent) &&
     current.parent.expression === current
   ) {
     current = current.parent;
@@ -152,22 +162,15 @@ export function inspectDbRelationSource(source, fileName = "fixture.ts") {
       );
     }
     if (ts.isCallExpression(node)) {
-      const callee = unwrapParentheses(node.expression);
+      const callee = unwrapTransparentExpressions(node.expression);
       if (
         ts.isElementAccessExpression(callee) &&
         callee.argumentExpression &&
         !literalTargets(callee.argumentExpression)
       ) {
-        const obscuredTargets = node.arguments[0]
-          ? literalTargets(node.arguments[0])
-          : null;
-        for (const target of obscuredTargets ?? []) {
-          if (RETIRED_RELATIONS.has(target)) {
-            errors.push(
-              `${location(node)}: dynamic element-access call conceals retired relation "${target}"`
-            );
-          }
-        }
+        errors.push(
+          `${location(node)}: dynamic element-access call "${callee.getText(sourceFile)}" is prohibited because it can conceal database relation targets`
+        );
       }
       const directMember = fromMember(callee);
       if (directMember && !isNonDatabaseFrom(directMember)) {

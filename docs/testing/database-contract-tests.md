@@ -3,7 +3,7 @@
 <!-- agent-summary: Database contracts separate schema drift, service-client tenancy, request RLS, and direct-role privileges. -->
 <!-- agent-summary: The always-on AST guard rejects production API references to explicitly retired relations. -->
 <!-- agent-summary: Production-reader unit tests execute real query construction and observable row mapping without Postgres. -->
-<!-- agent-summary: Local Supabase integration proves current relations, concrete fixtures, owner visibility, and foreign isolation. -->
+<!-- agent-summary: Local Supabase integration proves current relations plus member, public-read, and write-denial RLS behavior. -->
 <!-- agent-summary: Service-role success never substitutes for authenticated RLS coverage, and empty fixtures prove nothing. -->
 <!-- agent-summary: Direct popcorn_api grants stay operation-specific and are not broadened for generic smoke coverage. -->
 <!-- agent-summary: Database contract tests never invoke model or media providers and must create zero actions or jobs. -->
@@ -32,10 +32,11 @@ pnpm agent:validate -- --scope api
 
 `validate-api-db-relations.mjs` parses production TypeScript rather than
 grepping text. It rejects literal `.from()` calls to the retired relation
-catalog and rejects dynamic or aliased targets that could conceal a retired
-surface. Production helpers use literal branches when they accept a
-literal-union table choice. Tests, migrations, docs, storage buckets,
-`Array.from`, and `Buffer.from` are outside that database-call inventory.
+catalog, database `.from` aliases, dynamic relation targets, and every dynamic
+element-access call that could conceal both the method and relation. Production
+helpers use literal branches when they accept a literal-union table choice.
+Tests, migrations, docs, storage buckets, `Array.from`, and `Buffer.from` are
+outside that database-call inventory.
 
 The orchestrator production-reader regression is also in the default API suite:
 
@@ -58,21 +59,44 @@ pnpm db:local:reset
 pnpm db:contracts:test:local
 ```
 
-The integration test creates two local auth users and a concrete private
+The integration test creates four local auth users and a concrete private
 `story_blueprints → story_blueprint_acts → story_blueprint_scenes → story_beats
 → story_panels` fixture. It then proves:
 
 1. the service client sees each exact fixture id;
 2. the real `loadProjectGraphSnapshot` production path maps every row;
-3. the owning authenticated session sees every private row;
-4. an unrelated authenticated session and the anonymous role see none; and
-5. the read-only test path imports no provider entrypoint and creates no
-   `actions` or `jobs` rows.
+3. owner, admin, and member sessions see every private story-spine row;
+4. an unrelated authenticated session and the anonymous role see no private
+   rows;
+5. unrelated and anonymous sessions see every row after the project is public;
+6. admin and member sessions can insert, update, and delete a representative
+   unselected panel;
+7. unrelated and anonymous sessions cannot insert, update, or delete that
+   public project's panels; and
+8. the test imports no provider entrypoint and creates no `actions` or `jobs`
+   rows.
+
+The representative panel CRUD check encodes the shared `owns_project` policy
+used by the story-spine hierarchy; it does not claim that every table's
+constraints and triggers have full CRUD integration coverage.
 
 The test is opt-in because it requires the local Supabase CLI stack. Its normal
 API-suite skip is not the schema/RLS proof; the always-on AST and recording
 tests are the CI protection, and this local command is required when the
 database read boundary changes.
+
+## Remaining coverage
+
+- The static inventory covers all production API relation call sites, but the
+  runtime recording test executes the orchestrator graph reader rather than
+  every one of those callers or every selected column.
+- Local RLS reads cover all five story-spine relations; write coverage uses the
+  shared policy through representative `story_panels` CRUD rather than
+  duplicating hierarchy-specific constraint setup.
+- There is no hosted schema-cache smoke yet. Any future production check must
+  be read-only, use an explicitly approved test project/session, log only
+  identifiers or counts, and never invoke `/create`, a provider, or a retired
+  table intentionally.
 
 ## Failure interpretation
 

@@ -41,7 +41,8 @@ function assertNoError(
 async function signedInClient(
   service: SupabaseClient,
   suffix: string,
-  label: string
+  label: string,
+  cleanupIds: { authUserIds: string[]; domainUserIds: string[] }
 ): Promise<{ authUserId: string; domainUserId: string; db: SupabaseClient }> {
   const email = `graph-contract-${label}-${suffix}@example.test`;
   const password = `Db!${suffix}x`;
@@ -53,6 +54,7 @@ async function signedInClient(
   assertNoError(createError, `create ${label} auth user`);
   const authUserId = created.user?.id;
   assert.ok(authUserId, `${label} auth user must have an id`);
+  cleanupIds.authUserIds.push(authUserId);
 
   const { data: domainUser, error: domainError } = await service
     .from("users")
@@ -61,6 +63,7 @@ async function signedInClient(
     .single();
   assertNoError(domainError, `resolve ${label} domain user`);
   assert.ok(domainUser?.id, `${label} domain user must exist`);
+  cleanupIds.domainUserIds.push(domainUser.id);
 
   const authBase = client(process.env.SUPABASE_ANON_KEY!);
   const { data: signedIn, error: signInError } = await authBase.auth.signInWithPassword({
@@ -92,7 +95,7 @@ async function visibleIds(
 }
 
 integrationTest(
-  "migrated graph snapshot reads the story spine and RLS isolates private rows",
+  "migrated graph snapshot enforces the story-spine read and write RLS matrix",
   async () => {
     const service = client(process.env.SUPABASE_SERVICE_ROLE_KEY!);
     const anon = client(process.env.SUPABASE_ANON_KEY!);
@@ -104,18 +107,13 @@ integrationTest(
     const sceneId = randomUUID();
     const beatId = randomUUID();
     const panelId = randomUUID();
-    let ownerAuthUserId: string | undefined;
-    let ownerDomainUserId: string | undefined;
-    let outsiderAuthUserId: string | undefined;
-    let outsiderDomainUserId: string | undefined;
+    const cleanupIds = { authUserIds: [] as string[], domainUserIds: [] as string[] };
 
     try {
-      const owner = await signedInClient(service, suffix, "owner");
-      ownerAuthUserId = owner.authUserId;
-      ownerDomainUserId = owner.domainUserId;
-      const outsider = await signedInClient(service, suffix, "outsider");
-      outsiderAuthUserId = outsider.authUserId;
-      outsiderDomainUserId = outsider.domainUserId;
+      const owner = await signedInClient(service, suffix, "owner", cleanupIds);
+      const admin = await signedInClient(service, suffix, "admin", cleanupIds);
+      const member = await signedInClient(service, suffix, "member", cleanupIds);
+      const outsider = await signedInClient(service, suffix, "outsider", cleanupIds);
 
       const { error: workspaceError } = await service.from("workspaces").insert({
         id: workspaceId,
@@ -123,6 +121,22 @@ integrationTest(
         name: `__graph_contract__${suffix}`,
       });
       assertNoError(workspaceError, "seed owner workspace");
+
+      const { error: membershipError } = await service.from("workspace_members").insert([
+        {
+          workspace_id: workspaceId,
+          user_id: admin.domainUserId,
+          role: "admin",
+          invited_by: owner.domainUserId,
+        },
+        {
+          workspace_id: workspaceId,
+          user_id: member.domainUserId,
+          role: "member",
+          invited_by: owner.domainUserId,
+        },
+      ]);
+      assertNoError(membershipError, "seed admin and member workspace memberships");
 
       const { error: projectError } = await service.from("projects").insert({
         id: projectId,
@@ -205,6 +219,7 @@ integrationTest(
 
       const expected = new Map([
         ["story_blueprints", blueprintId],
+        ["story_blueprint_acts", actId],
         ["story_blueprint_scenes", sceneId],
         ["story_beats", beatId],
         ["story_panels", panelId],
@@ -228,11 +243,17 @@ integrationTest(
       assert.equal(snapshot.droppedForeignRowCount, 0);
 
       for (const [table, expectedId] of expected) {
-        assert.deepEqual(
-          await visibleIds(owner.db, table, projectId, "authenticated owner RLS"),
-          [expectedId],
-          `owner must see private ${table}`
-        );
+        for (const [role, db] of [
+          ["owner", owner.db],
+          ["admin", admin.db],
+          ["member", member.db],
+        ] as const) {
+          assert.deepEqual(
+            await visibleIds(db, table, projectId, `authenticated ${role} RLS`),
+            [expectedId],
+            `${role} must see private ${table}`
+          );
+        }
         assert.deepEqual(
           await visibleIds(outsider.db, table, projectId, "authenticated outsider RLS"),
           [],
@@ -244,6 +265,111 @@ integrationTest(
           `anonymous caller must not see private ${table}`
         );
       }
+
+      for (const [role, db, panelIndex] of [
+        ["admin", admin.db, 1],
+        ["member", member.db, 2],
+      ] as const) {
+        const writablePanelId = randomUUID();
+        const { data: insertedPanel, error: insertPanelError } = await db
+          .from("story_panels")
+          .insert({
+            id: writablePanelId,
+            project_id: projectId,
+            beat_id: beatId,
+            panel_index: panelIndex,
+            status: "ready",
+            is_selected: false,
+          })
+          .select("id")
+          .single();
+        assertNoError(insertPanelError, `${role} insert public.story_panels`);
+        assert.equal(insertedPanel?.id, writablePanelId);
+
+        const { data: updatedPanel, error: updatePanelError } = await db
+          .from("story_panels")
+          .update({ status: "approved" })
+          .eq("id", writablePanelId)
+          .select("id, status")
+          .single();
+        assertNoError(updatePanelError, `${role} update public.story_panels`);
+        assert.deepEqual(updatedPanel, { id: writablePanelId, status: "approved" });
+
+        const { data: deletedPanel, error: deletePanelError } = await db
+          .from("story_panels")
+          .delete()
+          .eq("id", writablePanelId)
+          .select("id")
+          .single();
+        assertNoError(deletePanelError, `${role} delete public.story_panels`);
+        assert.equal(deletedPanel?.id, writablePanelId);
+      }
+
+      const { error: publishError } = await service
+        .from("projects")
+        .update({ visibility: "public" })
+        .eq("id", projectId);
+      assertNoError(publishError, "publish project for positive public-read contract");
+
+      for (const [table, expectedId] of expected) {
+        assert.deepEqual(
+          await visibleIds(outsider.db, table, projectId, "public outsider RLS"),
+          [expectedId],
+          `outsider must see public ${table}`
+        );
+        assert.deepEqual(
+          await visibleIds(anon, table, projectId, "public anonymous RLS"),
+          [expectedId],
+          `anonymous caller must see public ${table}`
+        );
+      }
+
+      for (const [role, db, panelIndex] of [
+        ["outsider", outsider.db, 3],
+        ["anonymous", anon, 4],
+      ] as const) {
+        const { error } = await db.from("story_panels").insert({
+          id: randomUUID(),
+          project_id: projectId,
+          beat_id: beatId,
+          panel_index: panelIndex,
+          status: "ready",
+          is_selected: false,
+        });
+        assert.ok(error, `${role} must not insert a public story panel`);
+
+        const { data: attemptedUpdate, error: attemptedUpdateError } = await db
+          .from("story_panels")
+          .update({ status: "failed" })
+          .eq("id", panelId)
+          .select("id");
+        assertNoError(attemptedUpdateError, `${role} denied story-panel update`);
+        assert.deepEqual(
+          attemptedUpdate,
+          [],
+          `${role} must not update a public story panel`
+        );
+
+        const { data: attemptedDelete, error: attemptedDeleteError } = await db
+          .from("story_panels")
+          .delete()
+          .eq("id", panelId)
+          .select("id");
+        assertNoError(attemptedDeleteError, `${role} denied story-panel delete`);
+        assert.deepEqual(
+          attemptedDelete,
+          [],
+          `${role} must not delete a public story panel`
+        );
+      }
+
+      const { data: unchangedPanel, error: unchangedPanelError } = await service
+        .from("story_panels")
+        .select("id, status")
+        .eq("id", panelId)
+        .single();
+      assertNoError(unchangedPanelError, "verify denied story-panel writes");
+      assert.deepEqual(unchangedPanel, { id: panelId, status: "ready" });
 
       const [{ count: actionCount, error: actionError }, { count: jobCount, error: jobError }] =
         await Promise.all([
@@ -271,8 +397,15 @@ integrationTest(
           `workspace (${cleanupWorkspaceError.code ?? "unknown"}): ${cleanupWorkspaceError.message}`
         );
       }
-      for (const domainUserId of [ownerDomainUserId, outsiderDomainUserId]) {
-        if (!domainUserId) continue;
+      for (const authUserId of cleanupIds.authUserIds) {
+        const { error } = await service.from("users").delete().eq("auth_id", authUserId);
+        if (error) {
+          cleanupFailures.push(
+            `domain user for auth ${authUserId} (${error.code ?? "unknown"}): ${error.message}`
+          );
+        }
+      }
+      for (const domainUserId of cleanupIds.domainUserIds) {
         const { error } = await service.from("users").delete().eq("id", domainUserId);
         if (error) {
           cleanupFailures.push(
@@ -280,8 +413,7 @@ integrationTest(
           );
         }
       }
-      for (const authUserId of [ownerAuthUserId, outsiderAuthUserId]) {
-        if (!authUserId) continue;
+      for (const authUserId of cleanupIds.authUserIds) {
         const { error } = await service.auth.admin.deleteUser(authUserId);
         if (error) {
           cleanupFailures.push(

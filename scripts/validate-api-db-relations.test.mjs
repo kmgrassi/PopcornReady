@@ -67,7 +67,31 @@ test("rejects unreviewed dynamic targets and database from aliases", () => {
   const obscured = inspectDbRelationSource(
     "db[member]('storyboard_panels').select('*');"
   );
-  assert.match(obscured.errors.join("\n"), /conceals retired relation/);
+  assert.match(obscured.errors.join("\n"), /dynamic element-access call .* is prohibited/);
+
+  const fullyDynamic = inspectDbRelationSource(
+    "db[member](table).select('*');"
+  );
+  assert.match(
+    fullyDynamic.errors.join("\n"),
+    /dynamic element-access call .* is prohibited/
+  );
+
+  const dynamicMethod = inspectDbRelationSource(
+    "db[member]('assets').select('*');"
+  );
+  assert.match(
+    dynamicMethod.errors.join("\n"),
+    /dynamic element-access call "db\[member\]"/
+  );
+
+  const wrappedDynamic = inspectDbRelationSource(
+    "(db[member] as unknown as Function)(table);"
+  );
+  assert.match(
+    wrappedDynamic.errors.join("\n"),
+    /dynamic element-access call "db\[member\]"/
+  );
 });
 
 test("reviewed dynamic targets are exact-count inventory entries", () => {
