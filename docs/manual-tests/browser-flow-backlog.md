@@ -1,5 +1,13 @@
 # Browser Manual Flow Backlog
 
+<!-- agent-summary: This backlog prioritizes browser-first feature flows beyond the route smoke pass. -->
+<!-- agent-summary: The full-app manual guide remains authoritative for setup, route inventory, and cross-cutting checks. -->
+<!-- agent-summary: Local Supabase is the default unless hosted auth, storage, or real providers are under test. -->
+<!-- agent-summary: Provider-backed runs use the production fixture corpus in isolated non-customer workspaces. -->
+<!-- agent-summary: User changes flow through normal product actions, including object-scoped Request Changes. -->
+<!-- agent-summary: Public/private, RLS, reload, idempotency, mobile, and cleanup behavior remain explicit assertions. -->
+<!-- agent-summary: Record product gaps separately from harness failures and never improvise unsafe production mutations. -->
+
 This backlog defines browser-first manual test flows that should be exercised
 beyond the route smoke pass. It complements
 [Full App Manual Testing Guide](full-app-inventory.md), which remains the

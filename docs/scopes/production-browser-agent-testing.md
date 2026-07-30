@@ -395,9 +395,20 @@ the normal UI and production API. For example:
 - cleanup removes the owned data and storage objects.
 
 Direct unauthenticated visibility is tested only after PR 6 implements the
-approved `unlisted_canary` or sanitized ephemeral-user contract.
+approved `unlisted_canary` contract.
 
 ## Sandbox lifecycle
+
+The existing `test_sandboxes` row is an ephemeral ownership root: its workspace
+and project foreign keys cascade when the workspace is deleted. It cannot own
+terminal lifecycle evidence. PR 3 must add a separate durable production-browser
+run record keyed by E2E run ID. Every reference from that record to ephemeral
+state—especially sandbox, workspace, project, and auth/domain user IDs—is either
+a non-FK audit UUID or a nullable FK with `ON DELETE SET NULL`. `ON DELETE
+CASCADE` and `ON DELETE RESTRICT` are prohibited from the durable record to
+`test_sandboxes`, workspaces, projects, or ephemeral users, so cleanup can delete
+the sandbox graph and then persist orphan verification, terminal status, and
+redacted evidence metadata.
 
 Use an explicit state machine:
 
@@ -408,9 +419,9 @@ provisioning -> active -> settling -> cleaning -> cleaned
                     \-> expired -> settling
 ```
 
-Minimum durable metadata:
+Minimum durable production-browser run metadata:
 
-- E2E run ID, sandbox ID, release ID, git SHA, deploy IDs;
+- E2E run ID, sandbox audit UUID, release ID, git SHA, deploy IDs;
 - owner flow and feature set;
 - ephemeral auth/domain user IDs and membership roles;
 - workspace/project IDs and generated name prefix;
@@ -428,9 +439,12 @@ Cleanup ordering:
 5. remove or expire provider-side artifacts where supported;
 6. remove private/public storage objects and invalidate delivery where needed;
 7. delete the `internal_test` workspace through guarded ownership predicates;
-8. verify database, storage, provider, job, and queue orphan counts;
+   the cascading `test_sandboxes` row may disappear here, but the durable
+   production-browser run record remains;
+8. verify database, storage, provider, job, and queue orphan counts against the
+   durable E2E run correlation;
 9. delete the ephemeral auth/domain identity only after owned work is fenced;
-10. mark the sandbox `cleaned`,
+10. mark the durable production-browser run `cleaned`,
     `cleaned_with_external_retention`, or retain a diagnosable
     `failed_cleanup` record.
 
@@ -514,25 +528,33 @@ CI then checks:
 | Settings/account | Account/credits read, login/logout | Workspace model settings and ephemeral-user theme; provider keys only through a fenced test sink | Real provider-key persistence and charges stay staging-only |
 | Templates/brand/anchors | Route and safe interactions | Persisted actions where supported | Catalog promotion stays controlled |
 | Admin/evals | Admin/non-admin guards | Judgment action in sandbox | Bounded eval generation |
-| Public project/asset sharing | Private denial and known sanitized canary read | Requires approved ephemeral user/unlisted design | CDN expiry and public/private lifecycle |
+| Public project/asset sharing | Private denial and known sanitized canary read | Requires the approved unlisted-canary design inside an `internal_test` workspace | CDN expiry and public/private lifecycle |
 | PWA/mobile | Manifest, service worker, deep links, mobile overflow | Safe share-target upload | Native share sheet remains real-device |
 | Billing/webhooks/destructive admin | Configuration/contract only | None | Staging adapters and fault injection |
 
-### Public-sharing decision required
+### Public-sharing isolation contract
 
 Current visibility helpers intentionally exclude `internal_test` and `fixture`
 workspaces from public reads. Production public-sharing tests must not weaken
 that isolation accidentally.
 
-Select one before implementation:
+PR 6 must implement an explicit `unlisted_canary` model for projects/assets
+inside an `internal_test` workspace. The direct link carries a server-validated,
+resource-scoped, expiring, and revocable capability; persisted capability
+material is hashed. A capability for one project/asset cannot authorize another,
+and cleanup revokes it before deleting the sandbox.
 
-1. an ephemeral normal QA workspace containing only sanitized fixtures, deleted
-   immediately after the direct-link test; or
-2. an explicit `unlisted_canary` model that is direct-link readable but excluded
-   from discovery and customer metrics.
+The capability never makes `project_is_public`, public discovery/search helpers,
+or ordinary public RLS policies return true, and it cannot mint an indefinitely
+public object URL. Media delivery remains bounded by the canary capability and
+short-lived delivery authorization. Discovery, feeds, search, customer metrics,
+and ordinary public visibility continue to exclude the workspace. Cleanup
+therefore remains inside the existing sandbox purpose boundary and never gains
+authority to delete a normal `purpose = 'user'` workspace.
 
-The recommended long-term choice is an explicit unlisted-canary contract.
-Until it exists, public-sharing mutation remains manual and narrowly approved.
+Until that model and its guarded cleanup tests exist, public-sharing mutation
+remains manual and narrowly approved. An ephemeral normal QA workspace is not an
+allowed implementation option.
 
 ## Agent run protocol
 
@@ -682,6 +704,8 @@ Scope:
 - commit the threat model and capability claims;
 - add OIDC or signed short-lived capability verification;
 - add typed direct-Postgres sandbox create/status/teardown transactions;
+- add the durable production-browser run record whose lifecycle/evidence
+  survives cascading sandbox workspace deletion;
 - add a durable idempotent provisioning-intent record before the Supabase Admin
   call and compensating cleanup for every partial Auth/domain/database state;
 - provision one ephemeral Supabase auth/domain identity, owned workspace, and
@@ -708,6 +732,11 @@ Validation:
   transaction, and an ordinary signup still receives the configured promotion;
 - failures after provisioning intent, Auth creation, domain-user creation,
   workspace creation, and project creation are each idempotently compensated;
+- deleting the sandbox workspace cascades the ephemeral `test_sandboxes` row but
+  preserves the durable run record for orphan checks and terminal status;
+- migration tests prove workspace deletion also removes the ephemeral sandbox,
+  project, and user references without cascading or restricting the durable E2E
+  run and its terminal correlation fields;
 - cross-sandbox reads/deletes fail;
 - `/api/v1/me` returns the ephemeral sandbox workspace and every project,
   draft, settings, list, and create path remains in that workspace through RLS;
@@ -749,6 +778,8 @@ Validation:
 - late workers cannot recreate data after teardown;
 - database, queue, and storage orphan assertions are zero; provider artifacts
   are either zero or recorded under an allowlisted external-retention manifest;
+- terminal cleanup status and evidence remain queryable after the workspace,
+  project, and ephemeral sandbox row are gone;
 - the sweeper never targets a user workspace.
 
 Rollback:
@@ -801,22 +832,31 @@ Done when:
   continuously exercised in isolated production workspaces without provider
   spend.
 
-### PR 6 — Storage, roles, and safe sharing
+### PR 6 — Storage, roles, and unlisted canary sharing
 
-Depends on: PR 5 and the public-sharing decision.
+Depends on: PR 5.
 
 Scope:
 
 - add member/admin/non-admin role packs;
 - cover private upload, signed URL, S3/CloudFront delivery, expiry, and
   cross-workspace denial;
-- implement the selected sanitized ephemeral or unlisted-canary sharing model;
+- implement server-validated, resource-scoped, expiring, revocable
+  `unlisted_canary` capabilities only for `internal_test` projects/assets; store
+  only capability hashes and keep public/discovery helpers false;
+- keep media delivery short-lived and capability-bound; never create an
+  indefinitely public object URL for a canary;
+- keep cleanup on the existing internal-test sandbox boundary; never authorize
+  the canary cleanup path to delete `purpose = 'user'` workspaces;
 - verify no internal fixture enters public discovery or customer metrics.
 
 Validation:
 
 - private objects are inaccessible without authorization;
 - public/unlisted canary behavior matches its explicit policy;
+- missing, forged, expired, revoked, and wrong-project/asset capabilities are
+  denied; cleanup revokes live capabilities; and an unlisted canary never
+  appears in discovery;
 - signed URLs and evidence are redacted;
 - cleanup removes storage objects and invalidates access as designed.
 
@@ -977,15 +1017,14 @@ The implementation owner must resolve these before the named PR:
    product has explicit workspace selection.
 4. Test credit ledger versus a narrowly scoped internal-test budget bypass
    (PR 7).
-5. Ephemeral normal QA workspace versus an explicit unlisted-canary visibility
-   model for public sharing (PR 6).
-6. Evidence store, access policy, and retention periods (PR 2 before artifacts
+5. Evidence store, access policy, and retention periods (PR 2 before artifacts
    are uploaded).
-7. Stability thresholds that promote read, mutation, and provider packs from
+6. Stability thresholds that promote read, mutation, and provider packs from
    advisory to release-blocking.
 
 Recommended defaults are: merge commit SHA as the shared release orchestration
 ID with separate web/API artifact hashes, ordered migration-prefix digests,
 GitHub OIDC, one ephemeral QA identity per mutating sandbox, a separate test
-credit ledger, explicit unlisted canaries, restricted GitHub artifacts with
+credit ledger, capability-like unlisted canaries inside `internal_test`,
+restricted GitHub artifacts with
 short retention, and advisory rollout before enforcement.

@@ -156,11 +156,13 @@ Authenticated routes:
 - `/library`, `/library/:tab` (`projects` and `assets` are the active tabs)
 - `/projects`, `/projects/new`, `/projects/:projectId`,
 - `/create`,
+  `/storyboard`,
   `/projects/:projectId/concept`, `/projects/:projectId/brief`,
   `/projects/:projectId/script`,
   `/projects/:projectId/storyboard`, `/projects/:projectId/media`,
   `/projects/:projectId/watch`,
-  `/projects/:projectId/runs/:runId`
+  `/projects/:projectId/runs/:runId`,
+  `/projects/:projectId/:section`
 - `/runs`, `/assets`, `/outputs`
 - `/anchors`, `/anchors/mine`, `/anchors/:entryId`
 - `/uploads`, `/templates`, `/brand`, `/account`, `/settings`, `/faq`

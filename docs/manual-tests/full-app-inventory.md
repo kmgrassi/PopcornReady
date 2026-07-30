@@ -1,5 +1,13 @@
 # Full App Manual Testing Guide
 
+<!-- agent-summary: This is the authoritative manual browser pass for the active Vite SPA and Express API. -->
+<!-- agent-summary: Local-first Supabase is the default; hosted and provider-backed checks are explicitly separated. -->
+<!-- agent-summary: Hosted passes use managed QA identities and never the documented local-only credentials. -->
+<!-- agent-summary: Production provider checks use the fixture corpus and isolated non-customer workspaces. -->
+<!-- agent-summary: The route map follows apps/web/src/App.tsx, including redirects and dev-only harness routes. -->
+<!-- agent-summary: Persisted behavior is verified through visible actions, reloads, auth boundaries, and cleanup. -->
+<!-- agent-summary: Paid, destructive, or production-mutating actions require the safety contract named by their flow. -->
+
 This guide is the current manual QA pass for the active split app: Vite SPA in
 `apps/web`, Express API in `apps/api`, and Supabase-backed data/auth. It is
 meant to be runnable by a person in a browser, with focused API checks where a
@@ -126,11 +134,14 @@ Authenticated routes:
 - `/library`, `/library/projects`, `/library/assets`.
 - Compatibility redirects: `/projects`, `/runs`, `/assets`, `/outputs`;
   project-scoped runs/outputs redirect to project detail anchors.
+- `/storyboard`, which redirects to `/library/projects`.
 - `/projects/:projectId`, `/projects/:projectId/storyboard`,
   `/projects/:projectId/media`,
   `/projects/:projectId/watch`, `/projects/:projectId/runs/:runId`.
 - `/projects/:projectId/concept`, `/projects/:projectId/brief`,
   `/projects/:projectId/script`.
+- `/projects/:projectId/:section`, the project-detail section route used after
+  the explicit concept, brief, script, storyboard, media, watch, and run routes.
 - `/anchors`, `/anchors/mine`, `/anchors/:entryId`.
 - `/uploads`, `/templates`, `/brand`, `/account`, `/settings`, `/faq`.
 - `/evals`, which redirects to `/admin/evals`.
