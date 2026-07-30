@@ -130,4 +130,6 @@ and the user-provided image-prompt quality rubric.
 
 ## Next action / handoff
 
-Ready PR: https://github.com/kmgrassi/PopcornReady/pull/845
+Implementation PR (merged): https://github.com/kmgrassi/PopcornReady/pull/845
+
+Parallel-audit follow-up PR: https://github.com/kmgrassi/PopcornReady/pull/846
