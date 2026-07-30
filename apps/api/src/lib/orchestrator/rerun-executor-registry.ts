@@ -28,6 +28,8 @@ export interface RerunExecutorContext {
   actorId: string;
   proposalActionId: string;
   approvalActionId: string;
+  /** Exact persisted approval fingerprint; required by real domain executors. */
+  approvalFingerprint?: string;
   approvedMaxCostUsd: number;
   rootRunId: string;
   proposal: Extract<RerunProposalV2, { outcome: "revision" }>;

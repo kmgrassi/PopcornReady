@@ -225,6 +225,13 @@ export interface DomainApprovalContext {
   executionReservationId?: string;
   approvedBudgetUsd: number;
   approvalFingerprint: string;
+  /** Fenced rerun step completed by this finite domain turn, when present. */
+  rerunCallback?: {
+    executorId: string;
+    workItemId: string;
+    generation: number;
+    budgetReservationKeys: readonly string[];
+  };
 }
 
 export interface CreativeDirectorTaskRoute {

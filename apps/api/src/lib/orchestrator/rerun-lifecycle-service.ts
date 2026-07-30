@@ -13,6 +13,10 @@ import {
   RerunExecutorRegistry,
   validateBoundExecutorOutputs,
 } from "./rerun-executor-registry";
+import {
+  rerunExecutorCallbackToken,
+  rerunExecutorCallbackTokenHash,
+} from "./rerun-callback-fence";
 
 function stableStringify(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
@@ -29,7 +33,7 @@ function fingerprint(value: unknown): string {
 }
 
 export function callbackTokenHash(token: string): string {
-  return createHash("sha256").update(token).digest("hex");
+  return rerunExecutorCallbackTokenHash(token);
 }
 
 function deterministicUuid(...parts: string[]): string {
@@ -479,8 +483,7 @@ export async function executeRerunProposal(input: {
   const settled = await Promise.allSettled(proposal.selectedWork.map(async (workItem) => {
     const executionPlan = deps.registry.plan(workItem);
     const callbackFences = executionPlan.map(({ executor, requiredOutputs }) => {
-      const token = fingerprint({
-        kind: "rerun-executor-callback",
+      const token = rerunExecutorCallbackToken({
         executionReservationId: lease.reservationId,
         workItemId: workItem.workItemId,
         executorId: executor.id,
@@ -581,6 +584,7 @@ export async function executeRerunProposal(input: {
           actorId: input.actorId,
           proposalActionId: action.id,
           approvalActionId: approval.approvalActionId,
+          approvalFingerprint: approval.approvalFingerprint,
           approvedMaxCostUsd: approval.approvedMaxCostUsd,
           rootRunId,
           proposal,
