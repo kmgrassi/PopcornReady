@@ -62,26 +62,35 @@ Acceptance requires:
   critique.
 - Reserve and settle explicit zero-cost ledger entries only for deterministic
   story/assembly services. Critique carries a service estimate and measured
-  actual; a failed model-backed critique retains its reservation for recovery.
-- Persist an optional critique successor as an inert proposal action identity
-  in primitive causation. Never approve or execute it recursively.
+  actual; returned provider spend settles before an estimate overage is
+  terminalized, while a pre-result model failure retains its reservation for
+  recovery.
+- Persist an optional critique successor as inert durable provider metadata,
+  excluded from primitive output causation. Never approve or execute it
+  recursively.
+- Keep the rerun work dispatch running until fenced completion validates the
+  pooled output and settled budget. Generic child-domain finalization cannot
+  apply or fail an active proposal work dispatch.
 
 ## Changes
 
 - Added inert root story, prospective assembly, and prospective critique
   executor adapters.
 - Added exact story target/pointer/pin checks, prospective binding fan-in,
-  preservation pin checks, idempotency keys, child budget handling, and inert
-  follow-up proposal causation.
+  preservation pin checks, idempotency keys, measured child budget handling,
+  and inert follow-up proposal metadata.
 - Added target-aware durable output-kind validation for story snapshots while
   retaining the reviewed still/video/audio normalization.
+- Added database enforcement that preserves active rerun dispatch actions until
+  fenced work completion, plus measured-cost settlement that records provider
+  overages instead of stranding reservations.
 - Added the owning root-adapter contract and task feedback record.
 
 ## Validation evidence
 
-- Focused root/lifecycle/transaction set: 33 passed.
+- Focused root/lifecycle/transaction set: 37 passed after review hardening.
 - API, web, and shared typechecks plus shared type fixtures passed.
-- Migration tests/validation passed with 90 migrations.
+- Migration tests/validation passed with 91 migrations.
 - `pnpm agent:validate -- --scope all` passed, including RPC and relation
   boundaries at 48 targets / 47 expressions and 424 literal / zero dynamic
   relation calls.
@@ -95,10 +104,12 @@ Acceptance requires:
   snapshots must carry exact stable row-to-snapshot identities without pointer
   mutation. It also required stale/missing/extra binding, crash replay, and
   non-recursive critique-follow-up coverage; these are in the focused tests.
-- Self-review separated deterministic pre-result failure release from
-  post-result cost/update/settlement failure. A model-backed critique keeps its
-  reservation on failure, and any service result above its approved estimate
-  fails closed without falsely releasing measured spend.
+- Independent implementation review requested four durability corrections:
+  atomic dispatch application, inert follow-up metadata, settlement before
+  overage failure, and post-result crash replay. The executor no longer updates
+  actions, `completeWork` alone applies a running dispatch, successor identity
+  is not primitive causation, measured overages settle first, and tests prove a
+  replay reuses one staged asset and one durable settlement.
 
 ## Blockers and risks
 

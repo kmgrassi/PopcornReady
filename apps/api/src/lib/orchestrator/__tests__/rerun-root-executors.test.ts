@@ -116,7 +116,6 @@ type Observed = {
   reserved: Array<{ reservationKey: string; estimatedUsd: number }>;
   settled: Array<{ reservationKey: string; actualUsd: number }>;
   released: string[];
-  updated: Array<{ status?: string; outputAssetIds?: string[] }>;
   storyRequests: Parameters<RootRerunExecutorServices["stageStorySnapshot"]>[0][];
   assemblyRequests: Parameters<RootRerunExecutorServices["assembleProspectiveCut"]>[0][];
   critiqueRequests: Parameters<RootRerunExecutorServices["critiqueProspectiveCut"]>[0][];
@@ -153,10 +152,6 @@ function services(
       };
     },
     estimateCritiqueUsd: () => 0.05,
-    updateAction: async (_id, patch) => {
-      observed.updated.push(patch);
-      return {} as never;
-    },
     settleBudget: async ({ reservationKey, actualUsd }) => {
       observed.settled.push({ reservationKey, actualUsd });
       return {} as never;
@@ -174,7 +169,6 @@ function observed(): Observed {
     reserved: [],
     settled: [],
     released: [],
-    updated: [],
     storyRequests: [],
     assemblyRequests: [],
     critiqueRequests: [],
@@ -382,7 +376,11 @@ test("critique uses the prospective cut and exposes an inert successor identity"
   assert.deepEqual(seen.settled.map((entry) => entry.actualUsd), [0.02]);
   assert.deepEqual(
     result.status === "succeeded" ? result.primitiveActionIds : [],
-    ["dispatch:critique-work", "proposal-followup"]
+    ["dispatch:critique-work"]
+  );
+  assert.deepEqual(
+    result.status === "succeeded" ? result.providerResult : undefined,
+    { followupProposalActionId: "proposal-followup" }
   );
 });
 
@@ -421,7 +419,57 @@ test("critique failure is retryable and idempotent service replay keeps one asse
   assert.equal(attempts, 2);
 });
 
-test("critique keeps its reservation when measured cost exceeds the approved estimate", async () => {
+test("retry after a post-result settlement crash reuses one asset and one settlement", async () => {
+  const seen = observed();
+  const critique = work("critique-work", "critique_cut", [
+    output("critique-work", "critique"),
+  ]);
+  const stagedByKey = new Map<string, string>();
+  const durableSettlements = new Map<string, number>();
+  let settlementCalls = 0;
+  const configured = services(seen, {
+    critiqueProspectiveCut: async (request) => {
+      const assetId = stagedByKey.get(request.idempotencyKey) ?? "critique-staged";
+      stagedByKey.set(request.idempotencyKey, assetId);
+      return {
+        assetId,
+        intrinsicRole: "timeline_critique",
+        actualCostUsd: 0.02,
+      };
+    },
+    settleBudget: async ({ reservationKey, actualUsd }) => {
+      settlementCalls += 1;
+      const prior = durableSettlements.get(reservationKey);
+      if (prior !== undefined && prior !== actualUsd) {
+        throw new Error("settlement replay changed");
+      }
+      durableSettlements.set(reservationKey, actualUsd);
+      if (settlementCalls === 1) {
+        throw new Error("connection lost after settlement commit");
+      }
+      return {} as never;
+    },
+  });
+  const executor = createRootRerunExecutors(configured)[2];
+  const value = context({
+    workItem: critique,
+    selectedWork: [critique],
+    reserve: seen,
+  });
+
+  await assert.rejects(
+    executor.execute(value),
+    /connection lost after settlement commit/
+  );
+  const replay = await executor.execute(value);
+
+  assert.equal(replay.status, "succeeded");
+  assert.equal(stagedByKey.size, 1);
+  assert.equal(durableSettlements.size, 1);
+  assert.equal(settlementCalls, 2);
+});
+
+test("critique settles measured spend before rejecting an estimate overage", async () => {
   const seen = observed();
   const critique = work("critique-work", "critique_cut", [
     output("critique-work", "critique"),
@@ -443,8 +491,7 @@ test("critique keeps its reservation when measured cost exceeds the approved est
     (error) => error instanceof ApiError && error.code === "budget_exceeded"
   );
   assert.deepEqual(seen.released, []);
-  assert.deepEqual(seen.settled, []);
-  assert.deepEqual(seen.updated, []);
+  assert.deepEqual(seen.settled.map((entry) => entry.actualUsd), [0.06]);
 });
 
 test("critique will not consume an active cut without an exact asset pin", async () => {

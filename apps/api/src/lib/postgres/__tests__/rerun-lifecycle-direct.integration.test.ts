@@ -204,6 +204,11 @@ integrationTest(
         bindingId: "binding-callback",
         workItemId: "callback-work",
       };
+      const dispatchOutput = {
+        ...requiredOutput,
+        bindingId: "binding-dispatch",
+        workItemId: "dispatch-success-work",
+      };
       const negativeProposalId = await insertProposal(admin, projectId, [
         {
           workItemId: "negative-work",
@@ -211,6 +216,13 @@ integrationTest(
           kind: "revise_visuals",
           targets: [target],
           requiredOutputs: [requiredOutput],
+        },
+        {
+          workItemId: "dispatch-success-work",
+          owner: "visuals",
+          kind: "revise_visuals",
+          targets: [target],
+          requiredOutputs: [dispatchOutput],
         },
         {
           workItemId: "callback-work",
@@ -261,6 +273,86 @@ integrationTest(
           error instanceof ApiError && error.code === "validation_failed"
       );
       context.diagnostic("forged child budget and output causation rejected");
+      const dispatchActionId = randomUUID();
+      await reserveWorkTransaction({
+        projectId,
+        lease: negative.lease,
+        workItemId: "dispatch-success-work",
+        requestFingerprint: "dispatch-success-work",
+        dispatchActionId,
+        dispatchParams: {},
+        callbackFences: [],
+      });
+      const dispatchBudgetKey = "dispatch-success-budget";
+      await reserveChildBudgetTransaction({
+        projectId,
+        executionReservationId: negative.reservation.reservation_id,
+        workItemId: "dispatch-success-work",
+        actionId: dispatchActionId,
+        reservationKey: dispatchBudgetKey,
+        estimatedUsd: 0,
+      });
+      const dispatchAssetId = randomUUID();
+      await admin.query(
+        `insert into public.assets(
+           id,workspace_id,project_id,kind,media,role,filename,source
+         ) values ($1,$2,$3,'image','image','revised-shot','dispatch.png','{}')`,
+        [dispatchAssetId, workspaceId, projectId]
+      );
+      await admin.query(
+        `insert into public.action_assets(
+           project_id,action_id,asset_id,direction,role,ordinal
+         ) values ($1,$2,$3,'output','revised-shot',0)`,
+        [projectId, dispatchActionId, dispatchAssetId]
+      );
+      await admin.query(
+        `update public.actions
+            set status='applied',output_asset_ids=array[$2]::uuid[]
+          where id=$1`,
+        [dispatchActionId, dispatchAssetId]
+      );
+      const prematurelyFinalized = await admin.query<{ status: string }>(
+        "select status from public.actions where id=$1",
+        [dispatchActionId]
+      );
+      assert.equal(prematurelyFinalized.rows[0]?.status, "running");
+      await admin.query(
+        `select * from public.settle_orchestrator_run_budget($1,$2,0,null,0)`,
+        [projectId, dispatchBudgetKey]
+      );
+      const dispatchBinding = {
+        ...dispatchOutput,
+        intrinsicRole: "revised-shot",
+        assetId: dispatchAssetId,
+      };
+      await parkWorkTransaction({
+        projectId,
+        lease: negative.lease,
+        workItemId: "dispatch-success-work",
+        primitiveActionIds: [dispatchActionId],
+        budgetReservationKeys: [dispatchBudgetKey],
+        bindingResults: [dispatchBinding],
+      });
+      await completeWorkTransaction({
+        projectId,
+        lease: negative.lease,
+        workItemId: "dispatch-success-work",
+        bindingResults: [dispatchBinding],
+        primitiveActionIds: [dispatchActionId],
+        budgetReservationKeys: [dispatchBudgetKey],
+      });
+      const completedDispatch = await admin.query<{
+        status: string;
+        output_asset_ids: string[];
+      }>(
+        "select status,output_asset_ids from public.actions where id=$1",
+        [dispatchActionId]
+      );
+      assert.equal(completedDispatch.rows[0]?.status, "applied");
+      assert.deepEqual(completedDispatch.rows[0]?.output_asset_ids, [dispatchAssetId]);
+      context.diagnostic(
+        "running dispatch action became applied inside fenced work completion"
+      );
       const wrongRoleAssetId = randomUUID();
       await admin.query(
         `insert into public.assets(

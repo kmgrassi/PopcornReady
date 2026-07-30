@@ -50,6 +50,8 @@ export interface RerunExecutorSucceeded {
   outputs: BoundExecutorOutput[];
   primitiveActionIds: string[];
   budgetReservationKeys: string[];
+  /** Durable inert executor metadata; never treated as output causation. */
+  providerResult?: Record<string, unknown>;
   childRunId?: string;
   reportActionId?: string;
   reconciliationActionId?: string;

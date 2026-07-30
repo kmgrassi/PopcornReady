@@ -4,8 +4,8 @@
 <!-- agent-summary: Root story outputs stage immutable snapshots for exact stable relational rows. -->
 <!-- agent-summary: Assembly and critique consume approved prospective bindings before activation. -->
 <!-- agent-summary: No adapter in this slice moves a selection or relational story pointer. -->
-<!-- agent-summary: Critique may create an inert successor proposal but never executes it recursively. -->
-<!-- agent-summary: Production registration, dependency ordering, atomic application, and settlement belong to PR 5. -->
+<!-- agent-summary: Critique may create inert successor metadata but never uses it as output causation. -->
+<!-- agent-summary: Fenced work completion alone applies the shared rerun dispatch action. -->
 <!-- agent-summary: Tests use injected canonical-service fakes; live services remain unregistered until activation. -->
 
 > **Status:** Implemented behind the PR 2 executor interface. The production
@@ -64,12 +64,31 @@ Deterministic story staging and deterministic assembly reserve and settle an
 explicit zero-cost child ledger entry. Critique supplies an approved estimate
 and a measured actual cost through its canonical service. A failed model-backed
 critique retains its reservation for recovery rather than pretending no spend
-occurred.
+occurred. Once a canonical service returns, measured spend settles before an
+estimate overage is surfaced; admission estimates cannot erase provider cost
+or strand a reserved child ledger entry.
 
 Critique may persist an inert successor `rerun_proposal` action. Its ID is
-returned as durable primitive causation, while the action remains proposed.
-The adapter cannot approve it, call another executor, or start a recursive
-provider loop.
+stored in the callback's durable provider metadata, while the action remains
+proposed. It is deliberately excluded from `primitiveActionIds`: the successor
+did not cause the critique output. The adapter cannot approve it, call another
+executor, or start a recursive provider loop.
+
+## Dispatch ownership
+
+The root adapters use the existing `rerun_work_item_dispatch` action as their
+primitive identity, but they never apply or fail it directly. A canonical
+service may attach its pooled output through `action_assets` while the action is
+still running. The fenced `completeWork` transaction accepts that exact running
+dispatch as causation, validates its settled budget and output binding, marks
+the work complete, and only then applies the action atomically.
+
+Proposal-origin domain turns follow the same boundary. Their
+`approvalContext.rerunCallback` lets the child terminalize and report without
+owning the shared dispatch lifecycle. A database trigger preserves an active
+rerun dispatch if generic domain finalization attempts to apply or fail it;
+`completeWork` and `failWork` become eligible only after changing the durable
+work row to the matching terminal state.
 
 ## Activation contract
 
@@ -80,7 +99,6 @@ PR 5 must:
    assembly;
 3. register them only in the deploy that also applies all approved selection
    and story-pointer moves atomically;
-4. validate primitive action/output attribution and settle the measured child
-   costs; and
+4. validate primitive action/output attribution and aggregate already-settled
+   measured child costs; and
 5. preserve pooled outputs when execution is canceled or fails.
-

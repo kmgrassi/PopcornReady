@@ -28,6 +28,17 @@ remain available for measured settlement and recovery. Zero-cost release is
 safe only for demonstrably deterministic services that did not call a
 provider.
 
+An estimate is an admission fence, not permission to discard an actual bill.
+After a provider result exists, settle its measured cost before raising an
+overage. The stable reservation key makes a lost response safe to replay: the
+service reuses its staged asset and settlement returns the prior result.
+
+The work dispatch also belongs to the coordinator, not to a child service or
+generic domain finalizer. Outputs may be linked while it is running, but only
+the fenced work transaction may apply it after causation checks. Likewise, an
+inert successor proposal is useful callback metadata, not a primitive that
+caused the current output.
+
 ## Follow-up
 
 PR 5 owns dependency-aware ordering, canonical-service wiring, production
