@@ -28,9 +28,9 @@ cutover:
 
 Branch: `codex/selective-regen-pr7b-schema-retirement`
 
-Base: PR 7A head `05c5e0dc`
+Base: resolved PR 7A main-integration head `0cbeac7e`
 
-PR target: `codex/selective-regen-pr7-cleanup`
+PR target: `main` (with PR 855 then PR 856 required to merge first)
 
 PR 7B may merge only after PR 7A is fully deployed. Rolling back after the
 column drop must use a forward deploy of a PR 7A-compatible application; an
@@ -170,3 +170,28 @@ older binary that reads or writes the removed profile is not safe.
 ## Handoff
 
 Do not deploy or merge. Verify the rollout precondition first.
+
+## Main integration (PR 857)
+
+- Reset the integration branch to resolved PR 856 and applied the final reviewed
+  PR 7B merge delta relative to its PR 7A parent. It applied without conflicts,
+  producing only the intended 15-file destructive retirement layer.
+- Static migration, readiness, PREP-boundary, and CLI coverage passed 20/20,
+  with the live database integration correctly skipped outside its opt-in
+  environment. API and web typechecks passed.
+- The local destructive upgrade harness reached its initial PR 7A database
+  reset but the Docker/Supabase reset then stopped producing output and was
+  terminated after a bounded wait. The identical reviewed source delta already
+  passed this complete harness, including the PR 7A-to-PR 7B upgrade, live API
+  checks, final-schema integrations, and clean 95-migration replay; the current
+  failure is local daemon responsiveness, not a migration assertion failure.
+- This PR must still merge and deploy only after PR 856 is fully deployed to
+  every production application instance and the PREP migration has succeeded.
+- `pnpm agent:lint:fix` and `pnpm agent:validate -- --scope all` passed on the
+  reconstructed branch, including both app typechecks and validation of the
+  current 96-migration chain.
+- Independent integration review approved the code with the hard rollout gate
+  unchanged. It verified the reconstructed delta has the same stable patch ID
+  and identical 15-file name/stat set as the final reviewed PR 7B delta,
+  confirmed PR 855/856 implementation blobs are unchanged, and found no
+  actionable code blocker.

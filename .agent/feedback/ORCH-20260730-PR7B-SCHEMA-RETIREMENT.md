@@ -46,3 +46,8 @@ Upgrade harnesses should distinguish internal durable state from compatibility
 API projections. Assert destructive structural markers directly in SQL, then
 assert the public status vocabulary separately when it intentionally collapses
 new internal states for older clients.
+
+For a final destructive layer, reconstruct from the resolved preparatory branch
+and apply the reviewed merge delta relative to that preparatory parent. This
+keeps the schema drop auditable as one bounded change and avoids re-resolving
+the non-destructive rollout bridge through duplicate stacked histories.
