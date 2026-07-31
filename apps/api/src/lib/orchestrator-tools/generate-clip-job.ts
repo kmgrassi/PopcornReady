@@ -4,6 +4,7 @@ import type { AuthContext } from "@/lib/api/v1/auth";
 import { createGeneratedAsset as realCreateGeneratedAsset } from "@/lib/api/v1/generated-assets";
 import {
   getActiveProjectScopedAsset as realGetActiveProjectScopedAsset,
+  getProjectRunGeneratedAsset as realGetProjectRunGeneratedAsset,
   selectGeneratedBeatClipAsset as realSelectGeneratedBeatClipAsset,
 } from "@/lib/api/v1/store";
 import type { GraphAssetInput } from "@/lib/api/v1/asset-graph";
@@ -23,6 +24,7 @@ type VideoProvider =
 export interface GenerateClipJobDeps {
   createGeneratedAsset: typeof realCreateGeneratedAsset;
   getActiveProjectScopedAsset: typeof realGetActiveProjectScopedAsset;
+  getProjectRunGeneratedAsset: typeof realGetProjectRunGeneratedAsset;
   selectGeneratedBeatClipAsset: typeof realSelectGeneratedBeatClipAsset;
   jobs?: Pick<OrchestratorJobWriter, "setStep" | "succeed" | "fail"> &
     Partial<Pick<OrchestratorJobWriter, "reportProgress">>;
@@ -32,6 +34,7 @@ export interface GenerateClipJobDeps {
 const defaultDeps: GenerateClipJobDeps = {
   createGeneratedAsset: realCreateGeneratedAsset,
   getActiveProjectScopedAsset: realGetActiveProjectScopedAsset,
+  getProjectRunGeneratedAsset: realGetProjectRunGeneratedAsset,
   selectGeneratedBeatClipAsset: realSelectGeneratedBeatClipAsset,
 };
 
@@ -86,13 +89,28 @@ async function generateClipForBeat(input: {
   model?: string;
   orchestratorRunId?: string;
   sessionClaimGeneration?: number;
+  bypassActiveClipSelection?: boolean;
 }): Promise<string[]> {
-  const existingClip = await input.deps.getActiveProjectScopedAsset({
-    workspaceId: input.auth.workspaceId,
-    projectId: input.projectId,
-    slotRole: `beat_clip:${input.beat.beatId}`,
-    expectedRole: "beat_clip",
-  });
+  const sameChildClip =
+    input.orchestratorRunId && input.sessionClaimGeneration !== undefined
+      ? await input.deps.getProjectRunGeneratedAsset({
+          workspaceId: input.auth.workspaceId,
+          projectId: input.projectId,
+          orchestratorRunId: input.orchestratorRunId,
+          role: "beat_clip",
+          beatId: input.beat.beatId,
+        })
+      : null;
+  if (sameChildClip) return [sameChildClip.id];
+
+  const existingClip = input.bypassActiveClipSelection
+    ? null
+    : await input.deps.getActiveProjectScopedAsset({
+        workspaceId: input.auth.workspaceId,
+        projectId: input.projectId,
+        slotRole: `beat_clip:${input.beat.beatId}`,
+        expectedRole: "beat_clip",
+      });
   if (existingClip) return [existingClip.id];
 
   const result = await input.deps.createGeneratedAsset({
@@ -142,6 +160,7 @@ export interface GenerateClipJobInput {
   sessionClaimGeneration?: number;
   beats: GenerateClipJobBeat[];
   skippedBeatIds?: string[];
+  bypassActiveClipSelection?: boolean;
   provider?: VideoProvider;
   model?: string;
 }
@@ -180,6 +199,9 @@ export async function runGenerateClipJob(
         ...(input.orchestratorRunId ? { orchestratorRunId: input.orchestratorRunId } : {}),
         ...(input.sessionClaimGeneration !== undefined
           ? { sessionClaimGeneration: input.sessionClaimGeneration }
+          : {}),
+        ...(input.bypassActiveClipSelection
+          ? { bypassActiveClipSelection: true }
           : {}),
       });
       if (assetIds.length === 0) {

@@ -5,7 +5,10 @@ import type { AuthContext } from "@/lib/api/v1/auth";
 import type { ActiveProjectPlan, V1Asset } from "@/lib/api/v1/store";
 import type { ShotPlan } from "@popcorn/shared/types";
 import { createGenerateClipTool, parseGenerateClipInput } from "../generate-clip";
-import { runGenerateClipJob } from "../generate-clip-job";
+import {
+  runGenerateClipJob,
+  type GenerateClipJobInput,
+} from "../generate-clip-job";
 import { ToolInputError } from "../types";
 import type { ToolCallResult } from "../types";
 
@@ -181,10 +184,14 @@ test("visuals_revision generates the exact requested beat even when its clip is 
   let jobInput:
     | {
         execution: {
-          input: { beats: Array<{ beatId: string; keyframeAssetId: string }> };
+          input: {
+            beats: Array<{ beatId: string; keyframeAssetId: string }>;
+            bypassActiveClipSelection?: boolean;
+          };
         };
       }
     | undefined;
+  let kickedInput: GenerateClipJobInput | undefined;
   const tool = createGenerateClipTool({
     getActiveProjectPlan: async () => activePlan,
     getActiveProjectScopedAsset: async (input) => {
@@ -211,7 +218,9 @@ test("visuals_revision generates the exact requested beat even when its clip is 
       jobInput = input as unknown as typeof jobInput;
       return queuedJob();
     },
-    runGenerateClipJob: async () => {},
+    runGenerateClipJob: async (input) => {
+      kickedInput = input;
+    },
   });
 
   const result = (await tool.execute(
@@ -234,6 +243,8 @@ test("visuals_revision generates the exact requested beat even when its clip is 
     })),
     [{ beatId: "beat_2", keyframeAssetId: "kf_beat_2" }]
   );
+  assert.equal(jobInput?.execution.input.bypassActiveClipSelection, true);
+  assert.equal(kickedInput?.bypassActiveClipSelection, true);
 });
 
 test("visuals_revision reuses a same-child clip after a crash without reusing the active selection", async () => {
@@ -384,6 +395,7 @@ test("runGenerateClipJob generates clips with keyframe graph inputs, selects the
     },
     {
       jobs: spy.jobs,
+      getProjectRunGeneratedAsset: async () => null,
       getActiveProjectScopedAsset: async () => null,
       createGeneratedAsset: async (args) => {
         generatedBodies.push(args.body as Record<string, unknown>);
@@ -451,6 +463,7 @@ test("domain clip completion stays pooled and cannot overwrite a newer selection
     },
     {
       jobs: spy.jobs,
+      getProjectRunGeneratedAsset: async () => null,
       getActiveProjectScopedAsset: async () => null,
       createGeneratedAsset: async (args) => {
         claims.push(args.sessionClaimGeneration);
@@ -471,6 +484,131 @@ test("domain clip completion stays pooled and cannot overwrite a newer selection
   assert.equal(selectionAttempts, 0);
   assert.deepEqual(spy.succeededResult, {
     assetIds: ["clip_domain"],
+    skippedBeatIds: [],
+  });
+});
+
+test("visuals revision worker bypasses the active clip and creates a pooled revision", async () => {
+  const spy = jobsSpy();
+  const generatedBodies: Record<string, unknown>[] = [];
+  let selectionLookups = 0;
+  let selectionAttempts = 0;
+
+  await runGenerateClipJob(
+    {
+      jobId: "job_revision",
+      workspaceId: "ws_1",
+      projectId: "proj_1",
+      orchestratorRunId: "run_revision",
+      sessionClaimGeneration: 4,
+      bypassActiveClipSelection: true,
+      beats: [
+        {
+          beatId: "beat_1",
+          prompt: "Maya unlocks the cafe with more urgency.",
+          durationSec: 5,
+          keyframeAssetId: "kf_1",
+          keyframeContentHash: "kf_hash",
+        },
+      ],
+    },
+    {
+      jobs: spy.jobs,
+      getProjectRunGeneratedAsset: async () => null,
+      getActiveProjectScopedAsset: async () => {
+        selectionLookups += 1;
+        return asset({
+          id: "active_old_clip",
+          kind: "video",
+          role: "beat_clip",
+        });
+      },
+      createGeneratedAsset: async (args) => {
+        generatedBodies.push(args.body as Record<string, unknown>);
+        return {
+          status: 202,
+          body: { job: { result: { assetIds: ["clip_revision"] } } },
+        };
+      },
+      selectGeneratedBeatClipAsset: async () => {
+        selectionAttempts += 1;
+        return {} as never;
+      },
+      enqueueOrchestratorDispatch: async () => {},
+    }
+  );
+
+  assert.equal(selectionLookups, 0);
+  assert.equal(generatedBodies.length, 1);
+  assert.equal(generatedBodies[0]?.runId, "run_revision");
+  assert.equal(selectionAttempts, 0);
+  assert.deepEqual(spy.succeededResult, {
+    assetIds: ["clip_revision"],
+    skippedBeatIds: [],
+  });
+});
+
+test("recovered visuals revision worker reuses its same-child clip", async () => {
+  const spy = jobsSpy();
+  const runLookups: Array<{ runId: string; beatId?: string }> = [];
+  let activeSelectionLookups = 0;
+  let providerCalls = 0;
+
+  await runGenerateClipJob(
+    {
+      jobId: "job_revision_recovery",
+      workspaceId: "ws_1",
+      projectId: "proj_1",
+      orchestratorRunId: "run_revision",
+      sessionClaimGeneration: 4,
+      bypassActiveClipSelection: true,
+      beats: [
+        {
+          beatId: "beat_1",
+          prompt: "Maya unlocks the cafe with more urgency.",
+          durationSec: 5,
+          keyframeAssetId: "kf_1",
+          keyframeContentHash: "kf_hash",
+        },
+      ],
+    },
+    {
+      jobs: spy.jobs,
+      getProjectRunGeneratedAsset: async (input) => {
+        runLookups.push({
+          runId: input.orchestratorRunId,
+          beatId: input.beatId,
+        });
+        return asset({
+          id: "same_child_clip",
+          kind: "video",
+          role: "beat_clip",
+        });
+      },
+      getActiveProjectScopedAsset: async () => {
+        activeSelectionLookups += 1;
+        return asset({
+          id: "active_old_clip",
+          kind: "video",
+          role: "beat_clip",
+        });
+      },
+      createGeneratedAsset: async () => {
+        providerCalls += 1;
+        throw new Error("must not duplicate same-child provider work");
+      },
+      selectGeneratedBeatClipAsset: async () => {
+        throw new Error("recovered domain clips must remain pooled");
+      },
+      enqueueOrchestratorDispatch: async () => {},
+    }
+  );
+
+  assert.deepEqual(runLookups, [{ runId: "run_revision", beatId: "beat_1" }]);
+  assert.equal(activeSelectionLookups, 0);
+  assert.equal(providerCalls, 0);
+  assert.deepEqual(spy.succeededResult, {
+    assetIds: ["same_child_clip"],
     skippedBeatIds: [],
   });
 });
