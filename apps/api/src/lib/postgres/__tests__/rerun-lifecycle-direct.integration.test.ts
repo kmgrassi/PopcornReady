@@ -1360,7 +1360,7 @@ integrationTest(
         );
         assert.equal(reconciliation.rows[0]?.status, "applied");
         assert.equal(reconciliation.rows[0]?.moved_selections.length, 1);
-        assert.equal(reconciliation.rows[0]?.moved_story_pointers.length, 1);
+        assert.equal(reconciliation.rows[0]?.moved_story_pointers.length, 2);
       };
 
       await runScenario(false);

@@ -42,3 +42,16 @@ execution reservation and return the actual durable result when completion or
 failure wins the cancellation race. Likewise, settlement callbacks must be
 scoped to the proposal action so a restored execution cannot refresh a prior
 object selected in the same mounted dialog.
+
+Main integration should replay semantic commits, not merge duplicate stacked
+histories wholesale. When earlier PRs landed independently under different
+SHAs, a raw merge turned already-reviewed files into add/add conflicts. Rebuilding
+from current `main` and applying only PR 6's reviewed deltas reduced the conflict
+surface to the actual cancellation contract and made ownership explicit.
+
+Run the opt-in direct Postgres suite after reconstructing a stacked branch, even
+when its unit tests and typechecks are green. The combined current-main fixture
+found two real replay boundaries that neither side's mocked coverage exercised:
+a null aggregate represents an unparked work item, and primitive output
+attribution may already exist because it is also the evidence used to validate
+causation.

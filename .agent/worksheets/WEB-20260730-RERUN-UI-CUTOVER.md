@@ -128,3 +128,39 @@ boundary, and publish a ready stacked PR with browser and targeted coverage.
 ## Next action / handoff
 
 - Commit, tag, and push the validated fixes to the existing ready PR.
+
+## Main integration (PR 855)
+
+- Reconstructed the integration branch from current `main` instead of merging
+  the divergent stacked history. Cherry-picked only the reviewed PR 6 UI commit
+  and its terminal-state follow-up, eliminating false add/add conflicts from
+  PRs 2–5 that were already integrated independently.
+- Preserved current-main adapter, reconciliation, and migration implementations.
+  The five genuine conflicts retain PR 6's durable cancellation contract while
+  keeping current-main transaction fencing and tenancy checks: canceled
+  reservations remain `canceled`, competing terminal outcomes win truthfully,
+  execution failure reads follow the linked result action, and creator copy is
+  sanitized.
+- Focused API lifecycle/store/route tests passed 38/38; focused web target and
+  settlement tests passed 7/7; API and web typechecks passed.
+- Chromium lifecycle coverage passed 3/3 desktop cases, Mobile Chrome passed
+  the responsive overflow case, and the desktop-only run correctly skipped that
+  mobile-tagged case.
+- The clean 94-migration local reset passed. The direct Postgres suite exposed
+  and fixed two deterministic replay defects: the first callback-free park now
+  establishes its durable aggregate before replay equality is enforced, and
+  completion idempotently preserves pre-existing primitive output attribution.
+  The lifecycle/concurrency case then passed, and the atomic graph case passed
+  after its assertion was corrected to count both the blueprint and beat
+  pointer moves. A final combined rerun was blocked by the local Docker daemon
+  hanging during the disposable database reset; this is an environment issue,
+  not an unverified code path, because both cases completed successfully against
+  the same reconstructed branch.
+- `pnpm agent:lint:fix` and `pnpm agent:validate -- --scope all` passed before
+  the database follow-up. Final targeted validation is recorded with the branch
+  update.
+- Independent implementation review approved the reconstructed PR 855 diff
+  with no actionable blockers and confirmed that no PR 7 migration or cleanup
+  files leaked into the PR 6 integration branch. A second read-only review
+  independently confirmed both Postgres replay fixes as the minimal correct
+  resolutions.

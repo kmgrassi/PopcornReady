@@ -303,6 +303,7 @@ export async function parkWorkTransaction(input: {
     if (
       !mutatedCallback &&
       !input.blockedPrecondition &&
+      work.binding_results !== null &&
       (
         !sameJson(work.primitive_action_ids, input.primitiveActionIds) ||
         !sameJson(work.budget_reservation_keys, input.budgetReservationKeys) ||
@@ -710,9 +711,10 @@ export async function completeWorkTransaction(input: {
     }>).entries()) {
       if (!binding.assetId) continue;
       await client.query(
-        `insert into public.action_assets(
+         `insert into public.action_assets(
            project_id,action_id,asset_id,direction,role,ordinal
-         ) values ($1,$2,$3,'output',$4,$5)`,
+         ) values ($1,$2,$3,'output',$4,$5)
+         on conflict (action_id,direction,ordinal) do nothing`,
         [
           input.projectId, work.dispatch_action_id, binding.assetId,
           binding.role ?? "rerun_output", binding.ordinal ?? ordinal,
