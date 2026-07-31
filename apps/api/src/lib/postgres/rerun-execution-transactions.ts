@@ -133,11 +133,11 @@ export async function reserveExecutionTransaction(input: {
       rootRunId = requireRow((await client.query<{ id: string }>(
         `insert into public.orchestrator_runs (
            schema_version, project_id, status, input_summary, budget_usd,
-           spent_usd, agent_role, root_execution_profile
+           spent_usd, agent_role
          ) values (
            'orchestrator_run.v1', $1, 'running',
            'Approved selective regeneration', $2, 0,
-           'creative_director', 'creative_director'
+           'creative_director'
          ) returning id`,
         [input.projectId, input.approvedMaxCostUsd]
       )).rows, "Could not materialize execution root.").id;
@@ -147,7 +147,6 @@ export async function reserveExecutionTransaction(input: {
         `select id from public.orchestrator_runs
           where id = $1 and project_id = $2
             and agent_role = 'creative_director'
-            and root_execution_profile = 'creative_director'
             and status in ('queued', 'running', 'waiting')
           for update`,
         [rootRunId, input.projectId]
@@ -581,7 +580,11 @@ async function finalizeLocked(
       where id=$1`,
     [
       execution.id,
-      input.outcome === "applied" ? "completed" : "failed",
+      input.outcome === "applied"
+        ? "completed"
+        : input.error?.kind === "execution_canceled"
+          ? "canceled"
+          : "failed",
       input.executionActionId,
     ]
   );
@@ -638,7 +641,11 @@ export async function cancelExecutionTransaction(input: {
   proposalActionId: string;
   executionActionId: string;
   reason: string;
-}): Promise<string> {
+}): Promise<{
+  executionActionId: string;
+  status: "applied" | "failed" | "canceled";
+  canceled: boolean;
+}> {
   return lifecycleTransaction("rerunLifecycle.cancelExecution", async (client) => {
     const row = requireRow((await client.query<LockedExecution>(
       `select id, proposal_action_id, project_id, root_run_id,
@@ -654,7 +661,23 @@ export async function cancelExecutionTransaction(input: {
         where project_id=$1 and proposal_action_id=$2 for update`,
       [input.projectId, input.proposalActionId]
     )).rows, "Execution reservation not found.");
-    if (row.execution_result_action_id) return row.execution_result_action_id;
+    if (row.execution_result_action_id) {
+      const result = requireRow((await client.query<{
+        status: "applied" | "failed";
+        error_kind: string | null;
+      }>(
+        `select status,error->>'kind' as error_kind
+           from public.actions where id=$1 and project_id=$2
+             and tool='rerun_execution'`,
+        [row.execution_result_action_id, input.projectId]
+      )).rows, "Execution result action not found.");
+      const canceled = result.error_kind === "execution_canceled";
+      return {
+        executionActionId: row.execution_result_action_id,
+        status: canceled ? "canceled" : result.status,
+        canceled,
+      };
+    }
     await client.query(
       `update public.rerun_execution_work_items set status='canceled',
        error=$2::jsonb where execution_reservation_id=$1
@@ -683,7 +706,7 @@ export async function cancelExecutionTransaction(input: {
       [row.id, token]
     );
     const fenced = await lockExecution(client, input.projectId, row.id);
-    return finalizeLocked(client, {
+    const executionActionId = await finalizeLocked(client, {
       projectId: input.projectId,
       execution: fenced,
       leaseToken: token,
@@ -696,6 +719,7 @@ export async function cancelExecutionTransaction(input: {
         recoverable: false,
       },
     });
+    return { executionActionId, status: "canceled", canceled: true };
   });
 }
 

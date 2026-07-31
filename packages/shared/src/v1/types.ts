@@ -814,24 +814,6 @@ export interface BoardRevisionTarget {
   label?: string;
 }
 
-export interface BoardRevisionRequest {
-  message: string;
-  target: BoardRevisionTarget;
-  generationModel?: {
-    provider: string;
-    model: string;
-  };
-}
-
-export interface BoardRevisionResponse {
-  revision: {
-    id: string;
-    message: string;
-    target: BoardRevisionTarget;
-    createdAt: string;
-  };
-}
-
 // Canonical order and default labels for the stage rail. Individual runs may
 // skip stages they do not need; the rail orders whatever it is given by this
 // position.

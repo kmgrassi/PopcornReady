@@ -12,13 +12,16 @@ function readinessRunner(
   runner: TransactionRunner;
   calls: () => number;
   params: () => readonly unknown[];
+  sql: () => string;
 } {
   let calls = 0;
   let observedParams: readonly unknown[] = [];
+  let observedSql = "";
   const runner: TransactionRunner = async (_operation, callback) => {
     calls += 1;
     return callback({
-      async query(_sql: string, params: readonly unknown[] = []) {
+      async query(sql: string, params: readonly unknown[] = []) {
+        observedSql = sql;
         observedParams = params;
         return {
           rows: [
@@ -55,6 +58,7 @@ function readinessRunner(
     runner,
     calls: () => calls,
     params: () => observedParams,
+    sql: () => observedSql,
   };
 }
 
@@ -162,6 +166,40 @@ test("production readiness audits the complete retired lifecycle routine family"
     routine.includes("reserve_rerun_child_budget")));
   assert.ok(routines.some((routine) =>
     routine.includes("recover_rerun_execution")));
+});
+
+test("production readiness tolerates but does not require the transitional root profile grant", async () => {
+  const fixture = readinessRunner();
+  const readiness = createCreatorDirectDatabaseReadiness(fixture.runner, {
+    NODE_ENV: "production",
+    DATABASE_URL: "postgresql://configured",
+  });
+  await readiness();
+
+  const requiredPrivileges = JSON.parse(fixture.params()[2] as string) as {
+    orchestrator_runs: {
+      SELECT: string[];
+      INSERT: string[];
+    };
+  };
+  assert.ok(!requiredPrivileges.orchestrator_runs.SELECT.includes(
+    "root_execution_profile"
+  ));
+  assert.ok(!requiredPrivileges.orchestrator_runs.INSERT.includes(
+    "root_execution_profile"
+  ));
+  assert.match(
+    fixture.sql(),
+    /'orchestrator_runs'.*'root_execution_profile'/s
+  );
+  assert.match(
+    fixture.sql(),
+    /expected_table\.key = 'orchestrator_runs'\s+and actual\.column_name = 'root_execution_profile'\s+and actual\.privilege_type in \('SELECT', 'INSERT'\)/
+  );
+  assert.doesNotMatch(
+    fixture.sql(),
+    /expected_table\.key <> 'orchestrator_runs'/
+  );
 });
 
 test("Railway health fails closed when DATABASE_URL is absent", async () => {

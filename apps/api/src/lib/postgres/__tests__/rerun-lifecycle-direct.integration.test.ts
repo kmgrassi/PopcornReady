@@ -5,6 +5,7 @@ import test from "node:test";
 import { Pool } from "pg";
 import { ApiError } from "@/core/errors";
 import {
+  cancelExecutionTransaction,
   claimExecutionTransaction,
   finalizeExecutionTransaction,
   recoverExecutionTransaction,
@@ -192,7 +193,73 @@ integrationTest(
       );
       assert.equal(recovered.rows[0]?.execution_result_action_id, recoveryActionId);
       assert.equal(recovered.rows[0]?.status, "failed");
+      assert.deepEqual(
+        await cancelExecutionTransaction({
+          projectId,
+          proposalActionId: expiredProposalId,
+          executionActionId: randomUUID(),
+          reason: "late creator cancellation",
+        }),
+        {
+          executionActionId: recoveryActionId,
+          status: "failed",
+          canceled: false,
+        }
+      );
       context.diagnostic("expired fence rejected and recovery finalized");
+
+      const canceledProposalId = await insertProposal(admin, projectId);
+      const canceled = await approveAndClaim(
+        projectId,
+        canceledProposalId,
+        "creator-canceled"
+      );
+      const canceledActionId = randomUUID();
+      assert.deepEqual(
+        await cancelExecutionTransaction({
+          projectId,
+          proposalActionId: canceledProposalId,
+          executionActionId: canceledActionId,
+          reason: "creator_canceled",
+        }),
+        {
+          executionActionId: canceledActionId,
+          status: "canceled",
+          canceled: true,
+        }
+      );
+      const canceledState = await admin.query<{
+        reservation_status: string;
+        proposal_status: string;
+        execution_error_kind: string;
+        budget_status: string;
+        root_status: string;
+      }>(
+        `select reservation.status as reservation_status,
+                proposal.status as proposal_status,
+                execution.error->>'kind' as execution_error_kind,
+                budget.status as budget_status,
+                root.status as root_status
+           from public.rerun_execution_reservations reservation
+           join public.actions proposal
+             on proposal.id=reservation.proposal_action_id
+           join public.actions execution
+             on execution.id=reservation.execution_result_action_id
+           join public.orchestrator_budget_reservations budget
+             on budget.id=reservation.budget_reservation_id
+           join public.orchestrator_runs root
+             on root.id=reservation.root_run_id
+          where reservation.id=$1`,
+        [canceled.reservation.reservation_id]
+      );
+      assert.deepEqual(canceledState.rows[0], {
+        reservation_status: "canceled",
+        proposal_status: "failed",
+        execution_error_kind: "execution_canceled",
+        budget_status: "released",
+        root_status: "canceled",
+      });
+      context.diagnostic("creator cancellation persisted distinct terminal state");
 
       const target = { kind: "project", projectId };
       const requiredOutput = {

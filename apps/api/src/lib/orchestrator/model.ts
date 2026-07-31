@@ -1,5 +1,4 @@
 import { getLlmClient } from "../llm";
-import { getAsset } from "../api/v1/store";
 import { getWorkspaceModelSetting } from "../api/v1/model-settings";
 import { withLlmCostRecording } from "../api/v1/llm-costs";
 import { ToolRegistry } from "./registry";
@@ -21,11 +20,10 @@ export interface ModelTurnInput {
   priorResults?: unknown[];
   registry: ToolRegistry;
   /** Role-specific prompt selected from a durable AgentDefinition. */
-  systemPrompt?: string;
+  systemPrompt: string;
   /** Fresh structured context; never concatenate trusted and creator data into prose. */
   agentContext?: unknown;
   maxTokens?: number;
-  resolveAssetKind?: AssetKindResolver;
 }
 
 export type OrchestratorModel = (
@@ -46,15 +44,6 @@ interface PriorToolResult {
   };
 }
 
-interface BoardFeedbackRequest {
-  message: string;
-  generationModel?: {
-    provider: string;
-    model: string;
-  };
-  target: { scope?: string; assetId?: string };
-}
-
 interface RoutingContext {
   completedTools: ToolName[];
   latestFailure?: {
@@ -70,23 +59,6 @@ interface RoutingContext {
   };
   assetRoleGuide: Record<string, string>;
 }
-
-type AssetKindResolver = (
-  workspaceId: string,
-  projectId: string,
-  assetId: string
-) => Promise<"image" | "video" | "audio" | undefined>;
-
-// Exported so the fixture-only Gate-0 hierarchy simulation
-// (lib/orchestrator/evals/hierarchy-fixture.ts) evaluates the proposed
-// creative-director surface against the exact production decision prompt.
-export const ORCHESTRATOR_SYSTEM_PROMPT =
-  "You are the Popcorn Ready video-generation orchestrator. Decide the next single server-owned tool to call. The server owns validation, persistence, jobs, authorization, provider execution, and stage state. Call at most one tool. " +
-  "Each prior result reports its tool and status; a failed result also carries an `error` describing why it failed. When the most recent action failed, do not repeat the same tool with the same inputs — instead follow `error.suggestedNextTools` and satisfy every `error.unmetRequirements[].satisfyWith.tool` before retrying the failed step. " +
-  "A failed delegate_visuals or delegate_audio result can include the complete immutable `error.domainReport`: for `blocked`, use its prerequisite, requiredDomain, and targets to route recovery; for `question`, use its question, options, and fingerprint to request or apply the needed decision rather than discarding it. " +
-  "Important asset roles: `generate_storyboard` creates cheap sketch `beat_storyboard` tiles for planning/review; `generate_keyframe` creates photoreal `beat_keyframe` first-frame assets required by `generate_clip`; `generate_clip` creates new motion `beat_clip` video assets for planned beats; `edit_video_asset` changes the content of an existing uploaded footage asset or generated clip and links the new asset back to the source. A missing `beat_keyframe` is fixed with `generate_keyframe`, not `generate_storyboard`, unless the keyframe tool itself says storyboard tiles are missing. " +
-  "For Request Changes / board_feedback on a target asset: an image tile, keyframe, or visual anchor must use `regenerate_image_asset` with the target asset id and the user's replacement prompt. If the feedback asks to add, remove, replace, restyle, or otherwise modify content inside existing footage or a clip, call `edit_video_asset` with that target asset id as `sourceAssetId`. If the user asks for a different/new clip for a planned beat rather than changing the current source video, call `generate_clip`. " +
-  "Run autonomously by default: advance the pipeline toward a finished video without pausing for confirmation. The server enforces any required stops through its own configured approval gates, so do not insert approval steps on your own — only call `request_approval` when the input explicitly asks for human approval of a stage. Never choose `request_approval` merely because a step is expensive or user-visible.";
 
 async function llmClientForWorkspace(workspaceId: string | undefined) {
   if (!workspaceId) return getLlmClient();
@@ -124,69 +96,6 @@ function asToolName(value: unknown): ToolName | undefined {
 
 function priorResult(value: unknown): PriorToolResult | null {
   return isRecord(value) ? (value as PriorToolResult) : null;
-}
-
-function boardFeedbackRequest(value: unknown): BoardFeedbackRequest | null {
-  if (!isRecord(value)) return null;
-  const message = value.message;
-  const target = value.target;
-  if (typeof message !== "string" || !message.trim() || !isRecord(target)) return null;
-  return {
-    message: message.trim(),
-    ...(isRecord(value.generationModel) &&
-    typeof value.generationModel.provider === "string" &&
-    value.generationModel.provider.trim() &&
-    typeof value.generationModel.model === "string" &&
-    value.generationModel.model.trim()
-      ? {
-          generationModel: {
-            provider: value.generationModel.provider.trim(),
-            model: value.generationModel.model.trim(),
-          },
-        }
-      : {}),
-    target: {
-      ...(typeof target.scope === "string" ? { scope: target.scope } : {}),
-      ...(typeof target.assetId === "string" ? { assetId: target.assetId } : {}),
-    },
-  };
-}
-
-/**
- * Tile feedback is an image replacement request, not an open-ended planning
- * decision. Route it before consulting the LLM so a valid user request cannot
- * be incorrectly completed with no generation action.
- */
-export function deterministicBoardFeedbackRoute(
-  workspaceId: string | undefined,
-  projectId: string,
-  priorResults: unknown[] = [],
-  resolveAssetKind: AssetKindResolver = async (resolvedWorkspaceId, resolvedProjectId, assetId) => {
-    const asset = await getAsset(resolvedWorkspaceId, resolvedProjectId, assetId);
-    return asset.kind;
-  }
-): Promise<{ toolName: "regenerate_image_asset"; input: Record<string, unknown> } | undefined> {
-  const latest = priorResult(priorResults.at(-1));
-  if (latest?.tool !== "board_feedback" || latest.status !== "applied" || !workspaceId) {
-    return Promise.resolve(undefined);
-  }
-  const request = boardFeedbackRequest(latest.request);
-  if (request?.target.scope !== "tile" || !request.target.assetId) {
-    return Promise.resolve(undefined);
-  }
-  return resolveAssetKind(workspaceId, projectId, request.target.assetId)
-    .then((assetKind) => {
-      if (assetKind !== "image") return undefined;
-      return {
-        toolName: "regenerate_image_asset" as const,
-        input: {
-          assetId: request.target.assetId,
-          prompt: request.message,
-          ...(request.generationModel ? request.generationModel : {}),
-        },
-      };
-    })
-    .catch(() => undefined);
 }
 
 function recoveryToolsFromError(error: PriorToolResult["error"]): ToolName[] {
@@ -324,18 +233,7 @@ export const orchestratorModel: OrchestratorModel = async ({
   // Headroom so reasoning models (e.g. gpt-5) have budget left for the tool call
   // after thinking; non-reasoning models only use what they need.
   maxTokens = 4000,
-  resolveAssetKind,
 }) => {
-  const deterministicRoute = await deterministicBoardFeedbackRoute(
-    workspaceId,
-    projectId,
-    priorResults,
-    resolveAssetKind
-  );
-  if (deterministicRoute) {
-    return { type: "tool_call", ...deterministicRoute, model: "deterministic-board-feedback-router" };
-  }
-
   const tools = [...registry.values()].map((tool: ToolDefinition) => ({
     name: tool.name,
     description: tool.description,
@@ -350,7 +248,7 @@ export const orchestratorModel: OrchestratorModel = async ({
     },
     () =>
       client.chooseTool({
-        system: systemPrompt ?? ORCHESTRATOR_SYSTEM_PROMPT,
+        system: systemPrompt,
         userPayload: {
           projectId,
           inputSummary,

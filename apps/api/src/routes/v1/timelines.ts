@@ -26,7 +26,6 @@ import {
   type Job as V1Job,
   type JobType as V1JobType,
   SCHEMA,
-  type BoardRevisionTarget,
   type VersionedTimeline,
 } from "@popcorn/shared/v1/types";
 
@@ -80,52 +79,6 @@ function bodyRecord(body: unknown): Record<string, unknown> {
   return body && typeof body === "object" && !Array.isArray(body)
     ? (body as Record<string, unknown>)
     : {};
-}
-
-function parseRevisionMessage(body: unknown): string {
-  const message = String(bodyRecord(body).message ?? "").trim();
-  if (!message) {
-    throw new AgentApiError("invalid_request", 400, "A revision `message` is required.");
-  }
-  return message;
-}
-
-function optionalTargetString(
-  input: Record<string, unknown>,
-  key: keyof BoardRevisionTarget
-): string | undefined {
-  const value = input[key];
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
-
-function parseRevisionTarget(body: unknown): BoardRevisionTarget | undefined {
-  const raw = bodyRecord(body).target;
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
-  const target = raw as Record<string, unknown>;
-  const scope = target.scope === "board" || target.scope === "tile" ? target.scope : undefined;
-  if (!scope) {
-    throw new AgentApiError("invalid_request", 400, "`target.scope` must be board or tile.");
-  }
-
-  const parsed: BoardRevisionTarget = { scope };
-  for (const key of [
-    "runId",
-    "stageId",
-    "itemId",
-    "storyboardId",
-    "sceneId",
-    "beatId",
-    "panelId",
-    "keyframeAssetId",
-    "clipAssetId",
-    "assetId",
-    "artifactId",
-    "label",
-  ] as const) {
-    const value = optionalTargetString(target, key);
-    if (value) parsed[key] = value;
-  }
-  return parsed;
 }
 
 function parseExportOptions(body: unknown): ExportOptions {
@@ -260,47 +213,6 @@ async function latestTimelineForProject(
   }
   const timelines = await store.listTimelinesForProject(projectId);
   return timelines[0] ?? null;
-}
-
-async function createRevision(
-  { body, req, requestId }: HandlerCtx,
-  params: RouteParams
-): Promise<ApiResult> {
-  try {
-    param(params, "projectId");
-    param(params, "timelineId");
-    const message = parseRevisionMessage(body);
-    const target = parseRevisionTarget(body);
-    void req;
-    void message;
-    void target;
-    throw new AgentApiError(
-      "revision_retired",
-      410,
-      "Timeline patch revisions are retired. Use object-scoped Request Changes instead."
-    );
-  } catch (err) {
-    return agentErrorResult(err, requestId);
-  }
-}
-
-async function getRevision(
-  { requestId }: HandlerCtx,
-  params: RouteParams
-): Promise<ApiResult> {
-  try {
-    const projectId = param(params, "projectId");
-    const jobId = param(params, "jobId");
-    const job = requireJobInProject(await agentApiStore.getJob(jobId), {
-      type: "revision",
-      projectId,
-      jobId,
-      label: "Revision",
-    });
-    return { status: 200, body: { job } };
-  } catch (err) {
-    return agentErrorResult(err, requestId);
-  }
 }
 
 async function createExport(
@@ -670,16 +582,6 @@ timelinesRouter.post(
 timelinesRouter.get(
   "/projects/:projectId/timelines/critique/:jobId",
   route(getTimelineCritique)
-);
-
-timelinesRouter.post(
-  "/projects/:projectId/timelines/:timelineId/revisions",
-  mutation(createRevision)
-);
-
-timelinesRouter.get(
-  "/projects/:projectId/timelines/:timelineId/revisions/:jobId",
-  route(getRevision)
 );
 
 timelinesRouter.post(

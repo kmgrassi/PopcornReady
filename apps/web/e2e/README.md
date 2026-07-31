@@ -24,6 +24,14 @@ cannot reappear after its project changes, a delayed project creation cannot
 override a newer selection, and pagination failures preserve loaded projects,
 without spending provider credits.
 
+`rerun-proposal-lifecycle.spec.ts` verifies the durable Request Changes UI
+without provider spend: exact-target proposal preview, preserved/affected work,
+cost approval, separate execution, waiting-state polling, reload recovery,
+visible owning-surface refresh after restored completion, truthful cancellation,
+terminal cleanup, keyboard focus restoration, and mobile overflow. The run and
+storyboard suites also assert that their entry points open this lifecycle instead
+of posting the retired reject, board-revision, or stage-restart mutations.
+
 The command starts the Express API and Vite app, using:
 
 - `AUTH_MODE=local`

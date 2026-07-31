@@ -19,7 +19,6 @@ const rootRun: OrchestratorRun = {
   projectId: "project-1",
   status: "queued",
   inputSummary: "make a short film",
-  rootExecutionProfile: "creative_director",
   spentUsd: 0,
   createdAt: "2026-07-27T00:00:00.000Z",
   updatedAt: "2026-07-27T00:00:00.000Z",
@@ -48,7 +47,7 @@ const visualTask = {
   responseRecipient: { kind: "creative_director" },
 } as unknown as DomainTaskV1;
 
-test("root definition ignores a supplied flat registry and uses hierarchy context", async () => {
+test("root definition accepts an exact test registry seam", async () => {
   const registry: ToolRegistry = new Map();
   const definition = await resolveAgentDefinition({
     run: rootRun,
@@ -56,12 +55,12 @@ test("root definition ignores a supplied flat registry and uses hierarchy contex
     rootRegistry: registry,
   });
   assert.equal(definition.role, "creative_director");
-  assert.notEqual(definition.registry, registry);
+  assert.equal(definition.registry, registry);
 });
 
-test("creative-director root profile exposes only the creative-director surface", async () => {
+test("creative-director root exposes only the creative-director surface", async () => {
   const definition = await resolveAgentDefinition({
-    run: { ...rootRun, rootExecutionProfile: "creative_director" },
+    run: rootRun,
     workspaceId: "workspace-1",
   });
   assert.equal(definition.systemPrompt, CREATIVE_DIRECTOR_SYSTEM_PROMPT);
@@ -82,16 +81,6 @@ test("creative-director root profile exposes only the creative-director surface"
   ]);
   assert.equal(definition.registry.has("generate_clip"), false);
   assert.equal(definition.registry.has("generate_audio"), false);
-});
-
-test("a legacy root without a durable profile cannot resolve an agent definition", async () => {
-  await assert.rejects(
-    resolveAgentDefinition({
-      run: { ...rootRun, rootExecutionProfile: undefined },
-      workspaceId: "workspace-1",
-    }),
-    /legacy history/
-  );
 });
 
 test("root context reports include only root-origin specialist completions", () => {

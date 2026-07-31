@@ -74,6 +74,7 @@ export interface RerunProposalActionRecord {
   proposal: RerunProposalV2;
   inputAssetIds: string[];
   rationale: string | null;
+  failure: { code: string; message: string } | null;
 }
 
 interface ActionRow {
@@ -86,6 +87,37 @@ interface ActionRow {
   proposal: Record<string, unknown> | null;
   input_asset_ids: string[];
   rationale: string | null;
+  error: Record<string, unknown> | null;
+}
+
+export function normalizeRerunExecutionFailure(
+  value: unknown
+): { code: string; message: string } | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const rawError = unmarkedJson(value as Record<string, unknown>) ?? {};
+  const code =
+    typeof rawError.code === "string"
+      ? rawError.code
+      : typeof rawError.kind === "string"
+        ? rawError.kind
+        : "rerun_execution_failed";
+  const messages: Record<string, string> = {
+    stale_proposal:
+      "The selected work changed before the requested changes could be applied.",
+    budget_exceeded:
+      "The requested changes could not finish within the approved maximum cost.",
+    execution_canceled: "The requested changes were canceled.",
+    executor_failed:
+      "A generation step could not complete the requested changes.",
+    provider_quota:
+      "A generation provider could not complete the requested changes right now.",
+    reconciliation_failed:
+      "The generated changes could not be safely applied to the project.",
+  };
+  return {
+    code,
+    message: messages[code] ?? "The requested changes could not be completed.",
+  };
 }
 
 function mapProposalAction(row: ActionRow): RerunProposalActionRecord {
@@ -106,6 +138,7 @@ function mapProposalAction(row: ActionRow): RerunProposalActionRecord {
     proposal,
     inputAssetIds: row.input_asset_ids,
     rationale: row.rationale,
+    failure: normalizeRerunExecutionFailure(row.error),
   };
 }
 
@@ -117,7 +150,7 @@ export async function getRerunProposalAction(input: {
   const row = await runLifecycleQuery(
     "rerunLifecycleStore.getProposal",
     db.from("actions").select(
-      "id, project_id, orchestrator_run_id, tool, status, params, proposal, input_asset_ids, rationale"
+      "id, project_id, orchestrator_run_id, tool, status, params, proposal, input_asset_ids, rationale, error"
     ).eq("id", input.actionId).eq("project_id", input.projectId).maybeSingle()
   ) as ActionRow | null;
   if (!row) throw new ApiError("not_found", `Rerun proposal not found: ${input.actionId}`);
@@ -179,7 +212,7 @@ export async function assertRerunProposalAuthority(
   const root = await runLifecycleQuery(
     "rerunLifecycleStore.assertAuthority root",
     db.from("orchestrator_runs")
-      .select("id, project_id, agent_role, root_execution_profile")
+      .select("id, project_id, agent_role")
       .eq("id", action.rootRunId)
       .eq("project_id", action.projectId)
       .maybeSingle()
@@ -187,12 +220,10 @@ export async function assertRerunProposalAuthority(
     id: string;
     project_id: string;
     agent_role: string;
-    root_execution_profile: string | null;
   } | null;
   if (
     !root ||
-    root.agent_role !== "creative_director" ||
-    root.root_execution_profile !== "creative_director"
+    root.agent_role !== "creative_director"
   ) {
     throw new ApiError("validation_failed", "Proposal root is not an authorized Creative Director root.");
   }
@@ -308,6 +339,92 @@ export async function getRerunProposalApproval(input: {
     approvalActionId: row.id,
     approvedMaxCostUsd: Number(params.approvedMaxCostUsd),
     approvalFingerprint: String(params.approvalFingerprint),
+  };
+}
+
+interface RerunExecutionRow {
+  id: string;
+  status:
+    | "reserved"
+    | "running"
+    | "waiting"
+    | "completed"
+    | "failed"
+    | "canceled";
+  execution_result_action_id: string | null;
+  updated_at: string;
+}
+
+interface RerunExecutionReadDeps {
+  getReservation: (input: {
+    projectId: string;
+    proposalActionId: string;
+  }) => Promise<RerunExecutionRow | null>;
+  getExecutionAction: (input: {
+    projectId: string;
+    executionActionId: string;
+  }) => Promise<{ error: Record<string, unknown> | null } | null>;
+}
+
+export async function getLatestRerunExecution(
+  input: {
+    projectId: string;
+    proposalActionId: string;
+  },
+  overrides: Partial<RerunExecutionReadDeps> = {}
+): Promise<{
+  reservationId: string;
+  status:
+    | "reserved"
+    | "running"
+    | "waiting"
+    | "completed"
+    | "failed"
+    | "canceled";
+  executionActionId: string | null;
+  updatedAt: string;
+  failure: { code: string; message: string } | null;
+} | null> {
+  const getReservation = overrides.getReservation ?? (async (request) => {
+    const db = getServiceSupabaseForStore();
+    return runLifecycleQuery(
+      "rerunLifecycleStore.getExecution",
+      db.from("rerun_execution_reservations")
+        .select("id, status, execution_result_action_id, updated_at")
+        .eq("project_id", request.projectId)
+        .eq("proposal_action_id", request.proposalActionId)
+        .maybeSingle()
+    ) as Promise<RerunExecutionRow | null>;
+  });
+  const getExecutionAction = overrides.getExecutionAction ?? (async (request) => {
+    const db = getServiceSupabaseForStore();
+    return runLifecycleQuery(
+      "rerunLifecycleStore.getExecution result",
+      db.from("actions")
+        .select("error")
+        .eq("id", request.executionActionId)
+        .eq("project_id", request.projectId)
+        .eq("tool", "rerun_execution")
+        .maybeSingle()
+    ) as Promise<{ error: Record<string, unknown> | null } | null>;
+  });
+  const row = await getReservation(input);
+  if (!row) return null;
+  const executionAction = row.execution_result_action_id
+    ? await getExecutionAction({
+        projectId: input.projectId,
+        executionActionId: row.execution_result_action_id,
+      })
+    : null;
+  const failure = normalizeRerunExecutionFailure(executionAction?.error);
+  const canceled =
+    row.status === "canceled" || failure?.code === "execution_canceled";
+  return {
+    reservationId: row.id,
+    status: canceled ? "canceled" : row.status,
+    executionActionId: row.execution_result_action_id,
+    updatedAt: row.updated_at,
+    failure: canceled ? null : failure,
   };
 }
 
@@ -633,6 +750,6 @@ export async function cancelRerunExecution(input: {
   proposalActionId: string;
   executionActionId: string;
   reason: string;
-}): Promise<string> {
+}) {
   return cancelExecutionTransaction(input);
 }

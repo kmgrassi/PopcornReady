@@ -20,7 +20,6 @@ interface ReviewActions {
   feedbackNote?: string;
   onFeedbackNoteChange?: (note: string) => void;
   onApprove: (note: string) => void;
-  onReject: (note: string) => void;
   onCancel: () => void;
 }
 
@@ -36,6 +35,8 @@ interface ReviewGatePanelProps {
   reviewActions?: ReviewActions;
   onFeedbackNoteChange: (note: string) => void;
   onApprove: () => void;
+  onRequestChanges: () => void;
+  canRequestChanges: boolean;
 }
 
 const REVIEW_STAGE_LABELS: Partial<Record<GenerationStageType, string>> = {
@@ -181,6 +182,8 @@ export function ReviewGatePanel({
   reviewActions,
   onFeedbackNoteChange,
   onApprove,
+  onRequestChanges,
+  canRequestChanges,
 }: ReviewGatePanelProps) {
   const isBriefReviewGate = stageType === "brief_intake";
 
@@ -257,11 +260,21 @@ export function ReviewGatePanel({
             <button
               type="button"
               className={styles.secondaryButton}
-              onClick={() => reviewActions.onReject(feedbackNote)}
-              disabled={!!pending}
+              onClick={onRequestChanges}
+              disabled={!!pending || !canRequestChanges}
+              title={
+                canRequestChanges
+                  ? undefined
+                  : "Open a specific generated object before requesting changes."
+              }
             >
-              {pending === "reject" ? "Requesting..." : "Request changes"}
+              Request changes
             </button>
+            {!canRequestChanges ? (
+              <span className={styles.feedbackHint}>
+                Open a specific generated object to request changes safely.
+              </span>
+            ) : null}
           </>
         ) : null}
         <button

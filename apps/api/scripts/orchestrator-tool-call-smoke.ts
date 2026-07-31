@@ -2,13 +2,14 @@ import { randomUUID } from "node:crypto";
 
 import {
   orchestratorModel,
-  runToolLoopTurn,
   TOOL_NAMES,
   type OrchestratorRun,
   type ToolDefinition,
   type ToolName,
   type ToolRegistry,
 } from "../src/lib/orchestrator";
+import { CREATIVE_DIRECTOR_SYSTEM_PROMPT } from "../src/lib/orchestrator/creative-director-agent";
+import { runToolTestTurn } from "../src/lib/tool-tests/single-turn";
 import { getLlmClient, resolveLlmConfig, type LlmProvider } from "../src/lib/llm";
 
 type ProviderArg = LlmProvider | "configured" | "all";
@@ -186,12 +187,12 @@ async function runProbe(provider: LlmProvider, toolName: ToolName): Promise<void
   const previousProvider = process.env.LLM_PROVIDER;
   process.env.LLM_PROVIDER = provider;
 
-  let result: Awaited<ReturnType<typeof runToolLoopTurn>>;
+  let result: Awaited<ReturnType<typeof runToolTestTurn>>;
   const token = `probe_${toolName}_${randomUUID()}`;
   try {
     const registry = createProbeRegistry(toolName, token);
     const client = getLlmClient(process.env);
-    result = await runToolLoopTurn({
+    result = await runToolTestTurn({
       run: runFixture(toolName),
       workspaceId: "ws_tool_call_probe",
       actorId: "manual_smoke",
@@ -214,7 +215,7 @@ async function runProbe(provider: LlmProvider, toolName: ToolName): Promise<void
         }
         return orchestratorModel({ ...input, maxTokens: 1200 });
       },
-      env: { ...process.env, POPCORN_ORCHESTRATOR_TOOL_LOOP: "1" },
+      systemPrompt: CREATIVE_DIRECTOR_SYSTEM_PROMPT,
     });
   } finally {
     if (previousProvider === undefined) delete process.env.LLM_PROVIDER;

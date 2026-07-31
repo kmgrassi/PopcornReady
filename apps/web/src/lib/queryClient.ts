@@ -8,20 +8,17 @@ import {
 import type { DashboardSummaryResponse } from "@popcorn/shared/v1/dashboard";
 import type {
   GenerationRun,
-  GenerationStageType,
   ProjectVisibility,
   V1Asset,
 } from "@popcorn/shared/v1/types";
 import {
   v1Api,
   type CreateProviderSmokeAssetInput,
-  type CreateTimelineRevisionInput,
   type CreateProjectInput,
   type MeResponse,
   type ModelSettingPurpose,
   type ModelProvider,
   type ProviderApiKey,
-  type RejectGenerationRunInput,
   type RegisterProjectUploadInput,
   type SaveProjectStoryboardInput,
   type StartGenerationRunInput,
@@ -714,26 +711,12 @@ export function useUpdateGenerationRunMutation(projectId: string, runId: string)
       action,
       body,
     }: {
-      action: "approve" | "reject" | "cancel";
-      body?: RejectGenerationRunInput;
+      action: "approve" | "cancel";
+      body?: { note?: string };
     }) => v1Api.updateGenerationRun(projectId, runId, action, body),
     onSuccess: (data) => {
       client.setQueryData(queryKeys.generationRun(projectId, runId), data);
       void client.invalidateQueries({ queryKey: queryKeys.projectGenerationRuns(projectId) });
-      void client.invalidateQueries({ queryKey: ["dashboard"] });
-      void client.invalidateQueries({ queryKey: ["workspaces"] });
-    },
-  });
-}
-
-export function useRestartGenerationRunFromStageMutation(projectId: string, runId: string) {
-  const client = useQueryClient();
-
-  return useMutation({
-    mutationFn: (stageType: GenerationStageType) =>
-      v1Api.restartGenerationRunFromStage(projectId, runId, stageType),
-    onSuccess: (data) => {
-      client.setQueryData(queryKeys.generationRun(projectId, runId), data);
       void client.invalidateQueries({ queryKey: ["dashboard"] });
       void client.invalidateQueries({ queryKey: ["workspaces"] });
     },
@@ -776,13 +759,6 @@ export function useStartUploadedFootageGenerationRunMutation(projectId: string) 
       void client.invalidateQueries({ queryKey: ["dashboard"] });
       void client.invalidateQueries({ queryKey: ["workspaces"] });
     },
-  });
-}
-
-export function useCreateTimelineRevisionMutation(projectId: string, timelineId: string) {
-  return useMutation({
-    mutationFn: (input: CreateTimelineRevisionInput) =>
-      v1Api.createTimelineRevision(projectId, timelineId, input),
   });
 }
 

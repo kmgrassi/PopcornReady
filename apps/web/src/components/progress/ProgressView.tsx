@@ -22,7 +22,7 @@ import {
 } from "../../lib/v1/generation-runs/client";
 import { useProjectQuery } from "../../lib/queryClient";
 import { v1Api } from "../../lib/api-client";
-import { modelPurposeForAssetKind } from "../../lib/modelOptions";
+import { reviewProposalTarget as resolveReviewProposalTarget } from "../../lib/reviewProposalTarget";
 import { PIPELINE_GROUPS, StageRail } from "./StageRail";
 import {
   StoryboardBoard as FeedbackStoryboardBoard,
@@ -44,17 +44,12 @@ interface ProgressViewProps {
     feedbackNote?: string;
     onFeedbackNoteChange?: (note: string) => void;
     onApprove: (note: string) => void;
-    onReject: (note: string) => void;
     onCancel: () => void;
   };
   cancelAction?: {
     pending?: boolean;
     error?: string | null;
     onCancel: () => void;
-  };
-  restartAction?: {
-    pendingStageType?: GenerationStageType | null;
-    onRestart: (stageType: GenerationStageType) => void;
   };
   creditRecovery?: {
     balanceCredits: number;
@@ -410,7 +405,6 @@ export function ProgressView({
   studioReturnPath,
   reviewActions,
   cancelAction,
-  restartAction,
   creditRecovery,
   onBoardRevisionSuccess,
   headerSlot,
@@ -422,13 +416,9 @@ export function ProgressView({
   const [fallbackApproving, setFallbackApproving] = useState(false);
   const [fallbackError, setFallbackError] = useState<string | null>(null);
   const [fallbackFeedbackNote, setFallbackFeedbackNote] = useState("");
-  const [boardFeedbackPendingKey, setBoardFeedbackPendingKey] = useState<string | null>(null);
-  // The request returns as soon as the agent has queued the work. Keep the
-  // target keys after that handoff so each affected board tile remains visibly
-  // in progress for the background generation, not just the network request.
   const [boardFeedbackActiveKeys, setBoardFeedbackActiveKeys] = useState<string[]>([]);
-  const [boardFeedbackError, setBoardFeedbackError] = useState<string | null>(null);
   const [selectedAssetItemId, setSelectedAssetItemId] = useState<string | null>(null);
+  const [reviewProposalOpen, setReviewProposalOpen] = useState(false);
   const reviewGateKey = detail.run.reviewGate?.stageId ?? null;
   const projectQuery = useProjectQuery(detail.run.projectId);
   const project = projectQuery.data?.project ?? null;
@@ -473,9 +463,20 @@ export function ProgressView({
     selectedAssetItemId
       ? detail.stageItems.find((item) => item.itemId === selectedAssetItemId) ?? null
       : null;
+  const reviewProposalTarget = detail.run.reviewGate
+    ? resolveReviewProposalTarget({
+        stageType: detail.run.reviewGate.stageType,
+        runId: detail.run.runId,
+        items: reviewItems,
+        storyboardId: projectStoryboard?.id,
+      })
+    : null;
 
   useEffect(() => {
-    if (generatedOutputGroups.boardItems.length === 0) {
+    if (
+      reviewOutputGroups.boardItems.length === 0 &&
+      generatedOutputGroups.boardItems.length === 0
+    ) {
       setProjectStoryboard(null);
       return;
     }
@@ -493,7 +494,11 @@ export function ProgressView({
     return () => {
       canceled = true;
     };
-  }, [detail.run.projectId, generatedOutputGroups.boardItems.length]);
+  }, [
+    detail.run.projectId,
+    generatedOutputGroups.boardItems.length,
+    reviewOutputGroups.boardItems.length,
+  ]);
 
   const pending = reviewActions?.pending ?? (fallbackApproving ? "approve" : undefined);
   const actionError = reviewActions?.error ?? fallbackError;
@@ -663,7 +668,6 @@ export function ProgressView({
                 }
               : undefined
           }
-          restartAction={restartAction}
         />
         {showCancelAction && cancelAction?.error ? (
           <p className={styles.error} role="alert">
@@ -726,40 +730,25 @@ export function ProgressView({
     );
   }
 
-  async function submitBoardFeedback(input: {
-    message: string;
-    target: BoardRevisionTarget;
-    generationModel?: { provider: string; model: string };
-  }) {
-    const key = storyboardFeedbackTargetKey(input.target);
-    setBoardFeedbackPendingKey(key);
-    setBoardFeedbackError(null);
-    try {
-      await v1Api.createRunBoardRevision(detail.run.projectId, detail.run.runId, input);
-      setBoardFeedbackActiveKeys((current) =>
-        current.includes(key) ? current : [...current, key],
-      );
-      await onBoardRevisionSuccess?.();
-    } catch (err) {
-      setBoardFeedbackError(
-        err instanceof Error ? err.message : "Could not send board feedback.",
-      );
-      throw err;
-    } finally {
-      setBoardFeedbackPendingKey(null);
-    }
+  async function markBoardFeedbackStarted(target: BoardRevisionTarget) {
+    const key = storyboardFeedbackTargetKey(target);
+    setBoardFeedbackActiveKeys((current) =>
+      current.includes(key) ? current : [...current, key],
+    );
+    await onBoardRevisionSuccess?.();
+  }
+
+  async function markBoardFeedbackSettled(target: BoardRevisionTarget) {
+    const key = storyboardFeedbackTargetKey(target);
+    setBoardFeedbackActiveKeys((current) =>
+      current.filter((candidate) => candidate !== key),
+    );
+    await onBoardRevisionSuccess?.();
   }
 
   const selectedAssetTarget = selectedAssetItem
     ? stageItemRevisionTarget(detail.run.runId, selectedAssetItem)
     : null;
-  const selectedAssetPendingKey = selectedAssetTarget
-    ? storyboardFeedbackTargetKey(selectedAssetTarget)
-    : null;
-  const selectedAssetPending = Boolean(
-    selectedAssetPendingKey && boardFeedbackPendingKey === selectedAssetPendingKey,
-  );
-
   return (
     <div className={styles.shell}>
       <header className={styles.header}>
@@ -878,8 +867,35 @@ export function ProgressView({
               reviewActions={reviewActions}
               onFeedbackNoteChange={setFeedbackNote}
               onApprove={onApprove}
+              onRequestChanges={() => setReviewProposalOpen(true)}
+              canRequestChanges={Boolean(reviewProposalTarget)}
             />
           ) : null}
+          <AiAssetFeedbackDialog
+            open={reviewProposalOpen}
+            projectId={detail.run.projectId}
+            rootRunId={detail.run.runId}
+            target={reviewProposalTarget}
+            title={`Change ${currentStageLabel.toLowerCase()}`}
+            subtitle="Review the exact impact and maximum cost before the run changes."
+            initialMessage={feedbackNote}
+            onClose={() => setReviewProposalOpen(false)}
+            onExecutionStarted={() => {
+              void onBoardRevisionSuccess?.();
+            }}
+            onExecutionSettled={() => {
+              void onBoardRevisionSuccess?.();
+            }}
+            asset={
+              <div className={styles.assetModalPreview}>
+                <strong>{currentStageLabel} review</strong>
+                <p>
+                  The Creative Director will preserve unaffected work and
+                  propose only the changes required by your feedback.
+                </p>
+              </div>
+            }
+          />
 
           {generatedItems.length > 0 ? (
             <section
@@ -891,58 +907,59 @@ export function ProgressView({
               </h2>
               <div className={styles.generatedOutputs}>
                 <FeedbackStoryboardBoard
+                  projectId={detail.run.projectId}
                   runId={detail.run.runId}
                   items={generatedOutputGroups.boardItems}
                   storyboard={projectStoryboard}
-                  pendingTargetKey={boardFeedbackPendingKey}
                   activeTargetKeys={boardFeedbackActiveKeys}
-                  error={boardFeedbackError}
-                  onFeedback={submitBoardFeedback}
+                  onExecutionStarted={markBoardFeedbackStarted}
+                  onExecutionSettled={markBoardFeedbackSettled}
                 />
                 {generatedOutputGroups.genericItems.length > 0 ? (
                   <div className={`${styles.itemGrid} ${styles.reviewOutputGrid}`}>
                     {generatedOutputGroups.genericItems.map((item) => (
-                      <button
-                        className={styles.assetEditButton}
-                        type="button"
-                        key={item.itemId}
-                        onClick={() => setSelectedAssetItemId(item.itemId)}
-                        aria-label={`Edit ${item.label} with AI`}
-                        aria-busy={
-                          boardFeedbackPendingKey ===
-                            storyboardFeedbackTargetKey(stageItemRevisionTarget(detail.run.runId, item)) ||
-                          undefined
-                        }
-                      >
-                        {/* Embedded in the edit <button>; a nested regenerate
-                            <button> would be invalid markup, so suppress it. */}
-                        <StageItemCard item={item} allowInlineRegenerate={false} />
-                      </button>
+                      item.assetId ? (
+                        <button
+                          className={styles.assetEditButton}
+                          type="button"
+                          key={item.itemId}
+                          onClick={() => setSelectedAssetItemId(item.itemId)}
+                          aria-label={`Edit ${item.label} with AI`}
+                          aria-busy={
+                            boardFeedbackActiveKeys.includes(
+                              storyboardFeedbackTargetKey(
+                                stageItemRevisionTarget(detail.run.runId, item)
+                              )
+                            ) || undefined
+                          }
+                        >
+                          {/* Embedded in the edit <button>; a nested regenerate
+                              <button> would be invalid markup, so suppress it. */}
+                          <StageItemCard item={item} allowInlineRegenerate={false} />
+                        </button>
+                      ) : (
+                        <div key={item.itemId}>
+                          <StageItemCard item={item} allowInlineRegenerate={false} />
+                        </div>
+                      )
                     ))}
                   </div>
                 ) : null}
               </div>
               <AiAssetFeedbackDialog
                 open={Boolean(selectedAssetItem)}
+                projectId={detail.run.projectId}
+                rootRunId={detail.run.runId}
+                target={selectedAssetTarget}
                 title={selectedAssetItem?.label ?? "Edit asset"}
                 subtitle={selectedAssetItem?.promptPreview ?? selectedAssetItem?.purpose}
                 initialMessage={selectedAssetItem?.prompt ?? null}
-                pending={selectedAssetPending}
-                error={selectedAssetItem ? boardFeedbackError : null}
-                modelPurpose={
-                  selectedAssetItem?.kind ? modelPurposeForAssetKind(selectedAssetItem.kind) : null
-                }
-                onClose={() => {
-                  if (!selectedAssetPending) setSelectedAssetItemId(null);
+                onClose={() => setSelectedAssetItemId(null)}
+                onExecutionStarted={(executedTarget) => {
+                  void markBoardFeedbackStarted(executedTarget);
                 }}
-                onSubmit={async (message, generationModel) => {
-                  if (!selectedAssetTarget) return;
-                  await submitBoardFeedback({
-                    message,
-                    target: selectedAssetTarget,
-                    generationModel,
-                  });
-                  setSelectedAssetItemId(null);
+                onExecutionSettled={(executedTarget) => {
+                  void markBoardFeedbackSettled(executedTarget);
                 }}
                 asset={
                   selectedAssetItem ? (

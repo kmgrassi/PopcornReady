@@ -205,7 +205,33 @@ export interface RerunExecutionReservationV1 {
   idempotencyKey: string;
   requestFingerprint: string;
   approvedMaxCostUsd: number;
-  status: "reserved" | "running" | "completed" | "failed" | "canceled";
+  status:
+    | "reserved"
+    | "running"
+    | "waiting"
+    | "completed"
+    | "failed"
+    | "canceled";
   leaseGeneration: number;
   leaseExpiresAt: string | null;
+}
+
+export interface RerunProposalLifecycleView {
+  actionId: string;
+  status: RerunProposalLifecycleStatus;
+  proposal: RerunProposalV2;
+  approval: {
+    approvalActionId: string;
+    approvedMaxCostUsd: number;
+  } | null;
+  execution: {
+    reservationId: string;
+    status: RerunExecutionReservationV1["status"];
+    executionActionId: string | null;
+    updatedAt: string;
+  } | null;
+  failure: {
+    code: string;
+    message: string;
+  } | null;
 }

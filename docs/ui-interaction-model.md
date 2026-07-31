@@ -99,6 +99,16 @@ off the open"); they do **not** restate which thing they mean.
    NORTH_STAR Principle 5. The user **confirms**; the agent executes and
    recomputes only the affected assets.
 
+The preview is a durable lifecycle, not a one-shot mutation. The UI reads the
+proposal by action ID after reload, keeps approval separate from execution,
+polls waiting/running work, and reports applied, failed, canceled, or rejected
+state from the server. A stale preview must be refreshed and reviewed again
+before execution. Provider and model choice remain server-owned; creator
+authority is the requested intent, exact target, and approved maximum cost.
+If a summary surface cannot resolve a stable graph identity, Request Changes is
+disabled there and directs the creator to open a specific object. A checkpoint
+label must never be converted into a broader project target for convenience.
+
 **What it never shows.** Raw editable fields that write the object directly — no
 "edit beat text" textarea that saves a beat, no prompt field that re-runs a
 single asset in isolation, no property form that mutates content without going
@@ -135,9 +145,9 @@ mutations and therefore don't go through the agent. Anything not on this list is
   reversible and recorded; the agent still reconciles any downstream effect. This
   is the closest thing to a direct edit we allow, and it's deliberately
   *choosing*, never *creating*.
-- **Approvals / gates** — approve, reject, or cancel at a review checkpoint
-  (NORTH_STAR Principle 2/5). The user is steering the agent's run, not editing
-  content.
+- **Approvals / gates** — approve or cancel at a review checkpoint. A content
+  revision opens Request Changes and uses the durable proposal lifecycle; it
+  never rewinds the gate or a generation stage (NORTH_STAR Principle 2/5).
 - **Playback & view controls** — play/pause/scrub, zoom, full-screen, switch
   aspect preview, expand provenance. Pure view state.
 - **Navigation & organization metadata** — open/close panels, project

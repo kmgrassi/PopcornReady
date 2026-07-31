@@ -33,11 +33,19 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   existing/first/new-project selection, inline creation without losing the
   prompt, list and creation failure recovery, and keyboard focus/Escape behavior.
 - `run-progress.spec.ts` and `run-progress-actions.spec.ts` cover run progress,
-  approval/rejection/cancel actions, failed/succeeded states, and recovery hints
+  approval/cancel actions, durable Request Changes proposal entry points,
+  failed/succeeded states, and recovery hints
   with mocked browser API fixtures, including truthful grouped-tool progress,
   between-action copy, job item/provider activity, progressive local-admin
   diagnostics, and response-driven review-gate transitions that clear feedback
-  without racing page reloads.
+  without racing page reloads. They explicitly verify that review feedback and
+  generated-asset edits no longer post the retired reject or board-revision
+  mutations.
+- `rerun-proposal-lifecycle.spec.ts` covers proposal preview, explicit maximum
+  cost approval, separate execution, waiting-state polling, durable reload
+  recovery, visible owning-surface refresh after restored completion, truthful
+  cancellation without a failure alert, terminal cleanup, focus restoration,
+  and mobile overflow with provider-neutral browser API fixtures.
 - `specs/library-collections.spec.ts` covers Library pagination, filters, media
   viewer, visibility mutation behavior, and watch links with mocked fixtures.
 - `inspiration-poster.spec.ts` covers opening a generated story poster in the
@@ -45,8 +53,8 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
 - `storyboard-editor.spec.ts` verifies the dedicated storyboard route renders
   the empty state for a project whose storyboard endpoint returns `null`, keeps
   a ready beat card visual while disclosing its generation prompt only in the
-  opened asset detail, and exposes **Generate video** at a storyboard-review
-  stop before production media can continue.
+  exact-target Request Changes dialog, and exposes **Generate video** at a
+  storyboard-review stop before production media can continue.
 - `evals.spec.ts` covers the eval dashboard and admin workbench judgment action.
 
 The required local-first database smoke is:
@@ -90,7 +98,9 @@ Observed results:
   while their required fields were empty, and the unknown route rendered the
   Vite not-found placeholder.
 - The existing failed run retained its status, 50% progress, readable failure,
-  completed storyboard assets, restart controls, and familiar stage labels. A
+  completed storyboard assets and familiar stage labels. The historical
+  restart controls described by that deployment are now deleted; current
+  coverage asserts Request Changes proposal behavior instead. A
   390-by-844 mobile emulation showed no document-level horizontal overflow on
   the dashboard or run-detail route.
 - Contract type checks, the catalog/registry/recovery/projection suite (27/27),
@@ -106,9 +116,10 @@ Limits and remaining gaps:
 
 - PR 782 intentionally has no runtime or UI path. Its origin, recipient,
   identifier, task, report, and state guarantees are compile-time contracts.
-- PR 784 keeps the flat production registry active. The root, Visuals, and Audio
-  registries plus cross-domain recovery projection are dormant and cannot be
-  claimed as production specialist-agent behavior yet.
+- Historical PR 784 evidence: that PR kept the flat production registry active,
+  so its then-dormant role registries could not yet be claimed as production
+  specialist-agent behavior. The later hierarchy cutover activated role-owned
+  registries, and PR 7A deleted the flat production registry.
 - No already-running production job completed during the safe observation
   window. PR 783's exact live completion race was therefore verified by unit and
   local-Supabase concurrency tests, not by starting billable production work.

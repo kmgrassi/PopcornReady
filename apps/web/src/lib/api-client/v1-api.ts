@@ -1,26 +1,27 @@
 import type {
   AssetKind,
   AssetStatus,
-  BoardRevisionRequest,
   GenerationRun,
   GenerationRunStatus,
-  GenerationStageType,
   ProjectVisibility,
   ProjectStoryboard,
   V1Project,
 } from "@popcorn/shared/v1/types";
 import type { Project } from "@popcorn/shared/types";
+import type {
+  CreateRerunProposalV2Request,
+  RerunProposalLifecycleView,
+  RerunProposalV2,
+} from "@popcorn/shared/rerun-proposal";
 import type { GenerationRunDetail } from "../v1/generation-runs/status";
 import { apiRequest } from "./transport";
 import type {
   AccountMutationResponse,
   AnonymousDeviceRecoveryResponse,
   AssetMediaResponse,
-  BoardRevisionResponse,
   CreateBriefVersionResponse,
   CreateProjectInput,
   CreateProjectResponse,
-  CreateTimelineRevisionInput,
   ExportArtifactResponse,
   ExportJobResponse,
   ForkProjectResponse,
@@ -41,7 +42,6 @@ import type {
   PublicProjectResponse,
   RegisterProjectUploadInput,
   RegisterProjectUploadResponse,
-  RejectGenerationRunInput,
   SaveProjectStoryboardInput,
   StartGenerationRunInput,
   StartGenerationRunResponse,
@@ -513,8 +513,8 @@ export const v1Api = {
   updateGenerationRun: (
     projectId: string,
     runId: string,
-    action: "approve" | "reject" | "cancel",
-    body?: RejectGenerationRunInput
+    action: "approve" | "cancel",
+    body?: { note?: string }
   ) =>
     apiRequest<GenerationRunDetail>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/generation-runs/${encodeURIComponent(runId)}/${action}`,
@@ -528,53 +528,81 @@ export const v1Api = {
       `/api/v1/projects/${encodeURIComponent(projectId)}/generation-runs/${encodeURIComponent(runId)}/retry-after-credit-update`,
       { method: "POST" }
     ),
-  // Re-enter a run at an earlier stage: supersede that stage + downstream and
-  // resume so the agent re-runs from there.
-  restartGenerationRunFromStage: (
+  createRerunProposal: (
     projectId: string,
-    runId: string,
-    stageType: GenerationStageType
+    input: CreateRerunProposalV2Request
   ) =>
-    apiRequest<GenerationRunDetail>(
-      `/api/v1/projects/${encodeURIComponent(projectId)}/generation-runs/${encodeURIComponent(runId)}/restart-from`,
-      {
-        method: "POST",
-        body: { stageType },
-      }
+    apiRequest<{ actionId: string; proposal: RerunProposalV2 }>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/rerun-proposals/v2`,
+      { method: "POST", body: input }
     ),
-  createTimelineRevision: (
+  getRerunProposal: (projectId: string, actionId: string) =>
+    apiRequest<RerunProposalLifecycleView>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/rerun-proposals/v2/${encodeURIComponent(actionId)}`
+    ),
+  approveRerunProposal: (
     projectId: string,
-    timelineId: string,
-    input: CreateTimelineRevisionInput
+    actionId: string,
+    approvedMaxCostUsd: number
   ) =>
-    apiRequest<{ job: unknown }>(
-      `/api/v1/projects/${encodeURIComponent(projectId)}/timelines/${encodeURIComponent(timelineId)}/revisions`,
-      {
-        method: "POST",
-        body: typeof input === "string" ? { message: input } : input,
-      }
+    apiRequest<{
+      actionId: string;
+      status: "approved";
+      approvalActionId: string;
+      replayed: boolean;
+    }>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/rerun-proposals/v2/${encodeURIComponent(actionId)}/approve`,
+      { method: "POST", body: { approvedMaxCostUsd } }
     ),
-  createRunBoardRevision: (
+  rejectRerunProposal: (projectId: string, actionId: string) =>
+    apiRequest<{ actionId: string; status: "rejected" }>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/rerun-proposals/v2/${encodeURIComponent(actionId)}/reject`,
+      { method: "POST", body: {} }
+    ),
+  refreshRerunProposal: (
     projectId: string,
-    runId: string,
-    input: BoardRevisionRequest
+    actionId: string,
+    input: {
+      idempotencyKey: string;
+      message: string;
+      clarificationAnswer?: {
+        answerFingerprint: string;
+        optionId: string;
+      };
+    }
   ) =>
-    apiRequest<BoardRevisionResponse>(
-      `/api/v1/projects/${encodeURIComponent(projectId)}/generation-runs/${encodeURIComponent(runId)}/board-revisions`,
-      {
-        method: "POST",
-        body: input,
-      }
+    apiRequest<{ actionId: string; proposal: RerunProposalV2; replayed: boolean }>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/rerun-proposals/v2/${encodeURIComponent(actionId)}/refresh`,
+      { method: "POST", body: input }
     ),
-  // Project-scoped AI edit: route an asset edit through the agent without a run
-  // (the API revives/starts one). The agent revises the target in context.
-  createProjectAssetRevision: (projectId: string, input: BoardRevisionRequest) =>
-    apiRequest<{ runId: string; revision: BoardRevisionResponse["revision"] }>(
-      `/api/v1/projects/${encodeURIComponent(projectId)}/asset-revisions`,
-      {
-        method: "POST",
-        body: input,
-      }
+  executeRerunProposal: (
+    projectId: string,
+    actionId: string,
+    idempotencyKey: string
+  ) =>
+    apiRequest<{
+      actionId: string;
+      reservationId: string;
+      executionActionId?: string;
+      status: "waiting" | "running" | "applied" | "failed" | "canceled";
+      replayed: boolean;
+    }>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/rerun-proposals/v2/${encodeURIComponent(actionId)}/execute`,
+      { method: "POST", body: { idempotencyKey } }
+    ),
+  cancelRerunProposal: (
+    projectId: string,
+    actionId: string,
+    reason = "creator_canceled"
+  ) =>
+    apiRequest<{
+      actionId: string;
+      executionActionId: string;
+      status: "applied" | "failed" | "canceled";
+      canceled: boolean;
+    }>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/rerun-proposals/v2/${encodeURIComponent(actionId)}/cancel`,
+      { method: "POST", body: { reason } }
     ),
   startPromptGenerationRun: (
     projectId: string,

@@ -6,7 +6,6 @@ import type {
   V1Project,
 } from "@popcorn/shared/v1/types";
 import type { ProjectWatchMedia, WorkspaceOutput } from "../lib/api-client";
-import { v1Api } from "../lib/api-client";
 import { useAuth } from "../components/auth/AuthProvider";
 import { AiAssetFeedbackDialog } from "../components/ai-edit/AiAssetFeedbackDialog";
 import { ButtonLink } from "../components/ui/Button";
@@ -156,8 +155,6 @@ export function ProjectDetailPage() {
     limit: OUTPUT_LIMIT,
   });
   const [changeRequest, setChangeRequest] = useState<ChangeRequest | null>(null);
-  const [changePending, setChangePending] = useState(false);
-  const [changeError, setChangeError] = useState<string | null>(null);
   const [changeSent, setChangeSent] = useState<string | null>(null);
 
   useEffect(() => {
@@ -204,30 +201,6 @@ export function ProjectDetailPage() {
     : latestRun
       ? "Open this project's latest run."
       : "Runs are available after this project starts generation.";
-  async function submitChangeRequest(
-    message: string,
-    generationModel?: { provider: string; model: string }
-  ) {
-    if (!changeRequest || !projectId) return;
-    setChangePending(true);
-    setChangeError(null);
-    try {
-      await v1Api.createProjectAssetRevision(projectId, {
-        message,
-        target: changeRequest.target,
-        generationModel,
-      });
-      setChangeSent(changeRequest.target.label ?? "change");
-      setChangeRequest(null);
-      // Surface the new revision run in the pipeline aside right away.
-      void runsQuery.refetch();
-    } catch (err) {
-      setChangeError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setChangePending(false);
-    }
-  }
-
   const mobilePrimaryAction = project ? (
     <ProjectMobilePrimaryAction
       projectId={projectId}
@@ -260,7 +233,6 @@ export function ProjectDetailPage() {
       error={error}
       onRequestChanges={(scope) => {
         if (!project) return;
-        setChangeError(null);
         setChangeSent(null);
         setChangeRequest(buildChangeRequest(scope, project, storyboard));
       }}
@@ -374,6 +346,8 @@ export function ProjectDetailPage() {
       />
       <AiAssetFeedbackDialog
         open={Boolean(changeRequest)}
+        projectId={projectId}
+        target={changeRequest?.target ?? null}
         title={changeRequest?.title ?? "Request changes"}
         subtitle={changeRequest?.subtitle}
         asset={
@@ -386,12 +360,16 @@ export function ProjectDetailPage() {
             </p>
           )
         }
-        pending={changePending}
-        error={changeError}
-        onSubmit={submitChangeRequest}
-        onClose={() => {
-          if (!changePending) setChangeRequest(null);
+        onExecutionStarted={() => {
+          setChangeSent(changeRequest?.target.label ?? "change");
+          void runsQuery.refetch();
         }}
+        onExecutionSettled={() => {
+          void projectQuery.refetch();
+          void storyboardQuery.refetch();
+          void outputsQuery.refetch();
+        }}
+        onClose={() => setChangeRequest(null)}
       />
     </>
   );
