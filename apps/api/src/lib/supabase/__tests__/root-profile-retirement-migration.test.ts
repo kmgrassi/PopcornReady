@@ -113,6 +113,43 @@ test("PR7B replaces profile-bound routines, policies, and grants before a no-CAS
     migration.slice(reserveStart, policyStart),
     /root_execution_profile/
   );
+  const actionsPolicyStart = migration.indexOf(
+    "drop policy if exists actions_popcorn_api_rerun_select",
+    policyStart
+  );
+  const runPolicyStart = migration.indexOf(
+    "drop policy if exists orchestrator_runs_popcorn_api_rerun_select",
+    actionsPolicyStart
+  );
+  const dropColumn = migration.indexOf(
+    "drop column root_execution_profile",
+    runPolicyStart
+  );
+  assert.ok(
+    actionsPolicyStart > policyStart &&
+      runPolicyStart > actionsPolicyStart &&
+      dropColumn > runPolicyStart
+  );
+  const actionsPolicyReplacement = migration.slice(
+    actionsPolicyStart,
+    runPolicyStart
+  );
+  assert.doesNotMatch(actionsPolicyReplacement, /root_execution_profile/);
+  for (const causationPredicate of [
+    "'rerun_proposal', 'rerun_proposal_approval', 'rerun_work_item_dispatch'",
+    "'rerun_reconciliation', 'rerun_execution', 'domain_report'",
+    "tool <> 'domain_report'",
+    "status in ('running', 'applied')",
+    "child.agent_role in ('visuals', 'audio')",
+    "execution.root_run_id = child.parent_run_id",
+    "work.dispatch_action_id = child.root_action_id",
+    "child.id = actions.orchestrator_run_id",
+    "child.project_id = actions.project_id",
+    "{approvalContext,executionReservationId}",
+    "{approvalContext,proposalActionId}",
+  ]) {
+    assert.ok(actionsPolicyReplacement.includes(causationPredicate));
+  }
   assert.match(
     migration,
     /create policy orchestrator_runs_popcorn_api_rerun_select[\s\S]*using \(agent_role = 'creative_director'\)/

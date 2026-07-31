@@ -331,6 +331,22 @@ begin
       'public.reserve_rerun_proposal_execution(uuid,uuid,uuid,text,text,double precision,text)'::regprocedure
     )
   ) > 0 then raise exception 'reserve RPC still references profile'; end if;
+  if not exists (
+    select 1
+      from pg_policies
+     where schemaname = 'public'
+       and tablename = 'actions'
+       and policyname = 'actions_popcorn_api_rerun_select'
+       and coalesce(qual, '') not like '%root_execution_profile%'
+       and coalesce(qual, '') like '%domain_report%'
+       and coalesce(qual, '') like '%running%'
+       and coalesce(qual, '') like '%applied%'
+       and coalesce(qual, '') like '%visuals%'
+       and coalesce(qual, '') like '%audio%'
+       and coalesce(qual, '') like '%rerun_execution_reservations%'
+       and coalesce(qual, '') like '%rerun_execution_work_items%'
+       and coalesce(qual, '') like '%approvalContext%'
+  ) then raise exception 'role-only rerun action policy is missing causation checks'; end if;
 end;
 $$;
 `;
@@ -462,18 +478,22 @@ const env = localEnvironment();
 await exerciseRoutes(env);
 
 console.log("Exercising the replacement RPCs and final-schema integration...");
-run(
-  "pnpm",
-  [
-    "--filter", "@popcorn/api", "exec", "tsx", "--test",
-    "src/lib/supabase/__tests__/root-profile-retirement.integration.test.ts",
-    "src/lib/supabase/__tests__/rerun-proposal-lifecycle.integration.test.ts",
-  ],
-  {
-    env: { ...env, RUN_LOCAL_DB_INTEGRATION: "1" },
-    timeout: 300_000,
-  }
-);
+for (const testFile of [
+  "src/lib/supabase/__tests__/root-profile-retirement.integration.test.ts",
+  "src/lib/supabase/__tests__/rerun-proposal-lifecycle.integration.test.ts",
+]) {
+  run(
+    "pnpm",
+    [
+      "--filter", "@popcorn/api", "exec", "tsx", "--test",
+      "--test-concurrency=1", testFile,
+    ],
+    {
+      env: { ...env, RUN_LOCAL_DB_INTEGRATION: "1" },
+      timeout: 300_000,
+    }
+  );
+}
 
 console.log("Replaying all migrations from a clean database...");
 run("supabase", ["db", "reset", "--local", "--yes"], { timeout: 300_000 });
