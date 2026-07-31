@@ -40,7 +40,11 @@ import { applyCreditTransaction, getCreditBalance } from "@/lib/api/v1/credits";
 import { ApiError } from "@/core/errors";
 import { createToolExecutionContext } from "./tool-context";
 import type { ToolCallResult, ToolName } from "./types";
-import type { AgentDomain, DomainTaskV1 } from "@popcorn/shared/domain-agent-contract";
+import type {
+  AgentDomain,
+  DomainRunWaitReason,
+  DomainTaskV1,
+} from "@popcorn/shared/domain-agent-contract";
 import {
   isDispatchToolName,
   isToolName,
@@ -453,7 +457,7 @@ async function reconcileInFlightJob(
         jobId: parkingJobId,
         actionId: parkingAction.id,
       });
-      return park(run, r); // unknown job — leave parked for the sweeper
+      return park(run, r, "media_job"); // unknown job — leave parked for the sweeper
     }
     logger.info("orchestrator_job.reconciled", {
       workspaceId: r.workspaceId,
@@ -521,7 +525,7 @@ async function reconcileInFlightJob(
         ? null
         : finish(run, "failed", r, { ...reconciledError });
     }
-    if (job.status !== "succeeded") return park(run, r); // still running — stay parked
+    if (job.status !== "succeeded") return park(run, r, "media_job"); // still running — stay parked
     // Job done → finalize the parking action with the assets it produced.
     await r.store.markInvocation(parkingAction.id, {
       status: "applied",
@@ -531,7 +535,7 @@ async function reconcileInFlightJob(
     const gate = gates.find((g) => g.stage === parkingAction.tool);
     if (gate?.status === "pending" || gate?.status === "rejected") {
       await r.store.markGateReached(run.id, parkingAction.tool);
-      return park(run, r);
+      return park(run, r, "approval");
     }
     const stopped = await finishIfAfterGateReached(run, parkingAction.tool, r);
     if (stopped) return stopped;
@@ -923,7 +927,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
           gateId: gate.id,
           gateStatus: gate.status,
         });
-        return park(run, r);
+        return park(run, r, "approval");
       }
     }
 
@@ -1187,7 +1191,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
 
     if (regeneratingRejectedGate && result.status === "succeeded") {
       await r.store.markGateReached(run.id, decision.toolName);
-      return park(run, r);
+      return park(run, r, "approval");
     }
 
     if (result.status === "succeeded") {
@@ -1221,7 +1225,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
         tool: decision.toolName,
         resultStatus: result.status,
       });
-      const parked = await park(run, r);
+      const parked = await park(run, r, "media_job");
 
       // A fast inline worker can finish before the accepted invocation has been
       // recorded and the run has reached `waiting`. Reconcile its terminal state
@@ -1242,7 +1246,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
         tool: decision.toolName,
         resultStatus: result.status,
       });
-      return park(run, r); // parked on an approval gate
+      return park(run, r, "approval");
     }
     if (result.status === "failed" && !result.error.recoverable) {
       return finish(run, "failed", r, { ...result.error });
@@ -1280,10 +1284,14 @@ async function finish(
 async function park(
   run: OrchestratorRun,
   r: Resolved,
-  waitReason: "domain" | null = null
+  waitReason: DomainRunWaitReason
 ): Promise<OrchestratorRun> {
-  // The domain wait is distinct from media-job and approval waits: a root run
-  // parked on a delegated child records it durably so store/projection can
-  // distinguish "waiting on a specialist" from "waiting on a provider job".
-  return r.store.updateOrchestratorRun(run.id, { status: "waiting", waitReason });
+  // Finite Visuals/Audio runs must persist every wait reason. Root runs retain
+  // their historical null media/approval waits because the DB permits only a
+  // domain reason there; root delegation is the one explicit root wait.
+  const persistedReason = isDomainRun(run) || waitReason === "domain" ? waitReason : null;
+  return r.store.updateOrchestratorRun(run.id, {
+    status: "waiting",
+    waitReason: persistedReason,
+  });
 }

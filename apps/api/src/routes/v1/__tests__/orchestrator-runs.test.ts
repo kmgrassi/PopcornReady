@@ -185,13 +185,20 @@ test("rejects applied exports whose output is missing or not playable", () => {
 
 test("active work has unknown progress and reports provider waits and recovery", () => {
   const waiting = projectRunDetailFromParts(
-    runFixture({ status: "waiting" }),
+    runFixture({ status: "waiting", agentRole: "visuals", waitReason: "media_job" }),
     [],
-    [actionFixture("generate_anchor", { status: "running", jobIds: ["job_1"] })]
+    [actionFixture("generate_anchor", { status: "running" })]
   );
   assert.equal(waiting.run.progressPercent, undefined);
   assert.equal(waiting.run.activityState, "waiting_on_job");
   assert.equal(waiting.run.currentToolName, "generate_anchor");
+
+  const historicalRootWait = projectRunDetailFromParts(
+    runFixture({ status: "waiting" }),
+    [],
+    [actionFixture("generate_anchor", { status: "running", jobIds: ["job_1"] })]
+  );
+  assert.equal(historicalRootWait.run.activityState, "waiting_on_job");
 
   const recovering = projectRunDetailFromParts(
     runFixture({ status: "running" }),

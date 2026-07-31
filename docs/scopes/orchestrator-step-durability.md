@@ -70,6 +70,14 @@ protects parked-run recovery, while claimed recovery work drives queued/running
 runs through the normal entrypoint. This prevents completion callbacks and the
 recovery worker from concurrently observing incomplete lifecycle state.
 
+Every engine park supplies one semantic reason. Finite Visuals and Audio runs
+persist `media_job`, `domain`, or `approval` because their database constraint
+requires a queryable reason for every waiting state. Creative Director roots
+retain null media/approval waits for schema compatibility and persist `domain`
+only while delegated specialist work is active. Recovery claims clear the
+reason atomically before re-entering the loop and re-park with the same semantic
+reason when the awaited work remains active.
+
 ## Non-goals
 
 - Changing the loop's shape, the one-tool-per-turn decision model, or the
