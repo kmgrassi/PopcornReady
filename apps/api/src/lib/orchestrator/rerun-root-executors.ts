@@ -416,7 +416,7 @@ function storyExecutor(services: RootRerunExecutorServices): RerunKindExecutor {
       work.requiredOutputs.length === 1 &&
       canonicalTarget(work.targets[0]!) === canonicalTarget(output.target) &&
       output.kind === "story_snapshot" &&
-      (output.target.kind === "project" || output.target.kind === "beat"),
+      ["project", "storyboard", "scene", "beat"].includes(output.target.kind),
     async execute(context) {
       const { binding } = rootWork(context, "revise_story", "story_snapshot");
       const pointer = storyPointer(context, binding);

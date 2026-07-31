@@ -87,6 +87,7 @@ export interface SnapshotStoryboardScene {
   summary?: string;
   durationSec?: number;
   sceneAssetId: string | null;
+  storySnapshotAssetId?: string | null;
   status: string;
 }
 
@@ -513,7 +514,7 @@ export function createSupabaseGraphSnapshotReader(
         db()
           .from("story_blueprint_scenes")
           .select(
-            "id, project_id, story_blueprint_id, position, title, summary, target_duration_sec, scene_asset_id, status"
+            "id, project_id, story_blueprint_id, position, title, summary, target_duration_sec, scene_asset_id, story_snapshot_asset_id, status"
           )
           .eq("project_id", projectId)
       );
@@ -527,6 +528,7 @@ export function createSupabaseGraphSnapshotReader(
           summary: string | null;
           target_duration_sec: number | null;
           scene_asset_id: string | null;
+          story_snapshot_asset_id: string | null;
           status: string;
         }>) ?? []
       ).map((row) => ({
@@ -540,6 +542,7 @@ export function createSupabaseGraphSnapshotReader(
           ? { durationSec: row.target_duration_sec }
           : {}),
         sceneAssetId: row.scene_asset_id,
+        storySnapshotAssetId: row.story_snapshot_asset_id,
         status: row.status,
       }));
     },

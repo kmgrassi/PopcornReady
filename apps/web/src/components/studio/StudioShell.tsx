@@ -33,6 +33,7 @@ import {
   useStudioDraftsQuery,
 } from "../../lib/draftStoreQuery";
 import { reviewProposalTarget as resolveReviewProposalTarget } from "../../lib/reviewProposalTarget";
+import { useProjectStoryboardQuery } from "../../lib/queryClient";
 import styles from "./StudioShell.module.css";
 
 const LOCAL_DRAFT_ID = "local";
@@ -396,6 +397,10 @@ function StudioFlowView({
     initialPayload,
     initialStep,
   });
+  const gateStoryboardQuery = useProjectStoryboardQuery(
+    flow.projectId ?? "",
+    flow.run?.reviewGate?.stageType === "storyboard"
+  );
   const briefRef = useRef(flow.brief);
 
   useEffect(() => {
@@ -598,6 +603,7 @@ function StudioFlowView({
       ? resolveReviewProposalTarget({
           stageType: gate.stageType,
           runId: flow.run?.runId,
+          storyboardId: gateStoryboardQuery.data?.storyboard?.id,
         })
       : null;
     const canRecover = TERMINAL_RECOVERABLE_RUN_STATUSES.includes(runStatus);
@@ -682,7 +688,6 @@ function StudioFlowView({
           <ReviewStep
             draft={flow.brief}
             projectId={flow.projectId ?? ""}
-            rootRunId={flow.run?.runId}
             project={flow.reviewProject}
             timeline={flow.reviewTimeline}
             timelineId={flow.reviewTimelineId}

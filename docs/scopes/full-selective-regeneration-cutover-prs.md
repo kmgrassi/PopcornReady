@@ -369,7 +369,10 @@ column remains null.
 
 These names map to the live canonical relational spine:
 `story_blueprints.asset_id`,
-`story_blueprint_scenes.scene_asset_id`, and `story_beats.beat_asset_id`.
+`story_blueprint_scenes.story_snapshot_asset_id`, and
+`story_beats.beat_asset_id`. `story_blueprint_scenes.scene_asset_id` remains
+the disposable scene-wireframe image pointer and is never reused for semantic
+story state.
 The compatibility `storyboard` projection has the same `story_blueprints` row
 identity and fences its source plan through typed
 `story_blueprints.provenance.planAssetId`; no retired table is restored.
@@ -380,14 +383,16 @@ image/prompt references and selection state, but no semantic snapshot pointer,
 so panel media changes use asset/selection bindings rather than a
 `PlannedStoryPointerMove`.
 
-PR 5 activates only the projections whose semantic content can move atomically
-with that pointer: whole-story (`story_blueprint`) and exact beat
-(`story_beat`). Aggregate storyboard and scene story revisions fail executor
-coverage before approval because their current relational rows do not share the
-plan's scene/beat IDs, and `scene_asset_id` also owns visual scene media. They
-must not be advertised as executable until a dedicated relational semantic
-snapshot mapping lands. Storyboard-tile media generation remains executable
-only for exact beat or panel bindings, so one binding corresponds to one output.
+PR 5 initially activated whole-story (`story_blueprint`) and exact-beat
+(`story_beat`) projections. The PR 6 review hardening adds the missing dedicated
+scene semantic pointer and atomically reconciles an approved whole-storyboard
+plan into relational scene/beat rows through explicit text-stable-ID to
+relational-UUID mappings: retained rows preserve UUID identity, order and
+semantic fields update, new rows mint UUIDs, and removed rows are deleted.
+Exact scene revisions move only
+`story_snapshot_asset_id`; their wireframe image remains untouched.
+Storyboard-tile media generation remains executable only for exact beat or
+panel bindings, so one binding corresponds to one output.
 
 The model proposes selected work, target IDs, rationale, preservation choices,
 and bounded clarification content. The server validates the ID/capability
@@ -804,9 +809,9 @@ Independent review hardened activation into dependency waves: media, story, and
 Audio work fan out first; assembly begins only after those bindings complete;
 critique begins only after assembly. Whole-story and exact-beat semantic
 projections update their typed relational content in the same transaction as
-their asset pointer. Aggregate storyboard/scene semantic moves and aggregate
-storyboard-tile bindings fail coverage before approval until their relational
-identity/cardinality contracts are implemented.
+their asset pointer. Aggregate storyboard/scene semantic moves now use a
+dedicated semantic pointer and stable-identity relational reconciliation.
+Aggregate storyboard-tile media bindings still fail coverage before approval.
 
 **Deliver:**
 
@@ -854,6 +859,15 @@ endpoint. User-facing restart-stage controls, direct review rejection, timeline
 revision, and provider/model selection have been removed. PR 7 deletes the now
 unreferenced client/API compatibility implementations after this caller cutover
 lands.
+
+**Review hardening (2026-07-31):** proposal persistence is scoped to the exact
+review surface as well as graph target; Studio storyboard gates resolve the
+current storyboard identity; terminal Studio review intentionally materializes
+a successor root. Callback completion has a durable recovery sweep and handles
+callbacks that beat provider acceptance. Freshness maps only the database's
+explicit stale-pin signal, stale terminal executions can be refreshed from
+their proven durable cause, and storyboard/scene story revisions reconcile the
+relational story spine without overwriting visual scene media.
 
 **Deliver:**
 

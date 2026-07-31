@@ -47,6 +47,7 @@ interface ProposalRow extends QueryResultRow {
   status: RerunProposalLifecycleStatus;
   tool: string;
   proposal: RerunProposalV2;
+  error: Record<string, unknown> | null;
 }
 
 interface ApprovalRow extends QueryResultRow {
@@ -124,7 +125,8 @@ async function lockProposal(
 ): Promise<ProposalRow | null> {
   return firstRow(
     await client.query<ProposalRow>(
-      `select id, orchestrator_run_id, status::text as status, tool, proposal
+      `select id, orchestrator_run_id, status::text as status, tool, proposal,
+              error
          from public.actions
         where id = $1::uuid and project_id = $2::uuid
         for update`,
@@ -192,7 +194,7 @@ const STORY_PIN_SQL: Record<StorySnapshotPin["rowKind"], string> = {
       from public.story_blueprints
      where id = $1::uuid and project_id = $2::uuid
      for update`,
-  story_scene: `select scene_asset_id as snapshot_asset_id
+  story_scene: `select story_snapshot_asset_id as snapshot_asset_id
       from public.story_blueprint_scenes
      where id = $1::uuid and project_id = $2::uuid
      for update`,
@@ -233,9 +235,17 @@ async function proposalPinsAreFresh(
     );
     await client.query("release savepoint rerun_freshness");
     return true;
-  } catch {
+  } catch (error) {
     await client.query("rollback to savepoint rerun_freshness");
-    return false;
+    await client.query("release savepoint rerun_freshness");
+    const candidate = postgresError(error);
+    if (
+      candidate.code === "55000" &&
+      String(candidate.message ?? "").startsWith("stale_proposal_")
+    ) {
+      return false;
+    }
+    throw error;
   }
 }
 
@@ -470,7 +480,27 @@ export function createRerunProposalSuccessorTransaction(
             replayed: true,
           };
         }
-        if (prior.status !== "proposed") {
+        let staleFailed =
+          prior.status === "failed" && prior.error?.kind === "stale_proposal";
+        if (prior.status === "failed" && !staleFailed) {
+          staleFailed = Boolean(firstRow(await client.query(
+            `select reservation.id
+               from public.rerun_execution_reservations reservation
+               join public.actions result
+                 on result.id = reservation.execution_result_action_id
+                and result.project_id = reservation.project_id
+              where reservation.project_id = $1::uuid
+                and reservation.proposal_action_id = $2::uuid
+                and reservation.status = 'failed'
+                and result.tool = 'rerun_execution'
+                and result.status = 'failed'
+                and result.error ->> 'kind' = 'stale_proposal'
+              limit 1
+              for update of reservation, result`,
+            [input.projectId, input.priorActionId]
+          )));
+        }
+        if (prior.status !== "proposed" && !staleFailed) {
           fail(
             "55000",
             `proposal is not refreshable from status ${prior.status}`

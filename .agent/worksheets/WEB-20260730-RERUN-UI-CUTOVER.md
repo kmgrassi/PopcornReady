@@ -62,6 +62,14 @@ boundary, and publish a ready stacked PR with browser and targeted coverage.
   reservation, and reporting cancel-versus-completion races truthfully.
 - Scoped settlement callbacks to the current proposal action so a restored
   execution refreshes the exact owning surface without reusing a prior target.
+- Addressed the final stacked-PR review sweep: persisted proposal keys now
+  include the review surface, Studio resolves storyboard gates to the current
+  storyboard and omits terminal roots, callback completion has a durable
+  recovery sweep plus fast-callback race handling, and stale refresh requires a
+  proven durable stale cause.
+- Added a separate scene semantic snapshot pointer and forward migration for
+  stable-ID storyboard reconciliation. Relational scene/beat semantics update
+  atomically while scene wireframe images remain untouched.
 
 ## Validation evidence
 
@@ -164,3 +172,22 @@ boundary, and publish a ready stacked PR with browser and targeted coverage.
   files leaked into the PR 6 integration branch. A second read-only review
   independently confirmed both Postgres replay fixes as the minimal correct
   resolutions.
+
+## Final review-comment hardening
+
+- Independent plan review rejected overloading `scene_asset_id` and caught
+  poison-row/fast-callback and stale-successor gaps. The implementation now
+  isolates recovery candidates, re-reads callbacks that race provider
+  acceptance, proves stale failure from the linked execution result, and uses
+  `story_snapshot_asset_id` for semantic scene state.
+- Focused API/web type checks, 76 focused API tests, and 3 focused web tests
+  passed. Static migration validation passed all 95 migrations. The lifecycle
+  browser suite passed 4 applicable desktop/mobile cases with one expected
+  project skip after its restored-state fixture moved to the scoped storage key.
+- A clean local startup applied all 95 migrations. The direct Postgres suite
+  passed both cases, including callback/concurrency fencing and atomic mixed
+  graph application/rollback. Its story case now proves retained text semantic
+  IDs preserve relational UUIDs, storyboard and exact-scene add/remove behavior
+  is atomic, and visual scene pointers remain unchanged.
+- `pnpm agent:lint:fix` and `pnpm agent:validate -- --scope all` passed after the
+  final stable-identity and scene-child reconciliation fixes.

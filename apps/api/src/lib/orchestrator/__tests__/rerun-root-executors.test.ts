@@ -228,24 +228,20 @@ test("root executors are active in the production registry", () => {
   assert.doesNotThrow(() => productionRerunExecutorRegistry.preflight([story]));
 });
 
-test("story coverage fails closed for aggregate storyboard and scene projections", () => {
-  for (const unsupportedTarget of [
+test("story coverage includes exact storyboard and scene projections", () => {
+  for (const supportedTarget of [
     { kind: "storyboard", projectId, storyboardId: "storyboard-1" } as const,
     { kind: "scene", projectId, sceneId: "scene-1" } as const,
   ]) {
     const binding = {
       ...output("story-work", "story_snapshot"),
-      target: unsupportedTarget,
+      target: supportedTarget,
     };
     const story = {
       ...work("story-work", "revise_story", [binding]),
-      targets: [unsupportedTarget],
+      targets: [supportedTarget],
     } as RerunWorkItem;
-    assert.throws(
-      () => productionRerunExecutorRegistry.preflight([story]),
-      (error: unknown) =>
-        error instanceof ApiError && error.code === "coverage_unavailable"
-    );
+    assert.doesNotThrow(() => productionRerunExecutorRegistry.preflight([story]));
   }
 });
 

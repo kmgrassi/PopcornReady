@@ -337,7 +337,7 @@ export async function createScene(input: {
         story_blueprint_act_id: actId,
         workspace_id: input.auth.workspaceId,
         project_id: input.projectId,
-        stable_id: `scene_${sceneIndex + 1}`,
+        stable_id: input.data.stableId ?? `scene_${sceneIndex + 1}`,
         position: sceneIndex,
         title: input.data.title ?? `Scene ${sceneIndex + 1}`,
         summary: input.data.summary ?? "",
@@ -467,6 +467,7 @@ export async function createBeat(input: {
       .insert({
         project_id: input.projectId,
         scene_id: input.sceneId,
+        stable_id: input.data.stableId,
         beat_index: beatIndex,
         intent: input.data.intent ?? "",
         visual_description: input.data.visualDescription ?? null,
@@ -764,8 +765,18 @@ export async function buildStoryboardForPlan(input: {
   plan: EditPlan;
   /** plan beat id -> persisted tile image asset id. */
   tileAssetByBeatId: Map<string, string>;
+}, deps: {
+  createStoryboard: typeof createStoryboard;
+  createScene: typeof createScene;
+  createBeat: typeof createBeat;
+  createPanel: typeof createPanel;
+} = {
+  createStoryboard,
+  createScene,
+  createBeat,
+  createPanel,
 }): Promise<{ storyboardId: string; panelCount: number }> {
-  const storyboard = await createStoryboard({
+  const storyboard = await deps.createStoryboard({
     auth: input.auth,
     projectId: input.projectId,
     data: { planAssetId: input.planAssetId, status: "ready" },
@@ -777,11 +788,12 @@ export async function buildStoryboardForPlan(input: {
   let panelCount = 0;
   for (let s = 0; s < input.plan.scenes.length; s += 1) {
     const scene = input.plan.scenes[s];
-    const sbScene = await createScene({
+    const sbScene = await deps.createScene({
       auth: input.auth,
       projectId: input.projectId,
       storyboardId: storyboard.id,
       data: {
+        stableId: scene.id,
         sceneIndex: s,
         title: scene.name ?? null,
         setting: scene.setting ?? null,
@@ -792,12 +804,13 @@ export async function buildStoryboardForPlan(input: {
 
     for (let b = 0; b < scene.beats.length; b += 1) {
       const beat = scene.beats[b];
-      const sbBeat = await createBeat({
+      const sbBeat = await deps.createBeat({
         auth: input.auth,
         projectId: input.projectId,
         storyboardId: storyboard.id,
         sceneId: sbScene.id,
         data: {
+          stableId: beat.id,
           beatIndex: b,
           intent: beat.intent ?? "",
           durationSec: beat.durationSec ?? null,
@@ -810,7 +823,7 @@ export async function buildStoryboardForPlan(input: {
 
       const tileAssetId = beat.id ? input.tileAssetByBeatId.get(beat.id) : undefined;
       if (tileAssetId) {
-        await createPanel({
+        await deps.createPanel({
           auth: input.auth,
           projectId: input.projectId,
           storyboardId: storyboard.id,

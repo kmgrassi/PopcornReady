@@ -23,10 +23,13 @@ import {
   completeWorkTransaction,
   failWorkTransaction,
   parkWorkTransaction,
+  listReadyRerunExecutionResumes,
   recordCallbackTransaction,
   reserveChildBudgetTransaction,
   reserveWorkTransaction,
 } from "@/lib/postgres/rerun-work-transactions";
+
+export { listReadyRerunExecutionResumes };
 import {
   approveRerunProposalTransaction,
   createRerunProposalSuccessorDirectTransaction,
@@ -286,7 +289,7 @@ export async function assertRerunProposalFresh(
         ? db.from("story_blueprints").select("id, project_id, asset_id")
         : pin.rowKind === "story_scene"
           ? db.from("story_blueprint_scenes")
-            .select("id, project_id, scene_asset_id")
+            .select("id, project_id, story_snapshot_asset_id")
           : db.from("story_beats").select("id, project_id, beat_asset_id");
     const row = await runLifecycleQuery(
       `rerunLifecycleStore.fresh ${pin.rowKind}`,
@@ -298,7 +301,7 @@ export async function assertRerunProposalFresh(
       : pin.rowKind === "story_blueprint"
         ? (row?.asset_id ?? null)
         : pin.rowKind === "story_scene"
-          ? (row?.scene_asset_id ?? null)
+          ? (row?.story_snapshot_asset_id ?? null)
           : (row?.beat_asset_id ?? null);
     if (!row || currentSnapshotAssetId !== pin.expectedSnapshotAssetId) {
       throw new ApiError("stale_proposal", "A story snapshot moved after proposal creation.");

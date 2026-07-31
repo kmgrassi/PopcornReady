@@ -55,3 +55,16 @@ found two real replay boundaries that neither side's mocked coverage exercised:
 a null aggregate represents an unparked work item, and primitive output
 attribution may already exist because it is also the evidence used to validate
 causation.
+
+Async provider acceptance and callback delivery are independent commits. A
+callback can finish before the parent persists provider job IDs, or the HTTP
+wakeup can disappear after the callback commits. The parent therefore re-reads
+the durable callback after parking, and the recovery worker sweeps waiting
+executions whose callback fences are all terminal using the original
+idempotency key. Each candidate is isolated so one poison row cannot starve the
+rest of the queue.
+
+Visual scene media is not semantic story state. `scene_asset_id` remains the
+wireframe image pointer; structural scene revisions use a separate semantic
+snapshot pointer and reconcile retained/new/removed relational rows by stable
+identity in one transaction.

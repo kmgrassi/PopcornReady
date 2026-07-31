@@ -15,6 +15,10 @@ const graphRoleMigrationPath = path.resolve(
   process.cwd(),
   "../../supabase/migrations/20260730174000_rerun_atomic_graph_role.sql"
 );
+const storySpineMigrationPath = path.resolve(
+  process.cwd(),
+  "../../supabase/migrations/20260731123000_rerun_story_spine_application.sql"
+);
 
 test("rerun lifecycle migration fences approval, successor, execution, and work identity", async () => {
   const migration = await readFile(migrationPath, "utf8");
@@ -98,6 +102,23 @@ test("atomic graph role grants append and a bounded story-pointer function", asy
   assert.match(migration, /grant execute on function public\.apply_rerun_story_pointer/);
   assert.match(migration, /actions\.tool = 'rerun_execution'/);
   assert.match(migration, /actions\.status = 'running'/);
+});
+
+test("storyboard reruns preserve visual pointers and reconcile semantic rows", async () => {
+  const migration = await readFile(storySpineMigrationPath, "utf8");
+  assert.match(migration, /add column story_snapshot_asset_id uuid/);
+  assert.match(migration, /set story_snapshot_asset_id = p_new_asset_id/);
+  assert.doesNotMatch(migration, /set scene_asset_id = p_new_asset_id/);
+  assert.match(migration, /update public\.story_blueprint_scenes set position = position \+ 100000/);
+  assert.match(migration, /insert into public\.story_beats/);
+  assert.match(migration, /delete from public\.story_beats/);
+  assert.match(migration, /delete from public\.story_blueprint_scenes/);
+  assert.match(migration, /alter table public\.story_beats add column stable_id text/);
+  assert.match(migration, /where story_blueprint_id=p_row_id and stable_id=v_scene_key/);
+  assert.match(migration, /where scene_id=p_row_id and stable_id=v_beat_key/);
+  assert.match(migration, /delete from public\.story_beats\s+where scene_id=p_row_id/);
+  assert.match(migration, /storyboard snapshot contains duplicate beat ids/);
+  assert.match(migration, /grant execute on function public\.apply_rerun_story_pointer/);
 });
 
 test("proposal ceilings use the canonical budget ledger without double-counting settled children", async () => {

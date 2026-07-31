@@ -47,7 +47,10 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   cost approval, separate execution, waiting-state polling, durable reload
   recovery, visible owning-surface refresh after restored completion, truthful
   cancellation without a failure alert, terminal cleanup, focus restoration,
-  and mobile overflow with provider-neutral browser API fixtures.
+  and mobile overflow with provider-neutral browser API fixtures. Its restored
+  lifecycle fixture uses the same review-surface-scoped persistence key as the
+  UI, preventing concept, brief, and later-run proposals for the same project
+  graph target from colliding.
 - `specs/library-collections.spec.ts` covers Library pagination, filters, media
   viewer, visibility mutation behavior, and watch links with mocked fixtures.
 - `inspiration-poster.spec.ts` covers opening a generated story poster in the

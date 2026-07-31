@@ -225,13 +225,30 @@ export async function parkWorkTransaction(input: {
         throw new ApiError("idempotency_in_progress", "Stale callback fence.");
       }
       if ("jobIds" in callback) {
+        const storedJobIds = (locked.job_ids ?? []) as string[];
         if (locked.status !== "pending") {
+          // A provider is allowed to callback before its execute() promise has
+          // returned. The callback transaction wins that race; parking the
+          // accepted result must then be an idempotent acknowledgement rather
+          // than turning a successful callback into an execution failure.
+          if (
+            ["completed", "failed"].includes(String(locked.status)) &&
+            (storedJobIds.length === 0 || sameJson(storedJobIds, callback.jobIds))
+          ) {
+            if (storedJobIds.length === 0) {
+              await client.query(
+                `update public.rerun_execution_callbacks set job_ids=$2 where id=$1`,
+                [locked.id, callback.jobIds]
+              );
+              mutatedCallback = true;
+            }
+            continue;
+          }
           throw new ApiError(
             "idempotency_conflict",
             "Accepted callback replay is already terminal."
           );
         }
-        const storedJobIds = (locked.job_ids ?? []) as string[];
         if (storedJobIds.length > 0) {
           if (!sameJson(storedJobIds, callback.jobIds)) {
             throw new ApiError(
@@ -331,6 +348,56 @@ export async function parkWorkTransaction(input: {
         JSON.stringify(input.bindingResults),
       ]
     );
+  });
+}
+
+export interface ReadyRerunExecutionResume {
+  workspaceId: string;
+  projectId: string;
+  proposalActionId: string;
+  idempotencyKey: string;
+}
+
+/**
+ * Finds parked executions whose callback fences are all terminal. Replaying
+ * executeRerunProposal with the original idempotency key is the durable wakeup
+ * path when a callback response was lost or arrived before the parent parked.
+ */
+export async function listReadyRerunExecutionResumes(
+  limit = 25
+): Promise<ReadyRerunExecutionResume[]> {
+  return lifecycleTransaction("rerunLifecycle.listReadyResumes", async (client) => {
+    const result = await client.query<{
+      workspace_id: string;
+      project_id: string;
+      proposal_action_id: string;
+      idempotency_key: string;
+    }>(
+      `select project.workspace_id, execution.project_id,
+              execution.proposal_action_id, execution.idempotency_key
+         from public.rerun_execution_reservations execution
+         join public.projects project on project.id = execution.project_id
+        where execution.status = 'waiting'
+          and execution.execution_result_action_id is null
+          and exists (
+            select 1 from public.rerun_execution_callbacks callback
+             where callback.execution_reservation_id = execution.id
+          )
+          and not exists (
+            select 1 from public.rerun_execution_callbacks callback
+             where callback.execution_reservation_id = execution.id
+               and callback.status = 'pending'
+          )
+        order by execution.id
+        limit $1`,
+      [Math.max(1, Math.min(limit, 100))]
+    );
+    return result.rows.map((row) => ({
+      workspaceId: row.workspace_id,
+      projectId: row.project_id,
+      proposalActionId: row.proposal_action_id,
+      idempotencyKey: row.idempotency_key,
+    }));
   });
 }
 

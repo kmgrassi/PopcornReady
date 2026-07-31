@@ -18,7 +18,6 @@ import styles from "./ReviewStep.module.css";
 interface ReviewStepProps {
   draft: BriefDraft;
   projectId: string;
-  rootRunId?: string | null;
   project: Project | null | undefined;
   timeline: Timeline | null | undefined;
   timelineId?: string;
@@ -55,7 +54,6 @@ function statusLabel(status: GenerationStage["status"]) {
 export function ReviewStep({
   draft,
   projectId,
-  rootRunId,
   project,
   timeline,
   timelineId,
@@ -80,7 +78,6 @@ export function ReviewStep({
     ? selectedSegment.beatId
       ? {
           scope: "tile",
-          runId: rootRunId ?? undefined,
           beatId: selectedSegment.beatId,
           label: selectedSegment.role,
         }
@@ -269,7 +266,6 @@ export function ReviewStep({
       <RerunProposalDialog
         open={proposalOpen}
         projectId={projectId}
-        rootRunId={rootRunId}
         target={proposalTarget}
         rerunTarget={directProposalTarget}
         title={selectedSegment ? `Change ${selectedSegment.role}` : "Change the whole cut"}

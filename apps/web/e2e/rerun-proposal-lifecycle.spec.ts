@@ -261,7 +261,7 @@ test("restored creator cancellation remains canceled without a failure alert", a
   await page.addInitScript(
     ({ key, actionId }) => window.localStorage.setItem(key, actionId),
     {
-      key: `popcorn:rerun-proposal:${projectId}:project:${projectId}`,
+      key: `popcorn:rerun-proposal:${projectId}:concept:no-run:no-stage:no-item:no-field:project:${projectId}`,
       actionId: proposalActionId,
     }
   );

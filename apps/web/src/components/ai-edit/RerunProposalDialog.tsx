@@ -24,6 +24,7 @@ import {
 } from "../../lib/rerunProposalQueries";
 import { resolveRerunTarget } from "../../lib/rerunTargets";
 import { queryClient } from "../../lib/queryClientCore";
+import { rerunProposalStorageKey } from "../../lib/rerunProposalStorage";
 import { Button } from "../ui/Button";
 import { CloseButton } from "../ui/CloseButton";
 import {
@@ -46,37 +47,6 @@ export interface RerunProposalDialogProps {
   onClose: () => void;
   onExecutionStarted?: (target: BoardRevisionTarget) => Promise<void> | void;
   onExecutionSettled?: (target: BoardRevisionTarget) => Promise<void> | void;
-}
-
-function targetIdentity(target: RerunTarget) {
-  switch (target.kind) {
-    case "project":
-      return `project:${target.projectId}`;
-    case "storyboard":
-      return `storyboard:${target.storyboardId}`;
-    case "scene":
-      return `scene:${target.sceneId}`;
-    case "beat":
-      return `beat:${target.beatId}`;
-    case "panel":
-      return `panel:${target.panelId}`;
-    case "asset":
-      return `asset:${target.assetId}`;
-    case "lineage":
-      return `lineage:${target.lineageId}`;
-    case "timeline_item":
-      return `timeline:${target.timelineItemId}`;
-    case "export":
-      return `export:${target.exportId}`;
-    case "selection":
-      return `selection:${target.slotOwnerLineageId ?? "project"}:${target.slotRole}`;
-    case "transcript_segment":
-      return `transcript:${target.transcriptSegmentId}`;
-  }
-}
-
-function storageKey(projectId: string, target: RerunTarget) {
-  return `popcorn:rerun-proposal:${projectId}:${targetIdentity(target)}`;
 }
 
 function operationKey(
@@ -160,7 +130,9 @@ export function RerunProposalDialog({
     () => resolveRerunTarget(projectId, target, rerunTarget),
     [projectId, rerunTarget, target]
   );
-  const persistedKey = exactTarget ? storageKey(projectId, exactTarget) : null;
+  const persistedKey = exactTarget
+    ? rerunProposalStorageKey(projectId, exactTarget, target)
+    : null;
   const proposalQuery = useRerunProposalQuery(projectId, actionId);
   const createMutation = useCreateRerunProposalMutation(projectId);
   const approveMutation = useApproveRerunProposalMutation(projectId, actionId);

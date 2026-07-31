@@ -108,6 +108,16 @@ function harness(input: {
       budgetReservationKeys?: string[];
     } | null;
   }>;
+  callbackResultsAfterPark?: Array<{
+    executorId: string;
+    status: "completed" | "failed" | "canceled" | "pending";
+    jobIds: string[];
+    result: {
+      outputs?: unknown[];
+      primitiveActionIds?: string[];
+      budgetReservationKeys?: string[];
+    } | null;
+  }>;
   appliedFinalizeError?: ApiError;
   cancelResult?: {
     executionActionId: string;
@@ -217,7 +227,10 @@ function harness(input: {
       binding_results: null,
       primitive_action_ids: [],
       budget_reservation_keys: [],
-      callback_results: input.callbackResults ?? [],
+      callback_results:
+        parked > 0 && input.callbackResultsAfterPark
+          ? input.callbackResultsAfterPark
+          : input.callbackResults ?? [],
       replayed: dispatches > 0,
     }),
     completeWorkItem: async (request) => { lastCompleted = request; },
@@ -908,6 +921,49 @@ test("accepted async work parks with a durable callback fence instead of finaliz
   assert.equal(result.status, "waiting");
   assert.equal(state.parked, 1);
   assert.equal(state.finalOutcome, null);
+});
+
+test("a callback that wins the provider-accept race completes inline", async () => {
+  const expected = revisionProposal().selectedWork[0]!.requiredOutputs.map((output) => ({
+    ...output,
+    assetId: "asset-fast",
+    intrinsicRole: output.role,
+  }));
+  const registry = new RerunExecutorRegistry([
+    createFakeRerunExecutor({
+      id: "fast-callback",
+      kind: "revise_visuals",
+      execute: async () => ({
+        status: "accepted",
+        jobIds: ["job-fast"],
+        primitiveActionIds: ["action-fast"],
+        budgetReservationKeys: ["budget-fast"],
+      }),
+    }),
+  ]);
+  const state = harness({
+    registry,
+    callbackResultsAfterPark: [{
+      executorId: "fast-callback",
+      status: "completed",
+      jobIds: ["job-fast"],
+      result: {
+        outputs: expected,
+        primitiveActionIds: ["action-fast"],
+        budgetReservationKeys: ["budget-fast"],
+      },
+    }],
+  });
+  await approveRerunProposal({
+    workspaceId: "workspace-1", actorId: "actor-1", projectId: "project-1",
+    actionId: "proposal-1", approvedMaxCostUsd: 0,
+  }, state.deps);
+  const result = await executeRerunProposal({
+    workspaceId: "workspace-1", actorId: "actor-1", projectId: "project-1",
+    actionId: "proposal-1", idempotencyKey: "fast-callback",
+  }, state.deps);
+  assert.equal(result.status, "applied");
+  assert.deepEqual(state.lastCompleted?.bindingResults, expected);
 });
 
 test("failed durable work replays terminally without invoking an executor", async () => {
