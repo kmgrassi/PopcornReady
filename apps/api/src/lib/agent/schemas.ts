@@ -43,6 +43,22 @@ const sceneSchema = {
   required: ["name", "beats"],
 };
 
+const revisionBeatSchema = {
+  ...beatSchema,
+  properties: { id: str, ...beatSchema.properties },
+  required: ["id", ...beatSchema.required],
+};
+
+const revisionSceneSchema = {
+  ...sceneSchema,
+  properties: {
+    id: str,
+    ...sceneSchema.properties,
+    beats: { type: "array", items: revisionBeatSchema },
+  },
+  required: ["id", ...sceneSchema.required],
+};
+
 export const planSchema = {
   type: "object",
   additionalProperties: false,
@@ -56,6 +72,18 @@ export const planSchema = {
     },
   },
   required: ["targetLengthSec", "style", "aspectRatio", "scenes"],
+};
+
+/** Revision-only schema: retained entities must round-trip their stable IDs. */
+export const planRevisionSchema = {
+  ...planSchema,
+  properties: {
+    ...planSchema.properties,
+    scenes: {
+      type: "array",
+      items: revisionSceneSchema,
+    },
+  },
 };
 
 const planCritiqueIssueSchema = {

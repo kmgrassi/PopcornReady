@@ -24,7 +24,7 @@ function task(taskKind: string, sourceAssetId = "asset-source"): DomainTaskV1 {
     allowedOutputKinds:
       taskKind === "image_create" ? ["image"] : taskKind === "video_edit" || taskKind === "video_create"
         ? ["clip"]
-        : ["image", "anchor", "keyframe", "clip", "composite", "render"],
+        : ["image", "anchor", "storyboard", "keyframe", "clip", "composite", "render"],
     creativeConstraints: {},
     preserve: {
       assetIds: direct && taskKind === "video_edit" ? [sourceAssetId] : [],
@@ -107,6 +107,48 @@ test("Visuals registry policy is partitioned exactly by trusted task kind", () =
     "regenerate_image_asset",
     "edit_video_asset",
   ]);
+});
+
+test("storyboard assignments authorize storyboard generation without keyframe authority", () => {
+  const storyboardTarget = { kind: "project", projectId: "project-1" } as const;
+  const storyboardTask = {
+    ...task("visuals_revision"),
+    targets: [storyboardTarget],
+    requiredOutputs: [{
+      bindingId: "storyboard-binding",
+      workItemId: "storyboard-work",
+      target: storyboardTarget,
+      kind: "storyboard",
+      role: "beat_storyboard",
+      ordinal: 0,
+      minimumCount: 1,
+    }],
+    allowedOutputKinds: ["storyboard"],
+  } as DomainTaskV1;
+  const scope = buildDomainTargetScope({
+    snapshot,
+    targets: storyboardTask.targets,
+  });
+
+  assert.doesNotThrow(() =>
+    assertPreparedDomainToolInput({
+      toolName: "generate_storyboard",
+      parsedInput: {},
+      task: storyboardTask,
+      scope,
+      snapshot,
+    })
+  );
+  assert.throws(
+    () => assertPreparedDomainToolInput({
+      toolName: "generate_keyframe",
+      parsedInput: {},
+      task: storyboardTask,
+      scope,
+      snapshot,
+    }),
+    /keyframe output is outside/
+  );
 });
 
 test("selective standalone video uses server-owned provider settings", () => {

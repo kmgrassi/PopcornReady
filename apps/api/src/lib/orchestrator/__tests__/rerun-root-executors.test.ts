@@ -227,6 +227,27 @@ test("root executors are active in the production registry", () => {
   assert.doesNotThrow(() => productionRerunExecutorRegistry.preflight([story]));
 });
 
+test("story coverage fails closed for aggregate storyboard and scene projections", () => {
+  for (const unsupportedTarget of [
+    { kind: "storyboard", projectId, storyboardId: "storyboard-1" } as const,
+    { kind: "scene", projectId, sceneId: "scene-1" } as const,
+  ]) {
+    const binding = {
+      ...output("story-work", "story_snapshot"),
+      target: unsupportedTarget,
+    };
+    const story = {
+      ...work("story-work", "revise_story", [binding]),
+      targets: [unsupportedTarget],
+    } as RerunWorkItem;
+    assert.throws(
+      () => productionRerunExecutorRegistry.preflight([story]),
+      (error: unknown) =>
+        error instanceof ApiError && error.code === "coverage_unavailable"
+    );
+  }
+});
+
 test("story executor stages one pinned snapshot without moving its stable row", async () => {
   const seen = observed();
   const story = work("story-work", "revise_story", [

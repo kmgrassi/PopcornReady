@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type {
   RerunProposalV2,
   RerunTarget,
+  RerunWorkItem,
 } from "@popcorn/shared/rerun-proposal";
 import { ApiError } from "@/core/errors";
 import { getProject } from "@/lib/api/v1/store";
@@ -493,7 +494,7 @@ export async function executeRerunProposal(input: {
       });
   }, 20_000);
   heartbeat.unref();
-  const settled = await Promise.allSettled(proposal.selectedWork.map(async (workItem) => {
+  const executeWorkItem = async (workItem: RerunWorkItem) => {
     const executionPlan = deps.registry.plan(workItem);
     const callbackFences = executionPlan.map(({ executor, requiredOutputs }) => {
       const token = rerunExecutorCallbackToken({
@@ -746,7 +747,27 @@ export async function executeRerunProposal(input: {
       });
       throw error;
     }
-  }));
+  };
+  const waves = [
+    proposal.selectedWork.filter(
+      (workItem) =>
+        workItem.kind !== "reassemble_cut" && workItem.kind !== "critique_cut"
+    ),
+    proposal.selectedWork.filter((workItem) => workItem.kind === "reassemble_cut"),
+    proposal.selectedWork.filter((workItem) => workItem.kind === "critique_cut"),
+  ].filter((wave) => wave.length > 0);
+  type WorkResult = Awaited<ReturnType<typeof executeWorkItem>>;
+  const settled: PromiseSettledResult<WorkResult>[] = [];
+  for (const wave of waves) {
+    const waveSettled = await Promise.allSettled(wave.map(executeWorkItem));
+    settled.push(...waveSettled);
+    const waveIncomplete = waveSettled.some(
+      (result) =>
+        result.status === "rejected" ||
+        result.value.status !== "completed"
+    );
+    if (waveIncomplete) break;
+  }
   clearInterval(heartbeat);
   if (heartbeatError) throw heartbeatError;
   const failures = settled.filter(

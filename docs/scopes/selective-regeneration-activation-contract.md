@@ -2,7 +2,7 @@
 
 <!-- agent-summary: Production selective regeneration uses the immutable asset graph and durable proposal lifecycle. -->
 <!-- agent-summary: The production registry composes Visuals, Audio, video, and root adapter families in one module. -->
-<!-- agent-summary: Mixed work dispatches in parallel only after each work item and callback fence are durable. -->
+<!-- agent-summary: Independent media/story/audio work fans out before assembly and critique run in dependent waves. -->
 <!-- agent-summary: Generated outputs stay pooled until one terminal transaction applies every approved graph move. -->
 <!-- agent-summary: Selection moves append a CAS-checked head; story moves update only typed snapshot pointers. -->
 <!-- agent-summary: Reconciliation, actual cost, terminal action, and graph moves commit or roll back together. -->
@@ -25,10 +25,12 @@ to the exact work dispatch action.
 
 ## Fan-out and fan-in
 
-The lifecycle reserves every work item and its executor callback fences before
-launch. Independent work items execute through `Promise.allSettled`; completed
+The lifecycle runs independent media, story, and Audio work concurrently. Only
+after every binding in that wave completes does it reserve and execute
+prospective assembly; critique runs in a final wave after assembly. Completed
 steps are persisted immediately and skipped after a process restart. Accepted
-provider work parks the execution until the exact fenced callback arrives.
+provider work parks the execution before any dependent wave starts, until the
+exact fenced callback arrives.
 
 Failure, cancellation, and late callbacks are terminally fenced. Outputs that
 were already generated remain valid pooled assets, but are not active product
@@ -59,7 +61,12 @@ the final compare-and-set arbiter for other writers. The application role has no
 raw story-table UPDATE. A fixed-shape security-definer function verifies the
 live reservation, running terminal action, immutable approved move, completed
 exact binding, destination asset, and expected head before changing only
-`asset_id`, `provenance.planAssetId`, `scene_asset_id`, or `beat_asset_id`.
+`story_blueprints.asset_id` plus its typed `snapshot`, or
+`story_beats.beat_asset_id` plus its typed semantic columns. Aggregate
+storyboard/scene semantic revisions fail registry coverage before approval
+until their relational identity mapping is explicit. Storyboard media outputs
+are similarly exact beat/panel bindings, never one aggregate binding for many
+tiles.
 
 ## Accounting and reconciliation
 
