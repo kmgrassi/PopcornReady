@@ -40,10 +40,10 @@ failure interpretation live in
 
 ## Current inventory (2026-07-30)
 
-- Production database catalog, `public` schema: **100 functions**.
-- Trigger-backed functions: **34**.
-- Non-trigger functions: **66**.
-- `SECURITY DEFINER` functions: **78**.
+- Production database catalog, `public` schema: **119 functions**.
+- Trigger-backed functions: **36**.
+- Non-trigger functions: **83**.
+- `SECURITY DEFINER` functions: **96**.
 - Active API production runtime: **47 `.rpc()` expressions targeting 48
   distinct functions**.
 - Internal test-sandbox support: **2 expressions targeting one additional
@@ -54,15 +54,27 @@ backlog by itself: identity helpers, searches, and database integrity functions
 can remain RPCs. Each migration PR should remove its retired target from the
 allowlist.
 
-The 2026-07-30 relation scan observed **411 literal `.from()` calls** and the
+The 2026-07-30 relation scan observed **424 literal `.from()` calls** and the
 checked boundary permits **no dynamic calls**. Retired storyboards, generation-stage tables,
 composition/edit-graph tables, timelines, and brief versions are prohibited
 runtime targets.
 
+The durable rerun-proposal lifecycle is the second direct-Postgres workflow
+family. Approval, refresh, execution admission, leases, work/callback
+reservations, child-budget admission, cancellation, reconciliation, and
+terminal cost settlement run as typed `popcorn_api` transactions. The API does
+not call the corresponding service-role workflow routines. PostgreSQL retains
+the lifecycle transition trigger, budget-admission trigger, constraints, RLS,
+and the narrow pin-freshness locking function. The role's lifecycle read
+policies expose the Creative Director roots and lifecycle actions plus only the
+Visuals/Audio child runs and primitive actions whose parent root, dispatch
+action, proposal approval context, and execution reservation match one durable
+rerun work item. Unrelated domain runs and primitive actions remain hidden.
+
 ## Direct Postgres safety rules
 
 `DATABASE_URL` is server-only. The pool is lazy, but production readiness now
-requires the creator-direct confirmation role capabilities before Railway
+requires the exact creator-direct and rerun-lifecycle role capabilities before Railway
 promotes a deployment. Non-production processes may still boot without the URL;
 the first direct transaction then fails clearly if it is missing or its bounded
 pool settings are invalid.

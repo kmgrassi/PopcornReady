@@ -103,11 +103,26 @@ export type DomainTarget =
   | { kind: "asset"; projectId: string; assetId: string }
   | { kind: "lineage"; projectId: string; lineageId: string }
   | { kind: "timeline_item"; projectId: string; timelineItemId: string }
-  | { kind: "export"; projectId: string; exportId: string };
+  | { kind: "export"; projectId: string; exportId: string }
+  | {
+      kind: "selection";
+      projectId: string;
+      slotOwnerLineageId: string | null;
+      slotRole: string;
+    }
+  | {
+      kind: "transcript_segment";
+      projectId: string;
+      transcriptSegmentId: string;
+    };
 
+/** Semantic alias retained for task/report readability. */
+export type DomainTaskTarget = DomainTarget;
 export type VisualsOutputKind =
   | "image"
+  | "poster"
   | "anchor"
+  | "storyboard"
   | "keyframe"
   | "clip"
   | "composite"
@@ -121,15 +136,59 @@ type CreatorDirectVisualOutputKinds<
     ? Extract<VisualsOutputKind, "clip" | "composite" | "render">
     : Extract<VisualsOutputKind, "clip">;
 
-export type AudioOutputKind = "audio_track";
+/**
+ * `audio_fit` is a bound critique/fit result, not an audio track. Keeping it
+ * distinct prevents a fit report from satisfying a requested media output.
+ */
+export type AudioOutputKind = "audio_track" | "audio_fit";
 export type DomainOutputKind = VisualsOutputKind | AudioOutputKind;
 
-export interface DomainRequiredOutput<OutputKind extends DomainOutputKind> {
+/**
+ * Stored graph-asset kind that can satisfy a semantic domain output binding.
+ * Several proposal-level output kinds describe intent rather than the graph
+ * kind emitted by their executor.
+ */
+export function domainOutputAssetKind(kind: DomainOutputKind): string {
+  switch (kind) {
+    case "image":
+    case "poster":
+    case "anchor":
+    case "storyboard":
+    case "keyframe":
+      return "image";
+    case "clip":
+      return "video";
+    case "audio_track":
+      return "audio";
+    case "audio_fit":
+      return "critique";
+    case "composite":
+    case "render":
+      return kind;
+  }
+}
+
+interface DomainRequiredOutputBase<OutputKind extends DomainOutputKind> {
   kind: OutputKind;
   role: string;
   minimumCount: number;
-  target?: DomainTarget;
 }
+
+export type DomainRequiredOutput<OutputKind extends DomainOutputKind> =
+  | (DomainRequiredOutputBase<OutputKind> & {
+  /** Server-issued proposal-local identity; never reconstructed from role/kind. */
+  bindingId: string;
+  workItemId: string;
+  target: DomainTaskTarget;
+  ordinal: number;
+  })
+  | (DomainRequiredOutputBase<OutputKind> & {
+      /** Non-proposal creator/direct and historical assignments stay readable. */
+      bindingId?: never;
+      workItemId?: never;
+      target?: never;
+      ordinal?: never;
+    });
 
 export interface DomainCreativeConstraints {
   tone?: string;
@@ -160,6 +219,10 @@ export interface DomainPreserveSet {
 
 export interface DomainApprovalContext {
   proposalActionId: ActionId;
+  /** Durable action that recorded the creator approval. */
+  approvalActionId?: ActionId;
+  /** Fenced proposal execution reservation, when this is rerun work. */
+  executionReservationId?: string;
   approvedBudgetUsd: number;
   approvalFingerprint: string;
 }
@@ -202,7 +265,7 @@ interface DomainTaskBase<
   taskKind: TaskKind;
   objective: string;
   instruction: string;
-  targets: readonly DomainTarget[];
+  targets: readonly DomainTaskTarget[];
   requiredOutputs: readonly DomainRequiredOutput<OutputKind>[];
   allowedOutputKinds: readonly OutputKind[];
   creativeConstraints: DomainCreativeConstraints;
@@ -256,10 +319,26 @@ export interface DomainAcceptanceEvidence {
 
 export interface DomainDoneOutcome {
   outcome: "done";
-  outputs: readonly {
+  outputs: readonly ({
+    bindingId: string;
+    workItemId: string;
+    target: DomainTaskTarget;
+    kind: DomainOutputKind;
+    role: string;
+    ordinal: number;
     assetId: string;
     intrinsicRole: string;
-  }[];
+  } | {
+    /** Historical/unbound report entry. */
+    assetId: string;
+    intrinsicRole: string;
+    bindingId?: never;
+    workItemId?: never;
+    target?: never;
+    kind?: never;
+    role?: never;
+    ordinal?: never;
+  })[];
   changedSelections: readonly {
     slotRole: string;
     slotKey: string;

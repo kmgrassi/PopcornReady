@@ -8,12 +8,18 @@ import type { TransactionRunner } from "../creator-direct-confirmation.js";
 
 function readinessRunner(
   overrides: Record<string, unknown> = {}
-): { runner: TransactionRunner; calls: () => number } {
+): {
+  runner: TransactionRunner;
+  calls: () => number;
+  params: () => readonly unknown[];
+} {
   let calls = 0;
+  let observedParams: readonly unknown[] = [];
   const runner: TransactionRunner = async (_operation, callback) => {
     calls += 1;
     return callback({
-      async query() {
+      async query(_sql: string, params: readonly unknown[] = []) {
+        observedParams = params;
         return {
           rows: [
             {
@@ -25,6 +31,8 @@ function readinessRunner(
               owns_no_protected_tables: true,
               no_table_wide_privileges: true,
               no_forbidden_column_privileges: true,
+              lifecycle_access_exact: true,
+              lifecycle_routine_boundary: true,
               projects_read: true,
               runs_read: true,
               runs_lock: true,
@@ -34,7 +42,7 @@ function readinessRunner(
               idempotency_insert: true,
               reserve_execute: true,
               wake_execute: true,
-              policy_count: 7,
+              policy_count: 21,
               ...overrides,
             },
           ],
@@ -43,7 +51,11 @@ function readinessRunner(
       },
     } as unknown as PoolClient);
   };
-  return { runner, calls: () => calls };
+  return {
+    runner,
+    calls: () => calls,
+    params: () => observedParams,
+  };
 }
 
 test("production readiness requires the role capabilities and caches success", async () => {
@@ -133,6 +145,23 @@ test("production health fails closed when DATABASE_URL is absent", async () => {
 
   assert.deepEqual(await readiness(), { ready: false, checked: false });
   assert.equal(fixture.calls(), 0);
+});
+
+test("production readiness audits the complete retired lifecycle routine family", async () => {
+  const fixture = readinessRunner();
+  const readiness = createCreatorDirectDatabaseReadiness(fixture.runner, {
+    NODE_ENV: "production",
+    DATABASE_URL: "postgresql://configured",
+  });
+  await readiness();
+  const routines = fixture.params()[3] as string[];
+  assert.equal(routines.length, 16);
+  assert.ok(routines.some((routine) =>
+    routine.includes("approve_rerun_proposal")));
+  assert.ok(routines.some((routine) =>
+    routine.includes("reserve_rerun_child_budget")));
+  assert.ok(routines.some((routine) =>
+    routine.includes("recover_rerun_execution")));
 });
 
 test("Railway health fails closed when DATABASE_URL is absent", async () => {

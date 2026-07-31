@@ -75,6 +75,10 @@ function targetKey(target: DomainTarget): string {
       return `timeline_item:${target.timelineItemId}`;
     case "export":
       return `export:${target.exportId}`;
+    case "selection":
+      return `selection:${target.slotOwnerLineageId ?? "project"}:${target.slotRole}`;
+    case "transcript_segment":
+      return `transcript_segment:${target.transcriptSegmentId}`;
   }
 }
 
@@ -98,6 +102,10 @@ function targetId(target: DomainTarget): string {
       return target.timelineItemId;
     case "export":
       return target.exportId;
+    case "selection":
+      return `${target.slotOwnerLineageId ?? "project"}:${target.slotRole}`;
+    case "transcript_segment":
+      return target.transcriptSegmentId;
   }
 }
 
@@ -179,7 +187,15 @@ function assetIdsForTarget(
     // still stable, project-scoped targets but do not authorize arbitrary assets.
     case "timeline_item":
     case "export":
+    case "transcript_segment":
       return [];
+    case "selection": {
+      const selection = snapshot.selections.find((row) =>
+        row.slotOwnerLineageId === target.slotOwnerLineageId &&
+        row.slotRole === target.slotRole);
+      if (!selection) throw new Error("Domain target selection is not in the project.");
+      return [selection.activeAssetId];
+    }
   }
 }
 

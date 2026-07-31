@@ -26,6 +26,19 @@ export interface RerunProposalV2ServiceDeps {
   loadPacket: typeof loadRerunDecisionPacket;
   decide: RerunDecisionAdapter;
   createAction: typeof createAction;
+  persistProposal?: (input: {
+    projectId: string;
+    rootRunId: string | null;
+    source: "request_changes" | "autonomous_review";
+    message: string;
+    targets: RerunTarget[];
+    proposal: RerunProposalV2;
+    priorProposalActionId?: string;
+    clarificationAnswer?: {
+      answerFingerprint: string;
+      optionId: string;
+    };
+  }) => Promise<{ id: string }>;
 }
 
 const defaultDeps: RerunProposalV2ServiceDeps = {
@@ -75,6 +88,11 @@ export async function createRerunProposalV2(input: {
   message: string;
   targets: RerunTarget[];
   rootRunId?: string;
+  priorProposalActionId?: string;
+  clarificationAnswer?: {
+    answerFingerprint: string;
+    optionId: string;
+  };
 }, overrides: Partial<RerunProposalV2ServiceDeps> = {}): Promise<{
   actionId: string;
   proposal: RerunProposalV2;
@@ -113,20 +131,41 @@ export async function createRerunProposalV2(input: {
     }
     throw error;
   }
-  const action = await deps.createAction({
-    projectId: input.projectId,
-    ...(root ? { orchestratorRunId: root.id } : {}),
-    tool: "rerun_proposal",
-    status: proposal.outcome === "no_op" ? "applied" : "proposed",
-    inputAssetIds: proposal.inspectedAssetIds,
-    rationale: proposal.rationale,
-    params: {
-      schemaVersion: "rerun_proposal_request.v2",
+  const action = deps.persistProposal
+    ? await deps.persistProposal({
+      projectId: input.projectId,
+      rootRunId: root?.id ?? null,
       source: input.source,
       message: input.message,
       targets: input.targets,
-    },
-    proposal: proposal as unknown as Record<string, unknown>,
-  });
+      proposal,
+      ...(input.priorProposalActionId
+        ? { priorProposalActionId: input.priorProposalActionId }
+        : {}),
+      ...(input.clarificationAnswer
+        ? { clarificationAnswer: input.clarificationAnswer }
+        : {}),
+    })
+    : await deps.createAction({
+      projectId: input.projectId,
+      ...(root ? { orchestratorRunId: root.id } : {}),
+      tool: "rerun_proposal",
+      status: proposal.outcome === "no_op" ? "applied" : "proposed",
+      inputAssetIds: proposal.inspectedAssetIds,
+      rationale: proposal.rationale,
+      params: {
+        schemaVersion: "rerun_proposal_request.v2",
+        source: input.source,
+        message: input.message,
+        targets: input.targets,
+        ...(input.priorProposalActionId
+          ? { priorProposalActionId: input.priorProposalActionId }
+          : {}),
+        ...(input.clarificationAnswer
+          ? { clarificationAnswer: input.clarificationAnswer }
+          : {}),
+      },
+      proposal: proposal as unknown as Record<string, unknown>,
+    });
   return { actionId: action.id, proposal };
 }

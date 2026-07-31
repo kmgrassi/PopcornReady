@@ -4,7 +4,12 @@
 // report. It selects the model-visible surface and fresh context for an already
 // claimed run. PR 6 remains the sole domain-report finalization boundary.
 
-import type { AgentDomain, AgentRole, DomainTaskV1 } from "@popcorn/shared/domain-agent-contract";
+import {
+  domainOutputAssetKind,
+  type AgentDomain,
+  type AgentRole,
+  type DomainTaskV1,
+} from "@popcorn/shared/domain-agent-contract";
 import type { DomainReportV1 } from "@popcorn/shared/domain-agent-contract";
 import { createHash } from "node:crypto";
 import {
@@ -213,7 +218,17 @@ async function validatedOutputs(input: {
   projectId: string;
   task: DomainTaskV1;
   actions: readonly RunActionSummary[];
-}): Promise<Array<{ assetId: string; intrinsicRole: string; kind: string }>> {
+  claimedOutputs?: unknown;
+}): Promise<Array<{
+  assetId: string;
+  intrinsicRole: string;
+  kind: string;
+  bindingId?: string;
+  workItemId?: string;
+  target?: import("@popcorn/shared/domain-agent-contract").DomainTaskTarget;
+  role?: string;
+  ordinal?: number;
+}>> {
   const ids = actionOutputIds(input.actions);
   if (ids.length === 0) throw new Error("Domain done completion requires outputs created by this run.");
   const rows = await runQuery(
@@ -226,6 +241,49 @@ async function validatedOutputs(input: {
   ) as OutputAssetRow[];
   if (rows.length !== ids.length || rows.some((row) => row.project_id !== input.projectId)) {
     throw new Error("Domain completion referenced an output outside its project.");
+  }
+  const bound = input.task.requiredOutputs.filter(
+    (required): required is Extract<typeof required, { bindingId: string }> =>
+      "bindingId" in required
+  );
+  if (bound.length > 0) {
+    if (
+      bound.length !== input.task.requiredOutputs.length ||
+      !Array.isArray(input.claimedOutputs) ||
+      input.claimedOutputs.length !== bound.length
+    ) {
+      throw new Error("Bound domain completion must claim every required binding exactly once.");
+    }
+    const seen = new Set<string>();
+    const outputs = input.claimedOutputs.map((raw) => {
+      const claim = completionObject(raw);
+      const bindingId = boundedString(claim.bindingId, "outputs.bindingId", 128);
+      const assetId = boundedString(claim.assetId, "outputs.assetId", 128);
+      if (seen.has(bindingId)) throw new Error("Domain completion repeated an output binding.");
+      seen.add(bindingId);
+      const required = bound.find((candidate) => candidate.bindingId === bindingId);
+      if (!required) throw new Error("Domain completion claimed a binding outside its task.");
+      const row = rows.find((candidate) => candidate.id === assetId);
+      const expectedAssetKind = domainOutputAssetKind(required.kind);
+      if (!row || row.kind !== expectedAssetKind) {
+        throw new Error(`Domain completion output ${assetId} does not satisfy binding ${bindingId}.`);
+      }
+      return {
+        assetId,
+        intrinsicRole: row.role ?? required.role,
+        bindingId: required.bindingId,
+        workItemId: required.workItemId,
+        target: required.target,
+        kind: required.kind,
+        role: required.role,
+        ordinal: required.ordinal,
+      };
+    });
+    if (new Set(outputs.map((output) => output.assetId)).size !== ids.length ||
+        outputs.some((output) => !ids.includes(output.assetId))) {
+      throw new Error("Bound completion must claim exactly this run's output assets.");
+    }
+    return outputs;
   }
   const allowed = new Set<string>(input.task.allowedOutputKinds);
   const outputs = ids.map((id) => {
@@ -304,12 +362,30 @@ export async function buildDomainReportFromCompletion(
   const completion = completionObject(parsed);
   const outcome = completion.outcome;
   if (outcome === "done") {
-    const outputs = await (deps.validatedOutputs ?? validatedOutputs)(input);
+    const outputs = await (deps.validatedOutputs ?? validatedOutputs)({
+      ...input,
+      claimedOutputs: completion.outputs,
+    });
     return {
       schemaVersion: "DomainReport.v1",
       outcome: {
         outcome: "done",
-        outputs: outputs.map(({ assetId, intrinsicRole }) => ({ assetId, intrinsicRole })),
+        outputs: outputs.map((output) =>
+          output.bindingId
+            ? {
+              bindingId: output.bindingId,
+              workItemId: output.workItemId!,
+              target: output.target!,
+              kind: output.kind as import("@popcorn/shared/domain-agent-contract").DomainOutputKind,
+              role: output.role!,
+              ordinal: output.ordinal!,
+              assetId: output.assetId,
+              intrinsicRole: output.intrinsicRole,
+            }
+            : {
+              assetId: output.assetId,
+              intrinsicRole: output.intrinsicRole,
+            }),
         changedSelections: [],
         acceptanceEvidence: parseEvidence({
           value: completion.acceptanceEvidence,
