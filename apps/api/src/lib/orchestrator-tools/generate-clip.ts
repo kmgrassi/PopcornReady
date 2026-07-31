@@ -493,6 +493,7 @@ export function createGenerateClipTool(
             ...(context.orchestratorRunId ? { orchestratorRunId: context.orchestratorRunId } : {}),
             beats: jobBeats,
             skippedBeatIds,
+            ...(isVisualsRevision ? { bypassActiveClipSelection: true } : {}),
             ...(input.provider ? { provider: input.provider } : {}),
             ...(input.model ? { model: input.model } : {}),
           },
@@ -519,6 +520,7 @@ export function createGenerateClipTool(
             : {}),
           beats: jobBeats,
           skippedBeatIds,
+          ...(isVisualsRevision ? { bypassActiveClipSelection: true } : {}),
           ...(input.provider ? { provider: input.provider } : {}),
           ...(input.model ? { model: input.model } : {}),
         });
