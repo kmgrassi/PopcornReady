@@ -152,13 +152,12 @@ integrationTest(
 
       const { data: roots, error: rootError } = await f.service
         .from("orchestrator_runs")
-        .select("id, agent_role, root_execution_profile, status")
+        .select("id, agent_role, status")
         .eq("project_id", f.projectId);
       noError(rootError, "roots");
       assert.deepEqual(roots, [{
         id: rows[0].root_run_id,
         agent_role: "creative_director",
-        root_execution_profile: "creative_director",
         status: "running",
       }]);
       const approvalMismatch = await f.service.rpc(
@@ -245,7 +244,6 @@ integrationTest(
         status: "queued",
         input_summary: "Budget integration root",
         budget_usd: 1,
-        root_execution_profile: "creative_director",
       })).error, "root");
       const pair = await Promise.all([0, 1].map(() =>
         insertProposal({

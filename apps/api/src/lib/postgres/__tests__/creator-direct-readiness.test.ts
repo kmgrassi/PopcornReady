@@ -168,7 +168,7 @@ test("production readiness audits the complete retired lifecycle routine family"
     routine.includes("recover_rerun_execution")));
 });
 
-test("production readiness tolerates but does not require the transitional root profile grant", async () => {
+test("production readiness has no retired root profile privilege allowance", async () => {
   const fixture = readinessRunner();
   const readiness = createCreatorDirectDatabaseReadiness(fixture.runner, {
     NODE_ENV: "production",
@@ -188,17 +188,9 @@ test("production readiness tolerates but does not require the transitional root 
   assert.ok(!requiredPrivileges.orchestrator_runs.INSERT.includes(
     "root_execution_profile"
   ));
-  assert.match(
-    fixture.sql(),
-    /'orchestrator_runs'.*'root_execution_profile'/s
-  );
-  assert.match(
-    fixture.sql(),
-    /expected_table\.key = 'orchestrator_runs'\s+and actual\.column_name = 'root_execution_profile'\s+and actual\.privilege_type in \('SELECT', 'INSERT'\)/
-  );
   assert.doesNotMatch(
     fixture.sql(),
-    /expected_table\.key <> 'orchestrator_runs'/
+    /root_execution_profile/
   );
 });
 
