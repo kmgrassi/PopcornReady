@@ -8,9 +8,13 @@
 <!-- agent-summary: The cutover deletes restart-from-stage, the flat-root fallback, and obsolete compatibility UI. -->
 <!-- agent-summary: Completion requires graph-focused tests, Request Changes E2E, migration validation, and a controlled smoke. -->
 
-> **Status (2026-07-30):** PRs 1–7B are implemented on the final stack. PR 7B
-> is ready for review but must not merge or deploy until PR 7A is fully rolled
-> out.
+> **Status (2026-07-31):** PRs 1–7B are merged on the final stack. PR 7A's
+> production bridge migration succeeded. PR 7B's first production migration
+> attempt rolled back because one cross-table action policy still depended on
+> `root_execution_profile`; the migration hotfix replaces that policy before
+> retrying the destructive cleanup. The production API still reports pre-PR 7A
+> commit `2db09b81`; do not merge the hotfix (which auto-runs migrations) until
+> Railway serves PR 7A or newer everywhere.
 > This document supersedes the incomplete sequencing in
 > [`graph-rerun-decisioning-prs.md`](graph-rerun-decisioning-prs.md) and
 > [`regeneration-coverage-prs.md`](regeneration-coverage-prs.md). Those documents
@@ -82,7 +86,12 @@ supersedes historical flat/null roots, closes their unresolved gates, fences
 active family work, and removes the temporary rolling-deploy trigger,
 `root_execution_profile`, profile-bound database logic, constraints, policies,
 grants, readiness allowance, and transitional monitoring. It does not add a
-second product path.
+second product path. Its first production attempt failed safely inside the
+explicit transaction when `actions_popcorn_api_rerun_select` retained a
+cross-table dependency on the profile column. The retry replaces that policy
+and retains the nested specialist visibility branch in the run-select policy.
+Both keep the same role and rerun-causation checks, minus only the retired
+profile predicates, before the no-`CASCADE` column drop.
 
 ## 3. Non-Negotiable Design Rules
 

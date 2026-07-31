@@ -8,7 +8,7 @@
 <!-- agent-summary: Async dispatch races require local Supabase concurrency coverage when no safe live completion is available. -->
 <!-- agent-summary: Keep remaining gaps concrete, behavior-focused, and tied to the smallest useful next test. -->
 
-Last reconciled with the active route table: 2026-07-30
+Last reconciled with the active route table: 2026-07-31
 
 This inventory covers the active split app described in `CLAUDE.md`: the Vite
 React SPA in `apps/web` and the Express API in `apps/api`. New end-to-end work
@@ -72,6 +72,21 @@ pnpm test:e2e:local-db
 
 That command runs Playwright against local Supabase/Postgres with
 `DB_BACKEND=supabase`.
+
+The destructive root-profile retirement has an additional production-shaped
+database harness:
+
+```sh
+pnpm db:test:pr7b-upgrade
+```
+
+It resets to the PR 7A migration boundary, seeds legacy and current hierarchy
+controls, applies PR 7B, verifies the role-only rerun action policy and retired
+profile catalog, proves the `popcorn_api` role can read only causally tied
+specialist runs and primitive actions, exercises the API and replacement RPCs,
+and replays the full migration chain from a clean database. The harness runs its two database
+integration files sequentially so intentional error-path transactions in the
+lifecycle suite cannot interfere with the independent retirement fixture.
 
 ## Historical Production Verification: Specialist Foundations (2026-07-14)
 
