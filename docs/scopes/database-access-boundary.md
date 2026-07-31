@@ -139,7 +139,12 @@ memberships/ownership, the absence of extra effective table or column
 privileges, named RLS policies, and routine grants once and caches only a
 successful result. This prevents Railway's caller deployment from becoming
 healthy before the independent Supabase migration workflow has installed the
-required capabilities.
+required capabilities. Every migration that changes a `popcorn_api` table or
+column grant must update the readiness allowlist and the real-role integration
+coverage in the same PR. The rerun lifecycle directly reads the semantic scene
+snapshot pointer, but stable scene/beat identity remains behind the service
+client or the bounded story-application function and is not a direct-role
+grant.
 
 ## Incremental migration sequence
 
