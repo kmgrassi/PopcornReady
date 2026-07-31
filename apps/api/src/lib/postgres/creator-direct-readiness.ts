@@ -243,7 +243,7 @@ export function createCreatorDirectDatabaseReadiness(
                    from (
                      values
                        ('projects', array['id', 'workspace_id']::text[], array[]::text[], array[]::text[]),
-                       ('orchestrator_runs', array['id','project_id','origin_kind','status','parent_run_id','root_action_id','task_params','agent_role','root_execution_profile','budget_usd','spent_usd']::text[], array['updated_at','status','started_at','completed_at','error']::text[], array['schema_version','project_id','status','input_summary','budget_usd','spent_usd','agent_role','root_execution_profile']::text[]),
+                       ('orchestrator_runs', array['id','project_id','origin_kind','status','parent_run_id','root_action_id','task_params','agent_role','budget_usd','spent_usd']::text[], array['updated_at','status','started_at','completed_at','error']::text[], array['schema_version','project_id','status','input_summary','budget_usd','spent_usd','agent_role']::text[]),
                        ('orchestrator_run_gates', array['id', 'orchestrator_run_id', 'subject_proposal_action_id', 'gate_kind', 'project_id', 'actor_id', 'request_digest', 'approved_max_usd', 'approval_token_hash', 'expires_at', 'token_consumed_at', 'status']::text[], array['status', 'token_consumed_at', 'decided_at', 'updated_at']::text[], array[]::text[]),
                        ('idempotency', array['scope', 'key', 'body_hash', 'response_body']::text[], array[]::text[], array['scope', 'key', 'body_hash', 'status', 'response_body']::text[])
                    ) as allowed(table_name, select_columns, update_columns, insert_columns)
@@ -294,11 +294,6 @@ export function createCreatorDirectDatabaseReadiness(
                        and actual.table_name = expected_table.key
                        and actual.privilege_type = expected_privilege.key
                        and not expected_privilege.value ? actual.column_name
-                       and not (
-                         expected_table.key = 'orchestrator_runs'
-                         and actual.column_name = 'root_execution_profile'
-                         and actual.privilege_type in ('SELECT', 'INSERT')
-                       )
                   )
                ) as lifecycle_access_exact,
                has_function_privilege(
