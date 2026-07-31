@@ -39,3 +39,8 @@ When a safety migration mirrors application selection logic, both sides need an
 identical deterministic ordering. Timestamps alone are insufficient because a
 transaction can create multiple rows with the same `now()` value; add a stable
 ID tie-breaker to the application query and the migration.
+
+When repointing the cleanup stack to `main`, preserve the deployment boundary by
+replaying PR 7A onto the resolved PR 6 integration branch. A clean cherry-pick
+is stronger evidence than resolving a broad legacy merge: it proves the PREP
+bridge remains isolated from PR 7B's destructive schema removal.

@@ -1,6 +1,6 @@
 # Worksheet: ORCH-20260730-PR7-CLEANUP
 
-<!-- agent-summary: PR 7A is the non-destructive application cleanup stacked on final PR 6 head 3430cec7. -->
+<!-- agent-summary: PR 7A is the non-destructive application cleanup integrated after resolved PR 6 head 035a9d03. -->
 <!-- agent-summary: Legacy revision and stage-restart routes, clients, and controls are deleted. -->
 <!-- agent-summary: Production registry construction is role-owned; flat runtime compatibility is deleted. -->
 <!-- agent-summary: Application code routes by agent role and no longer reads or writes root_execution_profile. -->
@@ -26,9 +26,10 @@ adapter, activation, and Request Changes PRs:
 
 ## Stack and ownership
 
-This branch is based on final PR 6 commit `3430cec7`, which is stacked on final
-PR 5 commit `fc941092`. Its pull request must target
-`codex/selective-regen-pr6-ui` so the diff contains only PR 7A.
+This main-integration branch is based on resolved PR 6 integration commit
+`035a9d03`. PR 855 targets `main`; PR 856 also targets `main` and therefore
+retains PR 6 ancestry until PR 855 merges, after which its visible diff reduces
+to only PR 7A.
 
 Source-of-truth documents consulted and updated:
 
@@ -86,10 +87,10 @@ Source-of-truth documents consulted and updated:
   temporary PostgreSQL row-level smoke (`initdb` + `pg_ctl`, seed via `psql`,
   then pipe the migration fence from its `Role-only application routing` marker
   back through `psql`) executed the PR 7A SQL against legacy and valid roots.
-  Fixtures included reached legacy/valid gates, run-level credit errors, and
-  opposing failed-action errors with identical timestamps; all target,
-  non-target, deterministic tie-break, and history-preservation assertions
-  passed.
+Fixtures included reached legacy/valid gates, run-level credit errors, and
+opposing failed-action errors with identical timestamps; all target,
+non-target, deterministic tie-break, and history-preservation assertions
+passed.
 - The full API suite passes 1,079 tests with 135 skips and 3 todos; four unrelated
   existing failures remain (two deleted guest-retention migration fixtures, the
   public-project UUID assertion, and stale projection-catalog metadata).
@@ -128,3 +129,21 @@ profile-based monitoring queries. PR 7A now makes terminal flat/null rows
 structurally non-resumable before application routing loses the profile; PR 7B
 must repeat that proof after removing the column. Terminal historical runs
 remain readable.
+
+## Main integration (PR 856)
+
+- Reconstructed the branch from resolved PR 855 and replayed only the five
+  reviewed PR 7A commits. All five applied cleanly, with no manual conflict
+  resolution and no duplicate PR 2–6 history.
+- The diff preserves the transitional PREP migration and mixed-schema readiness
+  allowance. It does not contain the PR 7B profile-column drop or destructive
+  grant/signature cleanup.
+- Focused migration, CLI, retired-route, readiness, and registry coverage passed
+  41/41. API and web typechecks passed on the reconstructed branch.
+- PR 855's Postgres replay fixes remain in the branch ancestry unchanged.
+- Independent integration review approved with no actionable blockers. It
+  confirmed exact five-commit ancestry, blob-identical preservation of PR 855's
+  replay/terminal/UI settlement files, the PREP migration as the only new
+  migration, and no destructive PR 7B leakage; its focused rerun passed 42/42.
+- `pnpm agent:lint:fix` and `pnpm agent:validate -- --scope all` passed,
+  including both app typechecks and validation of the 95-migration chain.
