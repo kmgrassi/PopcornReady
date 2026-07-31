@@ -44,6 +44,11 @@ const REQUIRED_POLICIES = [
   "action_assets_popcorn_api_rerun_select",
   "action_assets_popcorn_api_rerun_insert",
   "assets_popcorn_api_rerun_select",
+  "selections_popcorn_api_rerun_select",
+  "selections_popcorn_api_rerun_insert",
+  "story_blueprints_popcorn_api_rerun_select",
+  "story_scenes_popcorn_api_rerun_select",
+  "story_beats_popcorn_api_rerun_select",
   "rerun_reservations_popcorn_api_all",
   "rerun_work_popcorn_api_all",
   "rerun_callbacks_popcorn_api_all",
@@ -60,6 +65,26 @@ const LIFECYCLE_COLUMN_PRIVILEGES = {
     INSERT: [],
     UPDATE: [],
   },
+  selections: {
+    SELECT: ["active_asset_id","project_id","seq","slot_owner_lineage_id","slot_role"],
+    INSERT: ["active_asset_id","project_id","seq","set_by_action_id","slot_owner_lineage_id","slot_role"],
+    UPDATE: [],
+  },
+  story_blueprints: {
+    SELECT: ["asset_id","id","project_id","provenance"],
+    INSERT: [],
+    UPDATE: [],
+  },
+  story_blueprint_scenes: {
+    SELECT: ["id","project_id","scene_asset_id"],
+    INSERT: [],
+    UPDATE: [],
+  },
+  story_beats: {
+    SELECT: ["beat_asset_id","id","project_id"],
+    INSERT: [],
+    UPDATE: [],
+  },
   orchestrator_runs: {
     SELECT: ["agent_role","budget_usd","id","origin_kind","parent_run_id","project_id","root_action_id","root_execution_profile","spent_usd","status","task_params"],
     INSERT: ["agent_role","budget_usd","input_summary","project_id","root_execution_profile","schema_version","spent_usd","status"],
@@ -71,7 +96,7 @@ const LIFECYCLE_COLUMN_PRIVILEGES = {
     UPDATE: ["error","output_asset_ids","status"],
   },
   action_assets: {
-    SELECT: ["action_id","asset_id","direction","project_id"],
+    SELECT: ["action_id","asset_id","direction","ordinal","project_id","role"],
     INSERT: ["action_id","asset_id","direction","ordinal","project_id","role"],
     UPDATE: [],
   },
@@ -276,6 +301,11 @@ export function createCreatorDirectDatabaseReadiness(
                  'public.assert_rerun_proposal_pins_fresh(uuid,uuid)',
                  'EXECUTE'
                )
+               and has_function_privilege(
+                 current_user,
+                 'public.apply_rerun_story_pointer(uuid,uuid,uuid,text,uuid,uuid,uuid)',
+                 'EXECUTE'
+               )
                and not exists (
                  select 1 from unnest($4::text[]) routine(signature)
                   where has_function_privilege(
@@ -348,6 +378,10 @@ export function createCreatorDirectDatabaseReadiness(
                 "actions",
                 "action_assets",
                 "assets",
+                "selections",
+                "story_blueprints",
+                "story_blueprint_scenes",
+                "story_beats",
                 "rerun_execution_reservations",
                 "rerun_execution_work_items",
                 "rerun_execution_callbacks",

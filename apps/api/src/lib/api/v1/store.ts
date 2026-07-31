@@ -1296,6 +1296,136 @@ export async function getAssetFingerprintPins(
   return pins;
 }
 
+export interface RerunDataAssetSnapshot {
+  id: string;
+  kind: Extract<
+    GraphAssetKind,
+    "beat" | "brief" | "plan" | "story_blueprint" | "composite" | "critique"
+  >;
+  role: string;
+  content: unknown;
+  contentHash: string | null;
+}
+
+/**
+ * Read the exact immutable data asset named by a proposal story/cut pin.
+ * Rerun root adapters use this instead of an active-selection read so a
+ * concurrent pointer move cannot change the material being revised.
+ */
+export async function getRerunDataAssetSnapshot(input: {
+  workspaceId: string;
+  projectId: string;
+  assetId: string;
+}): Promise<RerunDataAssetSnapshot> {
+  const row = await dataAssetById(
+    getServiceSupabase(),
+    input.assetId
+  );
+  if (
+    !row ||
+    row.workspace_id !== input.workspaceId ||
+    row.project_id !== input.projectId ||
+    !["beat", "brief", "plan", "story_blueprint", "composite", "critique"].includes(row.kind)
+  ) {
+    throw notFound(`Pinned data asset not found: ${input.assetId}`);
+  }
+  return {
+    id: row.id,
+    kind: row.kind as RerunDataAssetSnapshot["kind"],
+    role: row.role ?? row.kind,
+    content: unmarkedContent<unknown>(row.content),
+    contentHash: row.content_hash,
+  };
+}
+
+/**
+ * Persist a root-executor result in the pool without moving any selection or
+ * story pointer. The surrounding lifecycle transaction applies every approved
+ * move later, atomically. The caller-reserved id and ordered action attribution
+ * make a crash replay converge on the same immutable result.
+ */
+export async function addPooledRerunDataAsset(input: {
+  id: string;
+  workspaceId: string;
+  projectId: string;
+  kind: InsertDataAssetInput["kind"];
+  contentSchemaKind?: InsertDataAssetInput["contentSchemaKind"];
+  role: string;
+  content: unknown;
+  graphInputs: GraphAssetInput[];
+  createdByActionId: string;
+}): Promise<{ assetId: string }> {
+  const db = getServiceSupabase();
+  const contentSchemaKind =
+    input.contentSchemaKind ?? (input.kind === "composite" ? "timeline" : input.kind);
+  const expectedContentHash = canonicalContentHash(
+    markedContent(contentSchemaKind, input.content)
+  );
+  const expectedInputsFingerprint = inputsFingerprint(input.graphInputs, null);
+  const asset = await insertDataAsset({
+    db,
+    id: input.id,
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    kind: input.kind,
+    ...(input.contentSchemaKind
+      ? { contentSchemaKind: input.contentSchemaKind }
+      : {}),
+    role: input.role,
+    content: input.content,
+    inputs: input.graphInputs,
+    createdByActionId: input.createdByActionId,
+  });
+  if (
+    asset.project_id !== input.projectId ||
+    asset.workspace_id !== input.workspaceId ||
+    asset.kind !== input.kind ||
+    asset.role !== input.role ||
+    asset.content_hash !== expectedContentHash ||
+    asset.inputs_fingerprint !== expectedInputsFingerprint
+  ) {
+    throw new ApiError(
+      "idempotency_conflict",
+      "Pooled rerun artifact replay changed immutable content or causation."
+    );
+  }
+  await runQuery(
+    "store.addPooledRerunDataAsset action_assets",
+    db.from("action_assets").upsert(
+      {
+        project_id: input.projectId,
+        action_id: input.createdByActionId,
+        asset_id: asset.id,
+        direction: "output",
+        role: input.role,
+        ordinal: 0,
+      },
+      { onConflict: "action_id,direction,ordinal", ignoreDuplicates: true }
+    )
+  );
+  const attribution = await runQuery(
+    "store.addPooledRerunDataAsset verify action_assets",
+    db
+      .from("action_assets")
+      .select("project_id,asset_id,role")
+      .eq("action_id", input.createdByActionId)
+      .eq("direction", "output")
+      .eq("ordinal", 0)
+      .single()
+  ) as { project_id: string; asset_id: string; role: string | null };
+  if (
+    attribution.project_id !== input.projectId ||
+    attribution.asset_id !== asset.id ||
+    attribution.role !== input.role
+  ) {
+    throw new ApiError(
+      "idempotency_conflict",
+      "Pooled rerun action attribution replay changed."
+    );
+  }
+  return { assetId: asset.id };
+}
+
 async function insertDataAsset(input: InsertDataAssetInput): Promise<DataAssetRow> {
   const now = new Date().toISOString();
   const visibility = await defaultVisibilityForWorkspace(input.db, input.workspaceId);

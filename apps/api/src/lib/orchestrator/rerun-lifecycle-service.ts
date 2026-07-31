@@ -2,17 +2,19 @@ import { createHash } from "node:crypto";
 import type {
   RerunProposalV2,
   RerunTarget,
+  RerunWorkItem,
 } from "@popcorn/shared/rerun-proposal";
 import { ApiError } from "@/core/errors";
 import { getProject } from "@/lib/api/v1/store";
 import * as lifecycleStore from "@/lib/api/v1/rerun-lifecycle-store";
 import { createRerunProposalV2 } from "./rerun-proposal-v2-service";
 import {
-  productionRerunExecutorRegistry,
   type BoundExecutorOutput,
+  RetryableRerunExecutorError,
   RerunExecutorRegistry,
   validateBoundExecutorOutputs,
 } from "./rerun-executor-registry";
+import { productionRerunExecutorRegistry } from "./rerun-production-registry";
 import {
   rerunExecutorCallbackToken,
   rerunExecutorCallbackTokenHash,
@@ -493,7 +495,7 @@ export async function executeRerunProposal(input: {
       });
   }, 20_000);
   heartbeat.unref();
-  const settled = await Promise.allSettled(proposal.selectedWork.map(async (workItem) => {
+  const executeWorkItem = async (workItem: RerunWorkItem) => {
     const executionPlan = deps.registry.plan(workItem);
     const callbackFences = executionPlan.map(({ executor, requiredOutputs }) => {
       const token = rerunExecutorCallbackToken({
@@ -558,11 +560,13 @@ export async function executeRerunProposal(input: {
         reason: reserved.work_status,
       };
     }
+    const completedStepResults = reserved.callback_results.flatMap((callback) =>
+      callback.status === "completed" && callback.result
+        ? [{ executorId: callback.executorId, result: callback.result }]
+        : []);
+    const completedBindings = completedStepResults.flatMap(({ result }) =>
+      result.outputs ?? []) as BoundExecutorOutput[];
     try {
-      const completedStepResults = reserved.callback_results.flatMap((callback) =>
-        callback.status === "completed" && callback.result
-          ? [{ executorId: callback.executorId, result: callback.result }]
-          : []);
       const failedCallback = reserved.callback_results.find(
         (callback) => callback.status === "failed" ||
           callback.status === "canceled"
@@ -572,8 +576,6 @@ export async function executeRerunProposal(input: {
           `Executor callback ${failedCallback.executorId} ${failedCallback.status}.`
         );
       }
-      const completedBindings = completedStepResults.flatMap(({ result }) =>
-        result.outputs ?? []) as BoundExecutorOutput[];
       let pendingExternalStep = false;
       for (const [index, planned] of executionPlan.entries()) {
         const callback = callbackFences[index]!;
@@ -661,6 +663,9 @@ export async function executeRerunProposal(input: {
             ...(result.reconciliationActionId
               ? { reconciliationActionId: result.reconciliationActionId }
               : {}),
+            ...(result.providerResult
+              ? { providerResult: result.providerResult }
+              : {}),
           };
           await deps.parkWorkItem({
             projectId: input.projectId,
@@ -732,6 +737,25 @@ export async function executeRerunProposal(input: {
         reconciliationActionId: reconciliationActionIds[0],
       };
     } catch (error) {
+      if (error instanceof RetryableRerunExecutorError) {
+        await deps.parkWorkItem({
+          projectId: input.projectId,
+          lease,
+          workItemId: workItem.workItemId,
+          primitiveActionIds: completedStepResults.flatMap(({ result }) =>
+            result.primitiveActionIds ?? []),
+          budgetReservationKeys: [...new Set([
+            ...completedStepResults.flatMap(({ result }) =>
+              result.budgetReservationKeys ?? []),
+            ...error.budgetReservationKeys,
+          ])],
+          bindingResults: completedBindings,
+        });
+        return {
+          status: "parked" as const,
+          reason: "retryable_executor_failure" as const,
+        };
+      }
       await deps.failWorkItem({
         projectId: input.projectId,
         lease,
@@ -743,7 +767,27 @@ export async function executeRerunProposal(input: {
       });
       throw error;
     }
-  }));
+  };
+  const waves = [
+    proposal.selectedWork.filter(
+      (workItem) =>
+        workItem.kind !== "reassemble_cut" && workItem.kind !== "critique_cut"
+    ),
+    proposal.selectedWork.filter((workItem) => workItem.kind === "reassemble_cut"),
+    proposal.selectedWork.filter((workItem) => workItem.kind === "critique_cut"),
+  ].filter((wave) => wave.length > 0);
+  type WorkResult = Awaited<ReturnType<typeof executeWorkItem>>;
+  const settled: PromiseSettledResult<WorkResult>[] = [];
+  for (const wave of waves) {
+    const waveSettled = await Promise.allSettled(wave.map(executeWorkItem));
+    settled.push(...waveSettled);
+    const waveIncomplete = waveSettled.some(
+      (result) =>
+        result.status === "rejected" ||
+        result.value.status !== "completed"
+    );
+    if (waveIncomplete) break;
+  }
   clearInterval(heartbeat);
   if (heartbeatError) throw heartbeatError;
   const failures = settled.filter(
@@ -754,19 +798,13 @@ export async function executeRerunProposal(input: {
   const terminalFailures = results.filter(
     (result) => result.status === "terminal_failure"
   );
-  const reconciliationActionIds = results
-    .filter((result) => result.status === "completed")
-    .map((result) => result.reconciliationActionId)
-    .filter((id): id is string => Boolean(id));
-  const distinctReconciliationActionIds = [...new Set(reconciliationActionIds)];
   const executionActionId = deterministicUuid(
     "rerun-execution",
     lease.reservationId
   );
   if (
     failures.length > 0 ||
-    terminalFailures.length > 0 ||
-    distinctReconciliationActionIds.length > 1
+    terminalFailures.length > 0
   ) {
     await deps.finalizeExecution({
       projectId: input.projectId,
@@ -781,9 +819,6 @@ export async function executeRerunProposal(input: {
               ? failure.reason.message
               : "Executor failed."),
           ...terminalFailures.map((failure) => failure.reason),
-          ...(distinctReconciliationActionIds.length > 1
-            ? ["conflicting reconciliation actions"]
-            : []),
         ],
       },
     });
@@ -804,24 +839,44 @@ export async function executeRerunProposal(input: {
       replayed: false,
     };
   }
-  const reconciliationActionId = distinctReconciliationActionIds[0] ??
-    await deps.ensureReconciliation({
+  const reconciliationActionId = deterministicUuid(
+    "rerun-reconciliation",
+    lease.reservationId
+  );
+  try {
+    await deps.finalizeExecution({
       projectId: input.projectId,
-      proposalActionId: action.id,
-      rootRunId,
       lease,
-      reconciliationActionId: deterministicUuid(
-        "rerun-reconciliation",
-        lease.reservationId
-      ),
+      executionActionId,
+      outcome: "applied",
+      reconciliationActionId,
     });
-  await deps.finalizeExecution({
-    projectId: input.projectId,
-    lease,
-    executionActionId,
-    outcome: "applied",
-    reconciliationActionId,
-  });
+  } catch (error) {
+    if (
+      !(error instanceof ApiError) ||
+      !["stale_proposal", "budget_exceeded"].includes(error.code)
+    ) {
+      throw error;
+    }
+    await deps.finalizeExecution({
+      projectId: input.projectId,
+      lease,
+      executionActionId,
+      outcome: "failed",
+      error: {
+        kind: error.code,
+        message: error.message,
+        recoverable: error.code === "stale_proposal",
+      },
+    });
+    return {
+      actionId: action.id,
+      reservationId: lease.reservationId,
+      executionActionId,
+      status: "failed" as const,
+      replayed: false,
+    };
+  }
   return {
     actionId: action.id,
     reservationId: lease.reservationId,

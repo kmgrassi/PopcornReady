@@ -202,6 +202,14 @@ pointer; panel revisions therefore use asset/selection bindings. A project-level
 whole-story `story_snapshot` output binds the current story blueprint row and
 its `story_blueprints.asset_id` pin.
 
+The production rerun registry currently accepts semantic story snapshots only
+for the whole blueprint and an exact beat. Their relational `snapshot` or beat
+semantic columns move atomically with the approved asset pointer. Aggregate
+storyboard and scene semantic outputs fail coverage before approval: relational
+scene/beat UUIDs are not the plan's model IDs, and `scene_asset_id` also denotes
+visual scene media. Storyboard-tile generation likewise requires one exact beat
+or panel binding per output; aggregate storyboard bindings are not dispatchable.
+
 Absent selection slots are authorized only when the server recognizes the
 canonical project role or a role keyed by an existing beat, scene, or asset
 lineage. Those slots receive the initial CAS pin
@@ -360,6 +368,19 @@ Gemini. Untargeted results and domain revisions remain pooled. A direct video
 edit requires an asset target, an asset pin, and a trusted fingerprint that
 matches the fresh graph. It mints an `edited_from` clip and never swaps every
 selection that happens to reference the source.
+
+The dormant selective-video adapters dispatch approved beat clips, standalone
+video, and content-aware edits as bounded Visuals child runs. The child task
+carries the exact proposal/approval/execution identity, asset/selection/story
+pins, required-output bindings, executor/work-item identity, and callback
+generation. Canonical child tools mint immutable pooled outputs: beat clips
+retain their `beat_keyframe` input and add a `generated_from` edge, while edits
+retain the original and add `edited_from`. Child provider primitives own
+provider admission, idempotency, and proposal-family budget reservation.
+Terminal domain reporting derives their exact actions, settled reservations,
+and bound outputs for the fenced lifecycle callback. The adapter never applies
+the parent dispatch action or moves selections and is not production-registered
+before PR 5.
 
 Visuals media jobs carrying a domain session claim also leave generated
 anchors, keyframes, and clips pooled. Their exact claim fences provider work,

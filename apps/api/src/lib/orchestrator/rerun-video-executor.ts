@@ -4,37 +4,36 @@ import type {
   RerunWorkItem,
 } from "@popcorn/shared/rerun-proposal";
 import { ApiError } from "@/core/errors";
+import { buildProposalDelegatedTask } from "@/lib/orchestrator-tools/delegate-domain";
 import {
   dispatchDomainRun,
   type DispatchDomainRunInput,
   type DomainRunDispatch,
-} from "@/lib/orchestrator/domain-run-service";
-import { buildProposalDelegatedTask } from "@/lib/orchestrator-tools/delegate-domain";
+} from "./domain-run-service";
 import type {
   RerunExecutorContext,
   RerunKindExecutor,
-} from "../rerun-executor-registry";
+} from "./rerun-executor-registry";
 
-export const VISUAL_STILL_OUTPUT_KINDS = [
-  "image",
-  "poster",
-  "anchor",
-  "storyboard",
-  "keyframe",
-] as const;
+type VisualsWorkItem = Extract<RerunWorkItem, { owner: "visuals" }>;
 
-const outputKinds = new Set<string>(VISUAL_STILL_OUTPUT_KINDS);
-type VisualWorkItem = Extract<RerunWorkItem, { owner: "visuals" }>;
+export const VIDEO_BEAT_CLIP_RERUN_EXECUTOR_ID =
+  "rerun:video-beat-clip:v1";
+export const VIDEO_EDIT_RERUN_EXECUTOR_ID = "rerun:video-edit:v1";
+export const VIDEO_STANDALONE_RERUN_EXECUTOR_ID =
+  "rerun:video-standalone:v1";
 
-export interface VisualStillExecutorDeps {
+export interface VideoRerunExecutorDeps {
   dispatch(input: DispatchDomainRunInput): Promise<DomainRunDispatch>;
 }
 
-const defaultDeps: VisualStillExecutorDeps = {
+const defaultDeps: VideoRerunExecutorDeps = {
   dispatch: dispatchDomainRun,
 };
 
-function isVisualWorkItem(workItem: RerunWorkItem): workItem is VisualWorkItem {
+function isVisualsWorkItem(
+  workItem: RerunWorkItem
+): workItem is VisualsWorkItem {
   return workItem.owner === "visuals" && workItem.kind === "revise_visuals";
 }
 
@@ -65,11 +64,11 @@ function targetIdentity(target: RerunTarget): string {
   }
 }
 
-function subsetWorkItem(context: RerunExecutorContext): VisualWorkItem {
-  if (!isVisualWorkItem(context.workItem)) {
+function subsetWorkItem(context: RerunExecutorContext): VisualsWorkItem {
+  if (!isVisualsWorkItem(context.workItem)) {
     throw new ApiError(
       "validation_failed",
-      "Visual-still executor received non-Visuals rerun work."
+      "Video executor received non-Visuals rerun work."
     );
   }
   const targets = context.requiredOutputs.flatMap((output, index, outputs) =>
@@ -87,23 +86,21 @@ function subsetWorkItem(context: RerunExecutorContext): VisualWorkItem {
   };
 }
 
-function supportedTarget(output: BoundRequiredOutput): boolean {
-  if (
-    output.kind === "storyboard" &&
-    output.target.kind !== "beat" &&
-    output.target.kind !== "panel"
-  ) {
-    return false;
-  }
+function isBeatClipTarget(output: BoundRequiredOutput): boolean {
   return (
-    output.target.kind === "project" ||
-    output.target.kind === "storyboard" ||
-    output.target.kind === "scene" ||
-    output.target.kind === "beat" ||
-    output.target.kind === "panel" ||
-    output.target.kind === "asset" ||
-    output.target.kind === "selection"
+    output.kind === "clip" &&
+    (output.target.kind === "beat" ||
+      (output.target.kind === "selection" &&
+        output.target.slotRole.startsWith("beat_clip:")))
   );
+}
+
+function isVideoEditTarget(output: BoundRequiredOutput): boolean {
+  return output.kind === "clip" && output.target.kind === "asset";
+}
+
+function isStandaloneVideoTarget(output: BoundRequiredOutput): boolean {
+  return output.kind === "clip" && output.target.kind === "project";
 }
 
 function pins(context: RerunExecutorContext) {
@@ -116,38 +113,42 @@ function pins(context: RerunExecutorContext) {
   };
 }
 
-export function createVisualStillRerunExecutor(
-  overrides: Partial<VisualStillExecutorDeps> = {}
+function createExecutor(
+  input: {
+    id: string;
+    supportsOutput(output: BoundRequiredOutput): boolean;
+    blockedMessage: string;
+  },
+  deps: VideoRerunExecutorDeps
 ): RerunKindExecutor {
-  const deps = { ...defaultDeps, ...overrides };
   return {
-    id: "visual-stills.v1",
-    supports: (workItem, output) =>
-      isVisualWorkItem(workItem) &&
-      outputKinds.has(output.kind) &&
-      supportedTarget(output),
+    id: input.id,
+    supports(workItem, output) {
+      return isVisualsWorkItem(workItem) && input.supportsOutput(output);
+    },
     async execute(context) {
       if (!context.approvalFingerprint) {
         throw new ApiError(
           "validation_failed",
-          "Visual-still execution is missing its persisted approval fingerprint."
+          "Video rerun execution is missing its persisted approval fingerprint."
         );
       }
+
       const workItem = subsetWorkItem(context);
       const unsupported = context.requiredOutputs.find(
-        (output) => !outputKinds.has(output.kind) || !supportedTarget(output)
+        (output) => !input.supportsOutput(output)
       );
       if (unsupported) {
         return {
           status: "blocked",
           precondition: {
             kind: "root_target_resolution",
-            message:
-              "The Creative Director must resolve still work to an exact project, story, beat, panel, asset, or selection target.",
+            message: input.blockedMessage,
             target: unsupported.target,
           },
         };
       }
+
       const delegatedTask = buildProposalDelegatedTask({
         projectId: context.projectId,
         rootRunId: context.rootRunId,
@@ -165,7 +166,7 @@ export function createVisualStillRerunExecutor(
         approvalContext: {
           ...delegatedTask.approvalContext!,
           rerunCallback: {
-            executorId: "visual-stills.v1",
+            executorId: input.id,
             workItemId: workItem.workItemId,
             generation: context.fence.callbackGeneration,
           },
@@ -185,6 +186,7 @@ export function createVisualStillRerunExecutor(
         pins: pins(context),
         idempotencyKey: context.fence.idempotencyKey,
       });
+
       return {
         status: "accepted",
         childRunId: child.runId,
@@ -194,4 +196,39 @@ export function createVisualStillRerunExecutor(
       };
     },
   };
+}
+
+export function createVideoRerunExecutors(
+  overrides: Partial<VideoRerunExecutorDeps> = {}
+): RerunKindExecutor[] {
+  const deps = { ...defaultDeps, ...overrides };
+  return [
+    createExecutor(
+      {
+        id: VIDEO_BEAT_CLIP_RERUN_EXECUTOR_ID,
+        supportsOutput: isBeatClipTarget,
+        blockedMessage:
+          "The Creative Director must resolve beat clip work to one exact beat or beat_clip selection.",
+      },
+      deps
+    ),
+    createExecutor(
+      {
+        id: VIDEO_EDIT_RERUN_EXECUTOR_ID,
+        supportsOutput: isVideoEditTarget,
+        blockedMessage:
+          "The Creative Director must resolve a content-aware video edit to one exact pinned source asset.",
+      },
+      deps
+    ),
+    createExecutor(
+      {
+        id: VIDEO_STANDALONE_RERUN_EXECUTOR_ID,
+        supportsOutput: isStandaloneVideoTarget,
+        blockedMessage:
+          "The Creative Director must resolve standalone video generation to the exact project target.",
+      },
+      deps
+    ),
+  ];
 }

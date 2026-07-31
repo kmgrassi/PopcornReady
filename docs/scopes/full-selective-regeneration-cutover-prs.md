@@ -380,6 +380,15 @@ image/prompt references and selection state, but no semantic snapshot pointer,
 so panel media changes use asset/selection bindings rather than a
 `PlannedStoryPointerMove`.
 
+PR 5 activates only the projections whose semantic content can move atomically
+with that pointer: whole-story (`story_blueprint`) and exact beat
+(`story_beat`). Aggregate storyboard and scene story revisions fail executor
+coverage before approval because their current relational rows do not share the
+plan's scene/beat IDs, and `scene_asset_id` also owns visual scene media. They
+must not be advertised as executable until a dedicated relational semantic
+snapshot mapping lands. Storyboard-tile media generation remains executable
+only for exact beat or panel bindings, so one binding corresponds to one output.
+
 The model proposes selected work, target IDs, rationale, preservation choices,
 and bounded clarification content. The server validates the ID/capability
 allowlist and derives selection moves, cost/max cost, risk, approval policy,
@@ -680,6 +689,16 @@ starts immediately beside PR 1.
 
 ### PR 3B — Visual clip and video-edit coverage
 
+**Implementation status (2026-07-30):** the dormant PR 3B executors live behind
+the PR 2 interface and dispatch exact beat-clip, standalone-video, and
+asset-edit bindings as bounded Visuals child runs. Child tasks preserve the
+approved pins and callback identity; canonical child provider primitives own
+durable jobs, proposal-family budget admission, and immutable pooled outputs.
+Terminal domain reporting derives exact primitive/reservation/output causation
+for the fenced lifecycle callback. The adapters never apply parent dispatch
+actions or move selections, and the production registry remains empty pending
+PR 5.
+
 **Deliver:**
 
 - Add kind adapters for beat clips, generic video, and pinned content-aware
@@ -743,6 +762,9 @@ picture scope.
 
 - Execute root-owned story/plan/beat revisions through relational snapshots and
   graph edges.
+- Require one matching story target and snapshot output per root work item;
+  multi-row revisions use separate work items and fail coverage before approval
+  if presented as one aggregate item.
 - Preserve stable relational scene/beat/panel row IDs. A semantic update stages
   a new immutable snapshot asset; PR 5 later points the row to it atomically
   with the approved selection moves, and the prior snapshot preserves history.
@@ -762,10 +784,29 @@ picture scope.
 - A story-only wording change with no media effect can end as `no_op` for media.
 - A duration change updates only affected audio/clip timing and the composite.
 - Reassembly creates a new cut and preserves the prior cut.
-- Critique failure is visible and retryable without replaying completed media.
+- Zero-spend critique failure and ambiguous settlement acknowledgement are
+  retryable without replaying completed media; spent failures without a durable
+  output settle and terminate rather than risking a second provider charge.
 - No production route can dispatch these adapters before PR 5.
 
 ### PR 5 — Activate fan-out, atomic application, and reconciliation
+
+**Implementation status (2026-07-30):** The complete PR 3/4 adapter family is
+composed in the production registry. Work-item dispatch overlaps behind durable
+callback fences, while all outputs remain pooled until terminal finalization.
+The direct Postgres finalizer now resolves every approved move through exact
+durable bindings, revalidates selection/story heads, and commits selection
+appends, typed story pointers, reconciliation, terminal action, and settled
+actual cost together. Stale state and cost overage fall back to a failed
+terminal execution with no graph moves. See
+`docs/scopes/selective-regeneration-activation-contract.md`.
+Independent review hardened activation into dependency waves: media, story, and
+Audio work fan out first; assembly begins only after those bindings complete;
+critique begins only after assembly. Whole-story and exact-beat semantic
+projections update their typed relational content in the same transaction as
+their asset pointer. Aggregate storyboard/scene semantic moves and aggregate
+storyboard-tile bindings fail coverage before approval until their relational
+identity/cardinality contracts are implemented.
 
 **Deliver:**
 

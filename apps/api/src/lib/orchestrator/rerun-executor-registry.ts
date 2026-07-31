@@ -52,6 +52,8 @@ export interface RerunExecutorSucceeded {
   outputs: BoundExecutorOutput[];
   primitiveActionIds: string[];
   budgetReservationKeys: string[];
+  /** Durable inert executor metadata; never treated as output causation. */
+  providerResult?: Record<string, unknown>;
   childRunId?: string;
   reportActionId?: string;
   reconciliationActionId?: string;
@@ -79,6 +81,19 @@ export type RerunExecutorResult =
   | RerunExecutorAccepted
   | RerunExecutorBlocked;
 
+export class RetryableRerunExecutorError extends Error {
+  readonly budgetReservationKeys: string[];
+
+  constructor(
+    message: string,
+    input: { budgetReservationKeys: string[]; cause?: unknown }
+  ) {
+    super(message, input.cause === undefined ? undefined : { cause: input.cause });
+    this.name = "RetryableRerunExecutorError";
+    this.budgetReservationKeys = [...new Set(input.budgetReservationKeys)];
+  }
+}
+
 export interface RerunKindExecutor {
   readonly id: string;
   supports(
@@ -88,10 +103,6 @@ export interface RerunKindExecutor {
   execute(context: RerunExecutorContext): Promise<RerunExecutorResult>;
 }
 
-/**
- * PR 2 production registry is deliberately inert. PRs 3A/3B/3C may implement
- * adapters behind this interface, but PR 5 owns their production activation.
- */
 export class RerunExecutorRegistry {
   private readonly executors = new Map<string, RerunKindExecutor>();
 
@@ -150,8 +161,6 @@ export class RerunExecutorRegistry {
     }));
   }
 }
-
-export const productionRerunExecutorRegistry = new RerunExecutorRegistry();
 
 function canonicalJson(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);

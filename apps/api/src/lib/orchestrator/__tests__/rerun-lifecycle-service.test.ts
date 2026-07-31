@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { RerunProposalV2 } from "@popcorn/shared/rerun-proposal";
+import type {
+  RerunProposalV2,
+  RerunWorkItem,
+} from "@popcorn/shared/rerun-proposal";
 import type { RerunProposalActionRecord } from "@/lib/api/v1/rerun-lifecycle-store";
 import { ApiError } from "@/core/errors";
 import {
@@ -15,9 +18,11 @@ import {
 } from "../rerun-lifecycle-service";
 import {
   createFakeRerunExecutor,
+  RetryableRerunExecutorError,
   RerunExecutorRegistry,
   validateBoundExecutorOutputs,
 } from "../rerun-executor-registry";
+import { productionRerunExecutorRegistry } from "../rerun-production-registry";
 
 const target = {
   kind: "asset" as const,
@@ -26,7 +31,7 @@ const target = {
 };
 
 function revisionProposal(source: "request_changes" | "autonomous_review" = "request_changes"):
-RerunProposalV2 {
+Extract<RerunProposalV2, { outcome: "revision" }> {
   return {
     schemaVersion: "RerunProposal.v2",
     projectId: "project-1",
@@ -72,7 +77,9 @@ RerunProposalV2 {
   };
 }
 
-function action(proposal = revisionProposal()): RerunProposalActionRecord {
+function action(
+  proposal: RerunProposalV2 = revisionProposal()
+): RerunProposalActionRecord {
   return {
     id: "proposal-1",
     projectId: "project-1",
@@ -100,6 +107,7 @@ function harness(input: {
       budgetReservationKeys?: string[];
     } | null;
   }>;
+  appliedFinalizeError?: ApiError;
 }) {
   const proposalAction = action(input.proposal);
   let approval: {
@@ -118,14 +126,21 @@ function harness(input: {
   } | null = null;
   let dispatches = 0;
   let reserves = 0;
+  let approvals = 0;
+  let failedWorkItems = 0;
   let finalOutcome: "applied" | "failed" | null = null;
+  const finalOutcomes: Array<"applied" | "failed"> = [];
   let parked = 0;
+  let lastParked: Parameters<RerunLifecycleDeps["parkWorkItem"]>[0] | null = null;
+  let lastCompleted: Parameters<RerunLifecycleDeps["completeWorkItem"]>[0] | null =
+    null;
   const deps: RerunLifecycleDeps = {
     authorizeProject: async () => ({}) as never,
     getProposal: async () => proposalAction,
     getSuccessor: async () => null,
     assertAuthority: async () => {},
     approve: async (request) => {
+      approvals += 1;
       if (input.stale) {
         proposalAction.status = "failed";
         return {
@@ -171,14 +186,18 @@ function harness(input: {
       return { ...reservation, replayed: false };
     },
     claimExecution: async () => {
-      if (!reservation || reservation.status !== "reserved") {
+      if (
+        !reservation ||
+        !["reserved", "waiting"].includes(reservation.status)
+      ) {
         throw new ApiError("idempotency_in_progress", "leased");
       }
       reservation.status = "running";
+      reservation.lease_generation += 1;
       return {
         reservationId: "reservation-1",
         leaseToken: "lease-1",
-        leaseGeneration: 1,
+        leaseGeneration: reservation.lease_generation,
         leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),
       };
     },
@@ -195,13 +214,24 @@ function harness(input: {
       callback_results: input.callbackResults ?? [],
       replayed: dispatches > 0,
     }),
-    completeWorkItem: async () => {},
-    parkWorkItem: async () => { parked += 1; },
-    parkExecution: async () => {},
-    failWorkItem: async () => {},
+    completeWorkItem: async (request) => { lastCompleted = request; },
+    parkWorkItem: async (request) => {
+      parked += 1;
+      lastParked = request;
+    },
+    parkExecution: async () => {
+      reservation!.status = "waiting";
+    },
+    failWorkItem: async () => {
+      failedWorkItems += 1;
+    },
     reserveChildBudget: async () => ({ reservationId: "child-budget-1", replayed: false }),
     listCompletedBindings: async () => [],
     finalizeExecution: async (request) => {
+      finalOutcomes.push(request.outcome);
+      if (request.outcome === "applied" && input.appliedFinalizeError) {
+        throw input.appliedFinalizeError;
+      }
       finalOutcome = request.outcome;
       reservation!.status = "completed";
       proposalAction.status = "applied";
@@ -222,8 +252,13 @@ function harness(input: {
     get dispatches() { return dispatches; },
     incrementDispatch() { dispatches += 1; },
     get reserves() { return reserves; },
+    get approvals() { return approvals; },
+    get failedWorkItems() { return failedWorkItems; },
     get finalOutcome() { return finalOutcome; },
+    get finalOutcomes() { return finalOutcomes; },
     get parked() { return parked; },
+    get lastParked() { return lastParked; },
+    get lastCompleted() { return lastCompleted; },
   };
 }
 
@@ -239,6 +274,49 @@ test("production coverage fails before approval, reservation, or spend", async (
     }, state.deps),
     (error: unknown) => error instanceof ApiError && error.code === "coverage_unavailable"
   );
+  assert.equal(state.reserves, 0);
+});
+
+test("multi-output story work fails production coverage before approval", async () => {
+  const firstTarget = {
+    kind: "beat" as const,
+    projectId: "project-1",
+    beatId: "beat-1",
+  };
+  const secondTarget = {
+    kind: "beat" as const,
+    projectId: "project-1",
+    beatId: "beat-2",
+  };
+  const proposal = revisionProposal();
+  proposal.selectedWork = [{
+    workItemId: "story-work",
+    owner: "creative_director",
+    kind: "revise_story",
+    targets: [firstTarget, secondTarget],
+    requiredOutputs: [firstTarget, secondTarget].map((storyTarget, index) => ({
+      bindingId: `story-binding-${index + 1}`,
+      workItemId: "story-work",
+      target: storyTarget,
+      kind: "story_snapshot",
+      role: "beat_snapshot",
+      ordinal: index,
+    })),
+  }];
+  const state = harness({ proposal, registry: productionRerunExecutorRegistry });
+
+  await assert.rejects(
+    approveRerunProposal({
+      workspaceId: "workspace-1",
+      actorId: "actor-1",
+      projectId: "project-1",
+      actionId: "proposal-1",
+      approvedMaxCostUsd: 0,
+    }, state.deps),
+    (error: unknown) =>
+      error instanceof ApiError && error.code === "coverage_unavailable"
+  );
+  assert.equal(state.approvals, 0);
   assert.equal(state.reserves, 0);
 });
 
@@ -599,6 +677,161 @@ test("executor failure terminalizes the proposal execution and releases the work
   assert.equal(state.finalOutcome, "failed");
 });
 
+test("retryable executor failure parks and replays the same fenced result", async () => {
+  const reservationKey = "root:critique:reservation-1";
+  const idempotencyKeys: string[] = [];
+  const callbackGenerations: number[] = [];
+  const reservedKeys: string[] = [];
+  let attempts = 0;
+  let stagedAssetCount = 0;
+  let stagedAssetId: string | null = null;
+  const registry = new RerunExecutorRegistry([
+    createFakeRerunExecutor({
+      kind: "revise_visuals",
+      execute: async (context) => {
+        attempts += 1;
+        idempotencyKeys.push(context.fence.idempotencyKey);
+        callbackGenerations.push(context.fence.callbackGeneration);
+        await context.reserveBudget({
+          actionId: context.fence.dispatchActionId,
+          reservationKey,
+          estimatedUsd: 0.05,
+        });
+        if (!stagedAssetId) {
+          stagedAssetId = "pooled-output-1";
+          stagedAssetCount += 1;
+        }
+        if (attempts === 1) {
+          throw new RetryableRerunExecutorError(
+            "settlement response was lost",
+            { budgetReservationKeys: [reservationKey] }
+          );
+        }
+        return {
+          status: "succeeded",
+          outputs: context.requiredOutputs.map((output) => ({
+            ...output,
+            assetId: stagedAssetId!,
+            intrinsicRole: output.role,
+          })),
+          primitiveActionIds: [context.fence.dispatchActionId],
+          budgetReservationKeys: [reservationKey],
+        };
+      },
+    }),
+  ]);
+  const retryProposal = revisionProposal();
+  retryProposal.estimate = {
+    costUsd: 0.05,
+    maxCostUsd: 0.05,
+    latencyClass: "interactive",
+  };
+  const state = harness({ registry, proposal: retryProposal });
+  let budgetReservations = 0;
+  const durableBudgetKeys: string[] = [];
+  state.deps.reserveChildBudget = async (request) => {
+    budgetReservations += 1;
+    reservedKeys.push(request.reservationKey);
+    if (!durableBudgetKeys.includes(request.reservationKey)) {
+      durableBudgetKeys.push(request.reservationKey);
+    }
+    return {
+      reservationId: "child-budget-1",
+      replayed: budgetReservations > 1,
+    };
+  };
+  const parkWorkItem = state.deps.parkWorkItem;
+  let retryParkChecked = false;
+  state.deps.parkWorkItem = async (request) => {
+    if (!request.completedCallbacks?.length && !request.acceptedCallbacks?.length) {
+      assert.deepEqual(request.primitiveActionIds, []);
+      assert.deepEqual(request.budgetReservationKeys, durableBudgetKeys);
+      assert.deepEqual(request.bindingResults, []);
+      retryParkChecked = true;
+    }
+    await parkWorkItem(request);
+  };
+  await approveRerunProposal({
+    workspaceId: "workspace-1",
+    actorId: "actor-1",
+    projectId: "project-1",
+    actionId: "proposal-1",
+    approvedMaxCostUsd: 0.05,
+  }, state.deps);
+
+  const first = await executeRerunProposal({
+    workspaceId: "workspace-1",
+    actorId: "actor-1",
+    projectId: "project-1",
+    actionId: "proposal-1",
+    idempotencyKey: "retryable-root-result",
+  }, state.deps);
+  assert.equal(first.status, "waiting");
+  assert.equal(state.failedWorkItems, 0);
+  assert.equal(state.finalOutcome, null);
+  assert.deepEqual(state.lastParked?.budgetReservationKeys, [reservationKey]);
+  assert.equal(retryParkChecked, true);
+
+  const replay = await executeRerunProposal({
+    workspaceId: "workspace-1",
+    actorId: "actor-1",
+    projectId: "project-1",
+    actionId: "proposal-1",
+    idempotencyKey: "retryable-root-result",
+  }, state.deps);
+  assert.equal(replay.status, "applied");
+  assert.equal(state.failedWorkItems, 0);
+  assert.equal(state.finalOutcome, "applied");
+  assert.equal(stagedAssetCount, 1);
+  assert.deepEqual(idempotencyKeys, [idempotencyKeys[0], idempotencyKeys[0]]);
+  assert.deepEqual(callbackGenerations, [1, 1]);
+  assert.deepEqual(reservedKeys, [reservationKey, reservationKey]);
+});
+
+for (const code of ["stale_proposal", "budget_exceeded"] as const) {
+  test(`${code} during atomic application terminalizes failed without redispatch`, async () => {
+    let calls = 0;
+    const state = harness({
+      appliedFinalizeError: new ApiError(code, `forced ${code}`),
+      registry: new RerunExecutorRegistry([
+        createFakeRerunExecutor({
+          kind: "revise_visuals",
+          execute: async ({ workItem }) => {
+            calls += 1;
+            return {
+              status: "succeeded",
+              outputs: workItem.requiredOutputs.map((output) => ({
+                ...output,
+                assetId: "pooled-output-1",
+                intrinsicRole: output.role,
+              })),
+              primitiveActionIds: [],
+              budgetReservationKeys: [],
+            };
+          },
+        }),
+      ]),
+    });
+    await approveRerunProposal({
+      workspaceId: "workspace-1",
+      actorId: "actor-1",
+      projectId: "project-1",
+      actionId: "proposal-1",
+      approvedMaxCostUsd: 0,
+    }, state.deps);
+    const result = await executeRerunProposal({
+      workspaceId: "workspace-1",
+      actorId: "actor-1",
+      projectId: "project-1",
+      actionId: "proposal-1",
+      idempotencyKey: `atomic-${code}`,
+    }, state.deps);
+    assert.equal(result.status, "failed");
+    assert.equal(calls, 1);
+    assert.deepEqual(state.finalOutcomes, ["applied", "failed"]);
+  });
+}
+
 test("accepted async work parks with a durable callback fence instead of finalizing", async () => {
   const registry = new RerunExecutorRegistry([
     createFakeRerunExecutor({
@@ -749,6 +982,264 @@ test("a failed work item wins over a concurrently accepted item", async () => {
   assert.equal(state.finalOutcome, "failed");
 });
 
+test("mixed adapter work fans out concurrently and converges on one finalization", async () => {
+  const proposal = revisionProposal();
+  const audioTarget = {
+    kind: "selection" as const,
+    projectId: "project-1",
+    slotOwnerLineageId: null,
+    slotRole: "narration",
+  };
+  const audioOutput = {
+    bindingId: "audio-binding",
+    workItemId: "audio-work",
+    target: audioTarget,
+    kind: "audio_track" as const,
+    role: "narration",
+    ordinal: 0,
+  };
+  proposal.selectedWork.push({
+    workItemId: "audio-work",
+    owner: "audio",
+    kind: "revise_audio",
+    targets: [audioTarget],
+    requiredOutputs: [audioOutput],
+  });
+  let entered = 0;
+  let bothEntered!: () => void;
+  const enteredPromise = new Promise<void>((resolve) => {
+    bothEntered = resolve;
+  });
+  let release!: () => void;
+  const releasePromise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const execute = async (assetId: string, workItem: RerunWorkItem) => {
+    entered += 1;
+    if (entered === 2) bothEntered();
+    await releasePromise;
+    return {
+      status: "succeeded" as const,
+      outputs: workItem.requiredOutputs.map((output) => ({
+        ...output,
+        assetId,
+        intrinsicRole: output.role,
+      })),
+      primitiveActionIds: [],
+      budgetReservationKeys: [],
+    };
+  };
+  const state = harness({
+    proposal,
+    registry: new RerunExecutorRegistry([
+      createFakeRerunExecutor({
+        id: "parallel-visual",
+        kind: "revise_visuals",
+        execute: ({ workItem }) => execute("visual-output", workItem),
+      }),
+      createFakeRerunExecutor({
+        id: "parallel-audio",
+        kind: "revise_audio",
+        execute: ({ workItem }) => execute("audio-output", workItem),
+      }),
+    ]),
+  });
+  await approveRerunProposal({
+    workspaceId: "workspace-1",
+    actorId: "actor-1",
+    projectId: "project-1",
+    actionId: "proposal-1",
+    approvedMaxCostUsd: 0,
+  }, state.deps);
+  const execution = executeRerunProposal({
+    workspaceId: "workspace-1",
+    actorId: "actor-1",
+    projectId: "project-1",
+    actionId: "proposal-1",
+    idempotencyKey: "parallel-mixed",
+  }, state.deps);
+  await enteredPromise;
+  assert.equal(entered, 2);
+  release();
+  assert.equal((await execution).status, "applied");
+  assert.deepEqual(state.finalOutcomes, ["applied"]);
+});
+
+test("assembly and critique execute in dependent waves after media fan-in", async () => {
+  const proposal = revisionProposal();
+  proposal.selectedWork.push({
+    workItemId: "assembly-work",
+    owner: "creative_director",
+    kind: "reassemble_cut",
+    targets: [target],
+    requiredOutputs: [{
+      bindingId: "cut-binding",
+      workItemId: "assembly-work",
+      target,
+      kind: "composite",
+      role: "cut",
+      ordinal: 0,
+    }],
+  }, {
+    workItemId: "critique-work",
+    owner: "creative_director",
+    kind: "critique_cut",
+    targets: [target],
+    requiredOutputs: [{
+      bindingId: "critique-binding",
+      workItemId: "critique-work",
+      target,
+      kind: "critique",
+      role: "critique",
+      ordinal: 0,
+    }],
+  });
+  const events: string[] = [];
+  let visualEntered!: () => void;
+  const visualEnteredPromise = new Promise<void>((resolve) => {
+    visualEntered = resolve;
+  });
+  let releaseVisual!: () => void;
+  const releaseVisualPromise = new Promise<void>((resolve) => {
+    releaseVisual = resolve;
+  });
+  const succeed = (workItem: RerunWorkItem) => ({
+    status: "succeeded" as const,
+    outputs: workItem.requiredOutputs.map((output) => ({
+      ...output,
+      assetId: `${workItem.workItemId}-asset`,
+      intrinsicRole: output.role,
+    })),
+    primitiveActionIds: [],
+    budgetReservationKeys: [],
+  });
+  const state = harness({
+    proposal,
+    registry: new RerunExecutorRegistry([
+      createFakeRerunExecutor({
+        kind: "revise_visuals",
+        execute: async ({ workItem }) => {
+          events.push("visual:start");
+          visualEntered();
+          await releaseVisualPromise;
+          events.push("visual:end");
+          return succeed(workItem);
+        },
+      }),
+      createFakeRerunExecutor({
+        kind: "reassemble_cut",
+        execute: async ({ workItem }) => {
+          events.push("assembly");
+          return succeed(workItem);
+        },
+      }),
+      createFakeRerunExecutor({
+        kind: "critique_cut",
+        execute: async ({ workItem }) => {
+          events.push("critique");
+          return succeed(workItem);
+        },
+      }),
+    ]),
+  });
+  await approveRerunProposal({
+    workspaceId: "workspace-1",
+    actorId: "actor-1",
+    projectId: "project-1",
+    actionId: "proposal-1",
+    approvedMaxCostUsd: 0,
+  }, state.deps);
+  const execution = executeRerunProposal({
+    workspaceId: "workspace-1",
+    actorId: "actor-1",
+    projectId: "project-1",
+    actionId: "proposal-1",
+    idempotencyKey: "dependent-waves",
+  }, state.deps);
+  await visualEnteredPromise;
+  assert.deepEqual(events, ["visual:start"]);
+  releaseVisual();
+  assert.equal((await execution).status, "applied");
+  assert.deepEqual(events, ["visual:start", "visual:end", "assembly", "critique"]);
+});
+
+test("accepted media parks before reserving dependent assembly or critique", async () => {
+  const proposal = revisionProposal();
+  proposal.selectedWork.push({
+    workItemId: "assembly-work",
+    owner: "creative_director",
+    kind: "reassemble_cut",
+    targets: [target],
+    requiredOutputs: [{
+      bindingId: "cut-binding",
+      workItemId: "assembly-work",
+      target,
+      kind: "composite",
+      role: "cut",
+      ordinal: 0,
+    }],
+  }, {
+    workItemId: "critique-work",
+    owner: "creative_director",
+    kind: "critique_cut",
+    targets: [target],
+    requiredOutputs: [{
+      bindingId: "critique-binding",
+      workItemId: "critique-work",
+      target,
+      kind: "critique",
+      role: "critique",
+      ordinal: 0,
+    }],
+  });
+  let dependentCalls = 0;
+  const state = harness({
+    proposal,
+    registry: new RerunExecutorRegistry([
+      createFakeRerunExecutor({
+        kind: "revise_visuals",
+        execute: async () => ({
+          status: "accepted",
+          jobIds: ["00000000-0000-4000-8000-000000000099"],
+          primitiveActionIds: [],
+          budgetReservationKeys: [],
+        }),
+      }),
+      createFakeRerunExecutor({
+        kind: "reassemble_cut",
+        execute: async () => {
+          dependentCalls += 1;
+          throw new Error("assembly must wait for media fan-in");
+        },
+      }),
+      createFakeRerunExecutor({
+        kind: "critique_cut",
+        execute: async () => {
+          dependentCalls += 1;
+          throw new Error("critique must wait for assembly");
+        },
+      }),
+    ]),
+  });
+  await approveRerunProposal({
+    workspaceId: "workspace-1",
+    actorId: "actor-1",
+    projectId: "project-1",
+    actionId: "proposal-1",
+    approvedMaxCostUsd: 0,
+  }, state.deps);
+  const result = await executeRerunProposal({
+    workspaceId: "workspace-1",
+    actorId: "actor-1",
+    projectId: "project-1",
+    actionId: "proposal-1",
+    idempotencyKey: "park-before-dependent-waves",
+  }, state.deps);
+  assert.equal(result.status, "waiting");
+  assert.equal(dependentCalls, 0);
+  assert.equal(state.parked, 1);
+});
+
 test("a durable completed executor step is skipped after a process crash", async () => {
   const proposal = revisionProposal();
   const imageOutput = proposal.selectedWork[0]!.requiredOutputs[0]!;
@@ -832,6 +1323,47 @@ test("a durable completed executor step is skipped after a process crash", async
   assert.equal(result.status, "applied");
   assert.equal(imageCalls, 0);
   assert.equal(videoCalls, 1);
+});
+
+test("inert follow-up metadata survives parking but never enters complete-work causation", async () => {
+  const registry = new RerunExecutorRegistry([
+    createFakeRerunExecutor({
+      kind: "revise_visuals",
+      execute: async ({ workItem }) => ({
+        status: "succeeded",
+        outputs: workItem.requiredOutputs.map((output) => ({
+          ...output,
+          assetId: "output-asset-1",
+          intrinsicRole: output.role,
+        })),
+        primitiveActionIds: ["dispatch-action-1"],
+        budgetReservationKeys: ["budget-key-1"],
+        providerResult: { followupProposalActionId: "proposal-followup" },
+      }),
+    }),
+  ]);
+  const state = harness({ registry });
+  await approveRerunProposal({
+    workspaceId: "workspace-1",
+    actorId: "actor-1",
+    projectId: "project-1",
+    actionId: "proposal-1",
+    approvedMaxCostUsd: 0,
+  }, state.deps);
+  const result = await executeRerunProposal({
+    workspaceId: "workspace-1",
+    actorId: "actor-1",
+    projectId: "project-1",
+    actionId: "proposal-1",
+    idempotencyKey: "followup-metadata",
+  }, state.deps);
+
+  assert.equal(result.status, "applied");
+  assert.deepEqual(
+    state.lastParked?.completedCallbacks?.[0]?.result.providerResult,
+    { followupProposalActionId: "proposal-followup" }
+  );
+  assert.deepEqual(state.lastCompleted?.primitiveActionIds, ["dispatch-action-1"]);
 });
 
 test("a job-backed pending step reparks instead of becoming a failure", async () => {
