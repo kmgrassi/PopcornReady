@@ -210,7 +210,7 @@ export async function cancelRerunProposal(input: {
   const deps = { ...defaultDeps, ...overrides };
   const action = await authorizedProposal(input, deps);
   const executionActionId = deterministicUuid("rerun-execution", action.id, "canceled");
-  const persistedId = await deps.cancelExecution({
+  const persisted = await deps.cancelExecution({
     projectId: input.projectId,
     proposalActionId: action.id,
     executionActionId,
@@ -218,9 +218,9 @@ export async function cancelRerunProposal(input: {
   });
   return {
     actionId: action.id,
-    executionActionId: persistedId,
-    status: "failed" as const,
-    canceled: true,
+    executionActionId: persisted.executionActionId,
+    status: persisted.status,
+    canceled: persisted.canceled,
   };
 }
 

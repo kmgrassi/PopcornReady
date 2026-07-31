@@ -598,8 +598,8 @@ export const v1Api = {
     apiRequest<{
       actionId: string;
       executionActionId: string;
-      status: "failed";
-      canceled: true;
+      status: "applied" | "failed" | "canceled";
+      canceled: boolean;
     }>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/rerun-proposals/v2/${encodeURIComponent(actionId)}/cancel`,
       { method: "POST", body: { reason } }

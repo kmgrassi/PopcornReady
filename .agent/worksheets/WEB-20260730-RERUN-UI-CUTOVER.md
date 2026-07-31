@@ -56,6 +56,12 @@ boundary, and publish a ready stacked PR with browser and targeted coverage.
   project-wide concept request.
 - Updated legacy browser assertions to require proposal previews and added a
   dedicated lifecycle/reload/mobile Playwright suite.
+- Addressed PR review follow-up by reading terminal failure provenance from the
+  linked `rerun_execution` action, mapping durable error kinds to approved
+  creator copy, persisting cancellation distinctly on the execution
+  reservation, and reporting cancel-versus-completion races truthfully.
+- Scoped settlement callbacks to the current proposal action so a restored
+  execution refreshes the exact owning surface without reusing a prior target.
 
 ## Validation evidence
 
@@ -78,6 +84,16 @@ boundary, and publish a ready stacked PR with browser and targeted coverage.
 - Visual QA inspected the desktop proposal preview at
   `/tmp/popcorn-rerun-proposal-preview.png`; the layout retains one gold
   approval action, legible preserved/affected summaries, and no overflow.
+- PR review follow-up: 32/32 targeted API tests passed with two local-Postgres
+  integration cases correctly skipped outside the opt-in environment; API and
+  web type checks passed; settlement-target unit tests passed 2/2.
+- PR review follow-up: targeted Chromium lifecycle coverage passed 3/3 with the
+  mobile-only case skipped, and Mobile Chrome overflow coverage passed 1/1.
+  The browser now proves restored completion visibly refreshes project data and
+  restored cancellation remains canceled without a failure alert.
+- `pnpm agent:lint:fix` passed, followed by
+  `pnpm agent:validate -- --scope all`; the full scoped repository validation
+  completed successfully after the review fixes.
 
 ## Independent reviews
 
@@ -89,6 +105,18 @@ boundary, and publish a ready stacked PR with browser and targeted coverage.
   the exact project `cut` selection for whole-cut feedback, and fail-closed
   disabled guidance for unresolved surfaces.
 - Final independent re-review: approved with no remaining blockers.
+- PR review implementation checkpoint found raw durable-error disclosure,
+  cancellation terminal-race reporting, stale callback-target reuse, and a
+  failure-provenance test gap. The follow-up maps error codes to approved copy,
+  returns the actual durable terminal result, scopes callback targets by action,
+  and injects linked-action reads for observable unit coverage.
+- Independent implementation re-review approved the corrected diff with no
+  remaining blockers or actionable issues. It reran targeted API/web tests,
+  type checks, and `git diff --check`; the local-Supabase integration remained
+  an inspected opt-in test outside the configured environment.
+- Independent wrap-up review approved the final branch as ready to commit and
+  push. It confirmed all three unresolved PR comments, repository records, and
+  regression coverage were complete with no unrelated artifacts.
 
 ## Blockers and risks
 
@@ -99,5 +127,4 @@ boundary, and publish a ready stacked PR with browser and targeted coverage.
 
 ## Next action / handoff
 
-- Finish the validation matrix and independent re-review, then stack on PR 5,
-  commit, push, and open the ready PR.
+- Commit, tag, and push the validated fixes to the existing ready PR.

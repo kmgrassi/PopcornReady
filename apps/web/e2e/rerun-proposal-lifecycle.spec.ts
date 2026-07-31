@@ -74,7 +74,10 @@ function proposal() {
   };
 }
 
-async function installProject(page: Page) {
+async function installProject(
+  page: Page,
+  projectName: () => string = () => "Warm launch"
+) {
   await mockLocalApi(page);
   await page.route(`**/api/v1/projects/${projectId}`, (route) =>
     json(route, {
@@ -82,7 +85,7 @@ async function installProject(page: Page) {
         id: projectId,
         schemaVersion: "project.v1",
         workspaceId,
-        name: "Warm launch",
+        name: projectName(),
         status: "active",
         visibility: "private",
         hasStoryboard: false,
@@ -115,7 +118,8 @@ async function installProject(page: Page) {
 test("previews, approves, executes, and recovers a waiting proposal after reload", async ({
   page,
 }) => {
-  await installProject(page);
+  let projectName = "Warm launch";
+  await installProject(page, () => projectName);
   let approved = false;
   let executionStatus:
     | "waiting"
@@ -233,14 +237,66 @@ test("previews, approves, executes, and recovers a waiting proposal after reload
   await expect(page.getByRole("button", { name: "Preview changes" })).toHaveCount(0);
 
   executionStatus = "completed";
+  projectName = "Warm launch revised";
   await expect(page.getByRole("status").getByText("Changes applied")).toBeVisible({
     timeout: 5_000,
   });
+  await expect(
+    page.getByRole("heading", { name: "Warm launch revised" })
+  ).toBeVisible();
   await page.locator("footer").getByRole("button", { name: "Close" }).click();
   await expect(restoredTrigger).toBeFocused();
 
   await restoredTrigger.click();
   await expect(page.getByRole("button", { name: "Preview changes" })).toBeVisible();
+});
+
+test("restored creator cancellation remains canceled without a failure alert", async ({
+  page,
+}) => {
+  await installProject(page);
+  const base = `/api/v1/projects/${projectId}/rerun-proposals/v2`;
+  let executionStatus: "waiting" | "canceled" = "waiting";
+
+  await page.addInitScript(
+    ({ key, actionId }) => window.localStorage.setItem(key, actionId),
+    {
+      key: `popcorn:rerun-proposal:${projectId}:project:${projectId}`,
+      actionId: proposalActionId,
+    }
+  );
+  await page.route(`**${base}/${proposalActionId}`, (route) =>
+    json(route, {
+      actionId: proposalActionId,
+      status: executionStatus === "canceled" ? "failed" : "running",
+      proposal: proposal(),
+      approval: { approvalActionId, approvedMaxCostUsd: 1.2 },
+      execution: {
+        reservationId,
+        status: executionStatus,
+        executionActionId:
+          executionStatus === "canceled" ? "execution-action-canceled" : null,
+        updatedAt: now,
+      },
+      failure: null,
+    })
+  );
+  await page.route(`**${base}/${proposalActionId}/cancel`, async (route) => {
+    executionStatus = "canceled";
+    await json(route, {
+      actionId: proposalActionId,
+      executionActionId: "execution-action-canceled",
+      status: "canceled",
+      canceled: true,
+    });
+  });
+
+  await page.goto(`/projects/${projectId}`);
+  await page.getByRole("button", { name: "Request changes" }).first().click();
+  await expect(page.getByRole("status").getByText("Changes in progress")).toBeVisible();
+  await page.getByRole("button", { name: "Cancel changes" }).click();
+  await expect(page.getByRole("status").getByText("Changes canceled")).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
 });
 
 test("clarifies intent and refreshes a stale preview before approval", async ({ page }) => {

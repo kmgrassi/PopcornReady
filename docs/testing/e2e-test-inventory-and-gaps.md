@@ -43,8 +43,9 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   mutations.
 - `rerun-proposal-lifecycle.spec.ts` covers proposal preview, explicit maximum
   cost approval, separate execution, waiting-state polling, durable reload
-  recovery, terminal cleanup, focus restoration, and mobile overflow with
-  provider-neutral browser API fixtures.
+  recovery, visible owning-surface refresh after restored completion, truthful
+  cancellation without a failure alert, terminal cleanup, focus restoration,
+  and mobile overflow with provider-neutral browser API fixtures.
 - `specs/library-collections.spec.ts` covers Library pagination, filters, media
   viewer, visibility mutation behavior, and watch links with mocked fixtures.
 - `inspiration-poster.spec.ts` covers opening a generated story poster in the

@@ -30,3 +30,15 @@ control must resolve to a stable document, storyboard, asset, beat, or timeline
 asset before proposal creation. If that identity is unavailable, disabling the
 affordance with a route to the exact object is safer than silently widening the
 request to project scope.
+
+Terminal lifecycle state has two distinct sources of truth: the proposal action
+owns proposal status, while the linked execution-result action owns execution
+failure provenance. Creator-facing reads must follow that link, translate
+durable error kinds into approved copy instead of exposing raw provider details,
+and suppress failure copy when the execution was canceled.
+
+Cancellation is not merely a successful mutation response. Persist it on the
+execution reservation and return the actual durable result when completion or
+failure wins the cancellation race. Likewise, settlement callbacks must be
+scoped to the proposal action so a restored execution cannot refresh a prior
+object selected in the same mounted dialog.

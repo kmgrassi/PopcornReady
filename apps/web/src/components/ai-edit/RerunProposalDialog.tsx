@@ -26,6 +26,10 @@ import { resolveRerunTarget } from "../../lib/rerunTargets";
 import { queryClient } from "../../lib/queryClientCore";
 import { Button } from "../ui/Button";
 import { CloseButton } from "../ui/CloseButton";
+import {
+  settledExecutionTarget,
+  type StartedExecutionTarget,
+} from "./rerunProposalSettlement";
 import styles from "./RerunProposalDialog.module.css";
 
 export interface RerunProposalDialogProps {
@@ -140,7 +144,7 @@ export function RerunProposalDialog({
   } | null>(null);
   const onCloseRef = useRef(onClose);
   const pendingRef = useRef(false);
-  const executionTargetRef = useRef<BoardRevisionTarget | null>(null);
+  const executionTargetRef = useRef<StartedExecutionTarget | null>(null);
   const [message, setMessage] = useState("");
   const [actionId, setActionId] = useState<string | null>(null);
   const [createdView, setCreatedView] =
@@ -214,6 +218,7 @@ export function RerunProposalDialog({
     setCreatedView(null);
     setSettledNotifiedActionId(null);
     setActiveOperation(null);
+    executionTargetRef.current = null;
     setActionId(window.localStorage.getItem(persistedKey));
   }, [initialMessage, open, persistedKey]);
 
@@ -306,11 +311,15 @@ export function RerunProposalDialog({
     ) {
       return;
     }
+    const settledTarget = settledExecutionTarget(
+      view.actionId,
+      executionTargetRef.current,
+      target
+    );
+    if (!settledTarget) return;
     setSettledNotifiedActionId(view.actionId);
-    if (executionTargetRef.current) {
-      void onExecutionSettled(executionTargetRef.current);
-    }
-  }, [onExecutionSettled, settledNotifiedActionId, view]);
+    void onExecutionSettled(settledTarget);
+  }, [onExecutionSettled, settledNotifiedActionId, target, view]);
 
   useEffect(() => {
     if (terminal && persistedKey) {
@@ -416,7 +425,10 @@ export function RerunProposalDialog({
     const executedTarget = target;
     setLocalError(null);
     setActiveOperation("execute");
-    executionTargetRef.current = executedTarget;
+    executionTargetRef.current =
+      executedTarget && actionId
+        ? { actionId, target: executedTarget }
+        : null;
     try {
       await executeMutation.mutateAsync(
         operationKey(projectId, actionId!, "execute")
