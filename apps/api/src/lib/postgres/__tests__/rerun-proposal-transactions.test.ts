@@ -49,6 +49,7 @@ const proposal = {
 type Step = {
   rows?: QueryResultRow[];
   rowCount?: number;
+  error?: Error & { code?: string };
 };
 
 function scriptedRunner(steps: Step[]) {
@@ -60,6 +61,7 @@ function scriptedRunner(steps: Step[]) {
       const step = steps[index++];
       assert.ok(step, `unexpected query: ${sql}`);
       observed.push({ sql, params });
+      if (step.error) throw step.error;
       return {
         rows: step.rows ?? [],
         rowCount: step.rowCount ?? step.rows?.length ?? 0,
@@ -83,7 +85,8 @@ function scriptedRunner(steps: Step[]) {
 
 function proposalRow(
   status: string,
-  value: RerunProposalV2 = proposal
+  value: RerunProposalV2 = proposal,
+  error: Record<string, unknown> | null = null
 ): QueryResultRow {
   return {
     id: priorActionId,
@@ -91,6 +94,7 @@ function proposalRow(
     status,
     tool: "rerun_proposal",
     proposal: value,
+    error,
   };
 }
 
@@ -136,6 +140,37 @@ test("approval runs the lock, freshness check, insert, and transition inside one
     ),
     false
   );
+});
+
+test("approval rethrows infrastructure failures from the freshness check", async () => {
+  const databaseFailure = Object.assign(new Error("connection terminated"), {
+    code: "08006",
+  });
+  const fixture = scriptedRunner([
+    { rows: [proposalRow("proposed")] },
+    {},
+    {},
+    { error: databaseFailure },
+    {},
+    {},
+  ]);
+  await assert.rejects(
+    createApproveRerunProposalTransaction(fixture.runner)({
+      projectId,
+      proposalActionId: priorActionId,
+      approvalActionId,
+      actorId: "creator-1",
+      approvedMaxCostUsd: 2,
+      approvalFingerprint: "fingerprint",
+      autonomous: false,
+    }),
+    (error: unknown) =>
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "database_error"
+  );
+  assert.match(fixture.observed.at(-2)!.sql, /rollback to savepoint/i);
+  assert.match(fixture.observed.at(-1)!.sql, /release savepoint/i);
 });
 
 test("rejection replay is idempotent while retaining the proposal row lock", async () => {
@@ -202,4 +237,59 @@ test("successor creation atomically records causation before superseding the pri
     ),
     false
   );
+});
+
+test("a failed proposal refresh requires a durable stale execution cause", async () => {
+  const successor = {
+    ...proposal,
+    outcome: "no_op",
+    requiresApproval: false,
+    selectedWork: [],
+  } as RerunProposalV2;
+  const fixture = scriptedRunner([
+    { rows: [proposalRow("failed")] },
+    {},
+    { rows: [{ id: "00000000-0000-4000-8000-000000000099" }] },
+    { rowCount: 1 },
+    { rowCount: 1 },
+    { rowCount: 1 },
+  ]);
+  const result = await createRerunProposalSuccessorTransaction(fixture.runner)({
+    projectId,
+    priorActionId,
+    successorActionId,
+    requestFingerprint: "stale-refresh-fingerprint",
+    cause: "refresh",
+    rootRunId,
+    params: { schemaVersion: "RerunProposalRequest.v1" },
+    proposal: successor,
+    inputAssetIds: [],
+    rationale: "Refresh a stale terminal execution.",
+  });
+  assert.equal(result.successor_action_id, successorActionId);
+  assert.match(fixture.observed[2]!.sql, /result\.error ->> 'kind' = 'stale_proposal'/i);
+});
+
+test("an approved proposal cannot be replaced by refresh", async () => {
+  const fixture = scriptedRunner([
+    { rows: [proposalRow("approved")] },
+    {},
+  ]);
+  await assert.rejects(
+    createRerunProposalSuccessorTransaction(fixture.runner)({
+      projectId,
+      priorActionId,
+      successorActionId,
+      requestFingerprint: "invalid-approved-refresh",
+      cause: "refresh",
+      rootRunId,
+      params: {},
+      proposal,
+      inputAssetIds: [],
+      rationale: "Invalid refresh.",
+    }),
+    (error: unknown) =>
+      error instanceof Error && "code" in error && error.code === "database_error"
+  );
+  assert.equal(fixture.remaining(), 0);
 });

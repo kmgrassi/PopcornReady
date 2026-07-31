@@ -11,6 +11,7 @@ import {
   coerceShotPlanContent,
   getAsset,
   getRerunDataAssetSnapshot,
+  getServiceSupabaseForStore,
   type StoryBlueprint,
   type V1Asset,
 } from "@/lib/api/v1/store";
@@ -142,12 +143,16 @@ export function preserveStablePlanIds(
 
 export function validateStableTarget(
   plan: ShotPlan,
-  request: Pick<RootStorySnapshotRequest, "binding">
+  request: Pick<RootStorySnapshotRequest, "binding">,
+  semanticTargetId?: string
 ): void {
   const target = request.binding.target;
+  const stableId = semanticTargetId ?? (
+    target.kind === "scene" ? target.sceneId : target.kind === "beat" ? target.beatId : null
+  );
   if (
     target.kind === "scene" &&
-    !plan.scenes.some((scene) => scene.id === target.sceneId)
+    !plan.scenes.some((scene) => scene.id === stableId)
   ) {
     throw new ApiError(
       "validation_failed",
@@ -156,7 +161,7 @@ export function validateStableTarget(
   }
   if (
     target.kind === "beat" &&
-    !planBeats(plan).some((beat) => beat.id === target.beatId)
+    !planBeats(plan).some((beat) => beat.id === stableId)
   ) {
     throw new ApiError(
       "validation_failed",
@@ -259,6 +264,27 @@ async function stageStorySnapshot(
   let content: StoryBlueprint | ShotPlan | Record<string, unknown>;
   let actualCostUsd = 0;
   const causalAssets = [predecessorAsset];
+  let semanticTargetId: string | undefined;
+  if (
+    predecessor.kind === "plan" &&
+    (request.binding.target.kind === "scene" || request.binding.target.kind === "beat")
+  ) {
+    const target = request.binding.target;
+    const rowId = target.kind === "scene" ? target.sceneId : target.beatId;
+    const query = target.kind === "scene"
+      ? getServiceSupabaseForStore()
+        .from("story_blueprint_scenes")
+        .select("stable_id")
+      : getServiceSupabaseForStore()
+        .from("story_beats")
+        .select("stable_id");
+    const { data, error } = await query
+      .eq("project_id", request.projectId).eq("id", rowId).maybeSingle();
+    if (error || !data || typeof data.stable_id !== "string") {
+      throw new ApiError("stale_proposal", "Story target identity is no longer available.");
+    }
+    semanticTargetId = data.stable_id;
+  }
 
   if (request.binding.target.kind === "project") {
     const briefInput = predecessorAsset.graphInputs?.find((input) => input.role === "brief");
@@ -319,7 +345,7 @@ async function stageStorySnapshot(
         "Pinned story target does not contain a canonical shot plan."
       );
     }
-    validateStableTarget(sourcePlan, request);
+    validateStableTarget(sourcePlan, request, semanticTargetId);
     const revised = await withLlmCostRecording(
       {
         projectId: request.projectId,
@@ -344,17 +370,23 @@ async function stageStorySnapshot(
     );
     actualCostUsd = await sumActionCostUsd(request.primitiveActionId);
     const stable = preserveStablePlanIds(sourcePlan, revised);
-    validateStableTarget(stable, request);
+    validateStableTarget(stable, request, semanticTargetId);
     const target = request.binding.target;
-    content =
-      target.kind === "beat"
-        ? record(
-          planBeats(stable).find(
-            (beat) => beat.id === target.beatId
-          ),
-          "Canonical story revision omitted the requested beat."
-        )
-        : stable;
+    if (target.kind === "beat") {
+      const revisedBeat = record(
+        planBeats(stable).find((beat) => beat.id === semanticTargetId),
+        "Canonical story revision omitted the requested beat."
+      );
+      // The relational beat pointer remains a UUID authority boundary. Keep
+      // the semantic plan identity separately for future plan reconciliation.
+      content = {
+        ...revisedBeat,
+        id: target.beatId,
+        ...(semanticTargetId ? { stableId: semanticTargetId } : {}),
+      };
+    } else {
+      content = stable;
+    }
   }
 
   await addPooledRerunDataAsset({

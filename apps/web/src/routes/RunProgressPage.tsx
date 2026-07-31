@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import type { GenerationRun, GenerationStageType } from "@popcorn/shared/v1/types";
+import type { GenerationRun } from "@popcorn/shared/v1/types";
 import { AnonymousUpgradeBanner } from "../components/auth/AnonymousUpgradeBanner";
 import { useAuth } from "../components/auth/AuthProvider";
 import { ProgressView } from "../components/progress/ProgressView";
@@ -14,7 +14,6 @@ import {
   useGenerationRunQuery,
   useCreditsQuery,
   useRetryGenerationRunAfterCreditUpdateMutation,
-  useRestartGenerationRunFromStageMutation,
   useUpdateGenerationRunMutation,
 } from "../lib/queryClient";
 
@@ -62,7 +61,6 @@ function RunProgress({
   const studioReturnPath = null;
   const runQuery = useGenerationRunQuery(projectId, runId);
   const updateRun = useUpdateGenerationRunMutation(projectId, runId);
-  const restartRun = useRestartGenerationRunFromStageMutation(projectId, runId);
   const payload = runQuery.data ?? null;
   const authScope = auth.user?.id ?? auth.status;
   const creditFailure = payload?.run.status === "failed" && payload.run.error?.code === "insufficient_credits";
@@ -135,23 +133,6 @@ function RunProgress({
     }
   }
 
-  async function restartFromStage(stageType: GenerationStageType) {
-    if (restartRun.isPending) return;
-    const confirmed = window.confirm(
-      `Restart this run from the ${stageType.replace(/_/g, " ")} stage? ` +
-        "That stage and everything after it will re-run; existing assets are kept as history.",
-    );
-    if (!confirmed) return;
-    setActionError(null);
-    try {
-      const data = await restartRun.mutateAsync(stageType);
-      applyPayload(data);
-      void runQuery.refetch();
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : String(err));
-    }
-  }
-
   async function continueAfterCreditUpdate() {
     if (retryAfterCreditUpdate.isPending) return;
     setActionError(null);
@@ -205,10 +186,6 @@ function RunProgress({
             }
           : undefined
       }
-      restartAction={{
-        pendingStageType: restartRun.isPending ? restartRun.variables ?? null : null,
-        onRestart: (stageType) => void restartFromStage(stageType),
-      }}
       creditRecovery={
         creditFailure && typeof creditsQuery.data?.balanceCredits === "number" && creditsQuery.data.balanceCredits > 0
           ? {
@@ -226,7 +203,6 @@ function RunProgress({
               feedbackNote: reviewFeedbackNote,
               onFeedbackNoteChange: setReviewFeedbackNote,
               onApprove: (note) => void runAction("approve", note),
-              onReject: (note) => void runAction("reject", note),
               onCancel: () => void runAction("cancel"),
             }
           : undefined

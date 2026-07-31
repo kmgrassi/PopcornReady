@@ -581,7 +581,11 @@ async function finalizeLocked(
       where id=$1`,
     [
       execution.id,
-      input.outcome === "applied" ? "completed" : "failed",
+      input.outcome === "applied"
+        ? "completed"
+        : input.error?.kind === "execution_canceled"
+          ? "canceled"
+          : "failed",
       input.executionActionId,
     ]
   );
@@ -646,7 +650,7 @@ export async function cancelExecutionTransaction(input: {
   reason: string;
 }): Promise<{
   executionActionId: string;
-  status: "applied" | "failed";
+  status: "applied" | "failed" | "canceled";
   canceled: boolean;
 }> {
   return lifecycleTransaction("rerunLifecycle.cancelExecution", async (client) => {
@@ -670,15 +674,17 @@ export async function cancelExecutionTransaction(input: {
         error: { kind?: string } | null;
       }>(
         `select status::text as status, error
-           from public.actions where id=$1 and tool='rerun_execution'`,
-        [row.execution_result_action_id]
+           from public.actions
+          where id=$1 and project_id=$2 and tool='rerun_execution'`,
+        [row.execution_result_action_id, input.projectId]
       )).rows, "Execution result action not found.");
+      const canceled =
+        terminal.status === "failed" &&
+        terminal.error?.kind === "execution_canceled";
       return {
         executionActionId: row.execution_result_action_id,
-        status: terminal.status,
-        canceled:
-          terminal.status === "failed" &&
-          terminal.error?.kind === "execution_canceled",
+        status: canceled ? "canceled" : terminal.status,
+        canceled,
       };
     }
     await client.query(
@@ -722,7 +728,7 @@ export async function cancelExecutionTransaction(input: {
         recoverable: false,
       },
     });
-    return { executionActionId, status: "failed", canceled: true };
+    return { executionActionId, status: "canceled", canceled: true };
   });
 }
 

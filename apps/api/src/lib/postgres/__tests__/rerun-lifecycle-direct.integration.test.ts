@@ -249,7 +249,73 @@ integrationTest(
         [projectId, expiredBudgetKey]
       );
       assert.equal(recoveredBudget.rows[0]?.status, "released");
+      assert.deepEqual(
+        await cancelExecutionTransaction({
+          projectId,
+          proposalActionId: expiredProposalId,
+          executionActionId: randomUUID(),
+          reason: "late creator cancellation",
+        }),
+        {
+          executionActionId: recoveryActionId,
+          status: "failed",
+          canceled: false,
+        }
+      );
       context.diagnostic("expired fence rejected and recovery finalized");
+
+      const canceledProposalId = await insertProposal(admin, projectId);
+      const canceled = await approveAndClaim(
+        projectId,
+        canceledProposalId,
+        "creator-canceled"
+      );
+      const canceledActionId = randomUUID();
+      assert.deepEqual(
+        await cancelExecutionTransaction({
+          projectId,
+          proposalActionId: canceledProposalId,
+          executionActionId: canceledActionId,
+          reason: "creator_canceled",
+        }),
+        {
+          executionActionId: canceledActionId,
+          status: "canceled",
+          canceled: true,
+        }
+      );
+      const canceledState = await admin.query<{
+        reservation_status: string;
+        proposal_status: string;
+        execution_error_kind: string;
+        budget_status: string;
+        root_status: string;
+      }>(
+        `select reservation.status as reservation_status,
+                proposal.status as proposal_status,
+                execution.error->>'kind' as execution_error_kind,
+                budget.status as budget_status,
+                root.status as root_status
+           from public.rerun_execution_reservations reservation
+           join public.actions proposal
+             on proposal.id=reservation.proposal_action_id
+           join public.actions execution
+             on execution.id=reservation.execution_result_action_id
+           join public.orchestrator_budget_reservations budget
+             on budget.id=reservation.budget_reservation_id
+           join public.orchestrator_runs root
+             on root.id=reservation.root_run_id
+          where reservation.id=$1`,
+        [canceled.reservation.reservation_id]
+      );
+      assert.deepEqual(canceledState.rows[0], {
+        reservation_status: "canceled",
+        proposal_status: "failed",
+        execution_error_kind: "execution_canceled",
+        budget_status: "released",
+        root_status: "canceled",
+      });
+      context.diagnostic("creator cancellation persisted distinct terminal state");
 
       const target = { kind: "project", projectId };
       const requiredOutput = {
@@ -902,9 +968,24 @@ integrationTest(
         const concurrentStoryId = randomUUID();
         const oldBeatAssetId = randomUUID();
         const newBeatAssetId = randomUUID();
+        const oldPlanAssetId = randomUUID();
+        const newPlanAssetId = randomUUID();
+        const oldScenePlanAssetId = randomUUID();
+        const newScenePlanAssetId = randomUUID();
         const beatId = randomUUID();
         const sceneId = randomUUID();
         const actId = randomUUID();
+        const boardBlueprintId = randomUUID();
+        const boardActId = randomUUID();
+        const boardSceneId = randomUUID();
+        const removedSceneId = randomUUID();
+        const boardBeatId = randomUUID();
+        const removedBeatId = randomUUID();
+        const sceneBlueprintId = randomUUID();
+        const sceneActId = randomUUID();
+        const targetSceneId = randomUUID();
+        const targetSceneBeatId = randomUUID();
+        const removedSceneBeatId = randomUUID();
         await admin.query(
           `insert into public.assets(
            id,workspace_id,project_id,kind,media,status,role,content
@@ -946,6 +1027,42 @@ integrationTest(
           [oldBeatAssetId, workspaceId, projectId, beatId]
         );
         await admin.query(
+          `insert into public.assets(
+             id,workspace_id,project_id,kind,media,status,role,content
+           ) values (
+             $1,$2,$3,'plan','data','ready','storyboard_plan',$4::jsonb
+           )`,
+          [oldPlanAssetId, workspaceId, projectId, JSON.stringify({
+            schema_version: "plan.v1",
+            targetLengthSec: 8,
+            style: "cinematic",
+            aspectRatio: "16:9",
+            scenes: [
+              { id: "scene-a", name: "Keep", beats: [{
+                id: "beat-a", name: "Keep beat", intent: "old", durationSec: 4,
+              }] },
+              { id: "scene-remove", name: "Remove", beats: [{
+                id: "beat-remove", name: "Remove beat", intent: "remove", durationSec: 4,
+              }] },
+            ],
+          })]
+        );
+        await admin.query(
+          `insert into public.assets(
+             id,workspace_id,project_id,kind,media,status,role,content
+           ) values ($1,$2,$3,'plan','data','ready','scene_plan',$4::jsonb)`,
+          [oldScenePlanAssetId, workspaceId, projectId, JSON.stringify({
+            schema_version: "plan.v1",
+            targetLengthSec: 8,
+            style: "cinematic",
+            aspectRatio: "16:9",
+            scenes: [{ id: "target-scene", name: "Target", beats: [
+              { id: "target-beat", name: "Keep", intent: "old", durationSec: 4 },
+              { id: "target-remove", name: "Remove", intent: "remove", durationSec: 4 },
+            ] }],
+          })]
+        );
+        await admin.query(
           `insert into public.story_blueprint_acts(
              id,story_blueprint_id,workspace_id,project_id,stable_id,position,
              title,purpose,summary,target_duration_sec
@@ -966,6 +1083,74 @@ integrationTest(
           [beatId, projectId, sceneId, oldBeatAssetId]
         );
         await admin.query(
+          `insert into public.story_blueprints(
+             id,workspace_id,project_id,snapshot,provenance
+           ) values ($1,$2,$3,'{"schema_version":"storyBlueprint.v1"}',
+             jsonb_build_object('schema_version','storyBlueprintProvenance.v1',
+                                'planAssetId',$4::text))`,
+          [boardBlueprintId, workspaceId, projectId, oldPlanAssetId]
+        );
+        await admin.query(
+          `insert into public.story_blueprint_acts(
+             id,story_blueprint_id,workspace_id,project_id,stable_id,position,
+             title,purpose,summary,target_duration_sec
+           ) values ($1,$2,$3,$4,'board-act',0,'Board','Board','Board',8)`,
+          [boardActId, boardBlueprintId, workspaceId, projectId]
+        );
+        await admin.query(
+          `insert into public.story_blueprint_scenes(
+             id,story_blueprint_id,story_blueprint_act_id,workspace_id,project_id,
+             stable_id,position,title,summary,target_duration_sec,scene_asset_id,
+             story_snapshot_asset_id
+           ) values
+             ($1,$3,$4,$5,$6,'scene-a',0,'Keep','Keep',4,$7,$8),
+             ($2,$3,$4,$5,$6,'scene-remove',1,'Remove','Remove',4,$7,$8)`,
+          [boardSceneId, removedSceneId, boardBlueprintId, boardActId,
+            workspaceId, projectId, oldImageId, oldPlanAssetId]
+        );
+        await admin.query(
+          `insert into public.story_beats(
+             id,project_id,scene_id,stable_id,beat_index,intent,duration_sec,beat_asset_id
+           ) values
+             ($1,$3,$4,'beat-a',0,'old',4,$5),
+             ($2,$3,$6,'beat-remove',0,'remove',4,$5)`,
+          [boardBeatId, removedBeatId, projectId, boardSceneId,
+            oldPlanAssetId, removedSceneId]
+        );
+        await admin.query(
+          `insert into public.story_blueprints(
+             id,workspace_id,project_id,snapshot,provenance
+           ) values ($1,$2,$3,'{"schema_version":"storyBlueprint.v1"}',
+             jsonb_build_object('schema_version','storyBlueprintProvenance.v1',
+                                'planAssetId',$4::text))`,
+          [sceneBlueprintId, workspaceId, projectId, oldScenePlanAssetId]
+        );
+        await admin.query(
+          `insert into public.story_blueprint_acts(
+             id,story_blueprint_id,workspace_id,project_id,stable_id,position,
+             title,purpose,summary,target_duration_sec
+           ) values ($1,$2,$3,$4,'scene-act',0,'Scene','Scene','Scene',8)`,
+          [sceneActId, sceneBlueprintId, workspaceId, projectId]
+        );
+        await admin.query(
+          `insert into public.story_blueprint_scenes(
+             id,story_blueprint_id,story_blueprint_act_id,workspace_id,project_id,
+             stable_id,position,title,summary,target_duration_sec,scene_asset_id,
+             story_snapshot_asset_id
+           ) values ($1,$2,$3,$4,$5,'target-scene',0,'Target','Target',8,$6,$7)`,
+          [targetSceneId, sceneBlueprintId, sceneActId, workspaceId, projectId,
+            oldImageId, oldScenePlanAssetId]
+        );
+        await admin.query(
+          `insert into public.story_beats(
+             id,project_id,scene_id,stable_id,beat_index,intent,duration_sec,beat_asset_id
+           ) values
+             ($1,$3,$4,'target-beat',0,'old',4,$5),
+             ($2,$3,$4,'target-remove',1,'remove',4,$5)`,
+          [targetSceneBeatId, removedSceneBeatId, projectId, targetSceneId,
+            oldScenePlanAssetId]
+        );
+        await admin.query(
           `insert into public.selections(
              project_id,slot_owner_lineage_id,slot_role,seq,active_asset_id
            ) values ($1,null,$2,1,$3)`,
@@ -979,6 +1164,16 @@ integrationTest(
         };
         const storyTarget = { kind: "project", projectId };
         const beatTarget = { kind: "beat", projectId, beatId };
+        const boardTarget = {
+          kind: "storyboard" as const,
+          projectId,
+          storyboardId: boardBlueprintId,
+        };
+        const sceneTarget = {
+          kind: "scene" as const,
+          projectId,
+          sceneId: targetSceneId,
+        };
         const imageOutput = {
           bindingId: "image-binding",
           workItemId: "image-work",
@@ -1003,6 +1198,22 @@ integrationTest(
           role: "beat_snapshot",
           ordinal: 0,
         };
+        const boardOutput = {
+          bindingId: "board-binding",
+          workItemId: "board-work",
+          target: boardTarget,
+          kind: "story_snapshot",
+          role: "storyboard_plan",
+          ordinal: 0,
+        };
+        const sceneOutput = {
+          bindingId: "scene-binding",
+          workItemId: "scene-work",
+          target: sceneTarget,
+          kind: "story_snapshot",
+          role: "scene_plan",
+          ordinal: 0,
+        };
         const selectedWork = [{
           workItemId: "image-work",
           owner: "visuals",
@@ -1021,10 +1232,22 @@ integrationTest(
           kind: "revise_story",
           targets: [beatTarget],
           requiredOutputs: [beatOutput],
+        }, {
+          workItemId: "board-work",
+          owner: "creative_director",
+          kind: "revise_story",
+          targets: [boardTarget],
+          requiredOutputs: [boardOutput],
+        }, {
+          workItemId: "scene-work",
+          owner: "creative_director",
+          kind: "revise_story",
+          targets: [sceneTarget],
+          requiredOutputs: [sceneOutput],
         }];
         const value = {
           ...proposal(projectId, selectedWork),
-          targets: [selectionTarget, storyTarget, beatTarget],
+          targets: [selectionTarget, storyTarget, beatTarget, boardTarget, sceneTarget],
           pins: {
             assets: [],
             selections: [{
@@ -1041,6 +1264,14 @@ integrationTest(
               rowKind: "story_beat",
               rowId: beatId,
               expectedSnapshotAssetId: oldBeatAssetId,
+            }, {
+              rowKind: "storyboard",
+              rowId: boardBlueprintId,
+              expectedSnapshotAssetId: oldPlanAssetId,
+            }, {
+              rowKind: "story_scene",
+              rowId: targetSceneId,
+              expectedSnapshotAssetId: oldScenePlanAssetId,
             }],
           },
           plannedSelectionMoves: [{
@@ -1060,6 +1291,16 @@ integrationTest(
             rowKind: "story_beat",
             rowId: beatId,
             expectedSnapshotAssetId: oldBeatAssetId,
+          }, {
+            bindingId: "board-binding",
+            rowKind: "storyboard",
+            rowId: boardBlueprintId,
+            expectedSnapshotAssetId: oldPlanAssetId,
+          }, {
+            bindingId: "scene-binding",
+            rowKind: "story_scene",
+            rowId: targetSceneId,
+            expectedSnapshotAssetId: oldScenePlanAssetId,
           }],
         };
         const proposalId = await insertProposal(
@@ -1075,7 +1316,7 @@ integrationTest(
         );
         const complete = async (
           workItemId: string,
-          output: typeof imageOutput | typeof storyOutput | typeof beatOutput,
+          output: typeof imageOutput | typeof storyOutput | typeof beatOutput | typeof boardOutput | typeof sceneOutput,
           assetId: string
         ) => {
           const dispatchActionId = randomUUID();
@@ -1117,7 +1358,10 @@ integrationTest(
               workspaceId,
               projectId,
               output.kind === "story_snapshot"
-                ? output.target.kind === "beat" ? "beat" : "story_blueprint"
+                ? output.target.kind === "beat"
+                  ? "beat"
+                  : output.target.kind === "storyboard" || output.target.kind === "scene"
+                    ? "plan" : "story_blueprint"
                 : "image",
               output.kind === "story_snapshot" ? "data" : "image",
               output.role,
@@ -1130,10 +1374,48 @@ integrationTest(
                     durationSec: 3,
                     shotType: "close-up",
                   })
-                  : JSON.stringify({
+                  : output.target.kind === "storyboard"
+                    ? JSON.stringify({
+                      schema_version: "plan.v1",
+                      targetLengthSec: 7,
+                      style: "cinematic",
+                      aspectRatio: "16:9",
+                      scenes: [{
+                        id: "scene-a",
+                        name: "Keep revised",
+                        setting: "Night",
+                        beats: [{
+                          id: "beat-a",
+                          name: "Keep beat",
+                          intent: "revised",
+                          durationSec: 3,
+                        }],
+                      }, {
+                        id: "scene-new",
+                        name: "New",
+                        beats: [{
+                          id: "beat-new",
+                          name: "New beat",
+                          intent: "new",
+                          durationSec: 4,
+                        }],
+                      }],
+                    })
+                    : output.target.kind === "scene"
+                      ? JSON.stringify({
+                        schema_version: "plan.v1",
+                        targetLengthSec: 7,
+                        style: "cinematic",
+                        aspectRatio: "16:9",
+                        scenes: [{ id: "target-scene", name: "Target revised", beats: [
+                          { id: "target-beat", name: "Keep", intent: "revised", durationSec: 3 },
+                          { id: "target-new", name: "New", intent: "new", durationSec: 4 },
+                        ] }],
+                      })
+                      : JSON.stringify({
                     schema_version: "storyBlueprint.v1",
                     title: "new",
-                  })
+                      })
                 : null,
               dispatchActionId,
             ]
@@ -1183,6 +1465,8 @@ integrationTest(
         await complete("image-work", imageOutput, newImageId);
         await complete("story-work", storyOutput, newStoryId);
         await complete("beat-work", beatOutput, newBeatAssetId);
+        await complete("board-work", boardOutput, newPlanAssetId);
+        await complete("scene-work", sceneOutput, newScenePlanAssetId);
         if (staleStory) {
           await admin.query(
             "update public.story_blueprints set asset_id=$2 where id=$1",
@@ -1265,6 +1549,56 @@ integrationTest(
         );
         assert.deepEqual(
           (await admin.query<{
+            title: string;
+            scene_asset_id: string;
+            story_snapshot_asset_id: string;
+          }>(
+            `select title,scene_asset_id,story_snapshot_asset_id
+               from public.story_blueprint_scenes where id=$1`,
+            [boardSceneId]
+          )).rows[0],
+          {
+            title: "Keep revised",
+            scene_asset_id: oldImageId,
+            story_snapshot_asset_id: newPlanAssetId,
+          }
+        );
+        assert.equal((await admin.query(
+          "select 1 from public.story_blueprint_scenes where stable_id in ($1,$2)",
+          ["scene-remove", "scene-new"]
+        )).rowCount, 1);
+        assert.equal((await admin.query(
+          "select 1 from public.story_beats where stable_id in ($1,$2,$3)",
+          ["beat-remove", "beat-a", "beat-new"]
+        )).rowCount, 2);
+        assert.equal((await admin.query<{ id: string }>(
+          "select id from public.story_beats where stable_id='beat-a'",
+        )).rows[0]?.id, boardBeatId);
+        assert.deepEqual(
+          (await admin.query<{
+            title: string;
+            scene_asset_id: string;
+            story_snapshot_asset_id: string;
+          }>(
+            `select title,scene_asset_id,story_snapshot_asset_id
+               from public.story_blueprint_scenes where id=$1`,
+            [targetSceneId]
+          )).rows[0],
+          {
+            title: "Target revised",
+            scene_asset_id: oldImageId,
+            story_snapshot_asset_id: newScenePlanAssetId,
+          }
+        );
+        assert.equal((await admin.query(
+          "select 1 from public.story_beats where scene_id=$1 and stable_id in ($2,$3,$4)",
+          [targetSceneId, "target-remove", "target-beat", "target-new"]
+        )).rowCount, 2);
+        assert.equal((await admin.query<{ id: string }>(
+          "select id from public.story_beats where stable_id='target-beat'",
+        )).rows[0]?.id, targetSceneBeatId);
+        assert.deepEqual(
+          (await admin.query<{
             beat_asset_id: string;
             intent: string;
             duration_sec: number;
@@ -1294,7 +1628,7 @@ integrationTest(
         );
         assert.equal(reconciliation.rows[0]?.status, "applied");
         assert.equal(reconciliation.rows[0]?.moved_selections.length, 1);
-        assert.equal(reconciliation.rows[0]?.moved_story_pointers.length, 1);
+        assert.equal(reconciliation.rows[0]?.moved_story_pointers.length, 4);
       };
 
       await runScenario(false);

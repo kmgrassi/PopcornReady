@@ -10,6 +10,11 @@ import type {
   V1Project,
 } from "@popcorn/shared/v1/types";
 import type { Project } from "@popcorn/shared/types";
+import type {
+  CreateRerunProposalV2Request,
+  RerunProposalLifecycleView,
+  RerunProposalV2,
+} from "@popcorn/shared/rerun-proposal";
 import type { GenerationRunDetail } from "../v1/generation-runs/status";
 import { apiRequest } from "./transport";
 import type {
@@ -575,6 +580,82 @@ export const v1Api = {
         method: "POST",
         body: input,
       }
+    ),
+  createRerunProposal: (
+    projectId: string,
+    input: CreateRerunProposalV2Request
+  ) =>
+    apiRequest<{ actionId: string; proposal: RerunProposalV2 }>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/rerun-proposals/v2`,
+      { method: "POST", body: input }
+    ),
+  getRerunProposal: (projectId: string, actionId: string) =>
+    apiRequest<RerunProposalLifecycleView>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/rerun-proposals/v2/${encodeURIComponent(actionId)}`
+    ),
+  approveRerunProposal: (
+    projectId: string,
+    actionId: string,
+    approvedMaxCostUsd: number
+  ) =>
+    apiRequest<{
+      actionId: string;
+      status: "approved";
+      approvalActionId: string;
+      replayed: boolean;
+    }>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/rerun-proposals/v2/${encodeURIComponent(actionId)}/approve`,
+      { method: "POST", body: { approvedMaxCostUsd } }
+    ),
+  rejectRerunProposal: (projectId: string, actionId: string) =>
+    apiRequest<{ actionId: string; status: "rejected" }>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/rerun-proposals/v2/${encodeURIComponent(actionId)}/reject`,
+      { method: "POST", body: {} }
+    ),
+  refreshRerunProposal: (
+    projectId: string,
+    actionId: string,
+    input: {
+      idempotencyKey: string;
+      message: string;
+      clarificationAnswer?: {
+        answerFingerprint: string;
+        optionId: string;
+      };
+    }
+  ) =>
+    apiRequest<{ actionId: string; proposal: RerunProposalV2; replayed: boolean }>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/rerun-proposals/v2/${encodeURIComponent(actionId)}/refresh`,
+      { method: "POST", body: input }
+    ),
+  executeRerunProposal: (
+    projectId: string,
+    actionId: string,
+    idempotencyKey: string
+  ) =>
+    apiRequest<{
+      actionId: string;
+      reservationId: string;
+      executionActionId?: string;
+      status: "waiting" | "running" | "applied" | "failed" | "canceled";
+      replayed: boolean;
+    }>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/rerun-proposals/v2/${encodeURIComponent(actionId)}/execute`,
+      { method: "POST", body: { idempotencyKey } }
+    ),
+  cancelRerunProposal: (
+    projectId: string,
+    actionId: string,
+    reason = "creator_canceled"
+  ) =>
+    apiRequest<{
+      actionId: string;
+      executionActionId: string;
+      status: "applied" | "failed" | "canceled";
+      canceled: boolean;
+    }>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/rerun-proposals/v2/${encodeURIComponent(actionId)}/cancel`,
+      { method: "POST", body: { reason } }
     ),
   startPromptGenerationRun: (
     projectId: string,

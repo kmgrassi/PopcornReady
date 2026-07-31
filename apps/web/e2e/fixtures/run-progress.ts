@@ -12,6 +12,7 @@ import type {
 import type { GenerationRunDetail } from "../../src/lib/v1/generation-runs/status";
 
 export const e2eProjectId = "e2e-project-run-progress";
+export const e2eProposalActionId = "22222222-2222-4222-8222-222222222222";
 
 const now = "2026-06-16T14:00:00.000Z";
 
@@ -87,6 +88,69 @@ export function reviewGate(
     state: "awaiting_review",
     enteredAt: now,
   };
+}
+
+export async function installRerunProposalRoute(
+  page: Page,
+  options: {
+    expectedTarget?: Record<string, unknown>;
+    summary?: string;
+  } = {},
+) {
+  const requests: unknown[] = [];
+  await page.route(
+    `**/api/v1/projects/${e2eProjectId}/rerun-proposals/v2`,
+    async (route) => {
+      const body = route.request().postDataJSON() as {
+        message: string;
+        targets: Array<Record<string, unknown>>;
+      };
+      requests.push(body);
+      const target = options.expectedTarget ?? body.targets[0] ?? {
+        kind: "project",
+        projectId: e2eProjectId,
+      };
+      await route.fulfill({
+        status: 201,
+        json: {
+          actionId: e2eProposalActionId,
+          proposal: {
+            schemaVersion: "RerunProposal.v2",
+            projectId: e2eProjectId,
+            rootRunId: null,
+            source: "request_changes",
+            userIntent: body.message,
+            targets: [target],
+            inspectedAssetIds: [],
+            candidateAffectedAssetIds: [],
+            preservedAssetIds: [],
+            checklist: [
+              {
+                target,
+                decision: "change",
+                reason: "Apply the requested change to this exact target.",
+              },
+            ],
+            pins: { assets: [], selections: [], storySnapshots: [] },
+            estimate: {
+              costUsd: 0.1,
+              maxCostUsd: 0.2,
+              latencyClass: "interactive",
+            },
+            risk: "low",
+            requiresApproval: true,
+            rationale: "The selected target can be revised independently.",
+            userFacingSummary: options.summary ?? "Revise the selected work",
+            outcome: "revision",
+            selectedWork: [],
+            plannedSelectionMoves: [],
+            plannedStoryPointerMoves: [],
+          },
+        },
+      });
+    },
+  );
+  return requests;
 }
 
 export async function installRunProgressRoutes(

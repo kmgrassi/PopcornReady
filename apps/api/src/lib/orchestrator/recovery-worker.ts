@@ -10,7 +10,10 @@ import {
   type ClaimedOrchestratorDispatch,
 } from "@/lib/api/v1/orchestrator-store";
 import { createLogger, type Logger } from "@/lib/v1/logger";
+import { ApiError } from "@/core/errors";
+import { listReadyRerunExecutionResumes } from "@/lib/api/v1/rerun-lifecycle-store";
 import { resumeOrchestratorRun, runOrchestratorToCompletion } from "./engine";
+import { executeRerunProposal } from "./rerun-lifecycle-service";
 
 const DEFAULT_INTERVAL_MS = 1_000;
 const ASYNC_RETRY_SECONDS = 10;
@@ -49,6 +52,7 @@ export interface RecoveryWorkerDeps {
   run: typeof runOrchestratorToCompletion;
   resume: typeof resumeOrchestratorRun;
   repair: typeof recoverOrchestratorRuntimeControls;
+  resumeReruns: typeof recoverReadyRerunExecutions;
   logger: Logger;
 }
 
@@ -61,8 +65,38 @@ const defaults: RecoveryWorkerDeps = {
   run: runOrchestratorToCompletion,
   resume: resumeOrchestratorRun,
   repair: recoverOrchestratorRuntimeControls,
+  resumeReruns: recoverReadyRerunExecutions,
   logger: createLogger(),
 };
+
+export async function recoverReadyRerunExecutions(
+  logger: Logger = createLogger()
+): Promise<number> {
+  const candidates = await listReadyRerunExecutionResumes();
+  let resumed = 0;
+  for (const candidate of candidates) {
+    try {
+      await executeRerunProposal({
+        workspaceId: candidate.workspaceId,
+        projectId: candidate.projectId,
+        actionId: candidate.proposalActionId,
+        idempotencyKey: candidate.idempotencyKey,
+        actorId: "orchestrator-worker",
+      });
+      resumed += 1;
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "idempotency_in_progress") {
+        continue;
+      }
+      logger.error("orchestrator_worker.rerun_resume_failed", {
+        projectId: candidate.projectId,
+        proposalActionId: candidate.proposalActionId,
+        error: { message: error instanceof Error ? error.message : "Rerun resume failed." },
+      });
+    }
+  }
+  return resumed;
+}
 
 function terminal(status: string): boolean {
   return (
@@ -144,6 +178,7 @@ export async function recoverOrchestratorRuns(deps: Partial<RecoveryWorkerDeps> 
   // The public helper stays lightweight for unit callers; the long-running
   // worker below always injects the durable repair sweep before its lease pass.
   if (deps.repair) await resolved.repair();
+  if (deps.resumeReruns) await resolved.resumeReruns(resolved.logger);
   const dispatches = await resolved.claim();
   for (const dispatch of dispatches) {
     try {
@@ -174,6 +209,7 @@ export function startOrchestratorRecoveryWorker(options: { env?: NodeJS.ProcessE
     recoverOrchestratorRuns({
       logger,
       repair: defaults.repair,
+      resumeReruns: defaults.resumeReruns,
     })
       .then(() => {
         consecutiveFailures = 0;

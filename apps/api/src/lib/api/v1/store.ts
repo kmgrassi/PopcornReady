@@ -4559,6 +4559,7 @@ export async function saveProjectStoryboard(
         id: beat.id,
         project_id: projectId,
         scene_id: scene.id,
+        stable_id: beat.id,
         beat_index: index,
         intent: beat.intent,
         visual_description: beat.visualDescription ?? null,

@@ -177,6 +177,8 @@ export interface StoryboardInput {
 }
 
 export interface SceneInput {
+  /** Internal immutable identity copied from the source plan. */
+  stableId?: string;
   sceneIndex?: number;
   title?: string | null;
   summary?: string | null;
@@ -188,6 +190,8 @@ export interface SceneInput {
 }
 
 export interface BeatInput {
+  /** Internal immutable identity copied from the source plan. */
+  stableId?: string;
   beatIndex?: number;
   intent?: string;
   visualDescription?: string | null;

@@ -701,6 +701,44 @@ export async function executeRerunProposal(input: {
           budgetReservationKeys: result.budgetReservationKeys,
           bindingResults: completedBindings,
         });
+        // The provider callback can commit before execute() returns. Re-read
+        // under the same durable reservation so that race completes inline;
+        // otherwise the recovery sweep remains the missed-wakeup fallback.
+        const refreshed = await deps.reserveWorkItem({
+          projectId: input.projectId,
+          lease,
+          workItemId: workItem.workItemId,
+          requestFingerprint: workFingerprint,
+          dispatchActionId,
+          dispatchParams: {
+            schemaVersion: "RerunWorkDispatch.v1",
+            proposalActionId: action.id,
+            executionReservationId: lease.reservationId,
+            workItem,
+          },
+          callbackFences: callbackFences.map(({ descriptor }) => descriptor),
+        });
+        const refreshedStep = refreshed.callback_results.find(
+          (candidate) => candidate.executorId === callback.executor.id
+        );
+        if (refreshedStep?.status === "completed" && refreshedStep.result) {
+          const outputs = (refreshedStep.result.outputs ?? []) as BoundExecutorOutput[];
+          validateBoundExecutorOutputs(
+            { ...workItem, requiredOutputs: planned.requiredOutputs },
+            outputs
+          );
+          completedBindings.push(...outputs);
+          completedStepResults.push({
+            executorId: callback.executor.id,
+            result: refreshedStep.result,
+          });
+          continue;
+        }
+        if (refreshedStep?.status === "failed" || refreshedStep?.status === "canceled") {
+          throw new Error(
+            `Executor callback ${callback.executor.id} ${refreshedStep.status}.`
+          );
+        }
         pendingExternalStep = true;
       }
       if (pendingExternalStep) {

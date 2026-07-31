@@ -53,6 +53,17 @@ test("worker processes only atomically claimed dispatches", async () => {
   assert.deepEqual(released, [{ completed: false }, { completed: false }, { completed: false }]);
 });
 
+test("worker sweeps ready rerun callbacks before normal dispatch claims", async () => {
+  const order: string[] = [];
+  await recoverOrchestratorRuns({
+    repair: async () => { order.push("repair"); },
+    resumeReruns: async () => { order.push("reruns"); return 1; },
+    claim: async () => { order.push("claim"); return []; },
+    logger: { debug() {}, info() {}, warn() {}, error() {}, child() { return this; } },
+  });
+  assert.deepEqual(order, ["repair", "reruns", "claim"]);
+});
+
 test("worker forwards a claimed domain session generation to the shared engine", async () => {
   let seenGeneration: number | undefined;
   let seenRoles: readonly string[] | undefined;

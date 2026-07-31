@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { GenerationRun } from "@popcorn/shared/v1/types";
+import { RerunProposalDialog } from "../components/ai-edit/RerunProposalDialog";
 import { StageRail } from "../components/progress/StageRail";
 import { Button, ButtonLink } from "../components/ui/Button";
 import { EmptyState, ErrorState } from "../components/ui/StateCard";
@@ -7,6 +8,7 @@ import {
   useGenerationRunQuery,
   useUpdateGenerationRunMutation,
 } from "../lib/queryClient";
+import { reviewProposalTarget as resolveReviewProposalTarget } from "../lib/reviewProposalTarget";
 import styles from "./ProjectStagePanel.module.css";
 import { formatDate, titleCase } from "./project-detail-format";
 
@@ -26,7 +28,8 @@ export function ProjectStagePanel({
   onRetry: () => void;
 }) {
   const selectedRun = useMemo(() => selectStageRun(runs), [runs]);
-  const [pendingGateAction, setPendingGateAction] = useState<"approve" | "reject" | null>(null);
+  const [pendingGateAction, setPendingGateAction] = useState<"approve" | null>(null);
+  const [proposalOpen, setProposalOpen] = useState(false);
   const [stageExpanded, setStageExpanded] = useState(() => {
     if (typeof window === "undefined") return true;
     return !window.matchMedia(STAGE_PANEL_COMPACT_QUERY).matches;
@@ -46,6 +49,16 @@ export function ProjectStagePanel({
     .sort((a, b) => a.order - b.order)
     .find((stage) => stage.status === "queued");
   const hasReviewGate = Boolean(run?.reviewGate);
+  const gateItems = run?.reviewGate && runDetail
+    ? runDetail.stageItems.filter((item) => item.stageId === run.reviewGate?.stageId)
+    : [];
+  const proposalTarget = run?.reviewGate
+    ? resolveReviewProposalTarget({
+        stageType: run.reviewGate.stageType,
+        runId: run.runId,
+        items: gateItems,
+      })
+    : null;
   const projectPath = `/projects/${encodeURIComponent(projectId)}`;
   const runPath = run
     ? `${projectPath}/runs/${encodeURIComponent(run.runId)}`
@@ -62,17 +75,11 @@ export function ProjectStagePanel({
     "Final Render": `${projectPath}/watch`,
   };
 
-  function updateGate(action: "approve" | "reject") {
+  function updateGate() {
     if (!run?.runId) return;
-    setPendingGateAction(action);
+    setPendingGateAction("approve");
     updateRunMutation.mutate({
-      action,
-      body: action === "reject"
-        ? {
-            stageType: run.reviewGate?.stageType,
-            note: "Requested from the project stage panel.",
-          }
-        : undefined,
+      action: "approve",
     });
   }
 
@@ -195,20 +202,24 @@ export function ProjectStagePanel({
               {hasReviewGate ? (
                 <>
                   <Button
+                    variant="secondary"
+                    onClick={() => setProposalOpen(true)}
+                    disabled={!proposalTarget || updateRunMutation.isPending}
+                    title={
+                      proposalTarget
+                        ? undefined
+                        : "Open the run and select a generated object to request changes."
+                    }
+                  >
+                    Request changes
+                  </Button>
+                  <Button
                     variant="primary"
-                    onClick={() => updateGate("approve")}
+                    onClick={updateGate}
                     disabled={updateRunMutation.isPending}
                     isLoading={updateRunMutation.isPending && pendingGateAction === "approve"}
                   >
                     Approve and continue
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => updateGate("reject")}
-                    disabled={updateRunMutation.isPending}
-                    isLoading={updateRunMutation.isPending && pendingGateAction === "reject"}
-                  >
-                    Request revision
                   </Button>
                 </>
               ) : (
@@ -226,13 +237,43 @@ export function ProjectStagePanel({
                 body="We couldn't apply that stage action. The run may have changed, or your session may need to be refreshed."
                 error={updateRunMutation.error}
                 onRetry={() => {
-                  if (pendingGateAction) updateGate(pendingGateAction);
+                  if (pendingGateAction) updateGate();
                 }}
               />
+            ) : null}
+            {hasReviewGate && !proposalTarget ? (
+              <p className={styles.muted}>
+                Open the run and select a generated object to request changes safely.
+              </p>
             ) : null}
           </div>
         ) : null}
       </div>
+      {run?.reviewGate && proposalTarget ? (
+        <RerunProposalDialog
+          open={proposalOpen}
+          projectId={projectId}
+          rootRunId={run.runId}
+          target={proposalTarget}
+          title={`Change ${titleCase(run.reviewGate.stageType)}`}
+          subtitle="Review the exact impact and maximum cost before this checkpoint changes."
+          asset={
+            <div>
+              <strong>{proposalTarget.label ?? titleCase(run.reviewGate.stageType)}</strong>
+              <p>The current checkpoint remains unchanged until you approve.</p>
+            </div>
+          }
+          onClose={() => setProposalOpen(false)}
+          onExecutionStarted={() => {
+            void runDetailQuery.refetch();
+            onRetry();
+          }}
+          onExecutionSettled={() => {
+            void runDetailQuery.refetch();
+            onRetry();
+          }}
+        />
+      ) : null}
     </section>
   );
 }

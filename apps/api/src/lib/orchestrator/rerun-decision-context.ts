@@ -366,7 +366,9 @@ function targetAssetIds(input: BuildRerunDecisionPacketInput, targets: RerunTarg
         ...(snapshot.storyBlueprint?.assetId ? [snapshot.storyBlueprint.assetId] : []),
         ...(snapshot.storyBlueprint?.briefAssetId ? [snapshot.storyBlueprint.briefAssetId] : []),
         ...snapshot.storyboards.flatMap((row) => row.planAssetId ? [row.planAssetId] : []),
-        ...snapshot.scenes.flatMap((row) => row.sceneAssetId ? [row.sceneAssetId] : []),
+        ...snapshot.scenes.flatMap((row) =>
+          [row.sceneAssetId, row.storySnapshotAssetId]
+            .filter((id): id is string => Boolean(id))),
         ...snapshot.beats.flatMap((row) => row.beatAssetId ? [row.beatAssetId] : []),
         ...snapshot.panels.flatMap((row) =>
           [row.imageAssetId, row.promptAssetId].filter((id): id is string => Boolean(id)))
@@ -382,7 +384,7 @@ function targetAssetIds(input: BuildRerunDecisionPacketInput, targets: RerunTarg
     }
     if (target.kind === "scene") {
       const row = snapshot.scenes.find((candidate) => candidate.id === target.sceneId);
-      if (row?.sceneAssetId) ids.push(row.sceneAssetId);
+      if (row?.storySnapshotAssetId) ids.push(row.storySnapshotAssetId);
     }
     if (target.kind === "beat") {
       const row = snapshot.beats.find((candidate) => candidate.id === target.beatId);
@@ -678,7 +680,7 @@ export function buildRerunDecisionPacket(input: BuildRerunDecisionPacketInput): 
     ...input.snapshot.scenes.map((scene) => ({
       rowKind: "story_scene" as const,
       rowId: scene.id,
-      expectedSnapshotAssetId: scene.sceneAssetId,
+      expectedSnapshotAssetId: scene.storySnapshotAssetId ?? null,
     })),
     ...input.snapshot.beats.map((beat) => ({
       rowKind: "story_beat" as const,
@@ -915,6 +917,7 @@ export async function loadRerunDecisionPacket(input: {
           ...(scene.summary ? { summary: scene.summary } : {}),
           ...(scene.durationSec != null ? { durationSec: scene.durationSec } : {}),
           sceneAssetId: scene.sceneAssetId,
+          storySnapshotAssetId: canonicalStory.planAssetId,
           status: scene.status,
         })),
         beats: canonicalStory.scenes.flatMap((scene) => scene.beats.map((beat) => ({

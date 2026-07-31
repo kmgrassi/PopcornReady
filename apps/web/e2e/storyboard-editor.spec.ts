@@ -135,7 +135,7 @@ test("project storyboard route renders the dedicated storyboard page", async ({ 
   await expect(page.getByText("No storyboard yet")).toBeVisible();
 });
 
-test("storyboard keeps prompts in the asset detail @mobile", async ({ page }) => {
+test("storyboard opens exact-target change requests from asset detail @mobile", async ({ page }) => {
   await mockLocalAuth(page);
   await mockReadyStoryboard(page);
 
@@ -149,8 +149,10 @@ test("storyboard keeps prompts in the asset detail @mobile", async ({ page }) =>
   await page.getByRole("button", { name: "Orbital Greenhouse — Quiet Hope" }).click();
 
   await expect(page.getByRole("dialog")).toBeVisible();
-  await expect(page.getByText("Generation prompt", { exact: true })).toBeVisible();
-  await expect(page.getByText("A quiet orbital greenhouse glowing above the moon, cinematic still.")).toBeVisible();
+  await expect(page.getByText("Original prompt", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("A quiet orbital greenhouse glowing above the moon, cinematic still.")
+  ).toBeVisible();
   await expect(page.getByRole("textbox", { name: "What should change?" })).toHaveValue("");
 });
 

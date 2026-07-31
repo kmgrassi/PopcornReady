@@ -225,7 +225,7 @@ export async function applyResolvedRerunGraphMoves(
       )).rows[0]?.snapshot_asset_id;
     } else if (move.rowKind === "story_scene") {
       current = (await client.query<{ snapshot_asset_id: string | null }>(
-        `select scene_asset_id as snapshot_asset_id
+        `select story_snapshot_asset_id as snapshot_asset_id
            from public.story_blueprint_scenes
           where project_id=$1 and id=$2`,
         [input.projectId, move.rowId]

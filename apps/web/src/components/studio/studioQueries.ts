@@ -3,7 +3,6 @@ import type { Project, Timeline } from "@popcorn/shared/types";
 import type { GenerationRun } from "@popcorn/shared/v1/types";
 import {
   v1Api,
-  type CreateTimelineRevisionInput,
   type ExportJobResponse,
   type StartTimelineExportInput,
 } from "../../lib/api-client";
@@ -144,16 +143,6 @@ export function useStartStudioTimelineExportMutation(
       client.setQueryData(studioQueryKeys.timelineExport(projectId, job.id), { job });
       void client.invalidateQueries({ queryKey: ["workspaces"] });
     },
-  });
-}
-
-export function useStudioCreateTimelineRevisionMutation(
-  projectId: string,
-  timelineId: string,
-) {
-  return useMutation({
-    mutationFn: (input: CreateTimelineRevisionInput) =>
-      v1Api.createTimelineRevision(projectId, timelineId, input),
   });
 }
 

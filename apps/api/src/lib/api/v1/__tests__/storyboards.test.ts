@@ -9,11 +9,51 @@ import {
 import { semanticBeatChanged } from "../storyboards-repository";
 import type { StoryboardBeatRow } from "../storyboards-types";
 import {
+  buildStoryboardForPlan,
   parseBeatInput,
   parsePanelInput,
   parseSceneInput,
   parseStoryboardInput,
 } from "../storyboards";
+
+test("plan storyboard persistence carries semantic scene and beat identities", async () => {
+  const sceneStableIds: Array<string | undefined> = [];
+  const beatStableIds: Array<string | undefined> = [];
+  await buildStoryboardForPlan({
+    auth: { workspaceId: "workspace-1", userId: "user-1" } as never,
+    projectId: "project-1",
+    planAssetId: "plan-1",
+    plan: {
+      targetLengthSec: 4,
+      style: "cinematic",
+      aspectRatio: "16:9",
+      scenes: [{
+        id: "scene-semantic",
+        name: "Opening",
+        beats: [{
+          id: "beat-semantic",
+          name: "Reveal",
+          intent: "Reveal the product.",
+          durationSec: 4,
+        }],
+      }],
+    },
+    tileAssetByBeatId: new Map(),
+  }, {
+    createStoryboard: async () => ({ id: "storyboard-1" }) as never,
+    createScene: async (input) => {
+      sceneStableIds.push(input.data.stableId);
+      return { id: "scene-row-1" } as never;
+    },
+    createBeat: async (input) => {
+      beatStableIds.push(input.data.stableId);
+      return { id: "beat-row-1" } as never;
+    },
+    createPanel: async () => assert.fail("no tile means no panel"),
+  });
+  assert.deepEqual(sceneStableIds, ["scene-semantic"]);
+  assert.deepEqual(beatStableIds, ["beat-semantic"]);
+});
 
 test("storyboard parsers preserve null clears and valid statuses", () => {
   assert.deepEqual(parseStoryboardInput({ planAssetId: null, status: "ready" }), {
