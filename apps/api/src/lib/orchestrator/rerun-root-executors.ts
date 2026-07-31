@@ -5,6 +5,7 @@ import {
 } from "@/lib/api/v1/orchestrator-budget-controls";
 import type {
   BoundRequiredOutput,
+  AssetFingerprintPin,
   PlannedStoryPointerMove,
   RerunTarget,
   RerunWorkItem,
@@ -29,6 +30,7 @@ export interface RootStorySnapshotRequest {
   binding: BoundRequiredOutput;
   pointerMove: PlannedStoryPointerMove;
   pointerPin: StorySnapshotPin;
+  approvedAssetPins: AssetFingerprintPin[];
 }
 
 export interface RootProspectiveAsset {
@@ -74,7 +76,10 @@ export interface RootRerunExecutorServices {
   stageStorySnapshot(input: RootStorySnapshotRequest): Promise<RootServiceResult>;
   assembleProspectiveCut(input: RootAssemblyRequest): Promise<RootServiceResult>;
   critiqueProspectiveCut(input: RootCritiqueRequest): Promise<RootServiceResult>;
+  estimateStoryUsd(input: RootStorySnapshotRequest): number;
+  estimateAssemblyUsd(input: RootAssemblyRequest): number;
   estimateCritiqueUsd(input: RootCritiqueRequest): number;
+  measuredActionCostUsd(actionId: string): Promise<number>;
   settleBudget: typeof realSettleBudget;
   releaseBudget: typeof realReleaseBudget;
 }
@@ -316,6 +321,25 @@ async function executeService(input: {
         reservationKey,
         reason: `root_${input.suffix}_failed_before_completion`,
       });
+    } else {
+      const actualUsd = measuredCost(
+        await input.services.measuredActionCostUsd(
+          input.context.fence.dispatchActionId
+        )
+      );
+      if (actualUsd > 0) {
+        await input.services.settleBudget({
+          projectId: input.context.projectId,
+          reservationKey,
+          actualUsd,
+        });
+      } else {
+        await input.services.releaseBudget({
+          projectId: input.context.projectId,
+          reservationKey,
+          reason: `root_${input.suffix}_failed_without_recorded_spend`,
+        });
+      }
     }
     throw error;
   }
@@ -358,30 +382,33 @@ function storyExecutor(services: RootRerunExecutorServices): RerunKindExecutor {
     supports: (work, output) =>
       work.owner === "creative_director" &&
       work.kind === "revise_story" &&
-      output.kind === "story_snapshot",
+      output.kind === "story_snapshot" &&
+      (output.target.kind === "project" || output.target.kind === "beat"),
     async execute(context) {
       const { binding } = rootWork(context, "revise_story", "story_snapshot");
       const pointer = storyPointer(context, binding);
+      const request: RootStorySnapshotRequest = {
+        workspaceId: context.workspaceId,
+        projectId: context.projectId,
+        rootRunId: context.rootRunId,
+        proposalActionId: context.proposalActionId,
+        approvalActionId: context.approvalActionId,
+        primitiveActionId: context.fence.dispatchActionId,
+        idempotencyKey: context.fence.idempotencyKey,
+        instruction: context.proposal.userIntent,
+        binding,
+        pointerMove: pointer.move,
+        pointerPin: pointer.pin,
+        approvedAssetPins: context.proposal.pins.assets,
+      };
       return executeService({
         context,
         suffix: "story",
-        estimatedUsd: 0,
-        releaseOnFailure: true,
+        estimatedUsd: measuredCost(services.estimateStoryUsd(request)),
+        releaseOnFailure: request.binding.target.kind === "project",
         binding,
         services,
-        run: () => services.stageStorySnapshot({
-          workspaceId: context.workspaceId,
-          projectId: context.projectId,
-          rootRunId: context.rootRunId,
-          proposalActionId: context.proposalActionId,
-          approvalActionId: context.approvalActionId,
-          primitiveActionId: context.fence.dispatchActionId,
-          idempotencyKey: context.fence.idempotencyKey,
-          instruction: context.proposal.userIntent,
-          binding,
-          pointerMove: pointer.move,
-          pointerPin: pointer.pin,
-        }),
+        run: () => services.stageStorySnapshot(request),
       });
     },
   };
@@ -422,26 +449,27 @@ function assemblyExecutor(services: RootRerunExecutorServices): RerunKindExecuto
           "Assembly preservation set is missing an approved asset pin."
         );
       }
+      const request: RootAssemblyRequest = {
+        workspaceId: context.workspaceId,
+        projectId: context.projectId,
+        rootRunId: context.rootRunId,
+        proposalActionId: context.proposalActionId,
+        approvalActionId: context.approvalActionId,
+        primitiveActionId: context.fence.dispatchActionId,
+        idempotencyKey: context.fence.idempotencyKey,
+        instruction: context.proposal.userIntent,
+        binding,
+        prospectiveAssets,
+        preservedAssetIds: context.proposal.preservedAssetIds,
+      };
       return executeService({
         context,
         suffix: "assembly",
-        estimatedUsd: 0,
-        releaseOnFailure: true,
+        estimatedUsd: measuredCost(services.estimateAssemblyUsd(request)),
+        releaseOnFailure: false,
         binding,
         services,
-        run: () => services.assembleProspectiveCut({
-          workspaceId: context.workspaceId,
-          projectId: context.projectId,
-          rootRunId: context.rootRunId,
-          proposalActionId: context.proposalActionId,
-          approvalActionId: context.approvalActionId,
-          primitiveActionId: context.fence.dispatchActionId,
-          idempotencyKey: context.fence.idempotencyKey,
-          instruction: context.proposal.userIntent,
-          binding,
-          prospectiveAssets,
-          preservedAssetIds: context.proposal.preservedAssetIds,
-        }),
+        run: () => services.assembleProspectiveCut(request),
       });
     },
   };

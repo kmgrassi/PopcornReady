@@ -4,7 +4,6 @@ import { createHash } from "node:crypto";
 import test from "node:test";
 import { Pool } from "pg";
 import { ApiError } from "@/core/errors";
-import { ensureRerunReconciliation } from "@/lib/api/v1/rerun-lifecycle-store";
 import {
   cancelExecutionTransaction,
   claimExecutionTransaction,
@@ -61,7 +60,8 @@ function proposal(
 async function insertProposal(
   admin: Pool,
   projectId: string,
-  selectedWork: unknown[] = []
+  selectedWork: unknown[] = [],
+  proposalOverride?: Record<string, unknown>
 ): Promise<string> {
   const actionId = randomUUID();
   await admin.query(
@@ -70,7 +70,11 @@ async function insertProposal(
        input_asset_ids,output_asset_ids,job_ids
      ) values ($1,'action.v1',$2,'rerun_proposal','proposed',
        '{"schema_version":"action_params.v1"}'::jsonb,$3::jsonb,'{}','{}','{}')`,
-    [actionId, projectId, JSON.stringify(proposal(projectId, selectedWork))]
+    [
+      actionId,
+      projectId,
+      JSON.stringify(proposalOverride ?? proposal(projectId, selectedWork)),
+    ]
   );
   return actionId;
 }
@@ -275,6 +279,9 @@ integrationTest(
       );
       context.diagnostic("forged child budget and output causation rejected");
       const dispatchActionId = randomUUID();
+      const dispatchCallbackTokenHash = createHash("sha256")
+        .update("dispatch-success-token")
+        .digest("hex");
       await reserveWorkTransaction({
         projectId,
         lease: negative.lease,
@@ -282,7 +289,12 @@ integrationTest(
         requestFingerprint: "dispatch-success-work",
         dispatchActionId,
         dispatchParams: {},
-        callbackFences: [],
+        callbackFences: [{
+          executorId: "dispatch-success",
+          tokenHash: dispatchCallbackTokenHash,
+          generation: 1,
+          requiredOutputs: [dispatchOutput],
+        }],
       });
       const dispatchBudgetKey = "dispatch-success-budget";
       await reserveChildBudgetTransaction({
@@ -333,6 +345,16 @@ integrationTest(
         primitiveActionIds: [dispatchActionId],
         budgetReservationKeys: [dispatchBudgetKey],
         bindingResults: [dispatchBinding],
+        completedCallbacks: [{
+          executorId: "dispatch-success",
+          tokenHash: dispatchCallbackTokenHash,
+          generation: 1,
+          result: {
+            outputs: [dispatchBinding],
+            primitiveActionIds: [dispatchActionId],
+            budgetReservationKeys: [dispatchBudgetKey],
+          },
+        }],
       });
       await completeWorkTransaction({
         projectId,
@@ -735,16 +757,6 @@ integrationTest(
           error instanceof ApiError && error.code === "validation_failed"
       );
       const reconciliationActionId = randomUUID();
-      assert.equal(
-        await ensureRerunReconciliation({
-          projectId,
-          proposalActionId: successProposalId,
-          rootRunId: success.reservation.root_run_id,
-          lease: success.lease,
-          reconciliationActionId,
-        }),
-        reconciliationActionId
-      );
       const [replay, finalized] = await Promise.all([
         reserveExecutionTransaction(success.executionRequest),
         finalizeExecutionTransaction({
@@ -790,6 +802,452 @@ integrationTest(
       await admin.query(
         "revoke popcorn_api from postgres"
       ).catch(() => undefined);
+      await admin.query(
+        "delete from public.workspaces where id=$1",
+        [workspaceId]
+      ).catch(() => undefined);
+      await admin.end();
+    }
+  }
+);
+
+integrationTest(
+  "atomic graph application commits mixed moves and rolls every move back on a stale story CAS",
+  { concurrency: false, timeout: 60_000 },
+  async (context) => {
+    const admin = new Pool({ connectionString: databaseUrl, max: 2 });
+    const workspaceId = randomUUID();
+    const projectId = randomUUID();
+    const roleUrl = new URL(databaseUrl);
+    roleUrl.searchParams.set(
+      "options",
+      "-c role=popcorn_api -c statement_timeout=5000 -c lock_timeout=3000"
+    );
+    const originalUrl = process.env.DATABASE_URL;
+    try {
+      await admin.query("grant popcorn_api to postgres");
+      process.env.DATABASE_URL = roleUrl.toString();
+      await admin.query(
+        "insert into public.workspaces(id,name) values ($1,$2)",
+        [workspaceId, `Rerun graph ${workspaceId}`]
+      );
+      await admin.query(
+        `insert into public.projects(id,workspace_id,name,visibility)
+         values ($1,$2,$3,'private')`,
+        [projectId, workspaceId, `Rerun graph ${projectId}`]
+      );
+
+      const runScenario = async (staleStory: boolean) => {
+        const slotRole = staleStory ? "poster-stale" : "poster-success";
+        const oldImageId = randomUUID();
+        const newImageId = randomUUID();
+        const oldStoryId = randomUUID();
+        const newStoryId = randomUUID();
+        const concurrentStoryId = randomUUID();
+        const oldBeatAssetId = randomUUID();
+        const newBeatAssetId = randomUUID();
+        const beatId = randomUUID();
+        const sceneId = randomUUID();
+        const actId = randomUUID();
+        await admin.query(
+          `insert into public.assets(
+           id,workspace_id,project_id,kind,media,status,role,content
+           ) values
+             ($1,$4,$5,'image','image','ready','poster',null),
+             ($2,$4,$5,'story_blueprint','data','ready','story_blueprint',
+                '{"schema_version":"storyBlueprint.v1","title":"old"}'),
+             ($3,$4,$5,'story_blueprint','data','ready','story_blueprint',
+                '{"schema_version":"storyBlueprint.v1","title":"concurrent"}')`,
+          [
+            oldImageId,
+            oldStoryId,
+            concurrentStoryId,
+            workspaceId,
+            projectId,
+          ]
+        );
+        const blueprintId = randomUUID();
+        await admin.query(
+          `insert into public.story_blueprints(
+             id,workspace_id,project_id,asset_id,snapshot,provenance
+           ) values (
+             $1,$2,$3,$4,
+             '{"schema_version":"storyBlueprint.v1","title":"old"}',
+             '{"schema_version":"storyBlueprintProvenance.v1"}'
+           )`,
+          [blueprintId, workspaceId, projectId, oldStoryId]
+        );
+        await admin.query(
+          `insert into public.assets(
+             id,workspace_id,project_id,kind,media,status,role,content
+           ) values (
+             $1,$2,$3,'beat','data','ready','beat_snapshot',
+             jsonb_build_object(
+               'schema_version','beat.v1','id',$4::text,
+               'intent','old beat','durationSec',4
+             )
+           )`,
+          [oldBeatAssetId, workspaceId, projectId, beatId]
+        );
+        await admin.query(
+          `insert into public.story_blueprint_acts(
+             id,story_blueprint_id,workspace_id,project_id,stable_id,position,
+             title,purpose,summary,target_duration_sec
+           ) values ($1,$2,$3,$4,'act-1',0,'Act','Test','Test',4)`,
+          [actId, blueprintId, workspaceId, projectId]
+        );
+        await admin.query(
+          `insert into public.story_blueprint_scenes(
+             id,story_blueprint_id,story_blueprint_act_id,workspace_id,
+             project_id,stable_id,position,title,summary,target_duration_sec
+           ) values ($1,$2,$3,$4,$5,'scene-1',0,'Scene','Scene',4)`,
+          [sceneId, blueprintId, actId, workspaceId, projectId]
+        );
+        await admin.query(
+          `insert into public.story_beats(
+             id,project_id,scene_id,beat_index,intent,duration_sec,beat_asset_id
+           ) values ($1,$2,$3,0,'old beat',4,$4)`,
+          [beatId, projectId, sceneId, oldBeatAssetId]
+        );
+        await admin.query(
+          `insert into public.selections(
+             project_id,slot_owner_lineage_id,slot_role,seq,active_asset_id
+           ) values ($1,null,$2,1,$3)`,
+          [projectId, slotRole, oldImageId]
+        );
+        const selectionTarget = {
+          kind: "selection",
+          projectId,
+          slotOwnerLineageId: null,
+          slotRole,
+        };
+        const storyTarget = { kind: "project", projectId };
+        const beatTarget = { kind: "beat", projectId, beatId };
+        const imageOutput = {
+          bindingId: "image-binding",
+          workItemId: "image-work",
+          target: selectionTarget,
+          kind: "image",
+          role: "poster",
+          ordinal: 0,
+        };
+        const storyOutput = {
+          bindingId: "story-binding",
+          workItemId: "story-work",
+          target: storyTarget,
+          kind: "story_snapshot",
+          role: "story_blueprint",
+          ordinal: 0,
+        };
+        const beatOutput = {
+          bindingId: "beat-binding",
+          workItemId: "beat-work",
+          target: beatTarget,
+          kind: "story_snapshot",
+          role: "beat_snapshot",
+          ordinal: 0,
+        };
+        const selectedWork = [{
+          workItemId: "image-work",
+          owner: "visuals",
+          kind: "revise_visuals",
+          targets: [selectionTarget],
+          requiredOutputs: [imageOutput],
+        }, {
+          workItemId: "story-work",
+          owner: "creative_director",
+          kind: "revise_story",
+          targets: [storyTarget],
+          requiredOutputs: [storyOutput],
+        }, {
+          workItemId: "beat-work",
+          owner: "creative_director",
+          kind: "revise_story",
+          targets: [beatTarget],
+          requiredOutputs: [beatOutput],
+        }];
+        const value = {
+          ...proposal(projectId, selectedWork),
+          targets: [selectionTarget, storyTarget, beatTarget],
+          pins: {
+            assets: [],
+            selections: [{
+              slotOwnerLineageId: null,
+              slotRole,
+              expectedActiveAssetId: oldImageId,
+              expectedSeq: 1,
+            }],
+            storySnapshots: [{
+              rowKind: "story_blueprint",
+              rowId: blueprintId,
+              expectedSnapshotAssetId: oldStoryId,
+            }, {
+              rowKind: "story_beat",
+              rowId: beatId,
+              expectedSnapshotAssetId: oldBeatAssetId,
+            }],
+          },
+          plannedSelectionMoves: [{
+            bindingId: "image-binding",
+            slotOwnerLineageId: null,
+            slotRole,
+            expectedActiveAssetId: oldImageId,
+            expectedSeq: 1,
+          }],
+          plannedStoryPointerMoves: [{
+            bindingId: "story-binding",
+            rowKind: "story_blueprint",
+            rowId: blueprintId,
+            expectedSnapshotAssetId: oldStoryId,
+          }, {
+            bindingId: "beat-binding",
+            rowKind: "story_beat",
+            rowId: beatId,
+            expectedSnapshotAssetId: oldBeatAssetId,
+          }],
+        };
+        const proposalId = await insertProposal(
+          admin,
+          projectId,
+          selectedWork,
+          value
+        );
+        const execution = await approveAndClaim(
+          projectId,
+          proposalId,
+          staleStory ? "graph-stale" : "graph-success"
+        );
+        const complete = async (
+          workItemId: string,
+          output: typeof imageOutput | typeof storyOutput | typeof beatOutput,
+          assetId: string
+        ) => {
+          const dispatchActionId = randomUUID();
+          const callbackTokenHash = createHash("sha256")
+            .update(`graph:${workItemId}`)
+            .digest("hex");
+          await reserveWorkTransaction({
+            projectId,
+            lease: execution.lease,
+            workItemId,
+            requestFingerprint: `graph:${workItemId}`,
+            dispatchActionId,
+            dispatchParams: {},
+            callbackFences: [{
+              executorId: `graph:${workItemId}`,
+              tokenHash: callbackTokenHash,
+              generation: 1,
+              requiredOutputs: [output],
+            }],
+          });
+          const budgetKey = `graph-budget:${staleStory ? "stale" : "success"}:${workItemId}`;
+          await reserveChildBudgetTransaction({
+            projectId,
+            executionReservationId: execution.reservation.reservation_id,
+            workItemId,
+            actionId: dispatchActionId,
+            reservationKey: budgetKey,
+            estimatedUsd: 0,
+          });
+          await admin.query(
+            `insert into public.assets(
+               id,workspace_id,project_id,kind,media,status,role,content,
+               created_by_action_id
+             ) values (
+               $1,$2,$3,$4,$5,'ready',$6,$7::jsonb,$8
+             )`,
+            [
+              assetId,
+              workspaceId,
+              projectId,
+              output.kind === "story_snapshot"
+                ? output.target.kind === "beat" ? "beat" : "story_blueprint"
+                : "image",
+              output.kind === "story_snapshot" ? "data" : "image",
+              output.role,
+              output.kind === "story_snapshot"
+                ? output.target.kind === "beat"
+                  ? JSON.stringify({
+                    schema_version: "beat.v1",
+                    id: beatId,
+                    intent: "new beat",
+                    durationSec: 3,
+                    shotType: "close-up",
+                  })
+                  : JSON.stringify({
+                    schema_version: "storyBlueprint.v1",
+                    title: "new",
+                  })
+                : null,
+              dispatchActionId,
+            ]
+          );
+          await admin.query(
+            `insert into public.action_assets(
+               project_id,action_id,asset_id,direction,role,ordinal
+             ) values ($1,$2,$3,'output',$4,0)`,
+            [projectId, dispatchActionId, assetId, output.role]
+          );
+          await admin.query(
+            `select * from public.settle_orchestrator_run_budget($1,$2,0,null,0)`,
+            [projectId, budgetKey]
+          );
+          const binding = {
+            ...output,
+            assetId,
+            intrinsicRole: output.role,
+          };
+          await parkWorkTransaction({
+            projectId,
+            lease: execution.lease,
+            workItemId,
+            completedCallbacks: [{
+              executorId: `graph:${workItemId}`,
+              tokenHash: callbackTokenHash,
+              generation: 1,
+              result: {
+                outputs: [binding],
+                primitiveActionIds: [dispatchActionId],
+                budgetReservationKeys: [budgetKey],
+              },
+            }],
+            bindingResults: [binding],
+            primitiveActionIds: [dispatchActionId],
+            budgetReservationKeys: [budgetKey],
+          });
+          await completeWorkTransaction({
+            projectId,
+            lease: execution.lease,
+            workItemId,
+            bindingResults: [binding],
+            primitiveActionIds: [dispatchActionId],
+            budgetReservationKeys: [budgetKey],
+          });
+        };
+        await complete("image-work", imageOutput, newImageId);
+        await complete("story-work", storyOutput, newStoryId);
+        await complete("beat-work", beatOutput, newBeatAssetId);
+        if (staleStory) {
+          await admin.query(
+            "update public.story_blueprints set asset_id=$2 where id=$1",
+            [blueprintId, concurrentStoryId]
+          );
+        }
+        const executionActionId = randomUUID();
+        const reconciliationActionId = randomUUID();
+        if (staleStory) {
+          await assert.rejects(
+            finalizeExecutionTransaction({
+              projectId,
+              lease: execution.lease,
+              executionActionId,
+              outcome: "applied",
+              reconciliationActionId,
+            }),
+            (error: unknown) =>
+              error instanceof ApiError && error.code === "stale_proposal"
+          );
+          const selection = await admin.query<{ count: string; active_asset_id: string }>(
+            `select count(*)::text as count,
+                    (array_agg(active_asset_id order by seq desc))[1] as active_asset_id
+               from public.selections
+              where project_id=$1 and slot_role=$2`,
+            [projectId, slotRole]
+          );
+          assert.equal(selection.rows[0]?.count, "1");
+          assert.equal(selection.rows[0]?.active_asset_id, oldImageId);
+          assert.deepEqual(
+            (await admin.query<{ beat_asset_id: string; intent: string }>(
+              "select beat_asset_id,intent from public.story_beats where id=$1",
+              [beatId]
+            )).rows[0],
+            { beat_asset_id: oldBeatAssetId, intent: "old beat" }
+          );
+          assert.equal((await admin.query(
+            "select 1 from public.actions where id in ($1,$2)",
+            [executionActionId, reconciliationActionId]
+          )).rowCount, 0);
+          await finalizeExecutionTransaction({
+            projectId,
+            lease: execution.lease,
+            executionActionId,
+            outcome: "failed",
+            error: { kind: "stale_proposal" },
+          });
+          return;
+        }
+        await finalizeExecutionTransaction({
+          projectId,
+          lease: execution.lease,
+          executionActionId,
+          outcome: "applied",
+          reconciliationActionId,
+        });
+        const selection = await admin.query<{
+          seq: number;
+          active_asset_id: string;
+          set_by_action_id: string;
+        }>(
+          `select seq,active_asset_id,set_by_action_id
+             from public.selections
+            where project_id=$1 and slot_role=$2
+            order by seq desc limit 1`,
+          [projectId, slotRole]
+        );
+        assert.deepEqual(selection.rows[0], {
+          seq: 2,
+          active_asset_id: newImageId,
+          set_by_action_id: executionActionId,
+        });
+        assert.deepEqual(
+          (await admin.query<{ asset_id: string; title: string }>(
+            `select asset_id, snapshot->>'title' as title
+               from public.story_blueprints where id=$1`,
+            [blueprintId]
+          )).rows[0],
+          { asset_id: newStoryId, title: "new" }
+        );
+        assert.deepEqual(
+          (await admin.query<{
+            beat_asset_id: string;
+            intent: string;
+            duration_sec: number;
+            shot_type: string;
+          }>(
+            `select beat_asset_id,intent,duration_sec,shot_type
+               from public.story_beats where id=$1`,
+            [beatId]
+          )).rows[0],
+          {
+            beat_asset_id: newBeatAssetId,
+            intent: "new beat",
+            duration_sec: 3,
+            shot_type: "close-up",
+          }
+        );
+        const reconciliation = await admin.query<{
+          status: string;
+          moved_selections: unknown[];
+          moved_story_pointers: unknown[];
+        }>(
+          `select status,
+                  params->'movedSelections' as moved_selections,
+                  params->'movedStoryPointers' as moved_story_pointers
+             from public.actions where id=$1`,
+          [reconciliationActionId]
+        );
+        assert.equal(reconciliation.rows[0]?.status, "applied");
+        assert.equal(reconciliation.rows[0]?.moved_selections.length, 1);
+        assert.equal(reconciliation.rows[0]?.moved_story_pointers.length, 1);
+      };
+
+      await runScenario(false);
+      await runScenario(true);
+      context.diagnostic("mixed atomic apply and stale rollback both passed");
+    } finally {
+      await closePostgresPool();
+      process.env.DATABASE_URL = originalUrl;
+      await admin.query("revoke popcorn_api from postgres").catch(() => undefined);
       await admin.query(
         "delete from public.workspaces where id=$1",
         [workspaceId]

@@ -617,20 +617,19 @@ export async function completeWorkTransaction(input: {
                join public.actions primitive on primitive.id=aa.action_id
                join public.orchestrator_budget_reservations budget
                  on budget.action_id=primitive.id
-              where aa.project_id=$1 and aa.asset_id=$2
+              where aa.project_id=$1 and aa.asset_id=$2::uuid
                 and aa.direction='output' and aa.action_id=any($3::uuid[])
-                and primitive.orchestrator_run_id=
-                  coalesce($4::uuid,$5::uuid)
+                and primitive.orchestrator_run_id=coalesce($4::uuid,$5::uuid)
                 and primitive.tool<>'domain_report'
                 and (
                   primitive.status='applied'
                   or (
-                    primitive.id=$8
+                    primitive.id=$8::uuid
                     and primitive.status='running'
                   )
                 )
-                and budget.parent_reservation_id=$6
-                and budget.reservation_key=any($7)
+                and budget.parent_reservation_id=$6::uuid
+                and budget.reservation_key=any($7::text[])
                 and budget.orchestrator_run_id=coalesce($4::uuid,$5::uuid)
                 and budget.status='settled' limit 1`,
             [
@@ -650,19 +649,19 @@ export async function completeWorkTransaction(input: {
              join public.actions primitive on primitive.id=aa.action_id
              join public.orchestrator_budget_reservations budget
                on budget.action_id=primitive.id
-            where aa.project_id=$1 and aa.asset_id=$2
+            where aa.project_id=$1 and aa.asset_id=$2::uuid
               and aa.direction='output' and aa.action_id=any($3::uuid[])
               and primitive.orchestrator_run_id=coalesce($4::uuid,$5::uuid)
               and primitive.tool<>'domain_report'
               and (
                 primitive.status='applied'
                 or (
-                  primitive.id=$8
+                  primitive.id=$8::uuid
                   and primitive.status='running'
                 )
               )
-              and budget.parent_reservation_id=$6
-              and budget.reservation_key=any($7)
+              and budget.parent_reservation_id=$6::uuid
+              and budget.reservation_key=any($7::text[])
               and budget.status='settled' limit 1`,
           [
             input.projectId, binding.assetId, input.primitiveActionIds,

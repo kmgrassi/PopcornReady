@@ -11,11 +11,11 @@ import {
   type RootRerunExecutorServices,
 } from "../rerun-root-executors";
 import {
-  productionRerunExecutorRegistry,
   RerunExecutorRegistry,
   type BoundExecutorOutput,
   type RerunExecutorContext,
 } from "../rerun-executor-registry";
+import { productionRerunExecutorRegistry } from "../rerun-production-registry";
 
 const projectId = "00000000-0000-4000-8000-000000000001";
 const rootRunId = "00000000-0000-4000-8000-000000000002";
@@ -151,7 +151,10 @@ function services(
         followupProposalActionId: "proposal-followup",
       };
     },
+    estimateStoryUsd: () => 0,
+    estimateAssemblyUsd: () => 0,
     estimateCritiqueUsd: () => 0.05,
+    measuredActionCostUsd: async () => 0,
     settleBudget: async ({ reservationKey, actualUsd }) => {
       observed.settled.push({ reservationKey, actualUsd });
       return {} as never;
@@ -217,14 +220,32 @@ function context(input: {
   };
 }
 
-test("root executors stay absent from the production registry", () => {
+test("root executors are active in the production registry", () => {
   const story = work("story-work", "revise_story", [
     output("story-work", "story_snapshot"),
   ]);
-  assert.throws(
-    () => productionRerunExecutorRegistry.preflight([story]),
-    (error) => error instanceof ApiError && error.code === "coverage_unavailable"
-  );
+  assert.doesNotThrow(() => productionRerunExecutorRegistry.preflight([story]));
+});
+
+test("story coverage fails closed for aggregate storyboard and scene projections", () => {
+  for (const unsupportedTarget of [
+    { kind: "storyboard", projectId, storyboardId: "storyboard-1" } as const,
+    { kind: "scene", projectId, sceneId: "scene-1" } as const,
+  ]) {
+    const binding = {
+      ...output("story-work", "story_snapshot"),
+      target: unsupportedTarget,
+    };
+    const story = {
+      ...work("story-work", "revise_story", [binding]),
+      targets: [unsupportedTarget],
+    } as RerunWorkItem;
+    assert.throws(
+      () => productionRerunExecutorRegistry.preflight([story]),
+      (error: unknown) =>
+        error instanceof ApiError && error.code === "coverage_unavailable"
+    );
+  }
 });
 
 test("story executor stages one pinned snapshot without moving its stable row", async () => {
@@ -264,6 +285,26 @@ test("story executor rejects missing or forged pointer authority", async () => {
     /one exact prospective pointer move/
   );
   assert.equal(seen.storyRequests.length, 0);
+});
+
+test("model-backed story failure settles recorded spend before terminal failure", async () => {
+  const seen = observed();
+  const story = work("story-work", "revise_story", [
+    output("story-work", "story_snapshot"),
+  ]);
+  const executor = createRootRerunExecutors(services(seen, {
+    stageStorySnapshot: async () => {
+      throw new Error("structured call failed after usage");
+    },
+    measuredActionCostUsd: async () => 0.03,
+  }))[0];
+
+  await assert.rejects(
+    executor.execute(context({ workItem: story, selectedWork: [story], reserve: seen })),
+    /structured call failed/
+  );
+  assert.deepEqual(seen.settled.map((entry) => entry.actualUsd), [0.03]);
+  assert.deepEqual(seen.released, []);
 });
 
 test("assembly consumes exact prospective bindings and preserves active inputs", async () => {
@@ -355,6 +396,39 @@ test("assembly blocks missing prerequisites and rejects stale or extra bindings"
   );
 });
 
+test("model-backed assembly failure settles recorded spend before terminal failure", async () => {
+  const seen = observed();
+  const clipBinding = output("visual-work", "clip");
+  const visual: RerunWorkItem = {
+    workItemId: "visual-work",
+    owner: "visuals",
+    kind: "revise_visuals",
+    targets: [target],
+    requiredOutputs: [clipBinding],
+  };
+  const assembly = work("assembly-work", "reassemble_cut", [
+    output("assembly-work", "composite"),
+  ]);
+  const executor = createRootRerunExecutors(services(seen, {
+    assembleProspectiveCut: async () => {
+      throw new Error("selector failed after usage");
+    },
+    measuredActionCostUsd: async () => 0.04,
+  }))[1];
+
+  await assert.rejects(
+    executor.execute(context({
+      workItem: assembly,
+      selectedWork: [visual, assembly],
+      resolved: [completed(clipBinding, "clip-new")],
+      reserve: seen,
+    })),
+    /selector failed/
+  );
+  assert.deepEqual(seen.settled.map((entry) => entry.actualUsd), [0.04]);
+  assert.deepEqual(seen.released, []);
+});
+
 test("critique uses the prospective cut and exposes an inert successor identity", async () => {
   const seen = observed();
   const cutBinding = output("assembly-work", "composite");
@@ -412,7 +486,7 @@ test("critique failure is retryable and idempotent service replay keeps one asse
     reserve: seen,
   });
   await assert.rejects(executor.execute(value), /critic unavailable/);
-  assert.equal(seen.released.length, 0);
+  assert.equal(seen.released.length, 1);
   const replay = await executor.execute(value);
   assert.equal(replay.status, "succeeded");
   assert.equal(replay.status === "succeeded" ? replay.outputs[0]?.assetId : "", "critique-replayed");

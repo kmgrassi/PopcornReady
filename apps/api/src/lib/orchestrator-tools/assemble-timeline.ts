@@ -12,7 +12,7 @@ import {
 } from "@/lib/api/v1/store";
 import { withLlmCostRecording } from "@/lib/api/v1/llm-costs";
 import { sanitizeTimeline } from "@popcorn/timeline/timeline";
-import { planBeats, type Clip, type Timeline } from "@popcorn/shared/types";
+import { planBeats, type Clip, type ShotPlan, type Timeline } from "@popcorn/shared/types";
 import type { GraphAssetInput } from "@/lib/api/v1/asset-graph";
 import { selectedUploadedFootageAssetIds } from "@/lib/orchestrator/uploaded-footage-selection";
 import { toolDefinitionMetadata } from "./capability-catalog";
@@ -152,7 +152,7 @@ function beatClipsRequired(missingBeatIds: string[]): ToolCallResult<AssembleTim
   };
 }
 
-function roleAwareClip(asset: V1Asset, slotRole?: string): Clip {
+export function roleAwareClip(asset: V1Asset, slotRole?: string): Clip {
   const role = asset.role ?? "upload";
   const slot = slotRole ? ` slot=${slotRole}` : "";
   const base =
@@ -181,7 +181,7 @@ function uniqueAssets(assets: V1Asset[]): V1Asset[] {
   });
 }
 
-function sortTimelineByAssetOrder(timeline: Timeline, assetIds: string[]): Timeline {
+export function sortTimelineByAssetOrder(timeline: Timeline, assetIds: string[]): Timeline {
   if (assetIds.length === 0) return timeline;
   const order = new Map(assetIds.map((id, index) => [id, index]));
   const segments = timeline.segments
@@ -195,7 +195,7 @@ function sortTimelineByAssetOrder(timeline: Timeline, assetIds: string[]): Timel
   return { ...timeline, segments };
 }
 
-function graphInputsFor(
+export function graphInputsFor(
   plan: { assetId: string; contentHash: string },
   assets: V1Asset[]
 ): GraphAssetInput[] {
@@ -220,7 +220,7 @@ function graphInputsFor(
   return inputs;
 }
 
-function defaultGoal(plan: Awaited<ReturnType<typeof realGetActiveProjectPlan>>): string {
+export function defaultAssemblyGoal(plan: { plan: ShotPlan } | null): string {
   if (!plan) return "Assemble a timeline.";
   return (
     planBeats(plan.plan)
@@ -228,6 +228,44 @@ function defaultGoal(plan: Awaited<ReturnType<typeof realGetActiveProjectPlan>>)
       .filter(Boolean)
       .join(" ") || "Assemble a timeline."
   );
+}
+
+export async function assembleTimelineDraft(input: {
+  plan: ShotPlan;
+  planAsset: { assetId: string; contentHash: string };
+  assets: V1Asset[];
+  causalAssets?: V1Asset[];
+  goal?: string;
+  selectedAssetIds?: string[];
+  showCaptions?: boolean;
+  selectClips?: typeof realSelectClips;
+}): Promise<{ timeline: Timeline; graphInputs: GraphAssetInput[] }> {
+  const clips = input.assets.map((asset) => roleAwareClip(asset));
+  if (clips.filter((clip) => (clip.kind || "video") !== "audio").length === 0) {
+    throw new Error("Assembled timeline requires at least one visual clip.");
+  }
+  const draft = await (input.selectClips ?? realSelectClips)({
+    plan: input.plan,
+    clips,
+    goal: input.goal ?? defaultAssemblyGoal({ plan: input.plan }),
+    storyContext: null,
+  });
+  const timeline = sortTimelineByAssetOrder(
+    sanitizeTimeline(
+      input.showCaptions === undefined
+        ? draft
+        : { ...draft, showCaptions: input.showCaptions },
+      clips
+    ),
+    input.selectedAssetIds ?? []
+  );
+  if (timeline.segments.length === 0) {
+    throw new Error("Assembled timeline has no valid segments.");
+  }
+  return {
+    timeline,
+    graphInputs: graphInputsFor(input.planAsset, input.causalAssets ?? input.assets),
+  };
 }
 
 async function loadAssemblyAssets(input: {
@@ -371,34 +409,24 @@ export function createAssembleTimelineTool(
           rationale: "Assemble selected media assets into the active timeline.",
         });
 
-        const draft = await withLlmCostRecording(
+        const assembled = await withLlmCostRecording(
           {
             projectId: context.projectId,
             runId: context.orchestratorRunId,
             actionId: action.id,
           },
           () =>
-            resolved.selectClips({
+            assembleTimelineDraft({
               plan: activePlan.plan,
-              clips,
-              goal: input.goal ?? defaultGoal(activePlan),
-              storyContext: null,
+              planAsset: activePlan,
+              assets: inputAssets,
+              goal: input.goal ?? defaultAssemblyGoal(activePlan),
+              selectedAssetIds: selectedUploadAssetIds,
+              showCaptions: input.showCaptions,
+              selectClips: resolved.selectClips,
             })
         );
-        const timeline: Timeline = sortTimelineByAssetOrder(
-          sanitizeTimeline(
-            input.showCaptions === undefined
-              ? draft
-              : { ...draft, showCaptions: input.showCaptions },
-            clips
-          ),
-          selectedUploadAssetIds
-        );
-        if (timeline.segments.length === 0) {
-          throw new Error("Assembled timeline has no valid segments.");
-        }
-
-        const graphInputs = graphInputsFor(activePlan, inputAssets);
+        const { timeline, graphInputs } = assembled;
         const { timelineAssetId } = await resolved.addProjectTimeline({
           workspaceId: context.auth.workspaceId,
           projectId: context.projectId,

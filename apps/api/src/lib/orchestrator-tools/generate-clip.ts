@@ -373,14 +373,18 @@ export function createGenerateClipTool(
       const skippedBeatIds: string[] = [];
       const jobBeats: GenerateClipJobBeat[] = [];
       const missingKeyframeBeatIds: string[] = [];
+      const isVisualsRevision =
+        context.domainTask?.taskKind === "visuals_revision";
 
       for (const beatId of requestedBeatIds) {
-        const selectedClip = await resolved.getActiveProjectScopedAsset({
-          workspaceId: context.auth.workspaceId,
-          projectId: context.projectId,
-          slotRole: `beat_clip:${beatId}`,
-          expectedRole: "beat_clip",
-        });
+        const selectedClip = isVisualsRevision
+          ? null
+          : await resolved.getActiveProjectScopedAsset({
+              workspaceId: context.auth.workspaceId,
+              projectId: context.projectId,
+              slotRole: `beat_clip:${beatId}`,
+              expectedRole: "beat_clip",
+            });
         const existingClip =
           selectedClip ??
           (context.orchestratorRunId &&

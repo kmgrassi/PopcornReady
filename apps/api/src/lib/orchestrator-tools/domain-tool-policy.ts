@@ -18,11 +18,46 @@ const PRODUCTION_VISUAL_TOOLS = new Set<ToolName>([
   "edit_video_asset",
 ]);
 
+function selectiveVideoToolNames(
+  task: DomainTaskV1
+): readonly ToolName[] | null {
+  const bound = task.requiredOutputs.filter(
+    (output) => output.kind === "clip" && output.target
+  );
+  if (bound.length === 0 || bound.length !== task.requiredOutputs.length) {
+    return null;
+  }
+  if (bound.every((output) => output.target?.kind === "asset")) {
+    return ["edit_video_asset"];
+  }
+  if (bound.every((output) => output.target?.kind === "project")) {
+    return ["generate_video_asset"];
+  }
+  if (
+    bound.every(
+      (output) =>
+        output.target?.kind === "beat" ||
+        (
+          output.target?.kind === "selection" &&
+          output.target.slotRole.startsWith("beat_clip:")
+        )
+    )
+  ) {
+    return ["generate_clip"];
+  }
+  return [];
+}
+
 export function allowedVisualToolNames(task: DomainTaskV1): readonly ToolName[] {
   if (task.domain !== "visuals") return [];
   if (task.taskKind === "image_create") return ["generate_image_asset"];
   if (task.taskKind === "video_create") return ["generate_video_asset"];
   if (task.taskKind === "video_edit") return ["edit_video_asset"];
+  if (task.taskKind === "visuals_revision") {
+    const videoTools = selectiveVideoToolNames(task);
+    if (videoTools) return videoTools;
+    return [...PRODUCTION_VISUAL_TOOLS, "generate_video_asset"];
+  }
   return [...PRODUCTION_VISUAL_TOOLS];
 }
 
@@ -34,7 +69,7 @@ function requireOutput(task: DomainTaskV1, kind: "image" | "clip"): void {
 
 function requireVisualOutput(
   task: DomainTaskV1,
-  kind: "image" | "anchor" | "keyframe" | "clip"
+  kind: "image" | "anchor" | "storyboard" | "keyframe" | "clip"
 ): void {
   if (!(task.allowedOutputKinds as readonly string[]).includes(kind)) {
     throw new ToolInputError(
@@ -103,6 +138,12 @@ function targetedBeatIds(
       targetedAssetIds.add(target.assetId);
     } else if (target.kind === "lineage") {
       targetedLineageIds.add(target.lineageId);
+    } else if (
+      target.kind === "selection" &&
+      target.slotRole.startsWith("beat_clip:")
+    ) {
+      const beatId = target.slotRole.slice("beat_clip:".length);
+      if (beatId) beatIds.add(beatId);
     }
   }
 
@@ -165,10 +206,22 @@ export function assertPreparedDomainToolInput(input: {
   if (toolName === "generate_video_asset" || toolName === "edit_video_asset") {
     requireOutput(task, "clip");
   }
-  if (toolName === "generate_anchor") requireVisualOutput(task, "anchor");
-  if (toolName === "generate_storyboard" || toolName === "generate_keyframe") {
-    requireVisualOutput(task, "keyframe");
+  if (
+    task.taskKind === "visuals_revision" &&
+    (
+      toolName === "generate_clip" ||
+      toolName === "generate_video_asset" ||
+      toolName === "edit_video_asset"
+    ) &&
+    (parsed.provider || parsed.model)
+  ) {
+    throw new ToolInputError(
+      "Selective video work derives provider settings server-side."
+    );
   }
+  if (toolName === "generate_anchor") requireVisualOutput(task, "anchor");
+  if (toolName === "generate_storyboard") requireVisualOutput(task, "storyboard");
+  if (toolName === "generate_keyframe") requireVisualOutput(task, "keyframe");
   if (toolName === "generate_clip") requireVisualOutput(task, "clip");
   if (toolName === "regenerate_image_asset") {
     const assetId = parsed.assetId;
