@@ -638,6 +638,10 @@ export async function listRunActions(runId: string): Promise<RunActionSummary[]>
       .select("*")
       .eq("orchestrator_run_id", runId)
       .order("created_at", { ascending: true })
+      // Keep same-timestamp action order deterministic. The PR 7A legacy-credit
+      // fence uses the reverse of this exact ordering to identify the latest
+      // live failed action before application code loses profile awareness.
+      .order("id", { ascending: true })
   );
   // Superseded historical actions are hidden from the model-visible log.
   return ((data as RunActionRow[]) ?? [])
