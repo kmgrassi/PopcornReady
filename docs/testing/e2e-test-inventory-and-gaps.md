@@ -28,9 +28,11 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   routes, compatibility redirects, and not-found behavior.
 - `asset-studio.spec.ts` covers the production-default `/create` entry, image as
   the default goal, choice-card padding at desktop and mobile widths, proposal
-  review without dispatch, default-on image-prompt refinement, the exact
-  effective-prompt preview, creator bypass, stale refinement invalidation,
-  explicit confirmation, queued status, and desktop/mobile Create navigation.
+  review without dispatch, immediate navigation to `/create/review`, visible
+  image-prompt refinement, the exact effective-prompt preview, creator bypass,
+  manual **Approve this** confirmation, the 10-second automatic-confirmation
+  boundary, at-most-once dispatch, queued status, safe invalid-review recovery,
+  and desktop/mobile Create and review layouts.
   It also covers the accessible project picker,
   existing/first/new-project selection, inline creation without losing the
   prompt, list and creation failure recovery, and keyboard focus/Escape behavior.
@@ -330,29 +332,35 @@ Covered:
 
 - The authenticated global Create action opens `/create` by default.
 - Image is the default creator-facing goal and maps to `image_create`.
-- Reviewing the maximum cost does not confirm or enqueue the proposal.
+- Starting moves immediately to `/create/review`; proposal/refinement progress
+  is shown there before any confirmation or enqueue.
 - Image prompt improvement is on by default; the exact effective prompt is
   visible before confirmation, and disabling it sends the creator's prompt
   unchanged.
-- A delayed refined proposal is discarded if prompt improvement is disabled
-  while the request is in flight.
-- Explicit confirmation deep-links to the queued creator-direct run.
+- The visible proposal offers **Approve this** and automatically confirms after
+  10 seconds if untouched; manual/timed races dispatch at most once.
+- Revising cancels the countdown, returns to `/create`, preserves the editable
+  draft, and gives the revised request fresh proposal authority.
+- Confirmation failure stops automatic retry and remains manually actionable.
+- Direct `/create/review` navigation without request state fails closed and
+  creates no proposal or confirmation.
+- Successful confirmation replace-navigates to the queued creator-direct run.
 - The mobile Create tab opens Asset Studio and retains active state.
+- The review route remains legible and overflow-free at mobile widths.
 - The project picker selects an existing project, returns focus on Escape, and
   remains width-safe at mobile sizes.
 - People can create either their first project or another named project inline;
   the returned project is selected immediately and the asset prompt is retained.
 - Project list and project creation failures remain actionable and retryable.
-- A delayed proposal response is discarded after its selected project changes.
 - A delayed project creation cannot override a newer project selection.
 - A failed next-page request preserves loaded project rows and can retry the
   same cursor successfully.
 
 Remaining gaps:
 
-- Add dedicated delayed-proposal cases for prompt and goal changes. They share
-  the proposal-reset path already exercised by project and prompt-refinement
-  changes, but are not asserted independently.
+- Add reload recovery for a proposal already created on `/create/review`; the
+  current client fails closed when navigation state is unavailable rather than
+  persisting proposal authority in browser storage.
 - Add mocked status fixtures for completed, failed, canceled, question, and
   blocked outcomes.
 - Add browser coverage when optional references, Request Changes, dependency

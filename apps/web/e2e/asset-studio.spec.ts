@@ -66,11 +66,21 @@ test.describe("Asset Studio", () => {
     await mockAssetStudioProject(page);
   });
 
-  test("creates an image only after explicit cost confirmation", async ({ page }) => {
+  test("moves prompt refinement to review and manual approval dispatches once", async ({ page }) => {
     let proposalKind: string | null = null;
     let proposalPrompt: string | null = null;
     let improvePrompt: boolean | null = null;
     let confirmationCount = 0;
+    let releaseProposal: (() => void) | undefined;
+    const proposalReleased = new Promise<void>((resolve) => {
+      releaseProposal = resolve;
+    });
+    let releaseConfirmation: (() => void) | undefined;
+    const confirmationReleased = new Promise<void>((resolve) => {
+      releaseConfirmation = resolve;
+    });
+
+    await page.clock.install();
 
     await page.route(
       `**/api/v1/projects/${project.id}/agent-creations/proposals`,
@@ -81,6 +91,7 @@ test.describe("Asset Studio", () => {
         proposalPrompt = body.prompt;
         improvePrompt = body.improvePrompt;
         expect(request.headers()["idempotency-key"]).toMatch(/^asset-studio:proposal:/);
+        await proposalReleased;
         await fulfillJson(
           route,
           {
@@ -105,6 +116,7 @@ test.describe("Asset Studio", () => {
       `**/api/v1/projects/${project.id}/agent-creations/proposals/gate_image/confirm`,
       async (route) => {
         confirmationCount += 1;
+        await confirmationReleased;
         await fulfillJson(
           route,
           { sessionId: "session_image", runId: "run_image", enqueued: true },
@@ -146,9 +158,15 @@ test.describe("Asset Studio", () => {
     await page
       .getByLabel("What should it feel like?", { exact: true })
       .fill("An amber-lit editorial popcorn still");
-    await page.getByRole("button", { name: "Review cost" }).click();
+    await page.getByRole("button", { name: "Start" }).click();
 
-    await expect(page.getByRole("heading", { name: "Review before starting" })).toBeVisible();
+    await expect(page).toHaveURL(/\/create\/review$/);
+    await expect(page.getByRole("heading", { name: "Improving your prompt" })).toBeVisible();
+    await expect(page.getByText("Refining the creative direction")).toBeVisible();
+    expect(confirmationCount).toBe(0);
+
+    releaseProposal?.();
+    await expect(page.getByRole("heading", { name: "Approve this" })).toBeVisible();
     expect(proposalKind).toBe("image_create");
     expect(proposalPrompt).toBe("An amber-lit editorial popcorn still");
     expect(improvePrompt).toBe(true);
@@ -159,7 +177,10 @@ test.describe("Asset Studio", () => {
       page.getByText(/Editorial close-up of popcorn falling into a stoneware bowl/),
     ).toBeVisible();
 
-    await page.getByRole("button", { name: "Confirm and start" }).click();
+    await page.getByRole("button", { name: "Approve this" }).click();
+    await page.clock.fastForward(10_000);
+    expect(confirmationCount).toBe(1);
+    releaseConfirmation?.();
 
     await expect(page).toHaveURL(
       new RegExp(`/create\\?projectId=${project.id}&runId=run_image$`),
@@ -207,8 +228,9 @@ test.describe("Asset Studio", () => {
     });
     await expect(improve).toBeChecked();
     await improve.uncheck();
-    await page.getByRole("button", { name: "Review cost" }).click();
+    await page.getByRole("button", { name: "Start" }).click();
 
+    await expect(page).toHaveURL(/\/create\/review$/);
     await expect(page.getByText("Prompt", { exact: true })).toBeVisible();
     await expect(page.getByText("Refined prompt", { exact: true })).toHaveCount(0);
     expect(requestBody).toMatchObject({
@@ -218,7 +240,7 @@ test.describe("Asset Studio", () => {
     });
   });
 
-  test("keeps the image form actionable when prompt improvement fails", async ({
+  test("keeps prompt-improvement failure actionable and preserves revision", async ({
     page,
   }) => {
     await page.route(
@@ -242,11 +264,14 @@ test.describe("Asset Studio", () => {
     await page.getByRole("button", { name: project.name, exact: true }).click();
     const prompt = page.getByLabel("What should it feel like?", { exact: true });
     await prompt.fill("A precise campaign still");
-    await page.getByRole("button", { name: "Review cost" }).click();
+    await page.getByRole("button", { name: "Start" }).click();
 
-    await expect(page.locator("section").getByRole("alert")).toContainText(
+    await expect(page).toHaveURL(/\/create\/review$/);
+    await expect(page.locator("main").getByRole("alert")).toContainText(
       "turn off Improve image prompt",
     );
+    await page.getByRole("button", { name: "Revise request" }).click();
+    await expect(page).toHaveURL(/\/create$/);
     await expect(
       page.getByPlaceholder(
         "A quiet amber-lit close-up of popcorn falling into a bowl",
@@ -255,10 +280,52 @@ test.describe("Asset Studio", () => {
     await expect(
       page.getByRole("checkbox", { name: /Improve image prompt/ }),
     ).toBeChecked();
-    await expect(page.getByRole("button", { name: "Review cost" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Start" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: `Project ${project.name}` })).toBeVisible();
+  });
+
+  test("browser Back cancels review and restores the editable draft", async ({ page }) => {
+    let releaseProposal: (() => void) | undefined;
+    const proposalReleased = new Promise<void>((resolve) => {
+      releaseProposal = resolve;
+    });
+    await page.route(
+      `**/api/v1/projects/${project.id}/agent-creations/proposals`,
+      async (route) => {
+        await proposalReleased;
+        await fulfillJson(route, {
+          proposal: {
+            sessionId: "session_back",
+            runId: "run_back",
+            gateId: "gate_back",
+            requestDigest: "digest_back",
+            maximumUsd: 10,
+            approvalToken: "approval_back",
+            expiresAt: "2026-07-31T18:00:00.000Z",
+            effectivePrompt: "A restored editorial draft",
+            enhancementApplied: true,
+          },
+        }, 201);
+      },
+    );
+
+    await page.goto("/create");
+    await openProjectPicker(page);
+    await page.getByRole("button", { name: project.name, exact: true }).click();
+    await page.getByLabel("What should it feel like?", { exact: true }).fill("A restored draft");
+    await page.getByRole("button", { name: "Start" }).click();
+    await expect(page.getByRole("heading", { name: "Improving your prompt" })).toBeVisible();
+
+    await page.goBack();
+    releaseProposal?.();
+    await expect(page).toHaveURL(/\/create$/);
     await expect(
-      page.getByRole("heading", { name: "Review before starting" }),
-    ).toHaveCount(0);
+      page.getByPlaceholder(
+        "A quiet amber-lit close-up of popcorn falling into a bowl",
+      ),
+    ).toHaveValue("A restored draft");
+    await expect(page.getByRole("button", { name: `Project ${project.name}` })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Approve this" })).toHaveCount(0);
   });
 
   test("creates and immediately uses a new project without losing the prompt", async ({
@@ -318,9 +385,9 @@ test.describe("Asset Studio", () => {
       ),
     ).toHaveValue("A crisp editorial product still");
 
-    await page.getByRole("button", { name: "Review cost" }).click();
+    await page.getByRole("button", { name: "Start" }).click();
     await expect(
-      page.getByRole("heading", { name: "Review before starting" }),
+      page.getByRole("heading", { name: "Approve this" }),
     ).toBeVisible();
     expect(proposedProjectId).toBe(createdProject.id);
   });
@@ -372,129 +439,222 @@ test.describe("Asset Studio", () => {
     await expect(projectTrigger).toHaveAccessibleName(`Project ${project.name}`);
   });
 
-  test("does not surface a proposal after its project changes in flight", async ({
-    page,
-  }) => {
-    const secondProject = {
-      ...project,
-      id: "project_social_cutdowns",
-      name: "Social cutdowns",
-    };
-    let releaseProposal: (() => void) | undefined;
-    const proposalReleased = new Promise<void>((resolve) => {
-      releaseProposal = resolve;
-    });
-    let markProposalStarted: (() => void) | undefined;
-    const proposalStarted = new Promise<void>((resolve) => {
-      markProposalStarted = resolve;
-    });
-
-    await page.unroute("**/api/v1/projects?**");
-    await page.route("**/api/v1/projects?**", (route) =>
-      fulfillJson(route, {
-        projects: [project, secondProject],
-        pagination: { limit: 100, nextCursor: null },
+  test("automatically approves once after the proposal has been visible for 10 seconds", async ({ page }) => {
+    let confirmationCount = 0;
+    await page.clock.install();
+    await page.route(
+      `**/api/v1/projects/${project.id}/agent-creations/proposals`,
+      (route) => fulfillJson(route, {
+        proposal: {
+          sessionId: "session_auto",
+          runId: "run_auto",
+          gateId: "gate_auto",
+          requestDigest: "digest_auto",
+          maximumUsd: 10,
+          approvalToken: "approval_auto",
+          expiresAt: "2026-07-31T18:00:00.000Z",
+          effectivePrompt: "A considered editorial still",
+          enhancementApplied: true,
+        },
+      }, 201),
+    );
+    await page.route(
+      `**/api/v1/projects/${project.id}/agent-creations/proposals/gate_auto/confirm`,
+      (route) => {
+        confirmationCount += 1;
+        return fulfillJson(route, { sessionId: "session_auto", runId: "run_auto", enqueued: true }, 202);
+      },
+    );
+    await page.route(
+      `**/api/v1/projects/${project.id}/agent-creations/run_auto`,
+      (route) => fulfillJson(route, {
+        sessionId: "session_auto",
+        run: { id: "run_auto", status: "queued", inputSummary: "A considered editorial still" },
+        report: null,
+        outputs: [],
       }),
     );
-    await page.route(
-      `**/api/v1/projects/${project.id}/agent-creations/proposals`,
-      async (route) => {
-        markProposalStarted?.();
-        await proposalReleased;
-        await fulfillJson(
-          route,
-          {
-            proposal: {
-              sessionId: "session_stale",
-              runId: "run_stale",
-              gateId: "gate_stale",
-              requestDigest: "digest_stale",
-              maximumUsd: 10,
-              approvalToken: "approval_stale",
-              expiresAt: "2026-07-29T18:00:00.000Z",
-            },
-          },
-          201,
-        );
-      },
-    );
 
     await page.goto("/create");
     await openProjectPicker(page);
     await page.getByRole("button", { name: project.name, exact: true }).click();
-    await page
-      .getByLabel("What should it feel like?", { exact: true })
-      .fill("A precise campaign still");
-    await page.getByRole("button", { name: "Review cost" }).click();
-    await proposalStarted;
+    await page.getByLabel("What should it feel like?", { exact: true }).fill("A considered still");
+    await page.getByRole("button", { name: "Start" }).click();
+    await expect(page.getByRole("heading", { name: "Approve this" })).toBeVisible();
+    await expect(page.getByText("Starting automatically in 10 seconds.")).toBeVisible();
 
-    await openProjectPicker(page);
-    await page
-      .getByRole("button", { name: secondProject.name, exact: true })
-      .click();
-    releaseProposal?.();
-
-    await expect(page.getByRole("button", { name: "Review cost" })).toBeEnabled();
-    await expect(
-      page.getByRole("heading", { name: "Review before starting" }),
-    ).toHaveCount(0);
+    await page.clock.fastForward(1_000);
+    await expect(page.getByText("Starting automatically in 9 seconds.")).toBeVisible();
+    await page.clock.fastForward(8_999);
+    expect(confirmationCount).toBe(0);
+    await page.clock.fastForward(1);
+    await expect.poll(() => confirmationCount).toBe(1);
+    await expect(page).toHaveURL(new RegExp(`/create\\?projectId=${project.id}&runId=run_auto$`));
   });
 
-  test("does not surface a stale enhancement failure after improvement is disabled in flight", async ({
-    page,
-  }) => {
-    let releaseProposal: (() => void) | undefined;
-    const proposalReleased = new Promise<void>((resolve) => {
-      releaseProposal = resolve;
+  test("fails closed when the review route has no request state", async ({ page }) => {
+    let proposalCount = 0;
+    let confirmationCount = 0;
+    await page.route("**/agent-creations/proposals", (route) => {
+      proposalCount += 1;
+      return route.abort();
     });
-    let markProposalStarted: (() => void) | undefined;
-    const proposalStarted = new Promise<void>((resolve) => {
-      markProposalStarted = resolve;
+    await page.route("**/agent-creations/proposals/*/confirm", (route) => {
+      confirmationCount += 1;
+      return route.abort();
     });
 
+    await page.goto("/create/review");
+    await expect(page.getByRole("heading", { name: "This review is no longer available" })).toBeVisible();
+    expect(proposalCount).toBe(0);
+    expect(confirmationCount).toBe(0);
+  });
+
+  test("stops automatic retry after failure and allows a successful manual retry", async ({ page }) => {
+    let confirmationCount = 0;
+    await page.clock.install();
     await page.route(
       `**/api/v1/projects/${project.id}/agent-creations/proposals`,
-      async (route) => {
-        markProposalStarted?.();
-        await proposalReleased;
-        await fulfillJson(
-          route,
-          {
-            error: {
-              code: "model_output_invalid",
-              message:
-                "We couldn't improve this image prompt. Retry, or turn off Improve image prompt to continue with your original request.",
-            },
+      (route) => fulfillJson(route, {
+        proposal: {
+          sessionId: "session_retry",
+          runId: "run_retry",
+          gateId: "gate_retry",
+          requestDigest: "digest_retry",
+          maximumUsd: 10,
+          approvalToken: "approval_retry",
+          expiresAt: "2026-07-31T18:00:00.000Z",
+          effectivePrompt: "A considered editorial still",
+          enhancementApplied: true,
+        },
+      }, 201),
+    );
+    await page.route(
+      `**/api/v1/projects/${project.id}/agent-creations/proposals/gate_retry/confirm`,
+      (route) => {
+        confirmationCount += 1;
+        if (confirmationCount === 2) {
+          return fulfillJson(
+            route,
+            { sessionId: "session_retry", runId: "run_retry", enqueued: true },
+            202,
+          );
+        }
+        return fulfillJson(route, {
+          error: {
+            code: "confirmation_failed",
+            message: "The approval could not be recorded. Try again.",
           },
-          502,
-        );
+        }, 500);
+      },
+    );
+    await page.route(
+      `**/api/v1/projects/${project.id}/agent-creations/run_retry`,
+      (route) => fulfillJson(route, {
+        sessionId: "session_retry",
+        run: { id: "run_retry", status: "queued", inputSummary: "A considered editorial still" },
+        report: null,
+        outputs: [],
+      }),
+    );
+
+    await page.goto("/create");
+    await openProjectPicker(page);
+    await page.getByRole("button", { name: project.name, exact: true }).click();
+    await page.getByLabel("What should it feel like?", { exact: true }).fill("A considered still");
+    await page.getByRole("button", { name: "Start" }).click();
+    await page.getByRole("button", { name: "Approve this" }).click();
+
+    await expect(page.locator("main").getByRole("alert")).toContainText(
+      "approval could not be recorded",
+    );
+    await page.clock.fastForward(10_000);
+    expect(confirmationCount).toBe(1);
+    await expect(page.getByRole("button", { name: "Approve this" })).toBeEnabled();
+    await page.getByRole("button", { name: "Approve this" }).click();
+    await expect(page).toHaveURL(
+      new RegExp(`/create\\?projectId=${project.id}&runId=run_retry$`),
+    );
+    expect(confirmationCount).toBe(2);
+  });
+
+  test("revising a visible proposal cancels automatic approval", async ({ page }) => {
+    let confirmationCount = 0;
+    await page.clock.install();
+    await page.route(
+      `**/api/v1/projects/${project.id}/agent-creations/proposals`,
+      (route) => fulfillJson(route, {
+        proposal: {
+          sessionId: "session_revise",
+          runId: "run_revise",
+          gateId: "gate_revise",
+          requestDigest: "digest_revise",
+          maximumUsd: 10,
+          approvalToken: "approval_revise",
+          expiresAt: "2026-07-31T18:00:00.000Z",
+          effectivePrompt: "A revised editorial still",
+          enhancementApplied: true,
+        },
+      }, 201),
+    );
+    await page.route(
+      `**/api/v1/projects/${project.id}/agent-creations/proposals/gate_revise/confirm`,
+      (route) => {
+        confirmationCount += 1;
+        return route.abort();
       },
     );
 
     await page.goto("/create");
     await openProjectPicker(page);
     await page.getByRole("button", { name: project.name, exact: true }).click();
-    await page
-      .getByLabel("What should it feel like?", { exact: true })
-      .fill("A precise campaign still");
-    await page.getByRole("button", { name: "Review cost" }).click();
-    await proposalStarted;
+    await page.getByLabel("What should it feel like?", { exact: true }).fill("A draft to revise");
+    await page.getByRole("button", { name: "Start" }).click();
+    await expect(page.getByText("Starting automatically in 10 seconds.")).toBeVisible();
+    await page.getByRole("button", { name: "Revise request" }).click();
 
-    await page
-      .getByRole("checkbox", { name: /Improve image prompt/ })
-      .uncheck();
-    releaseProposal?.();
+    await expect(page).toHaveURL(/\/create$/);
+    await page.clock.fastForward(10_000);
+    expect(confirmationCount).toBe(0);
+    await expect(
+      page.getByPlaceholder(
+        "A quiet amber-lit close-up of popcorn falling into a bowl",
+      ),
+    ).toHaveValue("A draft to revise");
+  });
 
-    await expect(page.getByRole("button", { name: "Review cost" })).toBeEnabled();
-    await expect(
-      page.getByRole("heading", { name: "Review before starting" }),
-    ).toHaveCount(0);
-    await expect(page.locator("section").getByRole("alert")).toHaveCount(0);
-    await expect(
-      page
-        .getByRole("region", { name: "bottom notifications" })
-        .getByText("turn off Improve image prompt"),
-    ).toHaveCount(0);
+  test("keeps the review page legible on mobile @mobile", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.route(
+      `**/api/v1/projects/${project.id}/agent-creations/proposals`,
+      (route) => fulfillJson(route, {
+        proposal: {
+          sessionId: "session_mobile",
+          runId: "run_mobile",
+          gateId: "gate_mobile",
+          requestDigest: "digest_mobile",
+          maximumUsd: 10,
+          approvalToken: "approval_mobile",
+          expiresAt: "2026-07-31T18:00:00.000Z",
+          effectivePrompt: "Vertical editorial close-up with restrained amber light.",
+          enhancementApplied: true,
+        },
+      }, 201),
+    );
+
+    await page.goto("/create");
+    await openProjectPicker(page);
+    await page.getByRole("button", { name: project.name, exact: true }).click();
+    await page.getByLabel("What should it feel like?", { exact: true }).fill("A vertical close-up");
+    await page.getByRole("button", { name: "Start" }).click();
+
+    await expect(page.getByRole("heading", { name: "Approve this" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Approve this" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Revise request" })).toBeVisible();
+    const overflow = await page.evaluate(() =>
+      document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
   });
 
   test("creates the first project without leaving Asset Studio", async ({ page }) => {

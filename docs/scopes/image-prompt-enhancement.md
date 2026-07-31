@@ -3,7 +3,7 @@
 <!-- agent-summary: Asset Studio image requests use a default-on text-model art-direction pass. -->
 <!-- agent-summary: The creator can disable enhancement and send the trimmed original prompt exactly. -->
 <!-- agent-summary: Enhancement runs inside the idempotent proposal operation before image generation. -->
-<!-- agent-summary: The approved effective prompt is bound to the digest, task, run, action, and preview. -->
+<!-- agent-summary: The reviewed effective prompt is bound to the digest, task, run, action, and preview. -->
 <!-- agent-summary: Proposal provenance retains the original prompt, effective prompt, and policy version. -->
 <!-- agent-summary: Invalid or failed enhancement creates no run, action, gate, or silent fallback. -->
 <!-- agent-summary: Video and soundtrack creation remain outside this image-only policy. -->
@@ -46,9 +46,13 @@ The server:
    enhancement policy in proposal action parameters.
 
 The proposal response returns `effectivePrompt` and `enhancementApplied`.
-Asset Studio keeps the creator's original textarea untouched and shows the
-effective prompt read-only before confirmation. Image generation is not
-enqueued until the creator confirms the existing one-use proposal gate.
+Asset Studio navigates immediately to `/create/review`, keeps the creator's
+original prompt intact, and shows refinement progress followed by the effective
+prompt read-only. The visible review offers **Approve this** and states that it
+will confirm the existing one-use proposal gate automatically 10 seconds after
+the proposal appears unless the creator revises it. The countdown does not begin
+while enhancement is still running, and image generation is not enqueued before
+manual or timed confirmation.
 
 If enhancement fails, times out, or returns invalid output, the endpoint returns
 `model_output_invalid` and creates no creator-direct run, proposal action, or
@@ -72,11 +76,10 @@ rather than claiming that no model work has occurred.
 - Typed client mutation:
   `apps/web/src/lib/agent-creations.ts`
 - Creator control and review:
-  `apps/web/src/routes/StandaloneCreationPage.tsx`
+  `apps/web/src/routes/StandaloneCreationPage.tsx` and
+  `apps/web/src/routes/AssetCreationReviewPage.tsx`
 
 Required coverage includes policy/output validation, exact bypass, non-image
 pass-through, typed failure, default-on browser state, effective-prompt preview,
-and stale-response invalidation when the creator changes the project or
-enhancement toggle. Prompt and goal changes use the same proposal-reset path;
-dedicated delayed-response browser cases for those two inputs remain a focused
-coverage gap.
+immediate review-route navigation, manual and timed confirmation, at-most-once
+dispatch, draft-preserving revision, and safe invalid-route recovery.
