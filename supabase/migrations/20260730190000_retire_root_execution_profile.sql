@@ -5,6 +5,8 @@
 -- migration. The migration holds the profile fence until historical flat/null
 -- roots are structurally non-resumable, then removes the compatibility schema.
 
+begin;
+
 lock table public.orchestrator_runs in access exclusive mode;
 
 create temporary table pr7b_legacy_roots (
@@ -585,3 +587,5 @@ end;
 $$;
 
 notify pgrst, 'reload schema';
+
+commit;

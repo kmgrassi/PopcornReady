@@ -1,6 +1,6 @@
 # Worksheet: ORCH-20260730-PR7B-SCHEMA-RETIREMENT
 
-<!-- agent-summary: PR 7B is the destructive schema retirement stacked on PR 7A head 06c4b363. -->
+<!-- agent-summary: PR 7B is the destructive schema retirement stacked on the latest PR 7A head. -->
 <!-- agent-summary: Deployment is forbidden until every production application instance runs PR 7A or newer. -->
 <!-- agent-summary: Historical flat/null roots must become structurally non-resumable before profile metadata is dropped. -->
 <!-- agent-summary: The migration terminalizes active legacy families and closes legacy gate and credit-retry reopen paths. -->
@@ -28,7 +28,7 @@ cutover:
 
 Branch: `codex/selective-regen-pr7b-schema-retirement`
 
-Base: PR 7A head `06c4b363`
+Base: PR 7A head `05c5e0dc`
 
 PR target: `codex/selective-regen-pr7-cleanup`
 
@@ -116,12 +116,17 @@ older binary that reads or writes the removed profile is not safe.
 - Migration filename/version validation passes for 95 migrations.
 - `pnpm agent:lint:fix` passes.
 - Full `pnpm agent:validate` passes.
-- Docker Desktop briefly reported engine `29.0.1`, but the first clean reset
-  stalled for more than three minutes and a concurrent `docker ps` also
-  blocked. The harness was terminated cleanly without removing a container,
-  image, or volume. Per the bounded-runtime fallback, clean reset, upgrade,
-  local integrations, and API smoke remain pending on a healthy Docker runtime;
-  the ready PR must obtain its required GitHub smoke before handoff.
+- After merging the hardened PR 7A base and making the migration transaction
+  explicit, `pnpm db:test:pr7b-upgrade` passed end to end on local Docker. It
+  reset to the PR 7A boundary, seeded legacy and hierarchy controls, applied PR
+  7B, exercised live approval/retry and retired-route behavior, verified the
+  replacement RPCs and final-schema integrations, and replayed all 95 migrations
+  from a clean database.
+- The merged focused migration, CLI, and readiness suite passed 20/20, and the
+  explicit-transaction regression test passed 3/3 after the fix.
+- `pnpm agent:lint:fix` passed for all 15 changed files, and
+  `pnpm agent:validate -- --scope all` passed repository lint, workflow policy,
+  migration, RPC/relation boundaries, and web/API typechecks.
 
 ## Independent reviews
 
@@ -133,9 +138,34 @@ older binary that reads or writes the removed profile is not safe.
 - Implementation re-review found and resolved two harness issues: the live API
   now disables the recovery worker, and legacy approval must leave its dispatch
   exactly `completed|0`.
-- Wrap-up review found no remaining static code or documentation issue. It
-  withheld merge/deploy approval only until the executable upgrade harness (or
-  equivalent GitHub database smoke) passes on a healthy runtime.
+- The original wrap-up review found no remaining static code or documentation
+  issue and withheld merge/deploy approval only for the executable upgrade
+  harness. That database gate now passes after conflict resolution; a final
+  independent review of the merged diff approved it with no actionable
+  blockers. The reviewer confirmed the combined rollout semantics, explicit
+  transaction ordering, durable-state/API-projection assertions, documentation,
+  and fresh validation evidence.
+
+## Merge-conflict resolution
+
+- Merged the latest PR 7A head `05c5e0dc` into the PR 7B branch after GitHub
+  reported two content conflicts.
+- Reconciled `creative-director-rollout.md` and the cutover PR plan so they retain
+  PR 7A's gate/credit-retry continuation fencing and CLI restart/reject removal,
+  while accurately describing PR 7B's completed trigger, profile, signature,
+  policy, constraint, and grant retirement.
+- The application and migration changes from PR 7A merged without content
+  conflicts; validation after resolution is recorded below before push.
+- The combined upgrade harness exposed that the destructive migration's
+  `LOCK TABLE` and temporary-table lifetime relied on an implicit transaction.
+  Added an explicit `begin`/`commit` boundary and a static ordering assertion so
+  the lock, classification, cleanup, drop, and catalog checks execute atomically.
+- The live route smoke then confirmed the row was structurally `superseded` but
+  exposed a stale harness expectation: the generation-run compatibility
+  projection intentionally reports that internal state as `canceled`. Updated
+  the route assertion while retaining direct SQL proof of supersession. The
+  same split applies to a valid resumed `waiting` row, which the legacy API
+  projects as `running`; the harness now proves both contracts explicitly.
 
 ## Handoff
 

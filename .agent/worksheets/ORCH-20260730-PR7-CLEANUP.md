@@ -57,6 +57,10 @@ Source-of-truth documents consulted and updated:
    same PR 7A binary is healthy before and after PR 7B.
 6. Legacy HTTP paths are absent rather than redirected. Request Changes enters
    only through the durable proposal lifecycle shipped by PR 6.
+7. Before role-only routing deploys, the PREP migration rejects reached gates on
+   terminal legacy roots and changes only retry-eligible legacy failed roots to
+   canceled. Existing errors and actions remain readable, while both handlers
+   reject before mutating continuation state.
 
 ## Validation evidence
 
@@ -74,6 +78,22 @@ Source-of-truth documents consulted and updated:
   mixed-schema privilege adjustment.
 - A fresh post-review `pnpm agent:lint:fix` and `pnpm agent:validate` pass,
   including both app typechecks and the complete 94-migration chain.
+- PR review follow-up adds migration contract coverage for terminal legacy gate
+  and credit-retry fences plus an observable child-process CLI regression test.
+- The focused contract and CLI tests pass 7/7; migration preflight validates all
+  94 filenames and API typecheck passes. Docker is unavailable, so an executed
+  local-Supabase full-chain fixture remains a documented PR 7B check. An isolated
+  temporary PostgreSQL row-level smoke (`initdb` + `pg_ctl`, seed via `psql`,
+  then pipe the migration fence from its `Role-only application routing` marker
+  back through `psql`) executed the PR 7A SQL against legacy and valid roots.
+  Fixtures included reached legacy/valid gates, run-level credit errors, and
+  opposing failed-action errors with identical timestamps; all target,
+  non-target, deterministic tie-break, and history-preservation assertions
+  passed.
+- The full API suite passes 1,079 tests with 135 skips and 3 todos; four unrelated
+  existing failures remain (two deleted guest-retention migration fixtures, the
+  public-project UUID assertion, and stale projection-catalog metadata).
+- Final `pnpm agent:lint:fix` and `pnpm agent:validate -- --scope api` pass.
 
 ## Independent review
 
@@ -87,13 +107,24 @@ Source-of-truth documents consulted and updated:
   `orchestrator_runs` privileges remain rejected.
 - Wrap-up review also identified and prompted correction of stale North Star,
   domain contract, rollout, testing-inventory, and worksheet claims.
+- PR-comment research/plan review moved terminal continuation fencing from PR 7B
+  into PR 7A and chose canceled status for retry-eligible failed roots so their
+  original error/action evidence remains readable.
+- PR-comment implementation review found same-timestamp action ordering was
+  nondeterministic. The action query now adds the same ID tie-breaker used by the
+  migration. It also corrected the evidence claim: regex contract tests validate
+  migration shape. The isolated PostgreSQL row-level smoke passes; full-chain
+  local-Supabase proof remains pending without Docker.
+- Implementation re-review independently reran the focused 7 tests and API
+  typecheck, accepted the ordering fix and evidence wording, and found no
+  remaining SQL, security, CLI, or semantic-documentation blocker.
 
 ## Remaining risk and handoff
 
 PR 7B must not deploy until PR 7A is fully rolled out. It owns removal of the
 temporary trigger, `root_execution_profile` column, profile-bound database
 signatures/constraints/policies/grants, transitional readiness allowance, and
-profile-based monitoring queries. Before dropping the profile fence, PR 7B must
-make terminal flat/null rows structurally non-resumable and prove storyboard
-approval and insufficient-credit retry cannot reopen them. Terminal historical
-runs remain readable.
+profile-based monitoring queries. PR 7A now makes terminal flat/null rows
+structurally non-resumable before application routing loses the profile; PR 7B
+must repeat that proof after removing the column. Terminal historical runs
+remain readable.

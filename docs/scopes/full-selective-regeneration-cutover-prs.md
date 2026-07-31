@@ -44,7 +44,7 @@ After cutover:
   attributable through durable actions and graph edges; and
 - no production route can fall back to the old flat all-tools root.
 
-## 2. Current State On The PR 7A Stack
+## 2. Current State On The Final PR 7 Stack
 
 ### Shipped and retained
 
@@ -851,11 +851,14 @@ routes, the flat registry/driver/prompt, and application routing dependence on
 `root_execution_profile`. Its replay-safe PREP
 migration re-terminalizes active legacy families and temporarily fills the
 profile only for omitted Creative Director root inserts, so old and new binaries
-can overlap without misclassifying Visuals or Audio children. PR 7B is
-implemented but runs only after PR 7A is fully deployed. It makes historical
-legacy roots structurally non-resumable, removes the trigger and retained
-profile schema, and restores exact role-only privilege checks. The retired
-hierarchy health fields and CLI restart command were removed in PR 7A.
+can overlap without misclassifying Visuals or Audio children. It also closes
+reached gates and insufficient-credit retry eligibility on terminal legacy roots
+before role-only routing ships. PR 7B is implemented but runs only after PR 7A
+is fully deployed. It makes historical legacy roots structurally non-resumable,
+removes that trigger, the retained profile column, and profile-bound database
+signatures, constraints, policies, and grants, and restores exact role-only
+privilege checks. The retired hierarchy health fields and CLI restart/reject
+commands were removed in PR 7A.
 
 **Deliver:**
 
@@ -877,13 +880,12 @@ hierarchy health fields and CLI restart command were removed in PR 7A.
 - Migrate nonterminal historical/test flat roots to `canceled` or `superseded`;
   keep terminal rows readable as history but never resumable.
 - In PR 7A, remove the shared TypeScript type and application reads/writes, then
-  deploy the root-aware compatibility trigger. In PR 7B, after PR 7A is fully
-  deployed, drop `root_execution_profile` and its database-only compatibility
-  surface. Before the drop, use the still-present profile to make every terminal
-  flat/null row structurally non-resumable: close or reject reached gates and
-  remove retry-eligible insufficient-credit state (or supersede the affected
-  histories). Terminal run/action history remains readable without routing
-  metadata.
+  deploy the root-aware compatibility trigger and use the still-present profile
+  to make terminal flat/null rows structurally non-resumable: reject reached
+  gates and cancel only retry-eligible insufficient-credit failures while
+  preserving their errors/actions. In PR 7B, after PR 7A is fully deployed, drop
+  `root_execution_profile` and its database-only compatibility surface. Terminal
+  run/action history remains readable without routing metadata.
 - Delete obsolete stage-order UI projections that exist only to drive restart.
 - Update North Star, interaction, run-projection, testing inventory, operations,
   and rollout docs to describe the single remaining path.
@@ -903,9 +905,11 @@ hierarchy health fields and CLI restart command were removed in PR 7A.
 - Rollback is a forward deploy of the last hierarchy/graph-compatible
   application version. The pre-drop deploy must already ignore
   `root_execution_profile`; never redeploy code that expects a removed column.
-- PR 7B tests prove storyboard gate approval and credit retry cannot reopen
-  historical flat/null fixtures after the profile column and its update fence
-  are gone.
+- PR 7A closes storyboard gate approval and credit retry on historical flat/null
+  rows before the application loses profile awareness; focused contract tests
+  assert the migration predicates and deterministic action ordering. PR 7B adds
+  row-level migration fixtures and repeats the continuation proof after the
+  profile column and its update fence are gone.
 
 ## 6. Verification Matrix
 

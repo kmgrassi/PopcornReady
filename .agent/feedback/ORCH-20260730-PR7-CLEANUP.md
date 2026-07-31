@@ -26,3 +26,16 @@ Destructive schema cleanup needs a deployment boundary, not merely a migration
 ordering note. The pre-drop application must stop naming the retired column
 while a temporary root-aware insert trigger supports mixed old/new binaries.
 Only a later forward deploy may remove the trigger and column.
+
+## PR review follow-up lesson
+
+Removing application reads of compatibility metadata also removes the last
+request-time guard for terminal continuation routes. Before that cutover, use
+the retained database marker to close every continuation surface, and preserve
+the original errors/actions so the safety migration does not erase diagnostic
+history.
+
+When a safety migration mirrors application selection logic, both sides need an
+identical deterministic ordering. Timestamps alone are insufficient because a
+transaction can create multiple rows with the same `now()` value; add a stable
+ID tie-breaker to the application query and the migration.

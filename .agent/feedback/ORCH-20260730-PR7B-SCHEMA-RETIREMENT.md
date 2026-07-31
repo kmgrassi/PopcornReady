@@ -30,3 +30,19 @@ For future destructive schema retirements, require:
 3. positive-control fixtures proving current rows retain intended behavior; and
 4. a drop without `CASCADE`, followed by catalog and application readiness
    checks.
+
+When a destructive retirement PR conflicts with its required preparatory base,
+the merged documentation must preserve both phases of the rollout. In this
+case, PR 7A's continuation fencing is still historical evidence for why the
+profile can be dropped; PR 7B's final state must not erase that evidence or
+describe the temporary trigger as still live.
+
+Database migration runners do not guarantee an implicit transaction around a
+multi-statement file. Any migration that uses `LOCK TABLE` or transaction-scoped
+temporary tables must declare its transaction boundary explicitly and test that
+the lock and final assertions remain inside it.
+
+Upgrade harnesses should distinguish internal durable state from compatibility
+API projections. Assert destructive structural markers directly in SQL, then
+assert the public status vocabulary separately when it intentionally collapses
+new internal states for older clients.

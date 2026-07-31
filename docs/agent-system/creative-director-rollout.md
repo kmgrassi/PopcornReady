@@ -13,8 +13,12 @@
 New and anonymous root creation always uses the `creative_director` agent role.
 Environment variables cannot change root ownership. The retired
 `root_execution_profile` column and rolling-deploy trigger no longer exist.
-Historical flat/null roots are superseded and structurally non-resumable;
-terminal actions and outputs remain readable.
+Before PR 7B removed that bridge, PR 7A filled the profile only for omitted
+Creative Director root inserts while old and new binaries overlapped. PR 7A
+also rejected reached gates and closed insufficient-credit retry eligibility on
+legacy history without erasing its original errors or actions. PR 7B now makes
+those historical flat/null roots superseded and structurally non-resumable;
+their terminal actions and outputs remain readable.
 
 Project-scoped Request Changes uses the proposal lifecycle to resolve targets,
 approve cost and blast radius, execute bounded child work, and reconcile

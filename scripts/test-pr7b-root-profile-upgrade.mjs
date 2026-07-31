@@ -383,7 +383,11 @@ async function exerciseRoutes(env) {
       `/api/v1/projects/${ids.project}/generation-runs/${ids.legacySucceeded}/approve`
     );
     assert.equal(legacyApprove.response.status, 202);
-    assert.equal(legacyApprove.body?.run?.status, "superseded");
+    assert.equal(
+      legacyApprove.body?.run?.status,
+      "canceled",
+      "the legacy generation-run projection intentionally collapses superseded history to canceled"
+    );
     assert.equal(
       sqlScalar(`
         select status::text || '|' || attempts::text
@@ -403,7 +407,16 @@ async function exerciseRoutes(env) {
       `/api/v1/projects/${ids.project}/generation-runs/${ids.validSucceeded}/approve`
     );
     assert.equal(validApprove.response.status, 202);
-    assert.equal(validApprove.body?.run?.status, "waiting");
+    assert.equal(validApprove.body?.run?.status, "running");
+    assert.equal(
+      sqlScalar(`
+        select status::text
+          from public.orchestrator_runs
+         where id = '${ids.validSucceeded}';
+      `),
+      "waiting",
+      "valid approval must retain the durable waiting state behind the legacy running projection"
+    );
 
     const validRetry = await post(
       `/api/v1/projects/${ids.project}/generation-runs/${ids.validFailed}/retry-after-credit-update`

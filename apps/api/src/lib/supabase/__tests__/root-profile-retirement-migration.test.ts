@@ -11,6 +11,7 @@ const migration = readFileSync(
 );
 
 test("PR7B classifies and structurally retires legacy families before dropping the profile", () => {
+  const transaction = migration.indexOf("begin;");
   const lock = migration.indexOf(
     "lock table public.orchestrator_runs in access exclusive mode"
   );
@@ -30,14 +31,17 @@ test("PR7B classifies and structurally retires legacy families before dropping t
   const dropColumn = migration.indexOf(
     "drop column root_execution_profile"
   );
+  const commit = migration.lastIndexOf("commit;");
   assert.ok(
-    lock >= 0 &&
+    transaction >= 0 &&
+      lock > transaction &&
       snapshot > lock &&
       cancel > snapshot &&
       rejectGates > cancel &&
       supersede > rejectGates &&
       assertions > supersede &&
-      dropColumn > assertions
+      dropColumn > assertions &&
+      commit > dropColumn
   );
   assert.match(
     migration,
