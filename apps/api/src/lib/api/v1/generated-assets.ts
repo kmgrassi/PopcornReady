@@ -31,6 +31,8 @@ import {
   reserveOrchestratorBudget,
   settleOrchestratorBudget,
 } from "./orchestrator-budget-controls";
+import { reserveRerunChildBudget } from "./rerun-lifecycle-store";
+import { getDomainRun } from "./domain-session-store";
 import {
   billableUsdSoFar,
   currentRunUserId,
@@ -1016,6 +1018,52 @@ export interface GeneratedAssetBudgetAdmission {
   }): Promise<unknown>;
 }
 
+export async function reserveGeneratedAssetProviderBudget(
+  input: {
+    projectId: string;
+    runId?: string;
+    actionId: string;
+    jobId: string;
+    reservationKey: string;
+    estimatedUsd: number;
+  },
+  deps: {
+    getDomainRun: typeof getDomainRun;
+    reserveRerunChildBudget: typeof reserveRerunChildBudget;
+    reserveOrchestratorBudget: typeof reserveOrchestratorBudget;
+  } = {
+    getDomainRun,
+    reserveRerunChildBudget,
+    reserveOrchestratorBudget,
+  }
+) {
+  const proposalRun = input.runId
+    ? await deps.getDomainRun(input.projectId, input.runId)
+    : null;
+  const approval = proposalRun?.taskParams?.approvalContext;
+  const callback = approval?.rerunCallback;
+  if (callback && approval?.executionReservationId && input.runId) {
+    return deps.reserveRerunChildBudget({
+      projectId: input.projectId,
+      executionReservationId: approval.executionReservationId,
+      workItemId: callback.workItemId,
+      actionId: input.actionId,
+      childRunId: input.runId,
+      jobId: input.jobId,
+      reservationKey: input.reservationKey,
+      estimatedUsd: input.estimatedUsd,
+    });
+  }
+  return deps.reserveOrchestratorBudget({
+    projectId: input.projectId,
+    runId: input.runId,
+    actionId: input.actionId,
+    jobId: input.jobId,
+    reservationKey: input.reservationKey,
+    estimatedUsd: input.estimatedUsd,
+  });
+}
+
 const PROMPT_PREVIEW_MAX = 240;
 const PROVIDER_CLAIM_STALE_MS = 15 * 60_000;
 const PROVIDER_CLAIM_HEARTBEAT_MS = 30_000;
@@ -1469,7 +1517,7 @@ export async function runGeneratedAssetJob(args: {
       });
       budgetReserved = true;
     } else {
-      const budgetReservation = await reserveOrchestratorBudget({
+      const budgetReservation = await reserveGeneratedAssetProviderBudget({
         projectId,
         runId: parsed.runId,
         actionId: running.actionId,

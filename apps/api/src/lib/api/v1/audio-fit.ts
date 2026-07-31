@@ -168,6 +168,8 @@ export async function fitProjectAudioToPicture(input: {
   projectId: string;
   request: AudioFitRequest;
   orchestratorRunId?: string;
+  actionId?: string;
+  selectResult?: boolean;
 }): Promise<AudioFitResponse> {
   const audio = await getAsset(
     input.auth.workspaceId,
@@ -255,6 +257,8 @@ export async function fitProjectAudioToPicture(input: {
     beatId: input.request.beatId,
     critique,
     orchestratorRunId: input.orchestratorRunId,
+    actionId: input.actionId,
+    selectResult: input.selectResult,
   });
 
   return {

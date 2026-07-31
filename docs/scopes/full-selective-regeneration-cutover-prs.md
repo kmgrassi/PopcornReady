@@ -702,6 +702,13 @@ starts immediately beside PR 1.
 
 ### PR 3C — Audio and picture-fit coverage
 
+> **Implementation status (2026-07-30):** Adapter construction, exact
+> proposal-to-domain task projection, deterministic child-budget reservation,
+> and fenced domain-report callbacks are implemented on the PR 3C branch.
+> The adapters intentionally remain absent from the production registry; PR 5
+> owns activation, fan-out scheduling, atomic application, and final cost
+> settlement.
+
 **Deliver:**
 
 - Add kind adapters for per-beat voice/dialogue, narration, soundtrack, sound
@@ -724,6 +731,11 @@ starts immediately beside PR 1.
   repeated blind retries.
 - No production route can dispatch these adapters or incur provider spend before
   PR 5.
+
+Picture-fit work must be bound to one exact beat before Audio dispatch. Generic
+project, asset, timeline-item, and unsupported semantic targets return the typed
+root-owned prerequisite instead of granting Audio authority to infer story or
+picture scope.
 
 ### PR 4 — Root story, assembly, critique, and reconciliation
 

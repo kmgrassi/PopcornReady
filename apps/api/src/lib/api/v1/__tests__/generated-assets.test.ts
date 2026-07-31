@@ -24,6 +24,7 @@ import {
   generatedAssetIdempotentActionId,
   getGeneratedAssetJob,
   pooledImageRevisionWriteContext,
+  reserveGeneratedAssetProviderBudget,
 } from "../generated-assets";
 import { V1Job } from "../jobs";
 import { createProject, getAsset, listAssets } from "../store";
@@ -107,6 +108,54 @@ async function expectApiError(
     return true;
   });
 }
+
+test("proposal-bound generated assets reserve once under the approved child causation", async () => {
+  const nested: Record<string, unknown>[] = [];
+  const ordinary: Record<string, unknown>[] = [];
+  const result = await reserveGeneratedAssetProviderBudget({
+    projectId: "project-1",
+    runId: "child-run-1",
+    actionId: "primitive-action-1",
+    jobId: "provider-job-1",
+    reservationKey: "generated-asset:provider-job-1",
+    estimatedUsd: 0.37,
+  }, {
+    getDomainRun: async () => ({
+      taskParams: {
+        approvalContext: {
+          executionReservationId: "execution-1",
+          rerunCallback: {
+            workItemId: "work-audio",
+          },
+        },
+      },
+    }) as never,
+    reserveRerunChildBudget: async (input) => {
+      nested.push(input);
+      return { reservationId: "nested-1", replayed: false };
+    },
+    reserveOrchestratorBudget: async (input) => {
+      ordinary.push(input as unknown as Record<string, unknown>);
+      return null;
+    },
+  });
+
+  assert.deepEqual(result, {
+    reservationId: "nested-1",
+    replayed: false,
+  });
+  assert.deepEqual(nested, [{
+    projectId: "project-1",
+    executionReservationId: "execution-1",
+    workItemId: "work-audio",
+    actionId: "primitive-action-1",
+    childRunId: "child-run-1",
+    jobId: "provider-job-1",
+    reservationKey: "generated-asset:provider-job-1",
+    estimatedUsd: 0.37,
+  }]);
+  assert.deepEqual(ordinary, []);
+});
 
 dbTest("creates image, video, and audio generated assets and lists them", async () => {
   const projectId = await newProjectId("agent video");

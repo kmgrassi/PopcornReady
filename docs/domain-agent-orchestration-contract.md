@@ -331,6 +331,21 @@ blocking takes precedence when one error also advertises a local recovery, so
 required root/Audio work cannot disappear into a Visuals retry loop.
 
 Visuals and Audio execution are enabled through explicit role allowlists.
+
+Proposal-origin specialist turns also carry a runtime-only `rerunCallback`
+fence inside their persisted approval context. It binds the finite child turn
+to one execution reservation, work item, and executor generation. Canonical
+provider jobs under that child reserve directly beneath the approved proposal
+ceiling using their real child run, primitive action, and job identities.
+Terminal domain finalization validates every
+reported output against the exact approved binding before recording the
+proposal callback, then derives the exact output-producing primitive actions
+and settled child reservations from durable graph causation. A callback that
+loses its generation fence may leave its
+immutable output in the pool, but it cannot advance the proposal or make that
+output active. Adapter construction alone does not enable this path:
+production registration and atomic application remain root-owned rollout
+steps.
 Before an invocation action exists, the engine
 loads a fresh graph snapshot, verifies preserve pins, parses the selected tool
 once, and authorizes its stable IDs against the trusted task scope. The

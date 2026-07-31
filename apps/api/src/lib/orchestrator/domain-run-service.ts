@@ -36,6 +36,10 @@ import type {
   DomainReportV1,
   DomainTaskV1,
 } from "@popcorn/shared/domain-agent-contract";
+import type {
+  BoundRequiredOutput,
+  RerunWorkItem,
+} from "@popcorn/shared/rerun-proposal";
 import { ApiError } from "@/core/errors";
 import { getServiceSupabase } from "@/lib/supabase/clients";
 import { runQuery } from "@/lib/supabase/db-errors";
@@ -46,6 +50,14 @@ import {
   type CompletionRecipient,
   type DomainRunRecord,
 } from "@/lib/api/v1/domain-session-store";
+import { recordRerunExecutorCallback } from "@/lib/api/v1/rerun-lifecycle-store";
+import {
+  rerunExecutorCallbackToken,
+} from "./rerun-callback-fence";
+import {
+  type BoundExecutorOutput,
+  validateBoundExecutorOutputs,
+} from "./rerun-executor-registry";
 import {
   buildSessionSummaryCasUpdate,
   compactSessionHistory,
@@ -407,6 +419,194 @@ function reportOutputs(report: DomainReportV1): Array<{ assetId: string; role: s
   }));
 }
 
+export async function loadProposalExecutorCausation(input: {
+  projectId: string;
+  executionReservationId: string;
+  childRunId: string;
+  outputAssetIds: readonly string[];
+}): Promise<{ primitiveActionIds: string[]; budgetReservationKeys: string[] }> {
+  if (input.outputAssetIds.length === 0) {
+    return { primitiveActionIds: [], budgetReservationKeys: [] };
+  }
+  const db = getServiceSupabase();
+  const execution = await runQuery(
+    "domainRunService.proposalExecutionBudget",
+    db
+      .from("rerun_execution_reservations")
+      .select("budget_reservation_id")
+      .eq("id", input.executionReservationId)
+      .eq("project_id", input.projectId)
+      .single()
+  ) as { budget_reservation_id: string };
+  const links = await runQuery(
+    "domainRunService.proposalOutputActions",
+    db
+      .from("action_assets")
+      .select("action_id,asset_id")
+      .eq("project_id", input.projectId)
+      .eq("direction", "output")
+      .in("asset_id", [...input.outputAssetIds])
+  ) as Array<{ action_id: string; asset_id: string }>;
+  const candidateActionIds = [...new Set(links.map((link) => link.action_id))];
+  if (candidateActionIds.length === 0) {
+    throw new ApiError(
+      "validation_failed",
+      "Proposal domain output has no primitive action causation."
+    );
+  }
+  const actions = await runQuery(
+    "domainRunService.proposalPrimitiveActions",
+    db
+      .from("actions")
+      .select("id")
+      .eq("project_id", input.projectId)
+      .eq("orchestrator_run_id", input.childRunId)
+      .eq("status", "applied")
+      .neq("tool", "domain_report")
+      .in("id", candidateActionIds)
+  ) as Array<{ id: string }>;
+  const appliedActionIds = actions.map((action) => action.id);
+  const budgets = appliedActionIds.length > 0
+    ? await runQuery(
+        "domainRunService.proposalPrimitiveBudgets",
+        db
+          .from("orchestrator_budget_reservations")
+          .select("action_id,reservation_key")
+          .eq("project_id", input.projectId)
+          .eq("orchestrator_run_id", input.childRunId)
+          .eq("status", "settled")
+          .eq("parent_reservation_id", execution.budget_reservation_id)
+          .in("action_id", appliedActionIds)
+      ) as Array<{ action_id: string; reservation_key: string }>
+    : [];
+  const budgetByAction = new Set(budgets.map((budget) => budget.action_id));
+  const primitiveActionIds = appliedActionIds.filter((actionId) =>
+    budgetByAction.has(actionId)
+  );
+  const primitiveSet = new Set(primitiveActionIds);
+  for (const assetId of input.outputAssetIds) {
+    const caused = links.some(
+      (link) =>
+        link.asset_id === assetId &&
+        primitiveSet.has(link.action_id) &&
+        budgetByAction.has(link.action_id)
+    );
+    if (!caused) {
+      throw new ApiError(
+        "validation_failed",
+        `Proposal domain output ${assetId} lacks settled primitive budget causation.`
+      );
+    }
+  }
+  return {
+    primitiveActionIds,
+    budgetReservationKeys: [
+      ...new Set(budgets.map((budget) => budget.reservation_key)),
+    ],
+  };
+}
+
+export async function recordProposalExecutorCallback(
+  input: {
+    projectId: string;
+    run: DomainRunRecord;
+    reportActionId: string;
+    report: DomainReportV1;
+  },
+  recordCallback: typeof recordRerunExecutorCallback =
+    recordRerunExecutorCallback,
+  loadCausation: typeof loadProposalExecutorCausation =
+    loadProposalExecutorCausation
+): Promise<void> {
+  const task = input.run.taskParams;
+  const approval = task?.approvalContext;
+  const callback = approval?.rerunCallback;
+  const reservationId = approval?.executionReservationId;
+  if (!task || !callback || !reservationId) return;
+  const requiredOutputs = task.requiredOutputs.filter((output) =>
+    output.bindingId !== undefined &&
+    output.workItemId === callback.workItemId
+  );
+  if (requiredOutputs.length !== task.requiredOutputs.length) {
+    throw new ApiError(
+      "validation_failed",
+      "Rerun domain task contains an unbound callback output."
+    );
+  }
+  const token = rerunExecutorCallbackToken({
+    executionReservationId: reservationId,
+    workItemId: callback.workItemId,
+    executorId: callback.executorId,
+  });
+  let outcome: "completed" | "failed" = "failed";
+  let outputs: BoundExecutorOutput[] = [];
+  let primitiveActionIds: string[] = [];
+  let budgetReservationKeys: string[] = [];
+  if (input.report.outcome.outcome === "done") {
+    outputs = input.report.outcome.outputs.flatMap((output) =>
+      output.bindingId !== undefined &&
+      output.workItemId !== undefined &&
+      output.target !== undefined &&
+      output.kind !== undefined &&
+      output.role !== undefined &&
+      output.ordinal !== undefined
+        ? [output as BoundExecutorOutput]
+        : []
+    );
+    const callbackWorkItem: RerunWorkItem = task.domain === "audio"
+      ? {
+          workItemId: callback.workItemId,
+          owner: "audio",
+          kind: "revise_audio",
+          targets: [...task.targets],
+          requiredOutputs: requiredOutputs as unknown as BoundRequiredOutput[],
+        }
+      : {
+          workItemId: callback.workItemId,
+          owner: "visuals",
+          kind: "revise_visuals",
+          targets: [...task.targets],
+          requiredOutputs: requiredOutputs as unknown as BoundRequiredOutput[],
+        };
+    validateBoundExecutorOutputs(callbackWorkItem, outputs);
+    const causation = await loadCausation({
+      projectId: input.projectId,
+      executionReservationId: reservationId,
+      childRunId: input.run.id,
+      outputAssetIds: outputs.map((output) => output.assetId),
+    });
+    primitiveActionIds = causation.primitiveActionIds;
+    budgetReservationKeys = causation.budgetReservationKeys;
+    outcome = "completed";
+  }
+  try {
+    await recordCallback({
+      projectId: input.projectId,
+      reservationId,
+      workItemId: callback.workItemId,
+      executorId: callback.executorId,
+      callbackToken: token,
+      callbackGeneration: callback.generation,
+      outcome,
+      result: {
+        providerResult: { domainReport: input.report },
+        childRunId: input.run.id,
+        reportActionId: input.reportActionId,
+        primitiveActionIds,
+        budgetReservationKeys,
+        outputs,
+      },
+    });
+  } catch (error) {
+    if (error instanceof ApiError && error.code === "idempotency_in_progress") {
+      // Cancellation or lease takeover won the fence. The immutable outputs
+      // remain pooled, but the stale child cannot advance proposal state.
+      return;
+    }
+    throw error;
+  }
+}
+
 function summaryEvent(
   run: DomainRunRecord,
   report: DomainReportV1,
@@ -525,6 +725,12 @@ export async function finalizeDomainTurn(
     wokeParent: row.woke_parent,
     summaryApplied: row.summary_applied,
   };
+  await recordProposalExecutorCallback({
+    projectId: input.projectId,
+    run,
+    reportActionId: finalization.reportActionId,
+    report: input.report,
+  });
   if (finalization.wokeParent && finalization.parentRunId && input.onParentWake) {
     await input.onParentWake(finalization.parentRunId);
   }
