@@ -63,4 +63,4 @@ Add observable local-Postgres regression tests for `orchestrator_runs_wait_reaso
 
 ## Next action / handoff
 
-- Publish the ready PR and link it here.
+- Ready PR: https://github.com/kmgrassi/PopcornReady/pull/862
