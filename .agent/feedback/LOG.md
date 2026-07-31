@@ -297,3 +297,15 @@
   child with the persisted approval fingerprint and rerun-callback fence; they
   must not manually claim/finalize that child, because terminal report handling
   is what derives exact primitive and settled-budget causation.
+
+### 2026-07-31T07:41:15-04:00 — ORCH-20260731-PR850-REVIEW
+- What helped: Thread-aware GitHub review data and the existing pooled RPC fence
+  made all three defects traceable to narrow generated-asset boundaries.
+- Friction or failure: The generated-assets DB fixture still requires a manually
+  seeded workspace, and the local PostgREST stack intermittently times out on a
+  simple workspace-visibility query even while direct integration RPC tests pass.
+- Suggested improvement: Make the generated-assets integration fixture create
+  its own workspace and provide a direct-Postgres local runner for focused
+  persistence tests that should not depend on Kong/PostgREST health.
+- Follow-up: Track pooled-mint crash idempotency by canonical action ID before
+  activating the PR 3A executor in production.

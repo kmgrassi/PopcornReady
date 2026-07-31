@@ -43,7 +43,7 @@ import {
 } from "@popcorn/shared/generative/types";
 import type { GeneratedAssetCharacterBinding } from "@popcorn/shared/types";
 import { buildSemanticAnalysis } from "@/lib/assets/semantic-analysis";
-import { sha256Hex } from "./asset-graph";
+import { sha256Hex, type GraphAssetInput } from "./asset-graph";
 import { randomUUID } from "crypto";
 import type { Job } from "@popcorn/shared/v1/types";
 import type { V1Job } from "./jobs";
@@ -93,6 +93,7 @@ export interface ApiResult {
 export type GeneratedAssetJob = V1Job & {
   type: "asset_generation";
   actionId?: string;
+  sessionClaimGeneration?: number;
 };
 
 export function resolveGeneratedAssetClaimGeneration(
@@ -118,6 +119,50 @@ export function resolveGeneratedAssetClaimGeneration(
     );
   }
   return suppliedClaimGeneration;
+}
+
+export function generatedAssetIdempotentActionId(input: {
+  workspaceId: string;
+  projectId: string;
+  idempotencyKey: string;
+}): string {
+  const digest = sha256Hex(
+    [
+      "generated-asset-action.v1",
+      input.workspaceId,
+      input.projectId,
+      "asset_generation",
+      input.idempotencyKey,
+    ].join(":")
+  );
+  const variant = ((Number.parseInt(digest[16]!, 16) & 0x3) | 0x8).toString(16);
+  return [
+    digest.slice(0, 8),
+    digest.slice(8, 12),
+    `5${digest.slice(13, 16)}`,
+    `${variant}${digest.slice(17, 20)}`,
+    digest.slice(20, 32),
+  ].join("-");
+}
+
+export function pooledImageRevisionWriteContext(input: {
+  runId?: string;
+  sessionClaimGeneration?: number;
+  graphInputs?: GraphAssetInput[];
+}): {
+  graphInputs?: GraphAssetInput[];
+  orchestratorRunId?: string;
+  sessionClaimGeneration?: number;
+} {
+  return {
+    ...(input.graphInputs ? { graphInputs: input.graphInputs } : {}),
+    ...(input.runId && input.sessionClaimGeneration !== undefined
+      ? {
+          orchestratorRunId: input.runId,
+          sessionClaimGeneration: input.sessionClaimGeneration,
+        }
+      : {}),
+  };
 }
 
 function asGeneratedAssetJob(job: Job): GeneratedAssetJob {
@@ -347,7 +392,8 @@ async function runGeneration(
   projectId: string,
   parsed: ParsedRequest,
   item: RunStageItemHandle | null,
-  action: V1Action
+  action: V1Action,
+  sessionClaimGeneration?: number
 ): Promise<V1Asset> {
   const llmCostScope = generatedAssetLlmCostScope(projectId, parsed.runId, action.id);
   let revisionSource: V1Asset | undefined;
@@ -796,6 +842,11 @@ async function runGeneration(
             provenance,
             repointSurfaces: false,
             actionId: action.id,
+            ...pooledImageRevisionWriteContext({
+              runId: parsed.runId,
+              sessionClaimGeneration,
+              graphInputs: parsed.graphInputs,
+            }),
           }
         );
         return getAsset(auth.workspaceId, projectId, revised.assetId);
@@ -1173,8 +1224,17 @@ export async function enqueueGeneratedAssetJob(
     sessionClaim?.claimGeneration,
     sessionClaimGeneration
   );
+  const canonicalActionId =
+    actionId ??
+    (idempotencyKey
+      ? generatedAssetIdempotentActionId({
+          workspaceId: auth.workspaceId,
+          projectId,
+          idempotencyKey,
+        })
+      : randomUUID());
   const action = await createAction({
-    id: actionId ?? randomUUID(),
+    id: canonicalActionId,
     projectId,
     orchestratorRunId: parsed.runId,
     tool: actionToolForParsed(parsed),
@@ -1485,7 +1545,14 @@ export async function runGeneratedAssetJob(args: {
       : null;
     if (progress) await progress.attachJob(running.id);
 
-    const asset = await runGeneration(auth, projectId, parsed, item, action);
+    const asset = await runGeneration(
+      auth,
+      projectId,
+      parsed,
+      item,
+      action,
+      running.sessionClaimGeneration
+    );
     const billableUsd = Math.max(0, billableUsdSoFar() - billableBeforeUsd);
     const billingUserId = currentRunUserId();
     if (budgetReserved && billingUserId) {

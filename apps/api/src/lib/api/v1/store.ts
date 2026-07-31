@@ -6000,6 +6000,8 @@ export interface RegeneratedAssetMedia {
   orchestratorRunId?: string;
   /** Exact active domain-session claim used by the guarded pooled RPC. */
   sessionClaimGeneration?: number;
+  /** Approved immutable graph inputs for the newly minted pooled version. */
+  graphInputs?: GraphAssetInput[];
 }
 
 export type RegeneratedAssetResult = AssetMediaUrls & { assetId: string };
@@ -6067,6 +6069,7 @@ export async function applyRegeneratedAssetMedia(
         p_action_id: action.id,
         ...(update.repointSurfaces === false
           ? {
+              p_inputs: update.graphInputs ?? null,
               p_run_id: update.orchestratorRunId ?? null,
               p_session_claim_generation:
                 update.sessionClaimGeneration ?? null,
