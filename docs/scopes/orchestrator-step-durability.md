@@ -78,6 +78,20 @@ only while delegated specialist work is active. Recovery claims clear the
 reason atomically before re-entering the loop and re-park with the same semantic
 reason when the awaited work remains active.
 
+The real schema/store regression is opt-in because it requires local Supabase:
+
+```sh
+pnpm db:local:start
+pnpm db:local:reset
+pnpm db:test:orchestrator-wait-reasons:local
+```
+
+It exercises Visuals, Audio, and Creative Director rows against the named
+database constraint, then proves the production store maps each reason and
+clears it through the atomic resume claim. The normal API suite discovers but
+skips this file without `RUN_LOCAL_DB_INTEGRATION=1`; no current GitHub workflow
+provisions local Supabase for it.
+
 ## Non-goals
 
 - Changing the loop's shape, the one-tool-per-turn decision model, or the
