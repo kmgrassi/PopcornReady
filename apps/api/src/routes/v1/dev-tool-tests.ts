@@ -5,7 +5,8 @@
 
 import { Router, type RequestHandler } from "express";
 import { ApiError } from "@/core/errors";
-import { createDefaultToolRegistry } from "@/lib/orchestrator-tools/default-registry";
+import { createAudioToolRegistry } from "@/lib/orchestrator-tools/audio-registry";
+import { createRootToolRegistry } from "@/lib/orchestrator-tools/root-registry";
 import { createVisualsToolRegistry } from "@/lib/orchestrator-tools/visuals-registry";
 import { listBatteries } from "@/lib/tool-tests/batteries";
 import { runToolTestSuite } from "@/lib/tool-tests/runner";
@@ -22,8 +23,9 @@ export function isToolTestHarnessEnabled(
 
 export function wiredToolTestNames(): ReadonlySet<string> {
   return new Set([
-    ...createDefaultToolRegistry().list().map((tool) => tool.name),
+    ...createRootToolRegistry().list().map((tool) => tool.name),
     ...createVisualsToolRegistry().list().map((tool) => tool.name),
+    ...createAudioToolRegistry().list().map((tool) => tool.name),
   ]);
 }
 

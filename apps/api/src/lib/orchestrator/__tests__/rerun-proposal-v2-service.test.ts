@@ -12,7 +12,6 @@ const root = {
   status: "waiting" as const,
   inputSummary: "test",
   agentRole: "creative_director" as const,
-  rootExecutionProfile: "creative_director" as const,
   spentUsd: 0,
   createdAt: "now",
   updatedAt: "now",
@@ -116,7 +115,7 @@ test("workspace authorization and root mismatch fail before packet/model/action 
     targets: [{ kind: "project", projectId: "p" }],
     rootRunId: "flat",
   }, deps({
-    getRun: async () => ({ ...root, rootExecutionProfile: "flat" as const }),
+    getRun: async () => ({ ...root, agentRole: "visuals" as const }),
     loadPacket: async () => { packetLoads += 1; return packet; },
     createAction: async () => { writes += 1; return {} as never; },
   })), /Creative Director root/);

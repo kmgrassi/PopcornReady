@@ -1,31 +1,35 @@
 # Creative-director rollout and observation
 
 <!-- agent-summary: Creative-director routing is mandatory for every executable root run. -->
-<!-- agent-summary: Every new root pins creative_director; environment variables cannot select flat ownership. -->
-<!-- agent-summary: Flat and null-profile roots remain readable terminal history but cannot resume. -->
+<!-- agent-summary: Every new root uses the creative_director role; environment variables cannot select flat ownership. -->
+<!-- agent-summary: Flat and null-profile roots remain readable terminal history but cannot execute. -->
 <!-- agent-summary: Asset Studio remains operationally separate from root hierarchy routing. -->
-<!-- agent-summary: Project-scoped Request Changes starts a fresh hierarchy root when history is legacy. -->
-<!-- agent-summary: Run-scoped gate, retry, revision, recovery, and resume paths reject legacy roots. -->
-<!-- agent-summary: PR 7 removes the retained historical profile column and flat registry implementation. -->
+<!-- agent-summary: Project-scoped Request Changes enters the durable proposal lifecycle. -->
+<!-- agent-summary: Application routing is role-based and no longer reads or writes a root profile. -->
+<!-- agent-summary: PR 7B removes the temporary database-only compatibility profile after PR 7A rollout. -->
 
 ## Operating rule
 
-New and anonymous root creation always persists `creative_director`.
-Environment variables cannot change root ownership. The profile remains
-immutable: nonterminal flat/null test history is canceled by migration rather
-than rewritten, and terminal history remains readable.
+New and anonymous root creation always uses the `creative_director` agent role.
+Environment variables cannot change root ownership. Application code no longer
+reads or writes `root_execution_profile`; the PR 7A database trigger fills it
+only for omitted Creative Director root inserts while older binaries overlap.
+Nonterminal flat/null history is canceled rather than rewritten, and terminal
+history remains readable. Before role-only application routing deploys, PR 7A
+rejects reached gates on that history and cancels only failed legacy roots that
+would otherwise qualify for insufficient-credit retry. Their original error and
+action records remain intact for diagnosis.
 
-Project-scoped Request Changes may preserve creator intent by creating a fresh
-hierarchy root. Run-scoped gate decisions, credit retries, board revisions,
-recovery, and explicit resume reject legacy roots because their gates and
-actions cannot be transplanted safely. Visuals and Audio sessions retain their
-existing serialized creator-direct and root-origin behavior.
+Project-scoped Request Changes uses the proposal lifecycle to resolve targets,
+approve cost and blast radius, execute bounded child work, and reconcile
+outputs. The removed revision and stage-restart routes cannot revive legacy
+roots. Visuals and Audio sessions retain their serialized creator-direct and
+root-origin behavior.
 
-`GET /api/v1/health` continues to report the hierarchy as unconditionally
-enabled until roadmap PR 7 removes the historical rollout projection. Worker
-events attribute claimed hierarchy roots to their persisted profile and
-explicitly log refused legacy dispatches; domain runs retain their own
-role/session attribution.
+`GET /api/v1/health` reports liveness and creator-direct database readiness; it
+no longer exposes the retired hierarchy rollout or fallback window. Worker and
+domain events use durable role, run, action, and session causation rather than
+the compatibility profile.
 
 ## Cutover observation
 
@@ -47,10 +51,12 @@ Run the provider-neutral export, Request Changes (visual/audio/pacing), and
 root-versus-creator-direct contention smoke during cutover observation. Never
 send a duplicate live billable request merely to compare paths.
 
-## Monitoring queries
+## PR 7A transitional monitoring queries
 
-Use these read-only queries in the production Supabase SQL console, scoped to
-the cutover window. Join with application logs for model decision/error details.
+Use these read-only queries only while the PR 7A compatibility column exists,
+scoped to the cutover window. Join with application logs for model
+decision/error details. PR 7B must remove or rewrite these queries when it drops
+the column.
 
 ```sql
 select root_execution_profile, status, count(*)
@@ -74,5 +80,7 @@ group by 1 having count(*) > 1;
 ## Evidence and final cleanup
 
 Record the cutover start UTC, production test results, dashboard snapshots, and
-any incident. Roadmap PR 7 removes the historical flat registry, profile type,
-profile column, and health metadata after every production caller ignores them.
+any incident. The health metadata, historical flat registry, and application
+profile type are removed in PR 7A. Its temporary root-aware insert trigger
+supports the rolling deploy; PR 7B removes that trigger and the retained profile
+column only after every production caller ignores it.

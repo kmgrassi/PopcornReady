@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createDefaultToolRegistry } from "../default-registry";
+import { createTestToolRegistry } from "./test-registry";
 import { getToolCapability } from "../capability-catalog";
 import {
   composeToolDescription,
@@ -31,7 +31,7 @@ test("composeToolDescription appends only the usage sections that are present", 
 });
 
 test("bridged tools expose composed usage guidance to the model", () => {
-  const realRegistry = createDefaultToolRegistry();
+  const realRegistry = createTestToolRegistry();
   const registry = toOrchestratorRegistry(realRegistry);
   const planShots = registry.get("plan_shots");
   assert.ok(planShots, "plan_shots must be in the bridged registry");
@@ -48,7 +48,7 @@ test("bridged tools expose composed usage guidance to the model", () => {
 });
 
 test("bridge carries catalog metadata without changing model schemas or descriptions", () => {
-  const realRegistry = createDefaultToolRegistry();
+  const realRegistry = createTestToolRegistry();
   const registry = toOrchestratorRegistry(realRegistry);
   for (const [name, bridged] of registry) {
     const real = realRegistry.get(name);
@@ -67,7 +67,7 @@ test("bridge carries catalog metadata without changing model schemas or descript
 });
 
 test("bridged tools delegate cost estimates to the real registry", async () => {
-  const registry = toOrchestratorRegistry(createDefaultToolRegistry());
+  const registry = toOrchestratorRegistry(createTestToolRegistry());
   const generateClip = registry.get("generate_clip");
   assert.ok(generateClip, "generate_clip must be in the bridged registry");
 
@@ -85,7 +85,7 @@ test("bridged tools delegate cost estimates to the real registry", async () => {
 });
 
 test("every wired tool ships model-facing usage guidance", () => {
-  const registry = toOrchestratorRegistry(createDefaultToolRegistry());
+  const registry = toOrchestratorRegistry(createTestToolRegistry());
   for (const definition of registry.values()) {
     assert.match(
       definition.description,

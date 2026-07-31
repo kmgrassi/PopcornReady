@@ -159,10 +159,10 @@ export function createRequestApprovalTool(
       "Pause the run at a user approval gate before continuing with expensive or user-visible work.",
     usage: {
       preconditions: ["A durable orchestrator run is active."],
-      produces: ["A reached approval gate that the existing approve/reject routes can resolve."],
+      produces: ["A reached approval gate that the approve route can resolve."],
       useWhen: [
         "The user should inspect a tool's previews or notes before the next expensive stage.",
-        "A generation policy or user setting asks for a manual review stop; set step to the reviewed tool so reject can rerun it.",
+        "A generation policy or user setting asks for a manual review stop; Request Changes uses the proposal lifecycle instead of rewinding this gate.",
       ],
     },
     inputSchema: requestApprovalInputSchema,

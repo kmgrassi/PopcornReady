@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ApiError } from "@/core/errors";
 
 import type {
   OrchestratorRun,
@@ -9,13 +8,9 @@ import type {
 } from "@/lib/api/v1/orchestrator-store";
 import { projectRunDetailFromParts } from "../orchestrator-run-projections.js";
 import {
-  boardRevisionGateIdsToReset,
-  boardRevisionRequiresRunResume,
-  boardRevisionResumePatch,
   initialRunGates,
   initialRunStopAfterTools,
   isStoryboardAfterGate,
-  parseBoardRevisionTarget,
   runFailedForInsufficientCredits,
   storyboardContinuationPatch,
   stopAfterTools,
@@ -66,37 +61,6 @@ function gateFixture(
     ...overrides,
   };
 }
-
-test("board feedback resumes terminal runs, including failed and canceled runs", () => {
-  assert.equal(boardRevisionRequiresRunResume("failed"), true);
-  assert.equal(boardRevisionRequiresRunResume("canceled"), true);
-  assert.equal(boardRevisionRequiresRunResume("succeeded"), true);
-  assert.equal(boardRevisionRequiresRunResume("queued"), true);
-  assert.equal(boardRevisionRequiresRunResume("running"), false);
-  assert.equal(boardRevisionRequiresRunResume("waiting"), false);
-});
-
-test("board feedback clears terminal state and reached gates before resuming a canceled run", () => {
-  const run = runFixture({
-    status: "canceled",
-    startedAt: "2026-06-15T00:00:01.000Z",
-    completedAt: "2026-06-15T00:00:02.000Z",
-    error: { message: "Previous failure" },
-  });
-  assert.deepEqual(boardRevisionResumePatch(run), {
-    status: "running",
-    startedAt: "2026-06-15T00:00:01.000Z",
-    clearCompletedAt: true,
-    clearError: true,
-  });
-  assert.deepEqual(boardRevisionGateIdsToReset(run, [gateFixture("generate_keyframe")]), [
-    "gate_generate_keyframe",
-  ]);
-  assert.deepEqual(
-    boardRevisionGateIdsToReset(runFixture({ status: "failed" }), [gateFixture("generate_keyframe")]),
-    []
-  );
-});
 
 test("makes an unexpected terminal success without video a terminal partial failure", () => {
   const payload = projectRunDetailFromParts(
@@ -339,112 +303,6 @@ test("keeps board feedback actions out of generation progress projections", () =
   assert.deepEqual(
     payload.stageItems.map((item) => item.assetId),
     ["storyboard_asset"]
-  );
-});
-
-test("parseBoardRevisionTarget validates currentBrief with the shared brief schema", () => {
-  const target = parseBoardRevisionTarget(
-    {
-      target: {
-        scope: "brief",
-        currentBrief: {
-          goal: "Tighten the product launch hook.",
-          targetLengthSec: 30,
-          aspectRatio: "9:16",
-          platform: "tiktok",
-        },
-      },
-    },
-    "run_1"
-  );
-
-  assert.equal(target.currentBrief?.goal, "Tighten the product launch hook.");
-  assert.equal(target.currentBrief?.targetLengthSec, 30);
-  assert.equal(target.currentBrief?.aspectRatio, "9:16");
-  assert.equal(target.currentBrief?.platform, "tiktok");
-});
-
-test("parseBoardRevisionTarget rejects an invalid currentBrief payload", () => {
-  assert.throws(
-    () =>
-      parseBoardRevisionTarget(
-        {
-          target: {
-            scope: "brief",
-            currentBrief: {
-              goal: "Missing typed brief fields should fail.",
-            },
-          },
-        },
-        "run_1"
-      ),
-    (err: unknown) => {
-      assert.ok(err instanceof ApiError);
-      assert.equal(err.code, "validation_failed");
-      assert.match(err.message, /request body is invalid/i);
-      return true;
-    }
-  );
-});
-
-test("parseBoardRevisionTarget accepts primary footage asset targets", () => {
-  const target = parseBoardRevisionTarget(
-    {
-      target: {
-        scope: "asset",
-        assetId: "source_office_clip",
-        targetAssetUse: "primary_footage",
-        label: "Uploaded office clip",
-      },
-    },
-    "run_1"
-  );
-
-  assert.equal(target.scope, "asset");
-  assert.equal(target.assetId, "source_office_clip");
-  assert.equal(target.targetAssetUse, "primary_footage");
-});
-
-test("parseBoardRevisionTarget rejects asset scope without an asset id", () => {
-  assert.throws(
-    () =>
-      parseBoardRevisionTarget(
-        {
-          target: {
-            scope: "asset",
-            targetAssetUse: "primary_footage",
-          },
-        },
-        "run_1"
-      ),
-    (err: unknown) => {
-      assert.ok(err instanceof ApiError);
-      assert.equal(err.code, "validation_failed");
-      assert.match(err.message, /require an asset id/i);
-      return true;
-    }
-  );
-});
-
-test("parseBoardRevisionTarget rejects unsupported asset target uses", () => {
-  assert.throws(
-    () =>
-      parseBoardRevisionTarget(
-        {
-          target: {
-            scope: "asset",
-            assetId: "source_office_clip",
-            targetAssetUse: "banana",
-          },
-        },
-        "run_1"
-      ),
-    (err: unknown) => {
-      assert.ok(err instanceof ApiError);
-      assert.equal(err.code, "validation_failed");
-      assert.match(err.message, /targetAssetUse/i);
-      return true;
-    }
   );
 });
 

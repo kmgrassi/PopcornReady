@@ -1,16 +1,19 @@
 import { randomUUID } from "node:crypto";
 
-import { isOrchestratorToolLoopEnabled } from "./feature-flag";
-import { orchestratorModel, OrchestratorModel } from "./model";
-import { createToolRegistry, executeRegisteredTool, ToolRegistry } from "./registry";
-import { createToolExecutionContext } from "./tool-context";
+import { orchestratorModel, type OrchestratorModel } from "@/lib/orchestrator/model";
 import {
-  OrchestratorRun,
-  OrchestratorTurn,
-  ToolCallResult,
-  ToolInvocation,
-  ToolInvocationStatus,
-} from "./types";
+  createToolRegistry,
+  executeRegisteredTool,
+  type ToolRegistry,
+} from "@/lib/orchestrator/registry";
+import { createToolExecutionContext } from "@/lib/orchestrator/tool-context";
+import {
+  type OrchestratorRun,
+  type OrchestratorTurn,
+  type ToolCallResult,
+  type ToolInvocation,
+  type ToolInvocationStatus,
+} from "@/lib/orchestrator/types";
 
 export type ToolLoopTurnResult =
   | {
@@ -24,7 +27,7 @@ export type ToolLoopTurnResult =
       result?: ToolCallResult;
     };
 
-export interface RunToolLoopTurnInput {
+export interface RunToolTestTurnInput {
   run: OrchestratorRun;
   workspaceId: string;
   actorId?: string;
@@ -36,7 +39,7 @@ export interface RunToolLoopTurnInput {
   priorResults?: unknown[];
   registry?: ToolRegistry;
   model?: OrchestratorModel;
-  env?: NodeJS.ProcessEnv;
+  systemPrompt: string;
 }
 
 function nowIso(): string {
@@ -102,7 +105,7 @@ function nextRunState(run: OrchestratorRun, result: ToolCallResult): Orchestrato
   };
 }
 
-export async function runToolLoopTurn({
+export async function runToolTestTurn({
   run,
   workspaceId,
   actorId,
@@ -114,11 +117,8 @@ export async function runToolLoopTurn({
   priorResults = [],
   registry = createToolRegistry(),
   model = orchestratorModel,
-  env = process.env,
-}: RunToolLoopTurnInput): Promise<ToolLoopTurnResult> {
-  if (!isOrchestratorToolLoopEnabled(env)) {
-    return { status: "disabled", run };
-  }
+  systemPrompt,
+}: RunToolTestTurnInput): Promise<ToolLoopTurnResult> {
   if (run.status !== "running") {
     throw new Error(`Cannot start a model tool turn while run is ${run.status}.`);
   }
@@ -129,6 +129,7 @@ export async function runToolLoopTurn({
     inputSummary,
     priorResults,
     registry,
+    systemPrompt,
   });
   const turnId = randomUUID();
   const createdAt = nowIso();

@@ -133,11 +133,11 @@ export async function reserveExecutionTransaction(input: {
       rootRunId = requireRow((await client.query<{ id: string }>(
         `insert into public.orchestrator_runs (
            schema_version, project_id, status, input_summary, budget_usd,
-           spent_usd, agent_role, root_execution_profile
+           spent_usd, agent_role
          ) values (
            'orchestrator_run.v1', $1, 'running',
            'Approved selective regeneration', $2, 0,
-           'creative_director', 'creative_director'
+           'creative_director'
          ) returning id`,
         [input.projectId, input.approvedMaxCostUsd]
       )).rows, "Could not materialize execution root.").id;
@@ -147,7 +147,6 @@ export async function reserveExecutionTransaction(input: {
         `select id from public.orchestrator_runs
           where id = $1 and project_id = $2
             and agent_role = 'creative_director'
-            and root_execution_profile = 'creative_director'
             and status in ('queued', 'running', 'waiting')
           for update`,
         [rootRunId, input.projectId]

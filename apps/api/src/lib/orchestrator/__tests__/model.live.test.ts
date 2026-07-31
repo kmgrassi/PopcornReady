@@ -101,7 +101,6 @@ function runFixture(inputSummary: string): OrchestratorRun {
     projectId: "proj-live",
     status: "queued",
     inputSummary,
-    rootExecutionProfile: "creative_director",
     spentUsd: 0,
     createdAt: "t0",
     updatedAt: "t0",

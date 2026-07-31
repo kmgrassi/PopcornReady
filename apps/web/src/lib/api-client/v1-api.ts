@@ -1,10 +1,8 @@
 import type {
   AssetKind,
   AssetStatus,
-  BoardRevisionRequest,
   GenerationRun,
   GenerationRunStatus,
-  GenerationStageType,
   ProjectVisibility,
   ProjectStoryboard,
   V1Project,
@@ -21,11 +19,9 @@ import type {
   AccountMutationResponse,
   AnonymousDeviceRecoveryResponse,
   AssetMediaResponse,
-  BoardRevisionResponse,
   CreateBriefVersionResponse,
   CreateProjectInput,
   CreateProjectResponse,
-  CreateTimelineRevisionInput,
   ExportArtifactResponse,
   ExportJobResponse,
   ForkProjectResponse,
@@ -46,7 +42,6 @@ import type {
   PublicProjectResponse,
   RegisterProjectUploadInput,
   RegisterProjectUploadResponse,
-  RejectGenerationRunInput,
   SaveProjectStoryboardInput,
   StartGenerationRunInput,
   StartGenerationRunResponse,
@@ -518,8 +513,8 @@ export const v1Api = {
   updateGenerationRun: (
     projectId: string,
     runId: string,
-    action: "approve" | "reject" | "cancel",
-    body?: RejectGenerationRunInput
+    action: "approve" | "cancel",
+    body?: { note?: string }
   ) =>
     apiRequest<GenerationRunDetail>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/generation-runs/${encodeURIComponent(runId)}/${action}`,
@@ -532,54 +527,6 @@ export const v1Api = {
     apiRequest<GenerationRunDetail>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/generation-runs/${encodeURIComponent(runId)}/retry-after-credit-update`,
       { method: "POST" }
-    ),
-  // Re-enter a run at an earlier stage: supersede that stage + downstream and
-  // resume so the agent re-runs from there.
-  restartGenerationRunFromStage: (
-    projectId: string,
-    runId: string,
-    stageType: GenerationStageType
-  ) =>
-    apiRequest<GenerationRunDetail>(
-      `/api/v1/projects/${encodeURIComponent(projectId)}/generation-runs/${encodeURIComponent(runId)}/restart-from`,
-      {
-        method: "POST",
-        body: { stageType },
-      }
-    ),
-  createTimelineRevision: (
-    projectId: string,
-    timelineId: string,
-    input: CreateTimelineRevisionInput
-  ) =>
-    apiRequest<{ job: unknown }>(
-      `/api/v1/projects/${encodeURIComponent(projectId)}/timelines/${encodeURIComponent(timelineId)}/revisions`,
-      {
-        method: "POST",
-        body: typeof input === "string" ? { message: input } : input,
-      }
-    ),
-  createRunBoardRevision: (
-    projectId: string,
-    runId: string,
-    input: BoardRevisionRequest
-  ) =>
-    apiRequest<BoardRevisionResponse>(
-      `/api/v1/projects/${encodeURIComponent(projectId)}/generation-runs/${encodeURIComponent(runId)}/board-revisions`,
-      {
-        method: "POST",
-        body: input,
-      }
-    ),
-  // Project-scoped AI edit: route an asset edit through the agent without a run
-  // (the API revives/starts one). The agent revises the target in context.
-  createProjectAssetRevision: (projectId: string, input: BoardRevisionRequest) =>
-    apiRequest<{ runId: string; revision: BoardRevisionResponse["revision"] }>(
-      `/api/v1/projects/${encodeURIComponent(projectId)}/asset-revisions`,
-      {
-        method: "POST",
-        body: input,
-      }
     ),
   createRerunProposal: (
     projectId: string,
