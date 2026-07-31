@@ -18,6 +18,12 @@
 - Follow-up: <TODO / PR / none>
 ```
 
+### 2026-07-31T16:35:00-04:00 — WEB-20260731-ASSET-AUTOAPPROVAL review follow-up
+- What helped: Thread-aware review data isolated the two live PR findings, and the existing route-state boundary supported proposal restoration without persistent storage.
+- Friction or failure: The first implementation preserved the editable draft for Back navigation but did not preserve the successful proposal for Forward navigation.
+- Suggested improvement: Treat every browser-history workflow as a Back/Forward state machine and test both directions after asynchronous state becomes authoritative.
+- Follow-up: Add server-backed proposal recovery only if product requirements expand to direct links, new tabs, or lost session history.
+
 ### 2026-07-31T15:41:00-04:00 — WEB-20260731-ASSET-AUTOAPPROVAL
 - What helped: The existing two-phase creator-direct gate kept the UI change client-scoped, while absolute-time Playwright clock tests proved the 10-second boundary without slowing CI.
 - Friction or failure: Moving proposal work to a sibling route made form-history restoration and proposal-readiness announcements easy to miss; independent review caught both before handoff.

@@ -102,7 +102,7 @@ test.describe("Asset Studio", () => {
               requestDigest: "digest_image",
               maximumUsd: 10,
               approvalToken: "approval_image",
-              expiresAt: "2026-07-29T18:00:00.000Z",
+              expiresAt: "2099-07-31T18:00:00.000Z",
               effectivePrompt:
                 "Editorial close-up of popcorn falling into a stoneware bowl. Soft window light from camera-left, restrained amber palette, visible salt crystals, and shallow incidental crumbs.",
               enhancementApplied: true,
@@ -207,7 +207,7 @@ test.describe("Asset Studio", () => {
               requestDigest: "digest_bypass",
               maximumUsd: 10,
               approvalToken: "approval_bypass",
-              expiresAt: "2026-07-29T18:00:00.000Z",
+              expiresAt: "2099-07-31T18:00:00.000Z",
               effectivePrompt: originalPrompt,
               enhancementApplied: false,
             },
@@ -301,7 +301,7 @@ test.describe("Asset Studio", () => {
             requestDigest: "digest_back",
             maximumUsd: 10,
             approvalToken: "approval_back",
-            expiresAt: "2026-07-31T18:00:00.000Z",
+            expiresAt: "2099-07-31T18:00:00.000Z",
             effectivePrompt: "A restored editorial draft",
             enhancementApplied: true,
           },
@@ -326,6 +326,99 @@ test.describe("Asset Studio", () => {
     ).toHaveValue("A restored draft");
     await expect(page.getByRole("button", { name: `Project ${project.name}` })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Approve this" })).toHaveCount(0);
+  });
+
+  test("browser Forward restores the proposal without posting it again", async ({ page }) => {
+    let proposalCount = 0;
+    await page.clock.install();
+    await page.route(
+      `**/api/v1/projects/${project.id}/agent-creations/proposals`,
+      (route) => {
+        proposalCount += 1;
+        return fulfillJson(route, {
+          proposal: {
+            sessionId: "session_forward",
+            runId: "run_forward",
+            gateId: "gate_forward",
+            requestDigest: "digest_forward",
+            maximumUsd: 10,
+            approvalToken: "approval_forward",
+            expiresAt: "2099-07-31T18:00:00.000Z",
+            effectivePrompt: "A restored proposal preview",
+            enhancementApplied: true,
+          },
+        }, 201);
+      },
+    );
+
+    await page.goto("/create");
+    await openProjectPicker(page);
+    await page.getByRole("button", { name: project.name, exact: true }).click();
+    await page.getByLabel("What should it feel like?", { exact: true }).fill("A proposal to restore");
+    await page.getByRole("button", { name: "Start" }).click();
+    await expect(page.getByText("A restored proposal preview")).toBeVisible();
+    await expect.poll(() => page.evaluate(() =>
+      window.history.state?.usr?.assetCreationReview?.proposal?.gateId,
+    )).toBe("gate_forward");
+
+    await page.goBack();
+    await expect(page).toHaveURL(/\/create$/);
+    await page.goForward();
+
+    await expect(page).toHaveURL(/\/create\/review$/);
+    await expect(page.getByText("A restored proposal preview")).toBeVisible();
+    await expect(page.getByText("Starting automatically in 10 seconds.")).toBeVisible();
+    expect(proposalCount).toBe(1);
+  });
+
+  test("browser Forward fails safely when a restored proposal has expired", async ({ page }) => {
+    let confirmationCount = 0;
+    await page.clock.install();
+    const expiresAt = new Date(Date.now() + 60_000).toISOString();
+    await page.route(
+      `**/api/v1/projects/${project.id}/agent-creations/proposals`,
+      (route) => fulfillJson(route, {
+        proposal: {
+          sessionId: "session_expired",
+          runId: "run_expired",
+          gateId: "gate_expired",
+          requestDigest: "digest_expired",
+          maximumUsd: 10,
+          approvalToken: "approval_expired",
+          expiresAt,
+          effectivePrompt: "A proposal that will expire",
+          enhancementApplied: true,
+        },
+      }, 201),
+    );
+    await page.route(
+      `**/api/v1/projects/${project.id}/agent-creations/proposals/gate_expired/confirm`,
+      (route) => {
+        confirmationCount += 1;
+        return route.abort();
+      },
+    );
+
+    await page.goto("/create");
+    await openProjectPicker(page);
+    await page.getByRole("button", { name: project.name, exact: true }).click();
+    await page.getByLabel("What should it feel like?", { exact: true }).fill("An expiring proposal");
+    await page.getByRole("button", { name: "Start" }).click();
+    await expect(page.getByText("Starting automatically in 10 seconds.")).toBeVisible();
+    await expect.poll(() => page.evaluate(() =>
+      window.history.state?.usr?.assetCreationReview?.proposal?.gateId,
+    )).toBe("gate_expired");
+
+    await page.goBack();
+    await page.clock.fastForward(61_000);
+    await page.goForward();
+
+    await expect(page.getByRole("heading", { name: "Prepare a new review" })).toBeVisible();
+    await expect(page.getByRole("alert")).toContainText("needs to be refreshed");
+    await expect(page.getByRole("button", { name: "Prepare again" })).toBeVisible();
+    await expect(page.getByText(/Starting automatically in/)).toHaveCount(0);
+    await page.clock.fastForward(10_000);
+    expect(confirmationCount).toBe(0);
   });
 
   test("creates and immediately uses a new project without losing the prompt", async ({
@@ -358,7 +451,9 @@ test.describe("Asset Studio", () => {
               requestDigest: "digest_created",
               maximumUsd: 10,
               approvalToken: "approval_created",
-              expiresAt: "2026-07-29T18:00:00.000Z",
+              expiresAt: "2099-07-31T18:00:00.000Z",
+              effectivePrompt: "A crisp editorial product still",
+              enhancementApplied: true,
             },
           },
           201,
@@ -452,7 +547,7 @@ test.describe("Asset Studio", () => {
           requestDigest: "digest_auto",
           maximumUsd: 10,
           approvalToken: "approval_auto",
-          expiresAt: "2026-07-31T18:00:00.000Z",
+          expiresAt: "2099-07-31T18:00:00.000Z",
           effectivePrompt: "A considered editorial still",
           enhancementApplied: true,
         },
@@ -485,9 +580,9 @@ test.describe("Asset Studio", () => {
 
     await page.clock.fastForward(1_000);
     await expect(page.getByText("Starting automatically in 9 seconds.")).toBeVisible();
-    await page.clock.fastForward(8_999);
+    await page.clock.fastForward(8_000);
     expect(confirmationCount).toBe(0);
-    await page.clock.fastForward(1);
+    await page.clock.fastForward(1_000);
     await expect.poll(() => confirmationCount).toBe(1);
     await expect(page).toHaveURL(new RegExp(`/create\\?projectId=${project.id}&runId=run_auto$`));
   });
@@ -510,6 +605,63 @@ test.describe("Asset Studio", () => {
     expect(confirmationCount).toBe(0);
   });
 
+  test("keeps an explicit request-only manual policy after the proposal returns", async ({ page }) => {
+    let confirmationCount = 0;
+    await page.clock.install();
+    await page.route(
+      `**/api/v1/projects/${project.id}/agent-creations/proposals`,
+      (route) => fulfillJson(route, {
+        proposal: {
+          sessionId: "session_manual_only",
+          runId: "run_manual_only",
+          gateId: "gate_manual_only",
+          requestDigest: "digest_manual_only",
+          maximumUsd: 10,
+          approvalToken: "approval_manual_only",
+          expiresAt: "2099-07-31T18:00:00.000Z",
+          effectivePrompt: "A manual-only proposal",
+          enhancementApplied: true,
+        },
+      }, 201),
+    );
+    await page.route(
+      `**/api/v1/projects/${project.id}/agent-creations/proposals/gate_manual_only/confirm`,
+      (route) => {
+        confirmationCount += 1;
+        return route.abort();
+      },
+    );
+
+    await page.goto("/create/review");
+    await page.evaluate((reviewState) => {
+      window.history.replaceState(
+        { ...window.history.state, usr: reviewState },
+        "",
+      );
+    }, {
+      assetCreationReview: {
+        request: {
+          goal: "image",
+          projectId: project.id,
+          prompt: "A manual-only request",
+          improvePrompt: true,
+          maximumUsd: 10,
+          idempotencyKey: "asset-studio:proposal:manual-only",
+        },
+        proposal: null,
+        autoApprovalAllowed: false,
+      },
+    });
+    await page.reload();
+
+    await expect(page.getByRole("heading", { name: "Approve this" })).toBeVisible();
+    await expect(page.getByText("A manual-only proposal")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Approve this" })).toBeEnabled();
+    await expect(page.getByText(/Starting automatically in/)).toHaveCount(0);
+    await page.clock.fastForward(10_000);
+    expect(confirmationCount).toBe(0);
+  });
+
   test("stops automatic retry after failure and allows a successful manual retry", async ({ page }) => {
     let confirmationCount = 0;
     await page.clock.install();
@@ -523,7 +675,7 @@ test.describe("Asset Studio", () => {
           requestDigest: "digest_retry",
           maximumUsd: 10,
           approvalToken: "approval_retry",
-          expiresAt: "2026-07-31T18:00:00.000Z",
+          expiresAt: "2099-07-31T18:00:00.000Z",
           effectivePrompt: "A considered editorial still",
           enhancementApplied: true,
         },
@@ -568,9 +720,13 @@ test.describe("Asset Studio", () => {
     await expect(page.locator("main").getByRole("alert")).toContainText(
       "approval could not be recorded",
     );
+    await page.goBack();
+    await expect(page).toHaveURL(/\/create$/);
+    await page.goForward();
+    await expect(page.getByRole("button", { name: "Approve this" })).toBeEnabled();
+    await expect(page.getByText(/Starting automatically in/)).toHaveCount(0);
     await page.clock.fastForward(10_000);
     expect(confirmationCount).toBe(1);
-    await expect(page.getByRole("button", { name: "Approve this" })).toBeEnabled();
     await page.getByRole("button", { name: "Approve this" }).click();
     await expect(page).toHaveURL(
       new RegExp(`/create\\?projectId=${project.id}&runId=run_retry$`),
@@ -591,7 +747,7 @@ test.describe("Asset Studio", () => {
           requestDigest: "digest_revise",
           maximumUsd: 10,
           approvalToken: "approval_revise",
-          expiresAt: "2026-07-31T18:00:00.000Z",
+          expiresAt: "2099-07-31T18:00:00.000Z",
           effectivePrompt: "A revised editorial still",
           enhancementApplied: true,
         },
@@ -635,7 +791,7 @@ test.describe("Asset Studio", () => {
           requestDigest: "digest_mobile",
           maximumUsd: 10,
           approvalToken: "approval_mobile",
-          expiresAt: "2026-07-31T18:00:00.000Z",
+          expiresAt: "2099-07-31T18:00:00.000Z",
           effectivePrompt: "Vertical editorial close-up with restrained amber light.",
           enhancementApplied: true,
         },

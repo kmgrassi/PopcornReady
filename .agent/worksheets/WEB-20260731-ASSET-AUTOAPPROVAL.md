@@ -42,13 +42,17 @@ to the durable run-status view.
   reopen an auto-approving proposal.
 - Preserve the draft through React Router navigation state when revising. A
   direct review URL without valid state fails closed and performs no mutation.
+- Preserve a validated successful proposal on its review history entry so
+  browser Forward restores it without replaying the proposal POST. Store no
+  authority in the URL or persistent browser storage.
 - A confirmation failure does not automatically retry; it keeps the proposal
-  visible and makes manual retry possible.
+  visible and makes manual retry possible, including after Back/Forward.
 
 ## Changes
 
 - Added validated router-state helpers for Asset Studio review requests and
-  revision drafts, with focused unit tests.
+  revision drafts, with focused unit tests. Successful proposals and their
+  automatic-approval policy are also validated before history restoration.
 - Added `/create/review` and a dedicated responsive review page that owns prompt
   refinement progress, proposal display, manual approval, the visible
   wall-clock 10-second countdown, at-most-once confirmation, failure recovery,
@@ -57,16 +61,17 @@ to the durable run-status view.
   refinement begins, and restore the draft through Revise or browser Back.
 - Expanded Asset Studio Playwright coverage for navigation/loading, exact prompt
   review, manual/timed races, timer boundary, visible-proposal revision,
-  confirmation retry, invalid state, draft restoration, and mobile overflow.
+  confirmation retry, invalid state, draft restoration, Back/Forward proposal
+  recovery, stale restored proposals, and mobile overflow.
 - Updated the UI interaction model, Asset Studio scope, prompt-enhancement
   contract, E2E inventory, and E2E README for the timed-confirmation exception.
 
 ## Validation evidence
 
 - `pnpm --filter @popcorn/web typecheck` — passed.
-- `pnpm --filter @popcorn/web test` — 47 passed.
+- `pnpm --filter @popcorn/web test` — review follow-up: 51 passed.
 - `pnpm --filter @popcorn/web exec playwright test e2e/asset-studio.spec.ts
-  --project=chromium` — final run: 16 passed.
+  --project=chromium` — final review follow-up: 19 passed.
 - `pnpm --filter @popcorn/web exec playwright test e2e/asset-studio.spec.ts
   --project=mobile-safari --project=mobile-chrome` — final run: 4 passed.
 - Browser inspection at 1280x800 and 390x844 verified the refinement and
@@ -74,6 +79,10 @@ to the durable run-status view.
   overflow. The visual fixture intercepted only the creator-direct proposal;
   unrelated local API calls logged expected connection failures because the
   standalone Vite inspection server had no API process.
+- Review-follow-up browser inspection at 1280x800 and 390x844 verified the
+  expired-proposal recovery copy, inline alert hierarchy, 48px full-width mobile
+  action, and zero horizontal overflow. The local API remained intentionally
+  absent, so unrelated account/credit requests logged expected proxy failures.
 - `pnpm agent:lint:fix` — passed.
 - `pnpm agent:validate -- --scope web` — passed (agent lint, workflow policy,
   migration checks, and web typecheck).
@@ -97,6 +106,16 @@ to the durable run-status view.
   The countdown now disarms when either approval path starts, cleaning up its
   interval and timeout before success or preserved-error recovery. A final
   read-only review confirmed that fix and reported no remaining release blocker.
+- PR-comment research and plan review (independent agent): confirmed that the
+  successful proposal belongs in validated review-entry history state, required
+  manual-only restoration after failed confirmation, expiry safety, and focused
+  Back/Forward coverage. Both review comments were accepted.
+- PR-comment implementation review (independent agent): found misleading
+  assistive and visible stale-state copy plus a manual-only request policy that
+  could be re-enabled after proposal success. Follow-up review found that the
+  first policy fix incorrectly labeled a fresh manual-only proposal stale; expiry
+  validity and automation policy are now separate, and all findings are covered
+  by focused unit or browser tests.
 
 ## Blockers and risks
 
@@ -106,11 +125,13 @@ to the durable run-status view.
   tests prove a click/timer race dispatches once.
 - Resolved: invalid or missing navigation state fails closed without proposal or
   confirmation calls; draft history is restored through Revise and browser Back.
-- Reloading `/create/review` without its navigation state intentionally fails
-  closed; durable recovery of an already-created proposal remains documented as
-  a future gap.
+- Resolved: browser Forward restores the exact validated proposal without a
+  second proposal POST; stale proposals and failed confirmations cannot silently
+  re-arm automatic approval.
+- `/create/review` without usable browser history state intentionally fails
+  closed; server-backed recovery remains documented as a future gap.
 
 ## Next action / handoff
 
-Commit and tag the validated change, push its branch, and open the required
-ready-for-review PR.
+Commit and push the validated review fixes to PR #863, then report both threads
+ready for reviewer resolution.

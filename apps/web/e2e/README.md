@@ -20,12 +20,14 @@ pnpm --filter @popcorn/web test:e2e
 default-on prompt refinement, exact effective-prompt preview, creator bypass,
 immediate navigation to `/create/review`, manual **Approve this** confirmation,
 the visible 10-second automatic-confirmation boundary, at-most-once dispatch,
+Back/Forward proposal restoration without reposting, stale-proposal recovery,
 queued status, invalid review-state recovery, desktop/mobile Create and review
 layouts, project-picker keyboard behavior, existing/first/new-project selection,
 and project-list, proposal, confirmation, and creation failure recovery. It also
-verifies that revising preserves the editable draft, a delayed project creation
-cannot override a newer selection, and pagination failures preserve loaded
-projects, without spending provider credits.
+verifies that revising preserves the editable draft, failed confirmation remains
+manual-only on Forward, a delayed project creation cannot override a newer
+selection, and pagination failures preserve loaded projects, without spending
+provider credits.
 
 `rerun-proposal-lifecycle.spec.ts` verifies the durable Request Changes UI
 without provider spend: exact-target proposal preview, preserved/affected work,

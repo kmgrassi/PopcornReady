@@ -205,7 +205,7 @@ Authenticated routes:
 - `/inspiration`
 - `/library`, `/library/:tab` (`projects` and `assets` are the active tabs)
 - `/projects`, `/projects/new`, `/projects/:projectId`,
-- `/create`,
+- `/create`, `/create/review`,
   `/storyboard`,
   `/projects/:projectId/concept`, `/projects/:projectId/brief`,
   `/projects/:projectId/script`,
@@ -341,6 +341,9 @@ Covered:
   10 seconds if untouched; manual/timed races dispatch at most once.
 - Revising cancels the countdown, returns to `/create`, preserves the editable
   draft, and gives the revised request fresh proposal authority.
+- Browser Forward restores a validated proposal from that review history entry
+  without posting it again; a failed confirmation stays manual-only on return,
+  and an expired restored proposal fails safely into revision.
 - Confirmation failure stops automatic retry and remains manually actionable.
 - Direct `/create/review` navigation without request state fails closed and
   creates no proposal or confirmation.
@@ -358,9 +361,10 @@ Covered:
 
 Remaining gaps:
 
-- Add reload recovery for a proposal already created on `/create/review`; the
-  current client fails closed when navigation state is unavailable rather than
-  persisting proposal authority in browser storage.
+- Add server-backed recovery when `/create/review` has no usable browser history
+  state, such as a direct link, new tab, or lost session history. The current
+  client intentionally fails closed instead of persisting proposal authority in
+  URL or browser storage.
 - Add mocked status fixtures for completed, failed, canceled, question, and
   blocked outcomes.
 - Add browser coverage when optional references, Request Changes, dependency

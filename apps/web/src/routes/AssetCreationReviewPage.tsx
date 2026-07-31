@@ -8,26 +8,49 @@ import {
 } from "../lib/agent-creations";
 import {
   creationDraftNavigationState,
-  readCreationReviewRequest,
+  creationReviewNavigationState,
+  readCreationReviewState,
 } from "../lib/creationReview";
 import styles from "./AssetCreationReviewPage.module.css";
 
 const AUTO_APPROVAL_DELAY_MS = 10_000;
+const EXPIRY_SAFETY_MARGIN_MS = 1_000;
+
+function hasAutomaticApprovalWindow(proposal: CreationProposal) {
+  return (
+    Date.parse(proposal.expiresAt) >
+    Date.now() + AUTO_APPROVAL_DELAY_MS + EXPIRY_SAFETY_MARGIN_MS
+  );
+}
 
 export function AssetCreationReviewPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const request = useMemo(
-    () => readCreationReviewRequest(location.state),
+  const reviewState = useMemo(
+    () => readCreationReviewState(location.state),
     [location.state],
   );
+  const request = reviewState?.request ?? null;
+  const restoredProposal = reviewState?.proposal ?? null;
   const propose = useCreationProposal();
   const confirm = useCreationConfirmation();
-  const [proposal, setProposal] = useState<CreationProposal | null>(null);
+  const [proposal, setProposal] = useState<CreationProposal | null>(
+    restoredProposal,
+  );
   const [proposalError, setProposalError] = useState<Error | null>(null);
   const [secondsRemaining, setSecondsRemaining] = useState(10);
-  const [countdownArmed, setCountdownArmed] = useState(false);
-  const proposalStarted = useRef(false);
+  const [proposalNeedsRefresh, setProposalNeedsRefresh] = useState(
+    () => Boolean(restoredProposal && !hasAutomaticApprovalWindow(restoredProposal)),
+  );
+  const [countdownArmed, setCountdownArmed] = useState(
+    () =>
+      Boolean(
+        restoredProposal &&
+          reviewState?.autoApprovalAllowed &&
+          hasAutomaticApprovalWindow(restoredProposal),
+      ),
+  );
+  const proposalStarted = useRef(Boolean(restoredProposal));
   const confirmationStarted = useRef(false);
   const automaticApprovalCanceled = useRef(false);
   const mounted = useRef(true);
@@ -47,8 +70,21 @@ export function AssetCreationReviewPage() {
     try {
       const nextProposal = await propose.mutateAsync(request);
       if (mounted.current) {
+        const proposalHasApprovalWindow =
+          hasAutomaticApprovalWindow(nextProposal);
+        const canApproveAutomatically =
+          reviewState?.autoApprovalAllowed !== false &&
+          proposalHasApprovalWindow;
         setProposal(nextProposal);
-        setCountdownArmed(true);
+        setProposalNeedsRefresh(!proposalHasApprovalWindow);
+        setCountdownArmed(canApproveAutomatically);
+        navigate(`${location.pathname}${location.search}`, {
+          replace: true,
+          state: creationReviewNavigationState(request, {
+            proposal: nextProposal,
+            autoApprovalAllowed: canApproveAutomatically,
+          }),
+        });
       }
     } catch (error) {
       if (mounted.current) {
@@ -57,7 +93,14 @@ export function AssetCreationReviewPage() {
         );
       }
     }
-  }, [propose, request]);
+  }, [
+    location.pathname,
+    location.search,
+    navigate,
+    propose,
+    request,
+    reviewState?.autoApprovalAllowed,
+  ]);
 
   useEffect(() => {
     if (!request || proposalStarted.current) return;
@@ -67,10 +110,38 @@ export function AssetCreationReviewPage() {
 
   const approve = useCallback(
     async (source: "manual" | "timer") => {
-      if (!request || !proposal || confirmationStarted.current) return;
+      if (
+        !request ||
+        !proposal ||
+        proposalNeedsRefresh ||
+        confirmationStarted.current
+      ) {
+        return;
+      }
+      const expiryBuffer = source === "timer" ? EXPIRY_SAFETY_MARGIN_MS : 0;
+      if (Date.parse(proposal.expiresAt) <= Date.now() + expiryBuffer) {
+        automaticApprovalCanceled.current = true;
+        setCountdownArmed(false);
+        setProposalNeedsRefresh(true);
+        navigate(`${location.pathname}${location.search}`, {
+          replace: true,
+          state: creationReviewNavigationState(request, {
+            proposal,
+            autoApprovalAllowed: false,
+          }),
+        });
+        return;
+      }
       if (source === "manual") automaticApprovalCanceled.current = true;
       confirmationStarted.current = true;
       setCountdownArmed(false);
+      navigate(`${location.pathname}${location.search}`, {
+        replace: true,
+        state: creationReviewNavigationState(request, {
+          proposal,
+          autoApprovalAllowed: false,
+        }),
+      });
       try {
         const result = await confirm.mutateAsync({
           projectId: request.projectId,
@@ -85,7 +156,15 @@ export function AssetCreationReviewPage() {
         automaticApprovalCanceled.current = true;
       }
     },
-    [confirm, navigate, proposal, request],
+    [
+      confirm,
+      location.pathname,
+      location.search,
+      navigate,
+      proposal,
+      proposalNeedsRefresh,
+      request,
+    ],
   );
   const approveRef = useRef(approve);
   approveRef.current = approve;
@@ -157,14 +236,18 @@ export function AssetCreationReviewPage() {
     <main className={styles.page}>
       <header className={styles.header}>
         <h1>
-          {proposal
+          {proposalNeedsRefresh
+            ? "Prepare a new review"
+            : proposal
             ? "Approve this"
             : isImprovingPrompt
               ? "Improving your prompt"
               : "Preparing your request"}
         </h1>
         <p>
-          {proposal
+          {proposalNeedsRefresh
+            ? "This proposal can no longer be approved safely."
+            : proposal
             ? "Review the final request before asset generation begins."
             : isImprovingPrompt
               ? "We’re turning your idea into clear art direction before generation."
@@ -202,8 +285,11 @@ export function AssetCreationReviewPage() {
       {proposal ? (
         <section className={styles.proposal} aria-label="Creation proposal">
           <p className={styles.srOnly} role="status">
-            Proposal ready. Approve it now or asset generation starts
-            automatically in 10 seconds.
+            {proposalNeedsRefresh
+              ? "This proposal needs to be refreshed before it can be approved."
+              : countdownArmed
+                ? "Proposal ready. Approve it now or asset generation starts automatically in 10 seconds."
+                : "Proposal ready. Automatic approval is off. Approve it manually or revise the request."}
           </p>
           <p>
             Asset generation can spend up to ${proposal.maximumUsd.toFixed(2)}.
@@ -223,7 +309,15 @@ export function AssetCreationReviewPage() {
               {proposal.effectivePrompt || request.prompt.trim()}
             </p>
           </div>
-          {countdownArmed && !confirm.isPending && !confirm.error ? (
+          {proposalNeedsRefresh ? (
+            <div className={styles.staleNotice} role="alert">
+              <h2>This proposal needs to be refreshed</h2>
+              <p>
+                Return to Asset Studio to prepare a fresh proposal. Nothing has
+                been approved from this page.
+              </p>
+            </div>
+          ) : countdownArmed && !confirm.isPending && !confirm.error ? (
             <>
               <p className={styles.autoApprovalNotice}>
                 This request starts automatically 10 seconds after the proposal
@@ -240,23 +334,31 @@ export function AssetCreationReviewPage() {
               {confirm.error.message}
             </p>
           ) : null}
-          <div className={styles.actions}>
-            <Button
-              variant="cta"
-              size="lg"
-              isLoading={confirm.isPending}
-              onClick={() => void approve("manual")}
-            >
-              Approve this
-            </Button>
-            <Button
-              variant="ghost"
-              disabled={confirm.isPending}
-              onClick={revise}
-            >
-              Revise request
-            </Button>
-          </div>
+          {proposalNeedsRefresh ? (
+            <div className={styles.actions}>
+              <Button variant="cta" size="lg" onClick={revise}>
+                Prepare again
+              </Button>
+            </div>
+          ) : (
+            <div className={styles.actions}>
+              <Button
+                variant="cta"
+                size="lg"
+                isLoading={confirm.isPending}
+                onClick={() => void approve("manual")}
+              >
+                Approve this
+              </Button>
+              <Button
+                variant="ghost"
+                disabled={confirm.isPending}
+                onClick={revise}
+              >
+                Revise request
+              </Button>
+            </div>
+          )}
         </section>
       ) : null}
     </main>
