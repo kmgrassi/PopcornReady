@@ -6,8 +6,8 @@
 > graph-aware proposal lifecycle have shipped against the asset graph. Every
 > executable root uses the Creative Director hierarchy, Request Changes enters
 > through proposals, and fixed-stage/flat application fallbacks are deleted.
-> The remaining cleanup is the separately deployed retirement of the temporary
-> profile compatibility schema. See
+> The separately deployed profile compatibility schema is retired after
+> structurally fencing historical flat/null roots. See
 > [`scopes/full-selective-regeneration-cutover-prs.md`](scopes/full-selective-regeneration-cutover-prs.md).
 > New work should align to it; any deviation should be a conscious, documented
 > decision. Last updated 2026-07-30 (status pass; original design 2026-06-08).
@@ -44,6 +44,9 @@ since landed. Map below (details inline per section). **§3 describes the model 
   durable `driveLoop` is shared by the Creative Director and persistent Visuals
   and Audio specialists in `apps/api`. Flat/null root history is terminal and
   readable but cannot be created, recovered, or resumed.
+- ✅ **Legacy profile retirement** — historical flat/null roots are superseded
+  and cannot reopen; the temporary profile column, trigger, constraints,
+  policies, grants, and dependent routine logic are removed.
 - 🟡 **Inspection / feedback loop (§7 P3)** — artifacts, gates, and approvals ship;
   the prompt-improving OODA loop (`docs/scopes/ooda-feedback-loop.md`) is the main
   open piece.

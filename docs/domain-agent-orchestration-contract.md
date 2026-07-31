@@ -275,8 +275,8 @@ service-role inserts from an older process during a rolling deploy. Terminal
 legacy history remains readable but cannot be created, recovered, or resumed.
 Production registry construction is role-owned; the flat aggregate registry,
 generic root prompt, deterministic feedback router, and legacy tool-loop driver
-are deleted. A temporary database-only profile compatibility bridge remains
-through PR 7A and is removed by the separately deployed PR 7B described in
+are deleted. PR 7B structurally supersedes historical flat/null roots and
+removes the temporary database-only profile compatibility bridge described in
 [`scopes/full-selective-regeneration-cutover-prs.md`](scopes/full-selective-regeneration-cutover-prs.md).
 `regenerate_image_asset` is classified as synchronous media work: its live rich
 handler and bridge were already synchronous, while the old dormant stub
