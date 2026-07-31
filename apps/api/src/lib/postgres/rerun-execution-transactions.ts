@@ -534,7 +534,11 @@ export async function cancelExecutionTransaction(input: {
   proposalActionId: string;
   executionActionId: string;
   reason: string;
-}): Promise<string> {
+}): Promise<{
+  executionActionId: string;
+  status: "applied" | "failed";
+  canceled: boolean;
+}> {
   return lifecycleTransaction("rerunLifecycle.cancelExecution", async (client) => {
     const row = requireRow((await client.query<LockedExecution>(
       `select id, proposal_action_id, project_id, root_run_id,
@@ -550,7 +554,23 @@ export async function cancelExecutionTransaction(input: {
         where project_id=$1 and proposal_action_id=$2 for update`,
       [input.projectId, input.proposalActionId]
     )).rows, "Execution reservation not found.");
-    if (row.execution_result_action_id) return row.execution_result_action_id;
+    if (row.execution_result_action_id) {
+      const terminal = requireRow((await client.query<{
+        status: "applied" | "failed";
+        error: { kind?: string } | null;
+      }>(
+        `select status::text as status, error
+           from public.actions where id=$1 and tool='rerun_execution'`,
+        [row.execution_result_action_id]
+      )).rows, "Execution result action not found.");
+      return {
+        executionActionId: row.execution_result_action_id,
+        status: terminal.status,
+        canceled:
+          terminal.status === "failed" &&
+          terminal.error?.kind === "execution_canceled",
+      };
+    }
     await client.query(
       `update public.rerun_execution_work_items set status='canceled',
        error=$2::jsonb where execution_reservation_id=$1
@@ -579,7 +599,7 @@ export async function cancelExecutionTransaction(input: {
       [row.id, token]
     );
     const fenced = await lockExecution(client, input.projectId, row.id);
-    return finalizeLocked(client, {
+    const executionActionId = await finalizeLocked(client, {
       projectId: input.projectId,
       execution: fenced,
       leaseToken: token,
@@ -592,6 +612,7 @@ export async function cancelExecutionTransaction(input: {
         recoverable: false,
       },
     });
+    return { executionActionId, status: "failed", canceled: true };
   });
 }
 

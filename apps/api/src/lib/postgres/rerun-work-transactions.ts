@@ -618,13 +618,14 @@ export async function completeWorkTransaction(input: {
                join public.orchestrator_budget_reservations budget
                  on budget.action_id=primitive.id
               where aa.project_id=$1 and aa.asset_id=$2
-                and aa.direction='output' and aa.action_id=any($3)
-                and primitive.orchestrator_run_id=coalesce($4,$5)
+                and aa.direction='output' and aa.action_id=any($3::uuid[])
+                and primitive.orchestrator_run_id=
+                  coalesce($4::uuid,$5::uuid)
                 and primitive.tool<>'domain_report'
                 and primitive.status='applied'
                 and budget.parent_reservation_id=$6
                 and budget.reservation_key=any($7)
-                and budget.orchestrator_run_id=coalesce($4,$5)
+                and budget.orchestrator_run_id=coalesce($4::uuid,$5::uuid)
                 and budget.status='settled' limit 1`,
             [
               input.projectId, binding.assetId,
@@ -643,8 +644,8 @@ export async function completeWorkTransaction(input: {
              join public.orchestrator_budget_reservations budget
                on budget.action_id=primitive.id
             where aa.project_id=$1 and aa.asset_id=$2
-              and aa.direction='output' and aa.action_id=any($3)
-              and primitive.orchestrator_run_id=coalesce($4,$5)
+              and aa.direction='output' and aa.action_id=any($3::uuid[])
+              and primitive.orchestrator_run_id=coalesce($4::uuid,$5::uuid)
               and primitive.tool<>'domain_report'
               and primitive.status='applied'
               and budget.parent_reservation_id=$6
@@ -698,8 +699,7 @@ export async function completeWorkTransaction(input: {
       await client.query(
         `insert into public.action_assets(
            project_id,action_id,asset_id,direction,role,ordinal
-         ) values ($1,$2,$3,'output',$4,$5)
-         on conflict (action_id,direction,ordinal) do nothing`,
+         ) values ($1,$2,$3,'output',$4,$5)`,
         [
           input.projectId, work.dispatch_action_id, binding.assetId,
           binding.role ?? "rerun_output", binding.ordinal ?? ordinal,

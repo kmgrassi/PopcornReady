@@ -115,10 +115,37 @@ grant update (
 drop policy if exists actions_popcorn_api_rerun_select on public.actions;
 create policy actions_popcorn_api_rerun_select
   on public.actions for select to popcorn_api
-  using (tool in (
-    'rerun_proposal', 'rerun_proposal_approval', 'rerun_work_item_dispatch',
-    'rerun_reconciliation', 'rerun_execution', 'domain_report'
-  ));
+  using (
+    tool in (
+      'rerun_proposal', 'rerun_proposal_approval', 'rerun_work_item_dispatch',
+      'rerun_reconciliation', 'rerun_execution', 'domain_report'
+    )
+    or (
+      tool <> 'domain_report'
+      and status in ('running', 'applied')
+      and exists (
+        select 1
+          from public.orchestrator_runs child
+          join public.rerun_execution_reservations execution
+            on execution.project_id = child.project_id
+           and execution.root_run_id = child.parent_run_id
+          join public.rerun_execution_work_items work
+            on work.execution_reservation_id = execution.id
+           and work.project_id = execution.project_id
+           and work.dispatch_action_id = child.root_action_id
+         where child.id = actions.orchestrator_run_id
+           and child.project_id = actions.project_id
+           and child.agent_role in ('visuals', 'audio')
+           and child.root_execution_profile is null
+           and execution.id::text =
+             child.task_params #>>
+               '{approvalContext,executionReservationId}'
+           and execution.proposal_action_id::text =
+             child.task_params #>>
+               '{approvalContext,proposalActionId}'
+      )
+    )
+  );
 drop policy if exists actions_popcorn_api_rerun_insert on public.actions;
 create policy actions_popcorn_api_rerun_insert
   on public.actions for insert to popcorn_api
@@ -199,8 +226,30 @@ drop policy if exists orchestrator_runs_popcorn_api_rerun_select
 create policy orchestrator_runs_popcorn_api_rerun_select
   on public.orchestrator_runs for select to popcorn_api
   using (
-    agent_role = 'creative_director'
-    and root_execution_profile = 'creative_director'
+    (
+      agent_role = 'creative_director'
+      and root_execution_profile = 'creative_director'
+    )
+    or (
+      agent_role in ('visuals', 'audio')
+      and root_execution_profile is null
+      and exists (
+        select 1
+          from public.rerun_execution_reservations execution
+          join public.rerun_execution_work_items work
+            on work.execution_reservation_id = execution.id
+           and work.project_id = execution.project_id
+           and work.dispatch_action_id = orchestrator_runs.root_action_id
+         where execution.project_id = orchestrator_runs.project_id
+           and execution.root_run_id = orchestrator_runs.parent_run_id
+           and execution.id::text =
+             orchestrator_runs.task_params #>>
+               '{approvalContext,executionReservationId}'
+           and execution.proposal_action_id::text =
+             orchestrator_runs.task_params #>>
+               '{approvalContext,proposalActionId}'
+      )
+    )
   );
 drop policy if exists orchestrator_runs_popcorn_api_rerun_insert
   on public.orchestrator_runs;

@@ -67,6 +67,14 @@ test("popcorn_api gets exact lifecycle columns and no workflow-routine authority
     /revoke all on function public\.finalize_rerun_execution[\s\S]*from popcorn_api/
   );
   assert.match(migration, /assets_popcorn_api_rerun_select/);
+  assert.match(
+    migration,
+    /tool <> 'domain_report'[\s\S]*status in \('running', 'applied'\)[\s\S]*child\.id = actions\.orchestrator_run_id/
+  );
+  assert.match(
+    migration,
+    /work\.dispatch_action_id = orchestrator_runs\.root_action_id[\s\S]*approvalContext,executionReservationId/
+  );
 });
 
 test("proposal ceilings use the canonical budget ledger without double-counting settled children", async () => {

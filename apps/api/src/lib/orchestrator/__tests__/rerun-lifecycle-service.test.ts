@@ -7,6 +7,7 @@ import { ApiError } from "@/core/errors";
 import {
   approveRerunProposal,
   callbackTokenHash,
+  cancelRerunProposal,
   executeRerunProposal,
   refreshRerunProposal,
   rejectRerunProposal,
@@ -206,7 +207,11 @@ function harness(input: {
       proposalAction.status = "applied";
       return "execution-action-1";
     },
-    cancelExecution: async () => "execution-action-canceled",
+    cancelExecution: async () => ({
+      executionActionId: "execution-action-canceled",
+      status: "failed",
+      canceled: true,
+    }),
     createProposal: (async () => {
       throw new Error("not used");
     }) as RerunLifecycleDeps["createProposal"],
@@ -433,6 +438,81 @@ test("a valid clarification answer creates one causally linked successor", async
     successorInput?.params.clarificationAnswer,
     { answerFingerprint: "question-fingerprint", optionId: "warm" }
   );
+});
+
+test("a concurrent successor replay returns the persisted winning proposal", async () => {
+  const state = harness({});
+  const losingProposal = {
+    ...revisionProposal(),
+    userFacingSummary: "Losing nondeterministic proposal.",
+  };
+  const winningProposal = {
+    ...revisionProposal(),
+    userFacingSummary: "Persisted winning proposal.",
+  };
+  let successorReads = 0;
+  state.deps.getSuccessor = async () => {
+    successorReads += 1;
+    if (successorReads === 1) return null;
+    return {
+      ...action(winningProposal),
+      id: "successor-winner",
+      proposal: winningProposal,
+      rationale: winningProposal.rationale,
+    };
+  };
+  state.deps.createSuccessor = async () => ({
+    successor_action_id: "successor-winner",
+    replayed: true,
+  });
+  state.deps.createProposal = (async (input, overrides) => {
+    const persisted = await overrides!.persistProposal!({
+      projectId: input.projectId,
+      rootRunId: "root-1",
+      source: input.source,
+      message: input.message,
+      targets: input.targets,
+      proposal: losingProposal,
+      priorProposalActionId: input.priorProposalActionId,
+    });
+    return { actionId: persisted.id, proposal: losingProposal };
+  }) as RerunLifecycleDeps["createProposal"];
+
+  const result = await refreshRerunProposal({
+    workspaceId: "workspace-1",
+    projectId: "project-1",
+    actionId: "proposal-1",
+    idempotencyKey: "refresh-race",
+    message: "Try another version.",
+  }, state.deps);
+
+  assert.equal(successorReads, 2);
+  assert.equal(result.actionId, "successor-winner");
+  assert.equal(result.proposal.userFacingSummary, "Persisted winning proposal.");
+  assert.equal(result.replayed, true);
+});
+
+test("late cancellation reports the persisted successful outcome", async () => {
+  const state = harness({});
+  state.deps.cancelExecution = async () => ({
+    executionActionId: "execution-action-success",
+    status: "applied",
+    canceled: false,
+  });
+
+  const result = await cancelRerunProposal({
+    workspaceId: "workspace-1",
+    projectId: "project-1",
+    actionId: "proposal-1",
+    reason: "Too late.",
+  }, state.deps);
+
+  assert.deepEqual(result, {
+    actionId: "proposal-1",
+    executionActionId: "execution-action-success",
+    status: "applied",
+    canceled: false,
+  });
 });
 
 test("eligible autonomous work uses the same durable approval path", async () => {

@@ -6,6 +6,7 @@ import { Pool } from "pg";
 import { ApiError } from "@/core/errors";
 import { ensureRerunReconciliation } from "@/lib/api/v1/rerun-lifecycle-store";
 import {
+  cancelExecutionTransaction,
   claimExecutionTransaction,
   finalizeExecutionTransaction,
   recoverExecutionTransaction,
@@ -440,6 +441,191 @@ integrationTest(
       );
       context.diagnostic("DB-clock expiry and park replay mismatch rejected");
 
+      const positiveOutput = {
+        bindingId: "binding-positive",
+        workItemId: "positive-work",
+        target,
+        kind: "image",
+        role: "revised-shot",
+        ordinal: 0,
+      };
+      const positiveProposalId = await insertProposal(admin, projectId, [{
+        workItemId: "positive-work",
+        owner: "visuals",
+        kind: "revise_visuals",
+        targets: [target],
+        requiredOutputs: [positiveOutput],
+      }]);
+      const positive = await approveAndClaim(
+        projectId, positiveProposalId, "positive-causation"
+      );
+      const positiveDispatchId = randomUUID();
+      const positiveTokenHash = createHash("sha256")
+        .update("positive-callback-token").digest("hex");
+      await reserveWorkTransaction({
+        projectId,
+        lease: positive.lease,
+        workItemId: "positive-work",
+        requestFingerprint: "positive-work",
+        dispatchActionId: positiveDispatchId,
+        dispatchParams: {},
+        callbackFences: [{
+          executorId: "positive-visuals",
+          tokenHash: positiveTokenHash,
+          generation: 1,
+          requiredOutputs: [positiveOutput],
+        }],
+      });
+      const childRunId = randomUUID();
+      const taskParams = {
+        schemaVersion: "DomainTask.v1",
+        domain: "visuals",
+        taskKind: "visuals_revision",
+        objective: "Prove rerun child visibility.",
+        instruction: "Produce the required image.",
+        targets: [target],
+        requiredOutputs: [positiveOutput],
+        allowedOutputKinds: ["image"],
+        creativeConstraints: {},
+        preserve: { assetIds: [], selections: [], fingerprints: [], pins: [] },
+        candidateAffectedAssetIds: [],
+        budgetUsd: 0,
+        approvalContext: {
+          proposalActionId: positiveProposalId,
+          approvalActionId: positive.executionRequest.approvalActionId,
+          executionReservationId: positive.reservation.reservation_id,
+          approvedBudgetUsd: 0,
+          approvalFingerprint: positive.executionRequest.approvalFingerprint,
+        },
+        acceptanceCriteria: [],
+        origin: {
+          kind: "creative_director",
+          rootRunId: positive.reservation.root_run_id,
+          rootActionId: positiveDispatchId,
+          creatorMessageId: "direct-integration",
+        },
+        responseRecipient: { kind: "creative_director" },
+      };
+      await admin.query(
+        `select * from public.create_domain_run_dispatch(
+          p_idempotency_scope => $1, p_idempotency_key => $2,
+          p_request_hash => $3, p_run_id => $4, p_project_id => $5,
+          p_domain => 'visuals', p_input_summary => $6, p_budget_usd => 0,
+          p_task_kind => 'visuals_revision', p_task_params => $7::jsonb,
+          p_origin_kind => 'creative_director', p_parent_run_id => $8,
+          p_root_action_id => $9, p_origin_actor_id => null,
+          p_origin_request => null, p_continues_run_id => null,
+          p_pins => null, p_gate_stage => null, p_enqueue => false,
+          p_max_children_per_root => 20, p_max_continuation_chain => 10,
+          p_max_session_turns => 20,
+          p_max_blocked_reports_per_requirement => 3
+        )`,
+        [
+          `rerun-direct:${positive.reservation.reservation_id}`,
+          "positive-child", "positive-child-hash", childRunId, projectId,
+          "Positive rerun child visibility", JSON.stringify(taskParams),
+          positive.reservation.root_run_id, positiveDispatchId,
+        ]
+      );
+      const assetId = randomUUID();
+      const primitiveActionId = randomUUID();
+      await admin.query(
+        `insert into public.assets(
+           id,workspace_id,project_id,kind,media,role,filename,source
+         ) values ($1,$2,$3,'image','image',$4,'positive.png','{}')`,
+        [assetId, workspaceId, projectId, positiveOutput.role]
+      );
+      await admin.query(
+        `insert into public.actions(
+           id,schema_version,project_id,orchestrator_run_id,tool,status,params,
+           input_asset_ids,output_asset_ids,job_ids
+         ) values ($1,'action.v1',$2,$3,'generate_image','running',
+           '{"schema_version":"action_params.v1"}'::jsonb,'{}',$4::uuid[],'{}')`,
+        [primitiveActionId, projectId, childRunId, [assetId]]
+      );
+      await admin.query(
+        `insert into public.action_assets(
+           project_id,action_id,asset_id,direction,role,ordinal
+         ) values ($1,$2,$3,'output',$4,0)`,
+        [projectId, primitiveActionId, assetId, positiveOutput.role]
+      );
+      const budgetKey = `positive-budget:${positiveProposalId}`;
+      await reserveChildBudgetTransaction({
+        projectId,
+        executionReservationId: positive.reservation.reservation_id,
+        workItemId: "positive-work",
+        childRunId,
+        actionId: primitiveActionId,
+        reservationKey: budgetKey,
+        estimatedUsd: 0,
+      });
+      await admin.query(
+        "select * from public.settle_orchestrator_run_budget($1,$2,0,null,0)",
+        [projectId, budgetKey]
+      );
+      const binding = {
+        ...positiveOutput,
+        assetId,
+        intrinsicRole: positiveOutput.role,
+      };
+      const reportActionId = randomUUID();
+      await admin.query(
+        "update public.actions set status='applied' where id=$1",
+        [primitiveActionId]
+      );
+      await admin.query(
+        `update public.orchestrator_runs
+            set status='succeeded',started_at=now(),completed_at=now()
+          where id=$1`,
+        [childRunId]
+      );
+      await admin.query(
+        `insert into public.actions(
+           id,schema_version,project_id,orchestrator_run_id,tool,status,params,
+           input_asset_ids,output_asset_ids,job_ids
+         ) values ($1,'action.v1',$2,$3,'domain_report','applied',$4::jsonb,
+           '{}',$5::uuid[],'{}')`,
+        [
+          reportActionId, projectId, childRunId,
+          JSON.stringify({
+            schemaVersion: "DomainReport.v1",
+            outcome: { outputs: [binding] },
+          }),
+          [assetId],
+        ]
+      );
+      await parkWorkTransaction({
+        projectId,
+        lease: positive.lease,
+        workItemId: "positive-work",
+        completedCallbacks: [{
+          executorId: "positive-visuals",
+          tokenHash: positiveTokenHash,
+          generation: 1,
+          result: {
+            outputs: [binding],
+            childRunId,
+            reportActionId,
+            primitiveActionIds: [primitiveActionId],
+            budgetReservationKeys: [budgetKey],
+          },
+        }],
+        primitiveActionIds: [primitiveActionId],
+        budgetReservationKeys: [budgetKey],
+        bindingResults: [binding],
+      });
+      await completeWorkTransaction({
+        projectId,
+        lease: positive.lease,
+        workItemId: "positive-work",
+        bindingResults: [binding],
+        primitiveActionIds: [primitiveActionId],
+        budgetReservationKeys: [budgetKey],
+      });
+      context.diagnostic(
+        "causally bound specialist child and primitive were readable by popcorn_api"
+      );
+
       const successProposalId = await insertProposal(admin, projectId);
       const success = await approveAndClaim(
         projectId, successProposalId, "success"
@@ -494,6 +680,18 @@ integrationTest(
         terminal.rows[0]?.reconciliation_action_id,
         reconciliationActionId
       );
+      const lateCancellation = await cancelExecutionTransaction({
+        projectId,
+        proposalActionId: successProposalId,
+        executionActionId: randomUUID(),
+        reason: "creator canceled after success",
+      });
+      assert.deepEqual(lateCancellation, {
+        executionActionId,
+        status: "applied",
+        canceled: false,
+      });
+      context.diagnostic("late cancellation preserved the successful outcome");
     } finally {
       await closePostgresPool();
       process.env.DATABASE_URL = originalUrl;

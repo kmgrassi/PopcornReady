@@ -65,7 +65,11 @@ reservations, child-budget admission, cancellation, reconciliation, and
 terminal cost settlement run as typed `popcorn_api` transactions. The API does
 not call the corresponding service-role workflow routines. PostgreSQL retains
 the lifecycle transition trigger, budget-admission trigger, constraints, RLS,
-and the narrow pin-freshness locking function.
+and the narrow pin-freshness locking function. The role's lifecycle read
+policies expose the Creative Director roots and lifecycle actions plus only the
+Visuals/Audio child runs and primitive actions whose parent root, dispatch
+action, proposal approval context, and execution reservation match one durable
+rerun work item. Unrelated domain runs and primitive actions remain hidden.
 
 ## Direct Postgres safety rules
 

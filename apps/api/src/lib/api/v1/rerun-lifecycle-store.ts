@@ -633,6 +633,10 @@ export async function cancelRerunExecution(input: {
   proposalActionId: string;
   executionActionId: string;
   reason: string;
-}): Promise<string> {
+}): Promise<{
+  executionActionId: string;
+  status: "applied" | "failed";
+  canceled: boolean;
+}> {
   return cancelExecutionTransaction(input);
 }
