@@ -76,7 +76,7 @@ const LIFECYCLE_COLUMN_PRIVILEGES = {
     UPDATE: [],
   },
   story_blueprint_scenes: {
-    SELECT: ["id","project_id","scene_asset_id"],
+    SELECT: ["id","project_id","scene_asset_id","story_snapshot_asset_id"],
     INSERT: [],
     UPDATE: [],
   },

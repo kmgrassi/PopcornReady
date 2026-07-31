@@ -19,6 +19,10 @@ const storySpineMigrationPath = path.resolve(
   process.cwd(),
   "../../supabase/migrations/20260731123000_rerun_story_spine_application.sql"
 );
+const storyPrivilegeMigrationPath = path.resolve(
+  process.cwd(),
+  "../../supabase/migrations/20260731155000_harden_rerun_story_spine_privileges.sql"
+);
 
 test("rerun lifecycle migration fences approval, successor, execution, and work identity", async () => {
   const migration = await readFile(migrationPath, "utf8");
@@ -119,6 +123,22 @@ test("storyboard reruns preserve visual pointers and reconcile semantic rows", a
   assert.match(migration, /delete from public\.story_beats\s+where scene_id=p_row_id/);
   assert.match(migration, /storyboard snapshot contains duplicate beat ids/);
   assert.match(migration, /grant execute on function public\.apply_rerun_story_pointer/);
+});
+
+test("popcorn_api keeps only the story pointer needed by direct transactions", async () => {
+  const migration = await readFile(storyPrivilegeMigrationPath, "utf8");
+  assert.match(
+    migration,
+    /revoke select \(stable_id\)\s+on table public\.story_blueprint_scenes from popcorn_api/
+  );
+  assert.match(
+    migration,
+    /revoke select \(stable_id\)\s+on table public\.story_beats from popcorn_api/
+  );
+  assert.doesNotMatch(
+    migration,
+    /revoke select \(story_snapshot_asset_id\)/
+  );
 });
 
 test("proposal ceilings use the canonical budget ledger without double-counting settled children", async () => {

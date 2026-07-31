@@ -194,6 +194,31 @@ test("production readiness has no retired root profile privilege allowance", asy
   );
 });
 
+test("production readiness allows only the direct story-pointer columns", async () => {
+  const fixture = readinessRunner();
+  const readiness = createCreatorDirectDatabaseReadiness(fixture.runner, {
+    NODE_ENV: "production",
+    DATABASE_URL: "postgresql://configured",
+  });
+  await readiness();
+
+  const requiredPrivileges = JSON.parse(fixture.params()[2] as string) as {
+    story_blueprint_scenes: { SELECT: string[] };
+    story_beats: { SELECT: string[] };
+  };
+  assert.deepEqual(requiredPrivileges.story_blueprint_scenes.SELECT, [
+    "id",
+    "project_id",
+    "scene_asset_id",
+    "story_snapshot_asset_id",
+  ]);
+  assert.deepEqual(requiredPrivileges.story_beats.SELECT, [
+    "beat_asset_id",
+    "id",
+    "project_id",
+  ]);
+});
+
 test("Railway health fails closed when DATABASE_URL is absent", async () => {
   const fixture = readinessRunner();
   const readiness = createCreatorDirectDatabaseReadiness(fixture.runner, {
