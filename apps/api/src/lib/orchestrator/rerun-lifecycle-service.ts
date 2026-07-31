@@ -594,6 +594,7 @@ export async function executeRerunProposal(input: {
           actorId: input.actorId,
           proposalActionId: action.id,
           approvalActionId: approval.approvalActionId,
+          approvalFingerprint: approval.approvalFingerprint,
           approvedMaxCostUsd: approval.approvedMaxCostUsd,
           rootRunId,
           proposal,
