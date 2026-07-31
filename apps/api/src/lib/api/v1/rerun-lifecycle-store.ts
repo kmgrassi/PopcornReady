@@ -90,6 +90,36 @@ interface ActionRow {
   error: Record<string, unknown> | null;
 }
 
+export function normalizeRerunExecutionFailure(
+  value: unknown
+): { code: string; message: string } | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const rawError = unmarkedJson(value as Record<string, unknown>) ?? {};
+  const code =
+    typeof rawError.code === "string"
+      ? rawError.code
+      : typeof rawError.kind === "string"
+        ? rawError.kind
+        : "rerun_execution_failed";
+  const messages: Record<string, string> = {
+    stale_proposal:
+      "The selected work changed before the requested changes could be applied.",
+    budget_exceeded:
+      "The requested changes could not finish within the approved maximum cost.",
+    execution_canceled: "The requested changes were canceled.",
+    executor_failed:
+      "A generation step could not complete the requested changes.",
+    provider_quota:
+      "A generation provider could not complete the requested changes right now.",
+    reconciliation_failed:
+      "The generated changes could not be safely applied to the project.",
+  };
+  return {
+    code,
+    message: messages[code] ?? "The requested changes could not be completed.",
+  };
+}
+
 function mapProposalAction(row: ActionRow): RerunProposalActionRecord {
   const proposal = unmarkedJson(row.proposal) as RerunProposalV2 | undefined;
   if (
@@ -99,19 +129,6 @@ function mapProposalAction(row: ActionRow): RerunProposalActionRecord {
   ) {
     throw new ApiError("validation_failed", "Action is not a RerunProposal.v2 envelope.");
   }
-  const rawError = unmarkedJson(row.error) as Record<string, unknown> | undefined;
-  const failure = rawError
-    ? {
-        code:
-          typeof rawError.code === "string"
-            ? rawError.code
-            : "rerun_execution_failed",
-        message:
-          typeof rawError.message === "string"
-            ? rawError.message
-            : "The requested changes could not be completed.",
-      }
-    : null;
   return {
     id: row.id,
     projectId: row.project_id,
@@ -121,7 +138,7 @@ function mapProposalAction(row: ActionRow): RerunProposalActionRecord {
     proposal,
     inputAssetIds: row.input_asset_ids,
     rationale: row.rationale,
-    failure,
+    failure: normalizeRerunExecutionFailure(row.error),
   };
 }
 
@@ -327,34 +344,89 @@ export async function getRerunProposalApproval(input: {
   };
 }
 
-export async function getLatestRerunExecution(input: {
-  projectId: string;
-  proposalActionId: string;
-}): Promise<{
+interface RerunExecutionRow {
+  id: string;
+  status:
+    | "reserved"
+    | "running"
+    | "waiting"
+    | "completed"
+    | "failed"
+    | "canceled";
+  execution_result_action_id: string | null;
+  updated_at: string;
+}
+
+interface RerunExecutionReadDeps {
+  getReservation: (input: {
+    projectId: string;
+    proposalActionId: string;
+  }) => Promise<RerunExecutionRow | null>;
+  getExecutionAction: (input: {
+    projectId: string;
+    executionActionId: string;
+  }) => Promise<{ error: Record<string, unknown> | null } | null>;
+}
+
+export async function getLatestRerunExecution(
+  input: {
+    projectId: string;
+    proposalActionId: string;
+  },
+  overrides: Partial<RerunExecutionReadDeps> = {}
+): Promise<{
   reservationId: string;
-  status: "reserved" | "running" | "waiting" | "completed" | "failed" | "canceled";
+  status:
+    | "reserved"
+    | "running"
+    | "waiting"
+    | "completed"
+    | "failed"
+    | "canceled";
   executionActionId: string | null;
   updatedAt: string;
+  failure: { code: string; message: string } | null;
 } | null> {
-  const row = await runLifecycleQuery(
-    "rerunLifecycleStore.getExecution",
-    getServiceSupabaseForStore().from("rerun_execution_reservations")
-      .select("id, status, execution_result_action_id, updated_at")
-      .eq("project_id", input.projectId)
-      .eq("proposal_action_id", input.proposalActionId)
-      .maybeSingle()
-  ) as {
-    id: string;
-    status: "reserved" | "running" | "waiting" | "completed" | "failed" | "canceled";
-    execution_result_action_id: string | null;
-    updated_at: string;
-  } | null;
+  const getReservation = overrides.getReservation ?? (async (request) => {
+    const db = getServiceSupabaseForStore();
+    return runLifecycleQuery(
+      "rerunLifecycleStore.getExecution",
+      db.from("rerun_execution_reservations")
+        .select("id, status, execution_result_action_id, updated_at")
+        .eq("project_id", request.projectId)
+        .eq("proposal_action_id", request.proposalActionId)
+        .maybeSingle()
+    ) as Promise<RerunExecutionRow | null>;
+  });
+  const getExecutionAction = overrides.getExecutionAction ?? (async (request) => {
+    const db = getServiceSupabaseForStore();
+    return runLifecycleQuery(
+      "rerunLifecycleStore.getExecution result",
+      db.from("actions")
+        .select("error")
+        .eq("id", request.executionActionId)
+        .eq("project_id", request.projectId)
+        .eq("tool", "rerun_execution")
+        .maybeSingle()
+    ) as Promise<{ error: Record<string, unknown> | null } | null>;
+  });
+  const row = await getReservation(input);
   if (!row) return null;
+  const executionAction = row.execution_result_action_id
+    ? await getExecutionAction({
+        projectId: input.projectId,
+        executionActionId: row.execution_result_action_id,
+      })
+    : null;
+  const failure = normalizeRerunExecutionFailure(executionAction?.error);
+  const canceled =
+    row.status === "canceled" || failure?.code === "execution_canceled";
   return {
     reservationId: row.id,
-    status: row.status,
+    status: canceled ? "canceled" : row.status,
     executionActionId: row.execution_result_action_id,
     updatedAt: row.updated_at,
+    failure: canceled ? null : failure,
   };
 }
 
@@ -682,7 +754,7 @@ export async function cancelRerunExecution(input: {
   reason: string;
 }): Promise<{
   executionActionId: string;
-  status: "applied" | "failed";
+  status: "applied" | "failed" | "canceled";
   canceled: boolean;
 }> {
   return cancelExecutionTransaction(input);

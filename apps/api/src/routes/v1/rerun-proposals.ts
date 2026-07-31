@@ -193,8 +193,15 @@ rerunProposalsRouter.get(
               approvedMaxCostUsd: approval.approvedMaxCostUsd,
             }
           : null,
-        execution,
-        failure: action.failure,
+        execution: execution
+          ? {
+              reservationId: execution.reservationId,
+              status: execution.status,
+              executionActionId: execution.executionActionId,
+              updatedAt: execution.updatedAt,
+            }
+          : null,
+        failure: execution?.failure ?? action.failure,
       },
     };
   })

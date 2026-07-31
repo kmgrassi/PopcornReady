@@ -109,6 +109,11 @@ function harness(input: {
     } | null;
   }>;
   appliedFinalizeError?: ApiError;
+  cancelResult?: {
+    executionActionId: string;
+    status: "applied" | "failed" | "canceled";
+    canceled: boolean;
+  };
 }) {
   const proposalAction = action(input.proposal);
   let approval: {
@@ -238,9 +243,9 @@ function harness(input: {
       proposalAction.status = "applied";
       return "execution-action-1";
     },
-    cancelExecution: async () => ({
+    cancelExecution: async () => input.cancelResult ?? ({
       executionActionId: "execution-action-canceled",
-      status: "failed",
+      status: "canceled",
       canceled: true,
     }),
     createProposal: (async () => {
@@ -339,6 +344,46 @@ test("callback tokens use the raw SHA-256 fence expected by the database", () =>
     callbackTokenHash("callback-token"),
     "2bab857641ead2282344948fa6e48b34d6048089f1fd912e68c2f4fafb9c6a8f"
   );
+});
+
+test("creator cancellation reports the durable canceled outcome", async () => {
+  const state = harness({});
+  const result = await cancelRerunProposal(
+    {
+      workspaceId: "workspace-1",
+      projectId: "project-1",
+      actionId: "proposal-1",
+      reason: "creator_canceled",
+    },
+    state.deps
+  );
+
+  assert.equal(result.status, "canceled");
+  assert.equal(result.canceled, true);
+  assert.equal(result.executionActionId, "execution-action-canceled");
+});
+
+test("creator cancellation reports a competing terminal outcome truthfully", async () => {
+  const state = harness({
+    cancelResult: {
+      executionActionId: "execution-action-applied",
+      status: "applied",
+      canceled: false,
+    },
+  });
+  const result = await cancelRerunProposal(
+    {
+      workspaceId: "workspace-1",
+      projectId: "project-1",
+      actionId: "proposal-1",
+      reason: "creator_canceled",
+    },
+    state.deps
+  );
+
+  assert.equal(result.status, "applied");
+  assert.equal(result.canceled, false);
+  assert.equal(result.executionActionId, "execution-action-applied");
 });
 
 test("bound target validation ignores object key insertion order", () => {
