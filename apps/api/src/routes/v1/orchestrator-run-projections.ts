@@ -432,7 +432,8 @@ export function projectRun(
       // a delegated specialist assignment, not a provider job.
       : run.status === "waiting" && run.waitReason === "domain"
         ? "waiting_on_domain" as const
-        : run.status === "waiting" && latestAction?.jobIds.length
+        : run.status === "waiting" &&
+            (run.waitReason === "media_job" || latestAction?.jobIds.length)
           ? "waiting_on_job" as const
           : "working" as const;
   const currentStageType =

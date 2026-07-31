@@ -63,14 +63,34 @@ class FakeStore implements OrchestratorEngineStore {
   }
   async updateOrchestratorRun(_id: string, patch: UpdateOrchestratorRunPatch) {
     const { waitReason, ...rest } = patch;
-    this.run = { ...this.run, ...rest };
-    if (waitReason) this.run.waitReason = waitReason;
-    else if (waitReason === null) delete this.run.waitReason;
+    const nextRun = { ...this.run, ...rest };
+    if (waitReason) nextRun.waitReason = waitReason;
+    else if (waitReason === null) delete nextRun.waitReason;
+    else if (patch.status !== undefined && patch.status !== "waiting") {
+      delete nextRun.waitReason;
+    }
+    const finiteDomainRun = nextRun.agentRole === "visuals" || nextRun.agentRole === "audio";
+    if (nextRun.status === "waiting" && finiteDomainRun && !nextRun.waitReason) {
+      throw new Error("orchestrator_runs_wait_reason_shape");
+    }
+    if (
+      nextRun.status === "waiting" &&
+      !finiteDomainRun &&
+      nextRun.waitReason !== undefined &&
+      nextRun.waitReason !== "domain"
+    ) {
+      throw new Error("orchestrator_runs_wait_reason_shape");
+    }
+    if (nextRun.status !== "waiting" && nextRun.waitReason !== undefined) {
+      throw new Error("orchestrator_runs_wait_reason_shape");
+    }
+    this.run = nextRun;
     return { ...this.run };
   }
   async claimOrchestratorRunResume() {
     if (this.run.status !== "waiting") return null;
     this.run = { ...this.run, status: "running" };
+    delete this.run.waitReason;
     return { ...this.run };
   }
   async listRunGates() {
@@ -468,6 +488,7 @@ test("parks on an accepted async job, then resumes to completion when the job su
 
   const parked = await runOrchestratorToCompletion("run1", deps(store, model, registry));
   assert.equal(parked.status, "waiting");
+  assert.equal(parked.waitReason, undefined, "root media waits retain their legacy null reason");
   assert.equal(store.actions.length, 1);
   assert.deepEqual([store.actions[0].status, store.actions[0].jobIds], ["running", ["job1"]]);
 
@@ -481,6 +502,69 @@ test("parks on an accepted async job, then resumes to completion when the job su
   // the parking action is finalized with the assets its job produced
   assert.equal(store.actions[0].status, "applied");
   assert.deepEqual(store.actions[0].outputAssetIds, ["tile_1", "tile_2"]);
+});
+
+for (const { role, tool } of [
+  { role: "visuals", tool: "generate_keyframe" },
+  { role: "audio", tool: "generate_audio" },
+] as const) {
+  test(`a claimed ${role} run parks an accepted provider job with media_job`, async () => {
+    const store = new FakeStore(runFixture({ agentRole: role }));
+    const { model } = scriptedModel([{ type: "tool_call", toolName: tool }]);
+    const registry = fakeRegistry({
+      [tool]: () => ({ status: "accepted", jobId: "job1", resumesWhen: "job_terminal" }),
+    });
+
+    const parked = await runOrchestratorToCompletion(
+      "run1",
+      deps(store, model, registry, {
+        enabledDomainRoles: [role],
+        domainRuntimeEnabled: true,
+        sessionClaimGeneration: 1,
+        resolveAgentDefinition: async () => ({
+          role,
+          registry,
+          systemPrompt: `test ${role}`,
+          loadTurnContext: async () => undefined,
+        }),
+      })
+    );
+
+    assert.equal(parked.status, "waiting");
+    assert.equal(parked.waitReason, "media_job");
+  });
+}
+
+test("a claimed domain run preserves media_job while a provider job is still running", async () => {
+  const store = new FakeStore(runFixture({ agentRole: "visuals" }));
+  const { model } = scriptedModel([{ type: "tool_call", toolName: "generate_keyframe" }]);
+  const registry = fakeRegistry({
+    generate_keyframe: () => ({
+      status: "accepted",
+      jobId: "job1",
+      resumesWhen: "job_terminal",
+    }),
+  });
+  const domainDeps = deps(store, model, registry, {
+    enabledDomainRoles: ["visuals"],
+    domainRuntimeEnabled: true,
+    sessionClaimGeneration: 1,
+    resolveAgentDefinition: async () => ({
+      role: "visuals",
+      registry,
+      systemPrompt: "test visuals",
+      loadTurnContext: async () => undefined,
+    }),
+  });
+
+  await runOrchestratorToCompletion("run1", domainDeps);
+  const parked = await resumeOrchestratorRun("run1", {
+    ...domainDeps,
+    jobs: { getJob: async () => ({ status: "running" }) },
+  });
+
+  assert.equal(parked.status, "waiting");
+  assert.equal(parked.waitReason, "media_job");
 });
 
 test("continues when an async job finishes before the initial park completes", async () => {
@@ -993,10 +1077,44 @@ test("parks on an approval gate and persists preview artifacts on the action", a
   const parked = await runOrchestratorToCompletion("run1", deps(store, model, registry));
 
   assert.equal(parked.status, "waiting");
+  assert.equal(parked.waitReason, undefined, "root approval waits retain their legacy null reason");
   assert.equal(store.actions.length, 1);
   assert.equal(store.actions[0].tool, "request_approval");
   assert.equal(store.actions[0].status, "running");
   assert.deepEqual(store.actions[0].outputAssetIds, ["preview_1"]);
+});
+
+test("a claimed domain run parks an approval result with approval", async () => {
+  const store = new FakeStore(runFixture({ agentRole: "visuals" }));
+  const { model } = scriptedModel([
+    { type: "tool_call", toolName: "request_approval", input: { step: "export_video" } },
+  ]);
+  const registry = fakeRegistry({
+    request_approval: () => ({
+      status: "waiting_for_approval",
+      gateId: "gate_export_video",
+      resumesWhen: "approval_terminal",
+      previewArtifactIds: [],
+    }),
+  });
+
+  const parked = await runOrchestratorToCompletion(
+    "run1",
+    deps(store, model, registry, {
+      enabledDomainRoles: ["visuals"],
+      domainRuntimeEnabled: true,
+      sessionClaimGeneration: 1,
+      resolveAgentDefinition: async () => ({
+        role: "visuals",
+        registry,
+        systemPrompt: "test visuals",
+        loadTurnContext: async () => undefined,
+      }),
+    })
+  );
+
+  assert.equal(parked.status, "waiting");
+  assert.equal(parked.waitReason, "approval");
 });
 
 test("parks before a gated stage and resumes once the gate is approved", async () => {
