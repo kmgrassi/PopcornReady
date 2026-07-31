@@ -15,7 +15,10 @@ Environment variables cannot change root ownership. Application code no longer
 reads or writes `root_execution_profile`; the PR 7A database trigger fills it
 only for omitted Creative Director root inserts while older binaries overlap.
 Nonterminal flat/null history is canceled rather than rewritten, and terminal
-history remains readable.
+history remains readable. Before role-only application routing deploys, PR 7A
+rejects reached gates on that history and cancels only failed legacy roots that
+would otherwise qualify for insufficient-credit retry. Their original error and
+action records remain intact for diagnosis.
 
 Project-scoped Request Changes uses the proposal lifecycle to resolve targets,
 approve cost and blast radius, execute bounded child work, and reconcile

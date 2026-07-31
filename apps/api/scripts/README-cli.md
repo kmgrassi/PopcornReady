@@ -52,7 +52,7 @@ upload --project <id> --file <path> [--kind image|video|audio]
 run start  --project <id> --prompt <text> [--gates a,b --budget <usd>]
 run get    --project <id> --run <id>
 run watch  --project <id> --run <id> [--interval 4 --timeout 1800]   # polls until terminal/gate
-run approve|reject|cancel --project <id> --run <id> [--note <text>]
+run approve|cancel --project <id> --run <id> [--note <text>]
 
 discover projects|assets [--limit 24 --kind image|video|audio]
 

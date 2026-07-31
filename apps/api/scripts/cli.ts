@@ -138,7 +138,6 @@ Global: --api <origin> --token <jwt> --json
   run get --project <id> --run <id>
   run watch --project <id> --run <id> [--interval 4 --timeout 1800]
   run approve --project <id> --run <id> [--note <text>]
-  run reject  --project <id> --run <id> [--note <text>]
   run cancel  --project <id> --run <id>
 
   discover projects [--limit 24]
@@ -231,12 +230,12 @@ async function main() {
       }
       const runId = required(opts, "run");
       if (sub === "get") return out(cfg, await api(cfg, "GET", `${baseRun}/${runId}`));
-      if (sub === "approve" || sub === "reject" || sub === "cancel") {
+      if (sub === "approve" || sub === "cancel") {
         const body = str(opts, "note") ? { note: str(opts, "note") } : {};
         return out(cfg, await api(cfg, "POST", `${baseRun}/${runId}/${sub}`, body));
       }
       if (sub === "watch") return watchRun(cfg, baseRun, runId, opts);
-      return fail("usage: run start|get|watch|approve|reject|cancel");
+      return fail("usage: run start|get|watch|approve|cancel");
     }
 
     case "discover": {
