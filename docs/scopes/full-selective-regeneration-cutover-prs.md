@@ -89,8 +89,9 @@ grants, readiness allowance, and transitional monitoring. It does not add a
 second product path. Its first production attempt failed safely inside the
 explicit transaction when `actions_popcorn_api_rerun_select` retained a
 cross-table dependency on the profile column. The retry replaces that policy
-with the same role and rerun-causation checks, minus only the retired profile
-predicate, before the no-`CASCADE` column drop.
+and retains the nested specialist visibility branch in the run-select policy.
+Both keep the same role and rerun-causation checks, minus only the retired
+profile predicates, before the no-`CASCADE` column drop.
 
 ## 3. Non-Negotiable Design Rules
 

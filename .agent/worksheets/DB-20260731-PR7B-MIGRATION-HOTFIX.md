@@ -45,6 +45,11 @@ dropping the column, retain the existing RLS causation boundary, avoid
   with role-only specialist routing and the original causal fences.
 - Add static ordering and predicate coverage plus a post-upgrade catalog
   assertion for the replacement policy.
+- Preserve the causation-fenced specialist branch in the role-only
+  `orchestrator_runs` select policy so nested action-policy checks can see the
+  child run without widening run writes.
+- Add positive and negative `SET LOCAL ROLE popcorn_api` visibility probes for
+  a causally tied specialist primitive and an unrelated root primitive.
 - Record the transactional production rollback and retry boundary in the
   authoritative cutover scope.
 
@@ -80,6 +85,14 @@ dropping the column, retain the existing RLS causation boundary, avoid
   and relation boundaries, and web/API typechecks.
 - Production health still reports API commit `2db09b81`, so the PR 7A-or-newer
   application precondition is not yet satisfied despite the PR merges.
+- The amended seeded upgrade applied PR 7B and the real
+  `supabase_admin -> popcorn_api` role probe returned `1|1|0`: the causally tied
+  specialist run and primitive action were visible, while an unrelated applied
+  primitive action on a root remained hidden.
+- The live legacy/current API smoke and retirement integration passed with the
+  restored run policy. A Docker-loaded lifecycle invocation passed 6/8 and hit
+  statement timeouts in two cases; its immediate isolated rerun passed 8/8 in
+  2.8 seconds.
 
 ## Independent reviews
 
@@ -92,6 +105,14 @@ dropping the column, retain the existing RLS causation boundary, avoid
 - Wrap-up review approved commit/push/ready-PR publication with no remaining
   implementation blocker and confirmed the local Docker `502` occurred after
   the migration replay completed.
+- PR review on commit `63a98553` found that the action policy's nested run read
+  would fail under the creative-director-only replacement run policy. The
+  follow-up plan review approved restoring the original specialist causation
+  branch without either retired profile predicate.
+- Follow-up implementation review approved the least-privilege run policy and
+  confirmed the positive/negative role probe genuinely exercises nested RLS.
+- Follow-up wrap-up review approved commit/push with no remaining SQL, RLS,
+  fixture, test, or documentation blocker.
 
 ## Blockers and risks
 

@@ -150,9 +150,39 @@ test("PR7B replaces profile-bound routines, policies, and grants before a no-CAS
   ]) {
     assert.ok(actionsPolicyReplacement.includes(causationPredicate));
   }
+  const runSelectPolicyStart = migration.indexOf(
+    "create policy orchestrator_runs_popcorn_api_rerun_select",
+    runPolicyStart
+  );
+  const runInsertPolicyStart = migration.indexOf(
+    "create policy orchestrator_runs_popcorn_api_rerun_insert",
+    runSelectPolicyStart
+  );
+  assert.ok(
+    runSelectPolicyStart > runPolicyStart &&
+      runInsertPolicyStart > runSelectPolicyStart
+  );
+  const runSelectPolicyReplacement = migration.slice(
+    runSelectPolicyStart,
+    runInsertPolicyStart
+  );
+  assert.doesNotMatch(runSelectPolicyReplacement, /root_execution_profile/);
+  for (const visibilityPredicate of [
+    "agent_role = 'creative_director'",
+    "agent_role in ('visuals', 'audio')",
+    "work.execution_reservation_id = execution.id",
+    "work.project_id = execution.project_id",
+    "work.dispatch_action_id = orchestrator_runs.root_action_id",
+    "execution.project_id = orchestrator_runs.project_id",
+    "execution.root_run_id = orchestrator_runs.parent_run_id",
+    "{approvalContext,executionReservationId}",
+    "{approvalContext,proposalActionId}",
+  ]) {
+    assert.ok(runSelectPolicyReplacement.includes(visibilityPredicate));
+  }
   assert.match(
-    migration,
-    /create policy orchestrator_runs_popcorn_api_rerun_select[\s\S]*using \(agent_role = 'creative_director'\)/
+    migration.slice(runInsertPolicyStart, dropColumn),
+    /create policy orchestrator_runs_popcorn_api_rerun_insert[\s\S]*with check \(agent_role = 'creative_director'\)[\s\S]*create policy orchestrator_runs_popcorn_api_rerun_update[\s\S]*using \(agent_role = 'creative_director'\)[\s\S]*with check \(agent_role = 'creative_director'\)/
   );
   assert.match(
     migration,

@@ -527,7 +527,28 @@ drop policy if exists orchestrator_runs_popcorn_api_rerun_update
 
 create policy orchestrator_runs_popcorn_api_rerun_select
   on public.orchestrator_runs for select to popcorn_api
-  using (agent_role = 'creative_director');
+  using (
+    agent_role = 'creative_director'
+    or (
+      agent_role in ('visuals', 'audio')
+      and exists (
+        select 1
+          from public.rerun_execution_reservations execution
+          join public.rerun_execution_work_items work
+            on work.execution_reservation_id = execution.id
+           and work.project_id = execution.project_id
+           and work.dispatch_action_id = orchestrator_runs.root_action_id
+         where execution.project_id = orchestrator_runs.project_id
+           and execution.root_run_id = orchestrator_runs.parent_run_id
+           and execution.id::text =
+             orchestrator_runs.task_params #>>
+               '{approvalContext,executionReservationId}'
+           and execution.proposal_action_id::text =
+             orchestrator_runs.task_params #>>
+               '{approvalContext,proposalActionId}'
+      )
+    )
+  );
 create policy orchestrator_runs_popcorn_api_rerun_insert
   on public.orchestrator_runs for insert to popcorn_api
   with check (agent_role = 'creative_director');

@@ -82,8 +82,9 @@ pnpm db:test:pr7b-upgrade
 
 It resets to the PR 7A migration boundary, seeds legacy and current hierarchy
 controls, applies PR 7B, verifies the role-only rerun action policy and retired
-profile catalog, exercises the API and replacement RPCs, and replays the full
-migration chain from a clean database. The harness runs its two database
+profile catalog, proves the `popcorn_api` role can read only causally tied
+specialist runs and primitive actions, exercises the API and replacement RPCs,
+and replays the full migration chain from a clean database. The harness runs its two database
 integration files sequentially so intentional error-path transactions in the
 lifecycle suite cannot interfere with the independent retirement fixture.
 

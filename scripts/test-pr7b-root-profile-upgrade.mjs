@@ -8,6 +8,8 @@ import { fileURLToPath } from "node:url";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const databaseUrl =
   "postgresql://postgres:postgres@127.0.0.1:55522/postgres";
+const adminDatabaseUrl =
+  "postgresql://supabase_admin:postgres@127.0.0.1:55522/postgres";
 const apiPort = 4319;
 const apiOrigin = `http://127.0.0.1:${apiPort}`;
 const ids = {
@@ -32,6 +34,8 @@ const ids = {
   work: "00000000-0000-0000-0000-000000007700",
   callback: "00000000-0000-0000-0000-000000007800",
   job: "00000000-0000-0000-0000-000000007900",
+  specialistAction: "00000000-0000-0000-0000-000000007901",
+  unrelatedRootAction: "00000000-0000-0000-0000-000000007902",
 };
 
 function run(command, args, options = {}) {
@@ -68,6 +72,14 @@ function sqlScalar(source) {
   return run(
     "psql",
     [databaseUrl, "-X", "-v", "ON_ERROR_STOP=1", "-qAt"],
+    { input: source }
+  ).trim();
+}
+
+function sqlScalarAsAdmin(source) {
+  return run(
+    "psql",
+    [adminDatabaseUrl, "-X", "-v", "ON_ERROR_STOP=1", "-qAt"],
     { input: source }
   ).trim();
 }
@@ -195,7 +207,7 @@ insert into public.orchestrator_runs (
 ) values (
   '${ids.legacyChild}', '${ids.project}', 'running', 'Legacy active child',
   'visuals', '${ids.session}', 1, 'visuals_revision',
-  '{"schemaVersion":"DomainTask.v1","domain":"visuals","taskKind":"visuals_revision"}',
+  '{"schemaVersion":"DomainTask.v1","domain":"visuals","taskKind":"visuals_revision","approvalContext":{"executionReservationId":"${ids.execution}","proposalActionId":"${ids.proposalAction}"}}',
   'creative_director', '${ids.legacySucceeded}', '${ids.dispatchAction}', now()
 );
 update public.agent_sessions
@@ -347,6 +359,20 @@ begin
        and coalesce(qual, '') like '%rerun_execution_work_items%'
        and coalesce(qual, '') like '%approvalContext%'
   ) then raise exception 'role-only rerun action policy is missing causation checks'; end if;
+  if not exists (
+    select 1
+      from pg_policies
+     where schemaname = 'public'
+       and tablename = 'orchestrator_runs'
+       and policyname = 'orchestrator_runs_popcorn_api_rerun_select'
+       and coalesce(qual, '') not like '%root_execution_profile%'
+       and coalesce(qual, '') like '%creative_director%'
+       and coalesce(qual, '') like '%visuals%'
+       and coalesce(qual, '') like '%audio%'
+       and coalesce(qual, '') like '%rerun_execution_reservations%'
+       and coalesce(qual, '') like '%rerun_execution_work_items%'
+       and coalesce(qual, '') like '%approvalContext%'
+  ) then raise exception 'role-only rerun run policy is missing specialist causation checks'; end if;
 end;
 $$;
 `;
@@ -476,6 +502,31 @@ run("supabase", ["migration", "up", "--local"], { timeout: 180_000 });
 sql(postUpgradeAssertions);
 const env = localEnvironment();
 await exerciseRoutes(env);
+sql(`
+  insert into public.actions (
+    id, project_id, orchestrator_run_id, tool, status, params
+  ) values
+    ('${ids.specialistAction}', '${ids.project}', '${ids.legacyChild}',
+     'generate_image', 'applied', '{}'),
+    ('${ids.unrelatedRootAction}', '${ids.project}', '${ids.validSucceeded}',
+     'generate_image', 'applied', '{}');
+`);
+assert.equal(
+  sqlScalarAsAdmin(`
+    begin;
+    set local role popcorn_api;
+    select
+      (select count(*) from public.orchestrator_runs
+        where id = '${ids.legacyChild}')::text || '|' ||
+      (select count(*) from public.actions
+        where id = '${ids.specialistAction}')::text || '|' ||
+      (select count(*) from public.actions
+        where id = '${ids.unrelatedRootAction}')::text;
+    rollback;
+  `),
+  "1|1|0",
+  "popcorn_api must see the causally tied specialist run/action but not an unrelated root primitive"
+);
 
 console.log("Exercising the replacement RPCs and final-schema integration...");
 for (const testFile of [

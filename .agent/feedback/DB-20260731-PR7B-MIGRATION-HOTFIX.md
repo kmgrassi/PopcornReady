@@ -15,6 +15,9 @@ functions, constraints, grants, triggers, and policies owned by the table whose
 column is being dropped. A full-schema text search found the predicate, but the
 retirement checklist grouped policies by the target table and missed a policy
 on `actions` that queried `orchestrator_runs.root_execution_profile`.
+Cross-table policies also compose through RLS on every referenced table: after
+removing a dependency, the replacement policy on the referenced table must
+still expose the causally authorized rows needed by the outer policy.
 
 ## Follow-up
 
