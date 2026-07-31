@@ -72,26 +72,78 @@ function videoBrief(value: unknown): VideoBrief {
   return source as unknown as VideoBrief;
 }
 
-function preserveStablePlanIds(source: ShotPlan, revised: ShotPlan): ShotPlan {
-  return {
-    ...revised,
-    scenes: revised.scenes.map((scene, sceneIndex) => {
-      const priorScene = source.scenes[sceneIndex];
-      return {
-        ...scene,
-        ...(priorScene?.id ? { id: priorScene.id } : {}),
-        beats: scene.beats.map((beat, beatIndex) => ({
-          ...beat,
-          ...(priorScene?.beats[beatIndex]?.id
-            ? { id: priorScene.beats[beatIndex]!.id }
-            : {}),
-        })),
-      };
-    }),
+export function preserveStablePlanIds(
+  source: ShotPlan,
+  revised: ShotPlan
+): ShotPlan {
+  const knownSceneIds = new Set(source.scenes.map((scene) => scene.id));
+  const knownBeatIds = new Set(
+    planBeats(source).flatMap((beat) => beat.id ? [beat.id] : [])
+  );
+  const sceneIds = new Set<string>();
+  const beatIds = new Set<string>();
+  const stableId = (
+    kind: "scene" | "beat",
+    candidate: string | undefined,
+    known: Set<string>,
+    discriminator: string
+  ): string => {
+    if (candidate && known.has(candidate)) return candidate;
+    if (!candidate?.startsWith("new:")) {
+      throw new ApiError(
+        "validation_failed",
+        `Canonical story revision returned an unknown ${kind} identity.`
+      );
+    }
+    return `${kind}_new_${createHash("sha256")
+      .update(`${candidate}\u0000${discriminator}`)
+      .digest("hex")
+      .slice(0, 16)}`;
   };
+  const scenes = revised.scenes.map((scene, sceneIndex) => {
+    const sceneId = stableId(
+      "scene",
+      scene.id,
+      knownSceneIds,
+      `${sceneIndex}:${scene.name}`
+    );
+    if (sceneIds.has(sceneId)) {
+      throw new ApiError(
+        "validation_failed",
+        "Canonical story revision returned a duplicate scene identity."
+      );
+    }
+    sceneIds.add(sceneId);
+    const beats = scene.beats.map((beat, beatIndex) => {
+      const beatId = stableId(
+        "beat",
+        beat.id,
+        knownBeatIds,
+        `${sceneId}:${beatIndex}:${beat.name}`
+      );
+      if (beatIds.has(beatId)) {
+        throw new ApiError(
+          "validation_failed",
+          "Canonical story revision returned a duplicate beat identity."
+        );
+      }
+      beatIds.add(beatId);
+      return { ...beat, id: beatId };
+    });
+    return { ...scene, id: sceneId, beats };
+  });
+  // Existing IDs are meaningful identities, not positions. The model receives
+  // the source plan (including IDs) and must return the same ID for an entity it
+  // retains. New entities must use an explicit `new:` marker; the server mints
+  // their durable IDs. Removed entities simply disappear. Never transfer the ID
+  // that happened to occupy the same index.
+  return { ...revised, scenes };
 }
 
-function validateStableTarget(plan: ShotPlan, request: RootStorySnapshotRequest): void {
+export function validateStableTarget(
+  plan: ShotPlan,
+  request: Pick<RootStorySnapshotRequest, "binding">
+): void {
   const target = request.binding.target;
   if (
     target.kind === "scene" &&
@@ -282,8 +334,12 @@ async function stageStorySnapshot(
         style: sourcePlan.style,
         aspectRatio: sourcePlan.aspectRatio,
         narrativeContext: JSON.stringify(sourcePlan),
-        feedback: request.instruction,
+        feedback: [
+          request.instruction,
+          "Preserve the exact id of every existing scene and beat you retain, even when reordering. For a genuinely new entity, use a unique temporary id beginning with `new:`. Never reuse a removed entity's id for different content.",
+        ].join("\n\n"),
         storyContext: null,
+        preserveStableIds: true,
       })
     );
     actualCostUsd = await sumActionCostUsd(request.primitiveActionId);

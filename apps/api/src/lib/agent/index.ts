@@ -24,6 +24,7 @@ import {
   editDecisionTimelineSchema,
   narrationRewriteSchema,
   planCritiqueSchema,
+  planRevisionSchema,
   planSchema,
   uploadedFootagePlanReviewSchema,
 } from "./schemas";
@@ -89,6 +90,14 @@ function storyPlanText(p: ShotPlan): string {
   ].join("\n");
 }
 
+export interface PlanEditModelRequest {
+  cachedSystem: string;
+  user: string;
+  schema: Record<string, unknown>;
+  maxTokens: number;
+  effort: "high";
+}
+
 export async function planEdit(input: {
   goal: string;
   targetLengthSec: number;
@@ -99,7 +108,11 @@ export async function planEdit(input: {
   narrativeContext?: string | null;
   feedback?: string | null;
   footageGrounding?: string | null;
-}): Promise<ShotPlan> {
+  /** Require every retained scene/beat to return its existing stable ID. */
+  preserveStableIds?: boolean;
+}, overrides: {
+  structured?: (request: PlanEditModelRequest) => Promise<ShotPlan>;
+} = {}): Promise<ShotPlan> {
   const sys = `${PREAMBLE}
 
 TASK: Convert the user's creative goal into a storyboard plan organized as
@@ -130,10 +143,15 @@ ${feedback}
 
 Produce the edit plan.`;
 
-  const plan = await getLlmClient().structured<ShotPlan>({
+  const structured = overrides.structured ?? ((request: PlanEditModelRequest) =>
+    getLlmClient().structured<ShotPlan>(request));
+  const plan = await structured({
     cachedSystem: sys,
     user,
-    schema: planSchema,
+    schema: (input.preserveStableIds ? planRevisionSchema : planSchema) as Record<
+      string,
+      unknown
+    >,
     // The largest structured output we emit (a full multi-scene/beat plan) and
     // our only high-effort call. On reasoning models the reasoning tokens draw
     // from this same budget, so a tight cap can exhaust it before the model emits

@@ -69,7 +69,7 @@ function requireOutput(task: DomainTaskV1, kind: "image" | "clip"): void {
 
 function requireVisualOutput(
   task: DomainTaskV1,
-  kind: "image" | "anchor" | "keyframe" | "clip"
+  kind: "image" | "anchor" | "storyboard" | "keyframe" | "clip"
 ): void {
   if (!(task.allowedOutputKinds as readonly string[]).includes(kind)) {
     throw new ToolInputError(
@@ -220,9 +220,8 @@ export function assertPreparedDomainToolInput(input: {
     );
   }
   if (toolName === "generate_anchor") requireVisualOutput(task, "anchor");
-  if (toolName === "generate_storyboard" || toolName === "generate_keyframe") {
-    requireVisualOutput(task, "keyframe");
-  }
+  if (toolName === "generate_storyboard") requireVisualOutput(task, "storyboard");
+  if (toolName === "generate_keyframe") requireVisualOutput(task, "keyframe");
   if (toolName === "generate_clip") requireVisualOutput(task, "clip");
   if (toolName === "regenerate_image_asset") {
     const assetId = parsed.assetId;

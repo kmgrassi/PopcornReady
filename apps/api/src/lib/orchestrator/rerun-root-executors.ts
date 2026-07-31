@@ -382,7 +382,8 @@ function storyExecutor(services: RootRerunExecutorServices): RerunKindExecutor {
     supports: (work, output) =>
       work.owner === "creative_director" &&
       work.kind === "revise_story" &&
-      output.kind === "story_snapshot",
+      output.kind === "story_snapshot" &&
+      (output.target.kind === "project" || output.target.kind === "beat"),
     async execute(context) {
       const { binding } = rootWork(context, "revise_story", "story_snapshot");
       const pointer = storyPointer(context, binding);

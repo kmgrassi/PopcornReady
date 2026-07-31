@@ -380,6 +380,15 @@ image/prompt references and selection state, but no semantic snapshot pointer,
 so panel media changes use asset/selection bindings rather than a
 `PlannedStoryPointerMove`.
 
+PR 5 activates only the projections whose semantic content can move atomically
+with that pointer: whole-story (`story_blueprint`) and exact beat
+(`story_beat`). Aggregate storyboard and scene story revisions fail executor
+coverage before approval because their current relational rows do not share the
+plan's scene/beat IDs, and `scene_asset_id` also owns visual scene media. They
+must not be advertised as executable until a dedicated relational semantic
+snapshot mapping lands. Storyboard-tile media generation remains executable
+only for exact beat or panel bindings, so one binding corresponds to one output.
+
 The model proposes selected work, target IDs, rationale, preservation choices,
 and bounded clarification content. The server validates the ID/capability
 allowlist and derives selection moves, cost/max cost, risk, approval policy,
@@ -786,6 +795,13 @@ appends, typed story pointers, reconciliation, terminal action, and settled
 actual cost together. Stale state and cost overage fall back to a failed
 terminal execution with no graph moves. See
 `docs/scopes/selective-regeneration-activation-contract.md`.
+Independent review hardened activation into dependency waves: media, story, and
+Audio work fan out first; assembly begins only after those bindings complete;
+critique begins only after assembly. Whole-story and exact-beat semantic
+projections update their typed relational content in the same transaction as
+their asset pointer. Aggregate storyboard/scene semantic moves and aggregate
+storyboard-tile bindings fail coverage before approval until their relational
+identity/cardinality contracts are implemented.
 
 **Deliver:**
 

@@ -202,6 +202,14 @@ pointer; panel revisions therefore use asset/selection bindings. A project-level
 whole-story `story_snapshot` output binds the current story blueprint row and
 its `story_blueprints.asset_id` pin.
 
+The production rerun registry currently accepts semantic story snapshots only
+for the whole blueprint and an exact beat. Their relational `snapshot` or beat
+semantic columns move atomically with the approved asset pointer. Aggregate
+storyboard and scene semantic outputs fail coverage before approval: relational
+scene/beat UUIDs are not the plan's model IDs, and `scene_asset_id` also denotes
+visual scene media. Storyboard-tile generation likewise requires one exact beat
+or panel binding per output; aggregate storyboard bindings are not dispatchable.
+
 Absent selection slots are authorized only when the server recognizes the
 canonical project role or a role keyed by an existing beat, scene, or asset
 lineage. Those slots receive the initial CAS pin

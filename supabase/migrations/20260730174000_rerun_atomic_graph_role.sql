@@ -79,11 +79,11 @@ declare
   v_binding jsonb;
   v_result jsonb;
   v_destination public.assets%rowtype;
+  v_semantic jsonb;
   v_current uuid;
 begin
-  if p_row_kind not in (
-    'story_blueprint', 'storyboard', 'story_scene', 'story_beat'
-  ) or p_new_asset_id is null then
+  if p_row_kind not in ('story_blueprint', 'story_beat')
+     or p_new_asset_id is null then
     raise exception 'invalid rerun story pointer request' using errcode = '22023';
   end if;
 
@@ -169,7 +169,8 @@ begin
      and project_id = p_project_id;
   if not found
      or v_destination.role is distinct from v_binding->>'role'
-     or v_destination.kind not in ('story_blueprint', 'plan', 'beat') then
+     or v_destination.kind not in ('story_blueprint', 'plan', 'beat')
+     or v_destination.content is null then
     raise exception 'story pointer destination is invalid' using errcode = '42501';
   end if;
 
@@ -181,30 +182,9 @@ begin
     if not found or v_current is distinct from p_expected_asset_id then
       raise exception 'stale_proposal: story_blueprint pointer changed' using errcode = '40001';
     end if;
-    update public.story_blueprints set asset_id = p_new_asset_id
-     where project_id = p_project_id and id = p_row_id;
-  elsif p_row_kind = 'storyboard' then
-    select nullif(provenance->>'planAssetId', '')::uuid into v_current
-      from public.story_blueprints
-     where project_id = p_project_id and id = p_row_id
-     for update;
-    if not found or v_current is distinct from p_expected_asset_id then
-      raise exception 'stale_proposal: storyboard pointer changed' using errcode = '40001';
-    end if;
     update public.story_blueprints
-       set provenance = jsonb_set(
-         provenance, '{planAssetId}', to_jsonb(p_new_asset_id::text), true
-       )
-     where project_id = p_project_id and id = p_row_id;
-  elsif p_row_kind = 'story_scene' then
-    select scene_asset_id into v_current
-      from public.story_blueprint_scenes
-     where project_id = p_project_id and id = p_row_id
-     for update;
-    if not found or v_current is distinct from p_expected_asset_id then
-      raise exception 'stale_proposal: story_scene pointer changed' using errcode = '40001';
-    end if;
-    update public.story_blueprint_scenes set scene_asset_id = p_new_asset_id
+       set asset_id = p_new_asset_id,
+           snapshot = v_destination.content
      where project_id = p_project_id and id = p_row_id;
   else
     select beat_asset_id into v_current
@@ -214,7 +194,45 @@ begin
     if not found or v_current is distinct from p_expected_asset_id then
       raise exception 'stale_proposal: story_beat pointer changed' using errcode = '40001';
     end if;
-    update public.story_beats set beat_asset_id = p_new_asset_id
+    v_semantic := v_destination.content;
+    if v_semantic->>'id' is distinct from p_row_id::text then
+      raise exception 'story beat snapshot omitted its stable row identity'
+        using errcode = '22023';
+    end if;
+    update public.story_beats
+       set beat_asset_id = p_new_asset_id,
+           intent = coalesce(v_semantic->>'intent', intent),
+           visual_description = case
+             when v_semantic ? 'visualDescription'
+               then nullif(v_semantic->>'visualDescription', '')
+             else visual_description
+           end,
+           dialogue_summary = case
+             when v_semantic ? 'dialogueSummary'
+               then nullif(v_semantic->>'dialogueSummary', '')
+             else dialogue_summary
+           end,
+           narration = case
+             when v_semantic ? 'narration'
+               then nullif(v_semantic->>'narration', '')
+             else narration
+           end,
+           duration_sec = coalesce(
+             (v_semantic->>'durationSec')::double precision,
+             duration_sec
+           ),
+           shot_type = case
+             when v_semantic ? 'shotType' then nullif(v_semantic->>'shotType', '')
+             else shot_type
+           end,
+           camera = case
+             when v_semantic ? 'camera' then nullif(v_semantic->>'camera', '')
+             else camera
+           end,
+           framing = case
+             when v_semantic ? 'framing' then nullif(v_semantic->>'framing', '')
+             else framing
+           end
      where project_id = p_project_id and id = p_row_id;
   end if;
 end;

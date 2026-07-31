@@ -82,6 +82,11 @@ test("atomic graph role grants append and a bounded story-pointer function", asy
   assert.match(migration, /security definer/);
   assert.match(migration, /work\.status = 'completed'/);
   assert.match(migration, /binding->>'assetId' = p_new_asset_id::text/);
+  assert.match(migration, /snapshot = v_destination\.content/);
+  assert.match(migration, /story beat snapshot omitted its stable row identity/);
+  assert.match(migration, /intent = coalesce\(v_semantic->>'intent', intent\)/);
+  assert.match(migration, /p_row_kind not in \('story_blueprint', 'story_beat'\)/);
+  assert.doesNotMatch(migration, /story_scene pointer changed/);
   assert.match(migration, /grant execute on function public\.apply_rerun_story_pointer/);
   assert.match(migration, /actions\.tool = 'rerun_execution'/);
   assert.match(migration, /actions\.status = 'running'/);

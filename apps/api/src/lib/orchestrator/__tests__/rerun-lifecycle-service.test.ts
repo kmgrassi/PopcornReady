@@ -816,6 +816,181 @@ test("mixed adapter work fans out concurrently and converges on one finalization
   assert.deepEqual(state.finalOutcomes, ["applied"]);
 });
 
+test("assembly and critique execute in dependent waves after media fan-in", async () => {
+  const proposal = revisionProposal();
+  proposal.selectedWork.push({
+    workItemId: "assembly-work",
+    owner: "creative_director",
+    kind: "reassemble_cut",
+    targets: [target],
+    requiredOutputs: [{
+      bindingId: "cut-binding",
+      workItemId: "assembly-work",
+      target,
+      kind: "composite",
+      role: "cut",
+      ordinal: 0,
+    }],
+  }, {
+    workItemId: "critique-work",
+    owner: "creative_director",
+    kind: "critique_cut",
+    targets: [target],
+    requiredOutputs: [{
+      bindingId: "critique-binding",
+      workItemId: "critique-work",
+      target,
+      kind: "critique",
+      role: "critique",
+      ordinal: 0,
+    }],
+  });
+  const events: string[] = [];
+  let visualEntered!: () => void;
+  const visualEnteredPromise = new Promise<void>((resolve) => {
+    visualEntered = resolve;
+  });
+  let releaseVisual!: () => void;
+  const releaseVisualPromise = new Promise<void>((resolve) => {
+    releaseVisual = resolve;
+  });
+  const succeed = (workItem: RerunWorkItem) => ({
+    status: "succeeded" as const,
+    outputs: workItem.requiredOutputs.map((output) => ({
+      ...output,
+      assetId: `${workItem.workItemId}-asset`,
+      intrinsicRole: output.role,
+    })),
+    primitiveActionIds: [],
+    budgetReservationKeys: [],
+  });
+  const state = harness({
+    proposal,
+    registry: new RerunExecutorRegistry([
+      createFakeRerunExecutor({
+        kind: "revise_visuals",
+        execute: async ({ workItem }) => {
+          events.push("visual:start");
+          visualEntered();
+          await releaseVisualPromise;
+          events.push("visual:end");
+          return succeed(workItem);
+        },
+      }),
+      createFakeRerunExecutor({
+        kind: "reassemble_cut",
+        execute: async ({ workItem }) => {
+          events.push("assembly");
+          return succeed(workItem);
+        },
+      }),
+      createFakeRerunExecutor({
+        kind: "critique_cut",
+        execute: async ({ workItem }) => {
+          events.push("critique");
+          return succeed(workItem);
+        },
+      }),
+    ]),
+  });
+  await approveRerunProposal({
+    workspaceId: "workspace-1",
+    actorId: "actor-1",
+    projectId: "project-1",
+    actionId: "proposal-1",
+    approvedMaxCostUsd: 0,
+  }, state.deps);
+  const execution = executeRerunProposal({
+    workspaceId: "workspace-1",
+    actorId: "actor-1",
+    projectId: "project-1",
+    actionId: "proposal-1",
+    idempotencyKey: "dependent-waves",
+  }, state.deps);
+  await visualEnteredPromise;
+  assert.deepEqual(events, ["visual:start"]);
+  releaseVisual();
+  assert.equal((await execution).status, "applied");
+  assert.deepEqual(events, ["visual:start", "visual:end", "assembly", "critique"]);
+});
+
+test("accepted media parks before reserving dependent assembly or critique", async () => {
+  const proposal = revisionProposal();
+  proposal.selectedWork.push({
+    workItemId: "assembly-work",
+    owner: "creative_director",
+    kind: "reassemble_cut",
+    targets: [target],
+    requiredOutputs: [{
+      bindingId: "cut-binding",
+      workItemId: "assembly-work",
+      target,
+      kind: "composite",
+      role: "cut",
+      ordinal: 0,
+    }],
+  }, {
+    workItemId: "critique-work",
+    owner: "creative_director",
+    kind: "critique_cut",
+    targets: [target],
+    requiredOutputs: [{
+      bindingId: "critique-binding",
+      workItemId: "critique-work",
+      target,
+      kind: "critique",
+      role: "critique",
+      ordinal: 0,
+    }],
+  });
+  let dependentCalls = 0;
+  const state = harness({
+    proposal,
+    registry: new RerunExecutorRegistry([
+      createFakeRerunExecutor({
+        kind: "revise_visuals",
+        execute: async () => ({
+          status: "accepted",
+          jobIds: ["00000000-0000-4000-8000-000000000099"],
+          primitiveActionIds: [],
+          budgetReservationKeys: [],
+        }),
+      }),
+      createFakeRerunExecutor({
+        kind: "reassemble_cut",
+        execute: async () => {
+          dependentCalls += 1;
+          throw new Error("assembly must wait for media fan-in");
+        },
+      }),
+      createFakeRerunExecutor({
+        kind: "critique_cut",
+        execute: async () => {
+          dependentCalls += 1;
+          throw new Error("critique must wait for assembly");
+        },
+      }),
+    ]),
+  });
+  await approveRerunProposal({
+    workspaceId: "workspace-1",
+    actorId: "actor-1",
+    projectId: "project-1",
+    actionId: "proposal-1",
+    approvedMaxCostUsd: 0,
+  }, state.deps);
+  const result = await executeRerunProposal({
+    workspaceId: "workspace-1",
+    actorId: "actor-1",
+    projectId: "project-1",
+    actionId: "proposal-1",
+    idempotencyKey: "park-before-dependent-waves",
+  }, state.deps);
+  assert.equal(result.status, "waiting");
+  assert.equal(dependentCalls, 0);
+  assert.equal(state.parked, 1);
+});
+
 test("a durable completed executor step is skipped after a process crash", async () => {
   const proposal = revisionProposal();
   const imageOutput = proposal.selectedWork[0]!.requiredOutputs[0]!;

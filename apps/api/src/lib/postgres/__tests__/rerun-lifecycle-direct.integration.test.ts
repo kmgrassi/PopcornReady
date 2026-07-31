@@ -646,6 +646,11 @@ integrationTest(
         const oldStoryId = randomUUID();
         const newStoryId = randomUUID();
         const concurrentStoryId = randomUUID();
+        const oldBeatAssetId = randomUUID();
+        const newBeatAssetId = randomUUID();
+        const beatId = randomUUID();
+        const sceneId = randomUUID();
+        const actId = randomUUID();
         await admin.query(
           `insert into public.assets(
            id,workspace_id,project_id,kind,media,status,role,content
@@ -675,6 +680,38 @@ integrationTest(
           [blueprintId, workspaceId, projectId, oldStoryId]
         );
         await admin.query(
+          `insert into public.assets(
+             id,workspace_id,project_id,kind,media,status,role,content
+           ) values (
+             $1,$2,$3,'beat','data','ready','beat_snapshot',
+             jsonb_build_object(
+               'schema_version','beat.v1','id',$4::text,
+               'intent','old beat','durationSec',4
+             )
+           )`,
+          [oldBeatAssetId, workspaceId, projectId, beatId]
+        );
+        await admin.query(
+          `insert into public.story_blueprint_acts(
+             id,story_blueprint_id,workspace_id,project_id,stable_id,position,
+             title,purpose,summary,target_duration_sec
+           ) values ($1,$2,$3,$4,'act-1',0,'Act','Test','Test',4)`,
+          [actId, blueprintId, workspaceId, projectId]
+        );
+        await admin.query(
+          `insert into public.story_blueprint_scenes(
+             id,story_blueprint_id,story_blueprint_act_id,workspace_id,
+             project_id,stable_id,position,title,summary,target_duration_sec
+           ) values ($1,$2,$3,$4,$5,'scene-1',0,'Scene','Scene',4)`,
+          [sceneId, blueprintId, actId, workspaceId, projectId]
+        );
+        await admin.query(
+          `insert into public.story_beats(
+             id,project_id,scene_id,beat_index,intent,duration_sec,beat_asset_id
+           ) values ($1,$2,$3,0,'old beat',4,$4)`,
+          [beatId, projectId, sceneId, oldBeatAssetId]
+        );
+        await admin.query(
           `insert into public.selections(
              project_id,slot_owner_lineage_id,slot_role,seq,active_asset_id
            ) values ($1,null,$2,1,$3)`,
@@ -687,6 +724,7 @@ integrationTest(
           slotRole,
         };
         const storyTarget = { kind: "project", projectId };
+        const beatTarget = { kind: "beat", projectId, beatId };
         const imageOutput = {
           bindingId: "image-binding",
           workItemId: "image-work",
@@ -703,6 +741,14 @@ integrationTest(
           role: "story_blueprint",
           ordinal: 0,
         };
+        const beatOutput = {
+          bindingId: "beat-binding",
+          workItemId: "beat-work",
+          target: beatTarget,
+          kind: "story_snapshot",
+          role: "beat_snapshot",
+          ordinal: 0,
+        };
         const selectedWork = [{
           workItemId: "image-work",
           owner: "visuals",
@@ -715,10 +761,16 @@ integrationTest(
           kind: "revise_story",
           targets: [storyTarget],
           requiredOutputs: [storyOutput],
+        }, {
+          workItemId: "beat-work",
+          owner: "creative_director",
+          kind: "revise_story",
+          targets: [beatTarget],
+          requiredOutputs: [beatOutput],
         }];
         const value = {
           ...proposal(projectId, selectedWork),
-          targets: [selectionTarget, storyTarget],
+          targets: [selectionTarget, storyTarget, beatTarget],
           pins: {
             assets: [],
             selections: [{
@@ -731,6 +783,10 @@ integrationTest(
               rowKind: "story_blueprint",
               rowId: blueprintId,
               expectedSnapshotAssetId: oldStoryId,
+            }, {
+              rowKind: "story_beat",
+              rowId: beatId,
+              expectedSnapshotAssetId: oldBeatAssetId,
             }],
           },
           plannedSelectionMoves: [{
@@ -745,6 +801,11 @@ integrationTest(
             rowKind: "story_blueprint",
             rowId: blueprintId,
             expectedSnapshotAssetId: oldStoryId,
+          }, {
+            bindingId: "beat-binding",
+            rowKind: "story_beat",
+            rowId: beatId,
+            expectedSnapshotAssetId: oldBeatAssetId,
           }],
         };
         const proposalId = await insertProposal(
@@ -760,7 +821,7 @@ integrationTest(
         );
         const complete = async (
           workItemId: string,
-          output: typeof imageOutput | typeof storyOutput,
+          output: typeof imageOutput | typeof storyOutput | typeof beatOutput,
           assetId: string
         ) => {
           const dispatchActionId = randomUUID();
@@ -801,14 +862,24 @@ integrationTest(
               assetId,
               workspaceId,
               projectId,
-              output.kind === "story_snapshot" ? "story_blueprint" : "image",
+              output.kind === "story_snapshot"
+                ? output.target.kind === "beat" ? "beat" : "story_blueprint"
+                : "image",
               output.kind === "story_snapshot" ? "data" : "image",
               output.role,
               output.kind === "story_snapshot"
-                ? JSON.stringify({
-                  schema_version: "storyBlueprint.v1",
-                  title: "new",
-                })
+                ? output.target.kind === "beat"
+                  ? JSON.stringify({
+                    schema_version: "beat.v1",
+                    id: beatId,
+                    intent: "new beat",
+                    durationSec: 3,
+                    shotType: "close-up",
+                  })
+                  : JSON.stringify({
+                    schema_version: "storyBlueprint.v1",
+                    title: "new",
+                  })
                 : null,
               dispatchActionId,
             ]
@@ -857,6 +928,7 @@ integrationTest(
         };
         await complete("image-work", imageOutput, newImageId);
         await complete("story-work", storyOutput, newStoryId);
+        await complete("beat-work", beatOutput, newBeatAssetId);
         if (staleStory) {
           await admin.query(
             "update public.story_blueprints set asset_id=$2 where id=$1",
@@ -886,6 +958,13 @@ integrationTest(
           );
           assert.equal(selection.rows[0]?.count, "1");
           assert.equal(selection.rows[0]?.active_asset_id, oldImageId);
+          assert.deepEqual(
+            (await admin.query<{ beat_asset_id: string; intent: string }>(
+              "select beat_asset_id,intent from public.story_beats where id=$1",
+              [beatId]
+            )).rows[0],
+            { beat_asset_id: oldBeatAssetId, intent: "old beat" }
+          );
           assert.equal((await admin.query(
             "select 1 from public.actions where id in ($1,$2)",
             [executionActionId, reconciliationActionId]
@@ -922,12 +1001,31 @@ integrationTest(
           active_asset_id: newImageId,
           set_by_action_id: executionActionId,
         });
-        assert.equal(
-          (await admin.query<{ asset_id: string }>(
-            "select asset_id from public.story_blueprints where id=$1",
+        assert.deepEqual(
+          (await admin.query<{ asset_id: string; title: string }>(
+            `select asset_id, snapshot->>'title' as title
+               from public.story_blueprints where id=$1`,
             [blueprintId]
-          )).rows[0]?.asset_id,
-          newStoryId
+          )).rows[0],
+          { asset_id: newStoryId, title: "new" }
+        );
+        assert.deepEqual(
+          (await admin.query<{
+            beat_asset_id: string;
+            intent: string;
+            duration_sec: number;
+            shot_type: string;
+          }>(
+            `select beat_asset_id,intent,duration_sec,shot_type
+               from public.story_beats where id=$1`,
+            [beatId]
+          )).rows[0],
+          {
+            beat_asset_id: newBeatAssetId,
+            intent: "new beat",
+            duration_sec: 3,
+            shot_type: "close-up",
+          }
         );
         const reconciliation = await admin.query<{
           status: string;

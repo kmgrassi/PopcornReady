@@ -88,6 +88,13 @@ function subsetWorkItem(context: RerunExecutorContext): VisualWorkItem {
 }
 
 function supportedTarget(output: BoundRequiredOutput): boolean {
+  if (
+    output.kind === "storyboard" &&
+    output.target.kind !== "beat" &&
+    output.target.kind !== "panel"
+  ) {
+    return false;
+  }
   return (
     output.target.kind === "project" ||
     output.target.kind === "storyboard" ||
@@ -116,7 +123,9 @@ export function createVisualStillRerunExecutor(
   return {
     id: "visual-stills.v1",
     supports: (workItem, output) =>
-      isVisualWorkItem(workItem) && outputKinds.has(output.kind),
+      isVisualWorkItem(workItem) &&
+      outputKinds.has(output.kind) &&
+      supportedTarget(output),
     async execute(context) {
       if (!context.approvalFingerprint) {
         throw new ApiError(

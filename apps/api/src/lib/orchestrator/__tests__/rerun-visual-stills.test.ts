@@ -132,7 +132,13 @@ test("visual still adapter claims only PR 3A kinds and is active in production",
     throw new Error("not called");
   } });
   for (const kind of VISUAL_STILL_OUTPUT_KINDS) {
-    assert.equal(executor.supports(proposal().selectedWork[0]!, output({ kind })), true);
+    const candidate = output({
+      kind,
+      ...(kind === "storyboard"
+        ? { target: { kind: "beat", projectId, beatId: "beat-1" } }
+        : {}),
+    });
+    assert.equal(executor.supports(proposal().selectedWork[0]!, candidate), true);
   }
   assert.equal(
     executor.supports(proposal().selectedWork[0]!, output({ kind: "clip" })),
@@ -140,6 +146,21 @@ test("visual still adapter claims only PR 3A kinds and is active in production",
   );
   assert.doesNotThrow(() =>
     productionRerunExecutorRegistry.preflight(proposal().selectedWork)
+  );
+});
+
+test("aggregate storyboard bindings fail coverage until expanded to exact beats", () => {
+  const aggregate = output({
+    kind: "storyboard",
+    role: "beat_storyboard",
+    target: { kind: "storyboard", projectId, storyboardId: "storyboard-1" },
+  });
+  assert.throws(
+    () => productionRerunExecutorRegistry.preflight(
+      proposal({ outputs: [aggregate] }).selectedWork
+    ),
+    (error: unknown) =>
+      error instanceof ApiError && error.code === "coverage_unavailable"
   );
 });
 
