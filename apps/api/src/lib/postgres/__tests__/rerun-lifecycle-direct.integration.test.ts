@@ -146,11 +146,61 @@ integrationTest(
       );
       context.diagnostic("created workspace and project fixture");
 
-      const expiredProposalId = await insertProposal(admin, projectId);
+      const expiredTarget = { kind: "project", projectId };
+      const expiredOutput = {
+        bindingId: "expired-binding",
+        workItemId: "expired-work",
+        target: expiredTarget,
+        kind: "image",
+        role: "revised-shot",
+        ordinal: 0,
+      };
+      const expiredProposalId = await insertProposal(admin, projectId, [{
+        workItemId: "expired-work",
+        owner: "visuals",
+        kind: "revise_visuals",
+        targets: [expiredTarget],
+        requiredOutputs: [expiredOutput],
+      }]);
       const expired = await approveAndClaim(
         projectId, expiredProposalId, "expired"
       );
       context.diagnostic("approved and claimed expired-fence fixture");
+      const expiredDispatchActionId = randomUUID();
+      const expiredCallbackTokenHash = createHash("sha256")
+        .update("expired-retry-token")
+        .digest("hex");
+      await reserveWorkTransaction({
+        projectId,
+        lease: expired.lease,
+        workItemId: "expired-work",
+        requestFingerprint: "expired-work",
+        dispatchActionId: expiredDispatchActionId,
+        dispatchParams: {},
+        callbackFences: [{
+          executorId: "expired-retry",
+          tokenHash: expiredCallbackTokenHash,
+          generation: 1,
+          requiredOutputs: [expiredOutput],
+        }],
+      });
+      const expiredBudgetKey = `expired-retry-budget:${expired.reservation.reservation_id}`;
+      await reserveChildBudgetTransaction({
+        projectId,
+        executionReservationId: expired.reservation.reservation_id,
+        workItemId: "expired-work",
+        actionId: expiredDispatchActionId,
+        reservationKey: expiredBudgetKey,
+        estimatedUsd: 0,
+      });
+      await parkWorkTransaction({
+        projectId,
+        lease: expired.lease,
+        workItemId: "expired-work",
+        primitiveActionIds: [],
+        budgetReservationKeys: [expiredBudgetKey],
+        bindingResults: [],
+      });
       await admin.query(
         `update public.rerun_execution_reservations
             set lease_expires_at=now()-interval '1 second'
@@ -193,6 +243,12 @@ integrationTest(
       );
       assert.equal(recovered.rows[0]?.execution_result_action_id, recoveryActionId);
       assert.equal(recovered.rows[0]?.status, "failed");
+      const recoveredBudget = await admin.query<{ status: string }>(
+        `select status from public.orchestrator_budget_reservations
+          where project_id=$1 and reservation_key=$2`,
+        [projectId, expiredBudgetKey]
+      );
+      assert.equal(recoveredBudget.rows[0]?.status, "released");
       context.diagnostic("expired fence rejected and recovery finalized");
 
       const target = { kind: "project", projectId };

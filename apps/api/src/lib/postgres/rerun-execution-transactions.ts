@@ -591,6 +591,12 @@ async function finalizeLocked(
       where id=$1 and status='reserved'`,
     [execution.budget_reservation_id]
   );
+  await client.query(
+    `update public.orchestrator_budget_reservations
+        set status='released', released_at=now(), updated_at=now()
+      where parent_reservation_id=$1 and status='reserved'`,
+    [execution.budget_reservation_id]
+  );
   if (execution.owns_materialized_root) {
     await client.query(
       `update public.orchestrator_runs set status=$2, completed_at=now(),

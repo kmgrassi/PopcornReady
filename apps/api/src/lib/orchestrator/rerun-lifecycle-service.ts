@@ -10,6 +10,7 @@ import * as lifecycleStore from "@/lib/api/v1/rerun-lifecycle-store";
 import { createRerunProposalV2 } from "./rerun-proposal-v2-service";
 import {
   type BoundExecutorOutput,
+  RetryableRerunExecutorError,
   RerunExecutorRegistry,
   validateBoundExecutorOutputs,
 } from "./rerun-executor-registry";
@@ -559,11 +560,13 @@ export async function executeRerunProposal(input: {
         reason: reserved.work_status,
       };
     }
+    const completedStepResults = reserved.callback_results.flatMap((callback) =>
+      callback.status === "completed" && callback.result
+        ? [{ executorId: callback.executorId, result: callback.result }]
+        : []);
+    const completedBindings = completedStepResults.flatMap(({ result }) =>
+      result.outputs ?? []) as BoundExecutorOutput[];
     try {
-      const completedStepResults = reserved.callback_results.flatMap((callback) =>
-        callback.status === "completed" && callback.result
-          ? [{ executorId: callback.executorId, result: callback.result }]
-          : []);
       const failedCallback = reserved.callback_results.find(
         (callback) => callback.status === "failed" ||
           callback.status === "canceled"
@@ -573,8 +576,6 @@ export async function executeRerunProposal(input: {
           `Executor callback ${failedCallback.executorId} ${failedCallback.status}.`
         );
       }
-      const completedBindings = completedStepResults.flatMap(({ result }) =>
-        result.outputs ?? []) as BoundExecutorOutput[];
       let pendingExternalStep = false;
       for (const [index, planned] of executionPlan.entries()) {
         const callback = callbackFences[index]!;
@@ -736,6 +737,25 @@ export async function executeRerunProposal(input: {
         reconciliationActionId: reconciliationActionIds[0],
       };
     } catch (error) {
+      if (error instanceof RetryableRerunExecutorError) {
+        await deps.parkWorkItem({
+          projectId: input.projectId,
+          lease,
+          workItemId: workItem.workItemId,
+          primitiveActionIds: completedStepResults.flatMap(({ result }) =>
+            result.primitiveActionIds ?? []),
+          budgetReservationKeys: [...new Set([
+            ...completedStepResults.flatMap(({ result }) =>
+              result.budgetReservationKeys ?? []),
+            ...error.budgetReservationKeys,
+          ])],
+          bindingResults: completedBindings,
+        });
+        return {
+          status: "parked" as const,
+          reason: "retryable_executor_failure" as const,
+        };
+      }
       await deps.failWorkItem({
         projectId: input.projectId,
         lease,

@@ -762,6 +762,9 @@ picture scope.
 
 - Execute root-owned story/plan/beat revisions through relational snapshots and
   graph edges.
+- Require one matching story target and snapshot output per root work item;
+  multi-row revisions use separate work items and fail coverage before approval
+  if presented as one aggregate item.
 - Preserve stable relational scene/beat/panel row IDs. A semantic update stages
   a new immutable snapshot asset; PR 5 later points the row to it atomically
   with the approved selection moves, and the prior snapshot preserves history.
@@ -781,7 +784,9 @@ picture scope.
 - A story-only wording change with no media effect can end as `no_op` for media.
 - A duration change updates only affected audio/clip timing and the composite.
 - Reassembly creates a new cut and preserves the prior cut.
-- Critique failure is visible and retryable without replaying completed media.
+- Zero-spend critique failure and ambiguous settlement acknowledgement are
+  retryable without replaying completed media; spent failures without a durable
+  output settle and terminate rather than risking a second provider charge.
 - No production route can dispatch these adapters before PR 5.
 
 ### PR 5 — Activate fan-out, atomic application, and reconciliation

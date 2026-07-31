@@ -17,6 +17,7 @@ import type {
   RerunExecutorResult,
   RerunKindExecutor,
 } from "./rerun-executor-registry";
+import { RetryableRerunExecutorError } from "./rerun-executor-registry";
 
 export interface RootStorySnapshotRequest {
   workspaceId: string;
@@ -296,6 +297,22 @@ function measuredCost(value: number): number {
   return Number(value.toFixed(4));
 }
 
+function failureIsRetryable(error: unknown): boolean {
+  if (!(error instanceof ApiError)) return true;
+  if (error.code === "database_error") {
+    const dbCode = error.details?.dbCode;
+    return typeof dbCode === "string" &&
+      (
+        dbCode.startsWith("08") ||
+        dbCode === "40001" ||
+        dbCode === "40P01" ||
+        dbCode === "57014"
+      );
+  }
+  return ["storage_error", "internal_error", "idempotency_in_progress"]
+    .includes(error.code);
+}
+
 async function executeService(input: {
   context: RerunExecutorContext;
   suffix: string;
@@ -333,12 +350,14 @@ async function executeService(input: {
           reservationKey,
           actualUsd,
         });
-      } else {
-        await input.services.releaseBudget({
-          projectId: input.context.projectId,
-          reservationKey,
-          reason: `root_${input.suffix}_failed_without_recorded_spend`,
-        });
+      } else if (failureIsRetryable(error)) {
+        throw new RetryableRerunExecutorError(
+          error instanceof Error ? error.message : `Root ${input.suffix} failed.`,
+          {
+            budgetReservationKeys: [reservationKey],
+            cause: error,
+          }
+        );
       }
     }
     throw error;
@@ -346,11 +365,22 @@ async function executeService(input: {
   const actualUsd = measuredCost(result.actualCostUsd);
   // Provider spend is a fact once the service returns. Settle it durably before
   // surfacing an estimate overage so no terminal failure strands a reservation.
-  await input.services.settleBudget({
-    projectId: input.context.projectId,
-    reservationKey,
-    actualUsd,
-  });
+  try {
+    await input.services.settleBudget({
+      projectId: input.context.projectId,
+      reservationKey,
+      actualUsd,
+    });
+  } catch (error) {
+    if (!failureIsRetryable(error)) throw error;
+    throw new RetryableRerunExecutorError(
+      `Settlement for root ${input.suffix} is uncertain; retry the same fenced result.`,
+      {
+        budgetReservationKeys: [reservationKey],
+        cause: error,
+      }
+    );
+  }
   if (actualUsd > input.estimatedUsd) {
     throw new ApiError(
       "budget_exceeded",
@@ -382,6 +412,9 @@ function storyExecutor(services: RootRerunExecutorServices): RerunKindExecutor {
     supports: (work, output) =>
       work.owner === "creative_director" &&
       work.kind === "revise_story" &&
+      work.targets.length === 1 &&
+      work.requiredOutputs.length === 1 &&
+      canonicalTarget(work.targets[0]!) === canonicalTarget(output.target) &&
       output.kind === "story_snapshot" &&
       (output.target.kind === "project" || output.target.kind === "beat"),
     async execute(context) {

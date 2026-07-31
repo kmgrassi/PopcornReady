@@ -32,9 +32,15 @@ steps are persisted immediately and skipped after a process restart. Accepted
 provider work parks the execution before any dependent wave starts, until the
 exact fenced callback arrives.
 
-Failure, cancellation, and late callbacks are terminally fenced. Outputs that
-were already generated remain valid pooled assets, but are not active product
-state.
+Non-retryable failure, cancellation, and late callbacks are terminally fenced.
+A root service with a transient failure and zero recorded spend, or an
+idempotently staged output whose settlement acknowledgement is ambiguous, parks
+the running work and execution with the callback still pending. Re-entry uses
+the same callback generation, service idempotency key, and child reservation.
+Outputs that were already generated remain valid pooled assets, but are not
+active product state.
+Terminal finalization, cancellation, and expired-work recovery release every
+still-reserved child admission under the execution ceiling.
 
 ## Atomic application
 
@@ -74,6 +80,10 @@ Estimates are admission authority; model-backed root calls and provider-backed
 domain calls receive nonzero ceilings, while settled child reservations are the
 accounting source of truth. Measured spend is settled even when it exceeds the
 approved estimate, after which application fails with no active-state move.
+One immutable settlement tuple cannot absorb a later provider attempt: a root
+failure with recorded spend but no durable output therefore settles and fails
+terminally instead of replaying. Only transient zero-spend failures and exact
+durable output/settlement replays retain the original authority.
 The immutable settlement replay key covers actual cost, billing user, and
 billable cost. Terminal reconciliation records the exact selection and story
 before/after set, causal input/output assets, and actual cost; replays must match

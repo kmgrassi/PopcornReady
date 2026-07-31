@@ -81,6 +81,19 @@ export type RerunExecutorResult =
   | RerunExecutorAccepted
   | RerunExecutorBlocked;
 
+export class RetryableRerunExecutorError extends Error {
+  readonly budgetReservationKeys: string[];
+
+  constructor(
+    message: string,
+    input: { budgetReservationKeys: string[]; cause?: unknown }
+  ) {
+    super(message, input.cause === undefined ? undefined : { cause: input.cause });
+    this.name = "RetryableRerunExecutorError";
+    this.budgetReservationKeys = [...new Set(input.budgetReservationKeys)];
+  }
+}
+
 export interface RerunKindExecutor {
   readonly id: string;
   supports(

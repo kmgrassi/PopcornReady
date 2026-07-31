@@ -11,6 +11,7 @@ import {
   type RootRerunExecutorServices,
 } from "../rerun-root-executors";
 import {
+  RetryableRerunExecutorError,
   RerunExecutorRegistry,
   type BoundExecutorOutput,
   type RerunExecutorContext,
@@ -248,6 +249,28 @@ test("story coverage fails closed for aggregate storyboard and scene projections
   }
 });
 
+test("story coverage rejects multi-row work before execution", () => {
+  const secondTarget = { kind: "beat", projectId, beatId: "beat-2" } as const;
+  const secondOutput = {
+    ...output("story-work", "story_snapshot", "story-work:story-2"),
+    target: secondTarget,
+    ordinal: 1,
+  };
+  const story = {
+    ...work("story-work", "revise_story", [
+      output("story-work", "story_snapshot", "story-work:story-1"),
+      secondOutput,
+    ]),
+    targets: [target, secondTarget],
+  } as RerunWorkItem;
+
+  assert.throws(
+    () => productionRerunExecutorRegistry.preflight([story]),
+    (error: unknown) =>
+      error instanceof ApiError && error.code === "coverage_unavailable"
+  );
+});
+
 test("story executor stages one pinned snapshot without moving its stable row", async () => {
   const seen = observed();
   const story = work("story-work", "revise_story", [
@@ -301,7 +324,10 @@ test("model-backed story failure settles recorded spend before terminal failure"
 
   await assert.rejects(
     executor.execute(context({ workItem: story, selectedWork: [story], reserve: seen })),
-    /structured call failed/
+    (error: unknown) =>
+      !(error instanceof RetryableRerunExecutorError) &&
+      error instanceof Error &&
+      /structured call failed/.test(error.message)
   );
   assert.deepEqual(seen.settled.map((entry) => entry.actualUsd), [0.03]);
   assert.deepEqual(seen.released, []);
@@ -458,7 +484,7 @@ test("critique uses the prospective cut and exposes an inert successor identity"
   );
 });
 
-test("critique failure is retryable and idempotent service replay keeps one asset", async () => {
+test("zero-spend critique failure retains admission for idempotent replay", async () => {
   const seen = observed();
   const critique = work("critique-work", "critique_cut", [
     output("critique-work", "critique"),
@@ -485,12 +511,47 @@ test("critique failure is retryable and idempotent service replay keeps one asse
     selectedWork: [critique],
     reserve: seen,
   });
-  await assert.rejects(executor.execute(value), /critic unavailable/);
-  assert.equal(seen.released.length, 1);
+  await assert.rejects(
+    executor.execute(value),
+    (error: unknown) =>
+      error instanceof RetryableRerunExecutorError &&
+      error.budgetReservationKeys.length === 1 &&
+      /critic unavailable/.test(error.message)
+  );
+  assert.equal(seen.released.length, 0);
+  assert.equal(seen.settled.length, 0);
   const replay = await executor.execute(value);
   assert.equal(replay.status, "succeeded");
   assert.equal(replay.status === "succeeded" ? replay.outputs[0]?.assetId : "", "critique-replayed");
   assert.equal(attempts, 2);
+});
+
+test("permanent zero-spend critique failure remains terminal", async () => {
+  const seen = observed();
+  const critique = work("critique-work", "critique_cut", [
+    output("critique-work", "critique"),
+  ]);
+  const executor = createRootRerunExecutors(services(seen, {
+    critiqueProspectiveCut: async () => {
+      throw new ApiError(
+        "validation_failed",
+        "Prospective critique target is not a canonical timeline."
+      );
+    },
+    estimateCritiqueUsd: () => 0,
+  }))[2];
+
+  await assert.rejects(
+    executor.execute(context({
+      workItem: critique,
+      selectedWork: [critique],
+      reserve: seen,
+    })),
+    (error: unknown) =>
+      error instanceof ApiError && error.code === "validation_failed"
+  );
+  assert.equal(seen.released.length, 0);
+  assert.equal(seen.settled.length, 0);
 });
 
 test("retry after a post-result settlement crash reuses one asset and one settlement", async () => {
@@ -519,7 +580,11 @@ test("retry after a post-result settlement crash reuses one asset and one settle
       }
       durableSettlements.set(reservationKey, actualUsd);
       if (settlementCalls === 1) {
-        throw new Error("connection lost after settlement commit");
+        throw new ApiError(
+          "database_error",
+          "Database operation failed: orchestratorBudget.settle.",
+          { dbCode: "08006", dbMessage: "connection lost after settlement commit" }
+        );
       }
       return {} as never;
     },
@@ -533,7 +598,9 @@ test("retry after a post-result settlement crash reuses one asset and one settle
 
   await assert.rejects(
     executor.execute(value),
-    /connection lost after settlement commit/
+    (error: unknown) =>
+      error instanceof RetryableRerunExecutorError &&
+      /settlement.*uncertain/i.test(error.message)
   );
   const replay = await executor.execute(value);
 
@@ -542,6 +609,41 @@ test("retry after a post-result settlement crash reuses one asset and one settle
   assert.equal(durableSettlements.size, 1);
   assert.equal(settlementCalls, 2);
 });
+
+for (const dbCode of ["23505", "55000", "P0002"] as const) {
+  test(`deterministic settlement error ${dbCode} remains terminal`, async () => {
+    const seen = observed();
+    const critique = work("critique-work", "critique_cut", [
+      output("critique-work", "critique"),
+    ]);
+    const executor = createRootRerunExecutors(services(seen, {
+      settleBudget: async () => {
+        throw new ApiError(
+          "database_error",
+          "Database operation failed: orchestratorBudget.settle.",
+          {
+            dbCode,
+            dbMessage: dbCode === "23505"
+              ? "budget_settlement_replay_mismatch for key critique"
+              : "settlement reservation is not available",
+          }
+        );
+      },
+    }))[2];
+
+    await assert.rejects(
+      executor.execute(context({
+        workItem: critique,
+        selectedWork: [critique],
+        reserve: seen,
+      })),
+      (error: unknown) =>
+        error instanceof ApiError &&
+        error.code === "database_error" &&
+        error.details?.dbCode === dbCode
+    );
+  });
+}
 
 test("critique settles measured spend before rejecting an estimate overage", async () => {
   const seen = observed();

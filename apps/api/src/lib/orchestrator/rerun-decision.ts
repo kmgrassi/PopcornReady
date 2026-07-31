@@ -171,6 +171,12 @@ function parseWorkItem(value: unknown, index: number): ProposedWorkItem {
       input.requiredOutputs.length > 50) {
     fail(`${name}.requiredOutputs must contain between 1 and 50 outputs.`);
   }
+  if (
+    kind === "revise_story" &&
+    (input.targets.length !== 1 || input.requiredOutputs.length !== 1)
+  ) {
+    fail(`${name} revise_story work must contain exactly one target and one output.`);
+  }
   const requiredOutputs = input.requiredOutputs.map((raw, outputIndex) => {
     const outputName = `${name}.requiredOutputs[${outputIndex}]`;
     const output = record(raw, outputName);

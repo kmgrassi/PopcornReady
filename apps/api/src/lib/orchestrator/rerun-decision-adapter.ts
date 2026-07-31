@@ -35,7 +35,9 @@ export function createRerunDecisionAdapter(client: LlmClient = getLlmClient()): 
         `${CREATIVE_DIRECTOR_SYSTEM_PROMPT} ` +
         "For this turn, make one inert selective-regeneration proposal. " +
         "Choose only stable targets present in the bounded packet. Do not author cost, risk, " +
-        "approval, pins, binding IDs, work-item IDs, or planned pointer moves; the server owns them.",
+        "approval, pins, binding IDs, work-item IDs, or planned pointer moves; the server owns them. " +
+        "Each revise_story work item must name exactly one target and one matching story_snapshot output; " +
+        "use separate work items for separate story rows.",
       user: JSON.stringify(packet),
       schema: RERUN_DECISION_JSON_SCHEMA,
       maxTokens: 8_000,
@@ -150,6 +152,19 @@ function validateDecision(packet: RerunDecisionPacket, decision: RerunModelDecis
   decision.selectedWork.forEach((work) => {
     work.targets.forEach(assertTarget);
     const workTargetKeys = new Set(work.targets.map(targetKey));
+    if (
+      work.kind === "revise_story" &&
+      (
+        work.targets.length !== 1 ||
+        work.requiredOutputs.length !== 1 ||
+        targetKey(work.requiredOutputs[0]!.target) !== targetKey(work.targets[0]!)
+      )
+    ) {
+      throw new ApiError(
+        "validation_failed",
+        "Each revise_story work item must bind one output to its one exact target."
+      );
+    }
     work.requiredOutputs.forEach((output) => {
       assertTarget(output.target);
       if (!workTargetKeys.has(targetKey(output.target))) {

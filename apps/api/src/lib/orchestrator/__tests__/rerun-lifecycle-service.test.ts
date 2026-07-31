@@ -18,9 +18,11 @@ import {
 } from "../rerun-lifecycle-service";
 import {
   createFakeRerunExecutor,
+  RetryableRerunExecutorError,
   RerunExecutorRegistry,
   validateBoundExecutorOutputs,
 } from "../rerun-executor-registry";
+import { productionRerunExecutorRegistry } from "../rerun-production-registry";
 
 const target = {
   kind: "asset" as const,
@@ -124,6 +126,8 @@ function harness(input: {
   } | null = null;
   let dispatches = 0;
   let reserves = 0;
+  let approvals = 0;
+  let failedWorkItems = 0;
   let finalOutcome: "applied" | "failed" | null = null;
   const finalOutcomes: Array<"applied" | "failed"> = [];
   let parked = 0;
@@ -136,6 +140,7 @@ function harness(input: {
     getSuccessor: async () => null,
     assertAuthority: async () => {},
     approve: async (request) => {
+      approvals += 1;
       if (input.stale) {
         proposalAction.status = "failed";
         return {
@@ -181,14 +186,18 @@ function harness(input: {
       return { ...reservation, replayed: false };
     },
     claimExecution: async () => {
-      if (!reservation || reservation.status !== "reserved") {
+      if (
+        !reservation ||
+        !["reserved", "waiting"].includes(reservation.status)
+      ) {
         throw new ApiError("idempotency_in_progress", "leased");
       }
       reservation.status = "running";
+      reservation.lease_generation += 1;
       return {
         reservationId: "reservation-1",
         leaseToken: "lease-1",
-        leaseGeneration: 1,
+        leaseGeneration: reservation.lease_generation,
         leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),
       };
     },
@@ -210,8 +219,12 @@ function harness(input: {
       parked += 1;
       lastParked = request;
     },
-    parkExecution: async () => {},
-    failWorkItem: async () => {},
+    parkExecution: async () => {
+      reservation!.status = "waiting";
+    },
+    failWorkItem: async () => {
+      failedWorkItems += 1;
+    },
     reserveChildBudget: async () => ({ reservationId: "child-budget-1", replayed: false }),
     listCompletedBindings: async () => [],
     finalizeExecution: async (request) => {
@@ -239,6 +252,8 @@ function harness(input: {
     get dispatches() { return dispatches; },
     incrementDispatch() { dispatches += 1; },
     get reserves() { return reserves; },
+    get approvals() { return approvals; },
+    get failedWorkItems() { return failedWorkItems; },
     get finalOutcome() { return finalOutcome; },
     get finalOutcomes() { return finalOutcomes; },
     get parked() { return parked; },
@@ -259,6 +274,49 @@ test("production coverage fails before approval, reservation, or spend", async (
     }, state.deps),
     (error: unknown) => error instanceof ApiError && error.code === "coverage_unavailable"
   );
+  assert.equal(state.reserves, 0);
+});
+
+test("multi-output story work fails production coverage before approval", async () => {
+  const firstTarget = {
+    kind: "beat" as const,
+    projectId: "project-1",
+    beatId: "beat-1",
+  };
+  const secondTarget = {
+    kind: "beat" as const,
+    projectId: "project-1",
+    beatId: "beat-2",
+  };
+  const proposal = revisionProposal();
+  proposal.selectedWork = [{
+    workItemId: "story-work",
+    owner: "creative_director",
+    kind: "revise_story",
+    targets: [firstTarget, secondTarget],
+    requiredOutputs: [firstTarget, secondTarget].map((storyTarget, index) => ({
+      bindingId: `story-binding-${index + 1}`,
+      workItemId: "story-work",
+      target: storyTarget,
+      kind: "story_snapshot",
+      role: "beat_snapshot",
+      ordinal: index,
+    })),
+  }];
+  const state = harness({ proposal, registry: productionRerunExecutorRegistry });
+
+  await assert.rejects(
+    approveRerunProposal({
+      workspaceId: "workspace-1",
+      actorId: "actor-1",
+      projectId: "project-1",
+      actionId: "proposal-1",
+      approvedMaxCostUsd: 0,
+    }, state.deps),
+    (error: unknown) =>
+      error instanceof ApiError && error.code === "coverage_unavailable"
+  );
+  assert.equal(state.approvals, 0);
   assert.equal(state.reserves, 0);
 });
 
@@ -617,6 +675,117 @@ test("executor failure terminalizes the proposal execution and releases the work
   }, state.deps);
   assert.equal(result.status, "failed");
   assert.equal(state.finalOutcome, "failed");
+});
+
+test("retryable executor failure parks and replays the same fenced result", async () => {
+  const reservationKey = "root:critique:reservation-1";
+  const idempotencyKeys: string[] = [];
+  const callbackGenerations: number[] = [];
+  const reservedKeys: string[] = [];
+  let attempts = 0;
+  let stagedAssetCount = 0;
+  let stagedAssetId: string | null = null;
+  const registry = new RerunExecutorRegistry([
+    createFakeRerunExecutor({
+      kind: "revise_visuals",
+      execute: async (context) => {
+        attempts += 1;
+        idempotencyKeys.push(context.fence.idempotencyKey);
+        callbackGenerations.push(context.fence.callbackGeneration);
+        await context.reserveBudget({
+          actionId: context.fence.dispatchActionId,
+          reservationKey,
+          estimatedUsd: 0.05,
+        });
+        if (!stagedAssetId) {
+          stagedAssetId = "pooled-output-1";
+          stagedAssetCount += 1;
+        }
+        if (attempts === 1) {
+          throw new RetryableRerunExecutorError(
+            "settlement response was lost",
+            { budgetReservationKeys: [reservationKey] }
+          );
+        }
+        return {
+          status: "succeeded",
+          outputs: context.requiredOutputs.map((output) => ({
+            ...output,
+            assetId: stagedAssetId!,
+            intrinsicRole: output.role,
+          })),
+          primitiveActionIds: [context.fence.dispatchActionId],
+          budgetReservationKeys: [reservationKey],
+        };
+      },
+    }),
+  ]);
+  const retryProposal = revisionProposal();
+  retryProposal.estimate = {
+    costUsd: 0.05,
+    maxCostUsd: 0.05,
+    latencyClass: "interactive",
+  };
+  const state = harness({ registry, proposal: retryProposal });
+  let budgetReservations = 0;
+  const durableBudgetKeys: string[] = [];
+  state.deps.reserveChildBudget = async (request) => {
+    budgetReservations += 1;
+    reservedKeys.push(request.reservationKey);
+    if (!durableBudgetKeys.includes(request.reservationKey)) {
+      durableBudgetKeys.push(request.reservationKey);
+    }
+    return {
+      reservationId: "child-budget-1",
+      replayed: budgetReservations > 1,
+    };
+  };
+  const parkWorkItem = state.deps.parkWorkItem;
+  let retryParkChecked = false;
+  state.deps.parkWorkItem = async (request) => {
+    if (!request.completedCallbacks?.length && !request.acceptedCallbacks?.length) {
+      assert.deepEqual(request.primitiveActionIds, []);
+      assert.deepEqual(request.budgetReservationKeys, durableBudgetKeys);
+      assert.deepEqual(request.bindingResults, []);
+      retryParkChecked = true;
+    }
+    await parkWorkItem(request);
+  };
+  await approveRerunProposal({
+    workspaceId: "workspace-1",
+    actorId: "actor-1",
+    projectId: "project-1",
+    actionId: "proposal-1",
+    approvedMaxCostUsd: 0.05,
+  }, state.deps);
+
+  const first = await executeRerunProposal({
+    workspaceId: "workspace-1",
+    actorId: "actor-1",
+    projectId: "project-1",
+    actionId: "proposal-1",
+    idempotencyKey: "retryable-root-result",
+  }, state.deps);
+  assert.equal(first.status, "waiting");
+  assert.equal(state.failedWorkItems, 0);
+  assert.equal(state.finalOutcome, null);
+  assert.deepEqual(state.lastParked?.budgetReservationKeys, [reservationKey]);
+  assert.equal(retryParkChecked, true);
+
+  const replay = await executeRerunProposal({
+    workspaceId: "workspace-1",
+    actorId: "actor-1",
+    projectId: "project-1",
+    actionId: "proposal-1",
+    idempotencyKey: "retryable-root-result",
+  }, state.deps);
+  assert.equal(replay.status, "applied");
+  assert.equal(state.failedWorkItems, 0);
+  assert.equal(state.finalOutcome, "applied");
+  assert.equal(stagedAssetCount, 1);
+  assert.deepEqual(idempotencyKeys, [idempotencyKeys[0], idempotencyKeys[0]]);
+  assert.deepEqual(callbackGenerations, [1, 1]);
+  assert.deepEqual(reservedKeys, [reservationKey, reservationKey]);
 });
 
 for (const code of ["stale_proposal", "budget_exceeded"] as const) {

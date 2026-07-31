@@ -1,15 +1,14 @@
 # Root selective-regeneration adapter contract
 
-<!-- agent-summary: This document owns roadmap PR 4's inert root rerun adapter boundary. -->
+<!-- agent-summary: This document owns the activated root rerun adapter boundary. -->
 <!-- agent-summary: Root story outputs stage immutable snapshots for exact stable relational rows. -->
 <!-- agent-summary: Assembly and critique consume approved prospective bindings before activation. -->
 <!-- agent-summary: No adapter in this slice moves a selection or relational story pointer. -->
 <!-- agent-summary: Critique may create inert successor metadata but never uses it as output causation. -->
 <!-- agent-summary: Fenced work completion alone applies the shared rerun dispatch action. -->
-<!-- agent-summary: Tests use injected canonical-service fakes; live services remain unregistered until activation. -->
+<!-- agent-summary: Safe root retries retain one fenced reservation and reuse one idempotent durable result. -->
 
-> **Status:** Implemented behind the PR 2 executor interface. The production
-> executor registry remains empty.
+> **Status:** Implemented and activated through the production rerun registry.
 
 ## Boundary
 
@@ -38,6 +37,12 @@ must match both the stable target and a `StorySnapshotPin`:
 - scene target → `story_blueprint_scenes.scene_asset_id`;
 - beat target → `story_beats.beat_asset_id`.
 
+Each `revise_story` work item owns exactly one target and one matching
+`story_snapshot` output. A revision that changes multiple story rows expresses
+them as separate work items so registry preflight, execution, and pointer
+application agree on cardinality. Crafted aggregate work fails coverage before
+approval, while the executor retains the same check as a direct-call backstop.
+
 The service receives this row kind, stable row ID, predecessor asset ID, and
 idempotency key. It stages the new asset without changing the relational row.
 Stored graph kinds are target-aware: whole story uses `story_blueprint`,
@@ -62,11 +67,17 @@ is not activated before fan-in can satisfy it.
 
 Deterministic story staging and deterministic assembly reserve and settle an
 explicit zero-cost child ledger entry. Critique supplies an approved estimate
-and a measured actual cost through its canonical service. A failed model-backed
-critique retains its reservation for recovery rather than pretending no spend
-occurred. Once a canonical service returns, measured spend settles before an
-estimate overage is surfaced; admission estimates cannot erase provider cost
-or strand a reserved child ledger entry.
+and a measured actual cost through its canonical service. A zero-recorded-spend
+transient failure retains its approved reservation and parks the work for the
+same fenced idempotent retry. If the service durably stages its output but
+settlement acknowledgement is ambiguous, the same output and immutable
+settlement payload replay. A failure with recorded spend but no durable output
+settles that spend and remains terminal; re-running it under the same immutable
+reservation could double-charge or conflict. Permanent ledger errors remain
+terminal; only connection, serialization, deadlock, and timeout-class settlement
+failures are ambiguous enough to park. Once a canonical service returns,
+measured spend settles before an estimate overage is surfaced; admission
+estimates cannot erase provider cost or strand a reserved child ledger entry.
 
 Critique may persist an inert successor `rerun_proposal` action. Its ID is
 stored in the callback's durable provider metadata, while the action remains

@@ -13,6 +13,8 @@ const asset = (projectId: string, assetId: string): RerunTarget =>
   ({ kind: "asset", projectId, assetId });
 const storyboard = (projectId: string, storyboardId: string): RerunTarget =>
   ({ kind: "storyboard", projectId, storyboardId });
+const beat = (projectId: string, beatId: string): RerunTarget =>
+  ({ kind: "beat", projectId, beatId });
 
 function baseDecision() {
   return {
@@ -86,6 +88,70 @@ test("strict parser enforces the discriminated outcomes and rejects model-author
       requiredOutputs: [],
     }],
   }), /cannot author server policy field requiresApproval/);
+});
+
+test("story decisions require one target and output per work item", () => {
+  assert.throws(() => parseRerunModelDecision({
+    ...baseDecision(),
+    outcome: "revision",
+    selectedWork: [{
+      owner: "creative_director",
+      kind: "revise_story",
+      targets: [beat("p", "beat-1"), beat("p", "beat-2")],
+      requiredOutputs: [
+        { target: beat("p", "beat-1"), kind: "story_snapshot", role: "beat", ordinal: 0 },
+        { target: beat("p", "beat-2"), kind: "story_snapshot", role: "beat", ordinal: 1 },
+      ],
+    }],
+  }), /exactly one target and one output/);
+
+  const split = parseRerunModelDecision({
+    ...baseDecision(),
+    outcome: "revision",
+    selectedWork: ["beat-1", "beat-2"].map((beatId, ordinal) => ({
+      owner: "creative_director",
+      kind: "revise_story",
+      targets: [beat("p", beatId)],
+      requiredOutputs: [{
+        target: beat("p", beatId),
+        kind: "story_snapshot",
+        role: "beat",
+        ordinal,
+      }],
+    })),
+  });
+  assert.equal(split.outcome, "revision");
+  assert.equal(split.selectedWork.length, 2);
+});
+
+test("story work target must match its sole output target", () => {
+  const mismatchedPacket = packet();
+  mismatchedPacket.targets = [beat("p", "beat-1"), beat("p", "beat-2")];
+  const decision = parseRerunModelDecision({
+    ...baseDecision(),
+    outcome: "revision",
+    checklist: [
+      { target: beat("p", "beat-1"), decision: "change", reason: "Change one." },
+      { target: beat("p", "beat-2"), decision: "preserve", reason: "Keep two." },
+    ],
+    selectedWork: [{
+      owner: "creative_director",
+      kind: "revise_story",
+      targets: [beat("p", "beat-1")],
+      requiredOutputs: [{
+        target: beat("p", "beat-2"),
+        kind: "story_snapshot",
+        role: "beat",
+        ordinal: 0,
+      }],
+    }],
+  });
+
+  assert.throws(() => finalizeRerunProposal({
+    packet: mismatchedPacket,
+    decision,
+    source: "request_changes",
+  }), /one exact target/);
 });
 
 function packet(): RerunDecisionPacket {
