@@ -24,9 +24,6 @@ export type OrchestratorRunStatus =
   | "superseded";
 
 export type OrchestratorGateStatus = "pending" | "reached" | "approved" | "rejected";
-export type RootExecutionProfile = "flat" | "creative_director";
-const CREATIVE_DIRECTOR_ROOT_PROFILE = "creative_director" as const;
-
 export interface OrchestratorRun {
   id: string;
   schemaVersion: "orchestrator_run.v1";
@@ -35,8 +32,6 @@ export interface OrchestratorRun {
   inputSummary: string;
   /** Persisted role selects the declarative AgentDefinition (PR 8). */
   agentRole?: AgentRole;
-  /** Immutable root surface selected at creation; domain runs intentionally omit it. */
-  rootExecutionProfile?: RootExecutionProfile;
   budgetUsd?: number;
   spentUsd: number;
   /** Why a waiting run is parked: media_job | domain | approval (PR 6). */
@@ -92,7 +87,7 @@ export interface RunActionSummary {
   error?: Record<string, unknown>;
   createdAt: string;
   updatedAt?: string;
-  /** Set when the action was superseded by a restart-from-stage. */
+  /** Historical marker retained for readable action projections. */
   supersededAt?: string | null;
 }
 
@@ -110,39 +105,25 @@ export interface AnonymousQuotaInput {
   limit: number;
 }
 
-export function newRootProfileInsert(
-  _env: NodeJS.ProcessEnv = process.env
-): { root_execution_profile: RootExecutionProfile } {
-  return { root_execution_profile: CREATIVE_DIRECTOR_ROOT_PROFILE };
-}
-
-export function newAnonymousRootProfileParams(
-  _env: NodeJS.ProcessEnv = process.env
-): { p_root_execution_profile: RootExecutionProfile } {
-  return { p_root_execution_profile: CREATIVE_DIRECTOR_ROOT_PROFILE };
-}
-
 /**
- * Root work may execute only on an explicitly pinned Creative Director root.
- * Null and flat profiles remain readable history; omission never widens them.
+ * Root work belongs only to the Creative Director role. The PR7A compatibility
+ * migration terminalizes old flat roots before this application code ships;
+ * status checks keep that readable history from ever resuming.
  */
 export function isCreativeDirectorHierarchyRoot(
-  run: Pick<OrchestratorRun, "agentRole" | "rootExecutionProfile">
+  run: Pick<OrchestratorRun, "agentRole">
 ): boolean {
-  return (
-    (run.agentRole ?? "creative_director") === "creative_director" &&
-    run.rootExecutionProfile === CREATIVE_DIRECTOR_ROOT_PROFILE
-  );
+  return (run.agentRole ?? "creative_director") === "creative_director";
 }
 
 export function assertCreativeDirectorHierarchyRoot(
-  run: Pick<OrchestratorRun, "id" | "agentRole" | "rootExecutionProfile">,
+  run: Pick<OrchestratorRun, "id" | "agentRole">,
   operation: string
 ): void {
   if (isCreativeDirectorHierarchyRoot(run)) return;
   throw new ApiError(
     "validation_failed",
-    `Run ${run.id} is legacy history and cannot ${operation}. Start a new Creative Director run.`
+    `Run ${run.id} is not a Creative Director root and cannot ${operation}.`
   );
 }
 
@@ -167,7 +148,6 @@ interface OrchestratorRunRow {
   status: OrchestratorRunStatus;
   input_summary: string;
   agent_role?: AgentRole | null;
-  root_execution_profile?: RootExecutionProfile | null;
   budget_usd: number | null;
   spent_usd: number;
   wait_reason?: DomainRunWaitReason | null;
@@ -217,7 +197,6 @@ function mapRun(row: OrchestratorRunRow): OrchestratorRun {
     updatedAt: iso(row.updated_at),
   };
   if (row.agent_role) run.agentRole = row.agent_role;
-  if (row.root_execution_profile) run.rootExecutionProfile = row.root_execution_profile;
   if (row.budget_usd != null) run.budgetUsd = row.budget_usd;
   if (row.wait_reason) run.waitReason = row.wait_reason;
   const error = unmarkedJson(row.error);
@@ -300,7 +279,6 @@ export async function createOrchestratorRun(
         input_summary: input.inputSummary,
         budget_usd: input.budgetUsd ?? null,
         spent_usd: 0,
-        ...newRootProfileInsert(),
         ...deploymentMetadata(),
         created_at: now,
         updated_at: now,
@@ -330,7 +308,6 @@ export async function createOrchestratorRunWithAnonymousQuota(
       p_limit: quota.limit,
       p_deploy_id: metadata.deploy_id,
       p_git_sha: metadata.git_sha,
-      ...newAnonymousRootProfileParams(),
     })
   );
   const row = (rows as Array<{ run_id: string | null; quota_exceeded: boolean }>)[0];
@@ -661,9 +638,12 @@ export async function listRunActions(runId: string): Promise<RunActionSummary[]>
       .select("*")
       .eq("orchestrator_run_id", runId)
       .order("created_at", { ascending: true })
+      // Keep same-timestamp action order deterministic. The PR 7A legacy-credit
+      // fence uses the reverse of this exact ordering to identify the latest
+      // live failed action before application code loses profile awareness.
+      .order("id", { ascending: true })
   );
-  // Superseded actions (from a restart-from-stage) are hidden from the action
-  // log so the orchestrator re-derives and re-runs those stages.
+  // Superseded historical actions are hidden from the model-visible log.
   return ((data as RunActionRow[]) ?? [])
     .map(mapRunAction)
     .filter((action) => !action.supersededAt);
@@ -694,30 +674,4 @@ export async function resetGatesToPending(gateIds: string[]): Promise<void> {
       .update({ status: "pending", updated_at: new Date().toISOString() })
       .in("id", gateIds)
   );
-}
-
-// Clear active selections for the given slot roles so the asset tools regenerate
-// instead of reusing the superseded outputs. Beat selections (beat_keyframe:*,
-// beat_clip:*) carry no producing-action link, so they must be cleared by slot
-// role, not by action id. Deletes every row for the slot (current_selections is
-// "latest seq wins", so a leftover prior row would still skip regeneration). The
-// produced assets stay in the pool; only the active pointer is removed.
-export async function clearProjectSelections(
-  projectId: string,
-  exactRoles: string[],
-  rolePrefixes: string[]
-): Promise<void> {
-  const db = getServiceSupabase();
-  if (exactRoles.length > 0) {
-    await runQuery(
-      "store.clearProjectSelections exact",
-      db.from("selections").delete().eq("project_id", projectId).in("slot_role", exactRoles)
-    );
-  }
-  for (const prefix of rolePrefixes) {
-    await runQuery(
-      `store.clearProjectSelections ${prefix}`,
-      db.from("selections").delete().eq("project_id", projectId).like("slot_role", `${prefix}%`)
-    );
-  }
 }

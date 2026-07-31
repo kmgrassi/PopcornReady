@@ -3,9 +3,10 @@
 // exercises only the routing decision (orchestratorModel.chooseTool) — no engine
 // loop, no tool execution, no DB. See docs/scopes/orchestrator-decision-evals.md.
 
-import { createDefaultToolRegistry } from "@/lib/orchestrator-tools/default-registry";
+import { createRootToolRegistry } from "@/lib/orchestrator-tools/root-registry";
 import { toOrchestratorRegistry } from "@/lib/orchestrator-tools/to-orchestrator-registry";
 import { orchestratorModel, type OrchestratorModel } from "../model";
+import { CREATIVE_DIRECTOR_SYSTEM_PROMPT } from "../creative-director-agent";
 import { type ToolRegistry } from "../registry";
 import type { OrchestratorModelDecision, ToolName } from "../types";
 import type { DecisionScenario, SampleOutcome, ScenarioResult } from "./types";
@@ -17,7 +18,7 @@ import type { DecisionScenario, SampleOutcome, ScenarioResult } from "./types";
 // scenarios can still route through not-yet-wired stages (clip, export, …).
 // Restricted to the scenario's available tools; execution is never invoked here.
 function registryFor(tools: ToolName[]): ToolRegistry {
-  const full = toOrchestratorRegistry(createDefaultToolRegistry(), { includeStubs: true });
+  const full = toOrchestratorRegistry(createRootToolRegistry(), { includeStubs: true });
   const map: ToolRegistry = new Map();
   for (const tool of tools) {
     const def = full.get(tool);
@@ -57,6 +58,7 @@ export async function runDecisionScenario(
       inputSummary: scenario.inputSummary,
       priorResults: scenario.priorResults,
       registry,
+      systemPrompt: CREATIVE_DIRECTOR_SYSTEM_PROMPT,
     });
     outcomes.push(scoreDecision(scenario, decision));
   }

@@ -16,9 +16,8 @@ interface ToolCatalogEntry {
   gate: ToolGateMetadata;
   /**
    * "dispatch" marks a root-only turn-boundary tool (delegate_*). Dispatch
-   * tools are registered ONLY in the dormant creative-director registry —
-   * never in the flat production default registry, driver stubs, flat eval
-   * scenario surfaces, or the tool-test batteries (see PRODUCTION_TOOL_NAMES).
+   * tools are registered ONLY in the Creative Director registry, never in a
+   * domain registry or tool-test battery (see PRODUCTION_TOOL_NAMES).
    */
   surface?: "dispatch" | "domain";
   /** Exact compatibility behavior for the existing run projection. */
@@ -322,8 +321,7 @@ export function isToolName(value: string): value is ToolName {
 
 /**
  * Root-only turn-boundary dispatch tools (surface: "dispatch"). They exist in
- * the catalog for typing/metadata but must never appear on a flat production
- * surface: not in the default registry, driver stubs, flat eval scenarios, or
+ * the catalog for typing/metadata but must never appear in a domain surface or
  * the tool-test batteries.
  */
 export const DISPATCH_TOOL_NAMES = Object.freeze(

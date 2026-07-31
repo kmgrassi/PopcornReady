@@ -6,7 +6,6 @@ import type { HandlerCtx } from "@/lib/api/v1/handler";
 import { runIdempotent } from "@/lib/api/v1/idempotency";
 import {
   assertCreativeDirectorHierarchyRoot,
-  clearProjectSelections,
   cancelOrchestratorRunFamily,
   createPendingApprovalGate,
   createReachedApprovalGate,
@@ -16,7 +15,6 @@ import {
   listRunActions,
   listRunGates,
   listOrchestratorRunsForProject,
-  isCreativeDirectorHierarchyRoot,
   resetGatesToPending,
   resolveGate,
   supersedeRunActions,
@@ -47,19 +45,11 @@ import {
   type Job,
 } from "@popcorn/shared/v1/types";
 import {
-  BOARD_FEEDBACK_TOOL,
-  boardRevisionGateIdsToReset,
-  boardRevisionPayload,
-  boardRevisionProposal,
-  boardRevisionRequiresRunResume,
-  boardRevisionResumePatch,
   canViewOperatorDiagnostics,
   generationActions,
   isInsufficientCreditsFailure,
-  parseBoardRevisionRequest,
-  parseBoardRevisionTarget,
   runFailedForInsufficientCredits,
-} from "./orchestrator-run-board-revisions.js";
+} from "./orchestrator-run-helpers.js";
 import {
   projectRun,
   projectRunDetailFromParts,
@@ -68,12 +58,6 @@ import {
 } from "./orchestrator-run-projections.js";
 import { getAgentSession, getRootRunFamily } from "@/lib/api/v1/domain-session-store";
 import { projectCreatorRunHierarchy } from "./session-run-projection.js";
-import {
-  downstreamActionIds,
-  downstreamGateIds,
-  parseRestartStageType,
-  restartSelectionScope,
-} from "./orchestrator-run-restarts.js";
 
 const NO_STORE_HEADERS = { "Cache-Control": "no-store" };
 const ANONYMOUS_RUN_QUOTA_LIMIT = 1;
@@ -82,15 +66,8 @@ const AFTER_GATE_PREFIX = "after:";
 
 export const orchestratorRunsRouter = Router();
 export {
-  boardRevisionGateIdsToReset,
-  boardRevisionRequiresRunResume,
-  boardRevisionResumePatch,
   canViewOperatorDiagnostics,
-  downstreamActionIds,
-  downstreamGateIds,
   isInsufficientCreditsFailure,
-  parseBoardRevisionTarget,
-  restartSelectionScope,
   runFailedForInsufficientCredits,
 };
 
@@ -213,60 +190,6 @@ export function storyboardContinuationPatch(run: OrchestratorRun): UpdateOrchest
 
 export function isStoryboardAfterGate(gate: Pick<OrchestratorRunGate, "stage">): boolean {
   return gate.stage === `${AFTER_GATE_PREFIX}generate_storyboard`;
-}
-
-export function revisionRootFromProjectHistory(
-  runs: readonly OrchestratorRun[]
-): OrchestratorRun | null {
-  const rootRuns = runs.filter(
-    (candidate) => (candidate.agentRole ?? "creative_director") === "creative_director"
-  );
-  const newestRoot = rootRuns[0];
-  if (newestRoot && !isCreativeDirectorHierarchyRoot(newestRoot)) return null;
-  const latestUsable =
-    rootRuns.find(
-      (candidate) => candidate.status !== "failed" && candidate.status !== "canceled"
-    ) ??
-    null;
-  return latestUsable && isCreativeDirectorHierarchyRoot(latestUsable) ? latestUsable : null;
-}
-
-export interface ProjectRevisionRootDeps {
-  listRuns: typeof listOrchestratorRunsForProject;
-  cancelFamily: typeof cancelOrchestratorRunFamily;
-  createRun: typeof createOrchestratorRun;
-}
-
-export async function resolveProjectRevisionRoot(
-  projectId: string,
-  deps: Partial<ProjectRevisionRootDeps> = {}
-): Promise<OrchestratorRun> {
-  const resolved = {
-    listRuns: deps.listRuns ?? listOrchestratorRunsForProject,
-    cancelFamily: deps.cancelFamily ?? cancelOrchestratorRunFamily,
-    createRun: deps.createRun ?? createOrchestratorRun,
-  };
-  const runs = await resolved.listRuns(projectId);
-  const reusable = revisionRootFromProjectHistory(runs);
-  if (reusable) return reusable;
-
-  const newestLegacyRoot = runs.find(
-    (candidate) =>
-      (candidate.agentRole ?? "creative_director") === "creative_director" &&
-      !isCreativeDirectorHierarchyRoot(candidate)
-  );
-  if (
-    newestLegacyRoot &&
-    (newestLegacyRoot.status === "queued" ||
-      newestLegacyRoot.status === "running" ||
-      newestLegacyRoot.status === "waiting")
-  ) {
-    await resolved.cancelFamily({ projectId, runId: newestLegacyRoot.id });
-  }
-  return resolved.createRun({
-    projectId,
-    inputSummary: "Revise a generated asset based on user feedback.",
-  });
 }
 
 function canonicalize(value: unknown): unknown {
@@ -765,27 +688,6 @@ orchestratorRunsRouter.post(
 );
 
 orchestratorRunsRouter.post(
-  "/projects/:projectId/generation-runs/:runId/reject",
-  mutation(async ({ auth }, params) => {
-    const projectId = requireParam(params, "projectId");
-    const runId = requireParam(params, "runId");
-    await requireProjectAccess(auth.workspaceId, projectId);
-    const run = await requireProjectRun(runId, projectId);
-    assertCreativeDirectorHierarchyRoot(run, "reject a gate");
-    const gates = await listRunGates(runId);
-    const gate = gates.find((candidate) => candidate.status === "reached");
-    if (gate) {
-      await resolveGate(gate.id, "rejected");
-      if (isStoryboardAfterGate(gate)) {
-        await updateOrchestratorRun(runId, storyboardContinuationPatch(await getOrchestratorRun(runId)));
-      }
-      await enqueueOrchestratorDispatch(runId, auth.workspaceId);
-    }
-    return { status: 202, body: await assembleRunDetail(runId, auth.workspaceId, projectId) };
-  })
-);
-
-orchestratorRunsRouter.post(
   "/projects/:projectId/generation-runs/:runId/cancel",
   mutation(async ({ auth }, params) => {
     const projectId = requireParam(params, "projectId");
@@ -794,100 +696,6 @@ orchestratorRunsRouter.post(
     await requireProjectRun(runId, projectId);
     await cancelOrchestratorRunFamily({ projectId, runId });
     return { status: 200, body: await assembleRunDetail(runId, auth.workspaceId, projectId) };
-  })
-);
-
-orchestratorRunsRouter.post(
-  "/projects/:projectId/generation-runs/:runId/board-revisions",
-  mutation(async ({ auth, body }, params) => {
-    const projectId = requireParam(params, "projectId");
-    const runId = requireParam(params, "runId");
-    await requireProjectAccess(auth.workspaceId, projectId);
-    const run = await requireProjectRun(runId, projectId);
-    assertCreativeDirectorHierarchyRoot(run, "accept a board revision");
-    const request = parseBoardRevisionRequest(body, runId);
-    const action = await createAction({
-      projectId,
-      orchestratorRunId: runId,
-      tool: BOARD_FEEDBACK_TOOL,
-      status: "applied",
-      params: boardRevisionPayload(request),
-      inputAssetIds: [
-        request.target.clipAssetId,
-        request.target.keyframeAssetId,
-        request.target.assetId,
-      ].filter((id): id is string => Boolean(id)),
-      rationale: "User requested an AI-mediated board or tile revision.",
-      proposal: boardRevisionProposal(request),
-    });
-    if (boardRevisionRequiresRunResume(run.status)) {
-      const gates = await listRunGates(runId);
-      await resetGatesToPending(boardRevisionGateIdsToReset(run, gates));
-      await updateOrchestratorRun(runId, boardRevisionResumePatch(run));
-    }
-    await enqueueOrchestratorDispatch(runId, auth.workspaceId);
-
-    return {
-      status: 202,
-      body: {
-        revision: {
-          id: action.id,
-          message: request.message,
-          target: request.target,
-          createdAt: action.createdAt,
-        },
-      },
-    };
-  })
-);
-
-// Project-scoped AI edit: route an asset edit through the agent without the
-// caller needing a run. Revives the project's latest usable run (or starts a
-// fresh one), records the board_feedback, and resumes — so the agent revises the
-// target in context and can propagate to downstream assets when they exist.
-orchestratorRunsRouter.post(
-  "/projects/:projectId/asset-revisions",
-  mutation(async ({ auth, body }, params) => {
-    const projectId = requireParam(params, "projectId");
-    await requireProjectAccess(auth.workspaceId, projectId);
-
-    const run = await resolveProjectRevisionRoot(projectId);
-
-    const request = parseBoardRevisionRequest(body, run.id);
-    const action = await createAction({
-      projectId,
-      orchestratorRunId: run.id,
-      tool: BOARD_FEEDBACK_TOOL,
-      status: "applied",
-      params: boardRevisionPayload(request),
-      inputAssetIds: [
-        request.target.assetId,
-        request.target.keyframeAssetId,
-        request.target.clipAssetId,
-      ].filter((id): id is string => Boolean(id)),
-      rationale: "User asked the agent to revise an asset from the storyboard view.",
-      proposal: boardRevisionProposal(request),
-    });
-    if (run.status !== "running" && run.status !== "waiting") {
-      await updateOrchestratorRun(run.id, {
-        status: "running",
-        startedAt: run.startedAt ?? new Date().toISOString(),
-      });
-    }
-    await enqueueOrchestratorDispatch(run.id, auth.workspaceId);
-
-    return {
-      status: 202,
-      body: {
-        runId: run.id,
-        revision: {
-          id: action.id,
-          message: request.message,
-          target: request.target,
-          createdAt: action.createdAt,
-        },
-      },
-    };
   })
 );
 
@@ -926,47 +734,6 @@ orchestratorRunsRouter.post(
     }
     await updateOrchestratorRun(runId, {
       status: "running",
-      clearCompletedAt: true,
-      clearError: true,
-    });
-    await enqueueOrchestratorDispatch(runId, auth.workspaceId);
-
-    return { status: 202, body: await assembleRunDetail(runId, auth.workspaceId, projectId) };
-  })
-);
-
-// Re-enter a run at an arbitrary stage: supersede that stage + everything
-// downstream (so the agent's action log no longer shows them done), reset their
-// gates to pending, then resume. The agent re-derives and re-runs from there.
-orchestratorRunsRouter.post(
-  "/projects/:projectId/generation-runs/:runId/restart-from",
-  mutation(async ({ auth, body }, params) => {
-    const projectId = requireParam(params, "projectId");
-    const runId = requireParam(params, "runId");
-    await requireProjectAccess(auth.workspaceId, projectId);
-    const run = await requireProjectRun(runId, projectId);
-    assertCreativeDirectorHierarchyRoot(run, "restart from a generation stage");
-
-    const stageType = parseRestartStageType(body);
-    const fromOrder = GENERATION_STAGE_ORDER[stageType];
-
-    // Stop a live loop first — driveLoop exits at its next turn when the run is
-    // no longer "running" — so we don't race the in-flight loop.
-    if (run.status === "running" || run.status === "waiting") {
-      await updateOrchestratorRun(runId, { status: "canceled" });
-    }
-
-    const [actions, gates] = await Promise.all([listRunActions(runId), listRunGates(runId)]);
-    await supersedeRunActions(downstreamActionIds(actions, fromOrder));
-    await resetGatesToPending(downstreamGateIds(gates, fromOrder));
-    // Clear the active selections for this stage + downstream so the asset tools
-    // regenerate instead of skipping beats that still have a live selection.
-    const selectionScope = restartSelectionScope(fromOrder);
-    await clearProjectSelections(projectId, selectionScope.exactRoles, selectionScope.rolePrefixes);
-
-    await updateOrchestratorRun(runId, {
-      status: "running",
-      startedAt: run.startedAt ?? new Date().toISOString(),
       clearCompletedAt: true,
       clearError: true,
     });

@@ -13,7 +13,7 @@ import {
   TOOL_NAMES,
   type ToolName,
 } from "../capability-catalog";
-import { createDefaultToolRegistry } from "../default-registry";
+import { createTestToolRegistry } from "./test-registry";
 import { createRootToolRegistry } from "../root-registry";
 import { ToolRegistry } from "../registry";
 import { createVisualsToolRegistry } from "../visuals-registry";
@@ -192,9 +192,9 @@ test("driver stubs preserve the flat production vocabulary, descriptions, and sc
   }
 });
 
-test("flat default registry keeps its existing order and catalog metadata", () => {
-  const registry = createDefaultToolRegistry();
-  assert.deepEqual(names(registry), expectedDefaultRegistryOrder);
+test("test-only aggregate preserves catalog order and metadata", () => {
+  const registry = createTestToolRegistry();
+  assert.deepEqual(names(registry), PRODUCTION_TOOL_NAMES);
   for (const definition of registry.list()) {
     const metadata = getToolCapability(definition.name);
     assert.equal(definition.capability, metadata.capability);
@@ -207,7 +207,7 @@ test("flat default registry keeps its existing order and catalog metadata", () =
   }
 });
 
-test("role registries form an exact disjoint 12/8/2 partition", () => {
+test("role registries form an exact disjoint 13/8/2 partition", () => {
   const root = names(createRootToolRegistry());
   const visuals = names(createVisualsToolRegistry());
   const audio = names(createAudioToolRegistry());
@@ -250,16 +250,16 @@ test("role registries form an exact disjoint 12/8/2 partition", () => {
   }
   assert.equal(visuals.some((name) => audio.includes(name)), false);
 
-  // Nothing user-visible changes in production: the flat default registry
-  // never contains a dispatch tool.
-  const flat = names(createDefaultToolRegistry());
+  // The test-only aggregate is intentionally non-production and excludes
+  // dispatch tools so legacy primitive contract tests stay bounded.
+  const flat = names(createTestToolRegistry());
   for (const dispatchTool of DISPATCH_TOOL_NAMES) {
     assert.equal(flat.includes(dispatchTool), false, dispatchTool);
   }
 });
 
 test("rich registry rejects cross-domain or execution metadata drift", () => {
-  const definition = createDefaultToolRegistry().get("plan_shots");
+  const definition = createTestToolRegistry().get("plan_shots");
   const wrongOwner = new ToolRegistry();
   assert.throws(
     () => wrongOwner.register({ ...definition, ownerRole: "visuals" }),

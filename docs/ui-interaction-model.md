@@ -145,9 +145,9 @@ mutations and therefore don't go through the agent. Anything not on this list is
   reversible and recorded; the agent still reconciles any downstream effect. This
   is the closest thing to a direct edit we allow, and it's deliberately
   *choosing*, never *creating*.
-- **Approvals / gates** — approve, reject, or cancel at a review checkpoint
-  (NORTH_STAR Principle 2/5). The user is steering the agent's run, not editing
-  content.
+- **Approvals / gates** — approve or cancel at a review checkpoint. A content
+  revision opens Request Changes and uses the durable proposal lifecycle; it
+  never rewinds the gate or a generation stage (NORTH_STAR Principle 2/5).
 - **Playback & view controls** — play/pause/scrub, zoom, full-screen, switch
   aspect preview, expand provenance. Pure view state.
 - **Navigation & organization metadata** — open/close panels, project

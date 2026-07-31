@@ -3,8 +3,8 @@
 // durable state (orchestrator_runs + its actions), not a live process — each call
 // loads the run, drives turns until it parks (async job / approval gate) or
 // finishes, then exits. Re-entry (resume) is the same loop re-applied. Deliberately
-// calls model + executeRegisteredTool directly (rather than runToolLoopTurn) so it
-// can pause BEFORE a gated tool executes.
+// calls the model and registered tools directly so it can pause before a gated
+// tool executes.
 //
 // All side effects are injectable (store, jobs, model, registry) so the loop is
 // unit-testable with fakes — no DB, no network.
@@ -24,8 +24,6 @@ import {
   type RunActionSummary,
   type UpdateOrchestratorRunPatch,
 } from "@/lib/api/v1/orchestrator-store";
-import { createDefaultToolRegistry } from "@/lib/orchestrator-tools/default-registry";
-import { toOrchestratorRegistry } from "@/lib/orchestrator-tools/to-orchestrator-registry";
 import { recoverDurableOrchestratorJob } from "./job-recovery";
 import { orchestratorModel, type OrchestratorModel } from "./model";
 import { executeRegisteredTool, type ToolRegistry } from "./registry";
@@ -258,14 +256,6 @@ export function defaultEngineStore(): OrchestratorEngineStore {
   };
 }
 
-let cachedRegistry: ToolRegistry | undefined;
-function defaultRegistry(): ToolRegistry {
-  if (!cachedRegistry) {
-    cachedRegistry = toOrchestratorRegistry(createDefaultToolRegistry());
-  }
-  return cachedRegistry;
-}
-
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -307,7 +297,7 @@ function resolved(deps: EngineDeps) {
     // left un-retried inside withStoreRetry (non-idempotent append).
     store: withStoreRetry(deps.store ?? defaultEngineStore(), deps.retry),
     model: deps.model ?? orchestratorModel,
-    registry: deps.registry ?? defaultRegistry(),
+    rootRegistry: deps.registry,
     jobs: deps.jobs ?? {
       getJob: (id: string, projectId?: string) =>
         projectId
@@ -816,7 +806,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       workspaceId: r.workspaceId,
       // A creative-director profile owns its exact surface; the definition
       // ignores this fallback registry for that persisted profile.
-      rootRegistry: r.registry,
+      rootRegistry: r.rootRegistry,
       enabledDomainRoles: r.enabledDomainRoles,
     });
 

@@ -59,7 +59,6 @@ async function resolveRoot(input: {
     if (
       run.projectId !== input.projectId ||
       run.agentRole !== "creative_director" ||
-      run.rootExecutionProfile !== "creative_director" ||
       !["queued", "running", "waiting"].includes(run.status)
     ) {
       throw new ApiError(
@@ -71,7 +70,6 @@ async function resolveRoot(input: {
   }
   const existing = (await deps.listRuns(input.projectId)).find((run) =>
     run.agentRole === "creative_director" &&
-    run.rootExecutionProfile === "creative_director" &&
     (run.status === "queued" || run.status === "running" || run.status === "waiting")
   );
   if (existing) return existing;

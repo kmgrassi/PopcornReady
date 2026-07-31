@@ -8,7 +8,9 @@
 <!-- agent-summary: The cutover deletes restart-from-stage, the flat-root fallback, and obsolete compatibility UI. -->
 <!-- agent-summary: Completion requires graph-focused tests, Request Changes E2E, migration validation, and a controlled smoke. -->
 
-> **Status:** Accepted implementation scope. Start with PR 1 immediately.
+> **Status (2026-07-30):** PRs 1–6 and the non-destructive PR 7A application
+> cleanup are implemented on the final stack. PR 7B is the only remaining
+> deployment and must wait until PR 7A is fully rolled out.
 > This document supersedes the incomplete sequencing in
 > [`graph-rerun-decisioning-prs.md`](graph-rerun-decisioning-prs.md) and
 > [`regeneration-coverage-prs.md`](regeneration-coverage-prs.md). Those documents
@@ -42,7 +44,7 @@ After cutover:
   attributable through durable actions and graph edges; and
 - no production route can fall back to the old flat all-tools root.
 
-## 2. Current State On `main`
+## 2. Current State On The PR 7A Stack
 
 ### Shipped and retained
 
@@ -62,46 +64,24 @@ After cutover:
   generate anchors, storyboards, keyframes, clips, standalone images/videos, and
   pinned video edits; Audio can generate and fit audio; the root can assemble and
   critique a cut.
-- Object-scoped Request Changes and hierarchical run projections have shipped
-  foundation pieces.
+- Object-scoped Request Changes uses the durable proposal lifecycle and
+  hierarchical run projections.
+- Approval, rejection, refresh, execution, reservations, callbacks, causation,
+  reconciliation, retry, and actual-cost settlement are database-enforced and
+  idempotent.
+- Kind-specific Visuals, Audio, and root executors cover the production asset
+  kinds; activation fans out bounded work and applies approved selection/story
+  pointers atomically.
+- Legacy revision/stage-restart routes and the flat production runtime are
+  deleted.
 
-### Remaining gaps
+### Remaining cleanup
 
-1. **The proposal is not an agent decision.** The service deterministically
-   selects only the requested image, marks downstream candidates unchanged, and
-   always returns `executable: false`.
-2. **The decision packet is too narrow.** It lacks the complete bounded upstream,
-   sibling, story, selection, prior-action, domain-report, cost, and capability
-   context required for semantic blast-radius reasoning.
-3. **There is no proposal lifecycle executor.** Approval, rejection, stale-pin
-   failure, reservation, dispatch, fan-in, application, and terminal failure are
-   not one idempotent state machine.
-4. **Regeneration coverage is uneven.** Image alternatives exist, but keyframe,
-   clip, audio, storyboard/story, and cut revisions do not share one typed,
-   proposal-driven execution contract.
-5. **Selection authority is inconsistent.** Some flat-root tools still move
-   selections as part of generation. Domain jobs correctly leave alternatives
-   pooled, but approved targeted moves need one transactional expected-selection
-   contract.
-6. **Request Changes is not the only production edit path.** The web still
-   exposes restart-from-stage behavior.
-7. **The old runtime remains recoverable.** An expiring environment fallback can
-   still create flat-root runs, and legacy rows can still resolve the all-tools
-   registry.
-8. **The completion docs are fragmented.** Older scopes describe already-shipped
-   proposal and hierarchy work as missing and explicitly preserve the fallback
-   this roadmap must remove.
-9. **Request Changes bypasses the proposal.** The current asset-revision route
-   writes `board_feedback` as already applied, revives a prior run, and enqueues
-   it immediately. The web modal calls that route directly, so no graph closure,
-   estimate, approval, or pin protects the change.
-10. **Delegation drops graph scope.** The current domain task builder emits a
-    project-only target with empty candidate, preservation, fingerprint, and
-    selection-pin fields even though `DomainTask.v1` can carry them.
-11. **A flat-era shortcut runs before role routing.** Deterministic board-tile
-    feedback maps directly to the leaf `regenerate_image_asset` tool before the
-    role-owned decision path. That tool is not part of the Creative Director
-    registry and must not bypass proposal/delegation.
+PR 7B removes the temporary rolling-deploy trigger,
+`root_execution_profile`, profile-bound database signatures, constraints,
+policies, grants, readiness allowance, and transitional monitoring only after
+all PR 7A application instances are deployed. It does not add or change product
+behavior.
 
 ## 3. Non-Negotiable Design Rules
 
@@ -899,6 +879,20 @@ relational story spine without overwriting visual scene media.
 
 ### PR 7 — Forward cutover and delete the old paths
 
+**Implementation status (2026-07-30):** PR 7 is split into two forward
+deployments. PR 7A is implemented locally: it removes callers, compatibility
+routes, the flat registry/driver/prompt, and application routing dependence on
+`root_execution_profile`. Its replay-safe PREP
+migration re-terminalizes active legacy families and temporarily fills the
+profile only for omitted Creative Director root inserts, so old and new binaries
+can overlap without misclassifying Visuals or Audio children. It also closes
+reached gates and insufficient-credit retry eligibility on terminal legacy roots
+before role-only routing ships. PR 7B runs only after PR 7A is fully deployed and
+removes that trigger, the retained profile column, and profile-bound database
+signatures, constraints, policies, and grants. The retired hierarchy health
+fields and CLI restart/reject commands were already removed in the provisional
+cleanup.
+
 **Deliver:**
 
 - Delete `POST .../generation-runs/:runId/restart-from`, its route helpers,
@@ -918,9 +912,13 @@ relational story spine without overwriting visual scene media.
   compatibility path after role-specific routing owns all callers.
 - Migrate nonterminal historical/test flat roots to `canceled` or `superseded`;
   keep terminal rows readable as history but never resumable.
-- Drop `root_execution_profile` and its shared TypeScript type after all
-  nonterminal flat/null rows are terminalized. Terminal run/action history
-  remains readable without routing metadata.
+- In PR 7A, remove the shared TypeScript type and application reads/writes, then
+  deploy the root-aware compatibility trigger and use the still-present profile
+  to make terminal flat/null rows structurally non-resumable: reject reached
+  gates and cancel only retry-eligible insufficient-credit failures while
+  preserving their errors/actions. In PR 7B, after PR 7A is fully deployed, drop
+  `root_execution_profile` and its database-only compatibility surface. Terminal
+  run/action history remains readable without routing metadata.
 - Delete obsolete stage-order UI projections that exist only to drive restart.
 - Update North Star, interaction, run-projection, testing inventory, operations,
   and rollout docs to describe the single remaining path.
@@ -940,6 +938,11 @@ relational story spine without overwriting visual scene media.
 - Rollback is a forward deploy of the last hierarchy/graph-compatible
   application version. The pre-drop deploy must already ignore
   `root_execution_profile`; never redeploy code that expects a removed column.
+- PR 7A closes storyboard gate approval and credit retry on historical flat/null
+  rows before the application loses profile awareness; focused contract tests
+  assert the migration predicates and deterministic action ordering. PR 7B adds
+  row-level migration fixtures and repeats the continuation proof after the
+  profile column and its update fence are gone.
 
 ## 6. Verification Matrix
 

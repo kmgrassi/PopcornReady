@@ -67,7 +67,6 @@ const root = {
   status: "waiting" as const,
   inputSummary: "test",
   agentRole: "creative_director" as const,
-  rootExecutionProfile: "creative_director" as const,
   spentUsd: 0,
   createdAt: "now",
   updatedAt: "now",
@@ -103,10 +102,10 @@ test("packet computes bounded downstream depth, pins canonical story pointers, a
   assert.equal(result.pins.storySnapshots.some((pin) => pin.rowKind === ("panel" as never)), false);
 });
 
-test("project, root profile, target project, and unpinned selection mismatches fail before decisioning", () => {
+test("project, root role, target project, and unpinned selection mismatches fail before decisioning", () => {
   assert.throws(() => buildRerunDecisionPacket({
     snapshot: snapshot(),
-    rootRun: { ...root, rootExecutionProfile: "flat" },
+    rootRun: { ...root, agentRole: "visuals" },
     userIntent: "x",
     targets: [{ kind: "project", projectId: "p" }],
   }), /Creative Director root/);

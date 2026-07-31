@@ -2,16 +2,17 @@
 
 > **Status:** Vision + scope — **the foundation is now largely built.** This
 > remains the authoritative reference for how generation should evolve. The
-> data-model direction (§5) and the core orchestrator/tool runtime (§6–§7 P1/P2)
-> have shipped against the asset graph, and every executable root uses the
-> Creative Director hierarchy. The remaining generation migration is graph-aware proposal
-> decisioning, complete kind-specific execution, Request Changes integration,
-> and deletion of fixed-stage/flat fallbacks. See
+> data-model direction (§5), core orchestrator/tool runtime (§6–§7 P1/P2), and
+> graph-aware proposal lifecycle have shipped against the asset graph. Every
+> executable root uses the Creative Director hierarchy, Request Changes enters
+> through proposals, and fixed-stage/flat application fallbacks are deleted.
+> The remaining cleanup is the separately deployed retirement of the temporary
+> profile compatibility schema. See
 > [`scopes/full-selective-regeneration-cutover-prs.md`](scopes/full-selective-regeneration-cutover-prs.md).
 > New work should align to it; any deviation should be a conscious, documented
-> decision. Last updated 2026-07-29 (status pass; original design 2026-06-08).
+> decision. Last updated 2026-07-30 (status pass; original design 2026-06-08).
 
-## Implementation status (2026-07-29)
+## Implementation status (2026-07-30)
 
 The 2026-06-08 original was forward-looking design; most of the foundation has
 since landed. Map below (details inline per section). **§3 describes the model we
@@ -31,9 +32,10 @@ since landed. Map below (details inline per section). **§3 describes the model 
   storyboard and explicitly continued into production
   (`apps/api/src/lib/orchestrator/engine.ts`; `orchestrator_runs` /
   `orchestrator_run_gates` tables), drives the registered tool surface
-  (`apps/api/src/lib/orchestrator-tools/default-registry.ts`). **Pending:** restart
-  / rerun decisions still need to consume `downstream_assets()` stale candidates
-  instead of relying on the fixed stage restart path.
+  through explicit Creative Director, Visuals, and Audio registries
+  (`apps/api/src/lib/orchestrator-tools/*-registry.ts`). Revision proposals
+  consume graph context and execute through the durable rerun lifecycle; the
+  fixed-stage restart path is deleted.
 - ✅ **Regeneration = a new immutable version (§5)** — the `regenerate_asset_version`
   RPC mints a new version (same `lineage_id`, `version+1`) and repoints
   selections/panels
@@ -320,11 +322,13 @@ historical — do not build on them.
 
 ## 6. Tool surface (capabilities the orchestrator calls — shipped)
 
-Realized as the orchestrator tool registry
-(`apps/api/src/lib/orchestrator-tools/default-registry.ts`), driven by the run
-loop in `apps/api/src/lib/orchestrator/engine.ts`. The executable registry is the
-source of truth for the currently registered vocabulary; documentation must not
-freeze a hand-maintained count. Its capabilities cover planning, media
+Realized as three role-owned orchestrator registries
+(`apps/api/src/lib/orchestrator-tools/root-registry.ts`,
+`visuals-registry.ts`, and `audio-registry.ts`), driven by the shared run loop
+in `apps/api/src/lib/orchestrator/engine.ts`. Production never constructs an
+all-tools registry. The executable role registries are the source of truth for
+the currently registered vocabulary; documentation must not freeze a
+hand-maintained count. Their capabilities cover planning, media
 generation and revision, assembly, critique, approval, export, and optional
 publication. Image regeneration uses immutable versioning; broader regeneration
 coverage across kinds is still filling in.
@@ -343,21 +347,18 @@ likeness" is the edge from a clip to its anchor.
   dependency/provenance graph + granular idempotent generation tools are live on
   the asset graph; the orchestrator is the single engine, and the legacy
   monolith has been removed.
-- **P2 — Orchestrator agent. 🟡 Partially shipped.** The agent calls the tools via
+- **P2 — Orchestrator agent. ✅ Shipped.** The agent calls the tools via
   the run loop; initial runs are durable and autonomous through their complete
   storyboard, then require an explicit production continuation
   (`orchestrator_run_gates`), and carry a budget ceiling
-  (`orchestrator_runs.budget_usd` / `spent_usd`). **Pending:** graph-based
-  "minimal re-run on any change" decisioning and execution are incomplete.
-  `downstream_assets()` and a read-only proposal foundation ship, but Request
-  Changes still bypasses that proposal and the fallback restart route uses fixed
-  `GENERATION_STAGE_ORDER` boundaries and clears selections. The accepted
-  completion plan is
+  (`orchestrator_runs.budget_usd` / `spent_usd`). Graph-based Request Changes
+  uses a durable proposal, approval, execution, reconciliation, and cost
+  settlement lifecycle. Fixed-stage restart and selection-clearing fallbacks
+  are deleted. The implementation record is
   [`scopes/full-selective-regeneration-cutover-prs.md`](scopes/full-selective-regeneration-cutover-prs.md).
 - **P3 — Inspection, gates & feedback loop. 🟡 In progress:** artifacts are visible
   as they pop (every tool call is an `action`), gates ship, and immutable image
-  regeneration has partial UI/API coverage. **Open:** uniform graph-aware
-  Request Changes execution across every kind, plus the approvals/edits →
+  regeneration has UI/API coverage. **Open:** the approvals/edits →
   better-prompts feedback loop (`docs/scopes/ooda-feedback-loop.md`). First pass
   stays a reliable default ordering; agent latitude shines in the edit/re-run loop.
 
