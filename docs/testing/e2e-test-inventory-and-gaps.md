@@ -45,7 +45,9 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   diagnostics, and response-driven review-gate transitions that clear feedback
   without racing page reloads. They explicitly verify that review feedback and
   generated-asset edits no longer post the retired reject or board-revision
-  mutations.
+  mutations. A creator-direct image fixture also verifies one-step asset-ready
+  completion with no Brief, Script, or Storyboard rail, and the project overview
+  repeats that assertion for its compact status panel.
 - `rerun-proposal-lifecycle.spec.ts` covers proposal preview, explicit maximum
   cost approval, separate execution, waiting-state polling, durable reload
   recovery, visible owning-surface refresh after restored completion, truthful
@@ -387,6 +389,9 @@ Covered:
   of being collapsed by inline width styles.
 - A production-shaped storyboard-only terminal result never renders video-ready
   completion copy.
+- A successful creator-direct image renders **Asset ready** and one **Image
+  asset** stage on both the run and project-overview surfaces; production stages
+  such as Script are absent.
 - API regression coverage now keeps prompt/upload entrypoints autonomous when
   stop controls are omitted, preserves explicit `runThrough: false`, and rejects
   incomplete storyboard-to-keyframe handoffs. A local Supabase + MinIO

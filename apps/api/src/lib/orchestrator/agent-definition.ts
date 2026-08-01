@@ -327,6 +327,17 @@ function questionFingerprint(runId: string, question: string, options: unknown):
 }
 
 /** Strictly convert the domain model's terminal JSON into the immutable report. */
+function parseDomainCompletion(summary: string): unknown {
+  const trimmed = summary.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*\n([\s\S]*?)\n```$/i);
+  const payload = fenced?.[1]?.trim() ?? trimmed;
+  try {
+    return JSON.parse(payload);
+  } catch {
+    throw new Error("Domain completion must be valid JSON.");
+  }
+}
+
 export async function buildDomainReportFromCompletion(
   input: {
     runId: string;
@@ -339,12 +350,7 @@ export async function buildDomainReportFromCompletion(
     validatedOutputs?: typeof validatedOutputs;
   } = {}
 ): Promise<DomainReportV1> {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(input.summary);
-  } catch {
-    throw new Error("Domain completion must be valid JSON.");
-  }
+  const parsed = parseDomainCompletion(input.summary);
   const completion = completionObject(parsed);
   const outcome = completion.outcome;
   if (outcome === "done") {

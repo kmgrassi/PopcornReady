@@ -100,6 +100,16 @@ clears it through the atomic resume claim. The normal API suite discovers but
 skips this file without `RUN_LOCAL_DB_INTEGRATION=1`; no current GitHub workflow
 provisions local Supabase for it.
 
+Creator progress projection treats the parent run transport as authoritative
+once it is terminal. If a historical action row still says `running`, an
+attached failed/canceled/succeeded job supplies its terminal display state; if
+there is no terminal job, the parent failure/cancellation wins. Terminal runs
+therefore never expose a current tool or animate stale activity, while the
+immutable action and job records remain available for diagnosis. For a retried
+tool, only jobs attached to the latest invocation may override its current stage
+status; earlier attempt jobs remain visible as activity history but are not
+authoritative for the active retry.
+
 ## Non-goals
 
 - Changing the loop's shape, the one-tool-per-turn decision model, or the

@@ -41,6 +41,81 @@ const project = {
   updatedAt: now,
 };
 
+test("project overview presents one-off image activity without a script stage", async ({ page }) => {
+  await mockLocalApi(page);
+  const standaloneRun = {
+    runId: "run_one_off_image",
+    projectId,
+    status: "succeeded",
+    completionKind: "standalone_asset",
+    presentationKind: "standalone_image",
+    currentStageType: "ready",
+    progressPercent: 100,
+    message: "Asset is ready.",
+    reviewGate: null,
+    createdAt: now,
+    updatedAt: now,
+    startedAt: now,
+    completedAt: now,
+  };
+  const standaloneStage = {
+    stageId: "run_one_off_image:tool:generate_image_asset",
+    runId: standaloneRun.runId,
+    type: "asset_generation",
+    toolName: "generate_image_asset",
+    label: "Image asset",
+    order: 9,
+    status: "succeeded",
+    progressPercent: 100,
+    message: "Image asset applied.",
+    startedAt: now,
+    completedAt: now,
+    jobIds: [],
+    artifactIds: ["asset_one_off"],
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await page.route(`**/api/v1/projects/${projectId}`, (route) =>
+    json(route, { project }),
+  );
+  await page.route(`**/api/v1/projects/${projectId}/storyboard`, (route) =>
+    json(route, { storyboard: null }),
+  );
+  await page.route(`**/api/v1/projects/${projectId}/storyboards/generate`, (route) =>
+    json(route, { job: null }),
+  );
+  await page.route(`**/api/v1/workspaces/${workspaceId}/generation-runs**`, (route) =>
+    json(route, { runs: [standaloneRun], pagination: { limit: 6, nextCursor: null } }),
+  );
+  await page.route(
+    `**/api/v1/projects/${projectId}/generation-runs/${standaloneRun.runId}`,
+    (route) => json(route, { run: standaloneRun, stages: [standaloneStage], stageItems: [] }),
+  );
+
+  await page.goto(`/projects/${projectId}`);
+
+  const panel = page
+    .getByRole("heading", { name: "Generation status" })
+    .locator("xpath=ancestor::section");
+  await expect(page.getByRole("heading", { name: "Generation status" })).toBeVisible();
+  await expect(
+    panel.getByLabel("Generation stages").getByText("Image asset", { exact: true }),
+  ).toBeVisible();
+  await expect(panel.getByText("Asset ready", { exact: true })).toBeVisible();
+  await expect(panel.getByText("Script", { exact: true })).toHaveCount(0);
+
+  standaloneRun.status = "failed";
+  standaloneRun.message = "Generation failed.";
+  await page.reload();
+
+  await expect(panel.getByText("Failed", { exact: true })).toBeVisible();
+  await expect(panel.getByText("Needs attention", { exact: true })).toBeVisible();
+  await expect(
+    panel.getByLabel("Generation stages").getByText("Complete", { exact: true }),
+  ).toBeVisible();
+});
+
 test("project overview upload-more targets the existing project", async ({ page }) => {
   await mockLocalApi(page);
 
