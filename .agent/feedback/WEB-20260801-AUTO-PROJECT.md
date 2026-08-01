@@ -5,7 +5,7 @@
 <!-- agent-summary: Reuse server-owned AI naming instead of duplicating title heuristics in the browser. -->
 <!-- agent-summary: Request-only naming inputs avoid persisting an asset prompt as project metadata. -->
 <!-- agent-summary: Async create-and-continue flows must navigate with returned IDs, not pending React state. -->
-<!-- agent-summary: Same-tick duplicate submissions require a synchronous ref guard. -->
+<!-- agent-summary: Async continuations must stop after their owning route unmounts. -->
 <!-- agent-summary: This record ships with worksheet WEB-20260801-AUTO-PROJECT. -->
 
 ## Lesson
@@ -21,3 +21,11 @@ normalization, and future model changes consistent across entry points.
 Keep request-only naming context bounded, make the implicit step visible through
 loading and inline errors, and cover duplicate clicks and stale-state navigation
 whenever another create-and-continue interaction is added.
+
+## PR review follow-up
+
+Review exposed two lifecycle edges that happy-path locking did not cover. A
+disabled popover trigger does not disable an already-mounted panel, so the panel
+must be removed from the interaction tree and its local state closed. Likewise,
+an async mutation belongs to the route that started it: after that route
+unmounts, completion may update caches but must not navigate or set local state.

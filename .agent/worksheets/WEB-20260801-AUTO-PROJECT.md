@@ -43,6 +43,8 @@ the draft on failure, and leave the existing selected-project flow unchanged.
 - Automatic creation has visible loading and inline error states, a synchronous
   duplicate-click guard, a stable `Idempotency-Key`, and locks project/media/
   prompt choices until the critical section completes.
+- PR review follow-up closes an already-open picker during automatic creation
+  and ignores delayed completion after the creator leaves the Create route.
 - The Project rail explains that project selection is optional.
 - API schema, naming, route-boundary, web browser, desktop, and mobile coverage
   document and verify the behavior.
@@ -57,6 +59,10 @@ the draft on failure, and leave the existing selected-project flow unchanged.
 - Focused Playwright matrix — 6 passed across Chromium, Mobile Safari, and
   Mobile Chrome; includes duplicate submit, stable retry idempotency, failure
   preservation, selected-project bypass, delayed manual creation, and overflow.
+- PR comment follow-up: web unit suite 54 passed; 4 focused Playwright cases
+  passed across Chromium, Mobile Safari, and Mobile Chrome for open-picker
+  locking and abandoned-route completion; full `agent:validate -- --scope all`
+  passed afterward.
 - A broad accidental Playwright run before the focused command completed with
   105 passes, 5 skips, and 2 failures in the new tests; both test defects were
   corrected and the focused matrix passed afterward.
@@ -80,6 +86,11 @@ the draft on failure, and leave the existing selected-project flow unchanged.
 - Wrap-up: `/root/conflict_review` re-reviewed the fixed diff and reported no
   remaining actionable code, API-boundary, race, UX/accessibility, test, or
   source-of-truth documentation findings.
+- PR review comments: two unresolved P2 threads requested stale completion
+  suppression after unmount and full open-picker locking; both are implemented
+  with focused browser regressions. `/root/conflict_review` found no remaining
+  actionable findings in implementation review and approved the final wrap-up
+  after the full validation pass.
 
 ## Blockers and risks
 
@@ -89,4 +100,5 @@ the draft on failure, and leave the existing selected-project flow unchanged.
 
 ## Next action / handoff
 
-Commit, tag, push, and open the ready PR.
+Commit and push the addressed PR comment fixes. Thread replies/resolution remain
+untouched because the user authorized code changes, not GitHub comment writes.

@@ -206,6 +206,11 @@ test.describe("Asset Studio", () => {
     ).toBeVisible();
     const prompt = page.getByLabel("Describe the result", { exact: true });
     await prompt.fill("Quiet amber-lit popcorn falling into a bowl");
+    await openProjectPicker(page);
+    await page.getByRole("button", { name: "Create new project" }).click();
+    await expect(
+      page.getByLabel("Project name"),
+    ).toBeVisible();
     const review = page.getByRole("button", { name: "Review request" });
     await expect(review).toBeEnabled();
     await review.evaluate((button) => {
@@ -217,6 +222,9 @@ test.describe("Asset Studio", () => {
       page.getByRole("button", { name: "Creating project…" }),
     ).toBeDisabled();
     await expect(page.locator("textarea")).toBeDisabled();
+    await expect(
+      page.getByLabel("Project name"),
+    ).toHaveCount(0);
     await expect(
       page.getByRole("button", {
         name: `Use recent project ${project.name}`,
@@ -242,6 +250,53 @@ test.describe("Asset Studio", () => {
       page.getByRole("heading", { name: "Approve this" }),
     ).toBeVisible();
     expect(createCount).toBe(1);
+  });
+
+  test("does not open review when automatic project creation finishes after leaving Create", async ({
+    page,
+  }) => {
+    const automaticProject = {
+      ...project,
+      id: "project_abandoned_automatic",
+      name: "Abandoned Automatic Project",
+    };
+    let releaseCreate: (() => void) | undefined;
+    let markCreateCompleted: (() => void) | undefined;
+    const createReleased = new Promise<void>((resolve) => {
+      releaseCreate = resolve;
+    });
+    const createCompleted = new Promise<void>((resolve) => {
+      markCreateCompleted = resolve;
+    });
+
+    await page.route("**/api/v1/projects", async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      await createReleased;
+      await fulfillJson(route, { project: automaticProject }, 201);
+      markCreateCompleted?.();
+    });
+
+    await page.goto("/create");
+    await page
+      .getByLabel("Describe the result", { exact: true })
+      .fill("A request the creator leaves behind");
+    await page.getByRole("button", { name: "Review request" }).click();
+    await expect(
+      page.getByRole("button", { name: "Creating project…" }),
+    ).toBeDisabled();
+
+    await page
+      .getByRole("complementary")
+      .getByRole("link", { name: "Dashboard", exact: true })
+      .click();
+    await expect(page).toHaveURL(/\/dashboard$/);
+    releaseCreate?.();
+    await createCompleted;
+    await page.waitForTimeout(100);
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(
+      page.getByRole("heading", { name: "Approve this" }),
+    ).toHaveCount(0);
   });
 
   test("preserves the draft when automatic project creation fails", async ({ page }) => {

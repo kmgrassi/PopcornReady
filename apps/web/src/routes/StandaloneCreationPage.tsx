@@ -203,6 +203,7 @@ export function StandaloneCreationPage() {
     () => `asset-studio:proposal:${crypto.randomUUID()}`,
   );
   const reviewAttemptRef = useRef(false);
+  const pageLifecycleRef = useRef(0);
   const [isAutoCreatingProject, setIsAutoCreatingProject] = useState(false);
   const [autoProjectError, setAutoProjectError] = useState<string | null>(null);
   const runId = params.get("runId");
@@ -217,6 +218,12 @@ export function StandaloneCreationPage() {
   const selectedProject = listedSelection ?? selectedProjectQuery.data?.project ?? null;
   const improvePrompt =
     goal === "video" ? improveVideoPrompt : improveImagePrompt;
+
+  useEffect(() => {
+    return () => {
+      pageLifecycleRef.current += 1;
+    };
+  }, []);
 
   if (runId && projectId) {
     const reportOutcome = status.data?.report?.outcome.outcome;
@@ -375,6 +382,7 @@ export function StandaloneCreationPage() {
   async function startReview() {
     if (!canPropose || createProject.isPending || reviewAttemptRef.current) return;
     reviewAttemptRef.current = true;
+    const lifecycle = pageLifecycleRef.current;
     setAutoProjectError(null);
     const draft = {
       projectId,
@@ -396,6 +404,7 @@ export function StandaloneCreationPage() {
         });
         reviewProjectId = response.project.id;
       }
+      if (pageLifecycleRef.current !== lifecycle) return;
       const reviewDraft = { ...draft, projectId: reviewProjectId };
       navigate(`${location.pathname}${location.search}`, {
         replace: true,
@@ -409,6 +418,7 @@ export function StandaloneCreationPage() {
         }),
       });
     } catch (error) {
+      if (pageLifecycleRef.current !== lifecycle) return;
       setAutoProjectError(
         error instanceof Error
           ? error.message
@@ -416,7 +426,7 @@ export function StandaloneCreationPage() {
       );
     } finally {
       reviewAttemptRef.current = false;
-      setIsAutoCreatingProject(false);
+      if (pageLifecycleRef.current === lifecycle) setIsAutoCreatingProject(false);
     }
   }
 

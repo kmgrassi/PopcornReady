@@ -44,7 +44,8 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   existing/first/new-project selection, inline creation without losing the
   prompt, automatic AI-named creation when review starts without a selection,
   duplicate-submit protection, draft preservation after automatic-create
-  failure, list and creation failure recovery, and keyboard focus/Escape behavior.
+  failure, stale-completion suppression after navigation, open-picker locking,
+  list and creation failure recovery, and keyboard focus/Escape behavior.
 - `run-progress.spec.ts` and `run-progress-actions.spec.ts` cover run progress,
   approval/cancel actions, durable Request Changes proposal entry points,
   failed/succeeded states, and recovery hints
