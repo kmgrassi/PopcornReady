@@ -31,6 +31,8 @@ Add observable local-Postgres regression tests for `orchestrator_runs_wait_reaso
 - Added a focused local-Postgres matrix for Visuals, Audio, and Creative Director wait-reason shapes.
 - Added production store round-trips and atomic resume/CAS assertions.
 - Documented and scripted the exact opt-in local command.
+- Addressed the PR review by adding the documentation contract's seven durable
+  `agent-summary` lines to the materially updated orchestrator scope.
 
 ## Validation evidence
 
@@ -46,6 +48,9 @@ Add observable local-Postgres regression tests for `orchestrator_runs_wait_reaso
 - `pnpm agent:lint:fix` — passed for all five changed files.
 - `pnpm agent:validate -- --scope api` — passed, including agent lint, workflow
   policy, migration, RPC/relation-boundary, and API typecheck checks.
+- PR comment follow-up: `pnpm agent:lint:fix` passed for the three documentation
+  files, then `pnpm agent:validate -- --scope api` passed again. The local database
+  suite was not rerun because product behavior, tests, and schema are unchanged.
 
 ## Independent reviews
 
@@ -56,6 +61,12 @@ Add observable local-Postgres regression tests for `orchestrator_runs_wait_reaso
 - Wrap-up: `/root/wait_reason_wrap_review` approved the test-only scope,
   constraint/store/CAS coverage, cleanup, documentation, and validation evidence
   with no actionable findings.
+- PR comment research/plan: `/root/wait_reason_db_test_review` approved adding
+  exactly seven system-contract summaries and keeping validation comment-scoped.
+- PR comment implementation: `/root/wait_reason_impl_review` approved the exact
+  seven summaries and the worksheet/feedback updates with no findings.
+- PR comment wrap-up: `/root/wait_reason_wrap_review` approved the three-file
+  documentation-only diff for commit, push, and thread resolution.
 
 ## Blockers and risks
 

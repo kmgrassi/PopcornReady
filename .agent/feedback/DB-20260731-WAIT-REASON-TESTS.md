@@ -28,3 +28,9 @@ The false-confidence audit temporarily restored the dropped-reason behavior in
 the production store. The suite failed immediately with SQLSTATE `23514` at
 `orchestrator_runs_wait_reason_shape`, demonstrating that it detects the original
 failure rather than merely exercising fixture setup.
+
+When an existing authoritative document is materially updated with commands,
+coverage boundaries, or live operational constraints, migrate its header to the
+seven-summary contract in the same change. The summaries should describe the
+durable system contract—not the review that prompted the repair—so future agents
+can discover purpose, boundaries, commands, and non-goals with `rg`.

@@ -1,5 +1,13 @@
 # Orchestrator Step Durability — Scope
 
+<!-- agent-summary: This scope defines transient-failure durability for individual orchestrator turns. -->
+<!-- agent-summary: Idempotent store reads and patches use bounded retry with exponential backoff. -->
+<!-- agent-summary: Append-only invocation writes remain non-retryable until they have idempotency keys. -->
+<!-- agent-summary: Finite domain waits persist semantic reasons while compatible root waits may remain null. -->
+<!-- agent-summary: Resume claims atomically change waiting runs to running and clear their wait reason. -->
+<!-- agent-summary: Run pnpm db:test:orchestrator-wait-reasons:local against local Supabase; CI does not provision it. -->
+<!-- agent-summary: Loop shape, parallel fan-out, and broader async retry policy remain outside this scope. -->
+
 ## Objective
 
 Make a single orchestrator turn resilient to transient infrastructure failures so
