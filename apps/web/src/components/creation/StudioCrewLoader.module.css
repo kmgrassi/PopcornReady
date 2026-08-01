@@ -63,10 +63,8 @@
   height: var(--cell-size);
   background-image: var(--sprite-sheet);
   background-repeat: no-repeat;
-  background-position: var(--frame-a) var(--frame-y);
+  background-position: var(--frame-a) 0;
   image-rendering: pixelated;
-  transform: scale(var(--sprite-scale));
-  transform-origin: top left;
 }
 
 .scene[data-active="true"] .sprite {
@@ -74,7 +72,7 @@
 }
 
 .scene:not([data-active="true"]) .sprite {
-  background-position: 0 var(--frame-y);
+  background-position: 0 0;
 }
 
 .scene[data-active="true"] .camera .sprite {
@@ -99,12 +97,12 @@
 @keyframes crewWorking {
   0%,
   49% {
-    background-position: var(--frame-a) var(--frame-y);
+    background-position: var(--frame-a) 0;
   }
 
   50%,
   100% {
-    background-position: var(--frame-b) var(--frame-y);
+    background-position: var(--frame-b) 0;
   }
 }
 

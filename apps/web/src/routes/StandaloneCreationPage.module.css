@@ -117,17 +117,10 @@
 
 .progressTrack span {
   display: block;
-  width: 34%;
+  width: 42%;
   height: 100%;
   border-radius: inherit;
-  background: var(--muted);
-  opacity: 0.55;
-}
-
-.progressTrack[data-active="true"] span {
-  width: 42%;
   background: var(--accent);
-  opacity: 1;
   animation: progressSweep 1.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
 }
 
@@ -531,7 +524,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .progressTrack[data-active="true"] span,
+  .progressTrack span,
   .skeletonLine,
   .skeletonBrief {
     animation: none;

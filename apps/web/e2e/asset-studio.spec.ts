@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { readFileSync } from "node:fs";
 import { mockLocalApi, now, workspaceId } from "./fixtures/local-api";
 
 const project = {
@@ -64,6 +65,27 @@ async function expectChoiceCardPadding(page: Page) {
 }
 
 test.describe("Asset Studio", () => {
+  test("keeps progress artwork within its compact asset budget", () => {
+    const assets = [
+      { name: "writer-crew.png", width: 423, height: 141 },
+      { name: "camera-crew.png", width: 423, height: 141 },
+      { name: "worker-crew.png", width: 453, height: 151 },
+    ];
+    let totalBytes = 0;
+
+    for (const asset of assets) {
+      const image = readFileSync(
+        new URL(`../public/sprites/progress/${asset.name}`, import.meta.url),
+      );
+      expect(image.subarray(1, 4).toString()).toBe("PNG");
+      expect(image.readUInt32BE(16)).toBe(asset.width);
+      expect(image.readUInt32BE(20)).toBe(asset.height);
+      totalBytes += image.byteLength;
+    }
+
+    expect(totalBytes).toBeLessThan(512 * 1024);
+  });
+
   test.beforeEach(async ({ page }) => {
     await mockLocalApi(page);
     await mockAssetStudioProject(page);
@@ -191,6 +213,19 @@ test.describe("Asset Studio", () => {
     await expect(page.getByText("Queued", { exact: true })).toBeVisible();
     await expect(page.getByTestId("studio-crew")).toBeVisible();
     await expect(page.locator("[data-crew-member]")).toHaveCount(3);
+    await expect(page.getByTestId("creation-progress-track")).toBeVisible();
+    const crewResources = await page.locator("[data-crew-member]").evaluateAll((actors) =>
+      actors.map((actor) => {
+        const sprite = actor.firstElementChild;
+        return sprite ? getComputedStyle(sprite).backgroundImage : "";
+      }),
+    );
+    expect(crewResources).toEqual([
+      expect.stringContaining("/sprites/progress/writer-crew.png"),
+      expect.stringContaining("/sprites/progress/camera-crew.png"),
+      expect.stringContaining("/sprites/progress/worker-crew.png"),
+    ]);
+    expect(crewResources.some((name) => name.includes("-sprite-sheet.png"))).toBe(false);
     const brief = page.getByLabel("View full request brief");
     await expect(brief).toContainText("Create a single-panel 2D RPG boss");
     await expect(brief).toContainText("…");
@@ -255,6 +290,7 @@ test.describe("Asset Studio", () => {
     await expect(page.getByTestId("studio-crew")).not.toHaveAttribute(
       "data-active",
     );
+    await expect(page.getByTestId("creation-progress-track")).toHaveCount(0);
     const idleFrame = await page
       .locator('[data-crew-member="writer"]')
       .locator("div")
@@ -307,6 +343,7 @@ test.describe("Asset Studio", () => {
       page.getByRole("link", { name: "Open project assets" }),
     ).toBeVisible();
     await expect(page.getByText("1 asset is ready.")).toBeVisible();
+    await expect(page.getByTestId("creation-progress-track")).toHaveCount(0);
   });
 
   test("keeps the active crew calm and contained on mobile with reduced motion", async ({

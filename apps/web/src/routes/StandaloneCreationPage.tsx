@@ -284,13 +284,15 @@ export function StandaloneCreationPage() {
                 </span>
               </div>
 
-              <div
-                className={styles.progressTrack}
-                data-active={presentation.isActive || undefined}
-                aria-hidden="true"
-              >
-                <span />
-              </div>
+              {presentation.isActive ? (
+                <div
+                  className={styles.progressTrack}
+                  data-testid="creation-progress-track"
+                  aria-hidden="true"
+                >
+                  <span />
+                </div>
+              ) : null}
 
               {inputSummary ? (
                 <details className={styles.briefDisclosure}>

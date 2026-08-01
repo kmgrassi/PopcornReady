@@ -24,9 +24,10 @@ automatic-confirmation boundary, at-most-once dispatch, Back/Forward proposal
 restoration without reposting, stale-proposal recovery, invalid review-state
 recovery, and desktop/mobile Create and review layouts. After confirmation, it
 also covers human-readable queued/running/terminal progress, the studio-crew
-loading artwork, semantic request-brief truncation, reduced motion, mobile
-overflow, successful asset links, and truthful failed, canceled, blocked, and
-question outcomes. Project-picker keyboard behavior, existing/first/new-project
+loading artwork from compact progress-only resources, semantic request-brief
+truncation, active-only indeterminate progress, reduced motion, mobile overflow,
+successful asset links, and truthful failed, canceled, blocked, and question
+outcomes. Project-picker keyboard behavior, existing/first/new-project
 selection, project-list/proposal/confirmation/creation failure recovery, delayed
 selection safety, and pagination retry are covered without provider spend.
 

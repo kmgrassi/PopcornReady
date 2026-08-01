@@ -35,8 +35,9 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   boundary, at-most-once dispatch, queued status, safe invalid-review recovery,
   and desktop/mobile Create and review layouts. After confirmation, progress
   assertions cover human-readable queued/running/terminal status, checked-in
-  studio-crew loading artwork, a semantically truncated request brief with full
-  disclosure, reduced motion, mobile overflow, successful asset navigation, and
+  studio-crew artwork from compact progress-only resources, a semantically
+  truncated request brief with full disclosure, active-only indeterminate
+  progress, reduced motion, mobile overflow, successful asset navigation, and
   truthful failed, canceled, blocked, and question outcomes. It also covers the
   accessible project picker,
   existing/first/new-project selection, inline creation without losing the
@@ -356,7 +357,8 @@ Covered:
   creates no proposal or confirmation.
 - Successful confirmation replace-navigates to the queued creator-direct run.
 - The progress view presents human-readable queued and running status, studio
-  crew artwork, a truncated request brief with full disclosure, reduced-motion
+  crew artwork from compact progress-only resources, a truncated request brief
+  with full disclosure, active-only indeterminate progress, reduced-motion
   behavior, and mobile-safe layout.
 - Completed, failed, canceled, question, and blocked fixtures preserve truthful
   terminal copy, idle artwork, exact report details, and asset navigation.

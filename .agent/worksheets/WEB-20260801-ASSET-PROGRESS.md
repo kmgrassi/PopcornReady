@@ -141,6 +141,53 @@ both branches changed its first creation flow.
 - `pnpm agent:validate -- --scope web` — passed, including lint, workflow-policy
   tests, migration validation, and web typecheck.
 
+## Review-comment continuation — 2026-08-01
+
+Two unresolved P2 review threads identified performance and state-truthfulness
+issues in the progress surface: it loads 5,298,743 bytes of full sprite atlases
+to show three small characters, and terminal outcomes retain an indeterminate
+34% track. Preserve the original atlases for other routes, add loader-specific
+three-frame strips at their actual rendered size, and render the indeterminate
+track only while the run is active.
+
+### Comment-fix reviews
+
+- Research checkpoint: completed. The independent reviewer confirmed both
+  comments are actionable and traced the exact idle/work-frame crop geometry.
+- Plan checkpoint: approved. Use nearest-neighbor 3-frame strips, preserve the
+  current visual dimensions and animation timing, assert compact resource usage,
+  and remove the track from every terminal outcome without inventing 100%.
+- Implementation checkpoint: approved after one P3 test-hardening fix. The
+  reviewer verified frame order, offsets, visual dimensions, reduced-motion and
+  idle behavior, and active-only track semantics. A deterministic PNG dimension
+  and 512 KiB aggregate-budget assertion now guards the payload improvement.
+- Wrap-up checkpoint: approved. The independent reviewer rechecked asset bytes,
+  dimensions, decoded area, frame order, track semantics, tests, documentation,
+  and validation evidence and found no remaining implementation blocker.
+
+### Comment-fix validation
+
+- Compact assets total 243,817 bytes versus 5,298,743 bytes for the source
+  atlases, a 95.4% reduction. Decoded area is 187,689 pixels versus 4,718,076,
+  a 96.0% reduction. The original atlases remain unchanged for other routes.
+- `pnpm --filter @popcorn/web typecheck` — passed.
+- Compact-asset budget test — passed, including exact 423×141, 423×141, and
+  453×151 PNG dimensions and the 512 KiB aggregate ceiling.
+- `VITE_API_URL=http://127.0.0.1:4200 PLAYWRIGHT_WEB_PORT=3200
+  POPCORN_E2E_API_PORT=4200 pnpm --filter @popcorn/web exec playwright test
+  e2e/asset-studio.spec.ts` — passed, 29/29 across Chromium, mobile Chrome, and
+  mobile Safari. An earlier parallel run had one unrelated mobile-Safari project
+  selection timeout; the isolated case passed, then the complete final run
+  passed cleanly.
+- In-app browser inspection with deterministic CDP status fixtures: active at
+  1280×720 and Ready at 390×844, both with zero horizontal overflow. Computed
+  active sprite URLs referenced only `/sprites/progress/*`; the active track was
+  present, and the Ready state had static idle crew with no progress track.
+- `pnpm agent:lint:fix` — passed after the final test-hardening change.
+- `pnpm agent:validate -- --scope web` — passed, including lint, workflow-policy
+  tests, migration tests/validation, and web typecheck.
+
 ## Next action / handoff
 
-Commit and push the completed merge resolution to PR #867.
+Commit and push both review fixes to PR #867. Leave GitHub thread replies and
+resolution state unchanged unless the user explicitly requests those writes.

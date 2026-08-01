@@ -8,40 +8,32 @@ type CrewMember = {
   cellSize: number;
   frameA: number;
   frameB: number;
-  frameY: number;
-  scale: number;
 };
 
 const crew: CrewMember[] = [
   {
     id: "writer",
     label: "Writer reviewing the brief",
-    sheet: "/sprites/writer-sprite-sheet.png",
-    cellSize: 251,
-    frameA: -753,
-    frameB: -1004,
-    frameY: -10,
-    scale: 0.56,
+    sheet: "/sprites/progress/writer-crew.png",
+    cellSize: 141,
+    frameA: -141,
+    frameB: -282,
   },
   {
     id: "camera",
     label: "Camera operator framing the shot",
-    sheet: "/sprites/camera-man-sprite-sheet.png",
-    cellSize: 251,
-    frameA: -753,
-    frameB: -1004,
-    frameY: -10,
-    scale: 0.56,
+    sheet: "/sprites/progress/camera-crew.png",
+    cellSize: 141,
+    frameA: -141,
+    frameB: -282,
   },
   {
     id: "worker",
     label: "Workshop worker building the asset",
-    sheet: "/sprites/work-sprite-sheet.png",
-    cellSize: 280,
-    frameA: -840,
-    frameB: -1120,
-    frameY: 0,
-    scale: 0.54,
+    sheet: "/sprites/progress/worker-crew.png",
+    cellSize: 151,
+    frameA: -151,
+    frameB: -302,
   },
 ];
 
@@ -61,8 +53,6 @@ export function StudioCrewLoader({ active }: { active: boolean }) {
           "--cell-size": `${member.cellSize}px`,
           "--frame-a": `${member.frameA}px`,
           "--frame-b": `${member.frameB}px`,
-          "--frame-y": `${member.frameY}px`,
-          "--sprite-scale": member.scale,
         } as CSSProperties;
 
         return (

@@ -28,3 +28,10 @@ of keeping route ownership explicit: the creation form and review authority can
 evolve independently while the `runId` branch remains a focused, reusable
 progress boundary. End-to-end coverage should span that boundary so an
 auto-merge cannot silently disconnect approval from the progress experience.
+
+Decorative sprite atlases should be treated as production payloads, not merely
+design-source files. A progress component should ship only the poses it renders,
+at approximately their displayed dimensions, and tests should verify the route
+does not regress to requesting the source atlases. Likewise, an indeterminate
+track belongs only to active work; terminal truth is carried by the explicit
+status and outcome, not a frozen partial bar.
