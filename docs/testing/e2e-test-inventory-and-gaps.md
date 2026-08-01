@@ -57,7 +57,8 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   UI, preventing concept, brief, and later-run proposals for the same project
   graph target from colliding.
 - `specs/library-collections.spec.ts` covers Library pagination, filters, media
-  viewer, visibility mutation behavior, and watch links with mocked fixtures.
+  viewer, exact attributed credit usage in owned asset detail, visibility
+  mutation behavior, and watch links with mocked fixtures.
 - `inspiration-poster.spec.ts` covers opening a generated story poster in the
   shared media viewer and dismissing it with Escape.
 - `storyboard-editor.spec.ts` verifies the dedicated storyboard route renders

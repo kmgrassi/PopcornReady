@@ -17,6 +17,7 @@ import { VisibilityBadge } from "../components/ui/VisibilityBadge";
 import { MediaViewer, type MediaViewerItem } from "../components/media/MediaViewer";
 import { AssetImage } from "../components/media/AssetImage";
 import { RegenerateImageButton } from "../components/media/RegenerateImageButton";
+import { useAssetBillingQuery } from "../lib/queryClient";
 import {
   useAssetMediaMutation,
   useAssetRegenerateMutation,
@@ -512,6 +513,12 @@ export function AssetsPage() {
     ? assetsQuery.items.findIndex((asset) => (asset.assetId ?? asset.id) === selectedAssetId)
     : -1;
   const selectedAsset = selectedIndex >= 0 ? assetsQuery.items[selectedIndex] : null;
+  const billingQuery = useAssetBillingQuery(
+    authScope,
+    selectedAsset?.projectId ?? "",
+    selectedAsset ? selectedAsset.assetId ?? selectedAsset.id : null,
+    Boolean(selectedAsset && !isPublic),
+  );
   const requestedAssetId = searchParams.get("assetId");
 
   useEffect(() => {
@@ -626,6 +633,7 @@ export function AssetsPage() {
       ) : null}
       <MediaViewer
         item={selectedAsset ? assetViewerItem(selectedAsset) : null}
+        creditsCharged={isPublic ? undefined : billingQuery.data?.creditsCharged}
         hasPrevious={selectedIndex > 0}
         hasNext={selectedIndex >= 0 && selectedIndex < assetsQuery.items.length - 1}
         onClose={closeAssetViewer}

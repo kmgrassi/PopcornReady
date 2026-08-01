@@ -536,6 +536,21 @@ export function useProjectAssetsQuery(
   });
 }
 
+export function useAssetBillingQuery(
+  authScope: string,
+  projectId: string,
+  assetId: string | null,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: queryKeys.assetBilling(authScope, projectId, assetId ?? "closed"),
+    queryFn: ({ signal }: { signal: QuerySignal }) =>
+      v1Api.getProjectAssetDetail(projectId, assetId!, signal),
+    enabled: enabled && Boolean(projectId && assetId),
+    select: (response) => response.billing,
+  });
+}
+
 export function useSaveProjectStoryboardMutation(projectId: string) {
   const client = useQueryClient();
 

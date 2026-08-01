@@ -30,6 +30,10 @@ manual-only on Forward, a delayed project creation cannot override a newer
 selection, and pagination failures preserve loaded projects, without spending
 provider credits.
 
+`specs/library-collections.spec.ts` verifies that an owned generated asset's
+detail viewer shows its exact attributed credit debit without spending provider
+credits. Public asset viewers do not request or receive owner billing metadata.
+
 `rerun-proposal-lifecycle.spec.ts` verifies the durable Request Changes UI
 without provider spend: exact-target proposal preview, preserved/affected work,
 cost approval, separate execution, waiting-state polling, reload recovery,

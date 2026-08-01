@@ -2,10 +2,12 @@ import { useMemo, useReducer, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { FOOTAGE_ACCEPT, readSelectedFootage } from "../lib/upload";
 import {
+  useAssetBillingQuery,
   useProjectAssetsQuery,
   useRefreshAssetMediaMutation,
   useStartUploadedFootageGenerationRunMutation,
 } from "../lib/queryClient";
+import { useAuth } from "../components/auth/AuthProvider";
 import { v1Api } from "../lib/api-client";
 import { formatUploadSize } from "../lib/landingUpload";
 import { useUploadQueue } from "../lib/uploadQueue";
@@ -58,6 +60,8 @@ function uploadStatusLabel(status: string) {
 
 export function ProjectMediaGalleryPage() {
   const projectId = useParams().projectId ?? "";
+  const auth = useAuth();
+  const authScope = auth.user?.id ?? (import.meta.env.DEV ? "dev-autopilot" : auth.status);
   const navigate = useNavigate();
   const uploadQueue = useUploadQueue();
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
@@ -116,6 +120,12 @@ export function ProjectMediaGalleryPage() {
     ? assets.findIndex((asset) => asset.id === selectedAssetId)
     : -1;
   const selectedAsset = selectedIndex >= 0 ? assets[selectedIndex] : null;
+  const billingQuery = useAssetBillingQuery(
+    authScope,
+    projectId,
+    selectedAsset?.id ?? null,
+    Boolean(selectedAsset),
+  );
   const statusMessage = useMemo(() => {
     if (activeQueuedUploads.length > 0) {
       return `Uploading ${activeQueuedUploads.length} ${
@@ -434,6 +444,7 @@ export function ProjectMediaGalleryPage() {
 
       <MediaViewer
         item={selectedAsset ? viewerItem(selectedAsset) : null}
+        creditsCharged={billingQuery.data?.creditsCharged}
         hasPrevious={selectedIndex > 0}
         hasNext={selectedIndex >= 0 && selectedIndex < assets.length - 1}
         onClose={() => setSelectedAssetId(null)}
