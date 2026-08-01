@@ -133,3 +133,31 @@ test("revision state carries the editable draft without proposal authority", () 
     false,
   );
 });
+
+test("video review state preserves the default-on refinement choice", () => {
+  const videoRequest = {
+    ...request,
+    goal: "video" as const,
+    prompt: "A cyclist crosses a rain-slick street",
+  };
+  assert.deepEqual(
+    readCreationReviewRequest(creationReviewNavigationState(videoRequest)),
+    videoRequest,
+  );
+  assert.deepEqual(
+    readCreationDraft(
+      creationDraftNavigationState({
+        goal: videoRequest.goal,
+        projectId: videoRequest.projectId,
+        prompt: videoRequest.prompt,
+        improvePrompt: videoRequest.improvePrompt,
+      }),
+    ),
+    {
+      goal: "video",
+      projectId: videoRequest.projectId,
+      prompt: videoRequest.prompt,
+      improvePrompt: true,
+    },
+  );
+});

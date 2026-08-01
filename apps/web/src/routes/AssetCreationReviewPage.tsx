@@ -230,7 +230,11 @@ export function AssetCreationReviewPage() {
   };
 
   const isImprovingPrompt =
-    request.goal === "image" && request.improvePrompt;
+    (request.goal === "image" || request.goal === "video") &&
+    request.improvePrompt;
+  const refinementDescription = request.goal === "video"
+    ? "We’re turning your idea into clear motion direction before generation."
+    : "We’re turning your idea into clear art direction before generation.";
 
   return (
     <main className={styles.page}>
@@ -250,7 +254,7 @@ export function AssetCreationReviewPage() {
             : proposal
             ? "Review the final request before asset generation begins."
             : isImprovingPrompt
-              ? "We’re turning your idea into clear art direction before generation."
+              ? refinementDescription
               : "We’re checking the request and preparing its cost proposal."}
         </p>
       </header>
