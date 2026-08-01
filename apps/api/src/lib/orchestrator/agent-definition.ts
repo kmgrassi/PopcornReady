@@ -8,6 +8,7 @@ import {
   domainOutputAssetKind,
   type AgentDomain,
   type AgentRole,
+  type DomainOutputKind,
   type DomainTaskV1,
 } from "@popcorn/shared/domain-agent-contract";
 import type { DomainReportV1 } from "@popcorn/shared/domain-agent-contract";
@@ -229,6 +230,7 @@ interface OutputAssetRow {
   project_id: string;
   kind: string;
   role: string | null;
+  status: string;
 }
 
 export interface DomainCompletionOutputInventoryItem {
@@ -237,13 +239,161 @@ export interface DomainCompletionOutputInventoryItem {
   intrinsicRole: string;
 }
 
+function semanticOutputKind(
+  output: DomainCompletionOutputInventoryItem
+): DomainOutputKind | undefined {
+  if (output.kind === "composite" || output.kind === "render") return output.kind;
+  if (output.kind === "critique") {
+    return output.intrinsicRole === "audio_fit" ? "audio_fit" : undefined;
+  }
+  if (output.kind === "video") {
+    return ["beat_clip", "standalone_video", "upload", "primary_footage"].includes(
+      output.intrinsicRole
+    )
+      ? "clip"
+      : undefined;
+  }
+  if (output.kind === "audio") {
+    return ["audio_track", "soundtrack", "voiceover", "dialogue", "sound_effect"].includes(
+      output.intrinsicRole
+    )
+      ? "audio_track"
+      : undefined;
+  }
+  if (output.kind !== "image") return undefined;
+  if (["standalone_image", "image", "upload"].includes(output.intrinsicRole)) return "image";
+  if (output.intrinsicRole === "poster") return "poster";
+  if (["visual_anchor", "character_anchor", "scene_anchor"].includes(output.intrinsicRole)) {
+    return "anchor";
+  }
+  if (["storyboard", "beat_storyboard", "scene_storyboard"].includes(output.intrinsicRole)) {
+    return "storyboard";
+  }
+  if (["keyframe", "beat_keyframe"].includes(output.intrinsicRole)) return "keyframe";
+  return undefined;
+}
+
+function outputMatchesRequirement(
+  output: DomainCompletionOutputInventoryItem,
+  required: DomainTaskV1["requiredOutputs"][number]
+): boolean {
+  return semanticOutputKind(output) === required.kind;
+}
+
+export function assertDomainCompletionOutputInventoryAllowed(input: {
+  task: DomainTaskV1;
+  inventory: readonly DomainCompletionOutputInventoryItem[];
+}): void {
+  const allowedSemanticKinds = new Set<DomainOutputKind>(input.task.allowedOutputKinds);
+  if (input.inventory.some((output) => {
+    const semanticKind = semanticOutputKind(output);
+    return semanticKind === undefined || !allowedSemanticKinds.has(semanticKind);
+  })) {
+    throw completionValidationError(
+      "invalid_output_state",
+      "Domain completion output assets do not match the task's allowed semantic output kinds.",
+      false
+    );
+  }
+}
+
+export function assertDomainCompletionOutputCoverage(input: {
+  task: DomainTaskV1;
+  inventory: readonly DomainCompletionOutputInventoryItem[];
+}): void {
+  const slots = input.task.requiredOutputs.flatMap((required) =>
+    Array.from({ length: required.minimumCount }, () => required)
+  );
+  const candidatesBySlot = slots.map((required) =>
+    input.inventory.flatMap((output, index) =>
+      outputMatchesRequirement(output, required) ? [index] : []
+    )
+  );
+  const slotOrder = slots
+    .map((_, index) => index)
+    .sort((left, right) => candidatesBySlot[left].length - candidatesBySlot[right].length);
+  const assetAssignments = new Map<number, number>();
+
+  const assign = (slotIndex: number, visitedAssets: Set<number>): boolean => {
+    for (const assetIndex of candidatesBySlot[slotIndex]) {
+      if (visitedAssets.has(assetIndex)) continue;
+      visitedAssets.add(assetIndex);
+      const priorSlot = assetAssignments.get(assetIndex);
+      if (priorSlot === undefined || assign(priorSlot, visitedAssets)) {
+        assetAssignments.set(assetIndex, slotIndex);
+        return true;
+      }
+    }
+    return false;
+  };
+
+  if (slotOrder.some((slotIndex) => !assign(slotIndex, new Set()))) {
+    throw completionValidationError(
+      "invalid_output_state",
+      "Domain completion requires distinct role-compatible assets for every required output.",
+      false
+    );
+  }
+}
+
+export function validateDomainCompletionOutputInventory(input: {
+  projectId: string;
+  task: DomainTaskV1;
+  ids: readonly string[];
+  rows: readonly OutputAssetRow[];
+  requireComplete: boolean;
+}): DomainCompletionOutputInventoryItem[] {
+  if (
+    input.rows.length !== input.ids.length ||
+    input.rows.some((row) => row.project_id !== input.projectId)
+  ) {
+    throw completionValidationError(
+      "invalid_output_state",
+      "Domain completion referenced an output outside its project.",
+      false
+    );
+  }
+  if (input.rows.some((row) => row.status !== "ready")) {
+    throw completionValidationError(
+      "invalid_output_state",
+      "Domain completion referenced an output that is not ready.",
+      false
+    );
+  }
+  const allowedGraphKinds = new Set<string>(
+    input.task.allowedOutputKinds.map(domainOutputAssetKind)
+  );
+  if (input.rows.some((row) => !allowedGraphKinds.has(row.kind))) {
+    throw completionValidationError(
+      "invalid_output_state",
+      "Domain completion output assets do not match the task's allowed output kinds.",
+      false
+    );
+  }
+  const inventory = input.ids.map((id) => {
+    const row = input.rows.find((candidate) => candidate.id === id)!;
+    return {
+      assetId: row.id,
+      kind: row.kind,
+      intrinsicRole: row.role ?? row.kind,
+    };
+  });
+  assertDomainCompletionOutputInventoryAllowed({ task: input.task, inventory });
+  if (input.requireComplete) {
+    assertDomainCompletionOutputCoverage({ task: input.task, inventory });
+  }
+  return inventory;
+}
+
 export async function loadDomainCompletionOutputInventory(input: {
   projectId: string;
   task: DomainTaskV1;
   actions: readonly RunActionSummary[];
+  requireComplete?: boolean;
 }): Promise<DomainCompletionOutputInventoryItem[]> {
   const ids = actionOutputIds(input.actions);
   if (ids.length === 0) {
+    if (input.requireComplete === false) return [];
     throw completionValidationError(
       "missing_run_outputs",
       "Domain done completion requires outputs created by this run.",
@@ -254,54 +404,20 @@ export async function loadDomainCompletionOutputInventory(input: {
     "agentDefinition.validatedOutputs",
     getServiceSupabase()
       .from("assets")
-      .select("id, project_id, kind, role")
+      .select("id, project_id, kind, role, status")
       .eq("project_id", input.projectId)
       .in("id", ids)
   ) as OutputAssetRow[];
-  if (rows.length !== ids.length || rows.some((row) => row.project_id !== input.projectId)) {
-    throw completionValidationError(
-      "invalid_output_state",
-      "Domain completion referenced an output outside its project.",
-      false
-    );
-  }
-  const allowed = new Set<string>(input.task.allowedOutputKinds.map(domainOutputAssetKind));
-  if (rows.some((row) => !allowed.has(row.kind))) {
-    throw completionValidationError(
-      "invalid_output_state",
-      "Domain completion output assets do not match the task's allowed output kinds.",
-      false
-    );
-  }
-  for (const required of input.task.requiredOutputs) {
-    const expectedKind = domainOutputAssetKind(required.kind);
-    if (rows.filter((row) => row.kind === expectedKind).length < required.minimumCount) {
-      throw completionValidationError(
-        "invalid_output_state",
-        `Domain completion is missing required ${required.kind} outputs.`,
-        false
-      );
-    }
-  }
-  return ids.map((id) => {
-    const row = rows.find((candidate) => candidate.id === id)!;
-    const required = input.task.requiredOutputs.find(
-      (candidate) => domainOutputAssetKind(candidate.kind) === row.kind
-    );
-    return {
-      assetId: row.id,
-      kind: row.kind,
-      intrinsicRole: row.role ?? required?.role ?? row.kind,
-    };
+  return validateDomainCompletionOutputInventory({
+    projectId: input.projectId,
+    task: input.task,
+    ids,
+    rows,
+    requireComplete: input.requireComplete !== false,
   });
 }
 
-async function validatedOutputs(input: {
-  projectId: string;
-  task: DomainTaskV1;
-  actions: readonly RunActionSummary[];
-  claimedOutputs?: unknown;
-}): Promise<Array<{
+type ValidatedDomainCompletionOutput = {
   assetId: string;
   intrinsicRole: string;
   kind: string;
@@ -310,70 +426,95 @@ async function validatedOutputs(input: {
   target?: import("@popcorn/shared/domain-agent-contract").DomainTaskTarget;
   role?: string;
   ordinal?: number;
-}>> {
-  const inventory = await loadDomainCompletionOutputInventory(input);
-  const ids = inventory.map((output) => output.assetId);
+};
+
+export function validateDomainCompletionBoundOutputClaims(input: {
+  task: DomainTaskV1;
+  inventory: readonly DomainCompletionOutputInventoryItem[];
+  claimedOutputs?: unknown;
+}): ValidatedDomainCompletionOutput[] | undefined {
   const bound = input.task.requiredOutputs.filter(
     (required): required is Extract<typeof required, { bindingId: string }> =>
       "bindingId" in required
   );
-  if (bound.length > 0) {
-    if (
-      bound.length !== input.task.requiredOutputs.length ||
-      !Array.isArray(input.claimedOutputs) ||
-      input.claimedOutputs.length !== bound.length
-    ) {
-      throw completionValidationError(
-        bound.length !== input.task.requiredOutputs.length ? "invalid_output_state" : "invalid_output_claims",
-        "Bound domain completion must claim every required binding exactly once.",
-        bound.length === input.task.requiredOutputs.length
-      );
-    }
-    const seen = new Set<string>();
-    const outputs = input.claimedOutputs.map((raw) => {
-      const claim = completionObject(raw);
-      const bindingId = boundedString(claim.bindingId, "outputs.bindingId", 128);
-      const assetId = boundedString(claim.assetId, "outputs.assetId", 128);
-      if (seen.has(bindingId)) {
-        throw completionValidationError("invalid_output_claims", "Domain completion repeated an output binding.");
-      }
-      seen.add(bindingId);
-      const required = bound.find((candidate) => candidate.bindingId === bindingId);
-      if (!required) {
-        throw completionValidationError(
-          "invalid_output_claims",
-          "Domain completion claimed a binding outside its task."
-        );
-      }
-      const row = inventory.find((candidate) => candidate.assetId === assetId);
-      const expectedAssetKind = domainOutputAssetKind(required.kind);
-      if (!row || row.kind !== expectedAssetKind) {
-        throw completionValidationError(
-          "invalid_output_claims",
-          `Domain completion output ${assetId} does not satisfy binding ${bindingId}.`
-        );
-      }
-      return {
-        assetId,
-        intrinsicRole: row.intrinsicRole,
-        bindingId: required.bindingId,
-        workItemId: required.workItemId,
-        target: required.target,
-        kind: required.kind,
-        role: required.role,
-        ordinal: required.ordinal,
-      };
-    });
-    if (new Set(outputs.map((output) => output.assetId)).size !== ids.length ||
-        outputs.some((output) => !ids.includes(output.assetId))) {
+  if (bound.length === 0) return undefined;
+  if (
+    bound.length !== input.task.requiredOutputs.length ||
+    !Array.isArray(input.claimedOutputs) ||
+    input.claimedOutputs.length !== bound.length
+  ) {
+    throw completionValidationError(
+      bound.length !== input.task.requiredOutputs.length
+        ? "invalid_output_state"
+        : "invalid_output_claims",
+      "Bound domain completion must claim every required binding exactly once.",
+      bound.length === input.task.requiredOutputs.length
+    );
+  }
+  const seen = new Set<string>();
+  const outputs = input.claimedOutputs.map((raw) => {
+    const claim = completionObject(raw);
+    const bindingId = boundedString(claim.bindingId, "outputs.bindingId", 128);
+    const assetId = boundedString(claim.assetId, "outputs.assetId", 128);
+    if (seen.has(bindingId)) {
       throw completionValidationError(
         "invalid_output_claims",
-        "Bound completion must claim exactly this run's output assets."
+        "Domain completion repeated an output binding."
       );
     }
-    return outputs;
+    seen.add(bindingId);
+    const required = bound.find((candidate) => candidate.bindingId === bindingId);
+    if (!required) {
+      throw completionValidationError(
+        "invalid_output_claims",
+        "Domain completion claimed a binding outside its task."
+      );
+    }
+    const row = input.inventory.find((candidate) => candidate.assetId === assetId);
+    const expectedAssetKind = domainOutputAssetKind(required.kind);
+    if (!row || row.kind !== expectedAssetKind || !outputMatchesRequirement(row, required)) {
+      throw completionValidationError(
+        "invalid_output_claims",
+        `Domain completion output ${assetId} does not satisfy binding ${bindingId}.`
+      );
+    }
+    return {
+      assetId,
+      intrinsicRole: row.intrinsicRole,
+      bindingId: required.bindingId,
+      workItemId: required.workItemId,
+      target: required.target,
+      kind: required.kind,
+      role: required.role,
+      ordinal: required.ordinal,
+    };
+  });
+  const inventoryIds = input.inventory.map((output) => output.assetId);
+  if (
+    new Set(outputs.map((output) => output.assetId)).size !== outputs.length ||
+    outputs.length !== inventoryIds.length ||
+    outputs.some((output) => !inventoryIds.includes(output.assetId))
+  ) {
+    throw completionValidationError(
+      "invalid_output_claims",
+      "Bound completion must claim exactly this run's output assets."
+    );
   }
-  return inventory;
+  return outputs;
+}
+
+async function validatedOutputs(input: {
+  projectId: string;
+  task: DomainTaskV1;
+  actions: readonly RunActionSummary[];
+  claimedOutputs?: unknown;
+}): Promise<ValidatedDomainCompletionOutput[]> {
+  const inventory = await loadDomainCompletionOutputInventory(input);
+  return validateDomainCompletionBoundOutputClaims({
+    task: input.task,
+    inventory,
+    claimedOutputs: input.claimedOutputs,
+  }) ?? inventory;
 }
 
 function parseEvidence(input: {

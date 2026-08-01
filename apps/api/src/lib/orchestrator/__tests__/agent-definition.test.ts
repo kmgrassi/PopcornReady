@@ -4,10 +4,13 @@ import type { DomainTaskV1 } from "@popcorn/shared/domain-agent-contract";
 import type { OrchestratorRun } from "@/lib/api/v1/orchestrator-store";
 import { runOrchestratorToCompletion } from "../engine";
 import {
+  assertDomainCompletionOutputCoverage,
   assertDomainRegistry,
   buildDomainReportFromCompletion,
   compactRootDomainReports,
   resolveAgentDefinition,
+  validateDomainCompletionBoundOutputClaims,
+  validateDomainCompletionOutputInventory,
 } from "../agent-definition";
 import { CREATIVE_DIRECTOR_SYSTEM_PROMPT } from "../creative-director-agent";
 import type { ToolRegistry } from "../registry";
@@ -320,6 +323,219 @@ test("done completion rejects explicitly unsatisfied acceptance evidence", async
       }],
     }),
     /requires every acceptance criterion to be satisfied/
+  );
+});
+
+test("unbound semantic requirements need distinct role-compatible assets", () => {
+  const multiStillTask = {
+    ...visualTask,
+    requiredOutputs: [
+      { kind: "anchor", role: "visual_anchor", minimumCount: 1 },
+      { kind: "image", role: "image", minimumCount: 1 },
+    ],
+    allowedOutputKinds: ["anchor", "image"],
+  } as unknown as DomainTaskV1;
+
+  assert.throws(
+    () => assertDomainCompletionOutputCoverage({
+      task: multiStillTask,
+      inventory: [{
+        assetId: "generic-image",
+        kind: "image",
+        intrinsicRole: "standalone_image",
+      }],
+    }),
+    /distinct role-compatible assets/
+  );
+
+  assert.doesNotThrow(() => assertDomainCompletionOutputCoverage({
+    task: multiStillTask,
+    inventory: [
+      { assetId: "anchor", kind: "image", intrinsicRole: "character_anchor" },
+      { assetId: "generic-image", kind: "image", intrinsicRole: "standalone_image" },
+    ],
+  }));
+
+  assert.throws(
+    () => assertDomainCompletionOutputCoverage({
+      task: {
+        ...multiStillTask,
+        requiredOutputs: [{ kind: "image", role: "image", minimumCount: 2 }],
+        allowedOutputKinds: ["image"],
+      } as unknown as DomainTaskV1,
+      inventory: [{
+        assetId: "generic-image",
+        kind: "image",
+        intrinsicRole: "standalone_image",
+      }],
+    }),
+    /distinct role-compatible assets/
+  );
+});
+
+test("bound claims enforce semantic roles and one distinct asset per binding", () => {
+  const target = {
+    kind: "project" as const,
+    projectId: "project-1",
+  };
+  const boundTask = {
+    ...visualTask,
+    targets: [target],
+    requiredOutputs: [
+      {
+        bindingId: "anchor-binding",
+        workItemId: "anchor-work",
+        target,
+        kind: "anchor",
+        role: "visual_anchor",
+        ordinal: 0,
+        minimumCount: 1,
+      },
+      {
+        bindingId: "image-binding",
+        workItemId: "image-work",
+        target,
+        kind: "image",
+        role: "image",
+        ordinal: 0,
+        minimumCount: 1,
+      },
+    ],
+    allowedOutputKinds: ["anchor", "image"],
+  } as DomainTaskV1;
+  const inventory = [
+    { assetId: "anchor", kind: "image", intrinsicRole: "character_anchor" },
+    { assetId: "image", kind: "image", intrinsicRole: "standalone_image" },
+  ];
+
+  assert.throws(
+    () => validateDomainCompletionBoundOutputClaims({
+      task: boundTask,
+      inventory,
+      claimedOutputs: [
+        { bindingId: "anchor-binding", assetId: "image" },
+        { bindingId: "image-binding", assetId: "anchor" },
+      ],
+    }),
+    /does not satisfy binding anchor-binding/
+  );
+  assert.throws(
+    () => validateDomainCompletionBoundOutputClaims({
+      task: {
+        ...boundTask,
+        requiredOutputs: boundTask.requiredOutputs.map((required) => ({
+          ...required,
+          kind: "image" as const,
+          role: "image",
+        })),
+        allowedOutputKinds: ["image"],
+      } as DomainTaskV1,
+      inventory: [inventory[1]],
+      claimedOutputs: [
+        { bindingId: "anchor-binding", assetId: "image" },
+        { bindingId: "image-binding", assetId: "image" },
+      ],
+    }),
+    /exactly this run's output assets/
+  );
+});
+
+test("partial completion inventory still rejects missing, foreign, and semantic mismatches", () => {
+  const imageOnlyTask = {
+    ...visualTask,
+    requiredOutputs: [{ kind: "image", role: "image", minimumCount: 1 }],
+    allowedOutputKinds: ["image"],
+  } as unknown as DomainTaskV1;
+
+  assert.throws(
+    () => validateDomainCompletionOutputInventory({
+      projectId: "project-1",
+      task: imageOnlyTask,
+      ids: ["missing"],
+      rows: [],
+      requireComplete: false,
+    }),
+    /outside its project/
+  );
+  assert.throws(
+    () => validateDomainCompletionOutputInventory({
+      projectId: "project-1",
+      task: imageOnlyTask,
+      ids: ["foreign"],
+      rows: [{
+        id: "foreign",
+        project_id: "project-2",
+        kind: "image",
+        role: "standalone_image",
+        status: "ready",
+      }],
+      requireComplete: false,
+    }),
+    /outside its project/
+  );
+  assert.throws(
+    () => validateDomainCompletionOutputInventory({
+      projectId: "project-1",
+      task: imageOnlyTask,
+      ids: ["pending"],
+      rows: [{
+        id: "pending",
+        project_id: "project-1",
+        kind: "image",
+        role: "standalone_image",
+        status: "pending",
+      }],
+      requireComplete: false,
+    }),
+    /not ready/
+  );
+  assert.throws(
+    () => validateDomainCompletionOutputInventory({
+      projectId: "project-1",
+      task: imageOnlyTask,
+      ids: ["semantic-mismatch"],
+      rows: [{
+        id: "semantic-mismatch",
+        project_id: "project-1",
+        kind: "image",
+        role: "character_anchor",
+        status: "ready",
+      }],
+      requireComplete: false,
+    }),
+    /allowed semantic output kinds/
+  );
+
+  const partialTask = {
+    ...visualTask,
+    requiredOutputs: [
+      { kind: "anchor", role: "visual_anchor", minimumCount: 1 },
+      { kind: "image", role: "image", minimumCount: 1 },
+    ],
+    allowedOutputKinds: ["anchor", "image"],
+  } as unknown as DomainTaskV1;
+  const partialInput = {
+    projectId: "project-1",
+    task: partialTask,
+    ids: ["anchor"],
+    rows: [{
+      id: "anchor",
+      project_id: "project-1",
+      kind: "image",
+      role: "character_anchor",
+      status: "ready",
+    }],
+  };
+  assert.doesNotThrow(() => validateDomainCompletionOutputInventory({
+    ...partialInput,
+    requireComplete: false,
+  }));
+  assert.throws(
+    () => validateDomainCompletionOutputInventory({
+      ...partialInput,
+      requireComplete: true,
+    }),
+    /distinct role-compatible assets/
   );
 });
 

@@ -50,7 +50,7 @@ test("repair sends creator criteria as inert structured data with exact bound ou
     loadOutputInventory: async () => [{
       assetId: "asset-eligible",
       kind: "image",
-      intrinsicRole: "replacement",
+      intrinsicRole: "standalone_image",
     }],
     structuredCall: async (input) => {
       request = input;
@@ -99,7 +99,7 @@ test("repair sends creator criteria as inert structured data with exact bound ou
   assert.deepEqual(payload.eligibleOutputs, [{
     assetId: "asset-eligible",
     kind: "image",
-    intrinsicRole: "replacement",
+    intrinsicRole: "standalone_image",
   }]);
   assert.match(payload.previousCompletion, /asset-foreign/);
   assert.equal(JSON.parse(result).outputs[0].assetId, "asset-eligible");
@@ -115,11 +115,13 @@ test("normal bound-turn contract sources output ids from applied prior results",
 
 test("malformed questions can be repaired before any output exists", async () => {
   let inventoryCalls = 0;
+  let requireComplete: boolean | undefined;
   let request: { user: string } | undefined;
   const repair = createDomainCompletionRepairer({
-    loadOutputInventory: async () => {
+    loadOutputInventory: async (input) => {
       inventoryCalls += 1;
-      throw new Error("empty question repair must not require output state");
+      requireComplete = input.requireComplete;
+      return [];
     },
     structuredCall: async (input) => {
       request = input;
@@ -150,9 +152,75 @@ test("malformed questions can be repaired before any output exists", async () =>
 
   const payload = JSON.parse(request!.user).terminalCompletionContract;
   assert.deepEqual(payload.eligibleOutputs, []);
-  assert.equal(inventoryCalls, 0);
+  assert.equal(inventoryCalls, 1);
+  assert.equal(requireComplete, false);
   assert.equal(JSON.parse(result).outcome, "question");
   assert.match(DOMAIN_COMPLETION_REPAIR_SYSTEM_PROMPT, /may create new stable option ids/);
+});
+
+test("malformed questions can be repaired with only partial task outputs", async () => {
+  const partialTask = {
+    ...task,
+    requiredOutputs: [
+      { kind: "anchor", role: "visual_anchor", minimumCount: 1 },
+      { kind: "image", role: "image", minimumCount: 1 },
+    ],
+    allowedOutputKinds: ["anchor", "image"],
+  } as unknown as DomainTaskV1;
+  let requireComplete: boolean | undefined;
+  let request: { user: string } | undefined;
+  const repair = createDomainCompletionRepairer({
+    loadOutputInventory: async (input) => {
+      requireComplete = input.requireComplete;
+      return [{ assetId: "anchor-1", kind: "image", intrinsicRole: "character_anchor" }];
+    },
+    structuredCall: async (input) => {
+      request = input;
+      return {
+        outcome: "question",
+        question: "Should I create a photographic or illustrated companion image?",
+        options: [
+          { id: "photo", label: "Photographic", tradeoff: "More realistic." },
+          { id: "illustrated", label: "Illustrated", tradeoff: "More stylized." },
+        ],
+      };
+    },
+  });
+
+  const result = await repair({
+    workspaceId: "workspace-1",
+    projectId: "project-1",
+    runId: "run-1",
+    task: partialTask,
+    actions: [{
+      id: "anchor-action",
+      tool: "generate_anchor",
+      status: "applied",
+      params: {},
+      outputAssetIds: ["anchor-1"],
+      jobIds: [],
+      createdAt: "2026-08-01T00:00:00.000Z",
+    }],
+    previousCompletion: JSON.stringify({
+      outcome: "question",
+      question: "Which companion style?",
+      options: [],
+    }),
+    validationError: new DomainCompletionValidationError(
+      "invalid_question",
+      "Domain question must contain between two and six options.",
+      true
+    ),
+  });
+
+  const payload = JSON.parse(request!.user).terminalCompletionContract;
+  assert.equal(requireComplete, false);
+  assert.deepEqual(payload.eligibleOutputs, [{
+    assetId: "anchor-1",
+    kind: "image",
+    intrinsicRole: "character_anchor",
+  }]);
+  assert.equal(JSON.parse(result).outcome, "question");
 });
 
 test("Visuals and Audio share the canonical terminal contract instruction", () => {

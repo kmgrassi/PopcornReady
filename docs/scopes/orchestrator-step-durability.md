@@ -81,6 +81,13 @@ retain their own failure kinds, while an invalid corrected answer remains
 new durable state, so a worker crash before terminalization may start a fresh
 attempt after lease recovery.
 
+Question correction can inspect an incomplete output set so a specialist may
+ask for missing creative direction after producing only part of its assignment.
+That relaxed inventory still validates every asset's readiness, project/run
+ownership, graph kind, and persisted semantic role. It does not relax terminal
+completion: a corrected `done` response must allocate a distinct compatible
+asset to each required semantic-role slot, including every `minimumCount` slot.
+
 ## Async completion ordering (2026-07-14)
 
 An inline async worker can finish after its tool returns `accepted` but before the

@@ -59,16 +59,14 @@ export function createDomainCompletionRepairer(
   deps: RepairDeps = {}
 ): DomainCompletionRepairer {
   return async (input) => {
-    const hasAppliedOutputs = input.actions.some(
-      (action) => action.status === "applied" && action.outputAssetIds.length > 0
-    );
-    const eligibleOutputs = hasAppliedOutputs
-      ? await (deps.loadOutputInventory ?? loadDomainCompletionOutputInventory)({
-        projectId: input.projectId,
-        task: input.task,
-        actions: input.actions,
-      })
-      : [];
+    const eligibleOutputs = await (
+      deps.loadOutputInventory ?? loadDomainCompletionOutputInventory
+    )({
+      projectId: input.projectId,
+      task: input.task,
+      actions: input.actions,
+      requireComplete: false,
+    });
     const contract = buildDomainCompletionContract({
       task: input.task,
       eligibleOutputs,

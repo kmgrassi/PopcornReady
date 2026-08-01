@@ -21,6 +21,13 @@ Correction is not authority. The existing report parser, graph ownership checks,
 and output-state validation remain the final gate. Database faults, missing or
 failed assets, and unauthorized output claims must never be rewritten by a model.
 
+Graph kinds alone are also not sufficient completion evidence. Several product
+roles share the `image` graph kind, so semantic coverage must derive from the
+persisted asset role and allocate each asset to at most one required slot. Keep
+inventory authorization separate from completeness: question correction may
+inspect a valid partial inventory, while `done` still enforces every distinct
+semantic-role and `minimumCount` requirement.
+
 ## Follow-up
 
 - If completion correction must be exactly once across worker crashes, persist a

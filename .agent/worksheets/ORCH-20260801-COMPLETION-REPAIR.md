@@ -41,6 +41,11 @@ Prevent a successfully generated finite-domain asset from being stranded when th
   exhaustion, state-error bypass, provider failure, prompt injection handling,
   timeout, malformed questions without outputs, bound-turn output guidance,
   unsatisfied evidence, and role-prompt parity.
+- Addressed PR review feedback by validating unbound completion coverage with a
+  one-asset-per-semantic-slot allocation derived from persisted asset roles.
+- Split partial inventory authorization from complete output coverage so a
+  malformed question can be repaired after partial work without weakening the
+  normal `done` parser.
 
 ## Validation evidence
 
@@ -50,7 +55,7 @@ Prevent a successfully generated finite-domain asset from being stranded when th
 - Local baseline reproduction passed: output validation succeeded first, then
   the empty `acceptanceEvidence` completion failed with the production error.
 - API typecheck passed.
-- Focused orchestrator suite passed: 70 tests, 0 failures.
+- Focused orchestrator suite passed after review fixes: 74 tests, 0 failures.
 - `pnpm agent:lint:fix` passed.
 - `pnpm agent:validate -- --scope api` passed, including lint, workflow policy,
   migration, RPC-boundary, relation-boundary, and API typecheck checks.
@@ -81,6 +86,19 @@ Prevent a successfully generated finite-domain asset from being stranded when th
 - Wrap-up: `/root/implementation_reviewer` found no remaining code or
   documentation issues. Its process-only request to record lint-fix and API
   validation is satisfied above.
+- PR review plan: `/root/implementation_reviewer` required partial inventory to
+  retain readiness, ownership, graph-kind, and semantic-role checks; semantic
+  classification to derive from persisted assets; unknown roles to fail closed;
+  and corrected `done` reports to retain full distinct coverage. The follow-up
+  implementation and regression tests apply those constraints.
+- PR implementation review: `/root/implementation_reviewer` found that partial
+  inventory still needed an authoritative asset-readiness check and that bound
+  semantic/duplicate claim validation needed direct tests. The asset query now
+  requires `status = ready`, and pure bound-claim regressions cover both an
+  image used for an anchor binding and one asset claimed for two bindings.
+- PR wrap-up re-review: `/root/implementation_reviewer` confirmed both findings
+  are resolved, the corrected `done` path remains authoritative, and no
+  actionable code, test, or documentation findings remain.
 
 ## Blockers and risks
 
@@ -89,4 +107,4 @@ Prevent a successfully generated finite-domain asset from being stranded when th
 
 ## Next action / handoff
 
-- Commit, tag, push, and open the ready pull request.
+- Commit and push the reviewed follow-up to the existing ready pull request.
