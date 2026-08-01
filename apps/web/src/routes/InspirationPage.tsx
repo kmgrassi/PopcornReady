@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { StudioCrewLoadingState } from "../components/creation/StudioCrewLoadingState";
 import { Button } from "../components/ui/Button";
 import { MediaViewer, type MediaViewerItem } from "../components/media/MediaViewer";
 import { Spinner } from "../components/ui/Spinner";
@@ -399,11 +400,18 @@ function conceptSignature(inspiration: RandomStoryInspiration): string {
 
 function InspirationSkeleton() {
   return (
-    <div className={styles.skeleton} aria-label="Loading inspiration">
-      <span />
-      <span />
-      <span />
-      <span />
-    </div>
+    <StudioCrewLoadingState
+      title="Loading inspiration"
+      description="Gathering story elements for a fresh creative direction."
+      reservation={(
+        <div className={styles.skeleton}>
+          <span />
+          <span />
+          <span />
+          <span />
+        </div>
+      )}
+      variant="page"
+    />
   );
 }

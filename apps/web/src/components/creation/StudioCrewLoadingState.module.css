@@ -1,0 +1,55 @@
+.frame {
+  display: grid;
+}
+
+.frame > * {
+  grid-area: 1 / 1;
+}
+
+.state {
+  z-index: 1;
+  display: grid;
+  align-self: start;
+  gap: var(--section-gap);
+  inline-size: min(100%, 720px);
+  margin-inline: auto;
+}
+
+.state[data-variant="panel"] {
+  inline-size: min(100%, 640px);
+}
+
+.reservation {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.reservation,
+.reservation *,
+.reservation::before,
+.reservation::after,
+.reservation *::before,
+.reservation *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+.copy {
+  display: grid;
+  gap: var(--section-gap-tight);
+  justify-items: center;
+  color: var(--text);
+  text-align: center;
+}
+
+.copy strong {
+  font-size: var(--text-lg);
+  line-height: var(--line-heading);
+}
+
+.copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-md);
+  line-height: var(--line-body);
+}

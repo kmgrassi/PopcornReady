@@ -7,6 +7,7 @@ import type {
   VideoBriefInput,
 } from "@popcorn/shared/v1/types";
 import { AiAssetFeedbackDialog } from "../components/ai-edit/AiAssetFeedbackDialog";
+import { StudioCrewLoadingState } from "../components/creation/StudioCrewLoadingState";
 import { ButtonLink } from "../components/ui/Button";
 import { ImageWithSkeleton } from "../components/ui/ImageWithSkeleton";
 import { EmptyState, ErrorState } from "../components/ui/StateCard";
@@ -112,7 +113,13 @@ export function ProjectStepPage({ step }: { step: ProjectStep }) {
         </div>
       </header>
 
-      {loading ? <div className={styles.summary}>Loading {copy.title.toLowerCase()}...</div> : null}
+      {loading ? (
+        <StudioCrewLoadingState
+          title={`Loading ${copy.title.toLowerCase()}`}
+          description="Gathering this project step."
+          variant="page"
+        />
+      ) : null}
 
       {!loading && error ? (
         <ErrorState

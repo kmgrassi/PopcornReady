@@ -245,6 +245,84 @@ test.beforeEach(async ({ page }) => {
   await mockLibraryApi(page);
 });
 
+test("uses the studio crew for route-level library loading", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.unroute("**/api/v1/projects?**");
+  await page.route("**/api/v1/projects?**", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 750));
+    return json(route, {
+      projects: [project(1)],
+      pagination: { limit: 24, nextCursor: null },
+    });
+  });
+
+  await page.goto("/library/projects");
+  const loadingState = page.getByTestId("studio-crew-loading");
+  await expect(loadingState).toBeVisible();
+  await expect(loadingState).toHaveAttribute("aria-busy", "true");
+  await expect(loadingState).toContainText("Loading projects");
+  await expect(page.getByTestId("studio-crew")).toBeVisible();
+  const reservation = page.getByTestId("studio-crew-loading-reservation");
+  await expect(reservation).toHaveAttribute("aria-hidden", "true");
+  await expect(reservation).toBeHidden();
+  const reservationIsStill = await reservation.evaluate((element) => {
+    const nodes = [element, ...element.querySelectorAll("*")];
+    return nodes.every((node) =>
+      [null, "::before", "::after"].every((pseudo) => {
+        const style = getComputedStyle(node, pseudo);
+        return style.animationName === "none" && style.transitionDuration === "0s";
+      }),
+    );
+  });
+  expect(reservationIsStill).toBe(true);
+  await expect(page.getByTestId("studio-crew-loading")).toHaveCount(1);
+  const animationName = await page
+    .locator('[data-crew-member="director"] > div')
+    .evaluate((sprite) => getComputedStyle(sprite).animationName);
+  expect(animationName).toBe("none");
+  const overflow = await page.evaluate(() => ({
+    document: document.documentElement.scrollWidth,
+    viewport: document.documentElement.clientWidth,
+  }));
+  expect(overflow.document).toBeLessThanOrEqual(overflow.viewport + 1);
+
+  await expect(loadingState).toHaveCount(0);
+  await expect(page.getByText("Project Alpha")).toBeVisible();
+});
+
+test("uses the panel crew state while a project render loads", async ({ page }) => {
+  await page.unroute("**/api/v1/projects/proj-alpha/watch");
+  await page.route("**/api/v1/projects/proj-alpha/watch", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 750));
+    return json(route, {
+      media: {
+        assetId: "output-main",
+        projectId: "proj-alpha",
+        projectName: "Project Alpha",
+        filename: "project-alpha.mp4",
+        kind: "video",
+        url: imageDataUrl,
+        posterUrl: imageDataUrl,
+        durationSec: 45,
+        createdAt: now,
+        updatedAt: now,
+      },
+      fallback: { storyboardUrl: "/projects/proj-alpha/storyboard" },
+    });
+  });
+
+  await page.goto("/projects/proj-alpha/watch");
+  const loadingState = page.getByTestId("studio-crew-loading");
+  await expect(loadingState).toBeVisible();
+  await expect(loadingState).toHaveAttribute("data-variant", "panel");
+  await expect(loadingState).toContainText("Loading render");
+  await expect(page.getByTestId("studio-crew-loading-reservation")).toHaveCount(0);
+
+  await expect(loadingState).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Project Alpha" })).toBeVisible();
+});
+
 test("covers library pagination, filters, media viewer, visibility, and watch links", async ({ page }) => {
   await page.goto("/library");
   const tabs = page.getByLabel("Library collections");

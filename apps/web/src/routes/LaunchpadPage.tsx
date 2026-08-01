@@ -8,6 +8,7 @@ import { Button } from "../components/ui/Button";
 import { ErrorState } from "../components/ui/StateCard";
 import { useAuth } from "../components/auth/AuthProvider";
 import { AnonymousUpgradeBanner } from "../components/auth/AnonymousUpgradeBanner";
+import { StudioCrewLoadingState } from "../components/creation/StudioCrewLoadingState";
 import { deriveNextAction } from "../lib/nextAction";
 import { useDashboardSummaryQuery } from "../lib/queryClient";
 import styles from "./LaunchpadPage.module.css";
@@ -95,13 +96,20 @@ function formatMissing(missing: readonly string[]) {
 
 function LaunchpadSkeleton() {
   return (
-    <div className={styles.skeleton} aria-label="Loading Home">
-      <span />
-      <span />
-      <span />
-      <Button variant="cta" size="lg" disabled>
-        Loading
-      </Button>
-    </div>
+    <StudioCrewLoadingState
+      title="Loading Home"
+      description="Gathering the latest work from your studio."
+      reservation={(
+        <div className={styles.skeleton}>
+          <span />
+          <span />
+          <span />
+          <Button variant="cta" size="lg" disabled>
+            Loading
+          </Button>
+        </div>
+      )}
+      variant="page"
+    />
   );
 }

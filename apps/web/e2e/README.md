@@ -46,6 +46,11 @@ distinct full-video flow.
 `specs/library-collections.spec.ts` verifies that an owned generated asset's
 detail viewer shows its exact attributed credit debit without spending provider
 credits. Public asset viewers do not request or receive owner billing metadata.
+It also verifies the shared route-level studio-crew loading state on mobile,
+including accessible busy semantics, reduced motion, overflow containment, and
+its transition into loaded project content. A Watch-route case covers the panel
+variant, while the Library case verifies that hidden layout reservation does not
+introduce a second visible or semantic loading state.
 
 `rerun-proposal-lifecycle.spec.ts` verifies the durable Request Changes UI
 without provider spend: exact-target proposal preview, preserved/affected work,

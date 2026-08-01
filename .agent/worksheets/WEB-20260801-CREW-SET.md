@@ -48,6 +48,11 @@ behavior, and remain within the existing compact-artwork byte ceiling.
 - Keep the artwork decorative under the loader's existing `aria-hidden` boundary.
 - Preserve explicit z-index tiers for the backdrop, light wash, and actors; let
   the plate's continuous floor replace the redundant solid foreground strip.
+- Reuse the exact crew scene for route-level initial loads through one shared,
+  semantic loading-state wrapper. Preserve existing content-shaped geometry as
+  a hidden, non-animating reservation for dense layouts; keep compact, inline,
+  paginated, thumbnail, upload-progress, and background-refresh indicators
+  purpose-sized.
 
 ## Changes
 
@@ -81,6 +86,17 @@ behavior, and remain within the existing compact-artwork byte ceiling.
 - Added behavior-focused coverage that asserts the actor remains unmirrored,
   the actress is mirrored, and their center gap is smaller than the
   camera-to-actor gap while preserving the 320px containment check.
+- Added `StudioCrewLoadingState` as the narrow route-level loading contract and
+  adopted it across Activity, all four Library collections, project overview
+  and public overview, project steps, Storyboard, project media, Watch, Uploads,
+  Home, Inspiration, the Anchors list, and Anchor detail.
+- Retained content-shaped geometry on Activity, Library collections, project
+  overview, Uploads, Inspiration, Home, and Anchors as hidden, non-animating
+  layout reservation so the branded status does not trade away layout
+  stability; replaced the remaining plain route placeholders outright.
+- Added a mobile reduced-motion Library check for the shared status semantics,
+  animation suppression, overflow containment, and loaded-content transition;
+  documented the route-level versus purpose-sized loading rule.
 
 ## Validation evidence
 
@@ -97,6 +113,22 @@ behavior, and remain within the existing compact-artwork byte ceiling.
   2/2; and the complete Asset Studio suite passed 33/33 after the mirror and
   anchor changes.
 - The five active loader images total 454,365 bytes, below the existing 512 KiB ceiling.
+- Route-loading continuation: `pnpm --filter @popcorn/web typecheck` passed;
+  `library-collections.spec.ts` passed 3/3, including the new mobile
+  reduced-motion loading contract, hidden reservation semantics, and panel
+  variant; `pnpm agent:lint:fix` passed; and
+  `pnpm agent:validate -- --scope web` passed.
+- `run-progress.spec.ts` passed 27/27 across Chromium, mobile Safari, and mobile
+  Chrome after retaining the specialized recovery opener, including its stored
+  hint and transition into failure details.
+- In-app browser route-loading inspection paused the Library projects request at
+  the network boundary, then verified the real transient state at 1280×900 and
+  390×844. The status remained `aria-busy`, the desktop scene was centered at
+  720px, the mobile scene fit within 366px, reduced motion reported no sprite
+  animation, and document width matched viewport width at both sizes. After the
+  reservation fix, the desktop state remained 283px tall inside a hidden 984px
+  content reservation with exactly one loading status and no visible skeleton.
+  The request was then resumed and the loading state detached into real content.
 - In-app browser inspection against a deterministic local run fixture:
   1280×900 in `popcorn` and `popcorn-warm`, plus 390×844 and 320×800 in
   `popcorn`. The four silhouettes and widest active gestures stayed inside the
@@ -144,6 +176,17 @@ behavior, and remain within the existing compact-artwork byte ceiling.
 - Performer-blocking research and plan checkpoint: approved the deterministic
   actress mirror and tighter anchors, with active/reduced-motion inspection
   required at 1280px, 390px, and 320px before handoff.
+- Route-loading research and plan checkpoint: approved a narrow shared wrapper
+  around the exact crew scene for route-level initial loads, with existing
+  content geometry retained as hidden layout reservation and compact/background
+  loading indicators explicitly excluded.
+- Route-loading implementation checkpoint: initially blocked because retained
+  skeletons were visibly stacked below the crew and because the main Home load
+  was omitted. The centralized wrapper now places optional reservation content
+  invisibly in the same grid area, and Home now uses the shared state. Run
+  Progress remains a deliberate exception because its pending recovery screen
+  preserves a stored-run hint and an immediate project escape link, then hands
+  off to the crew-based production view when the run payload arrives.
 - Performer-blocking implementation checkpoint: approved after verifying the
   actress-only mirror scope, background-position and reduced-motion behavior,
   tighter three-width geometry, intermittent hand contact, relational E2E
@@ -152,6 +195,11 @@ behavior, and remain within the existing compact-artwork byte ceiling.
   five-file scope, three-width active and reduced-motion evidence, typecheck,
   focused 2/2 and full 33/33 Playwright results, lint, scoped validation, and
   clean diff.
+- Route-loading wrap-up checkpoint: approved after replacing visible stacked
+  skeletons with hidden same-grid reservation, suppressing reservation shimmer
+  animations and transitions, adding Home, preserving the specialized Run
+  Progress recovery opener, verifying page and panel variants, and completing
+  targeted plus scoped validation across the current 20-file continuation.
 
 ## Blockers and risks
 
@@ -165,6 +213,6 @@ behavior, and remain within the existing compact-artwork byte ceiling.
 
 ## Next action / handoff
 
-Commit the performer-blocking continuation, retarget
-`worksheet/WEB-20260801-CREW-SET`, and push it to the existing open pull request
-#870.
+Commit the route-loading continuation, retarget
+`worksheet/WEB-20260801-CREW-SET`, push it to the existing open pull request
+#870, and leave the local Library preview available for review.

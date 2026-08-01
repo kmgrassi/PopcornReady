@@ -28,6 +28,13 @@ facing, mirroring its fixed frame viewport is safer than regenerating the art.
 It preserves every pose and anchor while making conversational blocking an
 explicit, testable layout relationship.
 
+A distinctive loader works best as a route-level state, where there is enough
+space and waiting time for its production metaphor to register. It should own
+the visible status and accessible busy semantics, while existing content-shaped
+geometry can remain as a hidden, non-animating reservation for the destination
+layout. Small actions, pagination, media placeholders, uploads, and background
+refreshes need compact indicators instead of repeating the full scene.
+
 ## Follow-up
 
 If the project adopts deterministic visual baselines, include this loader at
