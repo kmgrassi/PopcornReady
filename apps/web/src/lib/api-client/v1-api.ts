@@ -243,7 +243,11 @@ export const v1Api = {
       method: "POST",
       body: input,
     }),
-  listProjects: (params?: { limit?: number; cursor?: string | null }) =>
+  listProjects: (params?: {
+    limit?: number;
+    cursor?: string | null;
+    order?: "createdAt" | "updatedAt";
+  }) =>
     apiRequest<ProjectsResponse>("/api/v1/projects", {
       searchParams: params,
     }),

@@ -17,7 +17,8 @@ pnpm --filter @popcorn/web test:e2e
 
 `asset-studio.spec.ts` uses browser API fixtures to verify the production
 `/create` route, the 30/70 desktop context-to-prompt workspace, responsive
-mobile collapse, recent-project loading/selection with real project media,
+mobile collapse, update-ordered recent-project loading/selection with real
+project media, expired-poster fallback and fresh-signed-URL recovery,
 default Image selection, accessible media-type targets, proposal review,
 default-on image and video prompt refinement, motion-specific progress, exact
 effective-prompt preview, creator bypass, draft-preserving video revision,

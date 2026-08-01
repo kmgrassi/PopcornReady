@@ -308,6 +308,20 @@ export interface CreateProjectInput {
   posterProvider?: string;
 }
 
+export type ProjectListOrder = "createdAt" | "updatedAt";
+
+export function parseProjectListOrder(
+  searchParams: URLSearchParams
+): ProjectListOrder {
+  const order = searchParams.get("order") ?? "createdAt";
+  if (order !== "createdAt" && order !== "updatedAt") {
+    throw validationError("The request query is invalid.", [
+      { path: "order", message: "Must be createdAt or updatedAt." },
+    ]);
+  }
+  return order;
+}
+
 export function parseCreateProject(input: unknown): CreateProjectInput {
   if (!isPlainObject(input)) {
     throw validationError("The request body is invalid.", [

@@ -41,7 +41,7 @@ export function StandaloneCreationPage() {
   const projectsQuery = useInfiniteQuery({
     queryKey: queryKeys.assetStudioProjects(),
     queryFn: ({ pageParam }) =>
-      v1Api.listProjects({ limit: 100, cursor: pageParam }),
+      v1Api.listProjects({ limit: 100, cursor: pageParam, order: "updatedAt" }),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.pagination.nextCursor,
   });

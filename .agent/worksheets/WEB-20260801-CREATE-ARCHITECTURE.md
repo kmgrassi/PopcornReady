@@ -123,6 +123,31 @@ workspace at desktop and mobile widths.
 - Wrap-up review: approved with no findings after final browser, detector,
   targeted-test, repository-lint, scoped-validation, documentation, worksheet,
   and feedback evidence review.
+- PR review follow-up identified two valid recent-project edge cases: browser
+  sorting covered only the first created-order API page, and a failed signed
+  poster URL suppressed later URLs for the same keyed project. The projects API
+  now supports `order=updatedAt`, Asset Studio requests that order, and poster
+  failure state is URL-specific. API schema/store coverage and mocked browser
+  coverage prove both fixes.
+- PR follow-up implementation review: approved with no P0–P2 findings after
+  inspecting pagination compatibility, React URL-specific failure state, tests,
+  and contract documentation.
+
+## PR review follow-up validation
+
+- API and web typechecks — passed.
+- Focused API schema/pagination/store tests — 29 passed, 14 local-Supabase tests
+  skipped as configured; the always-on 101-project regression passed.
+- Full web unit suite — 54 passed.
+- Asset Studio Chromium suite — 24 passed, including update-order request and
+  signed-poster URL recovery coverage.
+- `pnpm agent:lint:fix`, `pnpm agent:validate -- --scope web`, and
+  `git diff --check` — passed.
+- The full API suite ran 1,295 tests and reported five unrelated repository
+  failures: two refer to missing historical guest-retention migration
+  files and three cover unchanged graph projection, discover UUID, and tool
+  catalog expectations. None touches the project-list or poster-recovery diff;
+  all targeted affected API tests passed.
 
 ## Blockers and risks
 
@@ -132,6 +157,6 @@ workspace at desktop and mobile widths.
 
 ## Next action / handoff
 
-Commit the complete in-scope diff, create the annotated worksheet tag, push the
-branch and tag, and open the ready-for-review pull request to `main` with audit
-PR #864 linked as context.
+Run the post-review validation matrix, obtain independent implementation and
+wrap-up approval, commit the review fixes, and push the updated PR branch. Keep
+the existing annotated worksheet tag as the original completion checkpoint.

@@ -15,7 +15,11 @@ a route rename. The shell, empty states, next-action copy, navigation semantics,
 and responsive workspace all need to agree on what global Create means. New
 summary controls such as Recent projects also need explicit ordering and
 fallback contracts because upstream array order and poster availability are not
-presentation guarantees.
+presentation guarantees. Sorting a paginated response in the browser is not a
+global recency guarantee: the API must paginate in the requested order. Media
+failure state should also identify the failed URL rather than permanently mark
+the keyed project, because signed URLs can rotate while the component remains
+mounted.
 
 ## Follow-up
 

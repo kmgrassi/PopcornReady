@@ -31,12 +31,13 @@ async function fulfillJson(route: Route, body: unknown, status = 200) {
 }
 
 async function mockAssetStudioProject(page: Page) {
-  await page.route("**/api/v1/projects?**", (route) =>
-    fulfillJson(route, {
+  await page.route("**/api/v1/projects?**", (route) => {
+    expect(new URL(route.request().url()).searchParams.get("order")).toBe("updatedAt");
+    return fulfillJson(route, {
       projects: [recentProject, project],
       pagination: { limit: 100, nextCursor: null },
-    }),
-  );
+    });
+  });
 }
 
 async function openProjectPicker(page: Page) {
@@ -168,6 +169,53 @@ test.describe("Asset Studio", () => {
     await expect(
       page.getByRole("button", { name: "Project Create your first project" }),
     ).toBeVisible();
+  });
+
+  test("retries a recent-project poster when its signed URL changes", async ({ page }) => {
+    const expiredPosterUrl = "/expired-project-poster.svg";
+    const freshPosterUrl =
+      "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 90'%3E%3Crect width='160' height='90' fill='%234d3a72'/%3E%3C/svg%3E";
+    let posterUrl = expiredPosterUrl;
+
+    await page.unroute("**/api/v1/projects?**");
+    await page.route("**/api/v1/projects?**", (route) =>
+      fulfillJson(route, {
+        projects: [{ ...project, posterUrl }],
+        pagination: { limit: 100, nextCursor: null },
+      }),
+    );
+    await page.route("**/expired-project-poster.svg", (route) =>
+      route.fulfill({ status: 410 }),
+    );
+    await page.route("**/api/v1/projects", (route) => {
+      posterUrl = freshPosterUrl;
+      return fulfillJson(
+        route,
+        {
+          project: {
+            ...project,
+            id: "new-project",
+            name: "New project",
+            posterUrl: null,
+          },
+        },
+        201,
+      );
+    });
+
+    await page.goto("/create");
+    const recent = page.getByRole("button", {
+      name: `Use recent project ${project.name}`,
+    });
+    await expect(recent.locator("img")).toHaveCount(0);
+    await expect(recent.getByText("C", { exact: true })).toBeVisible();
+
+    await openProjectPicker(page);
+    await page.getByRole("button", { name: "Create new project" }).click();
+    await page.getByLabel("Project name").fill("New project");
+    await page.getByRole("button", { name: "Create project" }).click();
+
+    await expect(recent.locator("img")).toHaveAttribute("src", freshPosterUrl);
   });
 
   test("moves prompt refinement to review and manual approval dispatches once", async ({ page }) => {

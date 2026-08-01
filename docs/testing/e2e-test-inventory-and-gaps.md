@@ -338,8 +338,9 @@ Covered:
   use the same `/create` entry; `/projects/new` retains separate navigation state.
 - Desktop creation uses a roughly 30/70 project/media context-to-prompt layout;
   mobile collapses the context structurally without horizontal overflow.
-- A quiet recent-project switcher reuses loaded project data, shows real poster
-  context or a truthful fallback, and stays synchronized with the project picker.
+- A quiet recent-project switcher requests update-ordered project data, shows
+  real poster context or a truthful fallback, retries a fresh signed poster URL
+  after an earlier URL fails, and stays synchronized with the project picker.
 - Image is the default creator-facing goal and maps to `image_create`.
 - Starting moves immediately to `/create/review`; proposal/refinement progress
   is shown there before any confirmation or enqueue.

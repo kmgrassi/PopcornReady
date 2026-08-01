@@ -70,8 +70,11 @@ function RecentProjectButton({
   selected: boolean;
   onSelect: (projectId: string) => void;
 }) {
-  const [failedPoster, setFailedPoster] = useState(false);
-  const posterUrl = failedPoster ? null : project.posterUrl;
+  const [failedPosterUrl, setFailedPosterUrl] = useState<string | null>(null);
+  const posterUrl =
+    project.posterUrl && project.posterUrl !== failedPosterUrl
+      ? project.posterUrl
+      : null;
 
   return (
     <button
@@ -87,7 +90,7 @@ function RecentProjectButton({
           className={styles.poster}
           src={posterUrl}
           alt=""
-          onError={() => setFailedPoster(true)}
+          onError={() => setFailedPosterUrl(posterUrl)}
         />
       ) : (
         <span className={styles.fallback} aria-hidden="true">

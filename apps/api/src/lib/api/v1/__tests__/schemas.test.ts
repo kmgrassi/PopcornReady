@@ -10,6 +10,7 @@ import {
   parseCatalogSearchQuery,
   parseDiscoverSearchQuery,
   parsePagination,
+  parseProjectListOrder,
   parsePublishCatalogEntry,
   parseRegisterAsset,
   parseSetAssetVisibility,
@@ -347,6 +348,18 @@ test("parsePagination enforces limit bounds", () => {
 
   expectApiError(
     () => parsePagination(new URLSearchParams("limit=500")),
+    "validation_failed"
+  );
+});
+
+test("parseProjectListOrder validates supported project ordering", () => {
+  assert.equal(parseProjectListOrder(new URLSearchParams()), "createdAt");
+  assert.equal(
+    parseProjectListOrder(new URLSearchParams("order=updatedAt")),
+    "updatedAt"
+  );
+  expectApiError(
+    () => parseProjectListOrder(new URLSearchParams("order=name")),
     "validation_failed"
   );
 });
