@@ -292,9 +292,15 @@ export const v1Api = {
       pagination: response.pagination,
     };
   },
-  createProject: (input: CreateProjectInput) =>
+  createProject: (
+    input: CreateProjectInput,
+    options: { idempotencyKey?: string } = {},
+  ) =>
     apiRequest<CreateProjectResponse>("/api/v1/projects", {
       method: "POST",
+      ...(options.idempotencyKey
+        ? { headers: { "Idempotency-Key": options.idempotencyKey } }
+        : {}),
       body: input,
     }),
   createBriefVersion: (projectId: string, input: CreateProjectInput["brief"]) =>

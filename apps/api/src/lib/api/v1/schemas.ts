@@ -306,7 +306,16 @@ export interface CreateProjectInput {
   name?: string;
   brief?: VideoBrief;
   posterProvider?: string;
+  namingPrompt?: string;
+  namingContext?: "image" | "video" | "soundtrack";
 }
+
+const PROJECT_NAMING_CONTEXTS: NonNullable<CreateProjectInput["namingContext"]>[] = [
+  "image",
+  "video",
+  "soundtrack",
+];
+const MAX_PROJECT_NAMING_PROMPT_LENGTH = 500;
 
 export type ProjectListOrder = "createdAt" | "updatedAt";
 
@@ -331,6 +340,19 @@ export function parseCreateProject(input: unknown): CreateProjectInput {
   const fields: FieldError[] = [];
   const name = optionalString(input.name, "name", fields);
   const posterProvider = optionalString(input.posterProvider, "posterProvider", fields);
+  const namingPrompt = optionalString(input.namingPrompt, "namingPrompt", fields);
+  const namingContext = parseEnum(
+    input.namingContext,
+    PROJECT_NAMING_CONTEXTS,
+    "namingContext",
+    fields,
+  );
+  if (namingPrompt && namingPrompt.length > MAX_PROJECT_NAMING_PROMPT_LENGTH) {
+    fields.push({
+      path: "namingPrompt",
+      message: `Must be ${MAX_PROJECT_NAMING_PROMPT_LENGTH} characters or fewer.`,
+    });
+  }
   throwIfInvalid(fields);
 
   const brief =
@@ -342,6 +364,8 @@ export function parseCreateProject(input: unknown): CreateProjectInput {
     ...(name ? { name } : {}),
     ...(brief ? { brief } : {}),
     ...(posterProvider ? { posterProvider } : {}),
+    ...(namingPrompt ? { namingPrompt } : {}),
+    ...(namingContext ? { namingContext } : {}),
   };
 }
 

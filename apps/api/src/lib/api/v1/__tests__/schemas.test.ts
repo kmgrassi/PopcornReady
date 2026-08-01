@@ -227,6 +227,30 @@ test("parseCreateProject parses an explicit name and optional brief", () => {
   assert.equal(input.brief?.aspectRatio, "16:9");
 });
 
+test("parseCreateProject accepts bounded request-only naming context", () => {
+  assert.deepEqual(
+    parseCreateProject({
+      namingPrompt: "  An amber-lit product still  ",
+      namingContext: "image",
+    }),
+    {
+      namingPrompt: "An amber-lit product still",
+      namingContext: "image",
+    },
+  );
+});
+
+test("parseCreateProject rejects oversized or unknown naming context", () => {
+  expectApiError(
+    () =>
+      parseCreateProject({
+        namingPrompt: "x".repeat(501),
+        namingContext: "document",
+      }),
+    "validation_failed",
+  );
+});
+
 test("parseRegisterAsset accepts remote_url and infers kind from extension", () => {
   const input = parseRegisterAsset({
     source: { type: "remote_url", url: "https://cdn.example.com/clip.mp4" },

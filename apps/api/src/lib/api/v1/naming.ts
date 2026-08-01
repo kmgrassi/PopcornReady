@@ -99,15 +99,20 @@ async function aiDisplayName(args: {
   }
 }
 
+type DisplayNameGenerator = typeof aiDisplayName;
+
 export async function projectDisplayName(input: {
   explicitName?: string;
   brief?: VideoBrief;
-}): Promise<string> {
+  namingPrompt?: string;
+  namingContext?: string;
+}, generateName: DisplayNameGenerator = aiDisplayName): Promise<string> {
   const explicit = cleanDisplayName(input.explicitName);
   if (explicit) return explicit;
 
-  const goal = input.brief?.goal ?? "";
+  const goal = input.namingPrompt?.trim() || input.brief?.goal || "";
   const context = [
+    input.namingContext ? `asset type ${input.namingContext}` : null,
     input.brief?.format ? `format ${input.brief.format}` : null,
     input.brief?.platform ? `platform ${input.brief.platform}` : null,
     input.brief?.style ? `style ${input.brief.style}` : null,
@@ -115,7 +120,7 @@ export async function projectDisplayName(input: {
     .filter(Boolean)
     .join(", ");
   return (
-    (await aiDisplayName({ kind: "project", prompt: goal, context })) ??
+    (goal ? await generateName({ kind: "project", prompt: goal, context }) : null) ??
     fallbackDisplayName(goal, "Untitled Project")
   );
 }
@@ -182,10 +187,14 @@ export async function resolveAssetMetadata(input: {
 export async function resolveProjectMetadata(input: {
   agent?: AgentMetadataInput;
   brief?: VideoBrief;
+  namingPrompt?: string;
+  namingContext?: string;
 }): Promise<{ name: string; slug: string | null }> {
   const name = await projectDisplayName({
     ...(input.agent?.name ? { explicitName: input.agent.name } : {}),
     ...(input.brief ? { brief: input.brief } : {}),
+    ...(input.namingPrompt ? { namingPrompt: input.namingPrompt } : {}),
+    ...(input.namingContext ? { namingContext: input.namingContext } : {}),
   });
   const slug = normalizeSlug(input.agent?.slug) ?? normalizeSlug(name);
   return { name, slug };

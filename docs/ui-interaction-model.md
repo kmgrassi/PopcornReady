@@ -79,9 +79,13 @@ exception (§5).
 Initial creation is not a third editing primitive because there is no existing
 generated object to mutate yet. The authenticated shell plus Dashboard,
 Activity, and Library use one global **Create** entry at `/create`. That workspace
-collects an Image, Video, or Audio intent, requires project context (with inline
-project creation when needed), and then enters the durable proposal/review
-lifecycle before generation.
+collects an Image, Video, or Audio intent, then enters the durable
+proposal/review lifecycle before generation. Project context is optional at
+intake: when the creator does not choose a project, **Review request** creates
+one automatically, uses the existing AI naming pipeline with a prompt-derived
+fallback, and continues with the returned project. Explicit picker-based
+creation remains available when the creator wants to name or organize the
+project first.
 
 Full-video creation remains a separate, explicit flow at `/projects/new`. It
 collects a production brief and source footage, creates the project/run, and

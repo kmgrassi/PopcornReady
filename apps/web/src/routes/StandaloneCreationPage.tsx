@@ -1,5 +1,5 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { V1Project } from "@popcorn/shared/v1/types";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { StudioCrewLoader } from "../components/creation/StudioCrewLoader";
@@ -179,6 +179,7 @@ export function StandaloneCreationPage() {
     getNextPageParam: (page) => page.pagination.nextCursor,
   });
   const createProject = useCreateProjectMutation();
+  const autoCreateProject = useCreateProjectMutation({ notifications: false });
   const listedProjects =
     projectsQuery.data?.pages.flatMap((page) => page.projects) ?? [];
   const recentProject = createProject.data?.project;
@@ -201,6 +202,9 @@ export function StandaloneCreationPage() {
   const [proposalKey, setProposalKey] = useState(
     () => `asset-studio:proposal:${crypto.randomUUID()}`,
   );
+  const reviewAttemptRef = useRef(false);
+  const [isAutoCreatingProject, setIsAutoCreatingProject] = useState(false);
+  const [autoProjectError, setAutoProjectError] = useState<string | null>(null);
   const runId = params.get("runId");
   const status = useCreationStatus(projectId, runId);
   const listedSelection = projects.find((project) => project.id === projectId);
@@ -360,31 +364,60 @@ export function StandaloneCreationPage() {
     setProposalKey(`asset-studio:proposal:${crypto.randomUUID()}`);
   };
   const selectProject = (nextProjectId: string) => {
+    if (isAutoCreatingProject) return;
     if (nextProjectId === projectId) return;
+    setAutoProjectError(null);
     setProjectId(nextProjectId);
     resetProposal();
   };
-  const canPropose = Boolean(projectId && prompt.trim());
+  const canPropose = Boolean(prompt.trim());
 
-  function startReview() {
-    if (!canPropose) return;
+  async function startReview() {
+    if (!canPropose || createProject.isPending || reviewAttemptRef.current) return;
+    reviewAttemptRef.current = true;
+    setAutoProjectError(null);
     const draft = {
       projectId,
       goal,
       prompt: prompt.trim(),
       improvePrompt,
     };
-    navigate(`${location.pathname}${location.search}`, {
-      replace: true,
-      state: creationDraftNavigationState(draft),
-    });
-    navigate("/create/review", {
-      state: creationReviewNavigationState({
-        ...draft,
-        maximumUsd: 10,
-        idempotencyKey: proposalKey,
-      }),
-    });
+    try {
+      let reviewProjectId = draft.projectId;
+      if (!reviewProjectId) {
+        setIsAutoCreatingProject(true);
+        const response = await autoCreateProject.mutateAsync({
+          namingPrompt: draft.prompt.slice(0, 500),
+          namingContext: draft.goal,
+          idempotencyKey: proposalKey.replace(
+            "asset-studio:proposal:",
+            "asset-studio:project:",
+          ),
+        });
+        reviewProjectId = response.project.id;
+      }
+      const reviewDraft = { ...draft, projectId: reviewProjectId };
+      navigate(`${location.pathname}${location.search}`, {
+        replace: true,
+        state: creationDraftNavigationState(reviewDraft),
+      });
+      navigate("/create/review", {
+        state: creationReviewNavigationState({
+          ...reviewDraft,
+          maximumUsd: 10,
+          idempotencyKey: proposalKey,
+        }),
+      });
+    } catch (error) {
+      setAutoProjectError(
+        error instanceof Error
+          ? error.message
+          : "We couldn’t create a project for this request.",
+      );
+    } finally {
+      reviewAttemptRef.current = false;
+      setIsAutoCreatingProject(false);
+    }
   }
 
   return (
@@ -393,6 +426,7 @@ export function StandaloneCreationPage() {
         projects={projects}
         selectedProjectId={projectId}
         loading={projectsQuery.isLoading}
+        disabled={isAutoCreatingProject}
         onSelect={selectProject}
       />
 
@@ -407,6 +441,7 @@ export function StandaloneCreationPage() {
                   name="goal"
                   value={value}
                   checked={goal === value}
+                  disabled={isAutoCreatingProject}
                   onChange={() => {
                     setGoal(value);
                     resetProposal();
@@ -435,6 +470,7 @@ export function StandaloneCreationPage() {
               hasNextPage={Boolean(projectsQuery.hasNextPage)}
               isFetchingNextPage={projectsQuery.isFetchingNextPage}
               isCreating={createProject.isPending}
+              disabled={isAutoCreatingProject}
               createError={createProject.error}
               onChange={selectProject}
               onCreate={async (name) =>
@@ -444,6 +480,11 @@ export function StandaloneCreationPage() {
               onLoadMore={() => void projectsQuery.fetchNextPage()}
               onRetry={() => void projectsQuery.refetch()}
             />
+            {!projectId ? (
+              <p className={styles.projectHint}>
+                Optional — we’ll create and name one when you review.
+              </p>
+            ) : null}
             {selectedProject ? <SelectedProjectContext project={selectedProject} /> : null}
           </section>
         </aside>
@@ -461,7 +502,9 @@ export function StandaloneCreationPage() {
             <span>Describe the result</span>
             <textarea
               value={prompt}
+              disabled={isAutoCreatingProject}
               onChange={(event) => {
+                setAutoProjectError(null);
                 setPrompt(event.target.value);
                 resetProposal();
               }}
@@ -480,6 +523,7 @@ export function StandaloneCreationPage() {
               <input
                 type="checkbox"
                 checked={improvePrompt}
+                disabled={isAutoCreatingProject}
                 onChange={(event) => {
                   if (goal === "video") {
                     setImproveVideoPrompt(event.target.checked);
@@ -501,13 +545,19 @@ export function StandaloneCreationPage() {
           ) : null}
 
           <div className={styles.canvasActions}>
+            {autoProjectError ? (
+              <p className={styles.reviewError} role="alert">
+                We couldn’t create a project automatically. {autoProjectError}
+              </p>
+            ) : null}
             <Button
               variant="cta"
               size="lg"
-              disabled={!canPropose}
-              onClick={startReview}
+              disabled={!canPropose || createProject.isPending}
+              isLoading={isAutoCreatingProject}
+              onClick={() => void startReview()}
             >
-              Review request
+              {isAutoCreatingProject ? "Creating project…" : "Review request"}
             </Button>
           </div>
         </section>

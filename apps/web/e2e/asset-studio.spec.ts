@@ -154,6 +154,169 @@ test.describe("Asset Studio", () => {
     expect(overflow.scrollWidth).toBe(overflow.clientWidth);
   });
 
+  test("creates an AI-named project automatically when review has no project selection @mobile", async ({
+    page,
+  }) => {
+    const automaticProject = {
+      ...project,
+      id: "project_automatic",
+      name: "Amber Popcorn Study",
+    };
+    let createCount = 0;
+    let namingInput: Record<string, unknown> | null = null;
+    let projectIdempotencyKey: string | undefined;
+    let releaseCreate: (() => void) | undefined;
+    const createReleased = new Promise<void>((resolve) => {
+      releaseCreate = resolve;
+    });
+
+    await page.route("**/api/v1/projects", async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      createCount += 1;
+      namingInput = route.request().postDataJSON();
+      projectIdempotencyKey = route.request().headers()["idempotency-key"];
+      await createReleased;
+      await fulfillJson(route, { project: automaticProject }, 201);
+    });
+    await page.route(
+      `**/api/v1/projects/${automaticProject.id}/agent-creations/proposals`,
+      (route) =>
+        fulfillJson(
+          route,
+          {
+            proposal: {
+              sessionId: "session_automatic",
+              runId: "run_automatic",
+              gateId: "gate_automatic",
+              requestDigest: "digest_automatic",
+              maximumUsd: 10,
+              approvalToken: "approval_automatic",
+              expiresAt: "2099-07-31T18:00:00.000Z",
+              effectivePrompt: "Quiet amber-lit popcorn falling into a bowl",
+              enhancementApplied: true,
+            },
+          },
+          201,
+        ),
+    );
+
+    await page.goto("/create");
+    await expect(
+      page.getByText("Optional — we’ll create and name one when you review."),
+    ).toBeVisible();
+    const prompt = page.getByLabel("Describe the result", { exact: true });
+    await prompt.fill("Quiet amber-lit popcorn falling into a bowl");
+    const review = page.getByRole("button", { name: "Review request" });
+    await expect(review).toBeEnabled();
+    await review.evaluate((button) => {
+      button.click();
+      button.click();
+    });
+
+    await expect(
+      page.getByRole("button", { name: "Creating project…" }),
+    ).toBeDisabled();
+    await expect(page.locator("textarea")).toBeDisabled();
+    await expect(
+      page.getByRole("button", {
+        name: `Use recent project ${project.name}`,
+      }),
+    ).toBeDisabled();
+    expect(
+      await page.evaluate(
+        () =>
+          document.documentElement.scrollWidth -
+          document.documentElement.clientWidth,
+      ),
+    ).toBeLessThanOrEqual(0);
+    expect(createCount).toBe(1);
+    expect(namingInput).toEqual({
+      namingPrompt: "Quiet amber-lit popcorn falling into a bowl",
+      namingContext: "image",
+    });
+    expect(projectIdempotencyKey).toMatch(/^asset-studio:project:/);
+
+    releaseCreate?.();
+    await expect(page).toHaveURL(/\/create\/review$/);
+    await expect(
+      page.getByRole("heading", { name: "Approve this" }),
+    ).toBeVisible();
+    expect(createCount).toBe(1);
+  });
+
+  test("preserves the draft when automatic project creation fails", async ({ page }) => {
+    const automaticProject = {
+      ...project,
+      id: "project_retry_automatic",
+      name: "Red Bicycle Orbit",
+    };
+    const idempotencyKeys: Array<string | undefined> = [];
+    let createAttempts = 0;
+    await page.route("**/api/v1/projects", (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      createAttempts += 1;
+      idempotencyKeys.push(route.request().headers()["idempotency-key"]);
+      return createAttempts === 1
+        ? fulfillJson(
+            route,
+            {
+              error: {
+                code: "project_create_failed",
+                message: "Naming service is unavailable.",
+                retryable: true,
+              },
+            },
+            503,
+          )
+        : fulfillJson(route, { project: automaticProject }, 201);
+    });
+    await page.route(
+      `**/api/v1/projects/${automaticProject.id}/agent-creations/proposals`,
+      (route) =>
+        fulfillJson(route, {
+          proposal: {
+            sessionId: "session_retry_automatic",
+            runId: "run_retry_automatic",
+            gateId: "gate_retry_automatic",
+            requestDigest: "digest_retry_automatic",
+            maximumUsd: 10,
+            approvalToken: "approval_retry_automatic",
+            expiresAt: "2099-07-31T18:00:00.000Z",
+            effectivePrompt: "A slow orbit around a red bicycle",
+            enhancementApplied: true,
+          },
+        }, 201),
+    );
+
+    await page.goto("/create");
+    await page
+      .getByRole("radio", { name: /Video/ })
+      .evaluate((radio: HTMLInputElement) => radio.click());
+    const prompt = page.getByLabel("Describe the result", { exact: true });
+    await prompt.fill("A slow orbit around a red bicycle");
+    await page.getByRole("button", { name: "Review request" }).click();
+
+    await expect(page).toHaveURL(/\/create$/);
+    await expect(page.locator("main").getByRole("alert")).toContainText(
+      "We couldn’t create a project automatically",
+    );
+    await expect(
+      page.getByRole("textbox", { name: "Describe the result" }),
+    ).toHaveValue("A slow orbit around a red bicycle");
+    await expect(page.getByRole("radio", { name: /Video/ })).toBeChecked();
+    await expect(
+      page.getByRole("checkbox", { name: /Improve video prompt/ }),
+    ).toBeChecked();
+    await expect(
+      page.getByRole("button", { name: "Review request" }),
+    ).toBeEnabled();
+    await page.getByRole("button", { name: "Review request" }).click();
+    await expect(page).toHaveURL(/\/create\/review$/);
+    expect(createAttempts).toBe(2);
+    expect(idempotencyKeys[0]).toMatch(/^asset-studio:project:/);
+    expect(idempotencyKeys[1]).toBe(idempotencyKeys[0]);
+  });
+
   test("shows recent-project loading placeholders without duplicating project recovery", async ({ page }) => {
     let releaseProjects: (() => void) | undefined;
     const projectsReleased = new Promise<void>((resolve) => {
@@ -248,6 +411,7 @@ test.describe("Asset Studio", () => {
     let proposalPrompt: string | null = null;
     let improvePrompt: boolean | null = null;
     let confirmationCount = 0;
+    let projectCreateCount = 0;
     let releaseProposal: (() => void) | undefined;
     const proposalReleased = new Promise<void>((resolve) => {
       releaseProposal = resolve;
@@ -258,6 +422,11 @@ test.describe("Asset Studio", () => {
     });
 
     await page.clock.install();
+
+    await page.route("**/api/v1/projects", (route) => {
+      if (route.request().method() === "POST") projectCreateCount += 1;
+      return route.fallback();
+    });
 
     await page.route(
       `**/api/v1/projects/${project.id}/agent-creations/proposals`,
@@ -341,6 +510,7 @@ test.describe("Asset Studio", () => {
     await page.getByRole("button", { name: "Review request" }).click();
 
     await expect(page).toHaveURL(/\/create\/review$/);
+    expect(projectCreateCount).toBe(0);
     await expect(page.getByRole("heading", { name: "Improving your prompt" })).toBeVisible();
     await expect(page.getByText("Refining the creative direction")).toBeVisible();
     expect(confirmationCount).toBe(0);
@@ -942,11 +1112,17 @@ test.describe("Asset Studio", () => {
     });
 
     await page.goto("/create");
+    await page
+      .getByLabel("Describe the result", { exact: true })
+      .fill("A delayed project race");
     const projectTrigger = await openProjectPicker(page);
     await page.getByRole("button", { name: "Create new project" }).click();
     await page.getByLabel("Project name").fill(delayedProject.name);
     await page.getByRole("button", { name: "Create project" }).click();
     await createStarted;
+    await expect(
+      page.getByRole("button", { name: "Review request" }),
+    ).toBeDisabled();
 
     await page.keyboard.press("Escape");
     await expect(projectTrigger).toBeFocused();

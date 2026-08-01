@@ -20,6 +20,7 @@ interface ProjectPickerProps {
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
   isCreating: boolean;
+  disabled?: boolean;
   createError: Error | null;
   onChange: (projectId: string) => void;
   onCreate: (name: string) => Promise<V1Project>;
@@ -38,6 +39,7 @@ export function ProjectPicker({
   hasNextPage,
   isFetchingNextPage,
   isCreating,
+  disabled = false,
   createError,
   onChange,
   onCreate,
@@ -167,7 +169,7 @@ export function ProjectPicker({
         aria-labelledby={`${labelId} ${valueId}`}
         aria-expanded={isOpen}
         aria-controls={isOpen ? panelId : undefined}
-        disabled={isLoading && projects.length === 0}
+        disabled={disabled || (isLoading && projects.length === 0)}
         onClick={() => {
           if (isOpen) closePicker({ returnFocus: false });
           else openPicker();

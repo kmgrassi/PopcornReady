@@ -27,7 +27,9 @@ the visible 10-second automatic-confirmation boundary, at-most-once dispatch,
 Back/Forward proposal restoration without reposting, stale-proposal recovery,
 queued status, invalid review-state recovery, desktop/mobile Create and review
 layouts, project-picker keyboard behavior, existing/first/new-project selection,
-and project-list, proposal, confirmation, and creation failure recovery. It also
+automatic AI-named project creation when review starts without a selection,
+same-tick duplicate-submit protection, draft-preserving automatic-create
+failure, and project-list, proposal, confirmation, and creation failure recovery. It also
 verifies that revising preserves the editable draft, failed confirmation remains
 manual-only on Forward, a delayed project creation cannot override a newer
 selection, and pagination failures preserve loaded projects, without spending
