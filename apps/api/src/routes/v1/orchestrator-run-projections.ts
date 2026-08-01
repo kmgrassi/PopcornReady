@@ -28,6 +28,12 @@ import type { CreatorRunHierarchy } from "./session-run-projection.js";
 
 const BOARD_FEEDBACK_TOOL = "board_feedback";
 const AFTER_GATE_PREFIX = "after:";
+const CREATOR_HIDDEN_ACTION_TOOLS = new Set([
+  BOARD_FEEDBACK_TOOL,
+  "creator_direct_proposal",
+  "domain_report",
+  "store_asset_bytes",
+]);
 
 export interface GenerationRunDetail {
   run: GenerationRun;
@@ -70,7 +76,21 @@ export interface RunAssetPrompt {
 }
 
 function generationActions(actions: RunActionSummary[]): RunActionSummary[] {
-  return actions.filter((action) => action.tool !== BOARD_FEEDBACK_TOOL);
+  return actions.filter((action) => !CREATOR_HIDDEN_ACTION_TOOLS.has(action.tool));
+}
+
+function presentationKind(
+  run: OrchestratorRun
+): GenerationRun["presentationKind"] {
+  if (run.originKind !== "creator_direct") return undefined;
+  if (run.taskKind === "image_create") return "standalone_image";
+  if (run.taskKind === "video_create" || run.taskKind === "video_edit") {
+    return "standalone_video";
+  }
+  if (run.taskKind === "soundtrack_create" || run.taskKind === "audio_create") {
+    return "standalone_audio";
+  }
+  return undefined;
 }
 
 export function toolStage(tool: string): GenerationStageType {
@@ -85,6 +105,9 @@ export function toolStage(tool: string): GenerationStageType {
     case "generate_anchor":
     case "generate_keyframe":
     case "generate_clip":
+    case "generate_image_asset":
+    case "generate_video_asset":
+    case "regenerate_image_asset":
     case "edit_video_asset":
       return "asset_generation";
     case "generate_audio":
@@ -114,6 +137,7 @@ function toolItemKind(tool: string): GenerationStageItemKind {
     case "publish_to_catalog":
       return "caption";
     case "generate_clip":
+    case "generate_video_asset":
     case "edit_video_asset":
       return "video";
     case "generate_audio":
@@ -128,7 +152,10 @@ function toolItemKind(tool: string): GenerationStageItemKind {
   }
 }
 
-function toolItemPurpose(tool: string): GenerationStageItemPurpose {
+function toolItemPurpose(
+  tool: string,
+  standalonePresentation?: GenerationRun["presentationKind"]
+): GenerationStageItemPurpose {
   switch (tool) {
     case "create_or_load_brief":
       return "brief";
@@ -144,8 +171,13 @@ function toolItemPurpose(tool: string): GenerationStageItemPurpose {
     case "generate_keyframe":
       return "keyframe";
     case "generate_clip":
-    case "edit_video_asset":
       return "shot";
+    case "generate_image_asset":
+    case "generate_video_asset":
+    case "regenerate_image_asset":
+      return "asset";
+    case "edit_video_asset":
+      return standalonePresentation ? "asset" : "shot";
     case "generate_audio":
     case "fit_audio_to_picture":
       return "audio";
@@ -206,9 +238,32 @@ function completionKind(
   assets: ReadonlyMap<string, RunAssetPrompt>
 ): GenerationRun["completionKind"] {
   if (run.status !== "succeeded") return undefined;
+  if (hasReadyStandaloneAsset(run, actions, assets)) return "standalone_asset";
   if (hasFinishedVideo(actions, assets)) return "video";
   if (hasReachedStoryboardAfterGate(gates)) return "storyboard_assets";
   return undefined;
+}
+
+function hasReadyStandaloneAsset(
+  run: OrchestratorRun,
+  actions: RunActionSummary[],
+  assets: ReadonlyMap<string, RunAssetPrompt>
+): boolean {
+  const kind = presentationKind(run);
+  if (!kind) return false;
+  const expectedKind = kind === "standalone_image"
+    ? "image"
+    : kind === "standalone_video"
+      ? "video"
+      : "audio";
+  return generationActions(actions).some(
+    (action) =>
+      action.status === "applied" &&
+      action.outputAssetIds.some((assetId) => {
+        const asset = assets.get(assetId);
+        return asset?.status === "ready" && asset.kind === expectedKind;
+      })
+  );
 }
 
 function projectedRunStatus(
@@ -218,6 +273,9 @@ function projectedRunStatus(
   assets: ReadonlyMap<string, RunAssetPrompt>
 ): GenerationRunStatus {
   if (run.status !== "succeeded") return runStatus(run.status);
+  if (presentationKind(run)) {
+    return hasReadyStandaloneAsset(run, actions, assets) ? "succeeded" : "failed";
+  }
   if (hasFinishedVideo(actions, assets)) return "succeeded";
   return hasReachedAfterGate(gates) ? "succeeded" : "failed";
 }
@@ -227,6 +285,21 @@ function actionStatus(status: string): GenerationRunStatus {
   if (status === "failed") return "failed";
   if (status === "running") return "running";
   return "queued";
+}
+
+function terminalJobStatusForAction(
+  action: RunActionSummary | undefined,
+  jobs: ReadonlyMap<string, Job>
+): GenerationRunStatus | undefined {
+  if (action?.status !== "running") return undefined;
+  const attachedJobs = [...new Set(action.jobIds)]
+    .map((jobId) => jobs.get(jobId))
+    .filter((job): job is Job => Boolean(job));
+  return attachedJobs.find((job) => job.status === "failed")?.status ??
+    attachedJobs.find((job) => job.status === "canceled")?.status ??
+    (attachedJobs.length > 0 && attachedJobs.every((job) => job.status === "succeeded")
+      ? "succeeded"
+      : undefined);
 }
 
 function runMessage(
@@ -243,6 +316,7 @@ function runMessage(
     case "waiting":
       return "Generation is waiting for a job or approval gate.";
     case "succeeded":
+      if (hasReadyStandaloneAsset(run, actions, assets)) return "Asset is ready.";
       if (hasFinishedVideo(actions, assets)) return "Video export is ready.";
       return hasReachedStoryboardAfterGate(gates)
         ? "Storyboard assets are ready."
@@ -408,9 +482,11 @@ export function projectRun(
       }
     : null;
   const projectedActions = generationActions(actions);
-  const latestRunningAction = [...projectedActions]
-    .reverse()
-    .find((action) => action.status === "running");
+  const latestRunningAction = status === "running"
+    ? [...projectedActions]
+        .reverse()
+        .find((action) => action.status === "running")
+    : undefined;
   const latestAction = [...projectedActions].reverse()[0];
   const latestByTool = new Map<string, RunActionSummary>();
   for (const action of projectedActions) latestByTool.set(action.tool, action);
@@ -454,6 +530,7 @@ export function projectRun(
     projectId: run.projectId,
     status,
     completionKind: completionKind(run, gates, actions, assets),
+    presentationKind: presentationKind(run),
     activityState,
     currentToolName: latestRunningAction?.tool,
     reviewGates: reviewGates.map((gate) => toolStage(gate.stage) as GateableGenerationStageType),
@@ -471,8 +548,12 @@ export function projectRun(
     error:
       status === "failed" && run.status === "succeeded"
         ? {
-            code: "missing_video_output",
-            message: "Run ended; no playable video was created.",
+            code: presentationKind(run)
+              ? "missing_asset_output"
+              : "missing_video_output",
+            message: presentationKind(run)
+              ? "Run ended; no ready standalone asset was created."
+              : "Run ended; no playable video was created.",
             retryable: true,
           }
         : toErrorSummary(run.error),
@@ -520,16 +601,24 @@ function projectStages(
           (action) =>
             action.status === "failed" && latestByTool.get(action.tool)?.id === action.id
         );
-      const status = latestFailed
+      const actionDerivedStatus = latestFailed
         ? "failed"
         : latest
           ? actionStatus(latest.status)
           : "queued";
-      const statusAction = latestFailed ?? latest;
       const jobActivities = [...new Set(stageActions.flatMap((action) => action.jobIds))]
         .map((jobId) => options.jobs?.get(jobId))
         .filter((job): job is Job => Boolean(job))
         .map((job) => projectGenerationJobActivity(job, options));
+      const terminalJobStatus = terminalJobStatusForAction(
+        latest,
+        options.jobs ?? new Map()
+      );
+      const parentStatus = runStatus(run.status);
+      const status = actionDerivedStatus === "running" && parentStatus !== "running"
+        ? terminalJobStatus ?? parentStatus
+        : terminalJobStatus ?? actionDerivedStatus;
+      const statusAction = latestFailed ?? latest;
       return {
         stageId: toolStageId(run.id, tool),
         runId: run.id,
@@ -575,7 +664,8 @@ function actionPrompt(action: RunActionSummary): string | undefined {
 function projectStageItems(
   run: OrchestratorRun,
   actions: RunActionSummary[],
-  assetPrompts: ReadonlyMap<string, RunAssetPrompt>
+  assetPrompts: ReadonlyMap<string, RunAssetPrompt>,
+  jobs: ReadonlyMap<string, Job>
 ): GenerationStageItem[] {
   return generationActions(actions).flatMap((action) => {
     const type = toolStage(action.tool);
@@ -583,13 +673,19 @@ function projectStageItems(
     return action.outputAssetIds.map((assetId, index) => {
       const assetPrompt = assetPrompts.get(assetId);
       const prompt = actionLevelPrompt ?? assetPrompt?.prompt ?? assetPrompt?.description;
+      const parentStatus = runStatus(run.status);
+      const terminalJobStatus = terminalJobStatusForAction(action, jobs);
+      const projectedStatus = actionStatus(action.status);
+      const status = projectedStatus === "running" && parentStatus !== "running"
+        ? terminalJobStatus ?? parentStatus
+        : terminalJobStatus ?? projectedStatus;
       return {
         itemId: `${action.id}:${assetId}`,
         stageId: toolStageId(run.id, action.tool),
         kind: toolItemKind(action.tool),
-        purpose: toolItemPurpose(action.tool),
+        purpose: toolItemPurpose(action.tool, presentationKind(run)),
         label: `${action.tool} output ${index + 1}`,
-        status: actionStatus(action.status),
+        status,
         ...(prompt ? { prompt, promptPreview: promptPreview(prompt) } : {}),
         assetId,
         artifactId: assetId,
@@ -619,7 +715,7 @@ export function projectRunDetailFromParts(
   return {
     run: projectRun(run, gates, actions, assetPrompts, jobs),
     stages: projectStages(run, actions, { ...options, jobs }),
-    stageItems: projectStageItems(run, actions, assetPrompts),
+    stageItems: projectStageItems(run, actions, assetPrompts, jobs),
     resultArtifacts: projectResultArtifacts(run, actions),
     ...(operatorDiagnostics && operatorDiagnostics.length > 0
       ? { operatorDiagnostics }

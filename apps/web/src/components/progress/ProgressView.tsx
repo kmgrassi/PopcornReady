@@ -141,7 +141,23 @@ function nextStageType(run: GenerationRun, stages: GenerationStage[]): Generatio
   return undefined;
 }
 
-function lastCompletedPipelineStage(stages: GenerationStage[]): string | null {
+function standaloneAssetLabel(
+  presentationKind: GenerationRun["presentationKind"],
+): string | null {
+  if (presentationKind === "standalone_image") return "Image asset";
+  if (presentationKind === "standalone_video") return "Video asset";
+  if (presentationKind === "standalone_audio") return "Audio asset";
+  return null;
+}
+
+function lastCompletedPipelineStage(
+  stages: GenerationStage[],
+  presentationKind?: GenerationRun["presentationKind"],
+): string | null {
+  const assetLabel = standaloneAssetLabel(presentationKind);
+  if (assetLabel) {
+    return stages.some((stage) => stage.status === "succeeded") ? assetLabel : null;
+  }
   const stagesByTool = new Map(
     stages
       .filter((stage) => stage.toolName)
@@ -213,7 +229,9 @@ function headerStatus(run: GenerationRun): string {
     return "Producing";
   }
   if (run.status === "succeeded") {
-    return run.completionKind === "video" ? "Video ready" : "Partial result";
+    if (run.completionKind === "video") return "Video ready";
+    if (run.completionKind === "standalone_asset") return "Asset ready";
+    return "Partial result";
   }
   if (run.status === "failed") {
     return run.error?.code === "missing_video_output" ? "Partial result" : "Failed";
@@ -263,6 +281,7 @@ function mobileProgressSentence({
 
   if (run.status === "succeeded") {
     if (run.completionKind === "video") return "Your video is ready.";
+    if (run.completionKind === "standalone_asset") return "Your asset is ready.";
     if (run.completionKind === "storyboard_assets") {
       return "Storyboard ready; no video was created.";
     }
@@ -516,7 +535,10 @@ export function ProgressView({
   );
   const nextType = nextStageType(detail.run, detail.stages);
   const nextStageLabel = nextType ? reviewStageLabel(nextType) : null;
-  const lastCompletedStageLabel = lastCompletedPipelineStage(detail.stages);
+  const lastCompletedStageLabel = lastCompletedPipelineStage(
+    detail.stages,
+    detail.run.presentationKind,
+  );
   const activeStage = currentRunStage(detail.run, detail.stages);
   const hasExplicitAction = Boolean(detail.run.reviewGate || activeStage);
   const choosingNextStep = detail.run.status === "running" && !hasExplicitAction;
@@ -524,16 +546,18 @@ export function ProgressView({
     ? reviewStageLabel(detail.run.reviewGate.stageType)
     : choosingNextStep
       ? "Choosing the next step"
-    : activeStage?.label
-      ? activeStage.label
-    : detail.run.currentStageType
-      ? reviewStageLabel(detail.run.currentStageType)
-      : "Final render";
+      : activeStage?.label
+        ? activeStage.label
+        : standaloneAssetLabel(detail.run.presentationKind) ??
+          (detail.run.currentStageType
+            ? reviewStageLabel(detail.run.currentStageType)
+            : "Final render");
   const currentStageDisplay = detail.run.reviewGate
     ? `${currentStageLabel} review`
     : currentStageLabel;
   const projectBrief = project?.brief ?? null;
-  const projectTitle = project?.name?.trim() || "your video";
+  const standaloneLabel = standaloneAssetLabel(detail.run.presentationKind);
+  const projectTitle = project?.name?.trim() || (standaloneLabel ? "this project" : "your video");
   const returnLabel = workspaceReturnLabel({
     hasStudioDraft: Boolean(studioReturnPath),
     terminal,
@@ -631,8 +655,8 @@ export function ProgressView({
       <>
         <div className={styles.sidePanelHeader}>
           <div>
-            <p className={styles.eyebrow}>Pipeline</p>
-            <h2 className={styles.sidePanelHeading}>Stages</h2>
+            <p className={styles.eyebrow}>{standaloneLabel ? "Asset activity" : "Pipeline"}</p>
+            <h2 className={styles.sidePanelHeading}>{standaloneLabel ? "Status" : "Stages"}</h2>
           </div>
         </div>
         {showBackgroundActivity ? (
@@ -659,6 +683,7 @@ export function ProgressView({
           runMessage={detail.run.message}
           reviewGate={detail.run.reviewGate}
           stageLinks={stageLinks}
+          presentationKind={detail.run.presentationKind}
           stopAction={
             showCancelAction && cancelAction
               ? {
@@ -753,11 +778,14 @@ export function ProgressView({
     <div className={styles.shell}>
       <header className={styles.header}>
         <div className={styles.headerCopy}>
-          <p className={styles.eyebrow}>Unified workspace</p>
-          <h1 className={styles.title}>Producing {projectTitle}</h1>
+          <p className={styles.eyebrow}>{standaloneLabel ? "Asset Studio" : "Unified workspace"}</p>
+          <h1 className={styles.title}>
+            {standaloneLabel ? `${standaloneLabel} for ${projectTitle}` : `Producing ${projectTitle}`}
+          </h1>
           <p className={styles.headerDescription}>
-            The plan, generated assets, review checkpoints, and final export stay
-            attached to this workspace.
+            {standaloneLabel
+              ? "This one-off asset and its generation history stay attached to the project library."
+              : "The plan, generated assets, review checkpoints, and final export stay attached to this workspace."}
           </p>
           {headerSlot ? <div className={styles.headerSlot}>{headerSlot}</div> : null}
         </div>
@@ -974,7 +1002,7 @@ export function ProgressView({
 
           <details className={styles.mobilePipelineDetails}>
             <summary>
-              Show pipeline
+              {standaloneLabel ? "Show asset status" : "Show pipeline"}
               <span aria-hidden="true">+</span>
             </summary>
             <div

@@ -16,18 +16,19 @@ pnpm --filter @popcorn/web test:e2e
 ```
 
 `asset-studio.spec.ts` uses browser API fixtures to verify the production
-`/create` route, default Image selection, choice-card padding, proposal review,
-default-on prompt refinement, exact effective-prompt preview, creator bypass,
-explicit confirmation, and the creator-facing queued/running/terminal progress
-surface. Progress coverage includes the studio-crew loading artwork, semantically
-truncated request brief, reduced-motion behavior, mobile overflow, successful
-asset links, and truthful failed, canceled, and blocked copy. The suite also
-covers desktop/mobile Create navigation, project picker keyboard behavior,
-existing/first/new-project selection, and project-list and creation failure
-recovery. It verifies that an in-flight cost proposal cannot reappear after its
-project or refinement setting changes, a delayed project creation cannot
-override a newer selection, and pagination failures preserve loaded projects,
-without spending provider credits.
+`/create` route, default Image selection, choice-card padding, default-on image
+and video prompt refinement, motion-specific progress, exact effective-prompt
+preview, creator bypass, draft-preserving video revision, immediate navigation
+to `/create/review`, manual **Approve this** confirmation, the visible 10-second
+automatic-confirmation boundary, at-most-once dispatch, Back/Forward proposal
+restoration without reposting, stale-proposal recovery, invalid review-state
+recovery, and desktop/mobile Create and review layouts. After confirmation, it
+also covers human-readable queued/running/terminal progress, the studio-crew
+loading artwork, semantic request-brief truncation, reduced motion, mobile
+overflow, successful asset links, and truthful failed, canceled, blocked, and
+question outcomes. Project-picker keyboard behavior, existing/first/new-project
+selection, project-list/proposal/confirmation/creation failure recovery, delayed
+selection safety, and pagination retry are covered without provider spend.
 
 `rerun-proposal-lifecycle.spec.ts` verifies the durable Request Changes UI
 without provider spend: exact-target proposal preview, preserved/affected work,
@@ -36,6 +37,9 @@ visible owning-surface refresh after restored completion, truthful cancellation,
 terminal cleanup, keyboard focus restoration, and mobile overflow. The run and
 storyboard suites also assert that their entry points open this lifecycle instead
 of posting the retired reject, board-revision, or stage-restart mutations.
+Run-progress and project-overview fixtures additionally cover successful
+creator-direct image work as one **Image asset** activity, with asset-ready copy
+and no inferred Brief, Script, or Storyboard pipeline stages.
 
 The command starts the Express API and Vite app, using:
 

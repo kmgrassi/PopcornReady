@@ -8,7 +8,7 @@
 <!-- agent-summary: Async dispatch races require local Supabase concurrency coverage when no safe live completion is available. -->
 <!-- agent-summary: Keep remaining gaps concrete, behavior-focused, and tied to the smallest useful next test. -->
 
-Last reconciled with the active route table: 2026-07-31
+Last reconciled with the active route table: 2026-08-01
 
 This inventory covers the active split app described in `CLAUDE.md`: the Vite
 React SPA in `apps/web` and the Express API in `apps/api`. New end-to-end work
@@ -28,14 +28,17 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   routes, compatibility redirects, and not-found behavior.
 - `asset-studio.spec.ts` covers the production-default `/create` entry, image as
   the default goal, choice-card padding at desktop and mobile widths, proposal
-  review without dispatch, default-on image-prompt refinement, the exact
-  effective-prompt preview, creator bypass, stale refinement invalidation,
-  explicit confirmation, and the creator-facing progress state. Progress
+  review without dispatch, immediate navigation to `/create/review`, visible
+  image and video prompt refinement, motion-specific video progress, the exact
+  effective-prompt preview, creator bypass, draft-preserving video revision,
+  manual **Approve this** confirmation, the 10-second automatic-confirmation
+  boundary, at-most-once dispatch, queued status, safe invalid-review recovery,
+  and desktop/mobile Create and review layouts. After confirmation, progress
   assertions cover human-readable queued/running/terminal status, checked-in
   studio-crew loading artwork, a semantically truncated request brief with full
   disclosure, reduced motion, mobile overflow, successful asset navigation, and
-  truthful failed, canceled, and blocked outcomes. It also covers desktop/mobile
-  Create navigation and the accessible project picker,
+  truthful failed, canceled, blocked, and question outcomes. It also covers the
+  accessible project picker,
   existing/first/new-project selection, inline creation without losing the
   prompt, list and creation failure recovery, and keyboard focus/Escape behavior.
 - `run-progress.spec.ts` and `run-progress-actions.spec.ts` cover run progress,
@@ -46,7 +49,9 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   diagnostics, and response-driven review-gate transitions that clear feedback
   without racing page reloads. They explicitly verify that review feedback and
   generated-asset edits no longer post the retired reject or board-revision
-  mutations.
+  mutations. A creator-direct image fixture also verifies one-step asset-ready
+  completion with no Brief, Script, or Storyboard rail, and the project overview
+  repeats that assertion for its compact status panel.
 - `rerun-proposal-lifecycle.spec.ts` covers proposal preview, explicit maximum
   cost approval, separate execution, waiting-state polling, durable reload
   recovery, visible owning-surface refresh after restored completion, truthful
@@ -207,7 +212,7 @@ Authenticated routes:
 - `/inspiration`
 - `/library`, `/library/:tab` (`projects` and `assets` are the active tabs)
 - `/projects`, `/projects/new`, `/projects/:projectId`,
-- `/create`,
+- `/create`, `/create/review`,
   `/storyboard`,
   `/projects/:projectId/concept`, `/projects/:projectId/brief`,
   `/projects/:projectId/script`,
@@ -334,34 +339,44 @@ Covered:
 
 - The authenticated global Create action opens `/create` by default.
 - Image is the default creator-facing goal and maps to `image_create`.
-- Reviewing the maximum cost does not confirm or enqueue the proposal.
+- Starting moves immediately to `/create/review`; proposal/refinement progress
+  is shown there before any confirmation or enqueue.
 - Image prompt improvement is on by default; the exact effective prompt is
   visible before confirmation, and disabling it sends the creator's prompt
   unchanged.
-- A delayed refined proposal is discarded if prompt improvement is disabled
-  while the request is in flight.
-- Explicit confirmation deep-links to the queued creator-direct run.
+- The visible proposal offers **Approve this** and automatically confirms after
+  10 seconds if untouched; manual/timed races dispatch at most once.
+- Revising cancels the countdown, returns to `/create`, preserves the editable
+  draft, and gives the revised request fresh proposal authority.
+- Browser Forward restores a validated proposal from that review history entry
+  without posting it again; a failed confirmation stays manual-only on return,
+  and an expired restored proposal fails safely into revision.
+- Confirmation failure stops automatic retry and remains manually actionable.
+- Direct `/create/review` navigation without request state fails closed and
+  creates no proposal or confirmation.
+- Successful confirmation replace-navigates to the queued creator-direct run.
 - The progress view presents human-readable queued and running status, studio
   crew artwork, a truncated request brief with full disclosure, reduced-motion
   behavior, and mobile-safe layout.
 - Completed, failed, canceled, question, and blocked fixtures preserve truthful
   terminal copy, idle artwork, exact report details, and asset navigation.
 - The mobile Create tab opens Asset Studio and retains active state.
+- The review route remains legible and overflow-free at mobile widths.
 - The project picker selects an existing project, returns focus on Escape, and
   remains width-safe at mobile sizes.
 - People can create either their first project or another named project inline;
   the returned project is selected immediately and the asset prompt is retained.
 - Project list and project creation failures remain actionable and retryable.
-- A delayed proposal response is discarded after its selected project changes.
 - A delayed project creation cannot override a newer project selection.
 - A failed next-page request preserves loaded project rows and can retry the
   same cursor successfully.
 
 Remaining gaps:
 
-- Add dedicated delayed-proposal cases for prompt and goal changes. They share
-  the proposal-reset path already exercised by project and prompt-refinement
-  changes, but are not asserted independently.
+- Add server-backed recovery when `/create/review` has no usable browser history
+  state, such as a direct link, new tab, or lost session history. The current
+  client intentionally fails closed instead of persisting proposal authority in
+  URL or browser storage.
 - Add browser coverage when optional references, Request Changes, dependency
   attachment, and Use in project controls land.
 - Keep provider-backed image/video/audio smoke opt-in because it incurs cost.
@@ -381,6 +396,9 @@ Covered:
   of being collapsed by inline width styles.
 - A production-shaped storyboard-only terminal result never renders video-ready
   completion copy.
+- A successful creator-direct image renders **Asset ready** and one **Image
+  asset** stage on both the run and project-overview surfaces; production stages
+  such as Script are absent.
 - API regression coverage now keeps prompt/upload entrypoints autonomous when
   stop controls are omitted, preserves explicit `runThrough: false`, and rejects
   incomplete storyboard-to-keyframe handoffs. A local Supabase + MinIO

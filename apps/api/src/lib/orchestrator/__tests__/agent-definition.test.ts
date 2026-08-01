@@ -171,6 +171,36 @@ test("question completion derives trusted targets and a server fingerprint", asy
   }
 });
 
+test("domain completion accepts one exact JSON fence but rejects surrounding prose", async () => {
+  const completion = JSON.stringify({
+    outcome: "question",
+    question: "Which visual direction should this clip use?",
+    options: [
+      { id: "warm", label: "Warm", tradeoff: "Softer and nostalgic." },
+      { id: "cool", label: "Cool", tradeoff: "Sharper and more distant." },
+    ],
+  });
+  const report = await buildDomainReportFromCompletion({
+    runId: "domain-run",
+    projectId: "project-1",
+    task: visualTask,
+    actions: [],
+    summary: `\`\`\`json\n${completion}\n\`\`\``,
+  });
+  assert.equal(report.outcome.outcome, "question");
+
+  await assert.rejects(
+    buildDomainReportFromCompletion({
+      runId: "domain-run",
+      projectId: "project-1",
+      task: visualTask,
+      actions: [],
+      summary: `Done.\n\`\`\`json\n${completion}\n\`\`\``,
+    }),
+    /valid JSON/
+  );
+});
+
 test("bound completion carries the exact server-issued output identity into the report", async () => {
   const boundTarget = {
     kind: "asset" as const,
@@ -279,6 +309,7 @@ test("manual domain smoke drives a claimed question turn without a provider", as
     loadTurnContext: async () => ({ schemaVersion: "DomainTurnProjection.v1" }),
   };
   let finalizedGeneration: number | undefined;
+  let completionMode: string | undefined;
   const result = await runOrchestratorToCompletion(run.id, {
     workspaceId: "workspace-1",
     store,
@@ -286,18 +317,21 @@ test("manual domain smoke drives a claimed question turn without a provider", as
     sessionClaimGeneration: 42,
     resolveOwnerUserId: async () => null,
     resolveAgentDefinition: async () => definition,
-    model: async () => ({
-      type: "done",
-      summary: JSON.stringify({
-        outcome: "question",
-        question: "Which visual direction should this clip use?",
-        options: [
-          { id: "warm", label: "Warm", tradeoff: "Softer and nostalgic." },
-          { id: "cool", label: "Cool", tradeoff: "Sharper and more distant." },
-        ],
-      }),
-      model: "manual-smoke",
-    }),
+    model: async (input) => {
+      completionMode = input.completionMode;
+      return {
+        type: "done",
+        summary: JSON.stringify({
+          outcome: "question",
+          question: "Which visual direction should this clip use?",
+          options: [
+            { id: "warm", label: "Warm", tradeoff: "Softer and nostalgic." },
+            { id: "cool", label: "Cool", tradeoff: "Sharper and more distant." },
+          ],
+        }),
+        model: "manual-smoke",
+      };
+    },
     finalizeDomainTurn: async (input) => {
       finalizedGeneration = input.expectedClaimGeneration;
       run = { ...run, status: "succeeded" };
@@ -312,5 +346,6 @@ test("manual domain smoke drives a claimed question turn without a provider", as
     },
   });
   assert.equal(finalizedGeneration, 42);
+  assert.equal(completionMode, "domain_json");
   assert.equal(result.status, "succeeded");
 });

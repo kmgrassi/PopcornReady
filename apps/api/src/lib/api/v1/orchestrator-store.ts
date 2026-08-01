@@ -4,7 +4,10 @@
 // Kept separate from the ~13k-line store.ts per the cohesive-feature-file rule;
 // shared low-level mappers come from ./store-internal.
 
-import type { AgentRole, DomainRunWaitReason } from "@popcorn/shared/domain-agent-contract";
+import type {
+  AgentRole,
+  DomainRunWaitReason,
+} from "@popcorn/shared/domain-agent-contract";
 import { getServiceSupabase } from "../../supabase/clients";
 import { runQuery } from "../../supabase/db-errors";
 import { ApiError } from "./errors";
@@ -32,6 +35,9 @@ export interface OrchestratorRun {
   inputSummary: string;
   /** Persisted role selects the declarative AgentDefinition (PR 8). */
   agentRole?: AgentRole;
+  /** Finite domain identity used by creator projections and recovery policy. */
+  taskKind?: string;
+  originKind?: "creative_director" | "creator_direct";
   budgetUsd?: number;
   spentUsd: number;
   /** Why a waiting run is parked: media_job | domain | approval (PR 6). */
@@ -148,6 +154,8 @@ interface OrchestratorRunRow {
   status: OrchestratorRunStatus;
   input_summary: string;
   agent_role?: AgentRole | null;
+  task_kind?: string | null;
+  origin_kind?: "creative_director" | "creator_direct" | null;
   budget_usd: number | null;
   spent_usd: number;
   wait_reason?: DomainRunWaitReason | null;
@@ -197,6 +205,8 @@ function mapRun(row: OrchestratorRunRow): OrchestratorRun {
     updatedAt: iso(row.updated_at),
   };
   if (row.agent_role) run.agentRole = row.agent_role;
+  if (row.task_kind) run.taskKind = row.task_kind;
+  if (row.origin_kind) run.originKind = row.origin_kind;
   if (row.budget_usd != null) run.budgetUsd = row.budget_usd;
   if (row.wait_reason) run.waitReason = row.wait_reason;
   const error = unmarkedJson(row.error);

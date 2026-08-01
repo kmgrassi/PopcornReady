@@ -1,18 +1,20 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useState } from "react";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { StudioCrewLoader } from "../components/creation/StudioCrewLoader";
 import { ProjectPicker } from "../components/projects/ProjectPicker";
 import { Button } from "../components/ui/Button";
 import { ChoiceCard } from "../components/ui/ChoiceCard";
 import { v1Api } from "../lib/api-client";
 import {
-  useCreationConfirmation,
-  useCreationProposal,
   useCreationStatus,
   type CreationGoal,
-  type CreationProposal,
 } from "../lib/agent-creations";
+import {
+  creationDraftNavigationState,
+  creationReviewNavigationState,
+  readCreationDraft,
+} from "../lib/creationReview";
 import {
   queryKeys,
   useCreateProjectMutation,
@@ -159,7 +161,10 @@ function briefExcerpt(summary: string, maximumLength = 180) {
 }
 
 export function StandaloneCreationPage() {
-  const [params, setParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const returnedDraft = readCreationDraft(location.state);
+  const [params] = useSearchParams();
   const projectsQuery = useInfiniteQuery({
     queryKey: queryKeys.assetStudioProjects(),
     queryFn: ({ pageParam }) =>
@@ -176,18 +181,20 @@ export function StandaloneCreationPage() {
     !listedProjects.some((project) => project.id === recentProject.id)
       ? [recentProject, ...listedProjects]
       : listedProjects;
-  const [goal, setGoal] = useState<CreationGoal>("image");
-  const [projectId, setProjectId] = useState(params.get("projectId") ?? "");
-  const [prompt, setPrompt] = useState("");
-  const [improvePrompt, setImprovePrompt] = useState(true);
-  const [proposal, setProposal] = useState<CreationProposal | null>(null);
-  const [proposalError, setProposalError] = useState<Error | null>(null);
+  const [goal, setGoal] = useState<CreationGoal>(returnedDraft?.goal ?? "image");
+  const [projectId, setProjectId] = useState(
+    returnedDraft?.projectId ?? params.get("projectId") ?? "",
+  );
+  const [prompt, setPrompt] = useState(returnedDraft?.prompt ?? "");
+  const [improveImagePrompt, setImproveImagePrompt] = useState(
+    returnedDraft?.goal === "image" ? returnedDraft.improvePrompt : true,
+  );
+  const [improveVideoPrompt, setImproveVideoPrompt] = useState(
+    returnedDraft?.goal === "video" ? returnedDraft.improvePrompt : true,
+  );
   const [proposalKey, setProposalKey] = useState(
     () => `asset-studio:proposal:${crypto.randomUUID()}`,
   );
-  const proposalVersion = useRef(0);
-  const propose = useCreationProposal();
-  const confirm = useCreationConfirmation();
   const runId = params.get("runId");
   const status = useCreationStatus(projectId, runId);
   const listedSelection = projects.find((project) => project.id === projectId);
@@ -197,6 +204,8 @@ export function StandaloneCreationPage() {
   );
   const selectedName =
     listedSelection?.name ?? selectedProjectQuery.data?.project.name;
+  const improvePrompt =
+    goal === "video" ? improveVideoPrompt : improveImagePrompt;
 
   if (runId && projectId) {
     const reportOutcome = status.data?.report?.outcome.outcome;
@@ -335,9 +344,6 @@ export function StandaloneCreationPage() {
   }
 
   const resetProposal = () => {
-    proposalVersion.current += 1;
-    setProposal(null);
-    setProposalError(null);
     setProposalKey(`asset-studio:proposal:${crypto.randomUUID()}`);
   };
   const selectProject = (nextProjectId: string) => {
@@ -347,46 +353,35 @@ export function StandaloneCreationPage() {
   };
   const canPropose = Boolean(projectId && prompt.trim());
 
-  async function reviewCost() {
+  function startReview() {
     if (!canPropose) return;
-    const requestedVersion = proposalVersion.current;
-    setProposalError(null);
-    try {
-      const nextProposal = await propose.mutateAsync({
-        projectId,
-        goal,
-        prompt: prompt.trim(),
-        improvePrompt,
+    const draft = {
+      projectId,
+      goal,
+      prompt: prompt.trim(),
+      improvePrompt,
+    };
+    navigate(`${location.pathname}${location.search}`, {
+      replace: true,
+      state: creationDraftNavigationState(draft),
+    });
+    navigate("/create/review", {
+      state: creationReviewNavigationState({
+        ...draft,
         maximumUsd: 10,
         idempotencyKey: proposalKey,
-      });
-      if (proposalVersion.current === requestedVersion) {
-        setProposal(nextProposal);
-      }
-    } catch (error) {
-      if (proposalVersion.current === requestedVersion) {
-        setProposalError(
-          error instanceof Error ? error : new Error(String(error)),
-        );
-      }
-    }
+      }),
+    });
   }
-
-  async function start() {
-    if (!proposal) return;
-    const result = await confirm.mutateAsync({ projectId, proposal });
-    setParams({ projectId, runId: result.runId });
-  }
-
-  const error = proposalError ?? confirm.error;
 
   return (
     <main className={styles.page}>
       <header className={styles.header}>
         <h1>Make an asset for your project</h1>
         <p>
-          Describe the outcome. For images, a quick prompt-refinement pass runs
-          during review. No asset generation starts until you confirm the cost.
+          Describe the outcome. For images and videos, a quick prompt-refinement
+          pass runs on the next page. Review it there, or asset generation starts
+          automatically 10 seconds after the proposal is ready.
         </p>
       </header>
       <section className={styles.form}>
@@ -440,83 +435,49 @@ export function StandaloneCreationPage() {
               setPrompt(event.target.value);
               resetProposal();
             }}
-            placeholder="A quiet amber-lit close-up of popcorn falling into a bowl"
+            placeholder={
+              goal === "video"
+                ? "A cyclist crossing a rain-slick street as the camera holds still"
+                : goal === "soundtrack"
+                  ? "Sparse brushed percussion building to a warm final chord"
+                  : "A quiet amber-lit close-up of popcorn falling into a bowl"
+            }
           />
         </label>
 
-        {goal === "image" ? (
+        {goal === "image" || goal === "video" ? (
           <label className={styles.enhancementControl}>
             <input
               type="checkbox"
               checked={improvePrompt}
               onChange={(event) => {
-                setImprovePrompt(event.target.checked);
+                if (goal === "video") {
+                  setImproveVideoPrompt(event.target.checked);
+                } else {
+                  setImproveImagePrompt(event.target.checked);
+                }
                 resetProposal();
               }}
             />
             <span>
-              <strong>Improve image prompt</strong>
+              <strong>Improve {goal} prompt</strong>
               <small>
-                Adds concrete composition, lighting, materials, and restraint
-                while preserving your idea.
+                {goal === "video"
+                  ? "Adds clear action, camera behavior, continuity, and an end state while preserving your idea."
+                  : "Adds concrete composition, lighting, materials, and restraint while preserving your idea."}
               </small>
             </span>
           </label>
         ) : null}
 
-        {proposal ? (
-          <section className={styles.proposal} aria-live="polite">
-            <h2>Review before starting</h2>
-            <p>
-              Asset generation can spend up to ${proposal.maximumUsd.toFixed(2)}.
-              Asset generation has not begun.
-            </p>
-            <div className={styles.promptReview}>
-              {proposal.enhancementApplied ? (
-                <>
-                  <span>Original</span>
-                  <p>{prompt.trim()}</p>
-                  <span>Refined prompt</span>
-                </>
-              ) : (
-                <span>Prompt</span>
-              )}
-              <p className={styles.effectivePrompt}>
-                {proposal.effectivePrompt || prompt.trim()}
-              </p>
-            </div>
-            <div className={styles.actions}>
-              <Button
-                variant="cta"
-                size="lg"
-                isLoading={confirm.isPending}
-                onClick={() => void start()}
-              >
-                Confirm and start
-              </Button>
-              <Button variant="ghost" onClick={resetProposal}>
-                Revise request
-              </Button>
-            </div>
-          </section>
-        ) : (
-          <Button
-            variant="cta"
-            size="lg"
-            disabled={!canPropose}
-            isLoading={propose.isPending}
-            onClick={() => void reviewCost()}
-          >
-            {propose.isPending && goal === "image" && improvePrompt
-              ? "Improving prompt..."
-              : "Review cost"}
-          </Button>
-        )}
-        {error ? (
-          <p role="alert" className={styles.error}>
-            {error.message}
-          </p>
-        ) : null}
+        <Button
+          variant="cta"
+          size="lg"
+          disabled={!canPropose}
+          onClick={startReview}
+        >
+          Start
+        </Button>
       </section>
     </main>
   );

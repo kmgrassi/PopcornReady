@@ -23,6 +23,8 @@ export interface ModelTurnInput {
   systemPrompt: string;
   /** Fresh structured context; never concatenate trusted and creator data into prose. */
   agentContext?: unknown;
+  /** Terminal response shape required by the selected durable agent definition. */
+  completionMode?: "text" | "domain_json";
   maxTokens?: number;
 }
 
@@ -217,6 +219,14 @@ export function buildRoutingContext(priorResults: unknown[] = []): RoutingContex
   };
 }
 
+export function terminalCompletionInstruction(
+  mode: ModelTurnInput["completionMode"] = "text"
+): string {
+  return mode === "domain_json"
+    ? "If all work is complete, return only the terminal JSON object required by the system prompt and no tool call. Do not add prose or multiple code fences."
+    : "If all work is complete, answer with a concise text summary and no tool call.";
+}
+
 // One orchestrator turn: the configured LLM (OpenAI by default, Anthropic when
 // LLM_PROVIDER=anthropic) picks the next single tool, or finishes with a
 // summary. Tool definitions are passed provider-neutral; each adapter maps them
@@ -230,6 +240,7 @@ export const orchestratorModel: OrchestratorModel = async ({
   registry,
   systemPrompt,
   agentContext,
+  completionMode = "text",
   // Headroom so reasoning models (e.g. gpt-5) have budget left for the tool call
   // after thinking; non-reasoning models only use what they need.
   maxTokens = 4000,
@@ -256,7 +267,7 @@ export const orchestratorModel: OrchestratorModel = async ({
           routingContext: buildRoutingContext(priorResults),
           ...(agentContext === undefined ? {} : { agentContext }),
           instruction:
-            "Choose exactly one next tool if work remains. If all work is complete, answer with a concise text summary and no tool call. " +
+            `Choose exactly one next tool if work remains. ${terminalCompletionInstruction(completionMode)} ` +
             "Inspect routingContext and priorResults first: if routingContext.nextToolHint is present, use that tool unless it is unavailable. " +
             "If the latest action failed, resolve its error (follow suggestedNextTools / unmetRequirements) rather than calling the failed tool again unchanged.",
         },

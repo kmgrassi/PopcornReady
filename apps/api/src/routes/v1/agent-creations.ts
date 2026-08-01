@@ -9,6 +9,10 @@ import {
   enhanceImagePrompt,
   type ImagePromptEnhancementDeps,
 } from "@/lib/api/v1/image-prompt-enhancement";
+import {
+  enhanceVideoPrompt,
+  type VideoPromptEnhancementDeps,
+} from "@/lib/api/v1/video-prompt-enhancement";
 import { confirmCreatorDirectProposal } from "@/lib/postgres/creator-direct-confirmation";
 import { getServiceSupabase } from "@/lib/supabase/clients";
 import { runQuery } from "@/lib/supabase/db-errors";
@@ -84,12 +88,21 @@ export interface PreparedCreationRequest {
   enhancementPolicy: string | null;
 }
 
+export type CreationPromptEnhancementDeps =
+  ImagePromptEnhancementDeps & VideoPromptEnhancementDeps;
+
 export async function prepareCreationRequest(
   projectId: string,
   request: CreationRequest,
-  deps: ImagePromptEnhancementDeps = {}
+  deps: CreationPromptEnhancementDeps = {}
 ): Promise<PreparedCreationRequest> {
-  if (request.kind !== "image_create" || !request.improvePrompt) {
+  const enhancementKind =
+    request.kind === "image_create"
+      ? "image"
+      : request.kind === "video_create"
+        ? "video"
+        : null;
+  if (!enhancementKind || !request.improvePrompt) {
     return {
       request,
       originalPrompt: request.prompt,
@@ -98,11 +111,9 @@ export async function prepareCreationRequest(
     };
   }
   try {
-    const enhancement = await enhanceImagePrompt(
-      projectId,
-      request.prompt,
-      deps
-    );
+    const enhancement = enhancementKind === "image"
+      ? await enhanceImagePrompt(projectId, request.prompt, deps)
+      : await enhanceVideoPrompt(projectId, request.prompt, deps);
     return {
       request: { ...request, prompt: enhancement.effectivePrompt },
       originalPrompt: request.prompt,
@@ -112,7 +123,7 @@ export async function prepareCreationRequest(
   } catch {
     throw new ApiError(
       "model_output_invalid",
-      "We couldn't improve this image prompt. Retry, or turn off Improve image prompt to continue with your original request."
+      `We couldn't improve this ${enhancementKind} prompt. Retry, or turn off Improve ${enhancementKind} prompt to continue with your original request.`
     );
   }
 }

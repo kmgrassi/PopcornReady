@@ -3,7 +3,14 @@ import test from "node:test";
 
 import {
   buildRoutingContext,
+  terminalCompletionInstruction,
 } from "../model";
+
+test("domain turns request terminal JSON without a conflicting prose instruction", () => {
+  const instruction = terminalCompletionInstruction("domain_json");
+  assert.match(instruction, /only the terminal JSON object/i);
+  assert.doesNotMatch(instruction, /concise text summary/i);
+});
 
 test("routing context distinguishes missing clip keyframes from missing storyboard tiles", () => {
   const context = buildRoutingContext([

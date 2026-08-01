@@ -22,3 +22,9 @@ tree until the creator opens it.
 When the repository establishes a deterministic visual-baseline harness, add a
 reduced-motion screenshot assertion for this route in both the dark and warm
 themes.
+
+The later merge with the dedicated `/create/review` flow reinforced the value
+of keeping route ownership explicit: the creation form and review authority can
+evolve independently while the `runId` branch remains a focused, reusable
+progress boundary. End-to-end coverage should span that boundary so an
+auto-merge cannot silently disconnect approval from the progress experience.

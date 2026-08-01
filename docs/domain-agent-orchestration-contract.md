@@ -157,6 +157,13 @@ has a queryable `media_job`, `domain`, or `approval` reason. A run is
 failure, cancellation, timeout, or supersession cannot be recast as a domain
 report outcome.
 
+The model boundary makes that terminal shape explicit: root turns may finish
+with a concise text summary, while every finite domain turn must return only the
+terminal JSON object required by its role prompt. The report parser accepts raw
+JSON or one whole-response `json` code fence as transport normalization; prose,
+multiple fences, and any object that fails the existing typed output/evidence
+validation remain invalid.
+
 Creator-direct proposal state is separate from assignment transport. The
 server creates a validated proposal/quote, records explicit confirmation
 against an approved maximum, and only then enqueues a billable run. A pending
@@ -307,6 +314,12 @@ current 23-tool catalog. The two standalone tools have a specialist-only
 catalog surface and remain absent from `PRODUCTION_TOOL_NAMES` and root evals.
 Production never constructs an all-tools registry. Domain registries contain
 no root, sibling, approval, assembly, or dispatch capability.
+
+Creator projections preserve the durable `originKind` + `taskKind` identity.
+Confirmed `image_create`, `video_create`/`video_edit`, and
+`soundtrack_create`/`audio_create` runs are presented as one standalone image,
+video, or audio activity. Proposal, byte-storage, and terminal-report actions
+stay in durable history but are not rendered as creator progress stages.
 
 Under the active hierarchy, responsibility is:
 

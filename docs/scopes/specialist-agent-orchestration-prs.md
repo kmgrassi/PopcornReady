@@ -370,9 +370,9 @@ while coherence tools remain available where they belong.
 `request_approval` stays a **root-only model tool**. The creative director
 decides what a root-origin proposal should contain and why. Creator-direct work
 uses a runtime-owned two-phase quote/approval gate before any billable dispatch:
-proposal first, explicit confirmation or an approved maximum second, then an
-idempotent enqueue. Domain agents cannot create arbitrary approval gates or
-charge work before that confirmation.
+proposal first, manual or policy-approved visible timed confirmation second,
+then an idempotent enqueue. Domain agents cannot create arbitrary approval gates
+or charge work before that confirmation.
 
 ### In-domain self-healing
 
@@ -1221,11 +1221,13 @@ successor, queue, graph-scope, selection, and mocked-provider integration tests.
 **Depends on:** PR 12. This is part of the standalone track and does not require
 Gate 0 to say proceed.
 
-**Implementation status (2026-07-29):** `/create` is the default authenticated
+**Implementation status (2026-07-31):** `/create` is the default authenticated
 creation entry for standalone Image, Video, and Soundtrack requests. The
 client-only `VITE_STANDALONE_CREATION_ENABLED` rollout flag was removed after
-desktop/mobile browser coverage was added for image proposal and explicit
-confirmation. Image requests now use the default-on, proposal-bound art-direction
+desktop/mobile browser coverage was added for image proposal and confirmation.
+Proposal work moves immediately to `/create/review`; after the proposal is
+visible, creators can select **Approve this** or let the disclosed 10-second
+countdown confirm the same one-use gate. Image requests use the default-on, proposal-bound art-direction
 pass documented in
 [`image-prompt-enhancement.md`](image-prompt-enhancement.md), with an exact
 creator bypass and read-only effective-prompt review. Optional references,
@@ -1244,8 +1246,10 @@ small launch points from authenticated product surfaces.
   and bounded creative constraints, a cost proposal, and one primary action.
 - Label outcomes in creator language; do not expose internal agent names, raw
   provider/model/seed controls, tool names, or a raw domain-task editor.
-- Require explicit proposal confirmation before launch. Show cost/credit impact
-  and allow rejection or revision without dispatching billable work.
+- Require proposal confirmation before launch. Show cost/credit impact and allow
+  revision without dispatching billable work. Asset Studio may confirm through
+  its disclosed 10-second review-page countdown; Request Changes and production
+  gates remain deliberate-only.
 - For Image, default to a fast text-model art-direction pass inside the
   idempotent proposal operation. Keep the original prompt editable, show the
   exact effective prompt before confirmation, preserve both in proposal
@@ -1473,7 +1477,7 @@ browser QA, and deployment smoke.
 | Standalone video request | Creator-direct `video_create` in the project's Visuals session with no fabricated beat/storyboard |
 | Existing video edit | Creator-direct `video_edit` with an authorized pinned source asset, never inferred from prompt text |
 | Standalone soundtrack request | Creator-direct `soundtrack_create` in the project's Audio session with no fabricated timeline slot |
-| Direct request before approved cost | Return proposal/quote; do not enqueue billable work until explicit confirmation |
+| Direct request before approved cost | Return proposal/quote; do not enqueue billable work until manual confirmation or Asset Studio's disclosed 10-second timed confirmation |
 | Direct question | Address the creator conversation; fingerprinted answer creates a successor in the same session |
 | Direct cross-domain block | Offer validated dependency attachment or explicit full-production handoff; do not auto-start it |
 | Direct follow-up (“warmer”) | Same-session successor while the output is unconsumed; otherwise graph-scoped production Request Changes after PR 15 |

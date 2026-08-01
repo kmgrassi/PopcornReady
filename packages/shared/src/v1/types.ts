@@ -681,7 +681,11 @@ export interface GenerationRun {
   projectId: string;
   briefVersionId?: string;
   status: GenerationRunStatus;
-  completionKind?: "video" | "storyboard_assets";
+  completionKind?: "video" | "storyboard_assets" | "standalone_asset";
+  presentationKind?:
+    | "standalone_image"
+    | "standalone_video"
+    | "standalone_audio";
   activityState?: GenerationRunActivityState;
   currentToolName?: string;
   reviewGates?: GateableGenerationStageType[];
@@ -761,6 +765,7 @@ export type GenerationStageItemKind =
   | "export";
 
 export type GenerationStageItemPurpose =
+  | "asset"
   | "brief"
   | "plan"
   | "storyboard_frame"

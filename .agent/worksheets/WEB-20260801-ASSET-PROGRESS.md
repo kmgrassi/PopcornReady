@@ -102,6 +102,45 @@ terminal outcome behavior, and adapt cleanly to desktop and mobile.
 - One custom-port E2E attempt waited on the `e2e.env`-pinned API URL; the final
   run explicitly aligned `VITE_API_URL` with the custom API port and passed.
 
+## Conflict resolution continuation — 2026-08-01
+
+PR #867 became conflicting after `main` added the `/create/review` navigation
+flow, video prompt enhancement, and standalone run-status corrections. Preserve
+that newer creation/review behavior while retaining this worksheet's redesigned
+run-progress state. Predicted content conflicts are limited to
+`StandaloneCreationPage.tsx`, `apps/web/e2e/README.md`, and the E2E inventory;
+`asset-studio.spec.ts` auto-merges but still requires semantic review because
+both branches changed its first creation flow.
+
+### Continuation reviews
+
+- Research checkpoint: completed. The reviewer confirmed `origin/main` must own
+  the creation form and `/create/review` handoff, while this branch owns only the
+  `runId` progress presentation. Documentation must combine both flows, and the
+  auto-merged first E2E scenario needs semantic inspection.
+- Plan checkpoint: approved. The reviewer emphasized preserving main's hook
+  order and separate image/video draft state, retaining the direct-review
+  recovery gap, removing the now-closed terminal-fixture gap, and exercising the
+  complete create → review → approve → progress boundary.
+- Implementation checkpoint: approved. The independent reviewer verified the
+  resolved route preserves the new create/review architecture, the auto-merged
+  scenario crosses Start → review → Approve → progress exactly once, and the
+  documentation describes both review and progress coverage without stale gaps.
+- Wrap-up checkpoint: approved. The independent reviewer confirmed the index
+  has no unresolved entries or conflict markers, both sides' intended behavior
+  survived, the validation record is complete, and the merge is ready to push.
+
+### Continuation validation
+
+- `pnpm --filter @popcorn/web typecheck` — passed.
+- `VITE_API_URL=http://127.0.0.1:4193 PLAYWRIGHT_WEB_PORT=3193
+  POPCORN_E2E_API_PORT=4193 pnpm --filter @popcorn/web exec playwright test
+  e2e/asset-studio.spec.ts` — passed, 28/28 across Chromium, mobile Chrome, and
+  mobile Safari.
+- `pnpm agent:lint:fix` — passed.
+- `pnpm agent:validate -- --scope web` — passed, including lint, workflow-policy
+  tests, migration validation, and web typecheck.
+
 ## Next action / handoff
 
-Commit, tag, push, and open the required ready PR.
+Commit and push the completed merge resolution to PR #867.
