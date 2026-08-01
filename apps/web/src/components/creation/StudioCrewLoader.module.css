@@ -1,0 +1,144 @@
+.scene {
+  position: relative;
+  min-height: 252px;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background:
+    radial-gradient(
+      circle at 50% 30%,
+      color-mix(in srgb, var(--cta) 13%, transparent),
+      transparent 44%
+    ),
+    color-mix(in srgb, var(--surface-2) 88%, var(--bg));
+  isolation: isolate;
+}
+
+.stageLight {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--text) 4%, transparent),
+    transparent 58%
+  );
+}
+
+.worktable {
+  position: absolute;
+  z-index: 1;
+  right: 8%;
+  bottom: 43px;
+  width: 36%;
+  height: 8px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--border) 82%, var(--text));
+  box-shadow:
+    0 15px 0 -5px var(--border),
+    0 28px 0 -7px color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+.actor {
+  position: absolute;
+  z-index: 2;
+  bottom: 24px;
+  width: 160px;
+  height: 158px;
+  overflow: hidden;
+}
+
+.writer {
+  left: 2%;
+}
+
+.camera {
+  left: 32%;
+}
+
+.worker {
+  right: 0;
+}
+
+.sprite {
+  width: var(--cell-size);
+  height: var(--cell-size);
+  background-image: var(--sprite-sheet);
+  background-repeat: no-repeat;
+  background-position: var(--frame-a) var(--frame-y);
+  image-rendering: pixelated;
+  transform: scale(var(--sprite-scale));
+  transform-origin: top left;
+}
+
+.scene[data-active="true"] .sprite {
+  animation: crewWorking 920ms steps(1, end) infinite;
+}
+
+.scene:not([data-active="true"]) .sprite {
+  background-position: 0 var(--frame-y);
+}
+
+.scene[data-active="true"] .camera .sprite {
+  animation-delay: -230ms;
+}
+
+.scene[data-active="true"] .worker .sprite {
+  animation-delay: -460ms;
+}
+
+.floor {
+  position: absolute;
+  z-index: 3;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 24px;
+  background: color-mix(in srgb, var(--surface) 76%, var(--bg));
+  box-shadow: 0 -1px 0 color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+@keyframes crewWorking {
+  0%,
+  49% {
+    background-position: var(--frame-a) var(--frame-y);
+  }
+
+  50%,
+  100% {
+    background-position: var(--frame-b) var(--frame-y);
+  }
+}
+
+@media (max-width: 640px) {
+  .scene {
+    min-height: 210px;
+  }
+
+  .actor {
+    bottom: 10px;
+    transform: scale(0.82);
+    transform-origin: bottom left;
+  }
+
+  .writer {
+    left: -4%;
+  }
+
+  .camera {
+    left: 28%;
+  }
+
+  .worker {
+    right: -8%;
+  }
+
+  .worktable {
+    right: 2%;
+    bottom: 31px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scene[data-active="true"] .sprite {
+    animation: none;
+  }
+}

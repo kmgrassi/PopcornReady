@@ -30,8 +30,12 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   the default goal, choice-card padding at desktop and mobile widths, proposal
   review without dispatch, default-on image-prompt refinement, the exact
   effective-prompt preview, creator bypass, stale refinement invalidation,
-  explicit confirmation, queued status, and desktop/mobile Create navigation.
-  It also covers the accessible project picker,
+  explicit confirmation, and the creator-facing progress state. Progress
+  assertions cover human-readable queued/running/terminal status, checked-in
+  studio-crew loading artwork, a semantically truncated request brief with full
+  disclosure, reduced motion, mobile overflow, successful asset navigation, and
+  truthful failed, canceled, and blocked outcomes. It also covers desktop/mobile
+  Create navigation and the accessible project picker,
   existing/first/new-project selection, inline creation without losing the
   prompt, list and creation failure recovery, and keyboard focus/Escape behavior.
 - `run-progress.spec.ts` and `run-progress-actions.spec.ts` cover run progress,
@@ -337,6 +341,11 @@ Covered:
 - A delayed refined proposal is discarded if prompt improvement is disabled
   while the request is in flight.
 - Explicit confirmation deep-links to the queued creator-direct run.
+- The progress view presents human-readable queued and running status, studio
+  crew artwork, a truncated request brief with full disclosure, reduced-motion
+  behavior, and mobile-safe layout.
+- Completed, failed, canceled, question, and blocked fixtures preserve truthful
+  terminal copy, idle artwork, exact report details, and asset navigation.
 - The mobile Create tab opens Asset Studio and retains active state.
 - The project picker selects an existing project, returns focus on Escape, and
   remains width-safe at mobile sizes.
@@ -353,8 +362,6 @@ Remaining gaps:
 - Add dedicated delayed-proposal cases for prompt and goal changes. They share
   the proposal-reset path already exercised by project and prompt-refinement
   changes, but are not asserted independently.
-- Add mocked status fixtures for completed, failed, canceled, question, and
-  blocked outcomes.
 - Add browser coverage when optional references, Request Changes, dependency
   attachment, and Use in project controls land.
 - Keep provider-backed image/video/audio smoke opt-in because it incurs cost.

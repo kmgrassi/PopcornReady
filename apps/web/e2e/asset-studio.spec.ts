@@ -12,6 +12,9 @@ const project = {
   updatedAt: now,
 };
 
+const longRunSummary =
+  "Create a single-panel 2D RPG boss illustration in a clear 1990s pixel-art sprite-sheet style. Keep the composition focused, avoid glossy modern effects, emphasize a readable silhouette, and use a restrained brass, blue, and ember palette with deliberate one-pixel edges.";
+
 async function fulfillJson(route: Route, body: unknown, status = 200) {
   await route.fulfill({
     status,
@@ -120,7 +123,7 @@ test.describe("Asset Studio", () => {
           run: {
             id: "run_image",
             status: "queued",
-            inputSummary: "An amber-lit editorial popcorn still",
+            inputSummary: longRunSummary,
           },
           report: null,
           outputs: [],
@@ -164,8 +167,159 @@ test.describe("Asset Studio", () => {
     await expect(page).toHaveURL(
       new RegExp(`/create\\?projectId=${project.id}&runId=run_image$`),
     );
-    await expect(page.getByText("queued", { exact: true })).toBeVisible();
+    await expect(page.getByText("Queued", { exact: true })).toBeVisible();
+    await expect(page.getByTestId("studio-crew")).toBeVisible();
+    await expect(page.locator("[data-crew-member]")).toHaveCount(3);
+    const brief = page.getByLabel("View full request brief");
+    await expect(brief).toContainText("Create a single-panel 2D RPG boss");
+    await expect(brief).toContainText("…");
+    await expect(page.getByText(longRunSummary, { exact: true })).toBeHidden();
+    await brief.click();
+    await expect(page.getByText(longRunSummary, { exact: true })).toBeVisible();
     expect(confirmationCount).toBe(1);
+  });
+
+  test("keeps the progress state truthful across terminal outcomes", async ({ page }) => {
+    let status: "failed" | "canceled" | "succeeded" | "blocked" | "question" =
+      "failed";
+    await page.route(
+      `**/api/v1/projects/${project.id}/agent-creations/run_terminal`,
+      (route) => {
+        const isBlocked = status === "blocked";
+        const isQuestion = status === "question";
+        return fulfillJson(route, {
+          sessionId: "session_terminal",
+          run: {
+            id: "run_terminal",
+            status: isBlocked || isQuestion ? "waiting" : status,
+          },
+          report: isBlocked
+            ? {
+                schemaVersion: "DomainReport.v1",
+                outcome: {
+                  outcome: "blocked",
+                  precondition: {
+                    requirement: "Choose a visual direction",
+                    because: "The references point in two different directions",
+                  },
+                  requiredDomain: "visuals",
+                  targets: [],
+                  reason: "Choose between the warm and monochrome directions.",
+                },
+              }
+            : isQuestion
+              ? {
+                  schemaVersion: "DomainReport.v1",
+                  outcome: {
+                    outcome: "question",
+                    question: "Should the poster feel playful or ominous?",
+                    targets: [],
+                    options: [],
+                    fingerprint: "question_fingerprint",
+                  },
+                }
+              : null,
+          outputs:
+            status === "succeeded"
+              ? [{ assetId: "asset_ready", intrinsicRole: "hero_image" }]
+              : [],
+        });
+      },
+    );
+
+    await page.goto(`/create?projectId=${project.id}&runId=run_terminal`);
+    await expect(
+      page.getByRole("heading", { name: "The studio hit a snag" }),
+    ).toBeVisible();
+    await expect(page.getByTestId("studio-crew")).not.toHaveAttribute(
+      "data-active",
+    );
+    const idleFrame = await page
+      .locator('[data-crew-member="writer"]')
+      .locator("div")
+      .evaluate((sprite) => getComputedStyle(sprite).backgroundPositionX);
+    expect(idleFrame).toBe("0px");
+    await expect(page.getByText("This page updates automatically.")).toHaveCount(
+      0,
+    );
+    await expect(page.getByLabel("View full request brief")).toHaveCount(0);
+
+    status = "canceled";
+    await page.reload();
+    await expect(
+      page.getByRole("heading", { name: "Creation stopped" }),
+    ).toBeVisible();
+    await expect(page.getByText("This page updates automatically.")).toHaveCount(
+      0,
+    );
+
+    status = "blocked";
+    await page.reload();
+    await expect(
+      page.getByRole("heading", { name: "The studio needs a decision" }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Choose between the warm and monochrome directions."),
+    ).toBeVisible();
+    await expect(page.getByText("This page updates automatically.")).toHaveCount(
+      0,
+    );
+
+    status = "question";
+    await page.reload();
+    await expect(
+      page.getByRole("heading", { name: "The studio has a question" }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Should the poster feel playful or ominous?"),
+    ).toBeVisible();
+    await expect(page.getByText("This page updates automatically.")).toHaveCount(
+      0,
+    );
+
+    status = "succeeded";
+    await page.reload();
+    await expect(
+      page.getByRole("heading", { name: "Your asset is ready" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Open project assets" }),
+    ).toBeVisible();
+    await expect(page.getByText("1 asset is ready.")).toBeVisible();
+  });
+
+  test("keeps the active crew calm and contained on mobile with reduced motion", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.route(
+      `**/api/v1/projects/${project.id}/agent-creations/run_mobile`,
+      (route) =>
+        fulfillJson(route, {
+          sessionId: "session_mobile",
+          run: {
+            id: "run_mobile",
+            status: "running",
+            inputSummary: longRunSummary,
+          },
+          report: null,
+          outputs: [],
+        }),
+    );
+
+    await page.goto(`/create?projectId=${project.id}&runId=run_mobile`);
+    await expect(page.getByText("In progress", { exact: true })).toBeVisible();
+    const spriteAnimation = await page
+      .locator('[data-crew-member="writer"]')
+      .locator("div")
+      .evaluate((sprite) => getComputedStyle(sprite).animationName);
+    expect(spriteAnimation).toBe("none");
+    const overflow = await page.evaluate(() => ({
+      document: document.documentElement.scrollWidth,
+      viewport: document.documentElement.clientWidth,
+    }));
+    expect(overflow.document).toBeLessThanOrEqual(overflow.viewport + 1);
   });
 
   test("lets the creator bypass image prompt improvement exactly", async ({ page }) => {
