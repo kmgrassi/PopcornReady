@@ -105,6 +105,13 @@ polls waiting/running work, and reports applied, failed, canceled, or rejected
 state from the server. A stale preview must be refreshed and reviewed again
 before execution. Provider and model choice remain server-owned; creator
 authority is the requested intent, exact target, and approved maximum cost.
+Asset Studio standalone creation is the narrow timed-confirmation exception: it
+moves to a dedicated review page, shows the exact proposal and approved maximum,
+offers **Approve this**, and visibly counts down 10 seconds before confirming if
+the creator does not revise. The countdown begins only after the proposal is
+ready, is canceled by revision or a failed manual attempt, and shares the same
+one-use server gate as manual approval. Request Changes and production review
+gates still require deliberate confirmation and never inherit this timer.
 If a summary surface cannot resolve a stable graph identity, Request Changes is
 disabled there and directs the creator to open a specific object. A checkpoint
 label must never be converted into a broader project target for convenience.

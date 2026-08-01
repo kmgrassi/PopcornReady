@@ -18,12 +18,16 @@ pnpm --filter @popcorn/web test:e2e
 `asset-studio.spec.ts` uses browser API fixtures to verify the production
 `/create` route, default Image selection, choice-card padding, proposal review,
 default-on prompt refinement, exact effective-prompt preview, creator bypass,
-explicit confirmation, queued status, desktop/mobile Create navigation, project
-picker keyboard behavior, existing/first/new-project selection, and project-list
-and creation failure recovery. It also verifies that an in-flight cost proposal
-cannot reappear after its project or refinement setting changes, a delayed
-project creation cannot override a newer selection, and pagination failures
-preserve loaded projects, without spending provider credits.
+immediate navigation to `/create/review`, manual **Approve this** confirmation,
+the visible 10-second automatic-confirmation boundary, at-most-once dispatch,
+Back/Forward proposal restoration without reposting, stale-proposal recovery,
+queued status, invalid review-state recovery, desktop/mobile Create and review
+layouts, project-picker keyboard behavior, existing/first/new-project selection,
+and project-list, proposal, confirmation, and creation failure recovery. It also
+verifies that revising preserves the editable draft, failed confirmation remains
+manual-only on Forward, a delayed project creation cannot override a newer
+selection, and pagination failures preserve loaded projects, without spending
+provider credits.
 
 `rerun-proposal-lifecycle.spec.ts` verifies the durable Request Changes UI
 without provider spend: exact-target proposal preview, preserved/affected work,
