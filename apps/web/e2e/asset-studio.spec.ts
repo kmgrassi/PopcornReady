@@ -74,6 +74,7 @@ test.describe("Asset Studio", () => {
       { name: "writer-crew.png", width: 423, height: 141 },
       { name: "camera-crew.png", width: 423, height: 141 },
       { name: "worker-crew.png", width: 453, height: 151 },
+      { name: "studio-set.png", width: 640, height: 320 },
     ];
     let totalBytes = 0;
 
@@ -367,6 +368,10 @@ test.describe("Asset Studio", () => {
     );
     await expect(page.getByText("Queued", { exact: true })).toBeVisible();
     await expect(page.getByTestId("studio-crew")).toBeVisible();
+    await expect(page.getByTestId("studio-set")).toHaveCSS(
+      "background-image",
+      /studio-set\.png/,
+    );
     await expect(page.locator("[data-crew-member]")).toHaveCount(3);
     await expect(page.getByTestId("creation-progress-track")).toBeVisible();
     const crewResources = await page.locator("[data-crew-member]").evaluateAll((actors) =>

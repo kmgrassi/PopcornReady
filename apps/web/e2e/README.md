@@ -32,8 +32,9 @@ verifies that revising preserves the editable draft, failed confirmation remains
 manual-only on Forward, a delayed project creation cannot override a newer
 selection, and pagination failures preserve loaded projects, without spending
 provider credits. After confirmation, it also covers human-readable
-queued/running/terminal progress, studio-crew artwork from compact progress-only
-resources, semantic request-brief truncation, active-only indeterminate
+queued/running/terminal progress, studio-crew artwork and its production-set
+backdrop from compact progress-only resources, semantic request-brief
+truncation, active-only indeterminate
 progress, reduced motion, mobile overflow, successful asset links, and truthful
 failed, canceled, blocked, and question outcomes.
 

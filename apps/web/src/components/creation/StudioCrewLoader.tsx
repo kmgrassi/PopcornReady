@@ -45,8 +45,8 @@ export function StudioCrewLoader({ active }: { active: boolean }) {
       data-testid="studio-crew"
       aria-hidden="true"
     >
+      <div className={styles.setBackdrop} data-testid="studio-set" />
       <div className={styles.stageLight} />
-      <div className={styles.worktable} />
       {crew.map((member) => {
         const spriteStyle = {
           "--sprite-sheet": `url("${member.sheet}")`,
@@ -66,7 +66,6 @@ export function StudioCrewLoader({ active }: { active: boolean }) {
           </div>
         );
       })}
-      <div className={styles.floor} />
     </div>
   );
 }
