@@ -58,6 +58,7 @@ import type {
   WorkspaceOutputsResponse,
   ProjectsResponse,
   ProjectAssetsResponse,
+  ProjectAssetDetailResponse,
 } from "./types";
 
 function studioProjectFromV1(project: V1Project): Project {
@@ -243,7 +244,11 @@ export const v1Api = {
       method: "POST",
       body: input,
     }),
-  listProjects: (params?: { limit?: number; cursor?: string | null }) =>
+  listProjects: (params?: {
+    limit?: number;
+    cursor?: string | null;
+    order?: "createdAt" | "updatedAt";
+  }) =>
     apiRequest<ProjectsResponse>("/api/v1/projects", {
       searchParams: params,
     }),
@@ -319,6 +324,11 @@ export const v1Api = {
         signal,
         searchParams: params,
       }
+    ),
+  getProjectAssetDetail: (projectId: string, assetId: string, signal?: AbortSignal) =>
+    apiRequest<ProjectAssetDetailResponse>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(assetId)}`,
+      { signal }
     ),
   getProject: (projectId: string) =>
     apiRequest<ProjectResponse>(

@@ -393,6 +393,26 @@ dbTest("listProjects paginates with a cursor", async () => {
   assert.deepEqual(seen, [...ids].sort());
 });
 
+dbTest("listProjects can paginate by most recently updated", async () => {
+  const first = await createProject({ workspaceId: "ws_a", name: "first" });
+  await new Promise((r) => setTimeout(r, 5));
+  const second = await createProject({ workspaceId: "ws_a", name: "second" });
+  await new Promise((r) => setTimeout(r, 5));
+
+  const db = getServiceSupabaseForStore();
+  const { error } = await db
+    .from("projects")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", first.project.id);
+  assert.equal(error, null);
+
+  const { items } = await listProjects("ws_a", 2, null, "updatedAt");
+  assert.deepEqual(
+    items.map((project) => project.id),
+    [first.project.id, second.project.id]
+  );
+});
+
 dbTest("fillProjectPosterFromFirstFrame selects an empty poster slot", async () => {
   const { project } = await createProject({ workspaceId: "ws_a", name: "upload-first" });
   const video = await addAsset(

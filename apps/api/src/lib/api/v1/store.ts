@@ -4709,7 +4709,8 @@ export async function saveProjectStoryboard(
 export async function listProjects(
   workspaceId: string,
   limit: number,
-  cursor: string | null
+  cursor: string | null,
+  order: "createdAt" | "updatedAt" = "createdAt"
 ): Promise<PageResult<V1Project>> {
   const db = getServiceSupabase();
   const data = await runQuery(
@@ -4723,7 +4724,9 @@ export async function listProjects(
   const all = await Promise.all(
     (data as ProjectRow[]).map((row) => mapProjectWithProjection(db, row))
   );
-  return paginate(all, limit, cursor);
+  return order === "updatedAt"
+    ? paginateByUpdatedAt(all, limit, cursor)
+    : paginate(all, limit, cursor);
 }
 
 export async function listPublicProjects(

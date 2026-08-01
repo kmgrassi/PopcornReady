@@ -16,20 +16,35 @@ pnpm --filter @popcorn/web test:e2e
 ```
 
 `asset-studio.spec.ts` uses browser API fixtures to verify the production
-`/create` route, default Image selection, choice-card padding, default-on image
-and video prompt refinement, motion-specific progress, exact effective-prompt
-preview, creator bypass, draft-preserving video revision, immediate navigation
-to `/create/review`, manual **Approve this** confirmation, the visible 10-second
-automatic-confirmation boundary, at-most-once dispatch, Back/Forward proposal
-restoration without reposting, stale-proposal recovery, invalid review-state
-recovery, and desktop/mobile Create and review layouts. After confirmation, it
-also covers human-readable queued/running/terminal progress, the studio-crew
-loading artwork from compact progress-only resources, semantic request-brief
-truncation, active-only indeterminate progress, reduced motion, mobile overflow,
-successful asset links, and truthful failed, canceled, blocked, and question
-outcomes. Project-picker keyboard behavior, existing/first/new-project
-selection, project-list/proposal/confirmation/creation failure recovery, delayed
-selection safety, and pagination retry are covered without provider spend.
+`/create` route, the 30/70 desktop context-to-prompt workspace, responsive
+mobile collapse, update-ordered recent-project loading/selection with real
+project media, expired-poster fallback and fresh-signed-URL recovery,
+default Image selection, accessible media-type targets, proposal review,
+default-on image and video prompt refinement, motion-specific progress, exact
+effective-prompt preview, creator bypass, draft-preserving video revision,
+immediate navigation to `/create/review`, manual **Approve this** confirmation,
+the visible 10-second automatic-confirmation boundary, at-most-once dispatch,
+Back/Forward proposal restoration without reposting, stale-proposal recovery,
+queued status, invalid review-state recovery, desktop/mobile Create and review
+layouts, project-picker keyboard behavior, existing/first/new-project selection,
+and project-list, proposal, confirmation, and creation failure recovery. It also
+verifies that revising preserves the editable draft, failed confirmation remains
+manual-only on Forward, a delayed project creation cannot override a newer
+selection, and pagination failures preserve loaded projects, without spending
+provider credits. After confirmation, it also covers human-readable
+queued/running/terminal progress, studio-crew artwork from compact progress-only
+resources, semantic request-brief truncation, active-only indeterminate
+progress, reduced motion, mobile overflow, successful asset links, and truthful
+failed, canceled, blocked, and question outcomes.
+
+`creation-entry-points.spec.ts` verifies that the desktop and
+mobile shell, Dashboard, Activity, and both populated/empty Library actions use
+the canonical asset-oriented `/create` entry while `/projects/new` remains the
+distinct full-video flow.
+
+`specs/library-collections.spec.ts` verifies that an owned generated asset's
+detail viewer shows its exact attributed credit debit without spending provider
+credits. Public asset viewers do not request or receive owner billing metadata.
 
 `rerun-proposal-lifecycle.spec.ts` verifies the durable Request Changes UI
 without provider spend: exact-target proposal preview, preserved/affected work,

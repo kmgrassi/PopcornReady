@@ -17,6 +17,7 @@ import { VisibilityBadge } from "../components/ui/VisibilityBadge";
 import { MediaViewer, type MediaViewerItem } from "../components/media/MediaViewer";
 import { AssetImage } from "../components/media/AssetImage";
 import { RegenerateImageButton } from "../components/media/RegenerateImageButton";
+import { useAssetBillingQuery } from "../lib/queryClient";
 import {
   useAssetMediaMutation,
   useAssetRegenerateMutation,
@@ -142,13 +143,13 @@ function DashboardFrame({
   description,
   children,
   action,
-  showNewVideoAction = true,
+  showCreateAction = true,
 }: {
   title: string;
   description: string;
   children: ReactNode;
   action?: ReactNode;
-  showNewVideoAction?: boolean;
+  showCreateAction?: boolean;
 }) {
   return (
     <div className={styles.page}>
@@ -157,12 +158,12 @@ function DashboardFrame({
         title={title}
         description={description}
         action={
-          action || showNewVideoAction ? (
+          action || showCreateAction ? (
             <>
               {action}
-              {showNewVideoAction ? (
-                <ButtonLink variant="primary" to="/library/projects">
-                  Projects
+              {showCreateAction ? (
+                <ButtonLink variant="primary" to="/create">
+                  Create
                 </ButtonLink>
               ) : null}
             </>
@@ -279,7 +280,7 @@ export function RunsPage() {
     <DashboardFrame
       title="Runs"
       description="Track generation runs in this workspace."
-      showNewVideoAction={false}
+      showCreateAction={false}
     >
       <Toolbar>
         <ToolbarField label="Status">
@@ -393,8 +394,8 @@ export function ProjectsPage() {
         ) : (
           <EmptyState
             title="No projects yet"
-            body="Create a video to start building your project library."
-            action={<ButtonLink variant="secondary" to="/library/projects">View projects</ButtonLink>}
+            body="Create an image, short video, or audio asset to start a project."
+            action={<ButtonLink variant="secondary" to="/create">Create</ButtonLink>}
           />
         )
       ) : null}
@@ -512,6 +513,12 @@ export function AssetsPage() {
     ? assetsQuery.items.findIndex((asset) => (asset.assetId ?? asset.id) === selectedAssetId)
     : -1;
   const selectedAsset = selectedIndex >= 0 ? assetsQuery.items[selectedIndex] : null;
+  const billingQuery = useAssetBillingQuery(
+    authScope,
+    selectedAsset?.projectId ?? "",
+    selectedAsset ? selectedAsset.assetId ?? selectedAsset.id : null,
+    Boolean(selectedAsset && !isPublic),
+  );
   const requestedAssetId = searchParams.get("assetId");
 
   useEffect(() => {
@@ -626,6 +633,7 @@ export function AssetsPage() {
       ) : null}
       <MediaViewer
         item={selectedAsset ? assetViewerItem(selectedAsset) : null}
+        creditsCharged={isPublic ? undefined : billingQuery.data?.creditsCharged}
         hasPrevious={selectedIndex > 0}
         hasNext={selectedIndex >= 0 && selectedIndex < assetsQuery.items.length - 1}
         onClose={closeAssetViewer}

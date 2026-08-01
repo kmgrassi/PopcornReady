@@ -36,6 +36,7 @@ import {
   billableUsdSoFar,
   currentRunUserId,
   noteBillableGeneration,
+  noteInternallyHandledBillableGeneration,
   type KeyProvider,
 } from "@/lib/provider-keys/resolve";
 import {
@@ -1457,6 +1458,12 @@ export async function runGeneratedAssetJob(args: {
     );
     const billableUsd = Math.max(0, billableUsdSoFar() - billableBeforeUsd);
     const billingUserId = currentRunUserId();
+    if (budgetReserved) {
+      // The durable operation settlement owns this debit. Exclude it from the
+      // outer engine's tool-level settlement, even if recovery must finish the
+      // reservation later.
+      noteInternallyHandledBillableGeneration(billableUsd);
+    }
     if (budgetReserved && billingUserId) {
       await recordOrchestratorBudgetBilling({
         projectId,

@@ -191,3 +191,35 @@ track only while the run is active.
 
 Commit and push both review fixes to PR #867. Leave GitHub thread replies and
 resolution state unchanged unless the user explicitly requests those writes.
+
+## Final main refresh — 2026-08-01
+
+While the review fixes were being validated, `main` advanced through PR #868
+with the redesigned 30/70 creation workspace and recent-project recovery. The
+final merge keeps that create architecture wholesale and isolates this task's
+progress presentation behind `runId`, including the compact assets and
+active-only progress track. A dedicated progress project-context class avoids
+colliding with the new creation sidebar's `.projectContext` styles.
+
+- Independent conflict review: approved the preserve-both boundary and flagged
+  the project-context class and shimmer-name collisions; both were isolated.
+- `pnpm --filter @popcorn/web typecheck` — passed after resolution.
+- `VITE_API_URL=http://127.0.0.1:4201 PLAYWRIGHT_WEB_PORT=3201
+  POPCORN_E2E_API_PORT=4201 pnpm --filter @popcorn/web exec playwright test
+  e2e/asset-studio.spec.ts` — passed, 33/33 across Chromium, mobile Chrome, and
+  mobile Safari, including main's workspace/recent-project coverage and this
+  task's asset-budget, progress, terminal, and reduced-motion coverage.
+- `pnpm agent:lint:fix` and `pnpm agent:validate -- --scope web` — passed after
+  the final merge resolution.
+- Final implementation review: approved with no blocker. It confirmed the
+  workspace/progress boundary, hook validity, compact assets, active-only track,
+  CSS isolation, 33-test integration, and documentation.
+- Final wrap-up review: approved after confirming an empty unmerged index, clean
+  conflict/whitespace scans, an origin/main-relative file set limited to #867,
+  and accurate validation evidence.
+
+## Next action / handoff
+
+Commit and push the final `origin/main` refresh to PR #867, then verify GitHub
+reports it mergeable. Leave thread reply/resolution writes unchanged unless the
+user explicitly requests them.

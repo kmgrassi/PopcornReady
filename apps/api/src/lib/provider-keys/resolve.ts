@@ -59,7 +59,7 @@ interface ProviderKeyContext {
    */
   providerSource: Partial<Record<KeyProvider, KeySource>>;
   /** Running tally of provider cost incurred on PLATFORM keys (USD) — the billable amount. */
-  billing: { platformUsd: number };
+  billing: { platformUsd: number; internallyHandledUsd: number };
 }
 
 const providerKeyContext = new AsyncLocalStorage<ProviderKeyContext>();
@@ -72,7 +72,7 @@ export function withProviderKeyUser<T>(
   fn: () => Promise<T>
 ): Promise<T> {
   return providerKeyContext.run(
-    { userId, providerSource: {}, billing: { platformUsd: 0 } },
+    { userId, providerSource: {}, billing: { platformUsd: 0, internallyHandledUsd: 0 } },
     fn
   );
 }
@@ -81,6 +81,21 @@ export function withProviderKeyUser<T>(
 // The engine snapshots this around each tool to debit only the billable delta.
 export function billableUsdSoFar(): number {
   return providerKeyContext.getStore()?.billing.platformUsd ?? 0;
+}
+
+// Provider cost already owned by a nested durable budget settlement. The outer
+// engine subtracts this tally so the same provider call is not debited twice.
+export function internallyHandledBillableUsdSoFar(): number {
+  return providerKeyContext.getStore()?.billing.internallyHandledUsd ?? 0;
+}
+
+export function noteInternallyHandledBillableGeneration(costUsd: number): void {
+  const ctx = providerKeyContext.getStore();
+  if (!ctx || !(costUsd > 0)) return;
+  ctx.billing.internallyHandledUsd = Math.min(
+    ctx.billing.platformUsd,
+    ctx.billing.internallyHandledUsd + costUsd
+  );
 }
 
 // The acting user of the current run context (null if none / in-request).

@@ -1,10 +1,11 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { V1Project } from "@popcorn/shared/v1/types";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { StudioCrewLoader } from "../components/creation/StudioCrewLoader";
 import { ProjectPicker } from "../components/projects/ProjectPicker";
+import { ImageWithSkeleton } from "../components/ui/ImageWithSkeleton";
 import { Button } from "../components/ui/Button";
-import { ChoiceCard } from "../components/ui/ChoiceCard";
 import { v1Api } from "../lib/api-client";
 import {
   useCreationStatus,
@@ -20,12 +21,17 @@ import {
   useCreateProjectMutation,
   useProjectQuery,
 } from "../lib/queryClient";
+import { RecentProjectSwitcher } from "./create/RecentProjectSwitcher";
 import styles from "./StandaloneCreationPage.module.css";
 
-const goals: Array<[CreationGoal, string, string]> = [
-  ["image", "Image", "A visual for the project asset pool."],
-  ["video", "Video", "A short motion asset, without a full production."],
-  ["soundtrack", "Soundtrack", "Music or sound for the project asset pool."],
+const goals: Array<{
+  value: CreationGoal;
+  label: string;
+  description: string;
+}> = [
+  { value: "image", label: "Image", description: "A still visual for this project." },
+  { value: "video", label: "Video", description: "A short motion asset for this project." },
+  { value: "soundtrack", label: "Audio", description: "Music or sound for this project." },
 ];
 
 type StatusPresentation = {
@@ -168,7 +174,7 @@ export function StandaloneCreationPage() {
   const projectsQuery = useInfiniteQuery({
     queryKey: queryKeys.assetStudioProjects(),
     queryFn: ({ pageParam }) =>
-      v1Api.listProjects({ limit: 100, cursor: pageParam }),
+      v1Api.listProjects({ limit: 100, cursor: pageParam, order: "updatedAt" }),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.pagination.nextCursor,
   });
@@ -204,6 +210,7 @@ export function StandaloneCreationPage() {
   );
   const selectedName =
     listedSelection?.name ?? selectedProjectQuery.data?.project.name;
+  const selectedProject = listedSelection ?? selectedProjectQuery.data?.project ?? null;
   const improvePrompt =
     goal === "video" ? improveVideoPrompt : improveImagePrompt;
 
@@ -221,10 +228,14 @@ export function StandaloneCreationPage() {
     const inputSummary = status.data?.run.inputSummary?.trim();
 
     return (
-      <main className={`${styles.page} ${styles.progressPage}`}>
+      <main
+        className={`${styles.page} ${styles.statusPage} ${styles.progressPage}`}
+      >
         <header className={`${styles.header} ${styles.progressHeader}`}>
           {selectedName ? (
-            <p className={styles.projectContext}>Creating for {selectedName}</p>
+            <p className={styles.progressProjectContext}>
+              Creating for {selectedName}
+            </p>
           ) : null}
           <h1>
             {status.isLoading
@@ -378,109 +389,189 @@ export function StandaloneCreationPage() {
 
   return (
     <main className={styles.page}>
-      <header className={styles.header}>
-        <h1>Make an asset for your project</h1>
-        <p>
-          Describe the outcome. For images and videos, a quick prompt-refinement
-          pass runs on the next page. Review it there, or asset generation starts
-          automatically 10 seconds after the proposal is ready.
-        </p>
-      </header>
-      <section className={styles.form}>
-        <fieldset>
-          <legend>What are you making?</legend>
-          <div className={styles.choices}>
-            {goals.map(([value, label, description]) => (
-              <ChoiceCard
-                key={value}
-                name="goal"
-                value={value}
-                checked={goal === value}
-                onChange={() => {
-                  setGoal(value);
-                  resetProposal();
-                }}
-                label={label}
-                description={description}
-              />
+      <RecentProjectSwitcher
+        projects={projects}
+        selectedProjectId={projectId}
+        loading={projectsQuery.isLoading}
+        onSelect={selectProject}
+      />
+
+      <div className={styles.workspace}>
+        <aside className={styles.contextRail} aria-label="Creation context">
+          <fieldset className={styles.mediaTypes}>
+            <legend>Media type</legend>
+            {goals.map(({ value, label, description }) => (
+              <label className={styles.mediaType} key={value}>
+                <input
+                  type="radio"
+                  name="goal"
+                  value={value}
+                  checked={goal === value}
+                  onChange={() => {
+                    setGoal(value);
+                    resetProposal();
+                  }}
+                />
+                <CreationTypeIcon goal={value} />
+                <span>
+                  <strong>{label}</strong>
+                  <small>{description}</small>
+                </span>
+              </label>
             ))}
-          </div>
-        </fieldset>
+          </fieldset>
 
-        <ProjectPicker
-          projects={projects}
-          value={projectId}
-          selectedName={selectedName}
-          isLoading={projectsQuery.isLoading}
-          error={projectsQuery.data ? null : projectsQuery.error}
-          loadMoreError={
-            projectsQuery.isFetchNextPageError ? projectsQuery.error : null
-          }
-          hasNextPage={Boolean(projectsQuery.hasNextPage)}
-          isFetchingNextPage={projectsQuery.isFetchingNextPage}
-          isCreating={createProject.isPending}
-          createError={createProject.error}
-          onChange={selectProject}
-          onCreate={async (name) =>
-            (await createProject.mutateAsync({ name })).project
-          }
-          onResetCreateError={createProject.reset}
-          onLoadMore={() => void projectsQuery.fetchNextPage()}
-          onRetry={() => void projectsQuery.refetch()}
-        />
+          <section className={styles.projectContext} aria-labelledby="project-context-heading">
+            <h2 id="project-context-heading">Project</h2>
+            <ProjectPicker
+              projects={projects}
+              value={projectId}
+              selectedName={selectedName}
+              isLoading={projectsQuery.isLoading}
+              error={projectsQuery.data ? null : projectsQuery.error}
+              loadMoreError={
+                projectsQuery.isFetchNextPageError ? projectsQuery.error : null
+              }
+              hasNextPage={Boolean(projectsQuery.hasNextPage)}
+              isFetchingNextPage={projectsQuery.isFetchingNextPage}
+              isCreating={createProject.isPending}
+              createError={createProject.error}
+              onChange={selectProject}
+              onCreate={async (name) =>
+                (await createProject.mutateAsync({ name })).project
+              }
+              onResetCreateError={createProject.reset}
+              onLoadMore={() => void projectsQuery.fetchNextPage()}
+              onRetry={() => void projectsQuery.refetch()}
+            />
+            {selectedProject ? <SelectedProjectContext project={selectedProject} /> : null}
+          </section>
+        </aside>
 
-        <label>
-          What should it feel like?
-          <textarea
-            value={prompt}
-            onChange={(event) => {
-              setPrompt(event.target.value);
-              resetProposal();
-            }}
-            placeholder={
-              goal === "video"
-                ? "A cyclist crossing a rain-slick street as the camera holds still"
-                : goal === "soundtrack"
-                  ? "Sparse brushed percussion building to a warm final chord"
-                  : "A quiet amber-lit close-up of popcorn falling into a bowl"
-            }
-          />
-        </label>
+        <section className={styles.canvas} aria-label="Creation prompt">
+          <header className={styles.header}>
+            <h1>Create</h1>
+            <p>
+              Describe the result, then review the exact request before generation.
+              If untouched, generation starts 10 seconds after the proposal is ready.
+            </p>
+          </header>
 
-        {goal === "image" || goal === "video" ? (
-          <label className={styles.enhancementControl}>
-            <input
-              type="checkbox"
-              checked={improvePrompt}
+          <label className={styles.promptField}>
+            <span>Describe the result</span>
+            <textarea
+              value={prompt}
               onChange={(event) => {
-                if (goal === "video") {
-                  setImproveVideoPrompt(event.target.checked);
-                } else {
-                  setImproveImagePrompt(event.target.checked);
-                }
+                setPrompt(event.target.value);
                 resetProposal();
               }}
+              placeholder={
+                goal === "video"
+                  ? "A cyclist crossing a rain-slick street as the camera holds still"
+                  : goal === "soundtrack"
+                    ? "Sparse brushed percussion building to a warm final chord"
+                    : "A quiet amber-lit close-up of popcorn falling into a bowl"
+              }
             />
-            <span>
-              <strong>Improve {goal} prompt</strong>
-              <small>
-                {goal === "video"
-                  ? "Adds clear action, camera behavior, continuity, and an end state while preserving your idea."
-                  : "Adds concrete composition, lighting, materials, and restraint while preserving your idea."}
-              </small>
-            </span>
           </label>
-        ) : null}
 
-        <Button
-          variant="cta"
-          size="lg"
-          disabled={!canPropose}
-          onClick={startReview}
-        >
-          Start
-        </Button>
-      </section>
+          {goal === "image" || goal === "video" ? (
+            <label className={styles.enhancementControl}>
+              <input
+                type="checkbox"
+                checked={improvePrompt}
+                onChange={(event) => {
+                  if (goal === "video") {
+                    setImproveVideoPrompt(event.target.checked);
+                  } else {
+                    setImproveImagePrompt(event.target.checked);
+                  }
+                  resetProposal();
+                }}
+              />
+              <span>
+                <strong>Improve {goal} prompt</strong>
+                <small>
+                  {goal === "video"
+                    ? "Adds clear action, camera behavior, continuity, and an end state while preserving your idea."
+                    : "Adds concrete composition, lighting, materials, and restraint while preserving your idea."}
+                </small>
+              </span>
+            </label>
+          ) : null}
+
+          <div className={styles.canvasActions}>
+            <Button
+              variant="cta"
+              size="lg"
+              disabled={!canPropose}
+              onClick={startReview}
+            >
+              Review request
+            </Button>
+          </div>
+        </section>
+      </div>
     </main>
+  );
+}
+
+function SelectedProjectContext({ project }: { project: V1Project }) {
+  const [posterFailed, setPosterFailed] = useState(false);
+
+  useEffect(() => {
+    setPosterFailed(false);
+  }, [project.id, project.posterUrl]);
+
+  const updated = new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+  }).format(new Date(project.updatedAt));
+  const posterUrl = posterFailed ? null : project.posterUrl;
+
+  return (
+    <article className={styles.selectedProject} aria-label={`Selected project ${project.name}`}>
+      {posterUrl ? (
+        <ImageWithSkeleton
+          className={styles.projectPoster}
+          src={posterUrl}
+          alt=""
+          onError={() => setPosterFailed(true)}
+        />
+      ) : (
+        <span className={styles.projectFallback} aria-hidden="true">
+          {project.name.trim().charAt(0).toUpperCase() || "?"}
+        </span>
+      )}
+      <span className={styles.projectCopy}>
+        <strong title={project.name}>{project.name}</strong>
+        <small>Updated {updated}</small>
+      </span>
+    </article>
+  );
+}
+
+function CreationTypeIcon({ goal }: { goal: CreationGoal }) {
+  if (goal === "image") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <circle cx="9" cy="9" r="1.5" />
+        <path d="m5 17 4.5-4 3 2.5 2.5-2 4 3.5" />
+      </svg>
+    );
+  }
+  if (goal === "video") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="4" width="18" height="16" rx="3" />
+        <path d="m10 9 5 3-5 3Z" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4" />
+    </svg>
   );
 }

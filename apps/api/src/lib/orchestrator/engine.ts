@@ -33,6 +33,7 @@ import {
   billableUsdSoFar,
   currentRunUserId,
   getWorkspaceOwnerUserId,
+  internallyHandledBillableUsdSoFar,
   userHasAnyProviderKey,
   withProviderKeyUser,
 } from "@/lib/provider-keys/resolve";
@@ -185,6 +186,8 @@ export interface EngineDeps {
   getCreditBalance?: typeof getCreditBalance;
   userHasAnyProviderKey?: typeof userHasAnyProviderKey;
   applyCreditTransaction?: typeof applyCreditTransaction;
+  billableUsdSoFar?: typeof billableUsdSoFar;
+  internallyHandledBillableUsdSoFar?: typeof internallyHandledBillableUsdSoFar;
   /** Fail-closed rollout control: absent roles remain queued. */
   enabledDomainRoles?: readonly AgentDomain[];
   /** Runtime controls require an explicit claimed-domain execution opt-in. */
@@ -318,6 +321,9 @@ function resolved(deps: EngineDeps) {
     getCreditBalance: deps.getCreditBalance ?? getCreditBalance,
     userHasAnyProviderKey: deps.userHasAnyProviderKey ?? userHasAnyProviderKey,
     applyCreditTransaction: deps.applyCreditTransaction ?? applyCreditTransaction,
+    billableUsdSoFar: deps.billableUsdSoFar ?? billableUsdSoFar,
+    internallyHandledBillableUsdSoFar:
+      deps.internallyHandledBillableUsdSoFar ?? internallyHandledBillableUsdSoFar,
     enabledDomainRoles: deps.enabledDomainRoles ?? [],
     domainRuntimeEnabled: deps.domainRuntimeEnabled ?? false,
     sessionClaimGeneration: deps.sessionClaimGeneration,
@@ -998,6 +1004,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
 
     const runUserId = currentRunUserId();
     let billedBeforeUsd = 0;
+    let internallyHandledBeforeUsd = 0;
     try {
       // Credit pre-check: fail fast before spending on a generation a broke user
       // with no BYO keys can't pay for. Only gates BILLABLE tools (estimate > 0) —
@@ -1026,7 +1033,8 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
         }
       }
 
-      billedBeforeUsd = billableUsdSoFar();
+      billedBeforeUsd = r.billableUsdSoFar();
+      internallyHandledBeforeUsd = r.internallyHandledBillableUsdSoFar();
     } catch (err) {
       // Estimation and credit checks can fail before a tool handler runs. Keep
       // the reservation's lifecycle truthful in that case instead of leaving a
@@ -1159,8 +1167,13 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
     // local/guest generation leave the run tally empty, so they debit nothing.
     // 1 credit = $0.01, with a margin. The debit is balance-guarded in Postgres.
     if (result.status === "succeeded" && runUserId) {
-      const afterUsd = billableUsdSoFar();
-      const billableDeltaUsd = afterUsd - billedBeforeUsd;
+      const afterUsd = r.billableUsdSoFar();
+      const internallyHandledDeltaUsd =
+        r.internallyHandledBillableUsdSoFar() - internallyHandledBeforeUsd;
+      const billableDeltaUsd = Math.max(
+        0,
+        afterUsd - billedBeforeUsd - internallyHandledDeltaUsd
+      );
       if (billableDeltaUsd > 0) {
         const credits = Math.ceil(billableDeltaUsd * CREDIT_MARGIN * CREDITS_PER_USD);
         try {
@@ -1169,6 +1182,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
             deltaCredits: -credits,
             reason: "generation_debit",
             runId: run.id,
+            actionId,
             costUsd: billableDeltaUsd,
             // Cumulative billable USD is monotonic + unique per debit in the run,
             // so a retried debit is idempotent rather than double-charging.

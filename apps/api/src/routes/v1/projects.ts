@@ -7,6 +7,7 @@ import {
   parseAnalyzeBatch,
   parseCreateProject,
   parsePagination,
+  parseProjectListOrder,
   parseSetProjectVisibility,
 } from "@/lib/api/v1/schemas";
 import {
@@ -71,7 +72,13 @@ projectsRouter.get(
   "/projects",
   route(async ({ auth, req }) => {
     const { limit, cursor } = parsePagination(req.searchParams);
-    const { items, nextCursor } = await listProjects(auth.workspaceId, limit, cursor);
+    const order = parseProjectListOrder(req.searchParams);
+    const { items, nextCursor } = await listProjects(
+      auth.workspaceId,
+      limit,
+      cursor,
+      order
+    );
     return {
       status: 200,
       body: { projects: items, pagination: { limit, nextCursor } },

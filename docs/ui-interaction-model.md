@@ -74,6 +74,23 @@ There is no third primitive. If a proposed interaction is neither "observe" nor
 "request changes," it does not belong in the product without an explicit, documented
 exception (§5).
 
+### 2.3 Initial creation entry points
+
+Initial creation is not a third editing primitive because there is no existing
+generated object to mutate yet. The authenticated shell plus Dashboard,
+Activity, and Library use one global **Create** entry at `/create`. That workspace
+collects an Image, Video, or Audio intent, requires project context (with inline
+project creation when needed), and then enters the durable proposal/review
+lifecycle before generation.
+
+Full-video creation remains a separate, explicit flow at `/projects/new`. It
+collects a production brief and source footage, creates the project/run, and
+preserves the storyboard-first production boundary from the North Star. The two
+entry points must not share ambiguous labels or active-navigation state: global
+**Create** means the project-asset workspace; full-video actions say they create
+a video and link directly to `/projects/new`. Once either flow has produced an
+object, subsequent content changes return to object-scoped **Request Changes**.
+
 ## 3. The "Request Changes" modal
 
 Clicking an object the user wants to change — a project, a storyboard, a scene, a
@@ -138,7 +155,7 @@ STAR §0) focused on one object.
 | **Project** | overview: status, runs, latest output, the story at a glance | anything project-wide ("make the whole thing more upbeat," "rename the hero everywhere") |
 | **Storyboard / story** | the beats/scenes in order, with state per beat | structure ("add a beat after the reveal," "reorder," "tighten the arc") |
 | **Scene / beat** | the beat's intent, its keyframe, its clip, its provenance | that beat ("reshoot this darker," "change what happens here") |
-| **Asset (image/clip/audio)** | the asset full-size + its pool alternatives + lineage | that asset ("brighter," "different angle," "swap the jacket") |
+| **Asset (image/clip/audio)** | the asset full-size + its pool alternatives + lineage + exact credits used when a single-output ledger debit is attributable | that asset ("brighter," "different angle," "swap the jacket") |
 | **Timeline item** | the item in context of the cut | timing/selection/transition intent ("hold this longer," "use the other take") |
 | **Export / output** | the finished video | a new pass ("make a 9:16 version," "punchier ending") |
 

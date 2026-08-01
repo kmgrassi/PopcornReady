@@ -251,6 +251,14 @@ export interface ProjectAssetsResponse {
   pagination: ListPagination;
 }
 
+export interface ProjectAssetDetailResponse {
+  asset: V1Asset;
+  billing: {
+    /** Gross generation debits attributable to this one asset; null when unknown. */
+    creditsCharged: number | null;
+  };
+}
+
 export interface WorkspaceOutputsResponse {
   outputs: WorkspaceOutput[];
   pagination: ListPagination;

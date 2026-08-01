@@ -139,7 +139,8 @@ Users self-create their first workspace after Supabase sign-up. In
 ### Projects
 
 - `POST /api/v1/projects`
-- `GET /api/v1/projects`
+- `GET /api/v1/projects` — defaults to `createdAt` descending; pass
+  `order=updatedAt` for recent-work recovery. Cursors follow the selected order.
 - `GET /api/v1/projects/:projectId`
 - `PATCH /api/v1/projects/:projectId`
 - `DELETE /api/v1/projects/:projectId`
