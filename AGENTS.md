@@ -15,7 +15,7 @@ Read [`AGENT_WORKFLOW.md`](AGENT_WORKFLOW.md) first. Then use this router; `CLAU
 | Task | Read first | Required validation / update |
 | --- | --- | --- |
 | Any code or documentation change | `CLAUDE.md`, `docs/repository-structure.md`, `AGENT_WORKFLOW.md` | Worksheet, targeted test, `pnpm agent:validate` |
-| UI, routes, CSS | `apps/web/PRODUCT.md`, `apps/web/DESIGN.md`, `docs/ui-interaction-model.md` | Run web app, inspect browser, relevant Playwright test; use the Impeccable skill |
+| Browser-facing feature, UI, routes, CSS | `apps/web/PRODUCT.md`, `apps/web/DESIGN.md`, `docs/ui-interaction-model.md` | Run the web app locally and manually exercise the changed feature through its actual browser entry point; inspect affected states at desktop and mobile widths; run the relevant Playwright test; use the Impeccable skill |
 | API, auth, Supabase, migrations | `docs/supabase-identity-and-rls.md`, `docs/scopes/database-access-boundary.md`, relevant `docs/scopes/*` | API test or smoke; local Supabase check when persistence/auth changes |
 | Generation, tools, orchestration | `docs/NORTH_STAR.md`, relevant orchestrator scope, `apps/api/src/lib/tool-tests/README.md` | Unit tests plus opt-in tool smoke when changing live tool behavior |
 | E2E or manual testing | `docs/testing/e2e-test-inventory-and-gaps.md`, `apps/web/e2e/README.md` | Update inventory and add a behavior-focused test or documented gap |
