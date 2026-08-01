@@ -66,6 +66,21 @@ Acceptance criteria (met):
    history fed to the model stays bounded (separate from durability, same file of
    concerns).
 
+## Terminal completion correction (2026-08-01)
+
+A malformed finite-domain terminal response is now separated from a failed
+media invocation. When the terminal parser reports a model-correctable contract
+error, the engine makes one structured, no-tools correction call and validates
+the answer through the same parser. Successful primitive actions, jobs, and
+assets are reused; the correction cannot invoke a tool or replay billable media.
+
+The correction does not apply to missing/failed/unauthorized outputs, database
+or asset-state failures, or other runtime faults. Provider and timeout failures
+retain their own failure kinds, while an invalid corrected answer remains
+`invalid_input`. The correction count is bounded per live drive attempt, not by
+new durable state, so a worker crash before terminalization may start a fresh
+attempt after lease recovery.
+
 ## Async completion ordering (2026-07-14)
 
 An inline async worker can finish after its tool returns `accepted` but before the

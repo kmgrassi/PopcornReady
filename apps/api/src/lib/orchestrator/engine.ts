@@ -58,9 +58,15 @@ import { uploadedFootageMetadataFromSummary } from "./uploaded-footage-selection
 import {
   resolveAgentDefinition,
   buildDomainReportFromCompletion,
+  DomainCompletionValidationError,
   type AgentDefinition,
   type ResolveAgentDefinitionInput,
 } from "./agent-definition";
+import { buildDomainCompletionContract } from "./domain-completion-contract";
+import {
+  repairDomainCompletion,
+  type DomainCompletionRepairer,
+} from "./domain-completion-repair";
 import {
   failDomainRunTurn,
   finalizeDomainTurn,
@@ -201,6 +207,9 @@ export interface EngineDeps {
   resolveAgentDefinition?: (
     input: ResolveAgentDefinitionInput
   ) => Promise<AgentDefinition>;
+  /** Completion seams allow the strict parser and no-tools repair boundary to be tested together. */
+  buildDomainReport?: typeof buildDomainReportFromCompletion;
+  repairDomainCompletion?: DomainCompletionRepairer;
   prepareDomainScope?: (input: {
     workspaceId: string;
     projectId: string;
@@ -330,6 +339,8 @@ function resolved(deps: EngineDeps) {
     finalizeDomainTurn: deps.finalizeDomainTurn ?? finalizeDomainTurn,
     failDomainRunTurn: deps.failDomainRunTurn ?? failDomainRunTurn,
     resolveAgentDefinition: deps.resolveAgentDefinition ?? resolveAgentDefinition,
+    buildDomainReport: deps.buildDomainReport ?? buildDomainReportFromCompletion,
+    repairDomainCompletion: deps.repairDomainCompletion ?? repairDomainCompletion,
     prepareDomainScope:
       deps.prepareDomainScope ??
       (async ({ workspaceId, projectId, task }) => {
@@ -850,6 +861,9 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
           systemPrompt: definition.systemPrompt,
           agentContext,
           completionMode: definition.task ? "domain_json" : "text",
+          completionContract: definition.task
+            ? buildDomainCompletionContract({ task: definition.task })
+            : undefined,
         }),
         r.modelTurnTimeoutMs,
         `orchestrator model turn exceeded ${r.modelTurnTimeoutMs}ms`
@@ -866,7 +880,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       if (definition.task) {
         let report: import("@popcorn/shared/domain-agent-contract").DomainReportV1;
         try {
-          report = await buildDomainReportFromCompletion({
+          report = await r.buildDomainReport({
             runId: run.id,
             projectId: run.projectId,
             task: definition.task,
@@ -874,10 +888,98 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
             actions: prior,
           });
         } catch (err) {
-          return terminalizeDomainFailure(run, r, {
-            kind: "invalid_input",
-            message: err instanceof Error ? err.message : "Invalid domain completion.",
-            recoverable: false,
+          if (!(err instanceof DomainCompletionValidationError) || !err.repairable) {
+            return terminalizeDomainFailure(run, r, {
+              kind: err instanceof DomainCompletionValidationError
+                ? "invalid_input"
+                : "provider_failed",
+              message: err instanceof DomainCompletionValidationError
+                ? err.message
+                : "Domain completion validation could not verify persisted outputs.",
+              recoverable: false,
+            });
+          }
+          logger.warn("orchestrator.domain_completion_repair_started", {
+            workspaceId: r.workspaceId,
+            projectId: run.projectId,
+            runId: run.id,
+            turn,
+            validationCode: err.code,
+          });
+          let repairedSummary: string;
+          const repairTimeoutMessage =
+            `domain completion repair exceeded ${r.modelTurnTimeoutMs}ms`;
+          try {
+            repairedSummary = await withTimeout(
+              r.repairDomainCompletion({
+                workspaceId: r.workspaceId,
+                projectId: run.projectId,
+                runId: run.id,
+                task: definition.task,
+                actions: prior,
+                previousCompletion: decision.summary,
+                validationError: err,
+              }),
+              r.modelTurnTimeoutMs,
+              repairTimeoutMessage
+            );
+          } catch (repairErr) {
+            const timedOut =
+              repairErr instanceof Error && repairErr.message === repairTimeoutMessage;
+            logger.error("orchestrator.domain_completion_repair_failed", {
+              workspaceId: r.workspaceId,
+              projectId: run.projectId,
+              runId: run.id,
+              turn,
+              validationCode: err.code,
+              failureKind: timedOut ? "timeout" : "provider_failed",
+            });
+            return terminalizeDomainFailure(run, r, {
+              kind: repairErr instanceof DomainCompletionValidationError
+                ? "invalid_input"
+                : timedOut
+                  ? "timeout"
+                  : "provider_failed",
+              message: repairErr instanceof DomainCompletionValidationError
+                ? repairErr.message
+                : timedOut
+                  ? "Domain completion repair timed out."
+                  : "Domain completion repair model call failed.",
+              recoverable: false,
+            });
+          }
+          try {
+            report = await r.buildDomainReport({
+              runId: run.id,
+              projectId: run.projectId,
+              task: definition.task,
+              summary: repairedSummary,
+              actions: prior,
+            });
+          } catch (repairValidationErr) {
+            const validationFailure =
+              repairValidationErr instanceof DomainCompletionValidationError;
+            logger.error("orchestrator.domain_completion_repair_exhausted", {
+              workspaceId: r.workspaceId,
+              projectId: run.projectId,
+              runId: run.id,
+              turn,
+              validationCode: validationFailure ? repairValidationErr.code : undefined,
+            });
+            return terminalizeDomainFailure(run, r, {
+              kind: validationFailure ? "invalid_input" : "provider_failed",
+              message: validationFailure
+                ? repairValidationErr.message
+                : "Corrected domain completion could not verify persisted outputs.",
+              recoverable: false,
+            });
+          }
+          logger.info("orchestrator.domain_completion_repair_succeeded", {
+            workspaceId: r.workspaceId,
+            projectId: run.projectId,
+            runId: run.id,
+            turn,
+            validationCode: err.code,
           });
         }
         try {

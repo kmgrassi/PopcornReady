@@ -263,6 +263,66 @@ test("bound completion carries the exact server-issued output identity into the 
   }
 });
 
+test("reproduces a malformed done completion after its output asset already validated", async () => {
+  let outputValidationCalls = 0;
+  await assert.rejects(
+    buildDomainReportFromCompletion({
+      runId: "domain-run",
+      projectId: "project-1",
+      task: visualTask,
+      actions: [{
+        id: "image-action",
+        tool: "generate_image_asset",
+        status: "applied",
+        params: {},
+        outputAssetIds: ["image-1"],
+        jobIds: ["image-job"],
+        createdAt: "2026-08-01T00:00:00.000Z",
+      }],
+      summary: JSON.stringify({
+        outcome: "done",
+        acceptanceEvidence: [],
+        sessionSummary: "The requested image is ready.",
+      }),
+    }, {
+      validatedOutputs: async () => {
+        outputValidationCalls += 1;
+        return [{ assetId: "image-1", intrinsicRole: "standalone_image", kind: "clip" }];
+      },
+    }),
+    /one acceptance evidence item per criterion/
+  );
+  assert.equal(outputValidationCalls, 1, "the asset must validate before evidence rejects completion");
+});
+
+test("done completion rejects explicitly unsatisfied acceptance evidence", async () => {
+  await assert.rejects(
+    buildDomainReportFromCompletion({
+      runId: "domain-run",
+      projectId: "project-1",
+      task: visualTask,
+      actions: [],
+      summary: JSON.stringify({
+        outcome: "done",
+        acceptanceEvidence: [{
+          criterion: "Produce one approved clip.",
+          satisfied: false,
+          evidence: "The output does not meet the requested quality.",
+          assetIds: ["clip-1"],
+        }],
+        sessionSummary: "The clip needs clarification.",
+      }),
+    }, {
+      validatedOutputs: async () => [{
+        assetId: "clip-1",
+        intrinsicRole: "primary",
+        kind: "clip",
+      }],
+    }),
+    /requires every acceptance criterion to be satisfied/
+  );
+});
+
 test("disabled domain runtime does not invoke a model or tool", async () => {
   const run = { ...rootRun, id: "visual-run", agentRole: "visuals" as const };
   const store = {
