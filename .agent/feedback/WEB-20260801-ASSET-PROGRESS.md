@@ -1,0 +1,37 @@
+# Feedback: WEB-20260801-ASSET-PROGRESS
+
+<!-- agent-summary: Loading artwork should explain activity without pretending to be pipeline telemetry. -->
+<!-- agent-summary: Terminal run copy must derive from real status and report outcomes. -->
+<!-- agent-summary: Long generation briefs need semantic truncation, not only visual clipping. -->
+<!-- agent-summary: Existing themed assets can add warmth without inventing output previews. -->
+<!-- agent-summary: Reduced motion should retain a useful static working pose. -->
+<!-- agent-summary: Route fixtures can verify status truthfulness without provider spend. -->
+<!-- agent-summary: Dark and light peer themes need separate visual and contrast checks. -->
+
+## Lesson
+
+An active creation screen can feel alive without inventing percentages, stages,
+or sample outputs. Reusing the studio crew as a clearly decorative working
+metaphor, while keeping human status text authoritative, preserves trust and
+adds warmth. Truncating a generated brief is safest when the closed disclosure
+contains only a real excerpt and the full text does not enter the accessible
+tree until the creator opens it.
+
+## Follow-up
+
+When the repository establishes a deterministic visual-baseline harness, add a
+reduced-motion screenshot assertion for this route in both the dark and warm
+themes.
+
+The later merge with the dedicated `/create/review` flow reinforced the value
+of keeping route ownership explicit: the creation form and review authority can
+evolve independently while the `runId` branch remains a focused, reusable
+progress boundary. End-to-end coverage should span that boundary so an
+auto-merge cannot silently disconnect approval from the progress experience.
+
+Decorative sprite atlases should be treated as production payloads, not merely
+design-source files. A progress component should ship only the poses it renders,
+at approximately their displayed dimensions, and tests should verify the route
+does not regress to requesting the source atlases. Likewise, an indeterminate
+track belongs only to active work; terminal truth is carried by the explicit
+status and outcome, not a frozen partial bar.

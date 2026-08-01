@@ -31,7 +31,13 @@ and project-list, proposal, confirmation, and creation failure recovery. It also
 verifies that revising preserves the editable draft, failed confirmation remains
 manual-only on Forward, a delayed project creation cannot override a newer
 selection, and pagination failures preserve loaded projects, without spending
-provider credits. `creation-entry-points.spec.ts` verifies that the desktop and
+provider credits. After confirmation, it also covers human-readable
+queued/running/terminal progress, studio-crew artwork from compact progress-only
+resources, semantic request-brief truncation, active-only indeterminate
+progress, reduced motion, mobile overflow, successful asset links, and truthful
+failed, canceled, blocked, and question outcomes.
+
+`creation-entry-points.spec.ts` verifies that the desktop and
 mobile shell, Dashboard, Activity, and both populated/empty Library actions use
 the canonical asset-oriented `/create` entry while `/projects/new` remains the
 distinct full-video flow.

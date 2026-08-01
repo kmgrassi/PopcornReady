@@ -34,8 +34,13 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   effective-prompt preview, creator bypass, draft-preserving video revision,
   manual **Approve this** confirmation, the 10-second automatic-confirmation
   boundary, at-most-once dispatch, queued status, safe invalid-review recovery,
-  and desktop/mobile Create and review layouts.
-  It also covers the accessible project picker,
+  and desktop/mobile Create and review layouts. After confirmation, progress
+  assertions cover human-readable queued/running/terminal status, checked-in
+  studio-crew artwork from compact progress-only resources, a semantically
+  truncated request brief with full disclosure, active-only indeterminate
+  progress, reduced motion, mobile overflow, successful asset navigation, and
+  truthful failed, canceled, blocked, and question outcomes. It also covers the
+  accessible project picker,
   existing/first/new-project selection, inline creation without losing the
   prompt, list and creation failure recovery, and keyboard focus/Escape behavior.
 - `run-progress.spec.ts` and `run-progress-actions.spec.ts` cover run progress,
@@ -361,6 +366,12 @@ Covered:
 - Direct `/create/review` navigation without request state fails closed and
   creates no proposal or confirmation.
 - Successful confirmation replace-navigates to the queued creator-direct run.
+- The progress view presents human-readable queued and running status, studio
+  crew artwork from compact progress-only resources, a truncated request brief
+  with full disclosure, active-only indeterminate progress, reduced-motion
+  behavior, and mobile-safe layout.
+- Completed, failed, canceled, question, and blocked fixtures preserve truthful
+  terminal copy, idle artwork, exact report details, and asset navigation.
 - The mobile Create tab opens Asset Studio and retains active state.
 - The review route remains legible and overflow-free at mobile widths.
 - The project picker selects an existing project, returns focus on Escape, and
@@ -378,8 +389,6 @@ Remaining gaps:
   state, such as a direct link, new tab, or lost session history. The current
   client intentionally fails closed instead of persisting proposal authority in
   URL or browser storage.
-- Add mocked status fixtures for completed, failed, canceled, question, and
-  blocked outcomes.
 - Add browser coverage when optional references, Request Changes, dependency
   attachment, and Use in project controls land.
 - Keep provider-backed image/video/audio smoke opt-in because it incurs cost.

@@ -211,6 +211,301 @@
   font-size: var(--text-md);
 }
 
+.progressHeader {
+  margin-bottom: var(--space-6);
+}
+
+.progressProjectContext {
+  margin: 0 0 var(--space-2);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 800;
+}
+
+.statusShell {
+  display: grid;
+  grid-template-columns: minmax(360px, 1.08fr) minmax(320px, 0.92fr);
+  gap: var(--space-6);
+  padding: var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.statusDetails {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-4);
+}
+
+.liveStatus {
+  min-height: 26px;
+}
+
+.statusBadge {
+  display: inline-flex;
+  min-height: 26px;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 800;
+}
+
+.statusDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.statusBadge[data-tone="active"] {
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
+  background: color-mix(in srgb, var(--accent) 11%, var(--surface-2));
+  color: var(--text-strong);
+}
+
+.statusBadge[data-tone="active"] .statusDot {
+  background: var(--accent);
+}
+
+.statusBadge[data-tone="success"] {
+  border-color: color-mix(in srgb, var(--good) 36%, var(--border));
+  background: color-mix(in srgb, var(--good) 10%, var(--surface-2));
+  color: var(--text-strong);
+}
+
+.statusBadge[data-tone="success"] .statusDot {
+  background: var(--good);
+}
+
+.statusBadge[data-tone="danger"] {
+  border-color: var(--danger-border);
+  background: var(--danger-soft);
+  color: var(--danger-text);
+}
+
+.progressTrack {
+  height: 4px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+}
+
+.progressTrack span {
+  display: block;
+  width: 42%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  animation: progressSweep 1.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+.briefDisclosure {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.briefDisclosure summary {
+  display: grid;
+  min-height: var(--touch-target-min);
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: inherit;
+  cursor: pointer;
+  list-style: none;
+}
+
+.briefDisclosure summary::-webkit-details-marker {
+  display: none;
+}
+
+.briefDisclosure summary:hover {
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+.briefDisclosure summary:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.briefLabel {
+  color: var(--text-strong);
+  font-size: var(--text-sm);
+  font-weight: 800;
+}
+
+.briefExcerpt {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--line-body);
+}
+
+.briefAction {
+  color: color-mix(in srgb, var(--accent) 45%, var(--text));
+  font-size: var(--text-xs);
+  font-weight: 800;
+}
+
+.briefDisclosure[open] .briefExcerpt,
+.briefDisclosure[open] .briefAction {
+  display: none;
+}
+
+.briefDisclosure[open] summary {
+  border-bottom: 1px solid var(--border);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.briefDisclosure > p {
+  margin: 0;
+  padding: var(--space-4);
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: var(--text-sm);
+  line-height: var(--line-body);
+  white-space: pre-wrap;
+}
+
+.outcomePanel {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.outcomePanel[data-tone="danger"] {
+  background: var(--danger-soft);
+  color: var(--danger-text);
+}
+
+.outcomePanel strong,
+.outcomePanel p {
+  margin: 0;
+}
+
+.outcomePanel p,
+.continuationCopy,
+.readyRow p {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--line-body);
+}
+
+.outcomePanel[data-tone="danger"] p {
+  color: inherit;
+}
+
+.continuationCopy {
+  margin: 0;
+  max-width: 54ch;
+}
+
+.readyRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.readyRow p {
+  margin: 0;
+}
+
+.readyRow a {
+  display: inline-flex;
+  min-height: var(--touch-target-min);
+  align-items: center;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-strong);
+  font-size: var(--text-sm);
+  font-weight: 800;
+  text-decoration: none;
+  transition:
+    border-color var(--transition),
+    transform var(--transition);
+}
+
+.readyRow a:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  transform: translateY(-1px);
+}
+
+.readyRow a:active {
+  transform: translateY(0);
+}
+
+.readyRow a:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.errorPanel {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-md);
+  background: var(--danger-soft);
+  color: var(--danger-text);
+}
+
+.errorPanel p {
+  margin: 0;
+}
+
+.skeletonLine,
+.skeletonBrief {
+  border-radius: var(--radius-sm);
+  background: linear-gradient(
+    100deg,
+    var(--surface-2) 20%,
+    color-mix(in srgb, var(--text) 10%, var(--surface-2)) 50%,
+    var(--surface-2) 80%
+  );
+  background-size: 220% 100%;
+  animation: statusShimmer 1.4s ease-in-out infinite;
+}
+
+.skeletonLine {
+  width: 82%;
+  height: 12px;
+}
+
+.skeletonLabel {
+  width: 92px;
+  height: 26px;
+  border-radius: var(--radius-pill);
+}
+
+.skeletonTitle {
+  width: 64%;
+  height: 20px;
+}
+
+.skeletonShort {
+  width: 48%;
+}
+
+.skeletonBrief {
+  width: 100%;
+  height: 92px;
+}
+
 .promptField {
   display: grid;
   min-height: 0;
@@ -311,7 +606,6 @@
   border-radius: var(--radius-lg);
   background: var(--surface);
 }
-
 .status p {
   color: var(--muted);
 }
@@ -322,6 +616,10 @@
   margin: 0 auto;
   padding: var(--space-7) var(--space-5) var(--space-8);
   background: transparent;
+}
+
+.statusPage.progressPage {
+  max-width: 1040px;
 }
 
 .statusPage .header {
@@ -455,6 +753,16 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .progressTrack span,
+  .skeletonLine,
+  .skeletonBrief {
+    animation: none;
+  }
+
+  .readyRow a {
+    transition: none;
+  }
+
   .mediaType,
   .promptField {
     transition: none;
@@ -468,5 +776,50 @@
 @keyframes shimmer {
   to {
     background-position: -200% 0;
+  }
+}
+
+@keyframes progressSweep {
+  from {
+    transform: translateX(-105%);
+  }
+
+  to {
+    transform: translateX(340%);
+  }
+}
+
+@keyframes statusShimmer {
+  from {
+    background-position: 120% 0;
+  }
+
+  to {
+    background-position: -120% 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .statusShell {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .statusPage {
+    padding: var(--space-5) var(--space-4) var(--space-7);
+  }
+
+  .statusShell {
+    gap: var(--space-4);
+    padding: var(--space-4);
+  }
+
+  .readyRow {
+    align-items: stretch;
+  }
+
+  .readyRow a {
+    justify-content: center;
   }
 }
