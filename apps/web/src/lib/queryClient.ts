@@ -316,15 +316,23 @@ export function useProjectQuery(projectId: string, enabled = true) {
   });
 }
 
-export function useCreateProjectMutation() {
+export function useCreateProjectMutation({
+  notifications = true,
+}: { notifications?: boolean } = {}) {
   const client = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: CreateProjectInput) => v1Api.createProject(input),
-    meta: {
-      successMessage: "Project created",
-      errorMessage: "Could not create project",
-    },
+    mutationFn: ({ idempotencyKey, ...input }: CreateProjectInput & {
+      idempotencyKey?: string;
+    }) => v1Api.createProject(input, { idempotencyKey }),
+    ...(notifications
+      ? {
+          meta: {
+            successMessage: "Project created",
+            errorMessage: "Could not create project",
+          },
+        }
+      : { meta: { suppressErrorToast: true } }),
     onSuccess: (response) => {
       void client.invalidateQueries({ queryKey: ["projects"] });
       void client.invalidateQueries({ queryKey: queryKeys.assetStudioProjects() });

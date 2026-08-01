@@ -9,11 +9,13 @@ export function RecentProjectSwitcher({
   projects,
   selectedProjectId,
   loading,
+  disabled = false,
   onSelect,
 }: {
   projects: V1Project[];
   selectedProjectId: string;
   loading: boolean;
+  disabled?: boolean;
   onSelect: (projectId: string) => void;
 }) {
   const recentProjects = projects
@@ -53,6 +55,7 @@ export function RecentProjectSwitcher({
                 key={project.id}
                 project={project}
                 selected={project.id === selectedProjectId}
+                disabled={disabled}
                 onSelect={onSelect}
               />
             ))}
@@ -64,10 +67,12 @@ export function RecentProjectSwitcher({
 function RecentProjectButton({
   project,
   selected,
+  disabled,
   onSelect,
 }: {
   project: V1Project;
   selected: boolean;
+  disabled: boolean;
   onSelect: (projectId: string) => void;
 }) {
   const [failedPosterUrl, setFailedPosterUrl] = useState<string | null>(null);
@@ -83,6 +88,7 @@ function RecentProjectButton({
       aria-pressed={selected}
       aria-label={`Use recent project ${project.name}`}
       title={project.name}
+      disabled={disabled}
       onClick={() => onSelect(project.id)}
     >
       {posterUrl ? (

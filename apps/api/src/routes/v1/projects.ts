@@ -10,6 +10,7 @@ import {
   parseProjectListOrder,
   parseSetProjectVisibility,
 } from "@/lib/api/v1/schemas";
+import type { CreateProjectInput } from "@/lib/api/v1/schemas";
 import {
   analyzeAssetBatch,
   getAssetAnalysisJob,
@@ -32,6 +33,19 @@ import { startPosterGenerationInBackground } from "@/lib/api/v1/poster-backgroun
 import { getStoryboard, putStoryboard } from "@/lib/api/v1/storyboard";
 
 export const projectsRouter = Router();
+
+export function projectCreationParams(
+  workspaceId: string,
+  input: CreateProjectInput,
+): Parameters<typeof createProject>[0] {
+  return {
+    workspaceId,
+    name: input.name,
+    brief: input.brief,
+    namingPrompt: input.namingPrompt,
+    namingContext: input.namingContext,
+  };
+}
 
 const ADMIN_ROLES = new Set(["admin", "owner"]);
 
@@ -90,11 +104,9 @@ projectsRouter.post(
   "/projects",
   mutation(async ({ auth, body }) => {
     const input = parseCreateProject(body);
-    const { project, briefVersion } = await createProject({
-      workspaceId: auth.workspaceId,
-      name: input.name,
-      brief: input.brief,
-    });
+    const { project, briefVersion } = await createProject(
+      projectCreationParams(auth.workspaceId, input),
+    );
     if (briefVersion) {
       startPosterGenerationInBackground(auth, project.id, {
         provider: input.posterProvider,

@@ -20,6 +20,7 @@ interface ProjectPickerProps {
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
   isCreating: boolean;
+  disabled?: boolean;
   createError: Error | null;
   onChange: (projectId: string) => void;
   onCreate: (name: string) => Promise<V1Project>;
@@ -38,6 +39,7 @@ export function ProjectPicker({
   hasNextPage,
   isFetchingNextPage,
   isCreating,
+  disabled = false,
   createError,
   onChange,
   onCreate,
@@ -58,6 +60,7 @@ export function ProjectPicker({
   const [search, setSearch] = useState("");
   const [projectName, setProjectName] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
+  const panelOpen = isOpen && !disabled;
 
   const filteredProjects = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
@@ -87,16 +90,25 @@ export function ProjectPicker({
   }
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!panelOpen) return;
     const frame = requestAnimationFrame(() => {
       if (mode === "create") nameRef.current?.focus();
       else searchRef.current?.focus();
     });
     return () => cancelAnimationFrame(frame);
-  }, [isOpen, mode]);
+  }, [mode, panelOpen]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!disabled || !isOpen) return;
+    createAttemptRef.current += 1;
+    setIsOpen(false);
+    setMode("list");
+    setSearch("");
+    setValidationError(null);
+  }, [disabled, isOpen]);
+
+  useEffect(() => {
+    if (!panelOpen) return;
     function handlePointerDown(event: PointerEvent) {
       if (!rootRef.current?.contains(event.target as Node)) {
         closePicker({ returnFocus: false });
@@ -104,10 +116,10 @@ export function ProjectPicker({
     }
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [isOpen]);
+  }, [panelOpen]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!panelOpen) return;
     function handleKeyDown(event: globalThis.KeyboardEvent) {
       if (event.key !== "Escape") return;
       event.preventDefault();
@@ -115,7 +127,7 @@ export function ProjectPicker({
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen]);
+  }, [panelOpen]);
 
   useEffect(
     () => () => {
@@ -165,9 +177,9 @@ export function ProjectPicker({
         type="button"
         className={styles.trigger}
         aria-labelledby={`${labelId} ${valueId}`}
-        aria-expanded={isOpen}
-        aria-controls={isOpen ? panelId : undefined}
-        disabled={isLoading && projects.length === 0}
+        aria-expanded={panelOpen}
+        aria-controls={panelOpen ? panelId : undefined}
+        disabled={disabled || (isLoading && projects.length === 0)}
         onClick={() => {
           if (isOpen) closePicker({ returnFocus: false });
           else openPicker();
@@ -179,7 +191,7 @@ export function ProjectPicker({
         <ChevronIcon open={isOpen} />
       </button>
 
-      {isOpen ? (
+      {panelOpen ? (
         <section
           id={panelId}
           className={styles.panel}

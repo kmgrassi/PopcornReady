@@ -2072,6 +2072,8 @@ export async function createProject(input: {
   name?: string;
   slug?: string;
   brief?: VideoBrief;
+  namingPrompt?: string;
+  namingContext?: string;
 }): Promise<{ project: V1Project; briefVersion: V1BriefVersion | null }> {
   const db = getServiceSupabase();
   const now = new Date().toISOString();
@@ -2079,6 +2081,8 @@ export async function createProject(input: {
   const name = await projectDisplayName({
     explicitName: input.name,
     brief: input.brief,
+    namingPrompt: input.namingPrompt,
+    namingContext: input.namingContext,
   });
   const slug = await ensureUniqueProjectSlug(
     db,

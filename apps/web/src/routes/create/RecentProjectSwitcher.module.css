@@ -48,14 +48,19 @@
     transform var(--transition);
 }
 
-.project:hover {
+.project:not(:disabled):hover {
   border-color: var(--accent-border);
   background: var(--surface-2);
   transform: translateY(-1px);
 }
 
-.project:active {
+.project:not(:disabled):active {
   transform: translateY(0);
+}
+
+.project:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .project:focus-visible {

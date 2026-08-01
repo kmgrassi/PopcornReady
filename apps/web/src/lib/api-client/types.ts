@@ -315,6 +315,8 @@ export interface CreateProjectInput {
   name?: string;
   brief?: VideoBriefInput;
   posterProvider?: string;
+  namingPrompt?: string;
+  namingContext?: "image" | "video" | "soundtrack";
 }
 
 export interface CreateProjectResponse extends ProjectResponse {
