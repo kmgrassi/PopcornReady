@@ -15,7 +15,7 @@
 | Research | Are the source-of-truth docs, constraints, and problem framing correct? |
 | Plan | Is the scope minimal, reversible, and adequately testable? |
 | Implementation | Are correctness, security, performance, accessibility, and maintainability risks handled? |
-| Wrap-up | Do validation evidence, docs, worksheet, and PR tell the truth? |
+| Wrap-up | Do validation evidence, docs, worksheet, and PR tell the truth? For browser-facing work, does the worksheet confirm the locally running web app and identify the changed feature's actual browser entry point, exercised states, viewports, and observed results, with any exception explicitly accepted by the user? |
 
 ## Personas and document ownership
 
