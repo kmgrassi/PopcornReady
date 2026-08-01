@@ -18,6 +18,11 @@ import type { ToolCallResult, ToolError, ToolExecutionContext, ToolName } from "
 import type { OrchestratorModel } from "../model";
 import type { ToolRegistry } from "../registry";
 import { driverToolDefinitionMetadata } from "@/lib/orchestrator-tools/capability-catalog";
+import type { DomainReportV1, DomainTaskV1 } from "@popcorn/shared/domain-agent-contract";
+import {
+  buildDomainReportFromCompletion,
+  DomainCompletionValidationError,
+} from "../agent-definition";
 
 // ---------- fakes (no DB, no network) ----------
 
@@ -200,6 +205,42 @@ const ok = (resourceIds: string[] = [], costUsd?: number): ToolCallResult => ({
   resourceIds,
   ...(costUsd != null ? { costUsd } : {}),
 });
+
+const standaloneImageTask = {
+  schemaVersion: "DomainTask.v1",
+  domain: "visuals",
+  taskKind: "image_create",
+  objective: "Create one product image.",
+  instruction: "Create one product image.",
+  targets: [{ kind: "project", projectId: "proj1" }],
+  requiredOutputs: [{ kind: "image", role: "creator_direct", minimumCount: 1 }],
+  allowedOutputKinds: ["image"],
+  creativeConstraints: {},
+  preserve: { assetIds: [], selections: [], fingerprints: [], pins: [] },
+  candidateAffectedAssetIds: [],
+  budgetUsd: 10,
+  acceptanceCriteria: ["Create one product image."],
+  origin: {
+    kind: "creator_direct",
+    actorId: "user1",
+    creatorMessageId: "message1",
+    entrypoint: "project_api",
+    requestDigest: "digest1",
+    idempotencyKey: "key1",
+    approvalGateId: "gate1",
+  },
+  responseRecipient: { kind: "creator_conversation" },
+} as unknown as DomainTaskV1;
+
+function imageReportBuilder(input: Parameters<typeof buildDomainReportFromCompletion>[0]) {
+  return buildDomainReportFromCompletion(input, {
+    validatedOutputs: async () => [{
+      assetId: "image-1",
+      intrinsicRole: "standalone_image",
+      kind: "image",
+    }],
+  });
+}
 
 // ---------- tests ----------
 
@@ -565,6 +606,285 @@ test("a claimed domain run preserves media_job while a provider job is still run
 
   assert.equal(parked.status, "waiting");
   assert.equal(parked.waitReason, "media_job");
+});
+
+test("repairs malformed completion after an async image succeeds without replaying media", async () => {
+  const store = new FakeStore(runFixture({ agentRole: "visuals" }));
+  let mediaExecutions = 0;
+  let repairCalls = 0;
+  let finalizedReport: DomainReportV1 | undefined;
+  const registry = fakeRegistry({
+    generate_image_asset: () => {
+      mediaExecutions += 1;
+      return { status: "accepted", jobId: "image-job", resumesWhen: "job_terminal" };
+    },
+  });
+  let modelCalls = 0;
+  const model: OrchestratorModel = async (input) => {
+    modelCalls += 1;
+    assert.equal(
+      (input.completionContract as { schemaVersion?: string }).schemaVersion,
+      "DomainCompletionContract.v1"
+    );
+    return modelCalls === 1
+      ? { type: "tool_call", toolName: "generate_image_asset", input: {}, model: "mock" }
+      : {
+          type: "done",
+          summary: JSON.stringify({
+            outcome: "done",
+            acceptanceEvidence: [],
+            sessionSummary: "Image ready.",
+          }),
+          model: "mock",
+        };
+  };
+  const domainDeps = deps(store, model, registry, {
+    enabledDomainRoles: ["visuals"],
+    domainRuntimeEnabled: true,
+    sessionClaimGeneration: 7,
+    resolveAgentDefinition: async () => ({
+      role: "visuals",
+      registry,
+      systemPrompt: "test visuals",
+      task: standaloneImageTask,
+      loadTurnContext: async () => undefined,
+    }),
+    prepareDomainScope: async () => ({ snapshot: {} as never, scope: {} as never }),
+    buildDomainReport: imageReportBuilder,
+    repairDomainCompletion: async (input) => {
+      repairCalls += 1;
+      assert.deepEqual(input.actions[0]?.outputAssetIds, ["image-1"]);
+      assert.equal(input.validationError.code, "invalid_evidence");
+      return JSON.stringify({
+        outcome: "done",
+        acceptanceEvidence: [{
+          criterion: "Create one product image.",
+          satisfied: true,
+          evidence: "The persisted standalone image is ready.",
+          assetIds: ["image-1"],
+        }],
+        sessionSummary: "Image ready.",
+      });
+    },
+    finalizeDomainTurn: async (input) => {
+      finalizedReport = input.report;
+      store.run = { ...store.run, status: "succeeded" };
+      return {
+        reportActionId: "report-1",
+        performed: true,
+        recipient: "creator_conversation",
+        parentRunId: null,
+        wokeParent: false,
+        summaryApplied: true,
+      };
+    },
+    failDomainRunTurn: async () => assert.fail("corrected completion must not fail the run"),
+  });
+
+  const parked = await runOrchestratorToCompletion("run1", domainDeps);
+  assert.equal(parked.status, "waiting");
+  const completed = await resumeOrchestratorRun("run1", {
+    ...domainDeps,
+    jobs: {
+      getJob: async () => ({ status: "succeeded", result: { assetIds: ["image-1"] } }),
+    },
+  });
+
+  assert.equal(completed.status, "succeeded");
+  assert.equal(mediaExecutions, 1);
+  assert.equal(repairCalls, 1);
+  assert.equal(store.actions.length, 1);
+  assert.deepEqual(store.actions[0]?.jobIds, ["image-job"]);
+  assert.deepEqual(store.actions[0]?.outputAssetIds, ["image-1"]);
+  assert.equal(finalizedReport?.outcome.outcome, "done");
+});
+
+test("one malformed repair exhausts without replaying completed media", async () => {
+  const store = new FakeStore(runFixture({ agentRole: "visuals" }));
+  store.actions.push({
+    id: "image-action",
+    tool: "generate_image_asset",
+    status: "applied",
+    params: {},
+    outputAssetIds: ["image-1"],
+    jobIds: ["image-job"],
+    createdAt: "t1",
+  });
+  let repairCalls = 0;
+  let failureCalls = 0;
+  const registry = fakeRegistry({
+    generate_image_asset: () => assert.fail("completed media must not execute again"),
+  });
+  const run = await runOrchestratorToCompletion("run1", deps(store, async () => ({
+    type: "done",
+    summary: JSON.stringify({ outcome: "done", acceptanceEvidence: [] }),
+    model: "mock",
+  }), registry, {
+    enabledDomainRoles: ["visuals"],
+    domainRuntimeEnabled: true,
+    sessionClaimGeneration: 8,
+    resolveAgentDefinition: async () => ({
+      role: "visuals",
+      registry,
+      systemPrompt: "test visuals",
+      task: standaloneImageTask,
+      loadTurnContext: async () => undefined,
+    }),
+    buildDomainReport: imageReportBuilder,
+    repairDomainCompletion: async () => {
+      repairCalls += 1;
+      return JSON.stringify({ outcome: "done", acceptanceEvidence: [] });
+    },
+    finalizeDomainTurn: async () => assert.fail("invalid repair must not finalize"),
+    failDomainRunTurn: async (input) => {
+      failureCalls += 1;
+      store.run = { ...store.run, status: "failed", error: input.error };
+      return true;
+    },
+  }));
+
+  assert.equal(run.status, "failed");
+  assert.equal(repairCalls, 1);
+  assert.equal(failureCalls, 1);
+  assert.equal((run.error as { kind?: string }).kind, "invalid_input");
+  assert.equal(store.actions.length, 1);
+});
+
+test("non-repairable completion state errors never invoke the repair model", async () => {
+  const store = new FakeStore(runFixture({ agentRole: "visuals" }));
+  let repairCalls = 0;
+  const registry = fakeRegistry({});
+  const run = await runOrchestratorToCompletion("run1", deps(store, async () => ({
+    type: "done",
+    summary: JSON.stringify({ outcome: "done" }),
+    model: "mock",
+  }), registry, {
+    enabledDomainRoles: ["visuals"],
+    domainRuntimeEnabled: true,
+    sessionClaimGeneration: 9,
+    resolveAgentDefinition: async () => ({
+      role: "visuals",
+      registry,
+      systemPrompt: "test visuals",
+      task: standaloneImageTask,
+      loadTurnContext: async () => undefined,
+    }),
+    buildDomainReport: async () => {
+      throw new DomainCompletionValidationError(
+        "missing_run_outputs",
+        "Domain done completion requires outputs created by this run.",
+        false
+      );
+    },
+    repairDomainCompletion: async () => {
+      repairCalls += 1;
+      throw new Error("must not run");
+    },
+    failDomainRunTurn: async (input) => {
+      store.run = { ...store.run, status: "failed", error: input.error };
+      return true;
+    },
+  }));
+
+  assert.equal(run.status, "failed");
+  assert.equal(repairCalls, 0);
+  assert.equal((run.error as { kind?: string }).kind, "invalid_input");
+});
+
+test("completion repair provider failures stay distinct from invalid model output", async () => {
+  const store = new FakeStore(runFixture({ agentRole: "visuals" }));
+  store.actions.push({
+    id: "image-action",
+    tool: "generate_image_asset",
+    status: "applied",
+    params: {},
+    outputAssetIds: ["image-1"],
+    jobIds: ["image-job"],
+    createdAt: "t1",
+  });
+  const registry = fakeRegistry({});
+  const run = await runOrchestratorToCompletion("run1", deps(store, async () => ({
+    type: "done",
+    summary: JSON.stringify({ outcome: "done", acceptanceEvidence: [] }),
+    model: "mock",
+  }), registry, {
+    enabledDomainRoles: ["visuals"],
+    domainRuntimeEnabled: true,
+    sessionClaimGeneration: 10,
+    resolveAgentDefinition: async () => ({
+      role: "visuals",
+      registry,
+      systemPrompt: "test visuals",
+      task: standaloneImageTask,
+      loadTurnContext: async () => undefined,
+    }),
+    buildDomainReport: imageReportBuilder,
+    repairDomainCompletion: async () => {
+      throw new Error("provider unavailable");
+    },
+    failDomainRunTurn: async (input) => {
+      store.run = { ...store.run, status: "failed", error: input.error };
+      return true;
+    },
+  }));
+
+  assert.equal(run.status, "failed");
+  assert.equal((run.error as { kind?: string }).kind, "provider_failed");
+  assert.equal(
+    (run.error as { message?: string }).message,
+    "Domain completion repair model call failed."
+  );
+});
+
+test("completion repair timeouts stay distinct from invalid model output", async () => {
+  const store = new FakeStore(runFixture({ agentRole: "visuals" }));
+  store.actions.push({
+    id: "image-action",
+    tool: "generate_image_asset",
+    status: "applied",
+    params: {},
+    outputAssetIds: ["image-1"],
+    jobIds: ["image-job"],
+    createdAt: "t1",
+  });
+  let releaseRepair: (() => void) | undefined;
+  const registry = fakeRegistry({});
+  const run = await runOrchestratorToCompletion("run1", deps(store, async () => ({
+    type: "done",
+    summary: JSON.stringify({ outcome: "done", acceptanceEvidence: [] }),
+    model: "mock",
+  }), registry, {
+    enabledDomainRoles: ["visuals"],
+    domainRuntimeEnabled: true,
+    sessionClaimGeneration: 11,
+    modelTurnTimeoutMs: 5,
+    resolveAgentDefinition: async () => ({
+      role: "visuals",
+      registry,
+      systemPrompt: "test visuals",
+      task: standaloneImageTask,
+      loadTurnContext: async () => undefined,
+    }),
+    buildDomainReport: imageReportBuilder,
+    repairDomainCompletion: async () => {
+      await new Promise<void>((resolve) => {
+        releaseRepair = resolve;
+      });
+      return JSON.stringify({ outcome: "done", acceptanceEvidence: [] });
+    },
+    failDomainRunTurn: async (input) => {
+      store.run = { ...store.run, status: "failed", error: input.error };
+      return true;
+    },
+  }));
+  releaseRepair?.();
+
+  assert.equal(run.status, "failed");
+  assert.equal((run.error as { kind?: string }).kind, "timeout");
+  assert.equal(
+    (run.error as { message?: string }).message,
+    "Domain completion repair timed out."
+  );
 });
 
 test("continues when an async job finishes before the initial park completes", async () => {

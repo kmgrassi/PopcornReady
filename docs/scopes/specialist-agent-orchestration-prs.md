@@ -298,6 +298,17 @@ fingerprint. A partial unique index on `actions(orchestrator_run_id)` where
 acknowledgement compare-and-sets the existing delegation action and wakes its
 parent dispatch; creator-direct completion has no parent wake.
 
+A model-correctable malformed terminal response gets at most one no-tools
+correction call in the current drive attempt. That call is constrained by the
+trusted task contract and validated ready run-owned output inventory, and its
+answer must pass the same `DomainReport.v1` parser. Question correction may use
+a partial inventory, but each claimed asset must still be authorized and match
+an allowed persisted semantic role. Done correction requires distinct assets to
+cover every required semantic-role slot and repeated minimum. It never replays
+primitive work. Runtime output-state, persistence, provider, and timeout
+failures remain outside this semantic correction path and retain distinct
+terminal classification.
+
 The report action is a retrieval/control record, not the provenance spine.
 Output assets remain immutable, point to their primitive creating action, and
 carry typed input edges. Existing `input_asset_ids`/`output_asset_ids` arrays

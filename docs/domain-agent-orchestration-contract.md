@@ -164,6 +164,23 @@ JSON or one whole-response `json` code fence as transport normalization; prose,
 multiple fences, and any object that fails the existing typed output/evidence
 validation remain invalid.
 
+If a finite-domain response fails a model-correctable terminal-contract check,
+the engine may make one completion-only correction call during that drive
+attempt. The correction call has no tools and cannot repeat media generation or
+mutate graph state. It receives the safe validation code/message, the exact
+task criteria and required bindings, a validated inventory of ready run-owned
+outputs, and the prior response as untrusted data. The corrected response must
+pass the same report parser and output/evidence validation before the report can
+be persisted. A malformed `question` may receive a validated partial inventory,
+but every listed asset must still be ready, run-owned, project-owned, and an
+allowed semantic output for the task. A corrected `done` report must satisfy the
+full required-output contract with distinct assets for every semantic-role slot,
+including repeated `minimumCount` slots. Missing, failed, unauthorized, or
+semantically invalid output state and persistence errors bypass correction.
+Provider failure, timeout, and a second invalid response remain distinct
+terminal failures. The one-attempt bound is currently per in-process drive
+attempt; it is not a durable run-level retry counter across a worker crash.
+
 Creator-direct proposal state is separate from assignment transport. The
 server creates a validated proposal/quote, records explicit confirmation
 against an approved maximum, and only then enqueues a billable run. A pending

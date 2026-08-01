@@ -25,6 +25,8 @@ export interface ModelTurnInput {
   agentContext?: unknown;
   /** Terminal response shape required by the selected durable agent definition. */
   completionMode?: "text" | "domain_json";
+  /** Trusted, structured terminal contract for finite domain turns. */
+  completionContract?: unknown;
   maxTokens?: number;
 }
 
@@ -62,7 +64,7 @@ interface RoutingContext {
   assetRoleGuide: Record<string, string>;
 }
 
-async function llmClientForWorkspace(workspaceId: string | undefined) {
+export async function llmClientForWorkspace(workspaceId: string | undefined) {
   if (!workspaceId) return getLlmClient();
   try {
     const setting = await getWorkspaceModelSetting(workspaceId, "text_generation");
@@ -241,6 +243,7 @@ export const orchestratorModel: OrchestratorModel = async ({
   systemPrompt,
   agentContext,
   completionMode = "text",
+  completionContract,
   // Headroom so reasoning models (e.g. gpt-5) have budget left for the tool call
   // after thinking; non-reasoning models only use what they need.
   maxTokens = 4000,
@@ -266,6 +269,7 @@ export const orchestratorModel: OrchestratorModel = async ({
           priorResults,
           routingContext: buildRoutingContext(priorResults),
           ...(agentContext === undefined ? {} : { agentContext }),
+          ...(completionContract === undefined ? {} : { terminalCompletionContract: completionContract }),
           instruction:
             `Choose exactly one next tool if work remains. ${terminalCompletionInstruction(completionMode)} ` +
             "Inspect routingContext and priorResults first: if routingContext.nextToolHint is present, use that tool unless it is unavailable. " +
