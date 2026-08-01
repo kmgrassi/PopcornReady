@@ -105,7 +105,10 @@ once it is terminal. If a historical action row still says `running`, an
 attached failed/canceled/succeeded job supplies its terminal display state; if
 there is no terminal job, the parent failure/cancellation wins. Terminal runs
 therefore never expose a current tool or animate stale activity, while the
-immutable action and job records remain available for diagnosis.
+immutable action and job records remain available for diagnosis. For a retried
+tool, only jobs attached to the latest invocation may override its current stage
+status; earlier attempt jobs remain visible as activity history but are not
+authoritative for the active retry.
 
 ## Non-goals
 

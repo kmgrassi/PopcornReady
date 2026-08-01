@@ -58,6 +58,8 @@ Make creator-direct one-off Image, Video, and Audio work truthful and bounded. A
   normalization of at most one whole-response JSON fence.
 - Added API, parser/model, desktop project-overview, desktop run, and mobile run
   regressions and updated the owning system/testing documents.
+- PR #866 review follow-up scopes terminal job authority to the latest action's
+  job IDs while preserving every retry attempt in stage activity history.
 
 ## Validation evidence
 
@@ -77,6 +79,10 @@ Make creator-direct one-off Image, Video, and Audio work truthful and bounded. A
   matrix: the two new strict-locator failures were corrected, while one existing
   mobile cancellation test timed out; the same cancellation test and all 11
   affected Chromium tests passed on the focused rerun.
+- PR #866 review follow-up: projection suite passed 27/27, API typecheck passed,
+  and the local Express app returned a successful `/api/v1/health` response on
+  port 4190. The expected background worker warning noted missing local Supabase
+  configuration and did not affect the liveness request.
 
 ## Independent reviews
 
@@ -91,6 +97,15 @@ Make creator-direct one-off Image, Video, and Audio work truthful and bounded. A
 - Wrap-up: `/root/research_review` approved the final diff with no remaining
   correctness, regression, scope, test, documentation, or handoff blockers
   after standalone-only copy replaced the residual production-pipeline framing.
+- PR #866 review research/plan: `/root/research_review` confirmed that aggregate
+  retry history could override the current attempt and approved a narrow helper,
+  two retry-state assertions, and preserved aggregate diagnostics.
+- PR #866 review implementation: `/root/research_review` approved with no
+  findings; the helper is invocation-scoped, aggregate retry diagnostics remain
+  intact, and the regression proves recovering and callback-completed retries.
+- PR #866 review wrap-up: `/root/research_review` approved with no blockers;
+  final scope is the five expected files and the helper, regression, durability
+  documentation, worksheet, and feedback are mutually consistent.
 
 ## Blockers and risks
 
@@ -99,5 +114,4 @@ Make creator-direct one-off Image, Video, and Audio work truthful and bounded. A
 
 ## Next action / handoff
 
-- Commit and tag the validated worksheet state, push the branch, and open the
-  required ready pull request.
+- Commit and push the validated retry fix to the existing ready pull request.

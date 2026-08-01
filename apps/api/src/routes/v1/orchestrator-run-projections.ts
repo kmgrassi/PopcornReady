@@ -287,6 +287,21 @@ function actionStatus(status: string): GenerationRunStatus {
   return "queued";
 }
 
+function terminalJobStatusForAction(
+  action: RunActionSummary | undefined,
+  jobs: ReadonlyMap<string, Job>
+): GenerationRunStatus | undefined {
+  if (action?.status !== "running") return undefined;
+  const attachedJobs = [...new Set(action.jobIds)]
+    .map((jobId) => jobs.get(jobId))
+    .filter((job): job is Job => Boolean(job));
+  return attachedJobs.find((job) => job.status === "failed")?.status ??
+    attachedJobs.find((job) => job.status === "canceled")?.status ??
+    (attachedJobs.length > 0 && attachedJobs.every((job) => job.status === "succeeded")
+      ? "succeeded"
+      : undefined);
+}
+
 function runMessage(
   run: OrchestratorRun,
   actions: RunActionSummary[],
@@ -595,13 +610,10 @@ function projectStages(
         .map((jobId) => options.jobs?.get(jobId))
         .filter((job): job is Job => Boolean(job))
         .map((job) => projectGenerationJobActivity(job, options));
-      const terminalJobStatus = latest?.status === "running"
-        ? jobActivities.find((job) => job.status === "failed")?.status ??
-          jobActivities.find((job) => job.status === "canceled")?.status ??
-          (jobActivities.length > 0 && jobActivities.every((job) => job.status === "succeeded")
-            ? "succeeded"
-            : undefined)
-        : undefined;
+      const terminalJobStatus = terminalJobStatusForAction(
+        latest,
+        options.jobs ?? new Map()
+      );
       const parentStatus = runStatus(run.status);
       const status = actionDerivedStatus === "running" && parentStatus !== "running"
         ? terminalJobStatus ?? parentStatus
@@ -662,16 +674,7 @@ function projectStageItems(
       const assetPrompt = assetPrompts.get(assetId);
       const prompt = actionLevelPrompt ?? assetPrompt?.prompt ?? assetPrompt?.description;
       const parentStatus = runStatus(run.status);
-      const attachedJobs = action.jobIds
-        .map((jobId) => jobs.get(jobId))
-        .filter((job): job is Job => Boolean(job));
-      const terminalJobStatus = action.status === "running"
-        ? attachedJobs.find((job) => job.status === "failed")?.status ??
-          attachedJobs.find((job) => job.status === "canceled")?.status ??
-          (attachedJobs.length > 0 && attachedJobs.every((job) => job.status === "succeeded")
-            ? "succeeded"
-            : undefined)
-        : undefined;
+      const terminalJobStatus = terminalJobStatusForAction(action, jobs);
       const projectedStatus = actionStatus(action.status);
       const status = projectedStatus === "running" && parentStatus !== "running"
         ? terminalJobStatus ?? parentStatus

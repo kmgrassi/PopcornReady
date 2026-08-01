@@ -20,6 +20,11 @@ The successful retry exposed a second boundary mismatch: a shared “concise tex
 summary” instruction contradicted the role prompt's typed JSON report. Terminal
 response shape belongs in the model-turn contract, not in a universal suffix.
 
+Aggregate retry history is diagnostic context, not current authority. A stage
+may display every provider attempt, but its active or terminal status must be
+derived from the latest invocation's attached jobs so an old failure cannot
+hide a recovering retry.
+
 ## Follow-up
 
 - Keep proposal/storage/report actions queryable for diagnosis but exclude them

@@ -63,9 +63,9 @@ function gateFixture(
   };
 }
 
-function jobFixture(status: Job["status"]): Job {
+function jobFixture(status: Job["status"], id = "job_1"): Job {
   return {
-    id: "job_1",
+    id,
     schemaVersion: SCHEMA.job,
     workspaceId: "workspace_1",
     projectId: "project_1",
@@ -229,6 +229,43 @@ test("terminal parent state prevents stale tool actions from appearing active", 
     assert.equal(payload.run.currentToolName, undefined);
     assert.equal(payload.stages[0]?.status, "canceled");
     assert.notEqual(payload.stages[0]?.status, "running");
+  }
+});
+
+test("latest retry jobs control stage status while earlier attempts remain visible", () => {
+  for (const latestJobStatus of ["running", "succeeded"] as const) {
+    const payload = projectRunDetailFromParts(
+      runFixture({ status: "running" }),
+      [],
+      [
+        actionFixture("generate_image_asset", {
+          id: "attempt_old",
+          status: "failed",
+          jobIds: ["job_old"],
+          createdAt: "2026-06-15T00:00:01.000Z",
+        }),
+        actionFixture("generate_image_asset", {
+          id: "attempt_new",
+          status: "running",
+          jobIds: ["job_new"],
+          createdAt: "2026-06-15T00:00:02.000Z",
+        }),
+      ],
+      new Map(),
+      {
+        jobs: new Map([
+          ["job_old", jobFixture("failed", "job_old")],
+          ["job_new", jobFixture(latestJobStatus, "job_new")],
+        ]),
+      }
+    );
+
+    assert.equal(payload.stages[0]?.status, latestJobStatus);
+    assert.deepEqual(payload.stages[0]?.jobIds, ["job_old", "job_new"]);
+    assert.deepEqual(
+      payload.stages[0]?.jobActivities?.map((activity) => activity.status),
+      ["failed", latestJobStatus]
+    );
   }
 });
 
