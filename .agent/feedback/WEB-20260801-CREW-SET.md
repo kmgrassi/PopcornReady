@@ -23,6 +23,11 @@ then inspect a preview sheet for edge contamination and pose drift. Four evenly
 anchored roles also read more like a directed shoot when their gestures face the
 camera action instead of the viewport.
 
+When an approved sprite has the right identity and animation but the wrong
+facing, mirroring its fixed frame viewport is safer than regenerating the art.
+It preserves every pose and anchor while making conversational blocking an
+explicit, testable layout relationship.
+
 ## Follow-up
 
 If the project adopts deterministic visual baselines, include this loader at

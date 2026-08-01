@@ -61,6 +61,10 @@
   image-rendering: pixelated;
 }
 
+.actor[data-crew-member="actress"] .sprite {
+  transform: scaleX(-1);
+}
+
 .scene[data-active="true"] .sprite {
   animation: crewWorking 920ms steps(1, end) infinite;
   animation-delay: var(--animation-delay);
@@ -103,11 +107,11 @@
   }
 
   .actor[data-crew-member="actor"] {
-    left: 61%;
+    left: 62%;
   }
 
   .actor[data-crew-member="actress"] {
-    left: 82%;
+    left: 80%;
   }
 }
 

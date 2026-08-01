@@ -28,14 +28,14 @@ const crew: CrewMember[] = [
     id: "actor",
     label: "Actor rehearsing the scene",
     sheet: "/sprites/progress/actor-crew.png",
-    position: "62%",
+    position: "64%",
     delay: "-460ms",
   },
   {
     id: "actress",
     label: "Actress rehearsing the scene",
     sheet: "/sprites/progress/actress-crew.png",
-    position: "86%",
+    position: "82%",
     delay: "-690ms",
   },
 ];

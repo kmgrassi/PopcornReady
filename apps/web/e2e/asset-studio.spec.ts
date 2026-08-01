@@ -388,6 +388,38 @@ test.describe("Asset Studio", () => {
       expect.stringContaining("/sprites/progress/actress-crew.png"),
     ]);
     expect(crewResources.some((name) => name.includes("-sprite-sheet.png"))).toBe(false);
+    const performanceBlocking = await page.evaluate(() => {
+      const centerOf = (role: string) => {
+        const actor = document.querySelector<HTMLElement>(
+          `[data-crew-member='${role}']`,
+        );
+        if (!actor) throw new Error(`Missing ${role} crew member`);
+        const box = actor.getBoundingClientRect();
+        return box.left + box.width / 2;
+      };
+      const actorSprite = document.querySelector<HTMLElement>(
+        "[data-crew-member='actor'] > div",
+      );
+      const actressSprite = document.querySelector<HTMLElement>(
+        "[data-crew-member='actress'] > div",
+      );
+      if (!actorSprite || !actressSprite) throw new Error("Missing performer sprite");
+      return {
+        camera: centerOf("camera"),
+        actor: centerOf("actor"),
+        actress: centerOf("actress"),
+        actorTransform: getComputedStyle(actorSprite).transform,
+        actressTransform: getComputedStyle(actressSprite).transform,
+      };
+    });
+    expect(performanceBlocking.actorTransform).toBe("none");
+    expect(performanceBlocking.actressTransform).toBe(
+      "matrix(-1, 0, 0, 1, 0, 0)",
+    );
+    expect(performanceBlocking.actress).toBeGreaterThan(performanceBlocking.actor);
+    expect(performanceBlocking.actress - performanceBlocking.actor).toBeLessThan(
+      performanceBlocking.actor - performanceBlocking.camera,
+    );
     const brief = page.getByLabel("View full request brief");
     await expect(brief).toContainText("Create a single-panel 2D RPG boss");
     await expect(brief).toContainText("…");

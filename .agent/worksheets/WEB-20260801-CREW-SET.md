@@ -75,6 +75,12 @@ behavior, and remain within the existing compact-artwork byte ceiling.
   removed residual purple and light edge colors without changing frame alpha.
 - Added inward outer-role anchors through 390px and a smaller scale below 360px
   so the performance poses remain inside the set continuously down to 320px.
+- Mirrored only the actress sprite frame so her approved idle and action poses
+  face the actor without regenerating artwork, then tightened the performer
+  anchors to 64/82% on desktop and 62/80% through 390px.
+- Added behavior-focused coverage that asserts the actor remains unmirrored,
+  the actress is mirrored, and their center gap is smaller than the
+  camera-to-actor gap while preserving the 320px containment check.
 
 ## Validation evidence
 
@@ -86,12 +92,22 @@ behavior, and remain within the existing compact-artwork byte ceiling.
 - The focused `keeps the active crew calm and contained on mobile with reduced
   motion` Playwright run passed 1/1 after adding its 320px transformed-actor
   containment assertion.
+- Performer-blocking continuation: `pnpm --filter @popcorn/web typecheck`
+  passed; the focused manual-approval and active-crew Playwright pair passed
+  2/2; and the complete Asset Studio suite passed 33/33 after the mirror and
+  anchor changes.
 - The five active loader images total 454,365 bytes, below the existing 512 KiB ceiling.
 - In-app browser inspection against a deterministic local run fixture:
   1280×900 in `popcorn` and `popcorn-warm`, plus 390×844 and 320×800 in
   `popcorn`. The four silhouettes and widest active gestures stayed inside the
   set; the edge colors remained clean on dark and warm/light backgrounds; and
   document scroll width equaled viewport width.
+- Performer-blocking browser inspection covered active motion at 1280×900,
+  390×844, and 320×800, plus reduced motion at 320×800. Camera-to-actor versus
+  actor-to-actress center gaps were 130/90px, 74.5/58.3px, and 58.4/45.7px,
+  respectively. The actors faced one another, their widest gestures met without
+  merging body silhouettes, reduced motion stayed still, and no viewport
+  developed horizontal overflow.
 - The user-provided screenshot is the before-state evidence; the inspected live
   route is the after-state evidence. No screenshot baseline was committed because
   the repository's visual policy defers broad snapshots until fixtures and
@@ -125,6 +141,17 @@ behavior, and remain within the existing compact-artwork byte ceiling.
 - Cast wrap-up checkpoint: approved after verifying the final responsive CSS,
   exact sprite geometry and 454,365-byte payload, 33/33 full and 1/1 focused
   Playwright results, scoped validation, documentation, and 13-path change set.
+- Performer-blocking research and plan checkpoint: approved the deterministic
+  actress mirror and tighter anchors, with active/reduced-motion inspection
+  required at 1280px, 390px, and 320px before handoff.
+- Performer-blocking implementation checkpoint: approved after verifying the
+  actress-only mirror scope, background-position and reduced-motion behavior,
+  tighter three-width geometry, intermittent hand contact, relational E2E
+  assertions, and unchanged artwork payload.
+- Performer-blocking wrap-up checkpoint: approved after verifying the exact
+  five-file scope, three-width active and reduced-motion evidence, typecheck,
+  focused 2/2 and full 33/33 Playwright results, lint, scoped validation, and
+  clean diff.
 
 ## Blockers and risks
 
@@ -138,5 +165,6 @@ behavior, and remain within the existing compact-artwork byte ceiling.
 
 ## Next action / handoff
 
-Commit the implementation, retarget the worksheet tag to the completed cast
-continuation, and push it to the existing open pull request #870.
+Commit the performer-blocking continuation, retarget
+`worksheet/WEB-20260801-CREW-SET`, and push it to the existing open pull request
+#870.
