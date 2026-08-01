@@ -82,6 +82,7 @@ Automated tests and type-checking must not be treated as substitutes.
   `git diff --check`, requested explicit summary-line wording and a worksheet
   link from the feedback record, then approved the corrected final diff with no
   remaining required work.
+- Pull request: [#872 — Require local browser validation for web features](https://github.com/kmgrassi/PopcornReady/pull/872)
 
 ## Blockers and risks
 
@@ -89,6 +90,6 @@ Automated tests and type-checking must not be treated as substitutes.
 
 ## Next action / handoff
 
-Commit and push the approved documentation and task artifacts, open a
-ready-for-review pull request, then add the worksheet tag and publication
-metadata.
+Ready-for-review PR #872 is open against `main`. Tag the final publication
+metadata commit as `worksheet/DOCS-20260801-BROWSER-FEATURE-VALIDATION` and push
+it to the PR branch.
