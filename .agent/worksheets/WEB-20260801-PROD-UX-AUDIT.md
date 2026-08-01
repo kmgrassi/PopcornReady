@@ -91,4 +91,6 @@ design-review and deterministic/browser evidence into a prioritized critique.
 
 ## Next action / handoff
 
-Commit, tag, push, and open the required ready-for-review PR.
+Review and prioritize the five P1 findings in ready-for-review PR #864. The audit
+artifacts are committed on `codex/production-ux-audit` and tagged as
+`worksheet/WEB-20260801-PROD-UX-AUDIT`.
