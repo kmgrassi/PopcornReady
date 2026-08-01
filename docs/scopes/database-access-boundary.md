@@ -71,6 +71,14 @@ Visuals/Audio child runs and primitive actions whose parent root, dispatch
 action, proposal approval context, and execution reservation match one durable
 rerun work item. Unrelated domain runs and primitive actions remain hidden.
 
+Asset-detail billing is intentionally a request-scoped Supabase read. The
+owner-only project asset route resolves attributable `actions` and
+`credit_transactions` through the caller's JWT-backed client, so project and
+ledger RLS remain authoritative. Public discovery routes do not expose or
+request this billing projection. Only actions with exactly one output asset
+are attributable; ambiguous and historical unlinked debits return `null`
+instead of inventing a per-asset split.
+
 ## Direct Postgres safety rules
 
 `DATABASE_URL` is server-only. The pool is lazy, but production readiness now

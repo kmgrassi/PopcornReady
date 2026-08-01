@@ -29,6 +29,7 @@ import {
   transcribeAsset,
 } from "@/lib/api/v1/transcription";
 import type { TranscriptionProvider } from "@/lib/generative/transcription";
+import { getAssetCreditsCharged } from "@/lib/api/v1/asset-credit-usage";
 
 export const assetsRouter = Router();
 
@@ -250,7 +251,10 @@ assetsRouter.get(
     const projectId = requiredParam(params, "projectId");
     const assetId = requiredParam(params, "assetId");
     const asset = await getAsset(auth.workspaceId, projectId, assetId);
-    return { status: 200, body: { asset } };
+    const creditsCharged = auth.isLocal
+      ? null
+      : await getAssetCreditsCharged(asset.projectId, asset.id);
+    return { status: 200, body: { asset, billing: { creditsCharged } } };
   })
 );
 

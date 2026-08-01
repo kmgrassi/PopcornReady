@@ -26,6 +26,7 @@ export interface RefreshedMediaUrls {
 
 export interface MediaViewerProps {
   item: MediaViewerItem | null;
+  creditsCharged?: number | null;
   hasPrevious?: boolean;
   hasNext?: boolean;
   actions?: ReactNode;
@@ -62,6 +63,7 @@ function isNearExpiry(expiresAt?: string | null) {
 
 export function MediaViewer({
   item,
+  creditsCharged,
   hasPrevious = false,
   hasNext = false,
   actions,
@@ -186,6 +188,11 @@ export function MediaViewer({
               <span>{media.kind}</span>
               {duration ? <span>{duration}</span> : null}
               {media.projectName ? <span>{media.projectName}</span> : null}
+              {typeof creditsCharged === "number" ? (
+                <span>
+                  {creditsCharged.toLocaleString()} {creditsCharged === 1 ? "credit" : "credits"} used
+                </span>
+              ) : null}
             </div>
           </div>
           <CloseButton className={styles.iconButton} onClick={onClose} />

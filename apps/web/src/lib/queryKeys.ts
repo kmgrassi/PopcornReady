@@ -46,6 +46,8 @@ export const queryKeys = {
     projectId: string,
     params: { limit?: number; cursor?: string | null } = {},
   ) => ["projects", projectId, "assets", params] as const,
+  assetBilling: (authScope: string, projectId: string, assetId: string) =>
+    ["asset-billing", authScope, projectId, assetId] as const,
   dashboardSummary: (workspaceId: string) =>
     ["dashboard", "summary", workspaceId] as const,
   workspaceGenerationRuns: (

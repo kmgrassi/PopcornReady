@@ -1458,3 +1458,70 @@ test("allows estimated generation with low credits when the user has a provider 
   assert.equal(executed, true);
   assert.equal(store.actions[0].status, "applied");
 });
+
+test("does not double-debit nested settlement and attributes remaining tool cost", async () => {
+  const store = new FakeStore(runFixture());
+  const { model } = scriptedModel([
+    { type: "tool_call", toolName: "generate_clip" },
+    { type: "done" },
+  ]);
+  const registry = fakeRegistry({ generate_clip: () => ok(["clip_1"], 0.42) });
+  const billableReads = [0, 0.42];
+  const internallyHandledReads = [0, 0.2];
+  const debits: Array<Parameters<NonNullable<EngineDeps["applyCreditTransaction"]>>[0]> = [];
+
+  const run = await runOrchestratorToCompletion(
+    "run1",
+    deps(store, model, registry, {
+      resolveOwnerUserId: async () => "user1",
+      billableUsdSoFar: () => billableReads.shift() ?? 0.42,
+      internallyHandledBillableUsdSoFar: () => internallyHandledReads.shift() ?? 0.2,
+      applyCreditTransaction: async (input) => {
+        debits.push(input);
+        return {
+          id: "tx1",
+          seq: 1,
+          deltaCredits: input.deltaCredits,
+          reason: input.reason,
+          balanceAfter: 100,
+          costUsd: input.costUsd ?? null,
+          createdAt: "2026-08-01T00:00:00.000Z",
+        };
+      },
+    })
+  );
+
+  assert.equal(run.status, "succeeded");
+  assert.equal(debits.length, 1);
+  assert.equal(debits[0]?.deltaCredits, -44);
+  assert.ok(Math.abs((debits[0]?.costUsd ?? 0) - 0.22) < Number.EPSILON * 2);
+  assert.equal(debits[0]?.actionId, store.actions[0]?.id);
+});
+
+test("skips the outer debit when nested settlement handled the full provider cost", async () => {
+  const store = new FakeStore(runFixture());
+  const { model } = scriptedModel([
+    { type: "tool_call", toolName: "generate_clip" },
+    { type: "done" },
+  ]);
+  const registry = fakeRegistry({ generate_clip: () => ok(["clip_1"], 0.42) });
+  const billableReads = [0, 0.42];
+  const internallyHandledReads = [0, 0.42];
+  let debitCalls = 0;
+
+  const run = await runOrchestratorToCompletion(
+    "run1",
+    deps(store, model, registry, {
+      resolveOwnerUserId: async () => "user1",
+      billableUsdSoFar: () => billableReads.shift() ?? 0.42,
+      internallyHandledBillableUsdSoFar: () => internallyHandledReads.shift() ?? 0.42,
+      applyCreditTransaction: async () => {
+        debitCalls += 1;
+        throw new Error("outer debit must not run");
+      },
+    })
+  );
+
+  assert.equal(run.status, "succeeded");
+  assert.equal(debitCalls, 0);
+});

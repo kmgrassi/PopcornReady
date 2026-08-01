@@ -4,6 +4,7 @@ import { mockLocalApi, workspaceId } from "../fixtures/local-api";
 const now = "2026-06-16T14:00:00.000Z";
 const imageDataUrl =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 640 360'%3E%3Crect width='640' height='360' fill='%230f766e'/%3E%3Ctext x='42' y='196' fill='white' font-size='48' font-family='Arial'%3ELibrary asset%3C/text%3E%3C/svg%3E";
+let assetBillingRequests = 0;
 
 type JsonValue = Record<string, unknown> | Array<unknown>;
 
@@ -58,6 +59,30 @@ async function mockLibraryApi(page: Page) {
 
   await page.route("**/api/v1/projects/proj-alpha/storyboard", (route) =>
     json(route, { storyboard: null }),
+  );
+
+  await page.route(/\/api\/v1\/projects\/proj-alpha\/assets(?:\?.*)?$/, (route) =>
+    json(route, {
+      assets: [
+        {
+          id: "asset-project-media",
+          schemaVersion: "asset.v1",
+          projectId: "proj-alpha",
+          workspaceId,
+          kind: "image",
+          status: "ready",
+          filename: "project-keyframe.png",
+          name: "Project keyframe",
+          url: imageDataUrl,
+          thumbnailUrl: imageDataUrl,
+          durationSec: 0,
+          source: "generated",
+          createdAt: now,
+          updatedAt: now,
+        },
+      ],
+      pagination: { limit: 100, nextCursor: null },
+    }),
   );
 
   await page.route("**/api/v1/workspaces/*/generation-runs?**", async (route) => {
@@ -127,6 +152,26 @@ async function mockLibraryApi(page: Page) {
     });
   });
 
+  await page.route("**/api/v1/discover/assets?**", (route) =>
+    json(route, {
+      assets: [
+        {
+          id: "asset-image-ready",
+          projectId: "proj-alpha",
+          workspaceId: "workspace-public",
+          kind: "image",
+          status: "ready",
+          filename: "Keyframe still",
+          remoteUrl: imageDataUrl,
+          source: { type: "generated" },
+          createdAt: now,
+          updatedAt: now,
+        },
+      ],
+      pagination: { limit: 24, nextCursor: null },
+    }),
+  );
+
   await page.route("**/api/v1/assets/asset-video-missing/media", (route) =>
     json(route, {
       url: imageDataUrl,
@@ -139,6 +184,22 @@ async function mockLibraryApi(page: Page) {
     const body = route.request().postDataJSON() as { visibility?: "public" | "private" };
     assetVisibility = body.visibility ?? assetVisibility;
     return json(route, { asset: { id: "asset-image-ready", visibility: assetVisibility } });
+  });
+
+  await page.route("**/api/v1/projects/proj-alpha/assets/asset-image-ready", (route) => {
+    assetBillingRequests += 1;
+    return json(route, {
+      asset: { id: "asset-image-ready" },
+      billing: { creditsCharged: 84 },
+    });
+  });
+
+  await page.route("**/api/v1/projects/proj-alpha/assets/asset-project-media", (route) => {
+    assetBillingRequests += 1;
+    return json(route, {
+      asset: { id: "asset-project-media" },
+      billing: { creditsCharged: 84 },
+    });
   });
 
   await page.route("**/api/v1/workspaces/*/outputs?**", (route) =>
@@ -180,6 +241,7 @@ async function mockLibraryApi(page: Page) {
 }
 
 test.beforeEach(async ({ page }) => {
+  assetBillingRequests = 0;
   await mockLibraryApi(page);
 });
 
@@ -240,10 +302,35 @@ test("covers library pagination, filters, media viewer, visibility, and watch li
   await page.getByRole("button", { name: "View Keyframe still" }).click();
   const keyframeDialog = page.getByRole("dialog", { name: "Keyframe still" });
   await expect(keyframeDialog).toBeVisible();
+  await expect(keyframeDialog.getByText("84 credits used")).toBeVisible();
+  expect(assetBillingRequests).toBe(1);
   await keyframeDialog.getByRole("button", { name: "Make public" }).click();
   await expect(page.locator("span[data-private='false']")).toHaveText("Public");
   await page.keyboard.press("Escape");
   await expect(keyframeDialog).toBeHidden();
+
+  await page.getByLabel("Show").selectOption("public");
+  await expect(page.getByText("Keyframe still").first()).toBeVisible();
+  await page.getByRole("button", { name: "View Keyframe still" }).click();
+  const publicDialog = page.getByRole("dialog", { name: "Keyframe still" });
+  await expect(publicDialog).toBeVisible();
+  await expect(publicDialog.getByText(/credits? used/)).toHaveCount(0);
+  expect(assetBillingRequests).toBe(1);
+  await page.keyboard.press("Escape");
+
+  await page.goto("/projects/proj-alpha/media");
+  await expect(page.getByRole("heading", {
+    name: "Choose from the clips attached to this project",
+  })).toBeVisible();
+  const projectMediaBilling = page.waitForResponse(
+    "**/api/v1/projects/proj-alpha/assets/asset-project-media",
+  );
+  await page.getByRole("button", { name: "View Project keyframe" }).click();
+  expect((await projectMediaBilling).ok()).toBe(true);
+  const projectMediaDialog = page.getByRole("dialog", { name: "Project keyframe" });
+  await expect(projectMediaDialog.getByText("84 credits used")).toBeVisible();
+  expect(assetBillingRequests).toBe(2);
+  await page.keyboard.press("Escape");
 
   await page.goto("/projects/proj-alpha");
   await page.getByRole("link", { name: "Watch" }).click();

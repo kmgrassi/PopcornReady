@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { MediaViewer } from "../../components/media/MediaViewer";
 import {
   landingUploadHarnessItems,
   landingUploadStatusCounts,
@@ -146,6 +147,9 @@ export function DevLandingUploadPage() {
 
 export function DevMediaGalleryPage() {
   const selected = selectedGalleryAssets(mediaGalleryHarnessAssets);
+  const [detailOpen, setDetailOpen] = useState(
+    () => new URLSearchParams(window.location.search).get("asset-detail") === "credits",
+  );
   return (
     <HarnessShell
       eyebrow="Dev harness"
@@ -205,6 +209,17 @@ export function DevMediaGalleryPage() {
           ))}
         </div>
       </section>
+      <MediaViewer
+        item={detailOpen ? {
+          id: "asset-ready",
+          kind: "image",
+          title: "Cookie box hero",
+          projectName: "Midnight Bakery",
+          thumbnailUrl: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 960 540'%3E%3Crect width='960' height='540' fill='%2314111c'/%3E%3Ccircle cx='480' cy='270' r='150' fill='%23f5b62a'/%3E%3C/svg%3E",
+        } : null}
+        creditsCharged={84}
+        onClose={() => setDetailOpen(false)}
+      />
     </HarnessShell>
   );
 }

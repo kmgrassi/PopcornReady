@@ -138,7 +138,7 @@ STAR §0) focused on one object.
 | **Project** | overview: status, runs, latest output, the story at a glance | anything project-wide ("make the whole thing more upbeat," "rename the hero everywhere") |
 | **Storyboard / story** | the beats/scenes in order, with state per beat | structure ("add a beat after the reveal," "reorder," "tighten the arc") |
 | **Scene / beat** | the beat's intent, its keyframe, its clip, its provenance | that beat ("reshoot this darker," "change what happens here") |
-| **Asset (image/clip/audio)** | the asset full-size + its pool alternatives + lineage | that asset ("brighter," "different angle," "swap the jacket") |
+| **Asset (image/clip/audio)** | the asset full-size + its pool alternatives + lineage + exact credits used when a single-output ledger debit is attributable | that asset ("brighter," "different angle," "swap the jacket") |
 | **Timeline item** | the item in context of the cut | timing/selection/transition intent ("hold this longer," "use the other take") |
 | **Export / output** | the finished video | a new pass ("make a 9:16 version," "punchier ending") |
 
