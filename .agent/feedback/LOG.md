@@ -321,3 +321,16 @@
   persistence tests that should not depend on Kong/PostgREST health.
 - Follow-up: Track pooled-mint crash idempotency by canonical action ID before
   activating the PR 3A executor in production.
+
+### 2026-08-01T15:22:00-04:00 — WEB-20260801-LARGE-FILE-REFACTOR
+
+- What helped: The oversized ProgressView had clear state, plan, and pipeline
+  boundaries; extracting those seams reduced the file by 372 lines without
+  changing its public contract.
+- Friction or failure: The worktree started without dependencies, and the first
+  E2E command forwarded a separator incorrectly, so it ran the full suite rather
+  than only the named file; both issues were resolved and validation passed.
+- Suggested improvement: Bootstrap worktrees from the offline pnpm cache before
+  starting checks, and document the package-script argument forwarding syntax for
+  focused Playwright runs.
+- Follow-up: Continue selecting a different oversized file on the next daily run.
