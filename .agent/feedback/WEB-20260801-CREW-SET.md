@@ -16,6 +16,13 @@ when it was intended as furniture. A single grounded environment can make
 several animated sprites feel collaborative while leaving authoritative status
 copy and progress semantics unchanged.
 
+The most reliable way to expand a pixel cast is to preserve one strip contract
+across every role: generate each full animation together, remove chroma before
+resizing, normalize all frames with one shared scale and bottom-center anchor,
+then inspect a preview sheet for edge contamination and pose drift. Four evenly
+anchored roles also read more like a directed shoot when their gestures face the
+camera action instead of the viewport.
+
 ## Follow-up
 
 If the project adopts deterministic visual baselines, include this loader at

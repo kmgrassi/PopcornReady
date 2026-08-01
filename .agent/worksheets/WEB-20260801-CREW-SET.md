@@ -2,7 +2,7 @@
 
 <!-- agent-summary: Ground the standalone creation loader crew in a production-set scene. -->
 <!-- agent-summary: Replace the ambiguous CSS worktable that resembles a scrollbar. -->
-<!-- agent-summary: Use one compact pixel-art backdrop behind the existing crew sprites. -->
+<!-- agent-summary: Use one compact pixel-art backdrop behind a director, camera operator, actor, and actress. -->
 <!-- agent-summary: Preserve status truthfulness, reduced motion, and cross-theme legibility. -->
 <!-- agent-summary: Keep the complete loader image payload under its existing budget. -->
 <!-- agent-summary: Validate the production route at desktop and mobile widths. -->
@@ -11,7 +11,7 @@
 ## Goal and acceptance criteria
 
 Make the standalone asset-creation loader read as a small working production
-set rather than three isolated sprites. Remove the gray CSS-drawn worktable that
+set rather than isolated sprites. Remove the gray CSS-drawn worktable that
 resembles a scrollbar, add a cohesive pixel-art soundstage backdrop, keep the
 crew visually dominant, preserve current loading semantics and reduced-motion
 behavior, and remain within the existing compact-artwork byte ceiling.
@@ -30,15 +30,20 @@ behavior, and remain within the existing compact-artwork byte ceiling.
 - `apps/web/e2e/README.md`
 - Impeccable product-register guidance
 - ImageGen skill guidance
+- OpenAI `sprite-pipeline` skill guidance and official game-studio scripts
 
 ## Decisions
 
 - Remove the misleading CSS `worktable`; the actual progress track in the
   status column remains unchanged and visible only during active work.
 - Use a generated 2:1 pixel-art soundstage plate with no people, text, logos, or
-  UI. Keep the center quiet and ground the writer, camera operator, and worker
-  on one continuous floor plane.
-- Resize the generated plate to 640×320 PNG so all four loader assets remain
+  UI. Keep the center quiet and ground a director, camera operator, actor, and
+  actress on one continuous floor plane.
+- Keep the existing camera operator's identity and animation, clean its opaque
+  light edge contamination, and use the official sprite workflow to
+  generate, chroma-clean, shared-scale normalize, and preview the three new
+  three-frame strips at the camera strip's existing 423×141 geometry.
+- Resize the generated plate to 640×320 PNG so all five loader assets remain
   below the existing 512 KiB aggregate ceiling.
 - Keep the artwork decorative under the loader's existing `aria-hidden` boundary.
 - Preserve explicit z-index tiers for the backdrop, light wash, and actors; let
@@ -55,6 +60,21 @@ behavior, and remain within the existing compact-artwork byte ceiling.
   set plate, and asserted the live loader references it.
 - Updated the Web E2E README and repository E2E inventory to describe the
   production-set resource coverage.
+- Replaced the writer and workshop worker with a director, actor, and actress;
+  retained the existing camera operator; and positioned the four roles as one
+  directed performance from left to right.
+- Removed the two superseded progress-only strips and added exact asset-order,
+  dimension, compact-payload, idle-frame, and reduced-motion assertions for the
+  four-role cast.
+- Pulled the missing normalizer and preview utilities from the official
+  `openai/plugins` game-studio source with a shallow sparse checkout, then ran
+  `normalize_sprite_strip.py` at three 141px frames and
+  `render_sprite_preview_sheet.py` for each full strip. ImageGen's
+  `remove_chroma_key.py` removed the sampled magenta field before shared-scale,
+  bottom-center normalization; a bounded opaque-pixel decontamination pass
+  removed residual purple and light edge colors without changing frame alpha.
+- Added inward outer-role anchors through 390px and a smaller scale below 360px
+  so the performance poses remain inside the set continuously down to 320px.
 
 ## Validation evidence
 
@@ -63,11 +83,15 @@ behavior, and remain within the existing compact-artwork byte ceiling.
   POPCORN_E2E_API_PORT=4212 pnpm --filter @popcorn/web exec playwright test
   e2e/asset-studio.spec.ts` — passed, 33/33 across Chromium plus the tagged
   mobile Chrome and mobile Safari cases.
-- The four loader images total 482,024 bytes, below the existing 512 KiB ceiling.
+- The focused `keeps the active crew calm and contained on mobile with reduced
+  motion` Playwright run passed 1/1 after adding its 320px transformed-actor
+  containment assertion.
+- The five active loader images total 454,365 bytes, below the existing 512 KiB ceiling.
 - In-app browser inspection against a deterministic local run fixture:
-  1280×900 in `popcorn` and `popcorn-warm`, plus 390×844 in `popcorn-warm`.
-  The backdrop, rigging, workbench, and dolly remained recognizable; the sprites
-  stayed visually dominant; and document scroll width equaled viewport width.
+  1280×900 in `popcorn` and `popcorn-warm`, plus 390×844 and 320×800 in
+  `popcorn`. The four silhouettes and widest active gestures stayed inside the
+  set; the edge colors remained clean on dark and warm/light backgrounds; and
+  document scroll width equaled viewport width.
 - The user-provided screenshot is the before-state evidence; the inspected live
   route is the after-state evidence. No screenshot baseline was committed because
   the repository's visual policy defers broad snapshots until fixtures and
@@ -84,13 +108,23 @@ behavior, and remain within the existing compact-artwork byte ceiling.
 - Plan checkpoint: approved with refinements for explicit layer ordering,
   mobile-safe cropping, a recognizable non-pill dolly rail, theme checks, and
   retaining the existing compact asset ceiling.
-- Implementation checkpoint: approved. The reviewer verified asset composition,
+- Cast-update research and plan checkpoint: approved the left-to-right director,
+  camera, actor, actress blocking and required matching 423×141 strips,
+  bottom-center normalization, staggered motion, and 320px/390px inspection.
+- Backdrop implementation checkpoint: approved. The reviewer verified asset composition,
   explicit layer order, center-safe mobile cropping, cross-theme treatment,
   decorative accessibility, PNG validation, the 482,024-byte aggregate, and
   documentation accuracy with no product-code blocker.
-- Wrap-up checkpoint: approved after verifying the exact eight-file scope,
+- Backdrop wrap-up checkpoint: approved after verifying the exact eight-file scope,
   asset dimensions and bytes, test/documentation consistency, complete
   validation evidence, clean diff, worksheet, and feedback record.
+- Cast implementation checkpoint: initially blocked on residual opaque magenta
+  edge pixels and an actress gesture clipped inside the 320px scene. Both were
+  corrected with explicit edge decontamination, inward anchors through 390px,
+  and a smaller scale below 360px; re-review approved both fixes.
+- Cast wrap-up checkpoint: approved after verifying the final responsive CSS,
+  exact sprite geometry and 454,365-byte payload, 33/33 full and 1/1 focused
+  Playwright results, scoped validation, documentation, and 13-path change set.
 
 ## Blockers and risks
 
@@ -98,11 +132,11 @@ behavior, and remain within the existing compact-artwork byte ceiling.
   its wheels and hard ends; inspect it in the live route at desktop and mobile.
 - An opaque dark plate could feel muddy in the warm theme; inspect both default
   dark and warm themes and tune the token-derived wash if necessary.
-- The loader artwork now uses about 92% of its 512 KiB ceiling. A future artwork
+- The loader artwork now uses about 87% of its 512 KiB ceiling. A future artwork
   addition should replace or further optimize an asset rather than loosen the
   budget by default.
 
 ## Next action / handoff
 
-Commit the implementation, tag the worksheet, push the branch, and open the
-required ready-for-review pull request.
+Commit the implementation, retarget the worksheet tag to the completed cast
+continuation, and push it to the existing open pull request #870.

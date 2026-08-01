@@ -71,9 +71,10 @@ async function expectCreationTypeTargets(page: Page) {
 test.describe("Asset Studio", () => {
   test("keeps progress artwork within its compact asset budget", () => {
     const assets = [
-      { name: "writer-crew.png", width: 423, height: 141 },
+      { name: "director-crew.png", width: 423, height: 141 },
       { name: "camera-crew.png", width: 423, height: 141 },
-      { name: "worker-crew.png", width: 453, height: 151 },
+      { name: "actor-crew.png", width: 423, height: 141 },
+      { name: "actress-crew.png", width: 423, height: 141 },
       { name: "studio-set.png", width: 640, height: 320 },
     ];
     let totalBytes = 0;
@@ -372,7 +373,7 @@ test.describe("Asset Studio", () => {
       "background-image",
       /studio-set\.png/,
     );
-    await expect(page.locator("[data-crew-member]")).toHaveCount(3);
+    await expect(page.locator("[data-crew-member]")).toHaveCount(4);
     await expect(page.getByTestId("creation-progress-track")).toBeVisible();
     const crewResources = await page.locator("[data-crew-member]").evaluateAll((actors) =>
       actors.map((actor) => {
@@ -381,9 +382,10 @@ test.describe("Asset Studio", () => {
       }),
     );
     expect(crewResources).toEqual([
-      expect.stringContaining("/sprites/progress/writer-crew.png"),
+      expect.stringContaining("/sprites/progress/director-crew.png"),
       expect.stringContaining("/sprites/progress/camera-crew.png"),
-      expect.stringContaining("/sprites/progress/worker-crew.png"),
+      expect.stringContaining("/sprites/progress/actor-crew.png"),
+      expect.stringContaining("/sprites/progress/actress-crew.png"),
     ]);
     expect(crewResources.some((name) => name.includes("-sprite-sheet.png"))).toBe(false);
     const brief = page.getByLabel("View full request brief");
@@ -452,7 +454,7 @@ test.describe("Asset Studio", () => {
     );
     await expect(page.getByTestId("creation-progress-track")).toHaveCount(0);
     const idleFrame = await page
-      .locator('[data-crew-member="writer"]')
+      .locator('[data-crew-member="director"]')
       .locator("div")
       .evaluate((sprite) => getComputedStyle(sprite).backgroundPositionX);
     expect(idleFrame).toBe("0px");
@@ -529,7 +531,7 @@ test.describe("Asset Studio", () => {
     await page.goto(`/create?projectId=${project.id}&runId=run_mobile`);
     await expect(page.getByText("In progress", { exact: true })).toBeVisible();
     const spriteAnimation = await page
-      .locator('[data-crew-member="writer"]')
+      .locator('[data-crew-member="director"]')
       .locator("div")
       .evaluate((sprite) => getComputedStyle(sprite).animationName);
     expect(spriteAnimation).toBe("none");
@@ -538,6 +540,26 @@ test.describe("Asset Studio", () => {
       viewport: document.documentElement.clientWidth,
     }));
     expect(overflow.document).toBeLessThanOrEqual(overflow.viewport + 1);
+
+    await page.setViewportSize({ width: 320, height: 800 });
+    const narrowBounds = await page.evaluate(() => {
+      const scene = document.querySelector<HTMLElement>("[data-testid='studio-crew']");
+      if (!scene) throw new Error("Studio crew scene is missing");
+      const sceneBox = scene.getBoundingClientRect();
+      return {
+        scene: { left: sceneBox.left, right: sceneBox.right },
+        actors: Array.from(
+          document.querySelectorAll<HTMLElement>("[data-crew-member]"),
+        ).map((actor) => {
+          const box = actor.getBoundingClientRect();
+          return { left: box.left, right: box.right };
+        }),
+      };
+    });
+    for (const actor of narrowBounds.actors) {
+      expect(actor.left).toBeGreaterThanOrEqual(narrowBounds.scene.left - 1);
+      expect(actor.right).toBeLessThanOrEqual(narrowBounds.scene.right + 1);
+    }
   });
 
   test("lets the creator bypass image prompt improvement exactly", async ({ page }) => {

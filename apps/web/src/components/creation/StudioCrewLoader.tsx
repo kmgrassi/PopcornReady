@@ -2,38 +2,41 @@ import type { CSSProperties } from "react";
 import styles from "./StudioCrewLoader.module.css";
 
 type CrewMember = {
-  id: "writer" | "camera" | "worker";
+  id: "director" | "camera" | "actor" | "actress";
   label: string;
   sheet: string;
-  cellSize: number;
-  frameA: number;
-  frameB: number;
+  position: string;
+  delay: string;
 };
 
 const crew: CrewMember[] = [
   {
-    id: "writer",
-    label: "Writer reviewing the brief",
-    sheet: "/sprites/progress/writer-crew.png",
-    cellSize: 141,
-    frameA: -141,
-    frameB: -282,
+    id: "director",
+    label: "Director calling the next setup",
+    sheet: "/sprites/progress/director-crew.png",
+    position: "14%",
+    delay: "0ms",
   },
   {
     id: "camera",
     label: "Camera operator framing the shot",
     sheet: "/sprites/progress/camera-crew.png",
-    cellSize: 141,
-    frameA: -141,
-    frameB: -282,
+    position: "38%",
+    delay: "-230ms",
   },
   {
-    id: "worker",
-    label: "Workshop worker building the asset",
-    sheet: "/sprites/progress/worker-crew.png",
-    cellSize: 151,
-    frameA: -151,
-    frameB: -302,
+    id: "actor",
+    label: "Actor rehearsing the scene",
+    sheet: "/sprites/progress/actor-crew.png",
+    position: "62%",
+    delay: "-460ms",
+  },
+  {
+    id: "actress",
+    label: "Actress rehearsing the scene",
+    sheet: "/sprites/progress/actress-crew.png",
+    position: "86%",
+    delay: "-690ms",
   },
 ];
 
@@ -50,19 +53,19 @@ export function StudioCrewLoader({ active }: { active: boolean }) {
       {crew.map((member) => {
         const spriteStyle = {
           "--sprite-sheet": `url("${member.sheet}")`,
-          "--cell-size": `${member.cellSize}px`,
-          "--frame-a": `${member.frameA}px`,
-          "--frame-b": `${member.frameB}px`,
+          "--actor-x": member.position,
+          "--animation-delay": member.delay,
         } as CSSProperties;
 
         return (
           <div
             key={member.id}
-            className={`${styles.actor} ${styles[member.id]}`}
+            className={styles.actor}
             data-crew-member={member.id}
             title={member.label}
+            style={spriteStyle}
           >
-            <div className={styles.sprite} style={spriteStyle} />
+            <div className={styles.sprite} />
           </div>
         );
       })}

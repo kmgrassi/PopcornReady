@@ -36,8 +36,8 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   boundary, at-most-once dispatch, queued status, safe invalid-review recovery,
   and desktop/mobile Create and review layouts. After confirmation, progress
   assertions cover human-readable queued/running/terminal status, checked-in
-  studio-crew artwork and its production-set backdrop from compact
-  progress-only resources, a semantically
+  director, camera operator, actor, and actress artwork with its production-set
+  backdrop from compact progress-only resources, a semantically
   truncated request brief with full disclosure, active-only indeterminate
   progress, reduced motion, mobile overflow, successful asset navigation, and
   truthful failed, canceled, blocked, and question outcomes. It also covers the
