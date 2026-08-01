@@ -48,10 +48,10 @@ export function ActivityPage() {
         <section className={styles.empty}>
           <h2>No active generations</h2>
           <p>
-            Start a new video and this screen will track the run until the first
-            export is ready.
+            Create an image, short video, or audio asset and this screen will
+            track the work until it is ready.
           </p>
-          <Link to="/projects/new">Create new video</Link>
+          <Link to="/create">Create</Link>
         </section>
       ) : null}
     </div>

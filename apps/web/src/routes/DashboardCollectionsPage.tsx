@@ -143,13 +143,13 @@ function DashboardFrame({
   description,
   children,
   action,
-  showNewVideoAction = true,
+  showCreateAction = true,
 }: {
   title: string;
   description: string;
   children: ReactNode;
   action?: ReactNode;
-  showNewVideoAction?: boolean;
+  showCreateAction?: boolean;
 }) {
   return (
     <div className={styles.page}>
@@ -158,12 +158,12 @@ function DashboardFrame({
         title={title}
         description={description}
         action={
-          action || showNewVideoAction ? (
+          action || showCreateAction ? (
             <>
               {action}
-              {showNewVideoAction ? (
-                <ButtonLink variant="primary" to="/library/projects">
-                  Projects
+              {showCreateAction ? (
+                <ButtonLink variant="primary" to="/create">
+                  Create
                 </ButtonLink>
               ) : null}
             </>
@@ -280,7 +280,7 @@ export function RunsPage() {
     <DashboardFrame
       title="Runs"
       description="Track generation runs in this workspace."
-      showNewVideoAction={false}
+      showCreateAction={false}
     >
       <Toolbar>
         <ToolbarField label="Status">
@@ -394,8 +394,8 @@ export function ProjectsPage() {
         ) : (
           <EmptyState
             title="No projects yet"
-            body="Create a video to start building your project library."
-            action={<ButtonLink variant="secondary" to="/library/projects">View projects</ButtonLink>}
+            body="Create an image, short video, or audio asset to start a project."
+            action={<ButtonLink variant="secondary" to="/create">Create</ButtonLink>}
           />
         )
       ) : null}

@@ -142,9 +142,45 @@
   stroke-width: 8;
 }
 
-.newVideo {
+.createLink {
+  display: flex;
   width: 100%;
+  min-height: var(--touch-target-min);
+  align-items: center;
+  justify-content: center;
   margin-bottom: var(--space-6);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-strong);
+  font-size: var(--text-md);
+  font-weight: 800;
+  text-decoration: none;
+  transition:
+    background var(--transition),
+    border-color var(--transition),
+    color var(--transition),
+    transform var(--transition);
+}
+
+.createLink:hover {
+  border-color: color-mix(in srgb, var(--accent-2) 58%, var(--border));
+  transform: translateY(-1px);
+}
+
+.createLink:active {
+  transform: translateY(0);
+}
+
+.createLink:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.createLinkActive {
+  border-color: color-mix(in srgb, var(--accent-2) 58%, var(--border));
+  background: color-mix(in srgb, var(--accent-2) 12%, var(--surface-2));
 }
 
 /* Nav */
@@ -542,18 +578,6 @@
   .mobileTab:focus-visible {
     outline: none;
     box-shadow: var(--ring);
-  }
-
-  .mobileTabPrimary {
-    background: var(--cta);
-    color: var(--cta-contrast);
-    box-shadow: var(--shadow-sm);
-  }
-
-  .mobileTabPrimary:hover,
-  .mobileTabPrimary.mobileTabActive {
-    background: var(--cta);
-    color: var(--cta-contrast);
   }
 
   .mobileTabIconWrap {
