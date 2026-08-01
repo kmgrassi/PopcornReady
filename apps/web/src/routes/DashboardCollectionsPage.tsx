@@ -8,6 +8,7 @@ import {
 } from "../lib/api-client";
 import { PublishAnchorDialog } from "../components/anchors/PublishAnchorDialog";
 import { useAuth } from "../components/auth/AuthProvider";
+import { StudioCrewLoadingState } from "../components/creation/StudioCrewLoadingState";
 import { PageHeader } from "../components/ui/PageHeader";
 import { Toolbar, ToolbarField } from "../components/ui/Toolbar";
 import { Button, ButtonLink } from "../components/ui/Button";
@@ -175,16 +176,31 @@ function DashboardFrame({
   );
 }
 
-function DashboardSkeleton({ variant = "rows" }: { variant?: "rows" | "grid" }) {
+function DashboardSkeleton({
+  title,
+  description,
+  variant = "rows",
+}: {
+  title: string;
+  description?: string;
+  variant?: "rows" | "grid";
+}) {
   const isGrid = variant === "grid";
   return (
-    <div className={isGrid ? styles.grid : styles.list} aria-hidden="true">
-      {Array.from({ length: isGrid ? 8 : 5 }, (_, index) => (
-        <div className={`${styles.skeleton} ${isGrid ? styles.skeletonGrid : ""}`} key={index}>
-          <span /><span /><span />
+    <StudioCrewLoadingState
+      title={title}
+      description={description}
+      reservation={(
+        <div className={isGrid ? styles.grid : styles.list}>
+          {Array.from({ length: isGrid ? 8 : 5 }, (_, index) => (
+            <div className={`${styles.skeleton} ${isGrid ? styles.skeletonGrid : ""}`} key={index}>
+              <span /><span /><span />
+            </div>
+          ))}
         </div>
-      ))}
-    </div>
+      )}
+      variant="page"
+    />
   );
 }
 
@@ -289,7 +305,7 @@ export function RunsPage() {
           </select>
         </ToolbarField>
       </Toolbar>
-      {runsQuery.loading ? <DashboardSkeleton /> : null}
+      {runsQuery.loading ? <DashboardSkeleton title="Loading runs" /> : null}
       {!runsQuery.loading && runsQuery.error ? (
         <ErrorState
           title="Unable to load runs"
@@ -376,7 +392,7 @@ export function ProjectsPage() {
       }
       action={<ScopeToggle scope={scope} onChange={setScope} />}
     >
-      {projectsQuery.loading ? <DashboardSkeleton variant="grid" /> : null}
+      {projectsQuery.loading ? <DashboardSkeleton title="Loading projects" variant="grid" /> : null}
       {!projectsQuery.loading && projectsQuery.error ? (
         <ErrorState
           title="Unable to load projects"
@@ -562,7 +578,7 @@ export function AssetsPage() {
           </ToolbarField>
         ) : null}
       </Toolbar>
-      {assetsQuery.loading ? <DashboardSkeleton variant="grid" /> : null}
+      {assetsQuery.loading ? <DashboardSkeleton title="Loading assets" variant="grid" /> : null}
       {!assetsQuery.loading && assetsQuery.error ? (
         <ErrorState
           title="Unable to load assets"
@@ -750,7 +766,7 @@ export function OutputsPage() {
 
   return (
     <DashboardFrame title="Outputs" description="Finished exported videos from every project in the active workspace.">
-      {outputsQuery.loading ? <DashboardSkeleton variant="grid" /> : null}
+      {outputsQuery.loading ? <DashboardSkeleton title="Loading outputs" variant="grid" /> : null}
       {!outputsQuery.loading && outputsQuery.error ? (
         <ErrorState
           title="Unable to load outputs"

@@ -8,6 +8,7 @@ import {
   useStartUploadedFootageGenerationRunMutation,
 } from "../lib/queryClient";
 import { useAuth } from "../components/auth/AuthProvider";
+import { StudioCrewLoadingState } from "../components/creation/StudioCrewLoadingState";
 import { v1Api } from "../lib/api-client";
 import { formatUploadSize } from "../lib/landingUpload";
 import { useUploadQueue } from "../lib/uploadQueue";
@@ -243,10 +244,11 @@ export function ProjectMediaGalleryPage() {
       </div>
 
       {state === "loading" ? (
-        <section className={styles.empty} aria-label="Loading project media">
-          <h2>Loading media</h2>
-          <p>Fetching the project asset list from the API.</p>
-        </section>
+        <StudioCrewLoadingState
+          title="Loading media"
+          description="Fetching the project asset list."
+          variant="page"
+        />
       ) : null}
 
       {state === "error" ? (

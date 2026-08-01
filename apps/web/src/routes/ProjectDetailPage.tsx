@@ -8,6 +8,7 @@ import type {
 import type { ProjectWatchMedia, WorkspaceOutput } from "../lib/api-client";
 import { useAuth } from "../components/auth/AuthProvider";
 import { AiAssetFeedbackDialog } from "../components/ai-edit/AiAssetFeedbackDialog";
+import { StudioCrewLoadingState } from "../components/creation/StudioCrewLoadingState";
 import { ButtonLink } from "../components/ui/Button";
 import { ErrorState } from "../components/ui/StateCard";
 import { ProjectUploadButton } from "../components/project-upload/ProjectUploadButton";
@@ -544,11 +545,18 @@ function isProjectSectionId(value: string | undefined): value is ProjectSectionI
 
 function ProjectSkeleton() {
   return (
-    <div className={styles.skeleton} aria-hidden="true">
-      <span />
-      <span />
-      <span />
-    </div>
+    <StudioCrewLoadingState
+      title="Loading project"
+      description="Gathering the latest project details."
+      reservation={(
+        <div className={styles.skeleton}>
+          <span />
+          <span />
+          <span />
+        </div>
+      )}
+      variant="page"
+    />
   );
 }
 

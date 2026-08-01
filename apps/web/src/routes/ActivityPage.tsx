@@ -3,6 +3,7 @@ import { ActiveRunsPanel } from "../components/home/ActiveRunsPanel";
 import { RecentOutputsStrip } from "../components/home/RecentOutputsStrip";
 import { ErrorState } from "../components/ui/StateCard";
 import { useAuth } from "../components/auth/AuthProvider";
+import { StudioCrewLoadingState } from "../components/creation/StudioCrewLoadingState";
 import { useDashboardSummaryQuery } from "../lib/queryClient";
 import styles from "./ActivityPage.module.css";
 
@@ -60,10 +61,17 @@ export function ActivityPage() {
 
 function ActivitySkeleton() {
   return (
-    <div className={styles.skeleton} aria-label="Loading activity">
-      <span />
-      <span />
-      <span />
-    </div>
+    <StudioCrewLoadingState
+      title="Loading activity"
+      description="Gathering active runs and recent outputs."
+      reservation={(
+        <div className={styles.skeleton}>
+          <span />
+          <span />
+          <span />
+        </div>
+      )}
+      variant="page"
+    />
   );
 }

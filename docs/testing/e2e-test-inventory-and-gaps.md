@@ -26,6 +26,10 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   credentials and Supabase env are provided.
 - `specs/auth-and-routing.spec.ts` covers public auth routes, protected local
   routes, compatibility redirects, and not-found behavior.
+- `specs/library-collections.spec.ts` covers the shared studio-crew route-level
+  loading contract on a mobile Library route, including accessible busy status,
+  reduced motion, no horizontal overflow, hidden layout reservation, and
+  transition into loaded content. It also covers the panel variant on Watch.
 - `asset-studio.spec.ts` covers the production-default `/create` entry, image as
   the default goal, accessible media-type targets, the 30/70 desktop workspace,
   responsive mobile collapse, recent-project context and selection, proposal
@@ -36,7 +40,8 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   boundary, at-most-once dispatch, queued status, safe invalid-review recovery,
   and desktop/mobile Create and review layouts. After confirmation, progress
   assertions cover human-readable queued/running/terminal status, checked-in
-  studio-crew artwork from compact progress-only resources, a semantically
+  director, camera operator, actor, and actress artwork with its production-set
+  backdrop from compact progress-only resources, a semantically
   truncated request brief with full disclosure, active-only indeterminate
   progress, reduced motion, mobile overflow, successful asset navigation, and
   truthful failed, canceled, blocked, and question outcomes. It also covers the

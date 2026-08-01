@@ -15,94 +15,74 @@
 
 .stageLight {
   position: absolute;
+  z-index: 1;
   inset: 0;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--text) 4%, transparent),
-    transparent 58%
+  background: radial-gradient(
+    circle at 50% 42%,
+    color-mix(in srgb, var(--cta) 10%, transparent),
+    transparent 56%
   );
 }
 
-.worktable {
+.setBackdrop {
   position: absolute;
-  z-index: 1;
-  right: 8%;
-  bottom: 43px;
-  width: 36%;
-  height: 8px;
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--border) 82%, var(--text));
-  box-shadow:
-    0 15px 0 -5px var(--border),
-    0 28px 0 -7px color-mix(in srgb, var(--border) 72%, transparent);
+  z-index: 0;
+  inset: 0;
+  background-image:
+    linear-gradient(
+      color-mix(in srgb, var(--surface) 20%, transparent),
+      color-mix(in srgb, var(--bg) 16%, transparent)
+    ),
+    url("/sprites/progress/studio-set.png");
+  background-position: center;
+  background-size: cover;
+  opacity: 0.84;
+  image-rendering: pixelated;
 }
 
 .actor {
   position: absolute;
   z-index: 2;
   bottom: 24px;
-  width: 160px;
-  height: 158px;
+  left: var(--actor-x);
+  width: 141px;
+  height: 141px;
   overflow: hidden;
-}
-
-.writer {
-  left: 2%;
-}
-
-.camera {
-  left: 32%;
-}
-
-.worker {
-  right: 0;
+  transform: translateX(-50%);
+  transform-origin: bottom center;
 }
 
 .sprite {
-  width: var(--cell-size);
-  height: var(--cell-size);
+  width: 141px;
+  height: 141px;
   background-image: var(--sprite-sheet);
   background-repeat: no-repeat;
-  background-position: var(--frame-a) 0;
+  background-position: -141px 0;
   image-rendering: pixelated;
+}
+
+.actor[data-crew-member="actress"] .sprite {
+  transform: scaleX(-1);
 }
 
 .scene[data-active="true"] .sprite {
   animation: crewWorking 920ms steps(1, end) infinite;
+  animation-delay: var(--animation-delay);
 }
 
 .scene:not([data-active="true"]) .sprite {
   background-position: 0 0;
 }
 
-.scene[data-active="true"] .camera .sprite {
-  animation-delay: -230ms;
-}
-
-.scene[data-active="true"] .worker .sprite {
-  animation-delay: -460ms;
-}
-
-.floor {
-  position: absolute;
-  z-index: 3;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: 24px;
-  background: color-mix(in srgb, var(--surface) 76%, var(--bg));
-  box-shadow: 0 -1px 0 color-mix(in srgb, var(--border) 72%, transparent);
-}
-
 @keyframes crewWorking {
   0%,
   49% {
-    background-position: var(--frame-a) 0;
+    background-position: -141px 0;
   }
 
   50%,
   100% {
-    background-position: var(--frame-b) 0;
+    background-position: -282px 0;
   }
 }
 
@@ -113,25 +93,31 @@
 
   .actor {
     bottom: 10px;
-    transform: scale(0.82);
-    transform-origin: bottom left;
+    transform: translateX(-50%) scale(0.72);
+  }
+}
+
+@media (max-width: 390px) {
+  .actor[data-crew-member="director"] {
+    left: 18%;
   }
 
-  .writer {
-    left: -4%;
+  .actor[data-crew-member="camera"] {
+    left: 39%;
   }
 
-  .camera {
-    left: 28%;
+  .actor[data-crew-member="actor"] {
+    left: 62%;
   }
 
-  .worker {
-    right: -8%;
+  .actor[data-crew-member="actress"] {
+    left: 80%;
   }
+}
 
-  .worktable {
-    right: 2%;
-    bottom: 31px;
+@media (max-width: 360px) {
+  .actor {
+    transform: translateX(-50%) scale(0.62);
   }
 }
 

@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "../components/auth/AuthProvider";
+import { StudioCrewLoadingState } from "../components/creation/StudioCrewLoadingState";
 import { ProjectUploadButton } from "../components/project-upload/ProjectUploadButton";
 import { Button, ButtonLink } from "../components/ui/Button";
 import { PageHeader } from "../components/ui/PageHeader";
@@ -27,11 +28,18 @@ export function UploadsPage() {
       />
 
       {projectsQuery.loading ? (
-        <div className={styles.grid} aria-hidden="true">
-          {Array.from({ length: 4 }, (_, index) => (
-            <div className={styles.skeleton} key={index} />
-          ))}
-        </div>
+        <StudioCrewLoadingState
+          title="Loading upload destinations"
+          description="Gathering projects that can receive source media."
+          reservation={(
+            <div className={styles.grid}>
+            {Array.from({ length: 4 }, (_, index) => (
+              <div className={styles.skeleton} key={index} />
+            ))}
+            </div>
+          )}
+          variant="page"
+        />
       ) : null}
 
       {!projectsQuery.loading && projectsQuery.error ? (
