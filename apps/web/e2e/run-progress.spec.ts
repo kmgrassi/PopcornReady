@@ -36,6 +36,8 @@ interface MockRunOptions {
     retryable?: boolean;
   };
   operatorDiagnostics?: Array<Record<string, unknown>>;
+  completionKind?: "video" | "storyboard_assets" | "standalone_asset";
+  presentationKind?: "standalone_image" | "standalone_video" | "standalone_audio";
 }
 
 test.beforeEach(async ({ page }) => {
@@ -43,25 +45,70 @@ test.beforeEach(async ({ page }) => {
   await mockProject(page);
 });
 
+test("shows a completed one-off image as one asset step without video stages @mobile", async ({ page }) => {
+  await page.route(`**${apiRunPath}`, async (route) => {
+    await route.fulfill({
+      json: runDetail({
+        status: "succeeded",
+        stageType: "asset_generation",
+        completionKind: "standalone_asset",
+        presentationKind: "standalone_image",
+        message: "Asset is ready.",
+      }),
+    });
+  });
+
+  await page.goto(runPath);
+
+  await expect(page.getByText("Your asset is ready", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Image asset for/ })).toBeVisible();
+  await expect(page.getByText(/This one-off asset and its generation history/)).toBeVisible();
+  await expect(page.getByText("Unified workspace", { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/^Producing /)).toHaveCount(0);
+  const rail = await getVisibleStageRail(page);
+  await expect(rail.getByText("Asset activity", { exact: true })).toBeVisible();
+  await expect(rail.getByText("Pipeline", { exact: true })).toHaveCount(0);
+  await expect(rail.getByText("Image asset", { exact: true })).toBeVisible();
+  await expect(rail.getByText("Complete", { exact: true })).toBeVisible();
+  await expect(rail.getByText("Script", { exact: true })).toHaveCount(0);
+  await expect(rail.getByText("Brief", { exact: true })).toHaveCount(0);
+  await expect(rail.getByText("Storyboard", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Shots", { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/Visuals needs attention/i)).toHaveCount(0);
+  if ((page.viewportSize()?.width ?? 1_024) <= 760) {
+    await expect(page.getByText("Last completed: Image asset", { exact: true })).toBeVisible();
+  } else {
+    await expect(
+      page.getByLabel("Current run status").getByText("Image asset", { exact: true }),
+    ).toBeVisible();
+  }
+});
+
 async function getVisibleStageRail(page: Page) {
   const visibleRail = page
     .getByRole("complementary", { name: "Stage rail" })
     .filter({ visible: true });
-  if (await visibleRail.first().getByText("Pipeline").isVisible().catch(() => false)) {
+  if (
+    await visibleRail
+      .first()
+      .getByText(/^(Pipeline|Asset activity)$/)
+      .isVisible()
+      .catch(() => false)
+  ) {
     return visibleRail.first();
   }
 
   const summaryToggle = page
     .locator("summary")
-    .filter({ hasText: "Show pipeline" })
+    .filter({ hasText: /Show (pipeline|asset status)/ })
     .filter({ visible: true });
   if ((await summaryToggle.count()) > 0) {
     await summaryToggle.first().click();
   } else {
-    await page.getByText("Show pipeline").filter({ visible: true }).first().click();
+    await page.getByText(/Show (pipeline|asset status)/).filter({ visible: true }).first().click();
   }
 
-  await expect(visibleRail.first().getByText("Pipeline")).toBeVisible();
+  await expect(visibleRail.first().getByText(/^(Pipeline|Asset activity)$/)).toBeVisible();
   return visibleRail.first();
 }
 
@@ -650,6 +697,8 @@ function runDetail(options: MockRunOptions = {}) {
       currentStageType: stageType,
       progressPercent: options.progressPercent ?? 25,
       message: options.message ?? "Generating your video.",
+      completionKind: options.completionKind,
+      presentationKind: options.presentationKind,
       createdAt: now,
       updatedAt: now,
       startedAt: now,
@@ -659,11 +708,37 @@ function runDetail(options: MockRunOptions = {}) {
           : undefined,
       error: options.error,
     },
-    stages: buildStages(stageType, {
-      status: options.status ?? "running",
-      reviewStageId: options.reviewGate?.stageId,
-      error: options.error,
-    }),
+    stages: options.presentationKind
+      ? [{
+          stageId,
+          runId,
+          type: stageType,
+          toolName: options.presentationKind === "standalone_image"
+            ? "generate_image_asset"
+            : options.presentationKind === "standalone_video"
+              ? "generate_video_asset"
+              : "generate_audio",
+          label: options.presentationKind === "standalone_image"
+            ? "Image asset"
+            : options.presentationKind === "standalone_video"
+              ? "Video asset"
+              : "Audio asset",
+          order: 9,
+          status: options.status ?? "running",
+          progressPercent: options.status === "succeeded" ? 100 : 25,
+          message: options.message,
+          startedAt: now,
+          completedAt: options.status === "succeeded" ? now : undefined,
+          jobIds: [],
+          artifactIds: ["asset-1"],
+          createdAt: now,
+          updatedAt: now,
+        }]
+      : buildStages(stageType, {
+          status: options.status ?? "running",
+          reviewStageId: options.reviewGate?.stageId,
+          error: options.error,
+        }),
     stageItems:
       options.stageItems ??
       (options.reviewGate

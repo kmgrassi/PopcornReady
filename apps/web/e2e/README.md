@@ -36,6 +36,9 @@ visible owning-surface refresh after restored completion, truthful cancellation,
 terminal cleanup, keyboard focus restoration, and mobile overflow. The run and
 storyboard suites also assert that their entry points open this lifecycle instead
 of posting the retired reject, board-revision, or stage-restart mutations.
+Run-progress and project-overview fixtures additionally cover successful
+creator-direct image work as one **Image asset** activity, with asset-ready copy
+and no inferred Brief, Script, or Storyboard pipeline stages.
 
 The command starts the Express API and Vite app, using:
 

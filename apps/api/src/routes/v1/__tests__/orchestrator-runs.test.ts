@@ -6,6 +6,7 @@ import type {
   OrchestratorRunGate,
   RunActionSummary,
 } from "@/lib/api/v1/orchestrator-store";
+import { SCHEMA, type Job } from "@popcorn/shared/v1/types";
 import { projectRunDetailFromParts } from "../orchestrator-run-projections.js";
 import {
   initialRunGates,
@@ -59,6 +60,23 @@ function gateFixture(
     createdAt: "2026-06-15T00:00:00.000Z",
     updatedAt: "2026-06-15T00:00:03.000Z",
     ...overrides,
+  };
+}
+
+function jobFixture(status: Job["status"]): Job {
+  return {
+    id: "job_1",
+    schemaVersion: SCHEMA.job,
+    workspaceId: "workspace_1",
+    projectId: "project_1",
+    type: "asset_generation",
+    status,
+    progress: {},
+    input: null,
+    result: null,
+    error: null,
+    createdAt: "2026-06-15T00:00:01.000Z",
+    updatedAt: "2026-06-15T00:00:02.000Z",
   };
 }
 
@@ -147,6 +165,71 @@ test("surfaces orchestrator success as ready once export_video produced output",
       stageId: "run_1:export",
     },
   ]);
+});
+
+test("projects a creator-direct image as one successful standalone asset step", () => {
+  const payload = projectRunDetailFromParts(
+    runFixture({
+      agentRole: "visuals",
+      originKind: "creator_direct",
+      taskKind: "image_create",
+    }),
+    [],
+    [
+      actionFixture("creator_direct_proposal"),
+      actionFixture("generate_image_asset", { outputAssetIds: ["image_1"] }),
+      actionFixture("store_asset_bytes", { outputAssetIds: ["image_1"] }),
+      actionFixture("domain_report"),
+    ],
+    new Map([["image_1", { status: "ready", kind: "image" }]])
+  );
+
+  assert.equal(payload.run.status, "succeeded");
+  assert.equal(payload.run.completionKind, "standalone_asset");
+  assert.equal(payload.run.presentationKind, "standalone_image");
+  assert.match(payload.run.message ?? "", /asset is ready/i);
+  assert.deepEqual(payload.stages.map((stage) => ({
+    tool: stage.toolName,
+    type: stage.type,
+    status: stage.status,
+  })), [{ tool: "generate_image_asset", type: "asset_generation", status: "succeeded" }]);
+  assert.deepEqual(payload.stageItems.map((item) => ({
+    kind: item.kind,
+    purpose: item.purpose,
+    assetId: item.assetId,
+  })), [{ kind: "image", purpose: "asset", assetId: "image_1" }]);
+});
+
+test("fails a completed standalone run that has no ready asset", () => {
+  const payload = projectRunDetailFromParts(
+    runFixture({ originKind: "creator_direct", taskKind: "image_create" }),
+    [],
+    [actionFixture("generate_image_asset", { outputAssetIds: ["image_1"] })],
+    new Map([["image_1", { status: "pending", kind: "image" }]])
+  );
+
+  assert.equal(payload.run.status, "failed");
+  assert.equal(payload.run.error?.code, "missing_asset_output");
+});
+
+test("terminal parent state prevents stale tool actions from appearing active", () => {
+  for (const status of ["failed", "canceled"] as const) {
+    const payload = projectRunDetailFromParts(
+      runFixture({
+        status,
+        originKind: "creator_direct",
+        taskKind: "image_create",
+      }),
+      [],
+      [actionFixture("generate_image_asset", { status: "running", jobIds: ["job_1"] })],
+      new Map(),
+      { jobs: new Map([["job_1", jobFixture("canceled")]]) }
+    );
+
+    assert.equal(payload.run.currentToolName, undefined);
+    assert.equal(payload.stages[0]?.status, "canceled");
+    assert.notEqual(payload.stages[0]?.status, "running");
+  }
 });
 
 test("playable export wins over an after-export stop gate", () => {

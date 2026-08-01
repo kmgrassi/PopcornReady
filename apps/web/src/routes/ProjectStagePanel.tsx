@@ -41,6 +41,9 @@ export function ProjectStagePanel({
   );
   const runDetail = runDetailQuery.data ?? null;
   const run = runDetail?.run ?? selectedRun ?? null;
+  const standaloneStage = run?.presentationKind
+    ? runDetail?.stages.slice().sort((a, b) => b.order - a.order)[0]
+    : undefined;
   const updateRunMutation = useUpdateGenerationRunMutation(projectId, run?.runId ?? "");
   const activeError = error ?? runDetailQuery.error ?? null;
   const activeLoading = loading || (Boolean(selectedRun) && runDetailQuery.isLoading);
@@ -99,8 +102,10 @@ export function ProjectStagePanel({
     <section className={`${styles.panel} ${styles.stagePanel}`} aria-labelledby="project-stage-heading">
       <div className={styles.sectionHeader}>
         <div>
-          <span className={styles.eyebrow}>Run pipeline</span>
-          <h2 id="project-stage-heading">Stage and next step</h2>
+          <span className={styles.eyebrow}>{run?.presentationKind ? "Asset activity" : "Run pipeline"}</span>
+          <h2 id="project-stage-heading">
+            {run?.presentationKind ? "Generation status" : "Stage and next step"}
+          </h2>
         </div>
         <div className={styles.sectionHeaderActions}>
           {run ? (
@@ -156,9 +161,13 @@ export function ProjectStagePanel({
                 <dd>
                   {run.reviewGate
                     ? `${titleCase(run.reviewGate.stageType)} review`
-                    : run.currentStageType
-                      ? titleCase(run.currentStageType)
-                      : titleCase(run.status)}
+                    : run.status === "failed" || run.status === "canceled"
+                      ? titleCase(run.status)
+                    : standaloneStage
+                      ? standaloneStage.label
+                      : run.currentStageType
+                        ? titleCase(run.currentStageType)
+                        : titleCase(run.status)}
                 </dd>
               </div>
               <div>
@@ -166,13 +175,21 @@ export function ProjectStagePanel({
                 <dd>
                   {nextStage
                     ? titleCase(nextStage.type)
+                    : run.status === "failed"
+                      ? "Needs attention"
+                      : run.status === "canceled"
+                        ? "Stopped"
                     : run.status === "succeeded"
-                      ? run.completionKind === "video"
-                        ? "Video ready"
-                        : run.completionKind === "storyboard_assets"
-                          ? "Storyboard ready"
-                          : "Run ended"
-                      : "Pending"}
+                      ? run.completionKind === "standalone_asset"
+                        ? "Asset ready"
+                        : run.completionKind === "video"
+                          ? "Video ready"
+                          : run.completionKind === "storyboard_assets"
+                            ? "Storyboard ready"
+                            : "Run ended"
+                      : run.presentationKind && run.status === "running"
+                        ? "Finishing asset"
+                        : "Pending"}
                 </dd>
               </div>
               <div>
@@ -191,6 +208,7 @@ export function ProjectStagePanel({
                 reviewGate={run.reviewGate}
                 stageLinks={stageLinks}
                 showUpcomingStages
+                presentationKind={run.presentationKind}
               />
             ) : (
               <p className={styles.muted}>

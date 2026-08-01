@@ -144,9 +144,7 @@ const toolCapabilityCatalog = {
     execution: "sync",
     costClass: "media",
     gate: { kind: "none" },
-    // This tool historically used the stage-label/order fallbacks. Preserve
-    // that observable route behavior until a dedicated UI projection change.
-    runProjection: { label: null, order: null },
+    runProjection: { label: "Image revision", order: 9 },
   },
   edit_video_asset: {
     capability: "video_editing",
@@ -169,7 +167,7 @@ const toolCapabilityCatalog = {
     costClass: "media",
     gate: { kind: "none" },
     surface: "domain",
-    runProjection: { label: null, order: null },
+    runProjection: { label: "Image asset", order: 9 },
   },
   generate_video_asset: {
     capability: "standalone_video_generation",
@@ -181,7 +179,7 @@ const toolCapabilityCatalog = {
     costClass: "media",
     gate: { kind: "none" },
     surface: "domain",
-    runProjection: { label: null, order: null },
+    runProjection: { label: "Video asset", order: 9 },
   },
   generate_audio: {
     capability: "audio_generation",

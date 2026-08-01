@@ -20,6 +20,7 @@ export function TerminalState({ run, creditRecovery }: TerminalStateProps) {
   if (run.status === "succeeded") {
     const storyboardAssetsReady = run.completionKind === "storyboard_assets";
     const videoReady = run.completionKind === "video";
+    const standaloneAssetReady = run.completionKind === "standalone_asset";
 
     return (
       <div className="terminal-state terminal-succeeded" role="status">
@@ -28,6 +29,8 @@ export function TerminalState({ run, creditRecovery }: TerminalStateProps) {
           <span className="terminal-state-heading">
             {videoReady
               ? "Your video is ready"
+              : standaloneAssetReady
+                ? "Your asset is ready"
               : storyboardAssetsReady
                 ? "Storyboard assets are ready"
                 : "Run ended without a playable video"}
@@ -37,6 +40,8 @@ export function TerminalState({ run, creditRecovery }: TerminalStateProps) {
           {run.message ??
             (videoReady
               ? "Generation finished. The final preview is available below."
+              : standaloneAssetReady
+                ? "Generation finished. The asset is available in the project library."
               : storyboardAssetsReady
               ? "Generation stopped after creating the storyboard and keyframe images."
               : "The run ended, but no verified playable video output was reported.")}

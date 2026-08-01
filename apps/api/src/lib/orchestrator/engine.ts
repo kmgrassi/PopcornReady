@@ -843,6 +843,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
           registry: turnRegistry,
           systemPrompt: definition.systemPrompt,
           agentContext,
+          completionMode: definition.task ? "domain_json" : "text",
         }),
         r.modelTurnTimeoutMs,
         `orchestrator model turn exceeded ${r.modelTurnTimeoutMs}ms`

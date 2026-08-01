@@ -15,10 +15,10 @@ test("catalog-backed run labels and ordering preserve legacy projection behavior
     generate_storyboard: ["Storyboard", 6],
     generate_keyframe: ["Keyframes", 7],
     generate_clip: ["Clips", 8],
-    regenerate_image_asset: ["Plan", 101],
+    regenerate_image_asset: ["Image revision", 9],
     edit_video_asset: ["Video Edits", 9],
-    generate_image_asset: ["Plan", 101],
-    generate_video_asset: ["Plan", 101],
+    generate_image_asset: ["Image asset", 9],
+    generate_video_asset: ["Video asset", 9],
     generate_audio: ["Audio", 10],
     fit_audio_to_picture: ["Audio Sync", 11],
     assemble_timeline: ["Timeline", 12],
@@ -26,10 +26,11 @@ test("catalog-backed run labels and ordering preserve legacy projection behavior
     request_approval: ["Approval", 14],
     export_video: ["Final Render", 15],
     publish_to_catalog: ["Publish", 16],
-    // Dispatch tools (PR 6) use the same neutral stage-label/order fallback
-    // as regenerate_image_asset; they never render a dedicated stage.
+    // Dispatch tools use the neutral stage-label/order fallback because they
+    // are hidden orchestration metadata rather than creator-visible stages.
     delegate_visuals: ["Plan", 101],
     delegate_audio: ["Plan", 101],
+    delegate_domains: ["Plan", 101],
   } as const;
 
   assert.deepEqual(
