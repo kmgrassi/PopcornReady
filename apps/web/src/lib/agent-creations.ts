@@ -23,7 +23,7 @@ export function creationProposalBodyFor(input: {
     prompt: input.prompt,
     maximumUsd: input.maximumUsd,
     referenceAssetIds: [],
-    ...(input.goal === "image"
+    ...(input.goal === "image" || input.goal === "video"
       ? { improvePrompt: input.improvePrompt }
       : {}),
   };

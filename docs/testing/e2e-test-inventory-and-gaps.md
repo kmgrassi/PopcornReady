@@ -8,7 +8,7 @@
 <!-- agent-summary: Async dispatch races require local Supabase concurrency coverage when no safe live completion is available. -->
 <!-- agent-summary: Keep remaining gaps concrete, behavior-focused, and tied to the smallest useful next test. -->
 
-Last reconciled with the active route table: 2026-07-31
+Last reconciled with the active route table: 2026-08-01
 
 This inventory covers the active split app described in `CLAUDE.md`: the Vite
 React SPA in `apps/web` and the Express API in `apps/api`. New end-to-end work
@@ -29,7 +29,8 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
 - `asset-studio.spec.ts` covers the production-default `/create` entry, image as
   the default goal, choice-card padding at desktop and mobile widths, proposal
   review without dispatch, immediate navigation to `/create/review`, visible
-  image-prompt refinement, the exact effective-prompt preview, creator bypass,
+  image and video prompt refinement, motion-specific video progress, the exact
+  effective-prompt preview, creator bypass, draft-preserving video revision,
   manual **Approve this** confirmation, the 10-second automatic-confirmation
   boundary, at-most-once dispatch, queued status, safe invalid-review recovery,
   and desktop/mobile Create and review layouts.

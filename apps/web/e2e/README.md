@@ -17,7 +17,8 @@ pnpm --filter @popcorn/web test:e2e
 
 `asset-studio.spec.ts` uses browser API fixtures to verify the production
 `/create` route, default Image selection, choice-card padding, proposal review,
-default-on prompt refinement, exact effective-prompt preview, creator bypass,
+default-on image and video prompt refinement, motion-specific progress, exact
+effective-prompt preview, creator bypass, draft-preserving video revision,
 immediate navigation to `/create/review`, manual **Approve this** confirmation,
 the visible 10-second automatic-confirmation boundary, at-most-once dispatch,
 Back/Forward proposal restoration without reposting, stale-proposal recovery,

@@ -6,7 +6,7 @@
 <!-- agent-summary: The reviewed effective prompt is bound to the digest, task, run, action, and preview. -->
 <!-- agent-summary: Proposal provenance retains the original prompt, effective prompt, and policy version. -->
 <!-- agent-summary: Invalid or failed enhancement creates no run, action, gate, or silent fallback. -->
-<!-- agent-summary: Video and soundtrack creation remain outside this image-only policy. -->
+<!-- agent-summary: Video creation uses its own companion motion-direction policy; audio remains unchanged. -->
 
 ## Purpose
 
@@ -23,6 +23,10 @@ surface texture; restrained color and detail hierarchy; and believable
 imperfection. It replaces empty quality praise with visible decisions and must
 not invent people, products, logos, visible text, lettering, copy, brand facts,
 or plot points.
+
+Video creation follows the same proposal boundary with a distinct motion-aware
+policy; see [Video Prompt Enhancement](video-prompt-enhancement.md). The image
+policy in this document remains limited to `image_create`.
 
 ## Proposal and provenance contract
 

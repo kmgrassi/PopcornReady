@@ -11,7 +11,7 @@ test("Asset Studio maps creator-facing goals to creator-direct task kinds", () =
   assert.equal(creationKindFor("soundtrack"), "soundtrack_create");
 });
 
-test("Asset Studio maps image prompt-improvement choices into proposal payloads", () => {
+test("Asset Studio maps visual prompt-improvement choices into proposal payloads", () => {
   const base = {
     goal: "image" as const,
     prompt: "A restrained editorial product still",
@@ -32,19 +32,34 @@ test("Asset Studio maps image prompt-improvement choices into proposal payloads"
     referenceAssetIds: [],
     improvePrompt: false,
   });
-});
-
-test("Asset Studio omits image prompt improvement for non-image proposals", () => {
   assert.deepEqual(
     creationProposalBodyFor({
+      ...base,
       goal: "video",
       prompt: "A restrained editorial motion study",
       improvePrompt: true,
-      maximumUsd: 10,
     }),
     {
       kind: "video_create",
       prompt: "A restrained editorial motion study",
+      maximumUsd: 10,
+      referenceAssetIds: [],
+      improvePrompt: true,
+    },
+  );
+});
+
+test("Asset Studio omits prompt improvement for soundtrack proposals", () => {
+  assert.deepEqual(
+    creationProposalBodyFor({
+      goal: "soundtrack",
+      prompt: "A restrained instrumental pulse",
+      improvePrompt: true,
+      maximumUsd: 10,
+    }),
+    {
+      kind: "soundtrack_create",
+      prompt: "A restrained instrumental pulse",
       maximumUsd: 10,
       referenceAssetIds: [],
     },

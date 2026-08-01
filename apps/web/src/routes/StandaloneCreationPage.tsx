@@ -53,8 +53,11 @@ export function StandaloneCreationPage() {
     returnedDraft?.projectId ?? params.get("projectId") ?? "",
   );
   const [prompt, setPrompt] = useState(returnedDraft?.prompt ?? "");
-  const [improvePrompt, setImprovePrompt] = useState(
-    returnedDraft?.improvePrompt ?? true,
+  const [improveImagePrompt, setImproveImagePrompt] = useState(
+    returnedDraft?.goal === "image" ? returnedDraft.improvePrompt : true,
+  );
+  const [improveVideoPrompt, setImproveVideoPrompt] = useState(
+    returnedDraft?.goal === "video" ? returnedDraft.improvePrompt : true,
   );
   const [proposalKey, setProposalKey] = useState(
     () => `asset-studio:proposal:${crypto.randomUUID()}`,
@@ -68,6 +71,8 @@ export function StandaloneCreationPage() {
   );
   const selectedName =
     listedSelection?.name ?? selectedProjectQuery.data?.project.name;
+  const improvePrompt =
+    goal === "video" ? improveVideoPrompt : improveImagePrompt;
 
   if (runId && projectId) {
     return (
@@ -149,8 +154,8 @@ export function StandaloneCreationPage() {
       <header className={styles.header}>
         <h1>Make an asset for your project</h1>
         <p>
-          Describe the outcome. For images, a quick prompt-refinement pass runs
-          on the next page. Review it there, or asset generation starts
+          Describe the outcome. For images and videos, a quick prompt-refinement
+          pass runs on the next page. Review it there, or asset generation starts
           automatically 10 seconds after the proposal is ready.
         </p>
       </header>
@@ -205,25 +210,36 @@ export function StandaloneCreationPage() {
               setPrompt(event.target.value);
               resetProposal();
             }}
-            placeholder="A quiet amber-lit close-up of popcorn falling into a bowl"
+            placeholder={
+              goal === "video"
+                ? "A cyclist crossing a rain-slick street as the camera holds still"
+                : goal === "soundtrack"
+                  ? "Sparse brushed percussion building to a warm final chord"
+                  : "A quiet amber-lit close-up of popcorn falling into a bowl"
+            }
           />
         </label>
 
-        {goal === "image" ? (
+        {goal === "image" || goal === "video" ? (
           <label className={styles.enhancementControl}>
             <input
               type="checkbox"
               checked={improvePrompt}
               onChange={(event) => {
-                setImprovePrompt(event.target.checked);
+                if (goal === "video") {
+                  setImproveVideoPrompt(event.target.checked);
+                } else {
+                  setImproveImagePrompt(event.target.checked);
+                }
                 resetProposal();
               }}
             />
             <span>
-              <strong>Improve image prompt</strong>
+              <strong>Improve {goal} prompt</strong>
               <small>
-                Adds concrete composition, lighting, materials, and restraint
-                while preserving your idea.
+                {goal === "video"
+                  ? "Adds clear action, camera behavior, continuity, and an end state while preserving your idea."
+                  : "Adds concrete composition, lighting, materials, and restraint while preserving your idea."}
               </small>
             </span>
           </label>

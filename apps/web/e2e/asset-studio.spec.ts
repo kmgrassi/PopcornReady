@@ -240,6 +240,86 @@ test.describe("Asset Studio", () => {
     });
   });
 
+  test("refines video prompts with motion direction and preserves the video draft @mobile", async ({
+    page,
+  }) => {
+    const originalPrompt = "A cyclist crosses a rain-slick street";
+    const effectivePrompt =
+      "One continuous street-level shot of a cyclist entering frame left, crossing rain-slick pavement, and exiting frame right while the camera holds still.";
+    let requestBody: Record<string, unknown> | null = null;
+    let releaseProposal: (() => void) | undefined;
+    const proposalReleased = new Promise<void>((resolve) => {
+      releaseProposal = resolve;
+    });
+
+    await page.route(
+      `**/api/v1/projects/${project.id}/agent-creations/proposals`,
+      async (route) => {
+        requestBody = route.request().postDataJSON();
+        await proposalReleased;
+        await fulfillJson(
+          route,
+          {
+            proposal: {
+              sessionId: "session_video",
+              runId: "run_video",
+              gateId: "gate_video",
+              requestDigest: "digest_video",
+              maximumUsd: 10,
+              approvalToken: "approval_video",
+              expiresAt: "2099-07-31T18:00:00.000Z",
+              effectivePrompt,
+              enhancementApplied: true,
+            },
+          },
+          201,
+        );
+      },
+    );
+
+    await page.goto("/create");
+    const improveImage = page.getByRole("checkbox", {
+      name: /Improve image prompt/,
+    });
+    await improveImage.uncheck();
+    await page.getByText("Video", { exact: true }).click();
+    const improve = page.getByRole("checkbox", {
+      name: /Improve video prompt/,
+    });
+    await expect(improve).toBeChecked();
+    await openProjectPicker(page);
+    await page.getByRole("button", { name: project.name, exact: true }).click();
+    await page
+      .getByLabel("What should it feel like?", { exact: true })
+      .fill(originalPrompt);
+    await page.getByRole("button", { name: "Start" }).click();
+
+    await expect(page).toHaveURL(/\/create\/review$/);
+    await expect(page.getByRole("heading", { name: "Improving your prompt" })).toBeVisible();
+    await expect(page.getByText("clear motion direction before generation")).toBeVisible();
+    releaseProposal?.();
+    await expect(page.getByText(effectivePrompt)).toBeVisible();
+    expect(requestBody).toMatchObject({
+      kind: "video_create",
+      prompt: originalPrompt,
+      improvePrompt: true,
+    });
+
+    await page.getByRole("button", { name: "Revise request" }).click();
+    await expect(page).toHaveURL(/\/create$/);
+    await expect(
+      page.getByRole("radio", {
+        name: "Video A short motion asset, without a full production.",
+      }),
+    ).toBeChecked();
+    await expect(page.getByRole("checkbox", { name: /Improve video prompt/ })).toBeChecked();
+    await expect(
+      page.getByPlaceholder(
+        "A cyclist crossing a rain-slick street as the camera holds still",
+      ),
+    ).toHaveValue(originalPrompt);
+  });
+
   test("keeps prompt-improvement failure actionable and preserves revision", async ({
     page,
   }) => {
