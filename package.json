@@ -24,6 +24,7 @@
     "db:local:reset": "supabase db reset",
     "db:local:status": "supabase status",
     "db:local:test:e2e": "AUTH_MODE=supabase POPCORN_E2E_AUTH_MODE=supabase node scripts/with-local-supabase-env.mjs pnpm --filter @popcorn/web test:e2e",
+    "db:test:orchestrator-wait-reasons:local": "RUN_LOCAL_DB_INTEGRATION=1 node scripts/with-local-supabase-env.mjs pnpm --filter @popcorn/api exec tsx --test --test-concurrency=1 src/lib/supabase/__tests__/orchestrator-wait-reasons.integration.test.ts",
     "db:test:pr7b-upgrade": "node scripts/test-pr7b-root-profile-upgrade.mjs",
     "db:migrations:test": "node --test scripts/validate-supabase-migrations.test.mjs",
     "db:migrations:validate": "node scripts/validate-supabase-migrations.mjs",
