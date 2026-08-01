@@ -27,7 +27,8 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
 - `specs/auth-and-routing.spec.ts` covers public auth routes, protected local
   routes, compatibility redirects, and not-found behavior.
 - `asset-studio.spec.ts` covers the production-default `/create` entry, image as
-  the default goal, choice-card padding at desktop and mobile widths, proposal
+  the default goal, accessible media-type targets, the 30/70 desktop workspace,
+  responsive mobile collapse, recent-project context and selection, proposal
   review without dispatch, immediate navigation to `/create/review`, visible
   image and video prompt refinement, motion-specific video progress, the exact
   effective-prompt preview, creator bypass, draft-preserving video revision,
@@ -222,13 +223,14 @@ Authenticated routes:
   `/dev/landing-upload`, `/dev/media-gallery`, `/dev/video-edit`
 
 Retired route note: `/studio` is not mounted in the current Vite route table.
-Standalone Image, Video, and Soundtrack creation enters through the
-dashboard/global **Create new asset** action or `/create`. Full video-project
-creation remains available through the landing prompt, dashboard empty-state
-video action, and `/projects/new`.
+Standalone Image, Video, and Audio creation enters through the authenticated
+shell plus Dashboard, Activity, and Library **Create** actions or `/create`.
+Full video-project creation remains distinct through explicit video actions,
+the landing prompt, and `/projects/new`.
 
-Dashboard creation note: the global shell Create action opens Asset Studio.
-The full video-project flow is still `/projects/new`; `/studio` remains retired.
+Dashboard creation note: global Create actions open the asset-oriented creation
+workspace. The full video-project flow is still `/projects/new`; `/studio`
+remains retired.
 
 ## Recommended Harness Shape
 
@@ -332,6 +334,12 @@ Recommended next test:
 Covered:
 
 - The authenticated global Create action opens `/create` by default.
+- Dashboard, Activity, populated/empty Library, desktop shell, and mobile shell
+  use the same `/create` entry; `/projects/new` retains separate navigation state.
+- Desktop creation uses a roughly 30/70 project/media context-to-prompt layout;
+  mobile collapses the context structurally without horizontal overflow.
+- A quiet recent-project switcher reuses loaded project data, shows real poster
+  context or a truthful fallback, and stays synchronized with the project picker.
 - Image is the default creator-facing goal and maps to `image_create`.
 - Starting moves immediately to `/create/review`; proposal/refinement progress
   is shown there before any confirmation or enqueue.

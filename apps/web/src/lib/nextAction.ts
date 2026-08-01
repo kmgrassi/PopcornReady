@@ -123,19 +123,19 @@ export function deriveNextAction(
   if (!pulse || projectCount === 0) {
     return {
       type: "start",
-      title: "Create your first AI rough cut",
-      body: "Start with a brief, add footage, then choose where the run should stop for review.",
-      ctaLabel: "Create new video",
-      to: "/projects/new?start=1",
+      title: "Create your first project asset",
+      body: "Make an image, short video, or audio asset for a new or existing project.",
+      ctaLabel: "Create",
+      to: "/create",
     };
   }
 
   return {
     type: "new",
-    title: "Start the next rough cut",
-    body: "No workspace item needs attention right now. Create a new video when you are ready.",
-    ctaLabel: "Create new video",
-    to: "/projects/new?start=1",
+    title: "Create something new",
+    body: "No workspace item needs attention right now. Make an image, short video, or audio asset when you are ready.",
+    ctaLabel: "Create",
+    to: "/create",
   };
 }
 

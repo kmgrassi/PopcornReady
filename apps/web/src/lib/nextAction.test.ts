@@ -84,3 +84,27 @@ test("deriveNextAction does not invent a percentage for active work", () => {
   assert.doesNotMatch(action.body, /0%|50%/);
   assert.match(action.body, /Progress will update/);
 });
+
+test("deriveNextAction sends a zero-project workspace to asset creation", () => {
+  const action = deriveNextAction(
+    summary({
+      counts: { projects: 0, activeRuns: 0, outputs: 0 },
+    }),
+  );
+
+  assert.equal(action.type, "start");
+  assert.equal(action.title, "Create your first project asset");
+  assert.equal(action.ctaLabel, "Create");
+  assert.equal(action.to, "/create");
+  assert.match(action.body, /image, short video, or audio asset/);
+});
+
+test("deriveNextAction sends an idle existing workspace to asset creation", () => {
+  const action = deriveNextAction(summary({}));
+
+  assert.equal(action.type, "new");
+  assert.equal(action.title, "Create something new");
+  assert.equal(action.ctaLabel, "Create");
+  assert.equal(action.to, "/create");
+  assert.match(action.body, /image, short video, or audio asset/);
+});

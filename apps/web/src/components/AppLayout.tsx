@@ -73,9 +73,7 @@ type MobileTabItem = {
   label: string;
   to: string;
   activePaths: readonly string[];
-  excludePaths?: readonly string[];
   icon: "library" | "create" | "activity" | "account";
-  primary?: boolean;
   badge?: "activity";
 };
 
@@ -84,15 +82,13 @@ const MOBILE_TABS: readonly MobileTabItem[] = [
     label: "Library",
     to: "/library",
     activePaths: ["/library", "/projects", "/assets", "/outputs"],
-    excludePaths: ["/projects/new"],
     icon: "library",
   },
   {
     label: "Create",
     to: "/create",
-    activePaths: ["/create", "/projects/new"],
+    activePaths: ["/create"],
     icon: "create",
-    primary: true,
   },
   {
     label: "Activity",
@@ -331,16 +327,17 @@ export function AuthenticatedAppLayout() {
 
         {/* Quiet tier on purpose: each screen's featured action (e.g. the
             launchpad hero) owns the single gold CTA. */}
-        <Button
-          className={styles.newVideo}
-          variant="secondary"
-          onClick={() => {
-            setNavOpen(false);
-            navigate("/create");
-          }}
+        <NavLink
+          className={({ isActive }) =>
+            isActive
+              ? `${styles.createLink} ${styles.createLinkActive}`
+              : styles.createLink
+          }
+          to="/create"
+          onClick={() => setNavOpen(false)}
         >
-          Create new asset
-        </Button>
+          Create
+        </NavLink>
 
         <nav className={styles.nav} aria-label="Dashboard">
           {PRIMARY_NAV.map((item) => (
@@ -503,20 +500,16 @@ export function AuthenticatedAppLayout() {
 
 function MobileTabBar({ activityCount }: { activityCount: number }) {
   const location = useLocation();
-  const navigate = useNavigate();
 
   return (
     <nav className={styles.mobileTabBar} aria-label="Primary mobile">
       {MOBILE_TABS.map((item) => {
         const isActive = item.activePaths.some((path) =>
           location.pathname === path || location.pathname.startsWith(`${path}/`)
-        ) && !item.excludePaths?.some((path) =>
-          location.pathname === path || location.pathname.startsWith(`${path}/`)
         );
         const className = [
           styles.mobileTab,
           isActive ? styles.mobileTabActive : "",
-          item.primary ? styles.mobileTabPrimary : "",
         ]
           .filter(Boolean)
           .join(" ");
@@ -525,23 +518,8 @@ function MobileTabBar({ activityCount }: { activityCount: number }) {
             ? Math.min(activityCount, 9).toString()
             : null;
 
-        if (item.primary) {
-          return (
-            <button
-              key={item.to}
-              type="button"
-              className={className}
-              aria-current={isActive ? "page" : undefined}
-              onClick={() => navigate(item.to)}
-            >
-              <MobileTabIcon name={item.icon} />
-              <span>{item.label}</span>
-            </button>
-          );
-        }
-
         return (
-          <NavLink
+          <Link
             key={item.to}
             to={item.to}
             className={className}
@@ -552,7 +530,7 @@ function MobileTabBar({ activityCount }: { activityCount: number }) {
               {badge ? <span className={styles.mobileTabBadge}>{badge}</span> : null}
             </span>
             <span>{item.label}</span>
-          </NavLink>
+          </Link>
         );
       })}
     </nav>

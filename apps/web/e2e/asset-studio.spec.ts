@@ -8,8 +8,18 @@ const project = {
   name: "Campaign stills",
   status: "active",
   visibility: "private",
+  posterUrl:
+    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 90'%3E%3Crect width='160' height='90' fill='%232a2440'/%3E%3C/svg%3E",
   createdAt: now,
   updatedAt: now,
+};
+
+const recentProject = {
+  ...project,
+  id: "project_recent",
+  name: "Midnight Drive",
+  posterUrl: null,
+  updatedAt: "2025-01-01T00:00:00.000Z",
 };
 
 async function fulfillJson(route: Route, body: unknown, status = 200) {
@@ -23,7 +33,7 @@ async function fulfillJson(route: Route, body: unknown, status = 200) {
 async function mockAssetStudioProject(page: Page) {
   await page.route("**/api/v1/projects?**", (route) =>
     fulfillJson(route, {
-      projects: [project],
+      projects: [recentProject, project],
       pagination: { limit: 100, nextCursor: null },
     }),
   );
@@ -36,27 +46,20 @@ async function openProjectPicker(page: Page) {
   return trigger;
 }
 
-async function expectChoiceCardPadding(page: Page) {
-  const padding = await page.getByRole("radio").evaluateAll((inputs) => {
-    const expected = getComputedStyle(document.documentElement)
-      .getPropertyValue("--space-4")
-      .trim();
-    const cards = inputs.map((input) => {
-      const card = input.closest("label");
-      if (!card) throw new Error("Choice card radio is missing its label");
-      const style = getComputedStyle(card);
-      return {
-        inlineStart: style.paddingInlineStart,
-        inlineEnd: style.paddingInlineEnd,
-      };
-    });
-    return { expected, cards };
-  });
+async function expectCreationTypeTargets(page: Page) {
+  const targets = await page.getByRole("radio").evaluateAll((inputs) =>
+    inputs.map((input) => {
+      const label = input.closest("label");
+      if (!label) throw new Error("Creation type radio is missing its label");
+      const box = label.getBoundingClientRect();
+      return { width: box.width, height: box.height };
+    }),
+  );
 
-  expect(padding.cards).toHaveLength(3);
-  for (const card of padding.cards) {
-    expect(card.inlineStart).toBe(padding.expected);
-    expect(card.inlineEnd).toBe(padding.expected);
+  expect(targets).toHaveLength(3);
+  for (const target of targets) {
+    expect(target.width).toBeGreaterThanOrEqual(44);
+    expect(target.height).toBeGreaterThanOrEqual(44);
   }
 }
 
@@ -64,6 +67,107 @@ test.describe("Asset Studio", () => {
   test.beforeEach(async ({ page }) => {
     await mockLocalApi(page);
     await mockAssetStudioProject(page);
+  });
+
+  test("uses the selected recent project in the split creation workspace", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/create");
+
+    const context = page.getByLabel("Creation context");
+    const canvas = page.getByLabel("Creation prompt");
+    const contextBox = await context.boundingBox();
+    const canvasBox = await canvas.boundingBox();
+    expect(contextBox).not.toBeNull();
+    expect(canvasBox).not.toBeNull();
+    const workspaceWidth = contextBox!.width + canvasBox!.width;
+    expect(contextBox!.width / workspaceWidth).toBeGreaterThan(0.26);
+    expect(contextBox!.width / workspaceWidth).toBeLessThan(0.34);
+    expect(canvasBox!.width / workspaceWidth).toBeGreaterThan(0.66);
+
+    await expect(page.getByRole("navigation", { name: "Recent projects" })).toBeVisible();
+    const recentProjectOrder = await page
+      .getByRole("navigation", { name: "Recent projects" })
+      .getByRole("button")
+      .evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label")));
+    expect(recentProjectOrder).toEqual([
+      `Use recent project ${project.name}`,
+      `Use recent project ${recentProject.name}`,
+    ]);
+    await expect(
+      page.getByRole("button", { name: `Use recent project ${project.name}` }),
+    ).toContainText(project.name);
+    const noPosterProject = page.getByRole("button", {
+      name: `Use recent project ${recentProject.name}`,
+    });
+    await expect(noPosterProject.locator("img")).toHaveCount(0);
+    await expect(noPosterProject.getByText("M", { exact: true })).toBeVisible();
+    await page
+      .getByRole("button", { name: `Use recent project ${project.name}` })
+      .click();
+
+    await expect(
+      page.getByRole("article", { name: `Selected project ${project.name}` }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("article", { name: `Selected project ${project.name}` }).locator("img"),
+    ).toHaveAttribute("src", project.posterUrl);
+    await expect(
+      page.getByRole("button", { name: `Project ${project.name}`, exact: true }),
+    ).toBeVisible();
+
+    const promptBox = await page.getByLabel("Describe the result").boundingBox();
+    expect(promptBox).not.toBeNull();
+    expect(promptBox!.height).toBeGreaterThanOrEqual(260);
+    await expect(page.getByRole("button", { name: "Review request" })).toBeDisabled();
+    await expectCreationTypeTargets(page);
+
+    const overflow = await page.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }));
+    expect(overflow.scrollWidth).toBe(overflow.clientWidth);
+  });
+
+  test("shows recent-project loading placeholders without duplicating project recovery", async ({ page }) => {
+    let releaseProjects: (() => void) | undefined;
+    const projectsReleased = new Promise<void>((resolve) => {
+      releaseProjects = resolve;
+    });
+    await page.unroute("**/api/v1/projects?**");
+    await page.route("**/api/v1/projects?**", async (route) => {
+      await projectsReleased;
+      await fulfillJson(route, {
+        projects: [project],
+        pagination: { limit: 100, nextCursor: null },
+      });
+    });
+
+    await page.goto("/create");
+    await expect(page.getByRole("navigation", { name: "Recent projects" })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: `Use recent project ${project.name}` }),
+    ).toHaveCount(0);
+
+    releaseProjects?.();
+    await expect(
+      page.getByRole("button", { name: `Use recent project ${project.name}` }),
+    ).toBeVisible();
+  });
+
+  test("omits the recent-project strip when no projects exist", async ({ page }) => {
+    await page.unroute("**/api/v1/projects?**");
+    await page.route("**/api/v1/projects?**", (route) =>
+      fulfillJson(route, {
+        projects: [],
+        pagination: { limit: 100, nextCursor: null },
+      }),
+    );
+
+    await page.goto("/create");
+    await expect(page.getByRole("navigation", { name: "Recent projects" })).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Project Create your first project" }),
+    ).toBeVisible();
   });
 
   test("moves prompt refinement to review and manual approval dispatches once", async ({ page }) => {
@@ -140,14 +244,17 @@ test.describe("Asset Studio", () => {
     );
 
     await page.goto("/dashboard");
-    await page.getByRole("button", { name: "Create new asset" }).click();
+    await page
+      .getByRole("complementary")
+      .getByRole("link", { name: "Create", exact: true })
+      .click();
     await expect(page).toHaveURL(/\/create$/);
     await expect(
       page.getByRole("radio", {
-        name: "Image A visual for the project asset pool.",
+        name: "Image A still visual for this project.",
       }),
     ).toBeChecked();
-    await expectChoiceCardPadding(page);
+    await expectCreationTypeTargets(page);
 
     const projectTrigger = await openProjectPicker(page);
     await page.keyboard.press("Escape");
@@ -156,9 +263,9 @@ test.describe("Asset Studio", () => {
     await page.getByRole("button", { name: project.name, exact: true }).click();
     await expect(projectTrigger).toHaveAccessibleName(`Project ${project.name}`);
     await page
-      .getByLabel("What should it feel like?", { exact: true })
+      .getByLabel("Describe the result", { exact: true })
       .fill("An amber-lit editorial popcorn still");
-    await page.getByRole("button", { name: "Start" }).click();
+    await page.getByRole("button", { name: "Review request" }).click();
 
     await expect(page).toHaveURL(/\/create\/review$/);
     await expect(page.getByRole("heading", { name: "Improving your prompt" })).toBeVisible();
@@ -221,14 +328,14 @@ test.describe("Asset Studio", () => {
     await openProjectPicker(page);
     await page.getByRole("button", { name: project.name, exact: true }).click();
     await page
-      .getByLabel("What should it feel like?", { exact: true })
+      .getByLabel("Describe the result", { exact: true })
       .fill(originalPrompt);
     const improve = page.getByRole("checkbox", {
       name: /Improve image prompt/,
     });
     await expect(improve).toBeChecked();
     await improve.uncheck();
-    await page.getByRole("button", { name: "Start" }).click();
+    await page.getByRole("button", { name: "Review request" }).click();
 
     await expect(page).toHaveURL(/\/create\/review$/);
     await expect(page.getByText("Prompt", { exact: true })).toBeVisible();
@@ -290,9 +397,9 @@ test.describe("Asset Studio", () => {
     await openProjectPicker(page);
     await page.getByRole("button", { name: project.name, exact: true }).click();
     await page
-      .getByLabel("What should it feel like?", { exact: true })
+      .getByLabel("Describe the result", { exact: true })
       .fill(originalPrompt);
-    await page.getByRole("button", { name: "Start" }).click();
+    await page.getByRole("button", { name: "Review request" }).click();
 
     await expect(page).toHaveURL(/\/create\/review$/);
     await expect(page.getByRole("heading", { name: "Improving your prompt" })).toBeVisible();
@@ -309,7 +416,7 @@ test.describe("Asset Studio", () => {
     await expect(page).toHaveURL(/\/create$/);
     await expect(
       page.getByRole("radio", {
-        name: "Video A short motion asset, without a full production.",
+        name: /^Video(?: A short motion asset for this project\.)?$/,
       }),
     ).toBeChecked();
     await expect(page.getByRole("checkbox", { name: /Improve video prompt/ })).toBeChecked();
@@ -342,9 +449,9 @@ test.describe("Asset Studio", () => {
     await page.goto("/create");
     await openProjectPicker(page);
     await page.getByRole("button", { name: project.name, exact: true }).click();
-    const prompt = page.getByLabel("What should it feel like?", { exact: true });
+    const prompt = page.getByLabel("Describe the result", { exact: true });
     await prompt.fill("A precise campaign still");
-    await page.getByRole("button", { name: "Start" }).click();
+    await page.getByRole("button", { name: "Review request" }).click();
 
     await expect(page).toHaveURL(/\/create\/review$/);
     await expect(page.locator("main").getByRole("alert")).toContainText(
@@ -360,8 +467,10 @@ test.describe("Asset Studio", () => {
     await expect(
       page.getByRole("checkbox", { name: /Improve image prompt/ }),
     ).toBeChecked();
-    await expect(page.getByRole("button", { name: "Start" })).toBeEnabled();
-    await expect(page.getByRole("button", { name: `Project ${project.name}` })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Review request" })).toBeEnabled();
+    await expect(
+      page.getByRole("button", { name: `Project ${project.name}`, exact: true }),
+    ).toBeVisible();
   });
 
   test("browser Back cancels review and restores the editable draft", async ({ page }) => {
@@ -392,8 +501,8 @@ test.describe("Asset Studio", () => {
     await page.goto("/create");
     await openProjectPicker(page);
     await page.getByRole("button", { name: project.name, exact: true }).click();
-    await page.getByLabel("What should it feel like?", { exact: true }).fill("A restored draft");
-    await page.getByRole("button", { name: "Start" }).click();
+    await page.getByLabel("Describe the result", { exact: true }).fill("A restored draft");
+    await page.getByRole("button", { name: "Review request" }).click();
     await expect(page.getByRole("heading", { name: "Improving your prompt" })).toBeVisible();
 
     await page.goBack();
@@ -404,7 +513,9 @@ test.describe("Asset Studio", () => {
         "A quiet amber-lit close-up of popcorn falling into a bowl",
       ),
     ).toHaveValue("A restored draft");
-    await expect(page.getByRole("button", { name: `Project ${project.name}` })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: `Project ${project.name}`, exact: true }),
+    ).toBeVisible();
     await expect(page.getByRole("heading", { name: "Approve this" })).toHaveCount(0);
   });
 
@@ -434,8 +545,8 @@ test.describe("Asset Studio", () => {
     await page.goto("/create");
     await openProjectPicker(page);
     await page.getByRole("button", { name: project.name, exact: true }).click();
-    await page.getByLabel("What should it feel like?", { exact: true }).fill("A proposal to restore");
-    await page.getByRole("button", { name: "Start" }).click();
+    await page.getByLabel("Describe the result", { exact: true }).fill("A proposal to restore");
+    await page.getByRole("button", { name: "Review request" }).click();
     await expect(page.getByText("A restored proposal preview")).toBeVisible();
     await expect.poll(() => page.evaluate(() =>
       window.history.state?.usr?.assetCreationReview?.proposal?.gateId,
@@ -482,8 +593,8 @@ test.describe("Asset Studio", () => {
     await page.goto("/create");
     await openProjectPicker(page);
     await page.getByRole("button", { name: project.name, exact: true }).click();
-    await page.getByLabel("What should it feel like?", { exact: true }).fill("An expiring proposal");
-    await page.getByRole("button", { name: "Start" }).click();
+    await page.getByLabel("Describe the result", { exact: true }).fill("An expiring proposal");
+    await page.getByRole("button", { name: "Review request" }).click();
     await expect(page.getByText("Starting automatically in 10 seconds.")).toBeVisible();
     await expect.poll(() => page.evaluate(() =>
       window.history.state?.usr?.assetCreationReview?.proposal?.gateId,
@@ -542,7 +653,7 @@ test.describe("Asset Studio", () => {
     );
 
     await page.goto("/create");
-    const prompt = page.getByLabel("What should it feel like?", { exact: true });
+    const prompt = page.getByLabel("Describe the result", { exact: true });
     await prompt.fill("A crisp editorial product still");
     const projectTrigger = await openProjectPicker(page);
     await page.getByRole("button", { name: "Create new project" }).click();
@@ -560,7 +671,7 @@ test.describe("Asset Studio", () => {
       ),
     ).toHaveValue("A crisp editorial product still");
 
-    await page.getByRole("button", { name: "Start" }).click();
+    await page.getByRole("button", { name: "Review request" }).click();
     await expect(
       page.getByRole("heading", { name: "Approve this" }),
     ).toBeVisible();
@@ -653,8 +764,8 @@ test.describe("Asset Studio", () => {
     await page.goto("/create");
     await openProjectPicker(page);
     await page.getByRole("button", { name: project.name, exact: true }).click();
-    await page.getByLabel("What should it feel like?", { exact: true }).fill("A considered still");
-    await page.getByRole("button", { name: "Start" }).click();
+    await page.getByLabel("Describe the result", { exact: true }).fill("A considered still");
+    await page.getByRole("button", { name: "Review request" }).click();
     await expect(page.getByRole("heading", { name: "Approve this" })).toBeVisible();
     await expect(page.getByText("Starting automatically in 10 seconds.")).toBeVisible();
 
@@ -793,8 +904,8 @@ test.describe("Asset Studio", () => {
     await page.goto("/create");
     await openProjectPicker(page);
     await page.getByRole("button", { name: project.name, exact: true }).click();
-    await page.getByLabel("What should it feel like?", { exact: true }).fill("A considered still");
-    await page.getByRole("button", { name: "Start" }).click();
+    await page.getByLabel("Describe the result", { exact: true }).fill("A considered still");
+    await page.getByRole("button", { name: "Review request" }).click();
     await page.getByRole("button", { name: "Approve this" }).click();
 
     await expect(page.locator("main").getByRole("alert")).toContainText(
@@ -844,8 +955,8 @@ test.describe("Asset Studio", () => {
     await page.goto("/create");
     await openProjectPicker(page);
     await page.getByRole("button", { name: project.name, exact: true }).click();
-    await page.getByLabel("What should it feel like?", { exact: true }).fill("A draft to revise");
-    await page.getByRole("button", { name: "Start" }).click();
+    await page.getByLabel("Describe the result", { exact: true }).fill("A draft to revise");
+    await page.getByRole("button", { name: "Review request" }).click();
     await expect(page.getByText("Starting automatically in 10 seconds.")).toBeVisible();
     await page.getByRole("button", { name: "Revise request" }).click();
 
@@ -881,8 +992,8 @@ test.describe("Asset Studio", () => {
     await page.goto("/create");
     await openProjectPicker(page);
     await page.getByRole("button", { name: project.name, exact: true }).click();
-    await page.getByLabel("What should it feel like?", { exact: true }).fill("A vertical close-up");
-    await page.getByRole("button", { name: "Start" }).click();
+    await page.getByLabel("Describe the result", { exact: true }).fill("A vertical close-up");
+    await page.getByRole("button", { name: "Review request" }).click();
 
     await expect(page.getByRole("heading", { name: "Approve this" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Approve this" })).toBeVisible();
@@ -923,7 +1034,10 @@ test.describe("Asset Studio", () => {
 
     await expect(page).toHaveURL(/\/create$/);
     await expect(
-      page.getByRole("button", { name: `Project ${firstProject.name}` }),
+      page.getByRole("button", {
+        name: `Project ${firstProject.name}`,
+        exact: true,
+      }),
     ).toBeVisible();
   });
 
@@ -1065,7 +1179,10 @@ test.describe("Asset Studio", () => {
 
     await page.getByRole("button", { name: "Create project" }).click();
     await expect(
-      page.getByRole("button", { name: `Project ${retryProject.name}` }),
+      page.getByRole("button", {
+        name: `Project ${retryProject.name}`,
+        exact: true,
+      }),
     ).toBeVisible();
     expect(createAttempts).toBe(2);
   });
@@ -1074,17 +1191,36 @@ test.describe("Asset Studio", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/dashboard");
 
-    const createTab = page.getByRole("button", { name: "Create", exact: true });
+    const createTab = page
+      .getByRole("navigation", { name: "Primary mobile" })
+      .getByRole("link", { name: "Create", exact: true });
     await createTab.click();
 
     await expect(page).toHaveURL(/\/create$/);
     await expect(createTab).toHaveAttribute("aria-current", "page");
+    const recentStrip = page.getByRole("navigation", { name: "Recent projects" });
+    const context = page.getByLabel("Creation context");
+    const canvas = page.getByLabel("Creation prompt");
+    const recentBox = await recentStrip.boundingBox();
+    const contextBox = await context.boundingBox();
+    const canvasBox = await canvas.boundingBox();
+    expect(recentBox).not.toBeNull();
+    expect(contextBox).not.toBeNull();
+    expect(canvasBox).not.toBeNull();
+    expect(recentBox!.width).toBeLessThanOrEqual(390);
+    expect(contextBox!.y + contextBox!.height).toBeLessThanOrEqual(canvasBox!.y + 1);
+    const mobileOverflow = await page.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }));
+    expect(mobileOverflow.scrollWidth).toBe(mobileOverflow.clientWidth);
     await expect(
       page.getByRole("radio", {
-        name: "Image A visual for the project asset pool.",
+        name: "Image",
+        exact: true,
       }),
     ).toBeChecked();
-    await expectChoiceCardPadding(page);
+    await expectCreationTypeTargets(page);
 
     const trigger = await openProjectPicker(page);
     const triggerBox = await trigger.boundingBox();

@@ -4,19 +4,19 @@ import styles from "./EmptyDashboard.module.css";
 
 const previewSteps = [
   {
-    title: "Brief",
-    body: "Start with the idea, audience, tone, and the footage or references you already have.",
-    meta: "You describe the goal",
+    title: "Choose",
+    body: "Pick an image, short video, or audio asset and connect it to the project that needs it.",
+    meta: "Start with the format",
   },
   {
-    title: "Footage",
-    body: "The studio turns the brief into structured scenes, assets, and runs you can inspect.",
-    meta: "The agent assembles the cut",
+    title: "Describe",
+    body: "Tell the studio what the result should feel like in plain creative language.",
+    meta: "Set the direction",
   },
   {
     title: "Review",
-    body: "Watch the result, then ask for changes to a scene, shot, or asset instead of editing every detail by hand.",
-    meta: "You approve or request changes",
+    body: "Check the exact request and cost boundary before generation begins.",
+    meta: "Stay in control",
   },
 ];
 
@@ -28,10 +28,10 @@ export function EmptyDashboard({ action }: { action: NextAction }) {
       <section className={styles.preview} aria-labelledby="first-run-title">
         <div className={styles.header}>
           <div>
-            <h2 id="first-run-title">Your first run becomes a reviewable movie workspace.</h2>
+            <h2 id="first-run-title">Every creation stays connected to its project.</h2>
             <p className={styles.hint}>
-              Popcorn Ready handles the production path, then gives you clear
-              checkpoints to review and steer.
+              Start with one useful project asset, review the request, and let
+              Popcorn Ready keep the work and its provenance together.
             </p>
           </div>
         </div>

@@ -16,7 +16,9 @@ pnpm --filter @popcorn/web test:e2e
 ```
 
 `asset-studio.spec.ts` uses browser API fixtures to verify the production
-`/create` route, default Image selection, choice-card padding, proposal review,
+`/create` route, the 30/70 desktop context-to-prompt workspace, responsive
+mobile collapse, recent-project loading/selection with real project media,
+default Image selection, accessible media-type targets, proposal review,
 default-on image and video prompt refinement, motion-specific progress, exact
 effective-prompt preview, creator bypass, draft-preserving video revision,
 immediate navigation to `/create/review`, manual **Approve this** confirmation,
@@ -28,7 +30,10 @@ and project-list, proposal, confirmation, and creation failure recovery. It also
 verifies that revising preserves the editable draft, failed confirmation remains
 manual-only on Forward, a delayed project creation cannot override a newer
 selection, and pagination failures preserve loaded projects, without spending
-provider credits.
+provider credits. `creation-entry-points.spec.ts` verifies that the desktop and
+mobile shell, Dashboard, Activity, and both populated/empty Library actions use
+the canonical asset-oriented `/create` entry while `/projects/new` remains the
+distinct full-video flow.
 
 `rerun-proposal-lifecycle.spec.ts` verifies the durable Request Changes UI
 without provider spend: exact-target proposal preview, preserved/affected work,
