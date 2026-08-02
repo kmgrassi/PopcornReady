@@ -519,7 +519,7 @@ CI then checks:
 | Landing and public navigation | Render, deep links, validation, no console/network errors | Guest handoff when enabled | Provider start remains budgeted |
 | Login, callback, logout | Guard, managed QA login, callback, token refresh, logout | Role-specific session and reload | Invalid/expired token fixtures |
 | Dashboard and Activity | Authenticated reads and navigation | New activity appears after owned mutation | Long-running projection canary |
-| Asset Studio `/create` | Route, goal selection, proposal-only path | Project selection/create, confirm, reload, idempotency | One bounded image/video/audio canary |
+| Create launcher + Asset Studio `/create`, `/create/asset` | Intent routing, legacy-link/draft compatibility, goal selection, proposal-only path | Project selection/create, confirm, reload, idempotency | One bounded image/video/audio canary |
 | Full project creation | Route and draft entry | Draft write/reload/delete, brief, footage setup, run start | One bounded full-production canary |
 | Run progress/review | Existing deterministic state reads | Cancel seeded non-dispatched work; approve/reject/Request Changes only with a fenced test executor | Live polling, dispatch, and terminal provider result |
 | Project/storyboard/media/watch | Existing fixture reads and playback fallback | Storyboard generation/revision, selection, media state | Keyframe/clip/export canary |

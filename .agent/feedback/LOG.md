@@ -18,6 +18,12 @@
 - Follow-up: <TODO / PR / none>
 ```
 
+### 2026-08-02T07:32:37-04:00 — WEB-20260802-CREATE-LAUNCHER
+- What helped: Treating creation routes as one navigation context kept the launcher UI-only while focused browser tests protected both existing engines.
+- Friction or failure: The first cut covered query-shaped legacy links but missed React Router history-state drafts and trailing-slash route classification.
+- Suggested improvement: Include query, history state, canonicalization, Back, and Forward in the compatibility checklist whenever a live route changes meaning.
+- Follow-up: Continue the production UX audit backlog with a separate bounded refactor after this launcher dose is reviewed.
+
 ### 2026-08-02T06:39:23-04:00 — WEB-20260801-PROD-UX-AUDIT review follow-up
 - What helped: Thread-aware review data and source-level auth checks separated intentional creator BYOK/model settings from role-gated operator tools and an ungated developer token.
 - Friction or failure: The original audit omitted plan and implementation checkpoints, used a source-file slug for a multi-route production journey, and left manual browser evidence out of the E2E inventory.

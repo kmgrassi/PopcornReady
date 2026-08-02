@@ -1232,8 +1232,11 @@ successor, queue, graph-scope, selection, and mocked-provider integration tests.
 **Depends on:** PR 12. This is part of the standalone track and does not require
 Gate 0 to say proceed.
 
-**Implementation status (2026-07-31):** `/create` is the default authenticated
-creation entry for standalone Image, Video, and Soundtrack requests. The
+**Implementation status (2026-08-02):** `/create` is the authenticated intent
+launcher: Full video enters `/projects/new`, while Project asset enters
+`/create/asset` for standalone Image, Video, and Soundtrack requests. Legacy
+asset-status query links and validated draft history state remain compatible.
+The
 client-only `VITE_STANDALONE_CREATION_ENABLED` rollout flag was removed after
 desktop/mobile browser coverage was added for image proposal and confirmation.
 Proposal work moves immediately to `/create/review`; after the proposal is
@@ -1246,7 +1249,7 @@ same-session question/follow-up controls, blocked dependency actions, and Use in
 project remain follow-up scope; their absence must not be represented as full
 PR 13 acceptance.
 
-**Owns:** an outcome-oriented route such as `/create` and
+**Owns:** the outcome-oriented `/create/asset` route and
 `StandaloneCreationPage.tsx`, co-located CSS Modules, typed query hooks, and
 small launch points from authenticated product surfaces.
 

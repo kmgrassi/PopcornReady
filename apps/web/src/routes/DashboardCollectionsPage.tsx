@@ -410,7 +410,7 @@ export function ProjectsPage() {
         ) : (
           <EmptyState
             title="No projects yet"
-            body="Create an image, short video, or audio asset to start a project."
+            body="Start a full video or create one project asset to begin."
             action={<ButtonLink variant="secondary" to="/create">Create</ButtonLink>}
           />
         )
