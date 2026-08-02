@@ -372,6 +372,7 @@ test("getWorkspaceDashboardSummary surfaces storyboard reviews from completed ru
   assert.equal(summary.counts.activeRuns, 1);
   assert.equal(summary.activeRuns[0].runId, "r_storyboard");
   assert.equal(summary.activeRuns[0].status, "succeeded");
+  assert.equal(summary.activeRuns[0].storyboardBoundaryStatus, "reached");
   assert.deepEqual(summary.activeRuns[0].reviewGate, {
     stageType: "storyboard",
     stageId: "r_storyboard:tool:generate_storyboard",

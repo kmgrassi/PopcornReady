@@ -32,6 +32,7 @@ export interface DashboardActiveRunSummary {
   projectId: string;
   projectName: string;
   status: GenerationRunStatus;
+  storyboardBoundaryStatus?: GenerationRun["storyboardBoundaryStatus"];
   reviewGate?: RunReviewGate | null;
   currentStageType?: GenerationStageType;
   progressPercent?: number;

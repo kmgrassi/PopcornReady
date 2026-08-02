@@ -395,6 +395,15 @@ export interface StartGenerationRunResponse {
   runId: string | null;
 }
 
+export interface StartStoryboardGenerationRunResponse {
+  runId: string;
+  reused: boolean;
+}
+
+export interface StoryboardGenerationRunStatusResponse {
+  run: GenerationRun | null;
+}
+
 export type ExportDurationPolicy =
   | "timeline_only"
   | "match_longest_media"

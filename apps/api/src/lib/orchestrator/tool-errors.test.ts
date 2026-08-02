@@ -61,6 +61,29 @@ test("converts existing ApiError preconditions into model-readable tool errors",
   });
 });
 
+test("converts a missing storyboard plan into plan_shots recovery", () => {
+  const err = preconditionFromApiError(
+    new ApiError("plan_missing", "A shot plan is required."),
+    {
+      toolName: "generate_storyboard",
+      input: { projectId: "project_123" },
+    }
+  );
+
+  assert.ok(err);
+  assert.equal(err.kind, "precondition_unmet");
+  assert.deepEqual(err.unmetRequirements, [
+    {
+      requirement: "shot_plan",
+      because: "Storyboard generation needs a persisted scene-and-moment plan.",
+      satisfyWith: {
+        tool: "plan_shots",
+        inputHint: { projectId: "project_123" },
+      },
+    },
+  ]);
+});
+
 test("classifies a missing stored reference as a precondition instead of provider failure", () => {
   const err = classifyToolFailure(
     new ApiError(

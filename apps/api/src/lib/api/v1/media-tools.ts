@@ -114,7 +114,7 @@ function toolErrorKindForCode(code: string | undefined): ToolErrorKind {
   if (code === "rate_limited") return "provider_quota";
   if (code === "budget_exceeded") return "budget_exceeded";
   if (code === "validation_failed" || code === "asset_invalid") return "invalid_input";
-  if (code === "asset_not_ready" || code === "brief_missing") {
+  if (code === "asset_not_ready" || code === "brief_missing" || code === "plan_missing") {
     return "precondition_unmet";
   }
   if (code === "forbidden" || code === "unauthorized") return "policy_violation";

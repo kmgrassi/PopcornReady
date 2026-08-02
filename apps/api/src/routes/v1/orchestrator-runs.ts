@@ -12,6 +12,8 @@ import {
   createOrchestratorRun,
   createOrchestratorRunWithAnonymousQuota,
   getOrchestratorRun,
+  getLatestOrchestratorRunForGate,
+  isCreativeDirectorHierarchyRoot,
   listRunActions,
   listRunGates,
   listOrchestratorRunsForProject,
@@ -34,6 +36,10 @@ import {
   recordProjectActivity,
 } from "@/lib/api/v1/store";
 import { startPosterGenerationInBackground } from "@/lib/api/v1/poster-background";
+import {
+  withStoryboardEntrypointLock,
+  type StoryboardEntrypointLock,
+} from "@/lib/postgres/storyboard-entrypoint";
 import { parseBrief } from "@/lib/api/v1/schemas";
 import { enqueueOrchestratorDispatch } from "@/lib/orchestrator/recovery-worker";
 import {
@@ -306,6 +312,128 @@ function requestedProvider(body: unknown): string | undefined {
   return trimmed || undefined;
 }
 
+const ACTIVE_RUN_STATUSES = new Set<OrchestratorRun["status"]>([
+  "queued",
+  "running",
+  "waiting",
+]);
+
+export interface StoryboardEntrypointDeps {
+  requireProjectAccess: typeof requireProjectAccess;
+  getActiveProjectBrief: typeof getActiveProjectBrief;
+  listRuns: typeof listOrchestratorRunsForProject;
+  listGates: typeof listRunGates;
+  createRun: typeof createEntrypointRun;
+  enqueueRun: typeof enqueueOrchestratorDispatch;
+  withProjectLock: StoryboardEntrypointLock;
+}
+
+export interface StoryboardEntrypointStatusDeps {
+  requireProjectAccess: typeof requireProjectAccess;
+  getLatestRunForGate: typeof getLatestOrchestratorRunForGate;
+}
+
+export async function storyboardGenerationEntrypointStatusRoute(
+  ctx: Pick<HandlerCtx, "auth">,
+  params: Record<string, string | undefined>,
+  deps: Partial<StoryboardEntrypointStatusDeps> = {}
+) {
+  const projectId = requireParam(params, "projectId");
+  const resolved: StoryboardEntrypointStatusDeps = {
+    requireProjectAccess,
+    getLatestRunForGate: getLatestOrchestratorRunForGate,
+    ...deps,
+  };
+  await resolved.requireProjectAccess(ctx.auth.workspaceId, projectId);
+  const boundary = await resolved.getLatestRunForGate(
+    projectId,
+    `${AFTER_GATE_PREFIX}generate_storyboard`
+  );
+  return {
+    status: 200,
+    headers: NO_STORE_HEADERS,
+    body: {
+      run: boundary ? projectRun(boundary.run, [boundary.gate]) : null,
+    },
+  };
+}
+
+async function activeStoryboardRoot(
+  projectId: string,
+  deps: Pick<StoryboardEntrypointDeps, "listRuns" | "listGates">
+): Promise<OrchestratorRun | null> {
+  const runs = await deps.listRuns(projectId);
+  for (const run of runs) {
+    if (!ACTIVE_RUN_STATUSES.has(run.status) || !isCreativeDirectorHierarchyRoot(run)) {
+      continue;
+    }
+    const gates = await deps.listGates(run.id);
+    const storyboardGate = gates.find(isStoryboardAfterGate);
+    if (storyboardGate?.status === "pending" || storyboardGate?.status === "reached") {
+      return run;
+    }
+  }
+  return null;
+}
+
+export async function storyboardGenerationEntrypointRoute(
+  ctx: Pick<HandlerCtx, "auth" | "body"> & Partial<Pick<HandlerCtx, "req">>,
+  params: Record<string, string | undefined>,
+  deps: Partial<StoryboardEntrypointDeps> = {}
+) {
+  const projectId = requireParam(params, "projectId");
+  const resolved: StoryboardEntrypointDeps = {
+    requireProjectAccess,
+    getActiveProjectBrief,
+    listRuns: listOrchestratorRunsForProject,
+    listGates: listRunGates,
+    createRun: createEntrypointRun,
+    enqueueRun: enqueueOrchestratorDispatch,
+    withProjectLock: withStoryboardEntrypointLock,
+    ...deps,
+  };
+
+  await resolved.requireProjectAccess(ctx.auth.workspaceId, projectId);
+  return resolved.withProjectLock(projectId, async () => {
+    const existingRun = await activeStoryboardRoot(projectId, resolved);
+    if (existingRun) {
+      return {
+        status: 200,
+        body: { runId: existingRun.id, reused: true },
+      };
+    }
+
+    const activeBrief = await resolved.getActiveProjectBrief(projectId);
+    if (!activeBrief) {
+      throw new ApiError(
+        "brief_missing",
+        "Finish the project brief before creating a storyboard."
+      );
+    }
+
+    const { run, replayed } = await resolved.createRun({
+      workspaceId: ctx.auth.workspaceId,
+      actorId: ctx.auth.actor.id,
+      projectId,
+      entrypoint: "storyboard",
+      idempotencyKey: ctx.req?.header("Idempotency-Key") ?? null,
+      inputSummary:
+        "Continue this project from its active brief through scene-and-moment planning and storyboard review. Reuse valid project graph assets, generate the storyboard, and stop at the storyboard review boundary.",
+      gates: initialRunGates(ctx.body),
+      budgetUsd: budgetUsd(ctx.body),
+      body: ctx.body,
+      anonymousQuota: anonymousRunQuotaForAuth(ctx.auth),
+    });
+    if (!replayed) {
+      await resolved.enqueueRun(run.id, ctx.auth.workspaceId);
+    }
+    return {
+      status: replayed ? 200 : 202,
+      body: { runId: run.id, reused: replayed },
+    };
+  });
+}
+
 async function requireReadyVisualAssets(input: {
   workspaceId: string;
   projectId: string;
@@ -542,6 +670,16 @@ async function stopAfterCurrentStep(run: OrchestratorRun): Promise<void> {
     completedAt: new Date().toISOString(),
   });
 }
+
+orchestratorRunsRouter.get(
+  "/projects/:projectId/generation-entrypoints/storyboard",
+  route((ctx, params) => storyboardGenerationEntrypointStatusRoute(ctx, params))
+);
+
+orchestratorRunsRouter.post(
+  "/projects/:projectId/generation-entrypoints/storyboard",
+  mutation((ctx, params) => storyboardGenerationEntrypointRoute(ctx, params))
+);
 
 orchestratorRunsRouter.post(
   "/projects/:projectId/generation-entrypoints/prompt",

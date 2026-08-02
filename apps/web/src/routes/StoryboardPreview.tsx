@@ -22,6 +22,7 @@ export function StoryboardPreview({
   generating,
   progress,
   generationError,
+  unavailableReason,
   onGenerate,
   onRequestChanges,
   readOnly,
@@ -34,6 +35,7 @@ export function StoryboardPreview({
   generating: boolean;
   progress: StoryboardProgress;
   generationError: Error | null;
+  unavailableReason?: string | null;
   onGenerate?: () => void;
   onRequestChanges?: () => void;
   readOnly: boolean;
@@ -64,7 +66,7 @@ export function StoryboardPreview({
               ? `${scenes.length} ${scenes.length === 1 ? "scene" : "scenes"} · ${momentCount} ${
                   momentCount === 1 ? "moment" : "moments"
                 }`
-              : "Create a visual plan from the current project concept."}
+              : "Popcorn Ready plans the scenes and moments, then draws sketch panels for review."}
           </p>
         </div>
         <div className={styles.storyboardHeaderActions}>
@@ -82,11 +84,23 @@ export function StoryboardPreview({
               Open storyboard
             </ButtonLink>
           ) : null}
-          {/* The generate control only appears once nothing is in flight, so
-              the page never offers "Generate again" mid-run. */}
-          {!readOnly && onGenerate && !loading && !error && !generating ? (
-            <Button variant="secondary" size="sm" onClick={onGenerate}>
-              {storyboard ? "Generate again" : "Create storyboard"}
+          {!readOnly && !storyboard && unavailableReason && !generating ? (
+            <ButtonLink
+              variant="ghost"
+              size="sm"
+              to={`/projects/${encodeURIComponent(projectId)}/brief`}
+            >
+              Finish brief
+            </ButtonLink>
+          ) : null}
+          {!readOnly && !storyboard && onGenerate && !loading && !error && !generating ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={onGenerate}
+              disabled={Boolean(unavailableReason)}
+            >
+              Create storyboard
             </Button>
           ) : null}
         </div>
@@ -105,8 +119,8 @@ export function StoryboardPreview({
       ) : null}
       {!loading && !error && generationError ? (
         <ErrorState
-          title="Unable to generate storyboard"
-          body="We couldn't finish storyboard generation for this project."
+          title="Unable to start storyboard production"
+          body="We couldn't start the agent workflow. Try again to continue from the current project brief."
           error={generationError}
           onRetry={onGenerate ?? onRetry}
         />
@@ -114,7 +128,10 @@ export function StoryboardPreview({
       {!loading && !error && !storyboard && !generating ? (
         <EmptyState
           title="No storyboard yet"
-          body="Create storyboard scenes from this project's current shot plan."
+          body={
+            unavailableReason ??
+            "The agent will prepare the scene-and-moment plan automatically before drawing panels."
+          }
         />
       ) : null}
       {!loading && !error && storyboard ? (
@@ -196,7 +213,7 @@ function StoryboardGeneratingBanner({
         }`
       : hasStoryboard
         ? "Preparing scenes…"
-        : "Starting generation…";
+        : "Planning scenes and moments…";
 
   return (
     <div className={styles.generating} role="status" aria-live="polite">

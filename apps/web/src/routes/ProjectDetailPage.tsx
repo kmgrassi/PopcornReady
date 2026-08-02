@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import type {
   BoardRevisionTarget,
@@ -14,11 +14,11 @@ import { ErrorState } from "../components/ui/StateCard";
 import { ProjectUploadButton } from "../components/project-upload/ProjectUploadButton";
 import { storyboardProgress, type StoryboardProgress } from "../lib/v1/storyboard/progress";
 import {
-  useGenerateProjectStoryboardMutation,
   useDeleteProjectMutation,
   useProjectQuery,
-  useProjectStoryboardJobQuery,
   useProjectStoryboardQuery,
+  useProjectStoryboardRunQuery,
+  useStartProjectStoryboardRunMutation,
 } from "../lib/queryClient";
 import {
   useDashboardOutputsQuery,
@@ -116,41 +116,26 @@ export function ProjectDetailPage() {
   const authScope = useDashboardAuthScope();
   const projectQuery = useProjectQuery(projectId ?? "", Boolean(projectId));
   const deleteProjectMutation = useDeleteProjectMutation(projectId ?? "");
-  const generateStoryboardMutation = useGenerateProjectStoryboardMutation(projectId ?? "");
-  // Latest job for the project, fetched from the server, so an in-flight
-  // generation is rediscovered after a reload (the storyboard row isn't created
-  // until every tile is generated, so before then this is the only signal).
-  const storyboardJobQuery = useProjectStoryboardJobQuery(projectId ?? "", Boolean(projectId));
-  const storyboardGenerationJob = storyboardJobQuery.data?.job ?? null;
-  const jobActive = Boolean(
-    storyboardGenerationJob &&
-      storyboardGenerationJob.status !== "succeeded" &&
-      storyboardGenerationJob.status !== "failed" &&
-      storyboardGenerationJob.status !== "canceled"
-  );
-  // Keep the storyboard query polling while the job runs so the row appears and
-  // panel progress streams in.
-  const storyboardQuery = useProjectStoryboardQuery(
-    projectId ?? "",
-    Boolean(projectId),
-    jobActive
-  );
-  const refetchStoryboard = storyboardQuery.refetch;
-  const storyboardGenerationError = useMemo(() => {
-    if (storyboardGenerationJob?.status === "failed" && storyboardGenerationJob.error) {
-      return new Error(storyboardGenerationJob.error.message);
-    }
-    return storyboardJobQuery.error;
-  }, [
-    storyboardGenerationJob?.status,
-    storyboardGenerationJob?.error?.message,
-    storyboardJobQuery.error,
-  ]);
+  const startStoryboardRunMutation = useStartProjectStoryboardRunMutation(projectId ?? "");
   const runsQuery = useDashboardRunsQuery(authScope, {
     status: "all",
     projectId: projectId ?? undefined,
     limit: RUN_LIMIT,
   });
+  const latestRun = runsQuery.items[0] ?? null;
+  const storyboardRunQuery = useProjectStoryboardRunQuery(projectId ?? "", Boolean(projectId));
+  const storyboardBoundRun = storyboardRunQuery.data?.run ?? null;
+  const storyboardRunActive = Boolean(
+    storyboardBoundRun &&
+      storyboardBoundRun.storyboardBoundaryStatus === "pending" &&
+      (storyboardBoundRun.status === "queued" || storyboardBoundRun.status === "running")
+  );
+  const storyboardQuery = useProjectStoryboardQuery(
+    projectId ?? "",
+    Boolean(projectId),
+    storyboardRunActive
+  );
+  const refetchStoryboard = storyboardQuery.refetch;
   const outputsQuery = useDashboardOutputsQuery(authScope, {
     projectId: projectId ?? undefined,
     limit: OUTPUT_LIMIT,
@@ -159,10 +144,13 @@ export function ProjectDetailPage() {
   const [changeSent, setChangeSent] = useState<string | null>(null);
 
   useEffect(() => {
-    if (storyboardGenerationJob?.status === "succeeded") {
+    if (
+      storyboardBoundRun?.storyboardBoundaryStatus === "reached" ||
+      storyboardBoundRun?.status === "succeeded"
+    ) {
       void refetchStoryboard();
     }
-  }, [refetchStoryboard, storyboardGenerationJob?.status]);
+  }, [refetchStoryboard, storyboardBoundRun?.status, storyboardBoundRun?.storyboardBoundaryStatus]);
 
   useEffect(() => {
     if (!projectQuery.data?.project) return;
@@ -181,11 +169,23 @@ export function ProjectDetailPage() {
   const project = projectQuery.data?.project ?? null;
   const storyboard = storyboardQuery.data?.storyboard ?? null;
   const storyboardProgressState = storyboardProgress(storyboard);
-  // One continuous "in progress" signal: the request is in flight, the job is
-  // running, or the storyboard still has panels rendering. The "Generate again"
-  // control only returns once all of these settle.
+  const storyboardRunError =
+    !storyboard &&
+    storyboardBoundRun &&
+    (storyboardBoundRun.status === "failed" || storyboardBoundRun.status === "canceled")
+      ? new Error(
+          storyboardBoundRun.error?.message ??
+            (storyboardBoundRun.status === "canceled"
+              ? "Storyboard production stopped before a board was ready."
+              : "Storyboard production failed before a board was ready.")
+        )
+      : null;
+  // One continuous "in progress" signal: the request is starting, a production
+  // run is working toward the storyboard boundary, or panel assets are rendering.
   const storyboardGenerating =
-    generateStoryboardMutation.isPending || jobActive || storyboardProgressState.isGenerating;
+    startStoryboardRunMutation.isPending ||
+    storyboardRunActive ||
+    storyboardProgressState.isGenerating;
   const loading = projectQuery.isLoading;
   const error = projectQuery.error ?? null;
   const hasPlayableOutput = outputsQuery.items.some(isPlayableOutput);
@@ -195,13 +195,22 @@ export function ProjectDetailPage() {
     : hasPlayableOutput
       ? "Watch this project's latest video."
       : "Watch is available after this project has a playable video.";
-  const latestRun = runsQuery.items[0] ?? null;
   const runsDisabled = runsQuery.loading || !latestRun;
   const runsTitle = runsQuery.loading
     ? "Checking for recent runs."
     : latestRun
       ? "Open this project's latest run."
       : "Runs are available after this project starts generation.";
+  const startStoryboardRun = () => {
+    void startStoryboardRunMutation
+      .mutateAsync()
+      .then(({ runId }) => {
+        navigate(
+          `/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}`
+        );
+      })
+      .catch(() => undefined);
+  };
   const mobilePrimaryAction = project ? (
     <ProjectMobilePrimaryAction
       projectId={projectId}
@@ -210,17 +219,14 @@ export function ProjectDetailPage() {
       watchTitle={watchTitle}
       storyboard={storyboard}
       storyboardGenerating={storyboardGenerating}
-      storyboardError={generateStoryboardMutation.error ?? storyboardGenerationError}
+      storyboardError={startStoryboardRunMutation.error ?? storyboardRunError}
+      hasBrief={Boolean(project.brief)}
       canGenerateStoryboard={Boolean(
         !storyboardPreviewIsBlocked(storyboardQuery.isLoading, storyboardQuery.error) &&
-          !storyboardGenerating
+          !storyboardGenerating &&
+          project.brief
       )}
-      onStoryboardRetry={() => void storyboardQuery.refetch()}
-      onGenerate={() => {
-        void generateStoryboardMutation.mutateAsync().then(() => {
-          void storyboardQuery.refetch();
-        });
-      }}
+      onGenerate={startStoryboardRun}
     />
   ) : null;
 
@@ -299,12 +305,11 @@ export function ProjectDetailPage() {
         onRetry: () => void storyboardQuery.refetch(),
         generating: storyboardGenerating,
         progress: storyboardProgressState,
-        generationError: generateStoryboardMutation.error ?? storyboardGenerationError,
-        onGenerate: () => {
-          void generateStoryboardMutation.mutateAsync().then(() => {
-            void storyboardQuery.refetch();
-          });
-        },
+        generationError: startStoryboardRunMutation.error ?? storyboardRunError,
+        unavailableReason: project?.brief
+          ? null
+          : "Finish the project brief before creating a storyboard.",
+        onGenerate: startStoryboardRun,
       }}
       media={null}
       mobilePrimaryAction={mobilePrimaryAction}
@@ -313,11 +318,14 @@ export function ProjectDetailPage() {
         progress: storyboardProgressState,
         generating: storyboardGenerating,
         hasPlayableOutput,
+        hasBrief: Boolean(project?.brief),
         projectStatus: project?.status,
-        storyboardError: generateStoryboardMutation.error ?? storyboardGenerationError,
+        storyboardError: startStoryboardRunMutation.error ?? storyboardRunError,
       })}
       mobileRunLink={
-        latestRun
+        storyboardRunActive && storyboardBoundRun
+          ? `/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(storyboardBoundRun.runId)}`
+          : latestRun
           ? `/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(latestRun.runId)}`
           : null
       }
@@ -422,6 +430,7 @@ export function ProjectOverviewPage({
     generating: boolean;
     progress: StoryboardProgress;
     generationError: Error | null;
+    unavailableReason?: string | null;
     onGenerate?: () => void;
   };
   media?: ProjectWatchMedia | null;
@@ -497,6 +506,7 @@ export function ProjectOverviewPage({
                     generating={storyboardPreview.generating}
                     progress={storyboardPreview.progress}
                     generationError={storyboardPreview.generationError}
+                    unavailableReason={storyboardPreview.unavailableReason}
                     onGenerate={storyboardPreview.onGenerate}
                     onRequestChanges={
                       onRequestChanges ? () => onRequestChanges("board") : undefined
