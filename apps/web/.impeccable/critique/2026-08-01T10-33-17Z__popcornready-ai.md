@@ -1,10 +1,10 @@
 ---
-target: signed-in production creator experience
+target: signed-in production experience (owner/admin session)
 total_score: 23
 p0_count: 0
-p1_count: 5
+p1_count: 4
 timestamp: 2026-08-01T10-33-17Z
-slug: apps-web-src-app-tsx
+slug: popcornready-ai
 ---
 ## Design Health Score
 
@@ -14,7 +14,7 @@ slug: apps-web-src-app-tsx
 | 2 | Match between system and real world | 2 | Creator language is mixed with assets, runs, providers, models, provenance, and immutable-output terminology. |
 | 3 | User control and freedom | 2 | Back and recovery paths exist, but the ten-second automatic generation approval lacks an immediate pause/manual-only control. |
 | 4 | Consistency and standards | 2 | Shared components are coherent, while creation is split between asset and full-video systems and direct regeneration conflicts with Request Changes. |
-| 5 | Error prevention | 2 | Stale proposals and invalid submissions are guarded, but automatic spend approval and exposed provider controls increase avoidable risk. |
+| 5 | Error prevention | 2 | Stale proposals and invalid submissions are guarded, but automatic spend approval and equal prominence for a full-account bearer token increase avoidable risk. |
 | 6 | Recognition rather than recall | 3 | Navigation and breadcrumbs are clear, but users must infer whether to use Create, New project, Library, a project, or Activity. |
 | 7 | Flexibility and efficiency | 2 | Command search and direct links help, while unbounded draft lists, few bulk actions, and one-item flows slow experienced users. |
 | 8 | Aesthetic and minimalist design | 2 | The dark palette is coherent, but repeated panels, uppercase labels, active stripes, and equal-weight actions make the product feel templated and dense. |
@@ -74,11 +74,11 @@ The product has a good systems-status foundation but no single, legible creator 
 
 **Suggested command:** `$impeccable layout`
 
-### [P1] Creator and operator boundaries collapse in Settings
+### [P2] Settings compresses basic, advanced, developer, and admin controls into one page
 
-**Why it matters:** The production creator Settings route includes theme, workspace, model routing, provider API keys, a full-access API token, live provider smoke testing, and secondary product surfaces in one scroll. This is cognitively heavy, increases the chance of costly configuration mistakes, and makes the product feel operator-first.
+**Why it matters:** Model defaults and personal provider keys are intentional creator-facing capabilities, while the provider smoke test and secondary links are already limited to admin/operator roles. The hierarchy still compresses basic account and appearance controls, advanced creator generation settings, a full-account bearer token, and—during this owner/admin audit—the gated operator tools into one scroll. That makes routine settings harder to scan and gives a sensitive developer credential the same prominence as ordinary preferences.
 
-**Fix:** Keep creator Settings to account, workspace identity, theme, brand, and billing. Move model routing, API keys, tokens, and smoke tools behind an explicitly operator/admin surface with role gating and its own navigation hierarchy.
+**Fix:** Keep model defaults and BYOK available to creators under a clearly labeled, progressively disclosed generation section. Move the full-account bearer token to a separate Developer or Security surface, and keep the existing role-gated smoke test and operator links in an explicit admin area. Do not remove the documented creator choice of models and personal API keys.
 
 **Suggested command:** `$impeccable distill`
 
@@ -88,7 +88,7 @@ The product has a good systems-status foundation but no single, legible creator 
 
 **Sam — keyboard/screen-reader user:** Timed approval lacks a clear pause/extension control; changing countdown urgency is not continuously announced; the mobile bottom navigation competes with a page CTA; and the drawer implementation needs a verified focus trap. Strong focus rings, labeled navigation, 44px targets, and reduced-motion rules are positive foundations.
 
-**Maya — creator/marketer:** “Create new asset” does not match the goal of finishing a social video. Provider keys, model defaults, access tokens, smoke tests, immutable outputs, and provenance language make the collaborator feel like infrastructure tooling.
+**Maya — creator/marketer:** “Create new asset” does not match the goal of finishing a social video. Model defaults and BYOK can be useful advanced choices, but placing them beside basic preferences and a full-account bearer token makes routine Settings feel like infrastructure tooling. The smoke test and secondary operator links seen in this audit were specific to the owner/admin session.
 
 ## Minor Observations
 
@@ -103,7 +103,7 @@ The product has a good systems-status foundation but no single, legible creator 
 ## Questions to Consider
 
 - Is the primary unit a finished video, a project, or an asset—and which single word should a first-time creator learn?
-- Why should a creator ever encounter an API key, model identifier, or provider smoke test?
+- How should Settings separate everyday preferences, advanced creator BYOK/model defaults, developer credentials, and already-gated admin diagnostics without removing documented customer capabilities?
 - If the dashboard is for seeing and the agent is for changing, what justifies any prompt/provider regeneration form outside Request Changes?
 - Is ten seconds of silence valid consent to spend credits?
 - What would the project page become if the movie and its next creative decision owned the opening viewport?

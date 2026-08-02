@@ -18,6 +18,12 @@
 - Follow-up: <TODO / PR / none>
 ```
 
+### 2026-08-02T06:39:23-04:00 — WEB-20260801-PROD-UX-AUDIT review follow-up
+- What helped: Thread-aware review data and source-level auth checks separated intentional creator BYOK/model settings from role-gated operator tools and an ungated developer token.
+- Friction or failure: The original audit omitted plan and implementation checkpoints, used a source-file slug for a multi-route production journey, and left manual browser evidence out of the E2E inventory.
+- Suggested improvement: Resolve audit targets to stable URLs, label the inspected role and release identity, and verify all four review checkpoints plus the feedback log and coverage inventory before handoff.
+- Follow-up: Implement the release-gated production browser harness before treating point-in-time manual inspection as repeatable coverage.
+
 ### 2026-07-31T16:35:00-04:00 — WEB-20260731-ASSET-AUTOAPPROVAL review follow-up
 - What helped: Thread-aware review data isolated the two live PR findings, and the existing route-state boundary supported proposal restoration without persistent storage.
 - Friction or failure: The first implementation preserved the editable draft for Back navigation but did not preserve the successful proposal for Forward navigation.

@@ -23,8 +23,15 @@ design-review and deterministic/browser evidence into a prioritized critique.
 - `apps/web/PRODUCT.md`
 - `apps/web/DESIGN.md`
 - `docs/ui-interaction-model.md`
+- `docs/testing/e2e-test-inventory-and-gaps.md`
 - `docs/scopes/production-browser-agent-testing.md`
 - `docs/agent-system/performance-and-visual-regression.md`
+- `docs/agent-system/reviews.md`
+- `docs/agent-system/worksheets-and-feedback.md`
+- `apps/web/src/routes/SettingsPage.tsx`
+- `apps/web/src/components/auth/AdminRoute.tsx`
+- `apps/web/src/components/settings/AccessTokenPanel.tsx`
+- `apps/web/src/content/faqs.ts`
 - Impeccable `critique` and product-register instructions
 - In-app Browser control instructions
 
@@ -36,12 +43,20 @@ design-review and deterministic/browser evidence into a prioritized critique.
   settings, upload files, or exercise provider-backed actions.
 - Use two isolated assessments, with detector findings withheld until the design
   review is complete.
+- Treat the inspected Settings route as an owner/admin view. Preserve intentional
+  creator-facing model defaults and BYOK while distinguishing them from the
+  ungated bearer token and already-gated operator tools.
 
 ## Changes
 
 - Added this worksheet.
-- Added the detailed Impeccable critique snapshot for `apps-web-src-app-tsx`.
+- Added the detailed Impeccable critique snapshot for `popcornready-ai` under the
+  app-owned baseline directory.
 - Added task feedback documenting the production-audit lesson.
+- Recorded the point-in-time manual production pass in the E2E inventory and
+  appended the task lesson to the repository feedback log.
+- Reclassified the unsupported Settings P1 as a narrower P2 information-
+  architecture finding, reducing the audit register to four P1 findings.
 
 ## Validation evidence
 
@@ -56,16 +71,23 @@ design-review and deterministic/browser evidence into a prioritized critique.
   entries for the captured tab session.
 - Impeccable detector scanned 127 markup files under `apps/web/src` and returned
   12 warnings: 10 `layout-transition`, 1 `bounce-easing`, and 1 `side-tab`.
-- Critique health score: 23/40 with 0 P0 and 5 P1 findings.
-- `pnpm agent:lint:fix` passed for the three audit artifacts.
-- `pnpm agent:validate -- --scope docs` passed, including agent lint, GitHub
-  Actions policy tests, migration tests, and validation of 98 migrations.
+- Critique health score: 23/40 with 0 P0 and 4 P1 findings.
+- Original audit validation: `pnpm agent:lint:fix` and
+  `pnpm agent:validate -- --scope docs` passed for the three initial artifacts,
+  including agent lint, GitHub Actions policy tests, migration tests, and
+  validation of 98 migrations.
+- PR-feedback validation: `pnpm agent:lint:fix`, `git diff --check`, and
+  `pnpm agent:validate -- --scope docs` passed after the corrected critique,
+  worksheet, feedback records, and E2E inventory update. Docs validation included
+  agent lint, two GitHub Actions policy tests, two migration-policy tests, and
+  validation of 98 migrations.
 - Ignore list: `.impeccable/critique/ignore.md` did not exist.
 - Detector overlay live server: not started; cleanup was not required.
 - Temporary critique body: removed after the snapshot write.
 - Snapshot write: succeeded at
-  `.impeccable/critique/2026-08-01T10-33-17Z__apps-web-src-app-tsx.md`.
-- Trend read: succeeded; this is the first stored run for the target (23/40).
+  `apps/web/.impeccable/critique/2026-08-01T10-33-17Z__popcornready-ai.md`.
+- Trend read from the `apps/web` project root succeeded for `popcornready-ai`;
+  this is the first stored run for the production URL target (23/40).
 
 ## Independent reviews
 
@@ -78,6 +100,24 @@ design-review and deterministic/browser evidence into a prioritized critique.
 - Wrap-up review found four documentation issues: one production-derived metadata
   example, missing validation/run-note outcomes, and contradictory authentication
   wording. All four were resolved and the docs-scope validation was rerun.
+- PR-feedback research review: `/root/research_review` confirmed all five review
+  threads were actionable, verified the Settings auth boundaries and BYOK product
+  promise, identified the app-owned critique baseline, and required explicit
+  production-evidence limitations. The corrections above adopt those findings.
+- Retrospective plan review: `/root/plan_review` found the bounded read-only audit
+  supportable and retained P1 findings 1–4, but rejected the Settings P1 as
+  unsupported by the recorded creator-visible evidence. It required the P2
+  reclassification, owner/admin caveat, stable URL slug, feedback-log entry, and
+  historical E2E inventory record; each is included in this follow-up.
+- Implementation review: `/root/implementation_review` found stale validation
+  wording, missing admin-gate/token source references, and a tag that must move
+  only after the correction commit. The source references and evidence wording
+  were corrected; final commit/tag handling remains in the handoff sequence.
+- Fresh wrap-up review: `/root/wrapup_review` confirmed all five review comments
+  were substantively addressed and identified three final truthfulness fixes:
+  label the snapshot as an owner/admin-session audit, avoid a premature
+  commit/tag claim, and record that trend lookup runs from `apps/web`. All three
+  are reflected here; final validation is rerun after these edits.
 
 ## Blockers and risks
 
@@ -86,11 +126,15 @@ design-review and deterministic/browser evidence into a prioritized critique.
   desktop/mobile evidence after their isolated assessments completed.
 - The repository's proposed production harness is not yet implemented, so this
   ad-hoc audit cannot claim release coherence or global no-write guarantees.
+- No deployed commit or release identity was captured, and ordinary login, token
+  refresh, signed-URL, or route-activity side effects were not independently
+  measured. This is point-in-time manual evidence, not automated coverage.
 - Browser visualization used direct DOM/screenshot inspection. Mutable detector
   injection could not be established, so no user-visible overlay was created.
 
 ## Next action / handoff
 
-Review and prioritize the five P1 findings in ready-for-review PR #864. The audit
-artifacts are committed on `codex/production-ux-audit` and tagged as
+Review and prioritize the four P1 findings and the narrower Settings P2 in
+ready-for-review PR #864. Durable handoff targets are branch
+`codex/production-ux-audit` and tag
 `worksheet/WEB-20260801-PROD-UX-AUDIT`.

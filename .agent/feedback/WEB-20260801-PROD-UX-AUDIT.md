@@ -14,8 +14,10 @@ When isolated reviewers cannot access the same browser backend, preserve their
 independence with source and detector evidence, then add a clearly labeled live
 production supplement from the primary agent after both assessments finish.
 Read-only navigation can reveal high-value integration failures—circular primary
-actions, competing creation models, operator controls in creator settings, and
+actions, competing creation models, dense settings information architecture, and
 responsive hierarchy problems—without exercising unsafe production mutations.
+An owner/admin session must be labeled explicitly so role-gated diagnostics are
+not mistaken for ordinary creator controls.
 
 ## Follow-up
 
