@@ -9,7 +9,7 @@ import type {
 } from "@popcorn/shared/v1/types";
 import { AssetEditModal } from "../components/media/AssetEditModal";
 import { AssetImage } from "../components/media/AssetImage";
-import { StudioCrewLoadingState } from "../components/creation/StudioCrewLoadingState";
+import { QuickLoadingState } from "../components/ui/QuickLoadingState";
 import { Button, ButtonLink } from "../components/ui/Button";
 import { EmptyState, ErrorState } from "../components/ui/StateCard";
 import {
@@ -99,7 +99,7 @@ export function StoryboardPage() {
       </header>
 
       {loading ? (
-        <StudioCrewLoadingState
+        <QuickLoadingState
           title="Loading storyboard"
           description="Gathering scenes, beats, and panels."
           variant="page"

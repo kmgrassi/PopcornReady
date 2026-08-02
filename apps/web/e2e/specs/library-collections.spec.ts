@@ -245,7 +245,7 @@ test.beforeEach(async ({ page }) => {
   await mockLibraryApi(page);
 });
 
-test("uses the studio crew for route-level library loading", async ({ page }) => {
+test("uses a delayed content-shaped state for route-level library loading", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.unroute("**/api/v1/projects?**");
@@ -258,14 +258,14 @@ test("uses the studio crew for route-level library loading", async ({ page }) =>
   });
 
   await page.goto("/library/projects");
-  const loadingState = page.getByTestId("studio-crew-loading");
-  await expect(loadingState).toBeVisible();
+  const loadingState = page.getByTestId("quick-loading");
+  await expect(loadingState).toBeAttached();
   await expect(loadingState).toHaveAttribute("aria-busy", "true");
   await expect(loadingState).toContainText("Loading projects");
-  await expect(page.getByTestId("studio-crew")).toBeVisible();
-  const reservation = page.getByTestId("studio-crew-loading-reservation");
+  await expect(page.getByTestId("studio-crew")).toHaveCount(0);
+  const reservation = page.getByTestId("quick-loading-reservation");
   await expect(reservation).toHaveAttribute("aria-hidden", "true");
-  await expect(reservation).toBeHidden();
+  await expect(reservation).toBeVisible();
   const reservationIsStill = await reservation.evaluate((element) => {
     const nodes = [element, ...element.querySelectorAll("*")];
     return nodes.every((node) =>
@@ -276,11 +276,7 @@ test("uses the studio crew for route-level library loading", async ({ page }) =>
     );
   });
   expect(reservationIsStill).toBe(true);
-  await expect(page.getByTestId("studio-crew-loading")).toHaveCount(1);
-  const animationName = await page
-    .locator('[data-crew-member="director"] > div')
-    .evaluate((sprite) => getComputedStyle(sprite).animationName);
-  expect(animationName).toBe("none");
+  await expect(page.getByTestId("quick-loading")).toHaveCount(1);
   const overflow = await page.evaluate(() => ({
     document: document.documentElement.scrollWidth,
     viewport: document.documentElement.clientWidth,
@@ -291,7 +287,7 @@ test("uses the studio crew for route-level library loading", async ({ page }) =>
   await expect(page.getByText("Project Alpha")).toBeVisible();
 });
 
-test("uses the panel crew state while a project render loads", async ({ page }) => {
+test("uses the compact panel state while a project render loads", async ({ page }) => {
   await page.unroute("**/api/v1/projects/proj-alpha/watch");
   await page.route("**/api/v1/projects/proj-alpha/watch", async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 750));
@@ -313,14 +309,37 @@ test("uses the panel crew state while a project render loads", async ({ page }) 
   });
 
   await page.goto("/projects/proj-alpha/watch");
-  const loadingState = page.getByTestId("studio-crew-loading");
+  const loadingState = page.getByTestId("quick-loading");
   await expect(loadingState).toBeVisible();
   await expect(loadingState).toHaveAttribute("data-variant", "panel");
   await expect(loadingState).toContainText("Loading render");
-  await expect(page.getByTestId("studio-crew-loading-reservation")).toHaveCount(0);
+  await expect(page.getByTestId("studio-crew")).toHaveCount(0);
+  const reservation = page.getByTestId("quick-loading-reservation");
+  await expect(reservation).toBeVisible();
+  const panelGeometry = await reservation.evaluate((element) => ({
+    height: element.getBoundingClientRect().height,
+    viewport: document.documentElement.clientHeight,
+  }));
+  expect(panelGeometry.height).toBeGreaterThanOrEqual(420);
+  expect(panelGeometry.height).toBeLessThan(panelGeometry.viewport);
 
   await expect(loadingState).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Project Alpha" })).toBeVisible();
+});
+
+test("does not flash a loading state for a cache-fast library request", async ({ page }) => {
+  await page.unroute("**/api/v1/projects?**");
+  await page.route("**/api/v1/projects?**", (route) =>
+    json(route, {
+      projects: [project(1)],
+      pagination: { limit: 24, nextCursor: null },
+    }),
+  );
+
+  await page.goto("/library/projects");
+  await expect(page.getByText("Project Alpha")).toBeVisible();
+  await page.waitForTimeout(200);
+  await expect(page.getByTestId("quick-loading")).toHaveCount(0);
 });
 
 test("covers library pagination, filters, media viewer, visibility, and watch links", async ({ page }) => {

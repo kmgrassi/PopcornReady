@@ -6,6 +6,7 @@ import { StudioCrewLoader } from "../components/creation/StudioCrewLoader";
 import { ProjectPicker } from "../components/projects/ProjectPicker";
 import { ImageWithSkeleton } from "../components/ui/ImageWithSkeleton";
 import { Button } from "../components/ui/Button";
+import { QuickLoadingState } from "../components/ui/QuickLoadingState";
 import { v1Api } from "../lib/api-client";
 import {
   useCreationStatus,
@@ -260,26 +261,29 @@ export function StandaloneCreationPage() {
           </p>
         </header>
         {status.isLoading ? (
-          <section
-            className={styles.statusShell}
-            aria-busy="true"
-            aria-label="Loading creation status"
-          >
-            <StudioCrewLoader active />
-            <div className={styles.statusDetails}>
-              <div
-                className={`${styles.skeletonLine} ${styles.skeletonLabel}`}
-              />
-              <div
-                className={`${styles.skeletonLine} ${styles.skeletonTitle}`}
-              />
-              <div className={styles.skeletonLine} />
-              <div
-                className={`${styles.skeletonLine} ${styles.skeletonShort}`}
-              />
-              <div className={styles.skeletonBrief} />
-            </div>
-          </section>
+          <QuickLoadingState
+            title="Loading creation status"
+            description="Checking the latest progress on your asset."
+            reservation={(
+              <section className={styles.statusShell}>
+                <div className={styles.sceneSkeleton} />
+                <div className={styles.statusDetails}>
+                  <div
+                    className={`${styles.skeletonLine} ${styles.skeletonLabel}`}
+                  />
+                  <div
+                    className={`${styles.skeletonLine} ${styles.skeletonTitle}`}
+                  />
+                  <div className={styles.skeletonLine} />
+                  <div
+                    className={`${styles.skeletonLine} ${styles.skeletonShort}`}
+                  />
+                  <div className={styles.skeletonBrief} />
+                </div>
+              </section>
+            )}
+            variant="page"
+          />
         ) : null}
         {status.error ? (
           <section className={styles.errorPanel} role="alert">

@@ -3,7 +3,7 @@ import { ActiveRunsPanel } from "../components/home/ActiveRunsPanel";
 import { RecentOutputsStrip } from "../components/home/RecentOutputsStrip";
 import { ErrorState } from "../components/ui/StateCard";
 import { useAuth } from "../components/auth/AuthProvider";
-import { StudioCrewLoadingState } from "../components/creation/StudioCrewLoadingState";
+import { QuickLoadingState } from "../components/ui/QuickLoadingState";
 import { useDashboardSummaryQuery } from "../lib/queryClient";
 import styles from "./ActivityPage.module.css";
 
@@ -61,7 +61,7 @@ export function ActivityPage() {
 
 function ActivitySkeleton() {
   return (
-    <StudioCrewLoadingState
+    <QuickLoadingState
       title="Loading activity"
       description="Gathering active runs and recent outputs."
       reservation={(
