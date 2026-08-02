@@ -4,7 +4,6 @@ import { FOOTAGE_ACCEPT, readSelectedFootage } from "../lib/upload";
 import {
   useAssetBillingQuery,
   useProjectAssetsQuery,
-  useRefreshAssetMediaMutation,
   useStartUploadedFootageGenerationRunMutation,
 } from "../lib/queryClient";
 import { useAuth } from "../components/auth/AuthProvider";
@@ -15,7 +14,6 @@ import { useUploadQueue } from "../lib/uploadQueue";
 import { MediaViewer, type MediaViewerItem } from "../components/media/MediaViewer";
 import {
   assetDisplayTitle,
-  assetPreviewUrl,
   assetSourceLabel,
   editedAssetLineageLabel,
   formatDuration,
@@ -34,16 +32,24 @@ import {
   selectionReducer,
 } from "./project-media-intent";
 import styles from "./ProjectMediaGalleryPage.module.css";
+import { useAssetMediaQuery } from "../lib/assetMediaQuery";
+import type { AssetMediaResponse } from "../lib/api-client";
 
-function viewerItem(asset: ProjectMediaAsset): MediaViewerItem {
+function viewerItem(
+  asset: ProjectMediaAsset,
+  media?: AssetMediaResponse,
+): MediaViewerItem {
   return {
     id: asset.id,
     kind: asset.kind,
     title: assetDisplayTitle(asset),
     filename: asset.filename,
-    url: asset.remoteUrl ?? asset.url,
-    thumbnailUrl: asset.thumbnailUrl ?? undefined,
+    url: media ? media.url ?? undefined : asset.remoteUrl ?? asset.url,
+    thumbnailUrl: media
+      ? media.thumbnailUrl ?? undefined
+      : asset.thumbnailUrl ?? undefined,
     durationSec: asset.durationSec,
+    expiresAt: media?.expiresAt ?? asset.expiresAt,
   };
 }
 
@@ -74,7 +80,6 @@ export function ProjectMediaGalleryPage() {
   const [createPending, setCreatePending] = useState(false);
   const createInFlightRef = useRef(false);
   const assetsQuery = useProjectAssetsQuery(projectId, projectMediaQueryParams());
-  const refreshMedia = useRefreshAssetMediaMutation();
   const startRun = useStartUploadedFootageGenerationRunMutation(projectId);
   const queuedUploads = uploadQueue.projectItems(projectId);
   const activeQueuedUploads = queuedUploads.filter((item) =>
@@ -121,6 +126,23 @@ export function ProjectMediaGalleryPage() {
     ? assets.findIndex((asset) => asset.id === selectedAssetId)
     : -1;
   const selectedAsset = selectedIndex >= 0 ? assets[selectedIndex] : null;
+  const selectedMedia = useAssetMediaQuery({
+    authScope,
+    workspaceId: selectedAsset?.workspaceId ?? "",
+    assetId: selectedAsset?.id ?? "",
+    initialMedia: selectedAsset
+      ? {
+          url: selectedAsset.remoteUrl ?? selectedAsset.url,
+          thumbnailUrl: selectedAsset.thumbnailUrl,
+          expiresAt: selectedAsset.expiresAt,
+          updatedAt: selectedAsset.updatedAt,
+          visibility: selectedAsset.visibility,
+        }
+      : null,
+    enabled: Boolean(selectedAsset),
+    fetchWhenMissing: true,
+    proactiveRefresh: true,
+  });
   const billingQuery = useAssetBillingQuery(
     authScope,
     projectId,
@@ -322,7 +344,6 @@ export function ProjectMediaGalleryPage() {
 
           {assets.map((asset) => {
             const duration = formatDuration(asset.durationSec);
-            const previewUrl = assetPreviewUrl(asset);
             const selected = selectedPosition(selectedIds, asset.id);
             const lineageLabel = editedAssetLineageLabel(asset, assetById);
             const canSelect =
@@ -342,21 +363,7 @@ export function ProjectMediaGalleryPage() {
                   type="button"
                   onClick={() => setSelectedAssetId(asset.id)}
                 >
-                  {asset.kind === "image" && previewUrl ? (
-                    <img alt="" src={previewUrl} />
-                  ) : null}
-                  {asset.kind === "video" && previewUrl ? (
-                    <video
-                      muted
-                      playsInline
-                      preload="metadata"
-                      src={asset.remoteUrl ?? asset.url}
-                      poster={asset.thumbnailUrl ?? undefined}
-                    />
-                  ) : null}
-                  {(!previewUrl || asset.kind === "audio") ? (
-                    <span className={styles.placeholder}>{kindLabel(asset.kind)}</span>
-                  ) : null}
+                  <ProjectAssetPreview asset={asset} authScope={authScope} />
                 </button>
                 {duration ? <span className={styles.duration}>{duration}</span> : null}
                 <span className={styles.tileBody}>
@@ -445,7 +452,7 @@ export function ProjectMediaGalleryPage() {
       ) : null}
 
       <MediaViewer
-        item={selectedAsset ? viewerItem(selectedAsset) : null}
+        item={selectedAsset ? viewerItem(selectedAsset, selectedMedia.data) : null}
         creditsCharged={billingQuery.data?.creditsCharged}
         hasPrevious={selectedIndex > 0}
         hasNext={selectedIndex >= 0 && selectedIndex < assets.length - 1}
@@ -458,7 +465,14 @@ export function ProjectMediaGalleryPage() {
             setSelectedAssetId(assets[selectedIndex + 1].id);
           }
         }}
-        onRefresh={async (item) => refreshMedia.mutateAsync(item.id)}
+        onRefresh={async (item) =>
+          (await selectedMedia.refreshAfterError(item.url ?? item.thumbnailUrl)) ?? {
+            url: null,
+            thumbnailUrl: null,
+            expiresAt: null,
+          }
+        }
+        onMediaLoad={selectedMedia.markLoaded}
         actions={
           projectId ? (
             <Link to={`/projects/${encodeURIComponent(projectId)}`}>Back to project</Link>
@@ -467,4 +481,67 @@ export function ProjectMediaGalleryPage() {
       />
     </main>
   );
+}
+
+function ProjectAssetPreview({
+  asset,
+  authScope,
+}: {
+  asset: ProjectMediaAsset;
+  authScope: string;
+}) {
+  const mediaQuery = useAssetMediaQuery({
+    authScope,
+    workspaceId: asset.workspaceId,
+    assetId: asset.id,
+    initialMedia: {
+      url: asset.remoteUrl ?? asset.url,
+      thumbnailUrl: asset.thumbnailUrl,
+      expiresAt: asset.expiresAt,
+      updatedAt: asset.updatedAt,
+      visibility: asset.visibility,
+    },
+  });
+  const media = mediaQuery.data;
+  const resolvedUrl = media ? media.url ?? undefined : asset.remoteUrl ?? asset.url;
+  const resolvedThumbnail = media
+    ? media.thumbnailUrl ?? undefined
+    : asset.thumbnailUrl;
+  const previewUrl = resolvedThumbnail ?? resolvedUrl;
+
+  if (asset.kind === "image" && previewUrl) {
+    return (
+      <img
+        alt=""
+        src={previewUrl}
+        onError={() => void mediaQuery.refreshAfterError(previewUrl)}
+        onLoad={() => mediaQuery.markLoaded(previewUrl)}
+      />
+    );
+  }
+  if (asset.kind === "video" && previewUrl) {
+    const videoUrl = resolvedUrl;
+    if (!videoUrl) {
+      return (
+        <img
+          alt=""
+          src={previewUrl}
+          onError={() => void mediaQuery.refreshAfterError(previewUrl)}
+          onLoad={() => mediaQuery.markLoaded(previewUrl)}
+        />
+      );
+    }
+    return (
+      <video
+        muted
+        playsInline
+        preload="metadata"
+        src={videoUrl}
+        poster={resolvedThumbnail}
+        onError={() => void mediaQuery.refreshAfterError(videoUrl)}
+        onLoadedData={() => mediaQuery.markLoaded(videoUrl)}
+      />
+    );
+  }
+  return <span className={styles.placeholder}>{kindLabel(asset.kind)}</span>;
 }

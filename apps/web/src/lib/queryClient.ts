@@ -32,6 +32,7 @@ import { dashboardApi } from "./v1/dashboard/client";
 import { isRunActive, type GenerationRunDetail } from "./v1/generation-runs/status";
 import { storyboardProgress } from "./v1/storyboard/progress";
 import type { ProjectStoryboardResponse } from "./api-client";
+import { clearPersistedAssetMedia } from "./assetMediaQuery";
 
 const POLL_INTERVAL_MS = 2_000;
 const REVIEW_POLL_INTERVAL_MS = 15_000;
@@ -389,6 +390,8 @@ export function useSetProjectVisibilityMutation(projectId: string) {
       }
     },
     onSuccess: (data) => {
+      clearPersistedAssetMedia();
+      void client.invalidateQueries({ queryKey: ["asset-media"] });
       client.setQueryData(queryKeys.project(projectId), data);
       client.removeQueries({ queryKey: projectQueryKeys.publicProject(projectId) });
       void client.invalidateQueries({ queryKey: ["projects"] });
@@ -621,22 +624,6 @@ export function useWorkspaceOutputsQuery(
   });
 }
 
-export function useRefreshAssetMediaMutation() {
-  const client = useQueryClient();
-
-  return useMutation({
-    mutationFn: (assetId: string) => v1Api.refreshAssetMedia(assetId),
-    meta: {
-      successMessage: "Media refreshed",
-      errorMessage: "Could not refresh media",
-    },
-    onSuccess: (data, assetId) => {
-      client.setQueryData(queryKeys.assetMedia(assetId), data);
-      void client.invalidateQueries({ queryKey: ["workspaces"] });
-    },
-  });
-}
-
 export function useSetAssetVisibilityMutation() {
   const client = useQueryClient();
 
@@ -654,7 +641,12 @@ export function useSetAssetVisibilityMutation() {
       successMessage: "Visibility updated",
       errorMessage: "Could not update visibility",
     },
-    onSuccess: () => {
+    onSuccess: (_data, { assetId }) => {
+      clearPersistedAssetMedia();
+      void client.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === "asset-media" && query.queryKey[3] === assetId,
+      });
       void client.invalidateQueries({ queryKey: ["workspaces"] });
     },
   });

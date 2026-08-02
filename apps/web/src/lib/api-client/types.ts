@@ -217,6 +217,7 @@ export interface WorkspaceAsset {
   promptPreview?: string;
   url?: string;
   thumbnailUrl?: string;
+  expiresAt?: string | null;
   durationSec?: number;
   visibility?: "public" | "private";
   createdAt: string;
@@ -267,7 +268,7 @@ export interface WorkspaceOutputsResponse {
 export interface AssetMediaResponse {
   url: string | null;
   thumbnailUrl?: string | null;
-  expiresAt: string;
+  expiresAt: string | null;
 }
 
 export interface ProjectWatchMedia {

@@ -51,6 +51,10 @@ draft-history restoration.
 `specs/library-collections.spec.ts` verifies that an owned generated asset's
 detail viewer shows its exact attributed credit debit without spending provider
 credits. Public asset viewers do not request or receive owner billing metadata.
+It verifies that the project gallery and owned Library reuse the same scoped
+media URL across navigation and a same-tab reload, and that an unloadable image
+URL performs exactly one focused refresh to a working signed URL on desktop and
+both mobile browser projects.
 It also verifies the shared quick route-loading state on mobile, including its
 180ms anti-flash threshold, accessible busy semantics, content-shaped layout
 reservation, reduced motion, overflow containment, and transition into loaded

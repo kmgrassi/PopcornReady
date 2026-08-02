@@ -1,3 +1,4 @@
+import { HeadObjectCommand, type S3Client } from "@aws-sdk/client-s3";
 import { readStorageConfig, resolveBucket, type StorageConfig } from "./config";
 import { getS3Client } from "./s3-client";
 import { buildPresignedS3Url } from "./s3-presign";
@@ -33,10 +34,77 @@ function privateDeliveryBucket(config: StorageConfig): string {
   return resolveBucket(config, "private");
 }
 
-function isPubliclyDeliverable(asset: StoredAssetUrlFields): boolean {
+function deliveryBucket(
+  asset: StoredAssetUrlFields,
+  config: StorageConfig
+): string | null {
+  if (!asset.storage_key || !asset.storage_bucket) return null;
+  return isPubliclyDeliverable(asset, config)
+    ? config.publicBucket
+    : privateDeliveryBucket(config);
+}
+
+function isPubliclyDeliverable(
+  asset: StoredAssetUrlFields,
+  config: StorageConfig = readStorageConfig()
+): boolean {
   if (asset.visibility !== "public") return false;
+  return (
+    !asset.storage_bucket ||
+    asset.storage_bucket === config.publicBucket ||
+    asset.storage_bucket === "assets-public"
+  );
+}
+
+export function assetUrlRequiresSigning(asset: StoredAssetUrlFields): boolean {
   const config = readStorageConfig();
-  return !asset.storage_bucket || asset.storage_bucket === config.publicBucket;
+  return Boolean(
+    config.backend === "s3" &&
+      asset.storage_key &&
+      asset.storage_bucket &&
+      !isPubliclyDeliverable(asset, config)
+  );
+}
+
+export async function managedAssetObjectExists(
+  asset: StoredAssetUrlFields,
+  deps: { config?: StorageConfig; client?: S3Client } = {}
+): Promise<boolean> {
+  const config = deps.config ?? readStorageConfig();
+  if (config.backend === "s3" && asset.storage_key && !asset.storage_bucket) {
+    return false;
+  }
+  const bucket = deliveryBucket(asset, config);
+  if (config.backend !== "s3" || !asset.storage_key || !bucket) {
+    return true;
+  }
+
+  try {
+    await (deps.client ?? getS3Client(config)).send(
+      new HeadObjectCommand({
+        Bucket: bucket,
+        Key: asset.storage_key,
+      })
+    );
+    return true;
+  } catch (error) {
+    if (isMissingObjectError(error)) return false;
+    throw error;
+  }
+}
+
+function isMissingObjectError(error: unknown): boolean {
+  const candidate = error as {
+    name?: string;
+    Code?: string;
+    $metadata?: { httpStatusCode?: number };
+  };
+  return (
+    candidate.$metadata?.httpStatusCode === 404 ||
+    candidate.name === "NotFound" ||
+    candidate.name === "NoSuchKey" ||
+    candidate.Code === "NoSuchKey"
+  );
 }
 
 function isHostedRuntime(): boolean {
@@ -79,7 +147,9 @@ export async function resolveAssetUrl(
   if (asset.storage_key && hasManagedStorage) {
     if (config.backend === "local") return localPublicPath(asset.storage_key);
 
-    if (isPubliclyDeliverable(asset)) return stablePublicUrl(asset.storage_key);
+    if (isPubliclyDeliverable(asset, config)) {
+      return stablePublicUrl(asset.storage_key);
+    }
 
     return buildPresignedS3Url(
       {

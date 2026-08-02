@@ -6,7 +6,7 @@
 <!-- agent-summary: Generated references and media analysis share the bucket-aware storage reader. -->
 <!-- agent-summary: Supabase Storage is reserved for eval fixtures, not production asset delivery. -->
 <!-- agent-summary: Production S3 behavior is exercised locally with Supabase plus MinIO. -->
-<!-- agent-summary: Visibility moves remain copy, row update, then source delete. -->
+<!-- agent-summary: Visibility moves preserve object metadata, rewrite cache scope, then update the row and delete the source. -->
 
 ## Objective
 
@@ -56,6 +56,38 @@ S3 bucket, then loads both references through the real keyframe worker.
 Asynchronous orchestrator jobs return a recoverable storage failure to the model
 for retry, but stop after three consecutive failures for the same tool and error
 kind so a persistent outage cannot create an unbounded job loop.
+
+### Cache and missing-object hardening (2026-08-02)
+
+Immutable asset writes now set object metadata at creation:
+`public, max-age=31536000, immutable` in the public bucket and
+`private, max-age=31536000, immutable` in the private bucket. Browser-direct
+presigned PUT responses include the exact `requiredHeaders` map that the client
+must send so S3 persists `Cache-Control` with the object. Server-mediated
+writes apply the same policy. The current SPA upload flow still posts encoded
+bytes through its existing API path; the direct PUT contract is consumed by the
+storage smoke/API clients and is ready for a later large-upload UI cutover.
+
+Visibility reconciliation still orders work as copy, row update, then source
+delete. The copy reads source metadata first and preserves content type,
+content disposition, content encoding, content language, expiry, and custom S3
+metadata while replacing the destination `Cache-Control` with the target
+bucket's policy. Regeneration mints a new storage object id before writing bytes;
+it never overwrites an existing immutable version key.
+
+Focused private-media refresh checks the privacy-safe delivery bucket with
+`HeadObject`. Only S3 missing-object responses are translated to absent media;
+IAM, configuration, and network failures propagate. List projection does not
+probe every object. During the 2026-08-02 incident audit, the reported key and
+its asset-id prefix were absent from both production buckets and from both
+buckets' version listings. The authenticated production projection showed the
+asset and project are public, while the legacy row stores the logical bucket
+alias `assets-public`; its `updatedAt` remains in the original 2026-07-16
+creation window, so there is no row-timestamp evidence of a recent visibility
+move. Action-table history was unavailable, and an empty CloudTrail lookup is
+not deletion proof unless S3 data events were enabled. The resolver recognizes
+that legacy public alias, but the missing bytes still require regeneration or
+restoration from lineage; URL caching cannot restore them.
 
 ---
 
@@ -277,9 +309,11 @@ the bytes and calls `putObject(bucket, key, bytes, contentType)`, then persists
    for large files, **initiates a multipart upload** and presigns the parts —
    returning the URL(s). The bucket is itself a guard: a free/public project can
    only ever be handed a presigned PUT into `assets-public`.
-2. Client uploads bytes **directly to S3** (no API byte path; sidesteps the
+2. Client uploads bytes **directly to S3**, sending every header returned in
+   `requiredHeaders` (currently the visibility-aware immutable `Cache-Control`)
+   along with the signed request. This has no API byte path and sidesteps the
    Railway request/memory limits that server-mediated upload of large video
-   would hit).
+   would hit.
 3. Client calls `POST .../assets/:assetId/complete` (with multipart ETags if
    applicable); the API verifies the object exists, then finalizes the asset row
    (`status=ready`, `storage_key`, `storage_bucket`, visibility).
