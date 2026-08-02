@@ -64,4 +64,6 @@ Replace route-level studio crew animation with restrained loading feedback that 
 
 ## Next action / handoff
 
-Complete wrap-up review, commit and tag the branch, then open a ready-for-review PR.
+Ready-for-review PR: https://github.com/kmgrassi/PopcornReady/pull/875
+
+Monitor CI and review feedback on PR #875.
