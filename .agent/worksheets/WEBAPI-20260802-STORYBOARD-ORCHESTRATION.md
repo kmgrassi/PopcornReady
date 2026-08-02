@@ -58,6 +58,9 @@
 - `pnpm agent:lint:fix` — passed.
 - `pnpm agent:validate -- --scope all` — passed on the final tree after the status endpoint, operator diagnostics, and index migration changes.
 - `pnpm db:migrations:validate` — passed with 99 migrations. `pnpm db:local:status` could not complete because Docker container health inspection was unresponsive and was canceled; the migration's exact access-path index is covered by the focused migration test and repository migration validator.
+- PR #877 dispatch-recovery follow-up: the focused orchestrator route suite
+  passed 38 tests, `@popcorn/api` typecheck passed, and
+  `pnpm agent:validate -- --scope all` passed on the follow-up tree.
 
 ## Independent reviews
 
@@ -65,6 +68,12 @@
 - Plan: `/root/research_review` approved the storyboard-bounded entrypoint with narrow root reuse, idempotency, explicit no-brief behavior, no poster dispatch, and explicit legacy-stage mapping.
 - Implementation: `/root/research_review` identified and then confirmed fixes for concurrent duplicate roots, replay dispatch, overbroad client run inference, stale terminal polling, poster/unknown projection, low-level route coverage, operator provenance, heavyweight full-history polling, and its supporting database index.
 - Wrap-up: `/root/research_review` approved the implementation, migration, source-of-truth docs, feedback entry, auth ordering, performance shape, and test evidence with no remaining correctness issue.
+- PR follow-up research/plan: `/root/research_review` confirmed the review
+  finding and selected queued-plus-pending reuse and queued replay as the safe
+  repair boundary; running, waiting, and reached-gate runs must not be woken.
+- PR follow-up implementation/wrap-up: `/root/research_review` approved the
+  serialized retry repair, gate-aware wake boundary, idempotency replay handling,
+  focused regression, contract update, and validation with no blocking finding.
 
 ## Blockers and risks
 
@@ -72,4 +81,8 @@
 
 ## Next action / handoff
 
-- Commit and tag the approved worksheet, then publish the ready PR.
+- PR #877 review follow-up: re-wake queued reused and idempotently replayed
+  storyboard runs so a failed initial dispatch cannot strand a committed run.
+  Keep running, waiting, reached-gate, and terminal replays untouched. Focused
+  regression coverage, independent review, and full validation pass; commit and
+  push the follow-up.

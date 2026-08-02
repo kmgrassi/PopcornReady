@@ -24,6 +24,12 @@ The find-or-create decision also needs a cross-instance lock; request-level
 idempotency alone cannot prevent two different tabs from racing with different
 keys.
 
+Creating a run and waking its dispatch are separate durable operations. If the
+wake fails after the queued run commits, a retry must re-wake that same queued
+run rather than merely returning its id. Limit this repair to queued runs with
+a pending target gate: waking running work can schedule an extra turn, while
+waking waiting or reached-gate work can violate its intended park boundary.
+
 Progress projection needs the same identity discipline. Once a stage has a
 tool name, that tool must map explicitly or remain absent; falling back only on
 the broad stage type can make poster or unknown legacy work appear to complete
@@ -43,3 +49,5 @@ its asset metadata.
   a targeted test of the suggested tool.
 - Add explicit progress groups whenever a durable tool becomes creator-visible;
   do not expand stage-type fallbacks to absorb it.
+- Test split-store failure windows by failing the initial dispatch after run
+  creation, then proving a retry reuses and wakes the same run.

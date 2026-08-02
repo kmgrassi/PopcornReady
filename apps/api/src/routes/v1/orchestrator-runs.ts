@@ -361,7 +361,7 @@ export async function storyboardGenerationEntrypointStatusRoute(
 async function activeStoryboardRoot(
   projectId: string,
   deps: Pick<StoryboardEntrypointDeps, "listRuns" | "listGates">
-): Promise<OrchestratorRun | null> {
+): Promise<{ run: OrchestratorRun; gate: OrchestratorRunGate } | null> {
   const runs = await deps.listRuns(projectId);
   for (const run of runs) {
     if (!ACTIVE_RUN_STATUSES.has(run.status) || !isCreativeDirectorHierarchyRoot(run)) {
@@ -370,7 +370,7 @@ async function activeStoryboardRoot(
     const gates = await deps.listGates(run.id);
     const storyboardGate = gates.find(isStoryboardAfterGate);
     if (storyboardGate?.status === "pending" || storyboardGate?.status === "reached") {
-      return run;
+      return { run, gate: storyboardGate };
     }
   }
   return null;
@@ -395,11 +395,18 @@ export async function storyboardGenerationEntrypointRoute(
 
   await resolved.requireProjectAccess(ctx.auth.workspaceId, projectId);
   return resolved.withProjectLock(projectId, async () => {
-    const existingRun = await activeStoryboardRoot(projectId, resolved);
-    if (existingRun) {
+    const existing = await activeStoryboardRoot(projectId, resolved);
+    if (existing) {
+      // Run creation and dispatch are separate durable operations. If the initial
+      // wake failed after the queued run was committed, a creator retry must
+      // repair that missing dispatch instead of returning a permanently queued
+      // run. The wake routine is idempotent, so repeating it is safe.
+      if (existing.run.status === "queued" && existing.gate.status === "pending") {
+        await resolved.enqueueRun(existing.run.id, ctx.auth.workspaceId);
+      }
       return {
         status: 200,
-        body: { runId: existingRun.id, reused: true },
+        body: { runId: existing.run.id, reused: true },
       };
     }
 
@@ -424,7 +431,11 @@ export async function storyboardGenerationEntrypointRoute(
       body: ctx.body,
       anonymousQuota: anonymousRunQuotaForAuth(ctx.auth),
     });
-    if (!replayed) {
+    // An idempotency replay can recover the same split-operation failure even when
+    // the active-run read did not observe the committed run. Re-wake only a
+    // queued replay; running, waiting, and terminal runs already have runtime
+    // ownership or have finished.
+    if (!replayed || run.status === "queued") {
       await resolved.enqueueRun(run.id, ctx.auth.workspaceId);
     }
     return {

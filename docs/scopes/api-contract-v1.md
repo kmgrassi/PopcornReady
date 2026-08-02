@@ -202,7 +202,11 @@ Director run whose mandatory boundary is `after:generate_storyboard`. The agent
 prepares any missing scene-and-moment plan before it generates storyboard
 panels. If the project already has a nonterminal Creative Director root with an
 unresolved storyboard boundary, the endpoint returns that run instead of
-starting duplicate work. It does not launch poster generation.
+starting duplicate work. A queued reuse with a still-pending boundary, or a
+queued idempotency replay, is re-woken through the lease-safe dispatch
+primitive, repairing a failed initial dispatch without creating another run.
+Running, waiting, reached-boundary, and terminal work is not re-woken. The
+entrypoint does not launch poster generation.
 
 Response:
 

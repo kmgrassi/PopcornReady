@@ -19,6 +19,7 @@ import {
   storyboardGenerationEntrypointRoute,
   storyboardGenerationEntrypointStatusRoute,
   stopAfterTools,
+  type StoryboardEntrypointDeps,
 } from "../orchestrator-runs";
 
 
@@ -160,6 +161,80 @@ test("storyboard entrypoint reuses an active Creative Director root with an unre
   assert.equal(enqueued, false);
 });
 
+test("storyboard entrypoint retry reuses and re-wakes a queued run after initial dispatch failure", async () => {
+  const existing = runFixture({ id: "run_orphaned", status: "queued" });
+  const runs: ReturnType<typeof runFixture>[] = [];
+  const enqueued: string[] = [];
+  let createCount = 0;
+  let enqueueAttempts = 0;
+  const withProjectLock: StoryboardEntrypointLock = async (_projectId, operation) =>
+    operation();
+  const deps: Partial<StoryboardEntrypointDeps> = {
+    requireProjectAccess: async () => undefined,
+    listRuns: async () => runs,
+    listGates: async () => [gateFixture("after:generate_storyboard", { status: "pending" })],
+    getActiveProjectBrief: async () => ({ assetId: "brief_1" }) as never,
+    createRun: async () => {
+      createCount += 1;
+      runs.push(existing);
+      return { run: existing, replayed: false };
+    },
+    enqueueRun: async (runId: string) => {
+      enqueueAttempts += 1;
+      if (enqueueAttempts === 1) throw new Error("dispatch unavailable");
+      enqueued.push(runId);
+    },
+    withProjectLock,
+  };
+  const request = () =>
+    storyboardGenerationEntrypointRoute(
+      {
+        auth: {
+          workspaceId: "workspace_1",
+          actor: { id: "actor_1" },
+        } as never,
+        body: {},
+      },
+      { projectId: "project_1" },
+      deps
+    );
+
+  await assert.rejects(request(), /dispatch unavailable/);
+  const result = await request();
+
+  assert.deepEqual(result, {
+    status: 200,
+    body: { runId: "run_orphaned", reused: true },
+  });
+  assert.equal(createCount, 1);
+  assert.equal(enqueueAttempts, 2);
+  assert.deepEqual(enqueued, ["run_orphaned"]);
+});
+
+test("storyboard entrypoint does not wake a queued run whose storyboard gate is reached", async () => {
+  const existing = runFixture({ id: "run_at_review", status: "queued" });
+  let enqueued = false;
+  const result = await storyboardGenerationEntrypointRoute(
+    {
+      auth: { workspaceId: "workspace_1", actor: { id: "actor_1" } } as never,
+      body: {},
+    },
+    { projectId: "project_1" },
+    {
+      requireProjectAccess: async () => undefined,
+      listRuns: async () => [existing],
+      listGates: async () => [gateFixture("after:generate_storyboard", { status: "reached" })],
+      enqueueRun: async () => {
+        enqueued = true;
+      },
+      withProjectLock: async (_projectId, operation) => operation(),
+    }
+  );
+
+  assert.deepEqual(result.body, { runId: "run_at_review", reused: true });
+  assert.equal(enqueued, false);
+});
+
 test("storyboard status returns only the latest server-projected boundary run", async () => {
   let requestedStage = "";
   const result = await storyboardGenerationEntrypointStatusRoute(
@@ -254,14 +329,44 @@ test("storyboard entrypoint does not reuse a resolved board gate and requires an
   );
 });
 
-test("storyboard entrypoint does not enqueue an idempotent replay", async () => {
+test("storyboard entrypoint re-wakes a queued idempotent replay", async () => {
   const replayed = runFixture({ id: "run_replayed", status: "queued" });
-  let enqueued = false;
+  const enqueued: string[] = [];
   const result = await storyboardGenerationEntrypointRoute(
     {
       auth: { workspaceId: "workspace_1", actor: { id: "actor_1" } } as never,
       body: {},
       req: { header: () => "storyboard-replay" } as never,
+    },
+    { projectId: "project_1" },
+    {
+      requireProjectAccess: async () => undefined,
+      listRuns: async () => [],
+      listGates: async () => [],
+      getActiveProjectBrief: async () => ({ assetId: "brief_1" }) as never,
+      createRun: async () => ({ run: replayed, replayed: true }),
+      enqueueRun: async (runId) => {
+        enqueued.push(runId);
+      },
+      withProjectLock: async (_projectId, operation) => operation(),
+    }
+  );
+
+  assert.deepEqual(result, {
+    status: 200,
+    body: { runId: "run_replayed", reused: true },
+  });
+  assert.deepEqual(enqueued, ["run_replayed"]);
+});
+
+test("storyboard entrypoint does not re-wake a completed idempotent replay", async () => {
+  const replayed = runFixture({ id: "run_completed", status: "succeeded" });
+  let enqueued = false;
+  const result = await storyboardGenerationEntrypointRoute(
+    {
+      auth: { workspaceId: "workspace_1", actor: { id: "actor_1" } } as never,
+      body: {},
+      req: { header: () => "storyboard-completed-replay" } as never,
     },
     { projectId: "project_1" },
     {
@@ -279,7 +384,7 @@ test("storyboard entrypoint does not enqueue an idempotent replay", async () => 
 
   assert.deepEqual(result, {
     status: 200,
-    body: { runId: "run_replayed", reused: true },
+    body: { runId: "run_completed", reused: true },
   });
   assert.equal(enqueued, false);
 });
@@ -337,7 +442,7 @@ test("storyboard entrypoint serializes concurrent find-or-create requests per pr
   );
 
   assert.equal(createCount, 1);
-  assert.deepEqual(enqueued, ["run_serialized"]);
+  assert.deepEqual(enqueued, ["run_serialized", "run_serialized"]);
   assert.deepEqual(
     [first.body.reused, second.body.reused].sort(),
     [false, true]
