@@ -162,9 +162,17 @@ async function signedUploadSource(ctx: SmokeContext): Promise<JsonRecord> {
   );
   const uploadPath = stringField(response, "path");
   const signedUrl = stringField(response, "signedUrl");
+  const requiredHeaders = nestedRecord(response, "requiredHeaders");
   const put = await fetch(absoluteUrl(ctx.config, signedUrl), {
     method: "PUT",
-    headers: { "content-type": ctx.config.contentType },
+    headers: {
+      "content-type": ctx.config.contentType,
+      ...Object.fromEntries(
+        Object.entries(requiredHeaders).filter(
+          (entry): entry is [string, string] => typeof entry[1] === "string"
+        )
+      ),
+    },
     body: sampleBytes,
   });
   if (!put.ok) {

@@ -12,6 +12,7 @@ import {
   type S3Client,
 } from "@aws-sdk/client-s3";
 import { canSignCloudFront, signCloudFrontUrl } from "./cloudfront";
+import { immutableAssetCacheControl } from "./cache-control";
 import {
   readStorageConfig,
   resolveBucket,
@@ -66,6 +67,38 @@ export interface S3ObjectStoreDeps {
   buildPresignedS3Url?: typeof buildPresignedS3Url;
 }
 
+export async function copyS3ObjectWithMetadata(input: {
+  client: S3Client;
+  sourceBucket: string;
+  sourceKey: string;
+  destinationBucket: string;
+  destinationKey: string;
+  destinationVisibility: AssetVisibility;
+  contentType?: string;
+}): Promise<void> {
+  const source = await input.client.send(
+    new HeadObjectCommand({
+      Bucket: input.sourceBucket,
+      Key: input.sourceKey,
+    })
+  );
+  await input.client.send(
+    new CopyObjectCommand({
+      Bucket: input.destinationBucket,
+      Key: input.destinationKey,
+      CopySource: `${input.sourceBucket}/${encodeS3CopySourceKey(input.sourceKey)}`,
+      ContentType: input.contentType ?? source.ContentType,
+      ContentDisposition: source.ContentDisposition,
+      ContentEncoding: source.ContentEncoding,
+      ContentLanguage: source.ContentLanguage,
+      Expires: source.Expires,
+      CacheControl: immutableAssetCacheControl(input.destinationVisibility),
+      Metadata: source.Metadata,
+      MetadataDirective: "REPLACE",
+    })
+  );
+}
+
 export function createObjectStore(config: StorageConfig = readStorageConfig()): ObjectStore {
   if (config.backend === "local") return createLocalObjectStore(config);
   return createS3ObjectStore(config);
@@ -88,6 +121,7 @@ export function createS3ObjectStore(
           Key: input.key,
           Body: input.body,
           ContentType: input.contentType,
+          CacheControl: immutableAssetCacheControl(input.visibility),
         })
       );
       return { bucket, key: input.key };
@@ -127,15 +161,15 @@ export function createS3ObjectStore(
     async copyObject(input) {
       const sourceBucket = resolveBucket(config, input.sourceVisibility);
       const destinationBucket = resolveBucket(config, input.destinationVisibility);
-      await client.send(
-        new CopyObjectCommand({
-          Bucket: destinationBucket,
-          Key: input.destinationKey,
-          CopySource: `${sourceBucket}/${encodeS3CopySourceKey(input.sourceKey)}`,
-          ContentType: input.contentType,
-          MetadataDirective: input.contentType ? "REPLACE" : undefined,
-        })
-      );
+      await copyS3ObjectWithMetadata({
+        client,
+        sourceBucket,
+        sourceKey: input.sourceKey,
+        destinationBucket,
+        destinationKey: input.destinationKey,
+        destinationVisibility: input.destinationVisibility,
+        contentType: input.contentType,
+      });
       return { bucket: destinationBucket, key: input.destinationKey };
     },
 

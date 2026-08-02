@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
-import { resolveAssetUrl } from "./asset-urls";
+import { managedAssetObjectExists, resolveAssetUrl } from "./asset-urls";
+import { readStorageConfig } from "./config";
 
 const ENV_KEYS = [
   "STORAGE_BACKEND",
@@ -109,6 +110,18 @@ test("resolveAssetUrl returns stable unsigned public CDN URLs", async () => {
   );
 });
 
+test("resolveAssetUrl recognizes legacy logical public-bucket rows", async () => {
+  process.env.S3_PUBLIC_BUCKET = "popcornready-assets-public";
+  const url = await resolveAssetUrl({
+    remote_url: null,
+    storage_key: "ws/proj/legacy/public.png",
+    storage_bucket: "assets-public",
+    visibility: "public",
+  });
+
+  assert.equal(url, "https://cdn.example.com/assets/ws/proj/legacy/public.png");
+});
+
 test("resolveAssetUrl returns short-lived signed private URLs", async () => {
   const url = await resolveAssetUrl({
     remote_url: null,
@@ -165,4 +178,88 @@ test("resolveAssetUrl returns absolute local URLs for local backend storage keys
   });
 
   assert.equal(url, "http://localhost:4200/uploads/ws/proj/asset.mp4");
+});
+
+test("managedAssetObjectExists classifies only missing-object responses as absent", async () => {
+  const config = readStorageConfig();
+  const asset = {
+    remote_url: null,
+    storage_key: "ws/proj/asset/missing.png",
+    storage_bucket: "assets-private",
+    visibility: "private" as const,
+  };
+
+  assert.equal(
+    await managedAssetObjectExists(asset, {
+      config,
+      client: {
+        send: async () => {
+          throw { name: "NoSuchKey", $metadata: { httpStatusCode: 404 } };
+        },
+      } as never,
+    }),
+    false
+  );
+
+  await assert.rejects(
+    managedAssetObjectExists(asset, {
+      config,
+      client: {
+        send: async () => {
+          throw { name: "AccessDenied", $metadata: { httpStatusCode: 403 } };
+        },
+      } as never,
+    }),
+    (error: unknown) =>
+      (error as { name?: string }).name === "AccessDenied"
+  );
+});
+
+test("managedAssetObjectExists verifies the privacy-safe delivery bucket", async () => {
+  const config = readStorageConfig();
+  let checkedBucket: string | undefined;
+  await managedAssetObjectExists(
+    {
+      remote_url: null,
+      storage_key: "ws/proj/asset/stale-location.png",
+      storage_bucket: "assets-public",
+      visibility: "private",
+    },
+    {
+      config,
+      client: {
+        send: async (command: { input?: { Bucket?: string } }) => {
+          checkedBucket = command.input?.Bucket;
+          return {};
+        },
+      } as never,
+    }
+  );
+
+  assert.equal(checkedBucket, "assets-private");
+});
+
+test("managedAssetObjectExists withholds a managed S3 row without a bucket", async () => {
+  const config = readStorageConfig();
+  let calls = 0;
+  const exists = await managedAssetObjectExists(
+    {
+      remote_url: "https://public.example/legacy.png",
+      storage_key: "ws/proj/asset.png",
+      storage_bucket: null,
+      visibility: "private",
+    },
+    {
+      config,
+      client: {
+        send: async () => {
+          calls += 1;
+          return {};
+        },
+      } as never,
+    }
+  );
+
+  assert.equal(exists, false);
+  assert.equal(calls, 0);
 });

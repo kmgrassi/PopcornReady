@@ -68,6 +68,7 @@ export interface V1Asset {
   visibility?: "public" | "private";
   remoteUrl?: string;
   thumbnailUrl?: string;
+  expiresAt?: string | null;
   storageKey?: string;
   storageBucket?: string;
   durationSec?: number;

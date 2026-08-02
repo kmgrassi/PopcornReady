@@ -9,6 +9,7 @@ import {
 } from "@/lib/storage/config";
 import { createObjectStore, type ObjectStore } from "@/lib/storage/object-store";
 import { buildPresignedS3PutUrl } from "@/lib/storage/s3-presign";
+import { immutableAssetCacheControl } from "@/lib/storage/cache-control";
 import { getS3Client } from "@/lib/storage/s3-client";
 import { ApiError } from "./errors";
 
@@ -24,6 +25,7 @@ export interface UploadUrlResult {
   path: string;
   signedUrl: string;
   expiresAt: string;
+  requiredHeaders: Record<string, string>;
 }
 
 export function uploadPrefix(workspaceId: string, projectId: string): string {
@@ -78,6 +80,9 @@ export async function createAssetUploadUrl(input: {
         input.projectId
       )}/assets/upload-url/local?token=${encodeURIComponent(token)}`,
       expiresAt,
+      requiredHeaders: {
+        "Cache-Control": immutableAssetCacheControl(input.visibility),
+      },
     };
   }
 
@@ -90,10 +95,14 @@ export async function createAssetUploadUrl(input: {
         key: uploadPath,
         expiresInSec,
         contentType,
+        visibility: input.visibility,
       },
       getS3Client(config)
     ),
     expiresAt,
+    requiredHeaders: {
+      "Cache-Control": immutableAssetCacheControl(input.visibility),
+    },
   };
 }
 

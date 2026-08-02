@@ -7,6 +7,7 @@ import {
   registerAsset,
   updateAssetContext,
 } from "@/lib/api/v1/assets";
+import { SIGNED_MEDIA_JSON_HEADERS } from "@/lib/api/v1/cache-policy";
 import { writeLocalSignedUpload } from "@/lib/api/v1/asset-upload";
 import {
   parseAssetInventory,
@@ -143,6 +144,7 @@ assetsRouter.get(
     return {
       status: 200,
       body: { assets: items, pagination: { limit, nextCursor } },
+      headers: SIGNED_MEDIA_JSON_HEADERS,
     };
   })
 );

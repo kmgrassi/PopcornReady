@@ -419,7 +419,12 @@ export async function createStorageUploadUrl(
   auth: AuthContext,
   projectId: string,
   input: { filename?: string; contentType?: string }
-): Promise<{ path: string; signedUrl: string; expiresAt: string }> {
+): Promise<{
+  path: string;
+  signedUrl: string;
+  expiresAt: string;
+  requiredHeaders: Record<string, string>;
+}> {
   await getProject(auth.workspaceId, projectId);
   const filename = input.filename?.trim() || `${randomUUID()}.bin`;
   const visibility = await effectiveAssetStorageVisibility({

@@ -380,6 +380,8 @@ export interface V1Asset {
   filename: string;
   url: string; // served/managed path the renderer can read
   thumbnailUrl?: string;
+  // Null for stable public/remote media; ISO timestamp for private signed URLs.
+  expiresAt?: string | null;
   durationSec: number;
   // Human display name written by the generating agent (falls back to a derived name).
   name?: string;

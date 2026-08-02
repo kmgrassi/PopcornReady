@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import type { GenerationRunStatus } from "@popcorn/shared/v1/types";
 import {
   type WorkspaceAsset,
+  type AssetMediaResponse,
   type WorkspaceAssetSource,
   type WorkspaceOutput,
 } from "../lib/api-client";
@@ -30,6 +31,7 @@ import {
   type LibraryScope,
 } from "../lib/v1/dashboard/query";
 import styles from "./DashboardCollections.module.css";
+import { useAssetMediaQuery } from "../lib/assetMediaQuery";
 
 const PAGE_SIZE = 24;
 const DEV_AUTOPILOT = import.meta.env.DEV;
@@ -113,7 +115,10 @@ function StatusChip({
   return <span className={`${styles.chip} ${statusChipClass(status)}`}>{label ?? titleCase(status)}</span>;
 }
 
-function assetViewerItem(asset: WorkspaceAsset): MediaViewerItem {
+function assetViewerItem(
+  asset: WorkspaceAsset,
+  media?: AssetMediaResponse,
+): MediaViewerItem {
   const id = asset.assetId ?? asset.id;
   return {
     id,
@@ -122,8 +127,9 @@ function assetViewerItem(asset: WorkspaceAsset): MediaViewerItem {
     filename: asset.filename,
     projectName: asset.projectName,
     durationSec: asset.durationSec,
-    url: asset.url,
-    thumbnailUrl: asset.thumbnailUrl,
+    url: media ? media.url ?? undefined : asset.url,
+    thumbnailUrl: media ? media.thumbnailUrl ?? undefined : asset.thumbnailUrl,
+    expiresAt: media?.expiresAt ?? asset.expiresAt,
   };
 }
 
@@ -529,6 +535,16 @@ export function AssetsPage() {
     ? assetsQuery.items.findIndex((asset) => (asset.assetId ?? asset.id) === selectedAssetId)
     : -1;
   const selectedAsset = selectedIndex >= 0 ? assetsQuery.items[selectedIndex] : null;
+  const mediaWorkspaceId = isPublic ? "public" : assetsQuery.workspaceId;
+  const selectedMedia = useAssetMediaQuery({
+    authScope,
+    workspaceId: mediaWorkspaceId,
+    assetId: selectedAsset ? selectedAsset.assetId ?? selectedAsset.id : "",
+    initialMedia: selectedAsset,
+    enabled: Boolean(selectedAsset),
+    fetchWhenMissing: !isPublic,
+    proactiveRefresh: !isPublic,
+  });
   const billingQuery = useAssetBillingQuery(
     authScope,
     selectedAsset?.projectId ?? "",
@@ -622,7 +638,11 @@ export function AssetsPage() {
                     onClick={() => void openAsset(asset)}
                     aria-label={`View ${asset.title ?? asset.filename ?? id}`}
                   >
-                    <AssetPreview asset={asset} />
+                    <AssetPreview
+                      asset={asset}
+                      authScope={authScope}
+                      workspaceId={mediaWorkspaceId}
+                    />
                     <div className={styles.cardBody}>
                       <div><span className={styles.rowTitle}>{asset.title ?? asset.filename ?? asset.id}</span><span className={styles.rowSub}>{asset.projectName}</span></div>
                       <div className={styles.cardMeta}>
@@ -648,7 +668,7 @@ export function AssetsPage() {
         </>
       ) : null}
       <MediaViewer
-        item={selectedAsset ? assetViewerItem(selectedAsset) : null}
+        item={selectedAsset ? assetViewerItem(selectedAsset, selectedMedia.data) : null}
         creditsCharged={isPublic ? undefined : billingQuery.data?.creditsCharged}
         hasPrevious={selectedIndex > 0}
         hasNext={selectedIndex >= 0 && selectedIndex < assetsQuery.items.length - 1}
@@ -666,10 +686,14 @@ export function AssetsPage() {
         onRefresh={
           isPublic
             ? undefined
-            : async (item) => {
-                return mediaMutation.mutateAsync(item.id);
-              }
+            : async (item) =>
+                (await selectedMedia.refreshAfterError(item.url ?? item.thumbnailUrl)) ?? {
+                  url: null,
+                  thumbnailUrl: null,
+                  expiresAt: null,
+                }
         }
+        onMediaLoad={isPublic ? undefined : selectedMedia.markLoaded}
         onRegenerate={
           isPublic
             ? undefined
@@ -735,7 +759,23 @@ export function AssetsPage() {
   );
 }
 
-function AssetPreview({ asset }: { asset: WorkspaceAsset }) {
+function AssetPreview({
+  asset,
+  authScope,
+  workspaceId,
+}: {
+  asset: WorkspaceAsset;
+  authScope: string;
+  workspaceId: string;
+}) {
+  const assetId = asset.assetId ?? asset.id;
+  const mediaQuery = useAssetMediaQuery({
+    authScope,
+    workspaceId,
+    assetId,
+    initialMedia: asset,
+  });
+  const media = mediaQuery.data;
   // Rows can reference media whose bytes are gone (pre-storage-cutover dev
   // assets); AssetImage degrades to the kind placeholder on error instead of a
   // broken-image glyph. Recovery is disabled here because the surrounding card
@@ -743,13 +783,15 @@ function AssetPreview({ asset }: { asset: WorkspaceAsset }) {
   return (
     <AssetImage
       kind={asset.kind === "video" ? "video" : asset.kind === "audio" ? "audio" : "image"}
-      url={asset.url}
-      thumbnailUrl={asset.thumbnailUrl}
+      url={media ? media.url ?? undefined : asset.url}
+      thumbnailUrl={media ? media.thumbnailUrl ?? undefined : asset.thumbnailUrl}
       status={asset.status}
       mediaClassName={styles.media}
       placeholderClassName={`${styles.media} ${styles.mediaEmpty}`}
       placeholder={<span>{titleCase(asset.kind)}</span>}
       allowRegenerate={false}
+      onMediaError={(failedUrl) => void mediaQuery.refreshAfterError(failedUrl)}
+      onMediaLoad={mediaQuery.markLoaded}
     />
   );
 }

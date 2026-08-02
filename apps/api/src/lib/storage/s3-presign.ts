@@ -2,6 +2,8 @@ import { GetObjectCommand, PutObjectCommand, type S3Client } from "@aws-sdk/clie
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { readStorageConfig, type StorageConfig } from "./config";
 import { getS3Client } from "./s3-client";
+import { immutableAssetCacheControl } from "./cache-control";
+import type { AssetVisibility } from "./config";
 
 export async function buildPresignedS3Url(
   input: {
@@ -27,6 +29,7 @@ export async function buildPresignedS3PutUrl(
     key: string;
     expiresInSec?: number;
     contentType?: string;
+    visibility?: AssetVisibility;
   },
   client: S3Client = getS3Client()
 ): Promise<string> {
@@ -36,6 +39,7 @@ export async function buildPresignedS3PutUrl(
       Bucket: input.bucket,
       Key: input.key,
       ContentType: input.contentType,
+      CacheControl: immutableAssetCacheControl(input.visibility ?? "private"),
     }),
     { expiresIn: input.expiresInSec ?? 900 }
   );

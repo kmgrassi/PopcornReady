@@ -49,6 +49,10 @@ distinct full-video flow.
 `specs/library-collections.spec.ts` verifies that an owned generated asset's
 detail viewer shows its exact attributed credit debit without spending provider
 credits. Public asset viewers do not request or receive owner billing metadata.
+It verifies that the project gallery and owned Library reuse the same scoped
+media URL across navigation and a same-tab reload, and that an unloadable image URL
+performs exactly one focused refresh to a working signed URL on desktop and both
+mobile browser projects.
 It also verifies the shared route-level studio-crew loading state on mobile,
 including accessible busy semantics, reduced motion, overflow containment, and
 its transition into loaded project content. A Watch-route case covers the panel

@@ -22,6 +22,19 @@ function json(route: Route, body: JsonValue) {
   });
 }
 
+function image(route: Route, label: string, status = 200) {
+  return route.fulfill({
+    status,
+    headers: {
+      "cache-control": "private, max-age=31536000, immutable",
+      "content-type": "image/svg+xml",
+    },
+    body: status === 200
+      ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360"><rect width="640" height="360" fill="#0f766e"/><text x="42" y="196" fill="white" font-size="48">${label}</text></svg>`
+      : "missing",
+  });
+}
+
 function project(index: number) {
   return {
     id: index === 1 ? "proj-alpha" : `proj-${index}`,
@@ -414,4 +427,118 @@ test("covers library pagination, filters, media viewer, visibility, and watch li
   await page.getByRole("link", { name: "Watch" }).click();
   await expect(page).toHaveURL(/\/projects\/proj-alpha\/watch$/);
   await expect(page.getByRole("heading", { name: "Project Alpha" })).toBeVisible();
+});
+
+test("reuses one auth-scoped media URL across the project gallery, library, and reload", async ({ page }) => {
+  const projectSignedUrl = "/__e2e_media__/shared.svg?signature=project";
+  const librarySignedUrl = "/__e2e_media__/shared.svg?signature=library";
+  const expiresAt = new Date(Date.now() + 60 * 60_000).toISOString();
+  let focusedMediaRequests = 0;
+
+  await page.unroute(/\/api\/v1\/projects\/proj-alpha\/assets(?:\?.*)?$/);
+  await page.route(/\/api\/v1\/projects\/proj-alpha\/assets(?:\?.*)?$/, (route) =>
+    json(route, {
+      assets: [{
+        id: "asset-shared",
+        schemaVersion: "asset.v1",
+        projectId: "proj-alpha",
+        workspaceId,
+        kind: "image",
+        status: "ready",
+        filename: "shared.png",
+        name: "Shared keyframe",
+        url: projectSignedUrl,
+        thumbnailUrl: projectSignedUrl,
+        expiresAt,
+        visibility: "private",
+        source: "generated",
+        createdAt: now,
+        updatedAt: now,
+      }],
+      pagination: { limit: 100, nextCursor: null },
+    }),
+  );
+  await page.unroute("**/api/v1/workspaces/*/assets?**");
+  await page.route("**/api/v1/workspaces/*/assets?**", (route) =>
+    json(route, {
+      assets: [{
+        id: "asset-shared",
+        assetId: "asset-shared",
+        projectId: "proj-alpha",
+        projectName: "Project Alpha",
+        kind: "image",
+        status: "ready",
+        source: "generated",
+        title: "Shared keyframe",
+        filename: "shared.png",
+        url: librarySignedUrl,
+        thumbnailUrl: librarySignedUrl,
+        expiresAt,
+        visibility: "private",
+        createdAt: now,
+        updatedAt: now,
+      }],
+      pagination: { limit: 24, nextCursor: null },
+    }),
+  );
+  await page.route("**/__e2e_media__/shared.svg?**", (route) => image(route, "Shared"));
+  await page.route("**/api/v1/assets/asset-shared/media", (route) => {
+    focusedMediaRequests += 1;
+    return json(route, { url: projectSignedUrl, thumbnailUrl: projectSignedUrl, expiresAt });
+  });
+
+  await page.goto("/projects/proj-alpha/media");
+  await expect(page.getByRole("button", { name: "View Shared keyframe" }).locator("img"))
+    .toHaveAttribute("src", projectSignedUrl);
+
+  await page.goto("/library/assets");
+  const libraryImage = page.getByRole("button", { name: "View Shared keyframe" }).locator("img");
+  await expect(libraryImage).toHaveAttribute("src", projectSignedUrl);
+  await page.reload();
+  await expect(page.getByRole("button", { name: "View Shared keyframe" }).locator("img"))
+    .toHaveAttribute("src", projectSignedUrl);
+  expect(focusedMediaRequests).toBe(0);
+});
+
+test("@mobile retries failed media once with a newly signed URL", async ({ page }) => {
+  const failedUrl = "/__e2e_media__/failed.svg?signature=old";
+  const freshUrl = "/__e2e_media__/fresh.svg?signature=new";
+  const expiresAt = new Date(Date.now() + 60 * 60_000).toISOString();
+  let focusedMediaRequests = 0;
+
+  await page.unroute("**/api/v1/workspaces/*/assets?**");
+  await page.route("**/api/v1/workspaces/*/assets?**", (route) =>
+    json(route, {
+      assets: [{
+        id: "asset-retry",
+        assetId: "asset-retry",
+        projectId: "proj-alpha",
+        projectName: "Project Alpha",
+        kind: "image",
+        status: "ready",
+        source: "generated",
+        title: "Recoverable keyframe",
+        filename: "recoverable.png",
+        url: failedUrl,
+        thumbnailUrl: failedUrl,
+        expiresAt,
+        visibility: "private",
+        createdAt: now,
+        updatedAt: now,
+      }],
+      pagination: { limit: 24, nextCursor: null },
+    }),
+  );
+  await page.route("**/__e2e_media__/failed.svg?**", (route) => image(route, "Missing", 404));
+  await page.route("**/__e2e_media__/fresh.svg?**", (route) => image(route, "Recovered"));
+  await page.route("**/api/v1/assets/asset-retry/media", (route) => {
+    focusedMediaRequests += 1;
+    return json(route, { url: freshUrl, thumbnailUrl: freshUrl, expiresAt });
+  });
+
+  await page.goto("/library/assets");
+  const recovered = page.getByRole("button", { name: "View Recoverable keyframe" }).locator("img");
+  await expect(recovered).toHaveAttribute("src", freshUrl);
+  await expect(recovered).toBeVisible();
+  expect(focusedMediaRequests).toBe(1);
 });

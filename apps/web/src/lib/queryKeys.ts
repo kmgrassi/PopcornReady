@@ -73,7 +73,8 @@ export const queryKeys = {
     workspaceId: string,
     params: { projectId?: string; limit?: number; cursor?: string | null } = {},
   ) => ["workspaces", workspaceId, "outputs", params] as const,
-  assetMedia: (assetId: string) => ["assets", assetId, "media"] as const,
+  assetMedia: (authScope: string, workspaceId: string, assetId: string) =>
+    ["asset-media", authScope, workspaceId, assetId] as const,
   generationRun: (projectId: string, runId: string) =>
     ["projects", projectId, "generation-runs", runId] as const,
   generationRunArtifact: (projectId: string, runId: string, artifactId: string) =>

@@ -72,7 +72,11 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   graph target from colliding.
 - `specs/library-collections.spec.ts` covers Library pagination, filters, media
   viewer, exact attributed credit usage in owned asset detail, visibility
-  mutation behavior, and watch links with mocked fixtures.
+  mutation behavior, and watch links with mocked fixtures. It also proves one
+  auth/workspace/asset-scoped media URL survives project-gallery to Library
+  navigation and a same-tab reload without a focused URL request, plus a
+  desktop/mobile failed-image path that makes exactly one focused refresh and
+  renders the newly signed URL.
 - `inspiration-poster.spec.ts` covers opening a generated story poster in the
   shared media viewer and dismissing it with Escape.
 - `storyboard-editor.spec.ts` verifies the dedicated storyboard route renders

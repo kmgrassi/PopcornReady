@@ -93,6 +93,7 @@ function makeDeps(asset: V1Asset, effectiveVisibility: "public" | "private" = "p
         sessionId: "session-1",
         claimGeneration: 9,
       }),
+      createStorageObjectId: () => "22222222-2222-4222-8222-222222222222",
       logger: silentLogger,
     },
   };
@@ -114,6 +115,8 @@ test("regenerates from the saved prompt and persists a new version", async () =>
   // The executor hands the store the SOURCE asset id; the store mints the new
   // immutable version off it and repoints references.
   assert.equal(calls.applyMedia?.assetId, asset.id);
+  assert.equal(calls.writeObject?.assetId, "22222222-2222-4222-8222-222222222222");
+  assert.notEqual(calls.writeObject?.assetId, asset.id);
   assert.equal(calls.applyMedia?.update.storageBucket, "popcornready-assets-public");
   assert.equal((calls.applyMedia?.update.provenance as { prompt: string }).prompt, "a saved prompt");
   // New bytes carry a fresh content hash so graph consumers see content changed.
