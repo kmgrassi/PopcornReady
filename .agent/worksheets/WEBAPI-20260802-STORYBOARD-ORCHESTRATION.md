@@ -61,6 +61,19 @@
 - PR #877 dispatch-recovery follow-up: the focused orchestrator route suite
   passed 38 tests, `@popcorn/api` typecheck passed, and
   `pnpm agent:validate -- --scope all` passed on the follow-up tree.
+- PR #877 browser follow-up: ran the real local Vite app at
+  `/projects/manual-browser-storyboard` against a deterministic local HTTP API
+  fixture. At the default desktop viewport, **Create storyboard** produced the
+  expected dispatch error, exposed **Retry**, and the second POST returned the
+  reused queued run and navigated to
+  `/projects/manual-browser-storyboard/runs/run-browser-retry`, where the queued
+  Concept state and “Storyboard production started” notification were visible.
+  Repeated at 390×844: expanded Storyboard copy confirmed automatic
+  scene-and-moment planning, the first POST surfaced **Retry storyboard
+  workflow**, and the retry navigated to the same visible run. The viewport was
+  reset and browser tabs were closed afterward. This validates the browser/UI
+  contract; the split-operation database recovery remains covered by the
+  focused API regression because local Supabase credentials were unavailable.
 
 ## Independent reviews
 
