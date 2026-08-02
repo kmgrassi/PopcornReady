@@ -37,6 +37,47 @@ function project(index: number) {
   };
 }
 
+async function trackQuickLoadingAppearance(page: Page) {
+  await page.addInitScript(() => {
+    const trackedWindow = window as Window & { __quickLoadingSeen?: boolean };
+    trackedWindow.__quickLoadingSeen = false;
+
+    const includesQuickLoading = (node: Node) => {
+      if (!(node instanceof Element)) return false;
+      return (
+        node.matches('[data-testid="quick-loading"]') ||
+        Boolean(node.querySelector('[data-testid="quick-loading"]'))
+      );
+    };
+
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (
+          (mutation.type === "attributes" && includesQuickLoading(mutation.target)) ||
+          Array.from(mutation.addedNodes).some(includesQuickLoading)
+        ) {
+          trackedWindow.__quickLoadingSeen = true;
+          observer.disconnect();
+          return;
+        }
+      }
+    });
+
+    observer.observe(document, {
+      attributes: true,
+      attributeFilter: ["data-testid"],
+      childList: true,
+      subtree: true,
+    });
+  });
+}
+
+function quickLoadingWasSeen(page: Page) {
+  return page.evaluate(() =>
+    Boolean((window as Window & { __quickLoadingSeen?: boolean }).__quickLoadingSeen),
+  );
+}
+
 async function mockLibraryApi(page: Page) {
   let assetVisibility: "public" | "private" = "private";
 
@@ -246,6 +287,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("uses a delayed content-shaped state for route-level library loading", async ({ page }) => {
+  await trackQuickLoadingAppearance(page);
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.unroute("**/api/v1/projects?**");
@@ -260,6 +302,7 @@ test("uses a delayed content-shaped state for route-level library loading", asyn
   await page.goto("/library/projects");
   const loadingState = page.getByTestId("quick-loading");
   await expect(loadingState).toBeAttached();
+  expect(await quickLoadingWasSeen(page)).toBe(true);
   await expect(loadingState).toHaveAttribute("aria-busy", "true");
   await expect(loadingState).toContainText("Loading projects");
   await expect(page.getByTestId("studio-crew")).toHaveCount(0);
@@ -328,6 +371,7 @@ test("uses the compact panel state while a project render loads", async ({ page 
 });
 
 test("does not flash a loading state for a cache-fast library request", async ({ page }) => {
+  await trackQuickLoadingAppearance(page);
   await page.unroute("**/api/v1/projects?**");
   await page.route("**/api/v1/projects?**", (route) =>
     json(route, {
@@ -339,6 +383,7 @@ test("does not flash a loading state for a cache-fast library request", async ({
   await page.goto("/library/projects");
   await expect(page.getByText("Project Alpha")).toBeVisible();
   await page.waitForTimeout(200);
+  expect(await quickLoadingWasSeen(page)).toBe(false);
   await expect(page.getByTestId("quick-loading")).toHaveCount(0);
 });
 

@@ -37,6 +37,7 @@ Replace route-level studio crew animation with restrained loading feedback that 
 - Replaced ordinary route-level crew loaders across Home, Activity, Library collections, Uploads, Inspiration, Anchors, project overview/steps/storyboard/media/watch, and the initial Asset Studio status fetch.
 - Removed the obsolete `StudioCrewLoadingState`; retained `StudioCrewLoader` for the creation production presentation.
 - Updated the design-system loading contract, E2E inventory, browser-test README, and focused Library/Watch coverage.
+- Addressed PR review feedback by recording every `quick-loading` DOM appearance from before navigation, with the delayed branch as a positive control and the cache-fast branch asserting that no transient insertion occurred.
 
 ## Validation evidence
 
@@ -44,6 +45,7 @@ Replace route-level studio crew animation with restrained loading feedback that 
 - `pnpm --filter @popcorn/web test` — passed, 54 tests.
 - Focused `library-collections.spec.ts` quick/slow loading run — passed, 3 tests.
 - Focused `asset-studio.spec.ts` active crew reduced-motion/mobile run — passed, 1 test.
+- PR feedback rerun: focused delayed and cache-fast Library loading coverage — passed, 2 tests; typecheck passed.
 - `pnpm agent:lint:fix` — passed.
 - `pnpm agent:validate -- --scope web` — passed.
 - Manual visual inspection, `/library/projects`, 390×844: the first 180ms remained calm, then content-shaped cards appeared without a crew scene or horizontal overflow; loaded content replaced them directly.
@@ -56,6 +58,8 @@ Replace route-level studio crew animation with restrained loading feedback that 
 - Plan: approved the 180ms reveal-only threshold, single-status semantics, reduced-motion coverage, stable reservations, and explicit long-running boundary.
 - Implementation: found a potentially flaky gated fast-path test and insufficient Watch media geometry. Resolved by using an immediate fixture for the fast branch and a full Watch placeholder reservation with compact overlay. Clarified that terminal idle crew artwork is contextual, not loading feedback.
 - Wrap-up: approved with no unresolved implementation, UX, accessibility, testing, documentation, or validation blockers.
+- PR feedback research/plan review: confirmed the original post-load assertion could miss a transient flash and recommended a pre-navigation observer that inspects added nodes plus a delayed-state positive control.
+- PR feedback implementation/wrap-up: approved; the pre-navigation observer detects retained added nodes and attribute changes, the delayed case prevents a vacuous harness, and the fast case covers transient and late appearances.
 
 ## Blockers and risks
 
