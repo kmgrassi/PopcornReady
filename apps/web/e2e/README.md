@@ -16,7 +16,7 @@ pnpm --filter @popcorn/web test:e2e
 ```
 
 `asset-studio.spec.ts` uses browser API fixtures to verify the production
-`/create` route, the 30/70 desktop context-to-prompt workspace, responsive
+`/create/asset` route, the 30/70 desktop context-to-prompt workspace, responsive
 mobile collapse, update-ordered recent-project loading/selection with real
 project media, expired-poster fallback and fresh-signed-URL recovery,
 default Image selection, accessible media-type targets, proposal review,
@@ -43,8 +43,10 @@ failed, canceled, blocked, and question outcomes.
 
 `creation-entry-points.spec.ts` verifies that the desktop and
 mobile shell, Dashboard, Activity, and both populated/empty Library actions use
-the canonical asset-oriented `/create` entry while `/projects/new` remains the
-distinct full-video flow.
+the `/create` intent launcher; its keyboard/pointer choices reach the distinct
+`/projects/new` full-video and `/create/asset` asset flows. It also covers Create
+navigation ownership, mobile overflow, legacy query links, and validated legacy
+draft-history restoration.
 
 `specs/library-collections.spec.ts` verifies that an owned generated asset's
 detail viewer shows its exact attributed credit debit without spending provider

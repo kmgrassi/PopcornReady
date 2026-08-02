@@ -78,22 +78,25 @@ exception (§5).
 
 Initial creation is not a third editing primitive because there is no existing
 generated object to mutate yet. The authenticated shell plus Dashboard,
-Activity, and Library use one global **Create** entry at `/create`. That workspace
-collects an Image, Video, or Audio intent, then enters the durable
-proposal/review lifecycle before generation. Project context is optional at
-intake: when the creator does not choose a project, **Review request** creates
-one automatically, uses the existing AI naming pipeline with a prompt-derived
-fallback, and continues with the returned project. Explicit picker-based
-creation remains available when the creator wants to name or organize the
-project first.
+Activity, and Library use one global **Create** entry at `/create`. This launcher
+asks for the intended outcome and sends **Full video** to `/projects/new` or
+**Project asset** to `/create/asset`. The asset workspace collects an Image,
+Video, or Audio intent, then enters the durable proposal/review lifecycle at
+`/create/review` before generation. Legacy `/create` asset status links and
+validated draft history entries redirect to `/create/asset` without losing
+their query or route state.
 
-Full-video creation remains a separate, explicit flow at `/projects/new`. It
+Project context is optional at asset intake: when the creator does not choose a
+project, **Review request** creates one automatically, uses the existing AI
+naming pipeline with a prompt-derived fallback, and continues with the returned
+project. Explicit picker-based creation remains available when the creator wants
+to name or organize the project first. Full-video creation at `/projects/new`
 collects a production brief and source footage, creates the project/run, and
-preserves the storyboard-first production boundary from the North Star. The two
-entry points must not share ambiguous labels or active-navigation state: global
-**Create** means the project-asset workspace; full-video actions say they create
-a video and link directly to `/projects/new`. Once either flow has produced an
-object, subsequent content changes return to object-scoped **Request Changes**.
+preserves the storyboard-first production boundary from the North Star. The
+shell's Create item remains active throughout the launcher, asset/review, and
+full-video creation routes; Library owns ordinary project routes. Once either
+flow has produced an object, subsequent content changes return to object-scoped
+**Request Changes**.
 
 ## 3. The "Request Changes" modal
 

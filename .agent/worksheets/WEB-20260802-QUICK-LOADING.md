@@ -38,6 +38,7 @@ Replace route-level studio crew animation with restrained loading feedback that 
 - Removed the obsolete `StudioCrewLoadingState`; retained `StudioCrewLoader` for the creation production presentation.
 - Updated the design-system loading contract, E2E inventory, browser-test README, and focused Library/Watch coverage.
 - Addressed PR review feedback by recording every `quick-loading` DOM appearance from before navigation, with the delayed branch as a positive control and the cache-fast branch asserting that no transient insertion occurred.
+- Merged the latest `origin/main` creation-launcher work and resolved the sole inventory conflict by preserving quick-loading coverage while adopting the new `/create/asset` route wording.
 
 ## Validation evidence
 
@@ -46,6 +47,7 @@ Replace route-level studio crew animation with restrained loading feedback that 
 - Focused `library-collections.spec.ts` quick/slow loading run — passed, 3 tests.
 - Focused `asset-studio.spec.ts` active crew reduced-motion/mobile run — passed, 1 test.
 - PR feedback rerun: focused delayed and cache-fast Library loading coverage — passed, 2 tests; typecheck passed.
+- Post-merge validation: typecheck passed; focused Library/Watch loading coverage passed, 3 tests; focused Asset Studio crew coverage passed, 1 test.
 - `pnpm agent:lint:fix` — passed.
 - `pnpm agent:validate -- --scope web` — passed.
 - Manual visual inspection, `/library/projects`, 390×844: the first 180ms remained calm, then content-shaped cards appeared without a crew scene or horizontal overflow; loaded content replaced them directly.
@@ -60,11 +62,15 @@ Replace route-level studio crew animation with restrained loading feedback that 
 - Wrap-up: approved with no unresolved implementation, UX, accessibility, testing, documentation, or validation blockers.
 - PR feedback research/plan review: confirmed the original post-load assertion could miss a transient flash and recommended a pre-navigation observer that inspects added nodes plus a delayed-state positive control.
 - PR feedback implementation/wrap-up: approved; the pre-navigation observer detects retained added nodes and attribute changes, the delayed case prevents a vacuous harness, and the fast case covers transient and late appearances.
+- Merge-conflict research/plan review: approved the combined quick-loading paragraph and `/create/asset` workspace wording.
+- Merge-conflict implementation/wrap-up review: approved; no unmerged entries or conflict markers remain, both semantic inventory updates are preserved, and the merged routes/tests consistently separate `/create` from `/create/asset`.
 
 ## Blockers and risks
 
 - Local Playwright API servers log expected orchestrator-worker warnings when Supabase service credentials are absent; route fixtures and all scoped assertions pass.
 - No unresolved implementation blocker.
+- Latest-main merge conflict was isolated to `docs/testing/e2e-test-inventory-and-gaps.md` and is resolved locally with post-merge targeted checks passing.
+- Post-merge `pnpm agent:lint:fix` and `pnpm agent:validate -- --scope web` passed.
 
 ## Next action / handoff
 

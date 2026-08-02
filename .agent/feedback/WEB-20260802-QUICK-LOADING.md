@@ -21,3 +21,5 @@ Existing skeleton markup was useful infrastructure once it became the visible st
 New route loaders should use `QuickLoadingState` and supply content-shaped geometry where practical. Tests for fast paths should use immediate fixtures, while delayed fixtures cover the reveal branch. Keep `StudioCrewLoader` tied to the creation-production presentation rather than generic server-state hooks.
 
 An anti-flash assertion must record state throughout navigation, not only inspect the settled DOM. Install the observer before navigation, inspect mutation-added nodes directly so fast add/remove cycles cannot disappear before callback delivery, and prove the observer with a delayed-loader positive control.
+
+When the creation launcher landed concurrently, the E2E inventory conflict combined two independent truths: this PR owns the quick-loading contract, while the launcher migration owns the Asset Studio route name. Resolving at that semantic boundary preserved both changes without touching the cleanly merged application files.

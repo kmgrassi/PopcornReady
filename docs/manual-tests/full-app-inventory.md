@@ -229,9 +229,9 @@ recovery.
 - Open `/dashboard` in a fresh workspace.
 - Verify the empty or low-data state has clear next actions.
 - Verify whether the authenticated shell exposes the intended creation CTA:
-  - Target behavior: `Create new asset` should open `/create` with Image selected
-    by default and Video/Soundtrack available alongside it.
-  - Full video-project production remains available at `/projects/new`.
+  - Target behavior: `Create` should open `/create`, where Full video leads to
+    `/projects/new` and Project asset leads to `/create/asset`.
+  - Asset Studio defaults to Image with Video/Soundtrack available alongside it.
   - Library remains available as a separate sidebar menu item.
 - If the workspace has active runs or recent outputs, verify counts and cards
   match the project/run/output links they open.
@@ -375,7 +375,8 @@ Outputs:
 
 ### 7. Landing Quick-Start Generation
 
-This is the current creation entry point while `/studio` is retired.
+This public quick-start remains distinct from the authenticated `/create`
+launcher while `/studio` is retired.
 
 - Configure provider keys if you expect generation to run end to end. Without
   provider keys, verify the app surfaces a readable configuration error.

@@ -123,8 +123,8 @@ export function deriveNextAction(
   if (!pulse || projectCount === 0) {
     return {
       type: "start",
-      title: "Create your first project asset",
-      body: "Make an image, short video, or audio asset for a new or existing project.",
+      title: "Create your first video or asset",
+      body: "Start a full video, or make an image, short video, or audio asset for a project.",
       ctaLabel: "Create",
       to: "/create",
     };
@@ -133,7 +133,7 @@ export function deriveNextAction(
   return {
     type: "new",
     title: "Create something new",
-    body: "No workspace item needs attention right now. Make an image, short video, or audio asset when you are ready.",
+    body: "No workspace item needs attention right now. Start a full video or make one project asset when you are ready.",
     ctaLabel: "Create",
     to: "/create",
   };
