@@ -98,6 +98,15 @@ full-video creation routes; Library owns ordinary project routes. Once either
 flow has produced an object, subsequent content changes return to object-scoped
 **Request Changes**.
 
+An existing project with no storyboard may also expose **Create storyboard**.
+That action starts or returns the project’s storyboard-bounded Creative Director
+run; it does not call the low-level panel generator directly. The agent prepares
+missing scene-and-moment planning internally, generates the storyboard, and
+stops for review. The creator should never have to create or understand a “shot
+plan” prerequisite. Once a storyboard exists, the surface offers **Open
+storyboard** and object-scoped **Request Changes**, not a context-free “Generate
+again” mutation.
+
 ## 3. The "Request Changes" modal
 
 Clicking an object the user wants to change — a project, a storyboard, a scene, a

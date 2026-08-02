@@ -76,6 +76,14 @@ export interface RunAssetPrompt {
 }
 
 function generationActions(actions: RunActionSummary[]): RunActionSummary[] {
+  return actions.filter(
+    (action) =>
+      !CREATOR_HIDDEN_ACTION_TOOLS.has(action.tool) &&
+      (isToolName(action.tool) || action.tool === "generate_poster")
+  );
+}
+
+function operatorDiagnosticActions(actions: RunActionSummary[]): RunActionSummary[] {
   return actions.filter((action) => !CREATOR_HIDDEN_ACTION_TOOLS.has(action.tool));
 }
 
@@ -93,7 +101,7 @@ function presentationKind(
   return undefined;
 }
 
-export function toolStage(tool: string): GenerationStageType {
+export function toolStage(tool: string): GenerationStageType | undefined {
   const normalizedTool = tool.startsWith(AFTER_GATE_PREFIX)
     ? tool.slice(AFTER_GATE_PREFIX.length)
     : tool;
@@ -102,6 +110,7 @@ export function toolStage(tool: string): GenerationStageType {
       return "brief_intake";
     case "generate_storyboard":
       return "storyboard";
+    case "generate_poster":
     case "generate_anchor":
     case "generate_keyframe":
     case "generate_clip":
@@ -122,7 +131,7 @@ export function toolStage(tool: string): GenerationStageType {
     case "publish_to_catalog":
       return "export";
     default:
-      return "creative_plan";
+      return undefined;
   }
 }
 
@@ -166,6 +175,8 @@ function toolItemPurpose(
       return "plan";
     case "generate_storyboard":
       return "storyboard_frame";
+    case "generate_poster":
+      return "asset";
     case "generate_anchor":
       return "visual_anchor";
     case "generate_keyframe":
@@ -229,6 +240,16 @@ function hasReachedStoryboardAfterGate(gates: OrchestratorRunGate[]): boolean {
     const stage = toolStage(gate.stage);
     return stage === "storyboard" || stage === "asset_generation";
   });
+}
+
+function storyboardBoundaryStatus(
+  gates: OrchestratorRunGate[]
+): GenerationRun["storyboardBoundaryStatus"] {
+  const gate = gates.find((candidate) => candidate.stage === "after:generate_storyboard");
+  if (!gate) return undefined;
+  return gate.status === "pending" || gate.status === "reached"
+    ? gate.status
+    : "resolved";
 }
 
 function completionKind(
@@ -351,14 +372,16 @@ export function toolOrder(tool: string): number {
   const catalogOrder = isToolName(tool)
     ? getToolCapability(tool).runProjection.order
     : null;
-  return catalogOrder ?? 100 + GENERATION_STAGE_ORDER[toolStage(tool)];
+  const stage = toolStage(tool);
+  return catalogOrder ?? (stage ? 100 + GENERATION_STAGE_ORDER[stage] : Number.MAX_SAFE_INTEGER);
 }
 
 export function toolLabel(tool: string): string {
   const catalogLabel = isToolName(tool)
     ? getToolCapability(tool).runProjection.label
     : null;
-  return catalogLabel ?? GENERATION_STAGE_LABELS[toolStage(tool)];
+  const stage = toolStage(tool);
+  return catalogLabel ?? (stage ? GENERATION_STAGE_LABELS[stage] : tool);
 }
 
 function toErrorSummary(error: Record<string, unknown> | undefined) {
@@ -472,10 +495,13 @@ export function projectRun(
   // complete, but production must not start until the creator continues it.
   // Project it just like a conventional review gate so every surface has one
   // clear, actionable state rather than a misleading terminal success.
-  const reachedGate = gates.find((gate) => gate.status === "reached");
-  const reviewGate = reachedGate
+  const reachedGate = gates.find(
+    (gate) => gate.status === "reached" && Boolean(toolStage(gate.stage))
+  );
+  const reachedGateStage = reachedGate ? toolStage(reachedGate.stage) : undefined;
+  const reviewGate = reachedGate && reachedGateStage
     ? {
-        stageType: toolStage(reachedGate.stage) as GateableGenerationStageType,
+        stageType: reachedGateStage as GateableGenerationStageType,
         stageId: reviewStageId(run.id, reachedGate.stage),
         state: "awaiting_review" as const,
         enteredAt: reachedGate.updatedAt,
@@ -531,9 +557,13 @@ export function projectRun(
     status,
     completionKind: completionKind(run, gates, actions, assets),
     presentationKind: presentationKind(run),
+    storyboardBoundaryStatus: storyboardBoundaryStatus(gates),
     activityState,
     currentToolName: latestRunningAction?.tool,
-    reviewGates: reviewGates.map((gate) => toolStage(gate.stage) as GateableGenerationStageType),
+    reviewGates: reviewGates.flatMap((gate) => {
+      const stage = toolStage(gate.stage);
+      return stage ? [stage as GateableGenerationStageType] : [];
+    }),
     reviewGate,
     currentStageType,
     progressPercent: status === "succeeded" ? 100 : run.status === "queued" ? 0 : undefined,
@@ -588,8 +618,9 @@ function projectStages(
   }
 
   return [...grouped.entries()]
-    .map(([tool, stageActions]) => {
+    .flatMap(([tool, stageActions]) => {
       const type = toolStage(tool);
+      if (!type) return [];
       const latest = stageActions.at(-1);
       const latestByTool = new Map<string, RunActionSummary>();
       for (const action of stageActions) {
@@ -619,7 +650,7 @@ function projectStages(
         ? terminalJobStatus ?? parentStatus
         : terminalJobStatus ?? actionDerivedStatus;
       const statusAction = latestFailed ?? latest;
-      return {
+      return [{
         stageId: toolStageId(run.id, tool),
         runId: run.id,
         type,
@@ -643,7 +674,7 @@ function projectStages(
         updatedAt: latest?.updatedAt ?? latest?.createdAt ?? run.updatedAt,
         ...(jobActivities.length > 0 ? { jobActivities } : {}),
         error: latestFailed ? toErrorSummary(latestFailed.error) : undefined,
-      };
+      }];
     })
     .sort((a, b) => a.order - b.order);
 }
@@ -668,7 +699,6 @@ function projectStageItems(
   jobs: ReadonlyMap<string, Job>
 ): GenerationStageItem[] {
   return generationActions(actions).flatMap((action) => {
-    const type = toolStage(action.tool);
     const actionLevelPrompt = actionPrompt(action);
     return action.outputAssetIds.map((assetId, index) => {
       const assetPrompt = assetPrompts.get(assetId);
@@ -705,7 +735,7 @@ export function projectRunDetailFromParts(
 ): GenerationRunDetail {
   const jobs = options.jobs ?? new Map();
   const operatorDiagnostics = options.includeOperatorDiagnostics
-    ? generationActions(actions).flatMap((action) =>
+    ? operatorDiagnosticActions(actions).flatMap((action) =>
         action.jobIds.flatMap((jobId) => {
           const job = jobs.get(jobId);
           return job ? [projectJobDiagnostics(run.id, action, job, options)] : [];

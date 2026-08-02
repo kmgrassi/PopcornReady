@@ -154,6 +154,16 @@ snapshot pointer, but stable scene/beat identity remains behind the service
 client or the bounded story-application function and is not a direct-role
 grant.
 
+The storyboard creator entrypoint takes a transaction-scoped advisory lock on
+the project before its service-store find-or-create decision. The lock carries
+no table access and adds no role grants; it only serializes this entrypoint
+across API instances so two creator requests cannot create duplicate active
+storyboard-bound roots. Project authorization still runs first on the
+request-scoped access path, and the orchestrator store remains the durable
+run/gate writer. The gate lookup is backed by
+`orchestrator_run_gates(stage, created_at DESC, orchestrator_run_id)` so the
+two-second active-run poll does not scan and sort gate history.
+
 ## Incremental migration sequence
 
 1. Provision and test the least-privilege production API database role. ✅

@@ -686,6 +686,8 @@ export interface GenerationRun {
     | "standalone_image"
     | "standalone_video"
     | "standalone_audio";
+  /** Server-projected state of the mandatory storyboard review boundary. */
+  storyboardBoundaryStatus?: "pending" | "reached" | "resolved";
   activityState?: GenerationRunActivityState;
   currentToolName?: string;
   reviewGates?: GateableGenerationStageType[];

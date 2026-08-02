@@ -88,7 +88,7 @@ export function MobileProjectStatus({
           <p>
             {momentCount > 0
               ? `${momentCount} ${momentCount === 1 ? "moment" : "moments"} are ready to review.`
-              : "Storyboard scenes and panels will appear after generation starts."}
+              : "The agent plans scenes and moments before drawing storyboard panels."}
           </p>
           {!readOnly && storyboard ? (
             <ButtonLink
@@ -197,8 +197,8 @@ export function ProjectMobilePrimaryAction({
   storyboard,
   storyboardGenerating,
   storyboardError,
+  hasBrief,
   canGenerateStoryboard,
-  onStoryboardRetry,
   onGenerate,
 }: {
   projectId: string;
@@ -208,14 +208,14 @@ export function ProjectMobilePrimaryAction({
   storyboard: ProjectStoryboard | null;
   storyboardGenerating: boolean;
   storyboardError: Error | null;
+  hasBrief: boolean;
   canGenerateStoryboard: boolean;
-  onStoryboardRetry: () => void;
   onGenerate: () => void;
 }) {
   if (storyboardError) {
     return (
-      <Button variant="cta" fullWidth onClick={onStoryboardRetry}>
-        Retry storyboard
+      <Button variant="cta" fullWidth onClick={onGenerate}>
+        Retry storyboard workflow
       </Button>
     );
   }
@@ -250,6 +250,17 @@ export function ProjectMobilePrimaryAction({
       </ButtonLink>
     );
   }
+  if (!hasBrief) {
+    return (
+      <ButtonLink
+        variant="cta"
+        fullWidth
+        to={`/projects/${encodeURIComponent(projectId)}/brief`}
+      >
+        Finish brief
+      </ButtonLink>
+    );
+  }
   return (
     <Button
       variant="cta"
@@ -267,6 +278,7 @@ export function mobileProjectStatus({
   progress,
   generating,
   hasPlayableOutput,
+  hasBrief = true,
   projectStatus,
   storyboardError,
 }: {
@@ -274,6 +286,7 @@ export function mobileProjectStatus({
   progress: StoryboardProgress;
   generating: boolean;
   hasPlayableOutput: boolean;
+  hasBrief?: boolean;
   projectStatus?: string;
   storyboardError?: Error | null;
 }) {
@@ -290,6 +303,7 @@ export function mobileProjectStatus({
     return `Storyboard ready: ${sceneCount} ${sceneCount === 1 ? "scene" : "scenes"} to review.`;
   }
   if (projectStatus === "failed") return "Needs attention before generation can continue.";
+  if (!hasBrief) return "Finish the brief to create a storyboard.";
   return "Ready for a storyboard.";
 }
 

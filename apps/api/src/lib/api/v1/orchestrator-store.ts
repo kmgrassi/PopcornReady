@@ -367,6 +367,29 @@ export async function listOrchestratorRunsForProject(
   return ((data as OrchestratorRunRow[]) ?? []).map(mapRun);
 }
 
+export async function getLatestOrchestratorRunForGate(
+  projectId: string,
+  stage: string
+): Promise<{ run: OrchestratorRun; gate: OrchestratorRunGate } | null> {
+  const db = getServiceSupabase();
+  const data = await runQuery(
+    "store.getLatestOrchestratorRunForGate",
+    db
+      .from("orchestrator_run_gates")
+      .select("*, orchestrator_runs!inner(*)")
+      .eq("stage", stage)
+      .eq("orchestrator_runs.project_id", projectId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+  );
+  if (!data) return null;
+  const row = data as unknown as OrchestratorRunGateRow & {
+    orchestrator_runs: OrchestratorRunRow;
+  };
+  return { run: mapRun(row.orchestrator_runs), gate: mapGate(row) };
+}
+
 /**
  * Returns the durable work queue.  Routes only create or update these rows;
  * the recovery worker is the single owner that drives them afterwards.

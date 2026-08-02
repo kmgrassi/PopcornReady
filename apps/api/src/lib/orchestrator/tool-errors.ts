@@ -254,6 +254,23 @@ export function preconditionFromApiError(
     });
   }
 
+  if (error.code === "plan_missing") {
+    return preconditionUnmet({
+      message: error.message,
+      unmetRequirements: [
+        {
+          requirement: "shot_plan",
+          because: "Storyboard generation needs a persisted scene-and-moment plan.",
+          satisfyWith: {
+            tool: "plan_shots",
+            inputHint: { projectId: context.input?.projectId },
+          },
+        },
+      ],
+      details: { code: error.code },
+    });
+  }
+
   if (error.code === "asset_not_ready" || error.code === "object_not_found") {
     const assetIds = readStringArray(error.details?.assetIds);
     return preconditionUnmet({

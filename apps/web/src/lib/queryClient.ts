@@ -24,7 +24,6 @@ import {
   type StartGenerationRunInput,
   type StartTimelineExportInput,
   type StartUploadedFootageRunInput,
-  type ProjectStoryboardJobResponse,
 } from "./api-client";
 import { queryClient } from "./queryClientCore";
 import { queryKeys, studioProjectTimelineKey } from "./queryKeys";
@@ -56,12 +55,6 @@ function isTerminal(status: string): boolean {
 
 function shouldPollRun(run: GenerationRunDetail | undefined): boolean {
   return Boolean(run && !isTerminal(run.run.status));
-}
-
-function shouldPollStoryboardJob(
-  response: ProjectStoryboardJobResponse | undefined,
-): boolean {
-  return Boolean(response?.job && !isTerminal(response.job.status));
 }
 
 function shouldPollProjectAssets(assets: V1Asset[] | undefined): boolean {
@@ -485,16 +478,18 @@ export function useProjectStoryboardQuery(
   });
 }
 
-export function useGenerateProjectStoryboardMutation(projectId: string) {
+export function useStartProjectStoryboardRunMutation(projectId: string) {
   const client = useQueryClient();
 
   return useMutation({
-    mutationFn: () => v1Api.generateProjectStoryboard(projectId),
-    onSuccess: ({ job }) => {
-      // Seed the latest-job cache so polling + the loading banner start
-      // immediately, without waiting for the next poll of the list endpoint.
-      client.setQueryData(queryKeys.projectStoryboardJob(projectId), { job });
+    mutationFn: () => v1Api.startProjectStoryboardRun(projectId),
+    meta: {
+      successMessage: "Storyboard production started",
+      errorMessage: "Could not start storyboard production",
+    },
+    onSuccess: () => {
       void client.invalidateQueries({ queryKey: queryKeys.projectStoryboard(projectId) });
+      void client.invalidateQueries({ queryKey: queryKeys.projectStoryboardRun(projectId) });
       void client.invalidateQueries({ queryKey: queryKeys.project(projectId) });
       void client.invalidateQueries({ queryKey: ["projects"] });
       void client.invalidateQueries({ queryKey: ["workspaces"] });
@@ -503,18 +498,19 @@ export function useGenerateProjectStoryboardMutation(projectId: string) {
   });
 }
 
-// Latest storyboard generation job for the project. Polls while the job is
-// queued/running and — because it reads server state rather than a client-held
-// job id — keeps polling correctly after a page reload mid-generation.
-export function useProjectStoryboardJobQuery(projectId: string, enabled = true) {
+export function useProjectStoryboardRunQuery(projectId: string, enabled = true) {
   return useQuery({
-    queryKey: queryKeys.projectStoryboardJob(projectId),
+    queryKey: queryKeys.projectStoryboardRun(projectId),
     queryFn: ({ signal }: { signal: QuerySignal }) =>
-      v1Api.getProjectStoryboardJob(projectId, signal),
+      v1Api.getProjectStoryboardRunStatus(projectId, signal),
     enabled: enabled && Boolean(projectId),
     refetchInterval: (query) => {
-      const data = query.state.data as ProjectStoryboardJobResponse | undefined;
-      if (!shouldPollStoryboardJob(data)) return false;
+      const run = query.state.data?.run;
+      if (
+        !run ||
+        run.storyboardBoundaryStatus !== "pending" ||
+        isTerminal(run.status)
+      ) return false;
       if (document.visibilityState === "hidden") return HIDDEN_POLL_INTERVAL_MS;
       return POLL_INTERVAL_MS;
     },

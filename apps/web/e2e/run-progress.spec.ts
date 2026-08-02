@@ -84,6 +84,84 @@ test("shows a completed one-off image as one asset step without video stages @mo
   }
 });
 
+test("legacy poster work is shown as Poster and never backfills Brief or Script @mobile", async ({
+  page,
+}) => {
+  await page.route(`**${apiRunPath}`, async (route) => {
+    await route.fulfill({
+      json: {
+        run: {
+          runId,
+          projectId,
+          status: "canceled",
+          currentStageType: "creative_plan",
+          progressPercent: 100,
+          message: "Generation was canceled.",
+          reviewGate: null,
+          createdAt: now,
+          updatedAt: now,
+          startedAt: now,
+          completedAt: now,
+        },
+        stages: [
+          {
+            stageId: `${runId}:tool:create_or_load_brief`,
+            runId,
+            type: "brief_intake",
+            toolName: "create_or_load_brief",
+            label: "Concept",
+            order: 0,
+            status: "succeeded",
+            progressPercent: 100,
+            message: "Brief loaded.",
+            startedAt: now,
+            completedAt: now,
+            jobIds: [],
+            artifactIds: ["brief_asset"],
+            createdAt: now,
+            updatedAt: now,
+          },
+          {
+            stageId: `${runId}:tool:generate_poster`,
+            runId,
+            type: "creative_plan",
+            toolName: "generate_poster",
+            label: "Poster",
+            order: 1,
+            status: "succeeded",
+            progressPercent: 100,
+            message: "Poster ready.",
+            startedAt: now,
+            completedAt: now,
+            jobIds: [],
+            artifactIds: ["poster_asset"],
+            createdAt: now,
+            updatedAt: now,
+          },
+        ],
+        stageItems: [],
+      },
+    });
+  });
+
+  await page.goto(runPath);
+
+  const rail = await getVisibleStageRail(page);
+  await expect(rail.getByText("Poster", { exact: true })).toBeVisible();
+  const posterStage = rail.locator("li").filter({ hasText: "Poster" }).first();
+  await posterStage.getByText("Tool activity", { exact: true }).click();
+  await expect(posterStage.getByText("Generate poster", { exact: true })).toBeVisible();
+  await expect(rail.getByText("Brief", { exact: true })).toHaveCount(0);
+  await expect(rail.getByText("Script", { exact: true })).toHaveCount(0);
+  if ((page.viewportSize()?.width ?? 1_024) <= 760) {
+    await expect(page.getByText("Last completed: Poster", { exact: true })).toBeVisible();
+  } else {
+    await expect(
+      page.getByLabel("Current run status").getByText("Poster", { exact: true }),
+    ).toBeVisible();
+  }
+});
+
 async function getVisibleStageRail(page: Page) {
   const visibleRail = page
     .getByRole("complementary", { name: "Stage rail" })

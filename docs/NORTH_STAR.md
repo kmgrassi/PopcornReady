@@ -99,6 +99,10 @@ continues into photoreal keyframes, clips, audio, assembly, and export. This is
 not a return to a forward-only conveyor belt: the asset graph still enables
 targeted re-entry and selective regeneration. It is the deliberate point at
 which a creator sees the plan before the expensive media work begins.
+Creator-facing **Create storyboard** uses this same autonomous run boundary. A
+structured scene-and-moment plan is an internal input to storyboard panels, not
+a separate prerequisite the creator must prepare; missing planning is satisfied
+by the agent before `generate_storyboard` runs.
 
 ## 2. Principles (the mental-model shift)
 

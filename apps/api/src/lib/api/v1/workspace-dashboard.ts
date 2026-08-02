@@ -44,6 +44,7 @@ function mapOrchestratorSummary(
   const storyboardGate = gates.find(
     (gate) => gate.stage === AFTER_STORYBOARD_GATE && gate.status === "reached"
   );
+  const storyboardBoundary = gates.find((gate) => gate.stage === AFTER_STORYBOARD_GATE);
   const reviewGate = storyboardGate
     ? {
         stageType: "storyboard" as const,
@@ -56,6 +57,12 @@ function mapOrchestratorSummary(
     runId: run.id,
     projectId: run.projectId,
     status,
+    storyboardBoundaryStatus:
+      storyboardBoundary?.status === "pending" || storyboardBoundary?.status === "reached"
+        ? storyboardBoundary.status
+        : storyboardBoundary
+          ? "resolved"
+          : undefined,
     progressPercent: status === "queued" ? 0 : undefined,
     message:
       reviewGate
@@ -255,6 +262,7 @@ export async function getWorkspaceDashboardSummaryWithDeps(
       projectId: run.projectId,
       projectName: run.projectName,
       status: run.status,
+      storyboardBoundaryStatus: run.storyboardBoundaryStatus,
       reviewGate: run.reviewGate ?? null,
       currentStageType: run.currentStageType,
       progressPercent: run.progressPercent,

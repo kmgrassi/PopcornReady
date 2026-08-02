@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { mutation, route } from "@/core/adapter";
 import { ApiError } from "@/core/errors";
+import type { HandlerCtx } from "@/lib/api/v1/handler";
 import { agentApiStore } from "@/lib/agent-api/jobs";
 import {
   createBeat,
@@ -57,6 +58,56 @@ function scopedIdempotencyKey(
   return key ? `${projectId}:${key}` : null;
 }
 
+interface GenerateStoryboardPanelsDeps {
+  getProject: typeof getProject;
+  getActiveProjectPlan: typeof getActiveProjectPlan;
+  createOrGetJob: typeof agentApiStore.createOrGetJob;
+  runStoryboardJob: typeof runStoryboardJob;
+}
+
+export async function generateStoryboardPanelsRoute(
+  ctx: Pick<HandlerCtx, "auth" | "req">,
+  params: Record<string, string | undefined>,
+  deps: Partial<GenerateStoryboardPanelsDeps> = {}
+) {
+  const resolved: GenerateStoryboardPanelsDeps = {
+    getProject,
+    getActiveProjectPlan,
+    createOrGetJob: agentApiStore.createOrGetJob,
+    runStoryboardJob,
+    ...deps,
+  };
+  const projectId = requiredParam(params, "projectId");
+  await resolved.getProject(ctx.auth.workspaceId, projectId);
+
+  const activePlan = await resolved.getActiveProjectPlan(projectId);
+  if (!activePlan) {
+    throw new ApiError(
+      "plan_missing",
+      "A shot plan is required before generating storyboard panels."
+    );
+  }
+
+  const { job, created } = await resolved.createOrGetJob({
+    type: "asset_generation",
+    projectId,
+    idempotencyKey: scopedIdempotencyKey(ctx.req, projectId),
+  });
+
+  if (created) {
+    void resolved.runStoryboardJob({
+      jobId: job.id,
+      workspaceId: ctx.auth.workspaceId,
+      projectId,
+      plan: activePlan.plan,
+      planAssetId: activePlan.assetId,
+      planContentHash: activePlan.contentHash,
+    });
+  }
+
+  return { status: created ? 202 : 200, body: { job } };
+}
+
 storyboardsRouter.get(
   "/projects/:projectId/storyboards",
   route(async ({ auth }, params) => {
@@ -82,37 +133,7 @@ storyboardsRouter.post(
 
 storyboardsRouter.post(
   "/projects/:projectId/storyboards/generate",
-  route(async ({ auth, req }, params) => {
-    const projectId = requiredParam(params, "projectId");
-    await getProject(auth.workspaceId, projectId);
-
-    const activePlan = await getActiveProjectPlan(projectId);
-    if (!activePlan) {
-      throw new ApiError(
-        "brief_missing",
-        "A shot plan is required before generating storyboard panels."
-      );
-    }
-
-    const { job, created } = await agentApiStore.createOrGetJob({
-      type: "asset_generation",
-      projectId,
-      idempotencyKey: scopedIdempotencyKey(req, projectId),
-    });
-
-    if (created) {
-      void runStoryboardJob({
-        jobId: job.id,
-        workspaceId: auth.workspaceId,
-        projectId,
-        plan: activePlan.plan,
-        planAssetId: activePlan.assetId,
-        planContentHash: activePlan.contentHash,
-      });
-    }
-
-    return { status: created ? 202 : 200, body: { job } };
-  })
+  route((ctx, params) => generateStoryboardPanelsRoute(ctx, params))
 );
 
 // Latest storyboard generation job for the project (or null). The job id only

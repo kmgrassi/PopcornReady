@@ -82,6 +82,13 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   a ready beat card visual while disclosing its generation prompt only in the
   exact-target Request Changes dialog, and exposes **Generate video** at a
   storyboard-review stop before production media can continue.
+- `storyboard-orchestration.spec.ts` verifies desktop and mobile project
+  overviews explain automatic scene-and-moment planning, start the
+  storyboard-specific orchestrator entrypoint, navigate to its run, replace a
+  missing-brief dead end with a **Finish brief** path, and suppress duplicate
+  creation while a storyboard-bound run is active. It also proves an active
+  run that fails while the project remains open becomes retryable, and that
+  polling uses the one-boundary status endpoint rather than full run history.
 - `evals.spec.ts` covers the eval dashboard and admin workbench judgment action.
 
 The required local-first database smoke is:
@@ -502,12 +509,14 @@ Covered:
 
 - Storyboard route renders the dedicated storyboard page and empty state for a
   project without a storyboard.
+- Project detail starts storyboard production through the orchestrator, covers
+  the missing-brief prerequisite, and recovers truthful in-progress state after
+  returning to the project on desktop and mobile fixtures.
 
 Remaining gaps:
 
-- Project detail route coverage is thin.
-- Project-detail storyboard generation, panel request changes, image-regeneration
-  edge cases, and reload recovery are not covered by the current browser spec.
+- Project-detail panel request changes and image-regeneration edge cases remain
+  only partially covered.
 - Direct scene/beat editing is not the current storyboard UX; changes should be
   exercised through object-scoped Request Changes flows.
 - Watch page video playback/fallback behavior has limited coverage.

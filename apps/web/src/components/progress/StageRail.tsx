@@ -50,6 +50,14 @@ export const PIPELINE_GROUPS: StageGroup[] = [
     tools: ["create_or_load_brief"],
   },
   {
+    id: "poster",
+    type: "asset_generation",
+    label: "Poster",
+    description: "A visual cover for the project.",
+    tools: ["generate_poster"],
+    fallbackTypes: [],
+  },
+  {
     id: "brief",
     type: "creative_plan",
     label: "Brief",
@@ -137,6 +145,7 @@ const STANDALONE_GROUPS: Record<
 
 const TOOL_LABELS: Record<string, string> = {
   create_or_load_brief: "Create/load brief",
+  generate_poster: "Generate poster",
   develop_story_blueprint: "Develop story blueprint",
   draft_script: "Draft script",
   plan_shots: "Plan shots",
@@ -281,6 +290,7 @@ export function StageRail({
   const broadFallback = new Map<GenerationStageType, GenerationStage[]>();
   ordered.forEach((stage) => {
     if (stage.toolName) stagesByTool.set(stage.toolName, stage);
+    if (stage.toolName) return;
     const existing = broadFallback.get(stage.type) ?? [];
     existing.push(stage);
     broadFallback.set(stage.type, existing);
