@@ -9,7 +9,7 @@ import {
 } from "../lib/api-client";
 import { PublishAnchorDialog } from "../components/anchors/PublishAnchorDialog";
 import { useAuth } from "../components/auth/AuthProvider";
-import { StudioCrewLoadingState } from "../components/creation/StudioCrewLoadingState";
+import { QuickLoadingState } from "../components/ui/QuickLoadingState";
 import { PageHeader } from "../components/ui/PageHeader";
 import { Toolbar, ToolbarField } from "../components/ui/Toolbar";
 import { Button, ButtonLink } from "../components/ui/Button";
@@ -193,7 +193,7 @@ function DashboardSkeleton({
 }) {
   const isGrid = variant === "grid";
   return (
-    <StudioCrewLoadingState
+    <QuickLoadingState
       title={title}
       description={description}
       reservation={(
@@ -416,7 +416,7 @@ export function ProjectsPage() {
         ) : (
           <EmptyState
             title="No projects yet"
-            body="Create an image, short video, or audio asset to start a project."
+            body="Start a full video or create one project asset to begin."
             action={<ButtonLink variant="secondary" to="/create">Create</ButtonLink>}
           />
         )

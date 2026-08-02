@@ -7,7 +7,7 @@ import {
   useStartUploadedFootageGenerationRunMutation,
 } from "../lib/queryClient";
 import { useAuth } from "../components/auth/AuthProvider";
-import { StudioCrewLoadingState } from "../components/creation/StudioCrewLoadingState";
+import { QuickLoadingState } from "../components/ui/QuickLoadingState";
 import { v1Api } from "../lib/api-client";
 import { formatUploadSize } from "../lib/landingUpload";
 import { useUploadQueue } from "../lib/uploadQueue";
@@ -266,7 +266,7 @@ export function ProjectMediaGalleryPage() {
       </div>
 
       {state === "loading" ? (
-        <StudioCrewLoadingState
+        <QuickLoadingState
           title="Loading media"
           description="Fetching the project asset list."
           variant="page"

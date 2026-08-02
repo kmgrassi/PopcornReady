@@ -292,13 +292,16 @@ spread). A thin, low-alpha shadow that works on white reads as nothing here.
 ### Signature: Generation Stage Flow & Loading States
 The pipeline timeline (`admin-flow` / stage rows) renders stages as a vertical
 connected sequence with state-colored index nodes (running = coral glow, complete
-= reel-green). Route-level initial loading uses the shared pixel-art studio crew
-scene with a specific status label; content-dense routes retain **shimmer
-geometry** as an invisible, non-animating layout reservation for the real media
-layout. Compact buttons,
-pagination, thumbnails, upload progress, and background refreshes keep their
-purpose-sized indicators. This is where "show the work, not the slot machine"
-lives — make it legible and provenance-rich.
+= reel-green). Ordinary route and data loading waits briefly before revealing a
+shared quick-loading state: content-dense routes show content-shaped skeleton
+geometry, while routes without useful geometry use a compact progress treatment.
+The active pixel-art studio crew is reserved for known queued or running creative
+production, where the wait is part of the product story rather than an incidental
+fetch. The same scene may rest in its idle frame as context after that production
+finishes; it is not then a loading indicator. Compact buttons, pagination,
+thumbnails, upload progress, and background refreshes keep their purpose-sized
+indicators. This is where "show the work, not the slot machine" lives — make it
+legible and provenance-rich.
 
 Specialized recovery states may retain their own layout when they expose useful
 pending-state context or escape actions; the Run Progress opener keeps its
@@ -316,8 +319,8 @@ view.
   case, never a second typeface.
 - **Do** convey depth with tonal layers (bg → twilight → raised) plus dark-tuned
   shadows, and lift interactive elements on hover (reversing on `:active`).
-- **Do** make generation legible: stages, status, provenance, route-level studio
-  crew states, hidden content-shaped layout reservations, and a path to
+- **Do** make generation legible: stages, status, provenance, studio crew for
+  known creative production, delayed content-shaped route loading, and a path to
   re-trigger any stage.
 - **Do** keep the creator view quiet; reach operator density (evals/runs) only
   through progressive disclosure.

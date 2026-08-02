@@ -74,11 +74,22 @@ metadata that is rewritten correctly during visibility moves.
   row shows no recent visibility mutation. Direct action-table history remains
   blocked because this worktree has no production Supabase credentials.
 - API/web type checks pass. Targeted API storage/media/visibility tests pass.
-  Web unit tests pass (including scope, version mismatch, expiry, persistence,
+  Web unit tests pass, 65/65 after merging current main (including scope,
+  version mismatch, expiry, persistence,
   concurrent retry dedupe, and stop-after-refreshed-failure guards).
-- Playwright `library-collections.spec.ts` passes 5/5 in Chromium; its tagged
-  failed-media recovery passes in mobile Chrome and mobile Safari (7/7 total).
-- Final `pnpm agent:validate -- --scope all` passes.
+- Playwright `library-collections.spec.ts` passes 6/6 in Chromium; its tagged
+  failed-media recovery passes in mobile Chrome and mobile Safari (8/8 total).
+- Final post-merge `pnpm agent:validate -- --scope all` passes.
+- Manual local browser verification against the Vite app and deterministic
+  same-origin API fixture:
+  - Desktop 1440×1000: `/projects/proj-alpha/media` rendered the project-signed
+    URL; `/library/assets` reused that exact URL instead of its list projection.
+    A separate 404 asset made one focused request and rendered the fresh URL.
+  - Mobile 390×844: both project media and Library retained the cached/fresh
+    URLs after reload, with document width equal to viewport width (390px).
+  - Transient focused refresh: a 503 rejected visibly to the query boundary,
+    released the failed-URL guard, and the next error event retried successfully;
+    the asset rendered the fresh URL with no browser console error.
 - The full API suite remains red only on four unrelated baseline failures:
   two stale guest-retention migration filenames, graph-snapshot expectation
   drift, and the public-project UUID-shape assertion.
@@ -99,6 +110,13 @@ metadata that is rewritten correctly during visibility moves.
 - Wrap-up review: `/root/research_review` approved the final load-success retry
   release for image, video, and audio, the owned-only query wiring, truthful E2E
   documentation, and the complete diff with no remaining blocker.
+- PR follow-up review: the unresolved P2 correctly identified that TanStack
+  `refetch()` can resolve with stale cached data after a request error. The
+  focused refresh now throws on request errors, releases the failed URL guard,
+  and has a regression test proving a later retry remains available.
+- Follow-up wrap-up review: `/root/research_review` approved the README merge,
+  throwing focused refetch, rejection cleanup, regression coverage, manual
+  browser evidence, and documentation with no remaining blocker.
 
 ## Blockers and risks
 
@@ -110,5 +128,6 @@ metadata that is rewritten correctly during visibility moves.
 
 ## Next action / handoff
 
-Publish the validated branch and ready pull request. The missing production
-asset remains an operational regeneration/restoration follow-up.
+Commit and push the current-main merge and review fix, then resolve the addressed
+review thread on PR #878. The missing production asset remains an operational
+regeneration/restoration follow-up.

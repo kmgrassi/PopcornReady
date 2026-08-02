@@ -165,11 +165,17 @@ export function refreshAssetMediaAfterError(
   if (state.inFlight) return state.inFlight;
 
   state.blockedUrls.add(failedUrl);
-  const request = refresh().then((media) => {
-    const retryTarget = media.url ?? media.thumbnailUrl;
-    if (retryTarget) state.blockedUrls.add(retryTarget);
-    return media;
-  });
+  const request = refresh().then(
+    (media) => {
+      const retryTarget = media.url ?? media.thumbnailUrl;
+      if (retryTarget) state.blockedUrls.add(retryTarget);
+      return media;
+    },
+    (error: unknown) => {
+      state.blockedUrls.delete(failedUrl);
+      throw error;
+    },
+  );
   state.inFlight = request;
   const clearInFlight = () => {
     if (state.inFlight === request) state.inFlight = null;
@@ -300,7 +306,7 @@ export function useAssetMediaQuery({
   }, [proactiveRefresh, query.data?.expiresAt, query.isEnabled, query.refetch]);
 
   const refresh = useCallback(async () => {
-    const result = await query.refetch();
+    const result = await query.refetch({ throwOnError: true });
     return result.data ?? { url: null, thumbnailUrl: null, expiresAt: null };
   }, [query.refetch]);
 

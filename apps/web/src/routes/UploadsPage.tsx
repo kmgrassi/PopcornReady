@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "../components/auth/AuthProvider";
-import { StudioCrewLoadingState } from "../components/creation/StudioCrewLoadingState";
+import { QuickLoadingState } from "../components/ui/QuickLoadingState";
 import { ProjectUploadButton } from "../components/project-upload/ProjectUploadButton";
 import { Button, ButtonLink } from "../components/ui/Button";
 import { PageHeader } from "../components/ui/PageHeader";
@@ -28,7 +28,7 @@ export function UploadsPage() {
       />
 
       {projectsQuery.loading ? (
-        <StudioCrewLoadingState
+        <QuickLoadingState
           title="Loading upload destinations"
           description="Gathering projects that can receive source media."
           reservation={(

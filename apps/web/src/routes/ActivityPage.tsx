@@ -3,7 +3,7 @@ import { ActiveRunsPanel } from "../components/home/ActiveRunsPanel";
 import { RecentOutputsStrip } from "../components/home/RecentOutputsStrip";
 import { ErrorState } from "../components/ui/StateCard";
 import { useAuth } from "../components/auth/AuthProvider";
-import { StudioCrewLoadingState } from "../components/creation/StudioCrewLoadingState";
+import { QuickLoadingState } from "../components/ui/QuickLoadingState";
 import { useDashboardSummaryQuery } from "../lib/queryClient";
 import styles from "./ActivityPage.module.css";
 
@@ -49,7 +49,7 @@ export function ActivityPage() {
         <section className={styles.empty}>
           <h2>No active generations</h2>
           <p>
-            Create an image, short video, or audio asset and this screen will
+            Start a full video or create one project asset. This screen will
             track the work until it is ready.
           </p>
           <Link to="/create">Create</Link>
@@ -61,7 +61,7 @@ export function ActivityPage() {
 
 function ActivitySkeleton() {
   return (
-    <StudioCrewLoadingState
+    <QuickLoadingState
       title="Loading activity"
       description="Gathering active runs and recent outputs."
       reservation={(

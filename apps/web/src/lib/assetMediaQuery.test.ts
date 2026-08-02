@@ -142,3 +142,26 @@ test("concurrent error recovery deduplicates and stops if the refreshed URL also
   void refreshAssetMediaAfterError(state, "url-b", refresh);
   assert.equal(refreshCount, 2);
 });
+
+test("focused refresh failures reject and release the failed URL for a later retry", async () => {
+  const state = createAssetMediaRetryState();
+  let refreshCount = 0;
+  const refresh = async () => {
+    refreshCount += 1;
+    if (refreshCount === 1) throw new Error("focused media unavailable");
+    return { url: "url-b", thumbnailUrl: null, expiresAt: null };
+  };
+
+  await assert.rejects(
+    refreshAssetMediaAfterError(state, "url-a", refresh),
+    /focused media unavailable/,
+  );
+  assert.equal(state.blockedUrls.has("url-a"), false);
+
+  assert.deepEqual(await refreshAssetMediaAfterError(state, "url-a", refresh), {
+    url: "url-b",
+    thumbnailUrl: null,
+    expiresAt: null,
+  });
+  assert.equal(refreshCount, 2);
+});

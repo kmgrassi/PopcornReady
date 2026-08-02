@@ -26,11 +26,13 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   credentials and Supabase env are provided.
 - `specs/auth-and-routing.spec.ts` covers public auth routes, protected local
   routes, compatibility redirects, and not-found behavior.
-- `specs/library-collections.spec.ts` covers the shared studio-crew route-level
-  loading contract on a mobile Library route, including accessible busy status,
-  reduced motion, no horizontal overflow, hidden layout reservation, and
-  transition into loaded content. It also covers the panel variant on Watch.
-- `asset-studio.spec.ts` covers the production-default `/create` entry, image as
+- `specs/library-collections.spec.ts` covers the shared quick route-loading
+  contract on a mobile Library route, including the anti-flash threshold,
+  accessible busy status, reduced motion, no horizontal overflow, visible
+  content-shaped reservation, and transition into loaded content. It also covers
+  the compact panel variant on Watch. Long-running studio-crew coverage remains
+  in `asset-studio.spec.ts` for queued/running creative production.
+- `asset-studio.spec.ts` covers the `/create/asset` workspace, image as
   the default goal, accessible media-type targets, the 30/70 desktop workspace,
   responsive mobile collapse, recent-project context and selection, proposal
   review without dispatch, immediate navigation to `/create/review`, visible
@@ -253,7 +255,7 @@ Authenticated routes:
 - `/inspiration`
 - `/library`, `/library/:tab` (`projects` and `assets` are the active tabs)
 - `/projects`, `/projects/new`, `/projects/:projectId`,
-- `/create`, `/create/review`,
+- `/create`, `/create/asset`, `/create/review`,
   `/storyboard`,
   `/projects/:projectId/concept`, `/projects/:projectId/brief`,
   `/projects/:projectId/script`,
@@ -270,13 +272,14 @@ Authenticated routes:
 
 Retired route note: `/studio` is not mounted in the current Vite route table.
 Standalone Image, Video, and Audio creation enters through the authenticated
-shell plus Dashboard, Activity, and Library **Create** actions or `/create`.
-Full video-project creation remains distinct through explicit video actions,
-the landing prompt, and `/projects/new`.
+shell plus Dashboard, Activity, and Library **Create** actions, then the `/create`
+intent launcher and `/create/asset` workspace. Full video-project creation
+remains distinct through the launcher's Full video choice, explicit video
+actions, the landing prompt, and `/projects/new`.
 
-Dashboard creation note: global Create actions open the asset-oriented creation
-workspace. The full video-project flow is still `/projects/new`; `/studio`
-remains retired.
+Dashboard creation note: global Create actions open the intent launcher. Create
+owns active navigation through `/create`, `/create/asset`, `/create/review`, and
+`/projects/new`; `/studio` remains retired.
 
 ## Recommended Harness Shape
 
@@ -379,9 +382,12 @@ Recommended next test:
 
 Covered:
 
-- The authenticated global Create action opens `/create` by default.
+- The authenticated global Create action opens the `/create` intent launcher.
 - Dashboard, Activity, populated/empty Library, desktop shell, and mobile shell
-  use the same `/create` entry; `/projects/new` retains separate navigation state.
+  use that launcher; its Full video and Project asset choices lead to
+  `/projects/new` and `/create/asset` while Create retains navigation ownership.
+- Legacy asset-status query links and validated `/create` draft-history entries
+  redirect to `/create/asset` without losing their state.
 - Desktop creation uses a roughly 30/70 project/media context-to-prompt layout;
   mobile collapses the context structurally without horizontal overflow.
 - A quiet recent-project switcher requests update-ordered project data, shows
@@ -395,7 +401,7 @@ Covered:
   unchanged.
 - The visible proposal offers **Approve this** and automatically confirms after
   10 seconds if untouched; manual/timed races dispatch at most once.
-- Revising cancels the countdown, returns to `/create`, preserves the editable
+- Revising cancels the countdown, returns to `/create/asset`, preserves the editable
   draft, and gives the revised request fresh proposal authority.
 - Browser Forward restores a validated proposal from that review history entry
   without posting it again; a failed confirmation stays manual-only on return,
@@ -410,7 +416,7 @@ Covered:
   behavior, and mobile-safe layout.
 - Completed, failed, canceled, question, and blocked fixtures preserve truthful
   terminal copy, idle artwork, exact report details, and asset navigation.
-- The mobile Create tab opens Asset Studio and retains active state.
+- The mobile Create tab opens the launcher and remains active across both creation flows.
 - The review route remains legible and overflow-free at mobile widths.
 - The project picker selects an existing project, returns focus on Escape, and
   remains width-safe at mobile sizes.

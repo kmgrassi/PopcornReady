@@ -16,7 +16,7 @@ pnpm --filter @popcorn/web test:e2e
 ```
 
 `asset-studio.spec.ts` uses browser API fixtures to verify the production
-`/create` route, the 30/70 desktop context-to-prompt workspace, responsive
+`/create/asset` route, the 30/70 desktop context-to-prompt workspace, responsive
 mobile collapse, update-ordered recent-project loading/selection with real
 project media, expired-poster fallback and fresh-signed-URL recovery,
 default Image selection, accessible media-type targets, proposal review,
@@ -43,21 +43,24 @@ failed, canceled, blocked, and question outcomes.
 
 `creation-entry-points.spec.ts` verifies that the desktop and
 mobile shell, Dashboard, Activity, and both populated/empty Library actions use
-the canonical asset-oriented `/create` entry while `/projects/new` remains the
-distinct full-video flow.
+the `/create` intent launcher; its keyboard/pointer choices reach the distinct
+`/projects/new` full-video and `/create/asset` asset flows. It also covers Create
+navigation ownership, mobile overflow, legacy query links, and validated legacy
+draft-history restoration.
 
 `specs/library-collections.spec.ts` verifies that an owned generated asset's
 detail viewer shows its exact attributed credit debit without spending provider
 credits. Public asset viewers do not request or receive owner billing metadata.
 It verifies that the project gallery and owned Library reuse the same scoped
-media URL across navigation and a same-tab reload, and that an unloadable image URL
-performs exactly one focused refresh to a working signed URL on desktop and both
-mobile browser projects.
-It also verifies the shared route-level studio-crew loading state on mobile,
-including accessible busy semantics, reduced motion, overflow containment, and
-its transition into loaded project content. A Watch-route case covers the panel
-variant, while the Library case verifies that hidden layout reservation does not
-introduce a second visible or semantic loading state.
+media URL across navigation and a same-tab reload, and that an unloadable image
+URL performs exactly one focused refresh to a working signed URL on desktop and
+both mobile browser projects.
+It also verifies the shared quick route-loading state on mobile, including its
+180ms anti-flash threshold, accessible busy semantics, content-shaped layout
+reservation, reduced motion, overflow containment, and transition into loaded
+project content. A Watch-route case covers the compact panel variant. The
+studio crew remains covered in `asset-studio.spec.ts` for known queued/running
+creative production rather than ordinary data fetches.
 
 `rerun-proposal-lifecycle.spec.ts` verifies the durable Request Changes UI
 without provider spend: exact-target proposal preview, preserved/affected work,

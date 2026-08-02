@@ -8,7 +8,7 @@ import { Button } from "../components/ui/Button";
 import { ErrorState } from "../components/ui/StateCard";
 import { useAuth } from "../components/auth/AuthProvider";
 import { AnonymousUpgradeBanner } from "../components/auth/AnonymousUpgradeBanner";
-import { StudioCrewLoadingState } from "../components/creation/StudioCrewLoadingState";
+import { QuickLoadingState } from "../components/ui/QuickLoadingState";
 import { deriveNextAction } from "../lib/nextAction";
 import { useDashboardSummaryQuery } from "../lib/queryClient";
 import styles from "./LaunchpadPage.module.css";
@@ -96,7 +96,7 @@ function formatMissing(missing: readonly string[]) {
 
 function LaunchpadSkeleton() {
   return (
-    <StudioCrewLoadingState
+    <QuickLoadingState
       title="Loading Home"
       description="Gathering the latest work from your studio."
       reservation={(
