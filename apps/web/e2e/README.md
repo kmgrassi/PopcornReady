@@ -15,7 +15,8 @@ is local auth:
 pnpm --filter @popcorn/web test:e2e
 ```
 
-`asset-studio.spec.ts` uses browser API fixtures to verify the production
+`asset-studio-projects.spec.ts`, `asset-studio-review.spec.ts`, and
+`asset-studio-progress.spec.ts` use browser API fixtures to verify the production
 `/create/asset` route, the 30/70 desktop context-to-prompt workspace, responsive
 mobile collapse, update-ordered recent-project loading/selection with real
 project media, expired-poster fallback and fresh-signed-URL recovery,
