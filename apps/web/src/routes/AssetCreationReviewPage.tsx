@@ -148,7 +148,7 @@ export function AssetCreationReviewPage() {
           proposal,
         });
         navigate(
-          `/create?projectId=${encodeURIComponent(request.projectId)}&runId=${encodeURIComponent(result.runId)}`,
+          `/create/asset?projectId=${encodeURIComponent(request.projectId)}&runId=${encodeURIComponent(result.runId)}`,
           { replace: true },
         );
       } catch {
@@ -200,7 +200,7 @@ export function AssetCreationReviewPage() {
             Return to Asset Studio to prepare the request again. Nothing has
             been generated or approved from this page.
           </p>
-          <Button variant="cta" size="lg" onClick={() => navigate("/create", { replace: true })}>
+          <Button variant="cta" size="lg" onClick={() => navigate("/create/asset", { replace: true })}>
             Return to Asset Studio
           </Button>
         </section>
@@ -210,7 +210,7 @@ export function AssetCreationReviewPage() {
 
   const revise = () => {
     automaticApprovalCanceled.current = true;
-    navigate("/create", {
+    navigate("/create/asset", {
       replace: true,
       state: creationDraftNavigationState({
         goal: request.goal,

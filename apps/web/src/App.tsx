@@ -36,6 +36,7 @@ import { TemplatesPage } from "./routes/TemplatesPage";
 import { UploadsPage } from "./routes/UploadsPage";
 import { StandaloneCreationPage } from "./routes/StandaloneCreationPage";
 import { AssetCreationReviewPage } from "./routes/AssetCreationReviewPage";
+import { CreateLauncherPage } from "./routes/CreateLauncherPage";
 
 const isDevHarnessEnabled = import.meta.env.DEV;
 const devHarnessRoutes = {
@@ -120,7 +121,8 @@ export function App() {
           <Route path="/library/:tab" element={<LibraryPage />} />
           <Route path="/projects" element={<RedirectWithSearch to="/library/projects" />} />
           <Route path="/projects/new" element={<ProjectCreationPage />} />
-          <Route path="/create" element={<StandaloneCreationPage />} />
+          <Route path="/create" element={<CreateLauncherPage />} />
+          <Route path="/create/asset" element={<StandaloneCreationPage />} />
           <Route path="/create/review" element={<AssetCreationReviewPage />} />
           <Route path="/runs" element={<CollectionCompatRedirect section="runs" />} />
           <Route path="/assets" element={<RedirectWithSearch to="/library/assets" />} />

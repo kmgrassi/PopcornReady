@@ -32,6 +32,10 @@ import {
   getDashboardBreadcrumbs,
 } from "../lib/dashboardBreadcrumbs";
 import {
+  isCreateNavigationPath,
+  isLibraryNavigationPath,
+} from "../lib/dashboardNavigation";
+import {
   queryClient,
   useDashboardSummaryQuery,
   useMeQuery,
@@ -327,17 +331,18 @@ export function AuthenticatedAppLayout() {
 
         {/* Quiet tier on purpose: each screen's featured action (e.g. the
             launchpad hero) owns the single gold CTA. */}
-        <NavLink
-          className={({ isActive }) =>
-            isActive
+        <Link
+          className={
+            isCreateNavigationPath(location.pathname)
               ? `${styles.createLink} ${styles.createLinkActive}`
               : styles.createLink
           }
           to="/create"
+          aria-current={isCreateNavigationPath(location.pathname) ? "page" : undefined}
           onClick={() => setNavOpen(false)}
         >
           Create
-        </NavLink>
+        </Link>
 
         <nav className={styles.nav} aria-label="Dashboard">
           {PRIMARY_NAV.map((item) => (
@@ -345,12 +350,21 @@ export function AuthenticatedAppLayout() {
               key={item.to}
               to={item.to}
               end={item.to === "/settings"}
+              aria-current={
+                item.label === "Library" && isLibraryNavigationPath(location.pathname)
+                  ? "page"
+                  : undefined
+              }
               onClick={() => setNavOpen(false)}
               className={({ isActive }) =>
-                isActive ||
-                item.activePaths.some((path) =>
-                  path === "/" ? location.pathname === path : location.pathname.startsWith(path)
-                )
+                (item.label === "Library"
+                  ? isLibraryNavigationPath(location.pathname)
+                  : isActive ||
+                    item.activePaths.some((path) =>
+                      path === "/"
+                        ? location.pathname === path
+                        : location.pathname.startsWith(path)
+                    ))
                   ? `${styles.navLink} ${styles.active}`
                   : styles.navLink
               }
@@ -504,9 +518,14 @@ function MobileTabBar({ activityCount }: { activityCount: number }) {
   return (
     <nav className={styles.mobileTabBar} aria-label="Primary mobile">
       {MOBILE_TABS.map((item) => {
-        const isActive = item.activePaths.some((path) =>
-          location.pathname === path || location.pathname.startsWith(`${path}/`)
-        );
+        const isActive =
+          item.label === "Create"
+            ? isCreateNavigationPath(location.pathname)
+            : item.label === "Library"
+              ? isLibraryNavigationPath(location.pathname)
+              : item.activePaths.some((path) =>
+                  location.pathname === path || location.pathname.startsWith(`${path}/`)
+                );
         const className = [
           styles.mobileTab,
           isActive ? styles.mobileTabActive : "",

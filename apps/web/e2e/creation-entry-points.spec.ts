@@ -34,16 +34,18 @@ test.beforeEach(async ({ page }) => {
   await mockLocalApi(page);
 });
 
-test("Dashboard, Activity, and the desktop shell share the asset Create route", async ({ page }) => {
+test("Dashboard, Activity, and the desktop shell share the Create launcher", async ({ page }) => {
   await page.goto("/dashboard");
-  await expect(page.getByRole("heading", { name: "Create your first project asset" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Create your first video or asset" })).toBeVisible();
   await page.getByRole("main").getByRole("link", { name: "Create", exact: true }).click();
   await expect(page).toHaveURL(/\/create$/);
+  await expect(page.getByRole("heading", { name: "What do you want to make?" })).toBeVisible();
 
   await page.goto("/activity");
   await expect(page.getByRole("heading", { name: "No active generations" })).toBeVisible();
   await page.getByRole("main").getByRole("link", { name: "Create", exact: true }).click();
   await expect(page).toHaveURL(/\/create$/);
+  await expect(page.getByRole("heading", { name: "What do you want to make?" })).toBeVisible();
 
   await page.goto("/dashboard");
   const desktopCreate = page
@@ -54,10 +56,15 @@ test("Dashboard, Activity, and the desktop shell share the asset Create route", 
   await expect(page).toHaveURL(/\/create$/);
   await expect(desktopCreate).toHaveAttribute("aria-current", "page");
 
+  await page.goto("/create/asset");
+  await expect(desktopCreate).toHaveAttribute("aria-current", "page");
   await page.goto("/create/review");
   await expect(desktopCreate).toHaveAttribute("aria-current", "page");
   await page.goto("/projects/new");
-  await expect(desktopCreate).not.toHaveAttribute("aria-current", "page");
+  await expect(desktopCreate).toHaveAttribute("aria-current", "page");
+  await expect(
+    page.getByRole("complementary").getByRole("link", { name: "Library", exact: true }),
+  ).not.toHaveAttribute("aria-current", "page");
 });
 
 test("Library routes both nonempty and empty project actions to Create", async ({ page }) => {
@@ -70,6 +77,7 @@ test("Library routes both nonempty and empty project actions to Create", async (
   await expect(populatedCreate).toHaveCount(1);
   await populatedCreate.click();
   await expect(page).toHaveURL(/\/create$/);
+  await expect(page.getByRole("heading", { name: "What do you want to make?" })).toBeVisible();
 
   await mockProjects(page, []);
   await page.goto("/library/projects");
@@ -80,9 +88,85 @@ test("Library routes both nonempty and empty project actions to Create", async (
   await expect(emptyCreate).toHaveCount(2);
   await emptyCreate.last().click();
   await expect(page).toHaveURL(/\/create$/);
+  await expect(page.getByRole("heading", { name: "What do you want to make?" })).toBeVisible();
 });
 
-test("mobile Create is neutral, canonical, and distinct from full-video creation", async ({ page }) => {
+test("launcher routes both intents and preserves legacy asset status links", async ({ page }) => {
+  await page.goto("/create");
+
+  const fullVideo = page.getByRole("link", { name: "Start a full video" });
+  const projectAsset = page.getByRole("link", { name: "Create an asset" });
+  await expect(fullVideo).toHaveAttribute("href", "/projects/new");
+  await expect(projectAsset).toHaveAttribute("href", "/create/asset");
+
+  const actionColors = await page.evaluate(() => {
+    const ctaProbe = document.createElement("span");
+    ctaProbe.style.backgroundColor = "var(--cta)";
+    document.body.append(ctaProbe);
+    const fullVideoAction = Array.from(document.querySelectorAll("a")).find(
+      (element) => element.textContent?.trim() === "Start a full video",
+    );
+    const assetAction = Array.from(document.querySelectorAll("a")).find(
+      (element) => element.textContent?.trim() === "Create an asset",
+    );
+    const colors = {
+      cta: getComputedStyle(ctaProbe).backgroundColor,
+      fullVideo: fullVideoAction ? getComputedStyle(fullVideoAction).backgroundColor : "",
+      asset: assetAction ? getComputedStyle(assetAction).backgroundColor : "",
+    };
+    ctaProbe.remove();
+    return colors;
+  });
+  expect(actionColors.fullVideo).toBe(actionColors.cta);
+  expect(actionColors.asset).not.toBe(actionColors.cta);
+
+  await fullVideo.focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/projects\/new$/);
+
+  await page.goto("/create");
+  await projectAsset.click();
+  await expect(page).toHaveURL(/\/create\/asset$/);
+
+  await page.goto(`/create?projectId=${project.id}&runId=legacy-run`);
+  await expect(page).toHaveURL(
+    new RegExp(`/create/asset\\?projectId=${project.id}&runId=legacy-run$`),
+  );
+
+  await mockProjects(page, [project]);
+  await page.goto("/create");
+  await page.evaluate(
+    ({ projectId }) => {
+      window.history.replaceState(
+        {
+          ...window.history.state,
+          usr: {
+            assetCreationDraft: {
+              goal: "video",
+              projectId,
+              prompt: "A restored legacy draft",
+              improvePrompt: false,
+            },
+          },
+        },
+        "",
+        "/create",
+      );
+      window.location.reload();
+    },
+    { projectId: project.id },
+  );
+  await expect(page).toHaveURL(/\/create\/asset$/);
+  await expect(
+    page.getByRole("radio", { name: "Video A short motion asset" }),
+  ).toBeChecked();
+  await expect(page.getByLabel("Describe the result")).toHaveValue(
+    "A restored legacy draft",
+  );
+  await expect(page.getByLabel("Improve video prompt")).not.toBeChecked();
+});
+
+test("mobile Create stays active across both creation flows without overflow", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/dashboard");
 
@@ -91,6 +175,13 @@ test("mobile Create is neutral, canonical, and distinct from full-video creation
   await create.click();
   await expect(page).toHaveURL(/\/create$/);
   await expect(create).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("heading", { name: "What do you want to make?" })).toBeVisible();
+
+  const overflow = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  expect(overflow.scrollWidth).toBe(overflow.clientWidth);
 
   const createStyle = await create.evaluate((element) => {
     const ctaProbe = document.createElement("span");
@@ -105,8 +196,21 @@ test("mobile Create is neutral, canonical, and distinct from full-video creation
   });
   expect(createStyle.background).not.toBe(createStyle.cta);
 
+  await page.getByRole("link", { name: "Create an asset" }).click();
+  await expect(page).toHaveURL(/\/create\/asset$/);
+  await expect(create).toHaveAttribute("aria-current", "page");
+
+  await page.goto("/create/review");
+  await expect(create).toHaveAttribute("aria-current", "page");
+
   await page.goto("/projects/new");
   await expect(page).toHaveURL(/\/projects\/new$/);
+  await expect(create).toHaveAttribute("aria-current", "page");
+  await expect(
+    mobileNav.getByRole("link", { name: "Library", exact: true }),
+  ).not.toHaveAttribute("aria-current", "page");
+
+  await page.goto(`/projects/${project.id}`);
   await expect(create).not.toHaveAttribute("aria-current", "page");
   await expect(
     mobileNav.getByRole("link", { name: "Library", exact: true }),

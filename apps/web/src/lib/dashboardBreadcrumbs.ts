@@ -47,14 +47,19 @@ function staticCrumbs(items: BreadcrumbItem[]): BreadcrumbItem[] {
   return [{ label: "Dashboard", to: "/dashboard" }, ...items];
 }
 
+function normalizePathname(pathname: string) {
+  return pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+}
+
 export function getDashboardBreadcrumbParams(location: Location): DashboardBreadcrumbParams {
-  if (location.pathname === "/projects/new" || location.pathname === "/anchors/mine") {
+  const pathname = normalizePathname(location.pathname);
+  if (pathname === "/projects/new" || pathname === "/anchors/mine") {
     return {};
   }
 
   const projectRunMatch = matchPath(
     { path: "/projects/:projectId/runs/:runId", end: true },
-    location.pathname,
+    pathname,
   );
   if (projectRunMatch?.params.projectId) {
     return { projectId: projectRunMatch.params.projectId };
@@ -62,7 +67,7 @@ export function getDashboardBreadcrumbParams(location: Location): DashboardBread
 
   const projectMatch = matchPath(
     { path: "/projects/:projectId/*", end: false },
-    location.pathname,
+    pathname,
   );
   if (projectMatch?.params.projectId) {
     return { projectId: projectMatch.params.projectId };
@@ -70,7 +75,7 @@ export function getDashboardBreadcrumbParams(location: Location): DashboardBread
 
   const exactProjectMatch = matchPath(
     { path: "/projects/:projectId", end: true },
-    location.pathname,
+    pathname,
   );
   if (exactProjectMatch?.params.projectId) {
     return { projectId: exactProjectMatch.params.projectId };
@@ -78,7 +83,7 @@ export function getDashboardBreadcrumbParams(location: Location): DashboardBread
 
   const anchorMatch = matchPath(
     { path: "/anchors/:entryId", end: true },
-    location.pathname,
+    pathname,
   );
   if (anchorMatch?.params.entryId) {
     return { anchorEntryId: anchorMatch.params.entryId };
@@ -91,7 +96,7 @@ export function getDashboardBreadcrumbs(
   location: Location,
   labels: DashboardBreadcrumbLabels = {},
 ): BreadcrumbItem[] {
-  const pathname = location.pathname;
+  const pathname = normalizePathname(location.pathname);
 
   if (pathname === "/dashboard") {
     return [{ label: "Dashboard" }];
@@ -111,8 +116,26 @@ export function getDashboardBreadcrumbs(
 
   if (pathname === "/projects/new") {
     return staticCrumbs([
-      { label: "Library", to: "/library/projects" },
-      { label: "New project" },
+      { label: "Create", to: "/create" },
+      { label: "Full video" },
+    ]);
+  }
+
+  if (pathname === "/create") {
+    return staticCrumbs([{ label: "Create" }]);
+  }
+
+  if (pathname === "/create/asset") {
+    return staticCrumbs([
+      { label: "Create", to: "/create" },
+      { label: "Project asset" },
+    ]);
+  }
+
+  if (pathname === "/create/review") {
+    return staticCrumbs([
+      { label: "Create", to: "/create" },
+      { label: "Review" },
     ]);
   }
 

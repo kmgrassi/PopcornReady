@@ -99,7 +99,7 @@ test.describe("Asset Studio", () => {
 
   test("uses the selected recent project in the split creation workspace", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto("/create");
+    await page.goto("/create/asset");
 
     const context = page.getByLabel("Creation context");
     const canvas = page.getByLabel("Creation prompt");
@@ -202,7 +202,7 @@ test.describe("Asset Studio", () => {
         ),
     );
 
-    await page.goto("/create");
+    await page.goto("/create/asset");
     await expect(
       page.getByText("Optional — we’ll create and name one when you review."),
     ).toBeVisible();
@@ -278,7 +278,7 @@ test.describe("Asset Studio", () => {
       markCreateCompleted?.();
     });
 
-    await page.goto("/create");
+    await page.goto("/create/asset");
     await page
       .getByLabel("Describe the result", { exact: true })
       .fill("A request the creator leaves behind");
@@ -345,7 +345,7 @@ test.describe("Asset Studio", () => {
         }, 201),
     );
 
-    await page.goto("/create");
+    await page.goto("/create/asset");
     await page
       .getByRole("radio", { name: /Video/ })
       .evaluate((radio: HTMLInputElement) => radio.click());
@@ -353,7 +353,7 @@ test.describe("Asset Studio", () => {
     await prompt.fill("A slow orbit around a red bicycle");
     await page.getByRole("button", { name: "Review request" }).click();
 
-    await expect(page).toHaveURL(/\/create$/);
+    await expect(page).toHaveURL(/\/create\/asset$/);
     await expect(page.locator("main").getByRole("alert")).toContainText(
       "We couldn’t create a project automatically",
     );
@@ -388,7 +388,7 @@ test.describe("Asset Studio", () => {
       });
     });
 
-    await page.goto("/create");
+    await page.goto("/create/asset");
     await expect(page.getByRole("navigation", { name: "Recent projects" })).toBeVisible();
     await expect(
       page.getByRole("button", { name: `Use recent project ${project.name}` }),
@@ -409,7 +409,7 @@ test.describe("Asset Studio", () => {
       }),
     );
 
-    await page.goto("/create");
+    await page.goto("/create/asset");
     await expect(page.getByRole("navigation", { name: "Recent projects" })).toHaveCount(0);
     await expect(
       page.getByRole("button", { name: "Project Create your first project" }),
@@ -448,7 +448,7 @@ test.describe("Asset Studio", () => {
       );
     });
 
-    await page.goto("/create");
+    await page.goto("/create/asset");
     const recent = page.getByRole("button", {
       name: `Use recent project ${project.name}`,
     });
@@ -548,6 +548,8 @@ test.describe("Asset Studio", () => {
       .getByRole("link", { name: "Create", exact: true })
       .click();
     await expect(page).toHaveURL(/\/create$/);
+    await page.getByRole("link", { name: "Create an asset" }).click();
+    await expect(page).toHaveURL(/\/create\/asset$/);
     await expect(
       page.getByRole("radio", {
         name: "Image A still visual for this project.",
@@ -590,7 +592,7 @@ test.describe("Asset Studio", () => {
     releaseConfirmation?.();
 
     await expect(page).toHaveURL(
-      new RegExp(`/create\\?projectId=${project.id}&runId=run_image$`),
+      new RegExp(`/create/asset\\?projectId=${project.id}&runId=run_image$`),
     );
     await expect(page.getByText("Queued", { exact: true })).toBeVisible();
     await expect(page.getByTestId("studio-crew")).toBeVisible();
@@ -702,7 +704,7 @@ test.describe("Asset Studio", () => {
       },
     );
 
-    await page.goto(`/create?projectId=${project.id}&runId=run_terminal`);
+    await page.goto(`/create/asset?projectId=${project.id}&runId=run_terminal`);
     await expect(
       page.getByRole("heading", { name: "The studio hit a snag" }),
     ).toBeVisible();
@@ -785,7 +787,7 @@ test.describe("Asset Studio", () => {
         }),
     );
 
-    await page.goto(`/create?projectId=${project.id}&runId=run_mobile`);
+    await page.goto(`/create/asset?projectId=${project.id}&runId=run_mobile`);
     await expect(page.getByText("In progress", { exact: true })).toBeVisible();
     const spriteAnimation = await page
       .locator('[data-crew-member="director"]')
@@ -847,7 +849,7 @@ test.describe("Asset Studio", () => {
       },
     );
 
-    await page.goto("/create");
+    await page.goto("/create/asset");
     await openProjectPicker(page);
     await page.getByRole("button", { name: project.name, exact: true }).click();
     await page
@@ -907,7 +909,7 @@ test.describe("Asset Studio", () => {
       },
     );
 
-    await page.goto("/create");
+    await page.goto("/create/asset");
     const improveImage = page.getByRole("checkbox", {
       name: /Improve image prompt/,
     });
@@ -936,7 +938,7 @@ test.describe("Asset Studio", () => {
     });
 
     await page.getByRole("button", { name: "Revise request" }).click();
-    await expect(page).toHaveURL(/\/create$/);
+    await expect(page).toHaveURL(/\/create\/asset$/);
     await expect(
       page.getByRole("radio", {
         name: /^Video(?: A short motion asset for this project\.)?$/,
@@ -969,7 +971,7 @@ test.describe("Asset Studio", () => {
         ),
     );
 
-    await page.goto("/create");
+    await page.goto("/create/asset");
     await openProjectPicker(page);
     await page.getByRole("button", { name: project.name, exact: true }).click();
     const prompt = page.getByLabel("Describe the result", { exact: true });
@@ -981,7 +983,7 @@ test.describe("Asset Studio", () => {
       "turn off Improve image prompt",
     );
     await page.getByRole("button", { name: "Revise request" }).click();
-    await expect(page).toHaveURL(/\/create$/);
+    await expect(page).toHaveURL(/\/create\/asset$/);
     await expect(
       page.getByPlaceholder(
         "A quiet amber-lit close-up of popcorn falling into a bowl",
@@ -1021,7 +1023,7 @@ test.describe("Asset Studio", () => {
       },
     );
 
-    await page.goto("/create");
+    await page.goto("/create/asset");
     await openProjectPicker(page);
     await page.getByRole("button", { name: project.name, exact: true }).click();
     await page.getByLabel("Describe the result", { exact: true }).fill("A restored draft");
@@ -1030,7 +1032,7 @@ test.describe("Asset Studio", () => {
 
     await page.goBack();
     releaseProposal?.();
-    await expect(page).toHaveURL(/\/create$/);
+    await expect(page).toHaveURL(/\/create\/asset$/);
     await expect(
       page.getByPlaceholder(
         "A quiet amber-lit close-up of popcorn falling into a bowl",
@@ -1065,7 +1067,7 @@ test.describe("Asset Studio", () => {
       },
     );
 
-    await page.goto("/create");
+    await page.goto("/create/asset");
     await openProjectPicker(page);
     await page.getByRole("button", { name: project.name, exact: true }).click();
     await page.getByLabel("Describe the result", { exact: true }).fill("A proposal to restore");
@@ -1076,7 +1078,7 @@ test.describe("Asset Studio", () => {
     )).toBe("gate_forward");
 
     await page.goBack();
-    await expect(page).toHaveURL(/\/create$/);
+    await expect(page).toHaveURL(/\/create\/asset$/);
     await page.goForward();
 
     await expect(page).toHaveURL(/\/create\/review$/);
@@ -1113,7 +1115,7 @@ test.describe("Asset Studio", () => {
       },
     );
 
-    await page.goto("/create");
+    await page.goto("/create/asset");
     await openProjectPicker(page);
     await page.getByRole("button", { name: project.name, exact: true }).click();
     await page.getByLabel("Describe the result", { exact: true }).fill("An expiring proposal");
@@ -1175,7 +1177,7 @@ test.describe("Asset Studio", () => {
       },
     );
 
-    await page.goto("/create");
+    await page.goto("/create/asset");
     const prompt = page.getByLabel("Describe the result", { exact: true });
     await prompt.fill("A crisp editorial product still");
     const projectTrigger = await openProjectPicker(page);
@@ -1225,7 +1227,7 @@ test.describe("Asset Studio", () => {
       await fulfillJson(route, { project: delayedProject }, 201);
     });
 
-    await page.goto("/create");
+    await page.goto("/create/asset");
     await page
       .getByLabel("Describe the result", { exact: true })
       .fill("A delayed project race");
@@ -1290,7 +1292,7 @@ test.describe("Asset Studio", () => {
       }),
     );
 
-    await page.goto("/create");
+    await page.goto("/create/asset");
     await openProjectPicker(page);
     await page.getByRole("button", { name: project.name, exact: true }).click();
     await page.getByLabel("Describe the result", { exact: true }).fill("A considered still");
@@ -1304,7 +1306,7 @@ test.describe("Asset Studio", () => {
     expect(confirmationCount).toBe(0);
     await page.clock.fastForward(1_000);
     await expect.poll(() => confirmationCount).toBe(1);
-    await expect(page).toHaveURL(new RegExp(`/create\\?projectId=${project.id}&runId=run_auto$`));
+    await expect(page).toHaveURL(new RegExp(`/create/asset\\?projectId=${project.id}&runId=run_auto$`));
   });
 
   test("fails closed when the review route has no request state", async ({ page }) => {
@@ -1430,7 +1432,7 @@ test.describe("Asset Studio", () => {
       }),
     );
 
-    await page.goto("/create");
+    await page.goto("/create/asset");
     await openProjectPicker(page);
     await page.getByRole("button", { name: project.name, exact: true }).click();
     await page.getByLabel("Describe the result", { exact: true }).fill("A considered still");
@@ -1441,7 +1443,7 @@ test.describe("Asset Studio", () => {
       "approval could not be recorded",
     );
     await page.goBack();
-    await expect(page).toHaveURL(/\/create$/);
+    await expect(page).toHaveURL(/\/create\/asset$/);
     await page.goForward();
     await expect(page.getByRole("button", { name: "Approve this" })).toBeEnabled();
     await expect(page.getByText(/Starting automatically in/)).toHaveCount(0);
@@ -1449,7 +1451,7 @@ test.describe("Asset Studio", () => {
     expect(confirmationCount).toBe(1);
     await page.getByRole("button", { name: "Approve this" }).click();
     await expect(page).toHaveURL(
-      new RegExp(`/create\\?projectId=${project.id}&runId=run_retry$`),
+      new RegExp(`/create/asset\\?projectId=${project.id}&runId=run_retry$`),
     );
     expect(confirmationCount).toBe(2);
   });
@@ -1481,7 +1483,7 @@ test.describe("Asset Studio", () => {
       },
     );
 
-    await page.goto("/create");
+    await page.goto("/create/asset");
     await openProjectPicker(page);
     await page.getByRole("button", { name: project.name, exact: true }).click();
     await page.getByLabel("Describe the result", { exact: true }).fill("A draft to revise");
@@ -1489,7 +1491,7 @@ test.describe("Asset Studio", () => {
     await expect(page.getByText("Starting automatically in 10 seconds.")).toBeVisible();
     await page.getByRole("button", { name: "Revise request" }).click();
 
-    await expect(page).toHaveURL(/\/create$/);
+    await expect(page).toHaveURL(/\/create\/asset$/);
     await page.clock.fastForward(10_000);
     expect(confirmationCount).toBe(0);
     await expect(
@@ -1518,7 +1520,7 @@ test.describe("Asset Studio", () => {
       }, 201),
     );
 
-    await page.goto("/create");
+    await page.goto("/create/asset");
     await openProjectPicker(page);
     await page.getByRole("button", { name: project.name, exact: true }).click();
     await page.getByLabel("Describe the result", { exact: true }).fill("A vertical close-up");
@@ -1552,7 +1554,7 @@ test.describe("Asset Studio", () => {
         : route.fallback(),
     );
 
-    await page.goto("/create");
+    await page.goto("/create/asset");
     const trigger = page.getByRole("button", {
       name: "Project Create your first project",
     });
@@ -1561,7 +1563,7 @@ test.describe("Asset Studio", () => {
     await page.getByLabel("Project name").fill(firstProject.name);
     await page.getByRole("button", { name: "Create project" }).click();
 
-    await expect(page).toHaveURL(/\/create$/);
+    await expect(page).toHaveURL(/\/create\/asset$/);
     await expect(
       page.getByRole("button", {
         name: `Project ${firstProject.name}`,
@@ -1594,7 +1596,7 @@ test.describe("Asset Studio", () => {
       });
     });
 
-    await page.goto("/create");
+    await page.goto("/create/asset");
     await page
       .getByRole("button", { name: "Project Choose a project" })
       .click();
@@ -1646,7 +1648,7 @@ test.describe("Asset Studio", () => {
       });
     });
 
-    await page.goto("/create");
+    await page.goto("/create/asset");
     await openProjectPicker(page);
     const picker = page.getByLabel("Choose or create a project");
     await expect(
@@ -1693,7 +1695,7 @@ test.describe("Asset Studio", () => {
       return fulfillJson(route, { project: retryProject }, 201);
     });
 
-    await page.goto("/create");
+    await page.goto("/create/asset");
     await openProjectPicker(page);
     await page.getByRole("button", { name: "Create new project" }).click();
     const nameInput = page.getByLabel("Project name");
@@ -1716,7 +1718,7 @@ test.describe("Asset Studio", () => {
     expect(createAttempts).toBe(2);
   });
 
-  test("mobile Create opens Asset Studio and stays active @mobile", async ({ page }) => {
+  test("mobile Create can enter Asset Studio and stays active @mobile", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/dashboard");
 
@@ -1726,6 +1728,8 @@ test.describe("Asset Studio", () => {
     await createTab.click();
 
     await expect(page).toHaveURL(/\/create$/);
+    await page.getByRole("link", { name: "Create an asset" }).click();
+    await expect(page).toHaveURL(/\/create\/asset$/);
     await expect(createTab).toHaveAttribute("aria-current", "page");
     const recentStrip = page.getByRole("navigation", { name: "Recent projects" });
     const context = page.getByLabel("Creation context");
