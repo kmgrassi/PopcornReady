@@ -108,6 +108,32 @@ and replays the full migration chain from a clean database. The harness runs its
 integration files sequentially so intentional error-path transactions in the
 lifecycle suite cannot interfere with the independent retirement fixture.
 
+## Historical Production UX Audit (2026-08-01)
+
+This is point-in-time manual evidence, not automated E2E coverage or a current
+production contract. A signed-in owner/admin session inspected `/dashboard`,
+`/library/projects`, one existing `/projects/:projectId` overview, `/settings`,
+`/create`, and `/projects/new` at desktop width. Only the existing project
+overview was also checked at 390-by-844 mobile dimensions.
+
+The pass submitted no forms or mutation controls, started no generation, and
+changed no settings, uploads, approvals, or provider configuration. The final
+inspected route had no captured console warnings or errors. The owner/admin
+identity means role-gated provider smoke testing and secondary links were visible;
+that observation is not evidence that ordinary creators see those controls.
+
+Limits and remaining gaps:
+
+- The pass did not capture a deployed commit, health response, or other immutable
+  release identity, so it cannot be tied to a specific Netlify/Railway release.
+- The console observation covered only the final inspected tab state, not every
+  route's complete console and network history.
+- Only one authenticated route received the mobile-width check.
+- No global no-write assertion was available. Login, token refresh, signed-URL
+  minting, and route activity may write even during a read-oriented pass.
+- No detector overlay was injected, and the proposed release-gated production
+  harness remains unimplemented.
+
 ## Historical Production Verification: Specialist Foundations (2026-07-14)
 
 This section is point-in-time evidence, not the current production coverage
