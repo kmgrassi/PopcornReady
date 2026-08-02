@@ -8,7 +8,7 @@ import type {
 import type { ProjectWatchMedia, WorkspaceOutput } from "../lib/api-client";
 import { useAuth } from "../components/auth/AuthProvider";
 import { AiAssetFeedbackDialog } from "../components/ai-edit/AiAssetFeedbackDialog";
-import { StudioCrewLoadingState } from "../components/creation/StudioCrewLoadingState";
+import { QuickLoadingState } from "../components/ui/QuickLoadingState";
 import { ButtonLink } from "../components/ui/Button";
 import { ErrorState } from "../components/ui/StateCard";
 import { ProjectUploadButton } from "../components/project-upload/ProjectUploadButton";
@@ -545,7 +545,7 @@ function isProjectSectionId(value: string | undefined): value is ProjectSectionI
 
 function ProjectSkeleton() {
   return (
-    <StudioCrewLoadingState
+    <QuickLoadingState
       title="Loading project"
       description="Gathering the latest project details."
       reservation={(

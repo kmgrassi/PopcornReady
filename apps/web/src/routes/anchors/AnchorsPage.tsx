@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../components/auth/AuthProvider";
-import { StudioCrewLoadingState } from "../../components/creation/StudioCrewLoadingState";
+import { QuickLoadingState } from "../../components/ui/QuickLoadingState";
 import { Button } from "../../components/ui/Button";
 import { ImageWithSkeleton } from "../../components/ui/ImageWithSkeleton";
 import { EmptyState, ErrorState } from "../../components/ui/StateCard";
@@ -34,7 +34,7 @@ function catalogLikesAuthScope(auth: ReturnType<typeof useAuth>): string {
 
 function SkeletonGrid() {
   return (
-    <StudioCrewLoadingState
+    <QuickLoadingState
       title="Loading anchors"
       description="Gathering reusable creative references."
       reservation={(

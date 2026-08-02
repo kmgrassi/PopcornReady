@@ -1,6 +1,6 @@
 import { Link, Navigate, useParams } from "react-router-dom";
 import { AnonymousUpgradeBanner } from "../components/auth/AnonymousUpgradeBanner";
-import { StudioCrewLoadingState } from "../components/creation/StudioCrewLoadingState";
+import { QuickLoadingState } from "../components/ui/QuickLoadingState";
 import { ButtonLink } from "../components/ui/Button";
 import { useProjectWatchQuery } from "../lib/project-queries";
 import styles from "./ProjectWatchPage.module.css";
@@ -50,9 +50,11 @@ export function ProjectWatchPage() {
 
       {watchQuery.isLoading ? (
         <section className={styles.panel}>
-          <StudioCrewLoadingState
+          <QuickLoadingState
             title="Loading render"
             description="Preparing the selected project video."
+            reservation={<div className={styles.placeholder} />}
+            showCompactWithReservation
             variant="panel"
           />
         </section>

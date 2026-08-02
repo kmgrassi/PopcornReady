@@ -8,7 +8,7 @@ import {
 } from "../lib/api-client";
 import { PublishAnchorDialog } from "../components/anchors/PublishAnchorDialog";
 import { useAuth } from "../components/auth/AuthProvider";
-import { StudioCrewLoadingState } from "../components/creation/StudioCrewLoadingState";
+import { QuickLoadingState } from "../components/ui/QuickLoadingState";
 import { PageHeader } from "../components/ui/PageHeader";
 import { Toolbar, ToolbarField } from "../components/ui/Toolbar";
 import { Button, ButtonLink } from "../components/ui/Button";
@@ -187,7 +187,7 @@ function DashboardSkeleton({
 }) {
   const isGrid = variant === "grid";
   return (
-    <StudioCrewLoadingState
+    <QuickLoadingState
       title={title}
       description={description}
       reservation={(
