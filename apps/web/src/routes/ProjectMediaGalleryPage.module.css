@@ -130,6 +130,7 @@
   background: var(--surface-2);
   color: inherit;
   cursor: pointer;
+  text-decoration: none;
 }
 
 .previewButton img,

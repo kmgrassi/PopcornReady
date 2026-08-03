@@ -11,6 +11,7 @@ import { ErrorState } from "../components/ui/StateCard";
 import { ImageWithSkeleton } from "../components/ui/ImageWithSkeleton";
 import { VisibilityBadge } from "../components/ui/VisibilityBadge";
 import { useSetProjectVisibilityMutation } from "../lib/queryClient";
+import { assetLibraryPath } from "../lib/assetLibraryPath";
 import { formatDate, formatDuration, titleCase } from "./project-detail-format";
 import styles from "./ProjectDetailSections.module.css";
 
@@ -60,7 +61,17 @@ export function ProjectConcept({
   const shareUrl = publicProjectUrl(project.id);
   return (
     <section className={styles.hero} id="concept">
-      <ProjectPoster name={project.name} posterUrl={project.posterUrl} />
+      {!readOnly && project.posterAssetId ? (
+        <Link
+          className={styles.posterLink}
+          to={assetLibraryPath(project.posterAssetId, projectId)}
+          aria-label={`View ${project.name} poster asset`}
+        >
+          <ProjectPoster name={project.name} posterUrl={project.posterUrl} />
+        </Link>
+      ) : (
+        <ProjectPoster name={project.name} posterUrl={project.posterUrl} />
+      )}
       <div className={styles.heroBody}>
         <div className={styles.metaRow}>
           <StatusChip status={project.status} />

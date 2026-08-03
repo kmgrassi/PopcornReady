@@ -1,17 +1,16 @@
-import { useMemo, useReducer, useRef, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { FOOTAGE_ACCEPT, readSelectedFootage } from "../lib/upload";
 import {
-  useAssetBillingQuery,
   useProjectAssetsQuery,
   useStartUploadedFootageGenerationRunMutation,
 } from "../lib/queryClient";
-import { useAuth } from "../components/auth/AuthProvider";
 import { QuickLoadingState } from "../components/ui/QuickLoadingState";
+import { useAuth } from "../components/auth/AuthProvider";
 import { v1Api } from "../lib/api-client";
+import { assetLibraryPath } from "../lib/assetLibraryPath";
 import { formatUploadSize } from "../lib/landingUpload";
 import { useUploadQueue } from "../lib/uploadQueue";
-import { MediaViewer, type MediaViewerItem } from "../components/media/MediaViewer";
 import {
   assetDisplayTitle,
   assetSourceLabel,
@@ -33,26 +32,11 @@ import {
 } from "./project-media-intent";
 import styles from "./ProjectMediaGalleryPage.module.css";
 import { useAssetMediaQuery } from "../lib/assetMediaQuery";
-import type { AssetMediaResponse } from "../lib/api-client";
-
-function viewerItem(
-  asset: ProjectMediaAsset,
-  media?: AssetMediaResponse,
-): MediaViewerItem {
-  return {
-    id: asset.id,
-    kind: asset.kind,
-    title: assetDisplayTitle(asset),
-    filename: asset.filename,
-    url: media ? media.url ?? undefined : asset.remoteUrl ?? asset.url,
-    thumbnailUrl: media
-      ? media.thumbnailUrl ?? undefined
-      : asset.thumbnailUrl ?? undefined,
-    durationSec: asset.durationSec,
-    expiresAt: media?.expiresAt ?? asset.expiresAt,
-  };
-}
-
+import {
+  clearProjectMediaDraft,
+  readProjectMediaDraft,
+  stashProjectMediaDraft,
+} from "./projectMediaDraft";
 function statusClassName(asset: ProjectMediaAsset) {
   if (asset.status === "ready") return `${styles.badge} ${styles.statusReady}`;
   if (asset.status === "failed") return `${styles.badge} ${styles.statusFailed}`;
@@ -67,15 +51,20 @@ function uploadStatusLabel(status: string) {
 
 export function ProjectMediaGalleryPage() {
   const projectId = useParams().projectId ?? "";
+  const navigate = useNavigate();
   const auth = useAuth();
   const authScope = auth.user?.id ?? (import.meta.env.DEV ? "dev-autopilot" : auth.status);
-  const navigate = useNavigate();
   const uploadQueue = useUploadQueue();
-  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+  const [initialDraft] = useState(() => readProjectMediaDraft(projectId));
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [selectedIds, dispatchSelection] = useReducer(selectionReducer, []);
-  const [selectedPresetId, setSelectedPresetId] = useState("");
-  const [intentText, setIntentText] = useState("");
+  const [selectedIds, dispatchSelection] = useReducer(
+    selectionReducer,
+    initialDraft?.selectedIds ?? [],
+  );
+  const [selectedPresetId, setSelectedPresetId] = useState(
+    initialDraft?.selectedPresetId ?? "",
+  );
+  const [intentText, setIntentText] = useState(initialDraft?.intentText ?? "");
   const [createError, setCreateError] = useState<string | null>(null);
   const [createPending, setCreatePending] = useState(false);
   const createInFlightRef = useRef(false);
@@ -122,33 +111,6 @@ export function ProjectMediaGalleryPage() {
   const processingCount = assets.filter(
     (asset) => asset.status === "processing" || asset.status === "pending",
   ).length;
-  const selectedIndex = selectedAssetId
-    ? assets.findIndex((asset) => asset.id === selectedAssetId)
-    : -1;
-  const selectedAsset = selectedIndex >= 0 ? assets[selectedIndex] : null;
-  const selectedMedia = useAssetMediaQuery({
-    authScope,
-    workspaceId: selectedAsset?.workspaceId ?? "",
-    assetId: selectedAsset?.id ?? "",
-    initialMedia: selectedAsset
-      ? {
-          url: selectedAsset.remoteUrl ?? selectedAsset.url,
-          thumbnailUrl: selectedAsset.thumbnailUrl,
-          expiresAt: selectedAsset.expiresAt,
-          updatedAt: selectedAsset.updatedAt,
-          visibility: selectedAsset.visibility,
-        }
-      : null,
-    enabled: Boolean(selectedAsset),
-    fetchWhenMissing: true,
-    proactiveRefresh: true,
-  });
-  const billingQuery = useAssetBillingQuery(
-    authScope,
-    projectId,
-    selectedAsset?.id ?? null,
-    Boolean(selectedAsset),
-  );
   const statusMessage = useMemo(() => {
     if (activeQueuedUploads.length > 0) {
       return `Uploading ${activeQueuedUploads.length} ${
@@ -163,6 +125,10 @@ export function ProjectMediaGalleryPage() {
     }
     return "";
   }, [activeQueuedUploads.length, assetsQuery.isFetching, assetsQuery.isLoading, processingCount]);
+
+  useEffect(() => {
+    clearProjectMediaDraft(projectId);
+  }, [projectId]);
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0 || !projectId) return;
@@ -357,14 +323,29 @@ export function ProjectMediaGalleryPage() {
                 {selected ? (
                   <span className={styles.selectionBadge}>{selected}</span>
                 ) : null}
-                <button
+                <Link
                   aria-label={`View ${assetDisplayTitle(asset)}`}
                   className={styles.previewButton}
-                  type="button"
-                  onClick={() => setSelectedAssetId(asset.id)}
+                  onClick={(event) => {
+                    if (
+                      event.button !== 0 ||
+                      event.altKey ||
+                      event.ctrlKey ||
+                      event.metaKey ||
+                      event.shiftKey
+                    ) {
+                      return;
+                    }
+                    stashProjectMediaDraft(projectId, {
+                      selectedIds,
+                      selectedPresetId,
+                      intentText,
+                    });
+                  }}
+                  to={assetLibraryPath(asset.id, projectId)}
                 >
                   <ProjectAssetPreview asset={asset} authScope={authScope} />
-                </button>
+                </Link>
                 {duration ? <span className={styles.duration}>{duration}</span> : null}
                 <span className={styles.tileBody}>
                   <span className={styles.tileTitle}>{assetDisplayTitle(asset)}</span>
@@ -451,34 +432,6 @@ export function ProjectMediaGalleryPage() {
         </form>
       ) : null}
 
-      <MediaViewer
-        item={selectedAsset ? viewerItem(selectedAsset, selectedMedia.data) : null}
-        creditsCharged={billingQuery.data?.creditsCharged}
-        hasPrevious={selectedIndex > 0}
-        hasNext={selectedIndex >= 0 && selectedIndex < assets.length - 1}
-        onClose={() => setSelectedAssetId(null)}
-        onPrevious={() => {
-          if (selectedIndex > 0) setSelectedAssetId(assets[selectedIndex - 1].id);
-        }}
-        onNext={() => {
-          if (selectedIndex >= 0 && selectedIndex < assets.length - 1) {
-            setSelectedAssetId(assets[selectedIndex + 1].id);
-          }
-        }}
-        onRefresh={async (item) =>
-          (await selectedMedia.refreshAfterError(item.url ?? item.thumbnailUrl)) ?? {
-            url: null,
-            thumbnailUrl: null,
-            expiresAt: null,
-          }
-        }
-        onMediaLoad={selectedMedia.markLoaded}
-        actions={
-          projectId ? (
-            <Link to={`/projects/${encodeURIComponent(projectId)}`}>Back to project</Link>
-          ) : null
-        }
-      />
     </main>
   );
 }

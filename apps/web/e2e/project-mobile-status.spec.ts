@@ -32,6 +32,39 @@ test("mobile project overview renders one status-card job @mobile", async ({ pag
   expect(Math.max(overflow.body, overflow.document)).toBeLessThanOrEqual(
     overflow.viewport + 1,
   );
+
+  await statusRegion.getByRole("button", { name: "View Lunch launch storyboard asset" }).click();
+  await expect(page).toHaveURL(
+    `/library/assets?assetId=asset-mobile-status&projectId=${projectId}`,
+  );
+});
+
+test("desktop project images expose asset detail without stealing scene navigation", async ({ page }) => {
+  test.skip(!page.viewportSize() || page.viewportSize()!.width <= 760, "Desktop-only composition.");
+
+  await mockProjectOverview(page);
+  await page.goto(`/projects/${projectId}`);
+
+  const posterLink = page.getByRole("link", { name: "View Lunch launch poster asset" });
+  await expect(posterLink).toHaveAttribute(
+    "href",
+    `/library/assets?assetId=asset-project-poster&projectId=${projectId}`,
+  );
+  await expect(page.getByRole("link", { name: "View Scene 1 asset" })).toHaveAttribute(
+    "href",
+    `/library/assets?assetId=asset-mobile-status&projectId=${projectId}`,
+  );
+  await expect(page.getByRole("link", { name: "Open Scene 1 in the storyboard" })).toHaveAttribute(
+    "href",
+    `/projects/${projectId}/storyboard`,
+  );
+
+  await posterLink.focus();
+  await expect(posterLink).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(
+    `/library/assets?assetId=asset-project-poster&projectId=${projectId}`,
+  );
 });
 
 async function mockProjectOverview(page: Page) {
@@ -59,6 +92,7 @@ async function mockProjectOverview(page: Page) {
           visibility: "private",
           hasStoryboard: true,
           posterUrl: imageDataUrl,
+          posterAssetId: "asset-project-poster",
           brief: {
             goal: "Make a product video for a lunch ordering app.",
             targetLengthSec: 30,

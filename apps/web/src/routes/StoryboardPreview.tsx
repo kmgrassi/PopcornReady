@@ -10,6 +10,7 @@ import { Button, ButtonLink } from "../components/ui/Button";
 import { Spinner } from "../components/ui/Spinner";
 import { EmptyState, ErrorState } from "../components/ui/StateCard";
 import type { StoryboardProgress } from "../lib/v1/storyboard/progress";
+import { assetLibraryPath } from "../lib/assetLibraryPath";
 import styles from "./StoryboardPreview.module.css";
 import { formatDuration, titleCase } from "./project-detail-format";
 
@@ -163,16 +164,15 @@ function SceneStripCard({
   const label = `Scene ${scene.sceneIndex + 1}`;
   const panel = scene.beats.map(selectedPanel).find(Boolean) ?? null;
   const momentCount = scene.beats.length;
-  const body = (
-    <>
-      {panel ? (
-        <StoryboardPanelThumb panel={panel} label={label} />
-      ) : (
-        <div className={`${styles.storyImage} ${styles.storyImageEmpty}`}>
-          <span>No panels yet</span>
-        </div>
-      )}
-      <div className={styles.sceneStripMeta}>
+  const image = panel ? (
+    <StoryboardPanelThumb panel={panel} label={label} />
+  ) : (
+    <div className={`${styles.storyImage} ${styles.storyImageEmpty}`}>
+      <span>No panels yet</span>
+    </div>
+  );
+  const meta = (
+    <div className={styles.sceneStripMeta}>
         <span>
           {label}
           {scene.durationSec ? ` · ${formatDuration(scene.durationSec)}` : ""}
@@ -182,20 +182,30 @@ function SceneStripCard({
           {momentCount} {momentCount === 1 ? "moment" : "moments"}
         </p>
       </div>
-    </>
   );
 
   if (readOnly) {
-    return <article className={styles.sceneStripCard}>{body}</article>;
+    return <article className={styles.sceneStripCard}>{image}{meta}</article>;
   }
   return (
-    <Link
-      className={styles.sceneStripCard}
-      to={`/projects/${encodeURIComponent(projectId)}/storyboard`}
-      aria-label={`Open ${label} in the storyboard`}
-    >
-      {body}
-    </Link>
+    <article className={styles.sceneStripCard}>
+      {panel?.imageAssetId ? (
+        <Link
+          className={styles.sceneAssetLink}
+          to={assetLibraryPath(panel.imageAssetId, projectId)}
+          aria-label={`View ${label} asset`}
+        >
+          {image}
+        </Link>
+      ) : image}
+      <Link
+        className={styles.sceneMetaLink}
+        to={`/projects/${encodeURIComponent(projectId)}/storyboard`}
+        aria-label={`Open ${label} in the storyboard`}
+      >
+        {meta}
+      </Link>
+    </article>
   );
 }
 

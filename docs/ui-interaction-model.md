@@ -5,7 +5,7 @@
 > Star defines the agent-orchestrated generation model, and this doc defines the
 > single interaction model every authenticated surface must follow from it. New
 > UI work (human or agent) aligns to this; deviations are conscious and
-> documented. Last updated 2026-06-21.
+> documented. Last updated 2026-08-03.
 
 ## 0. The one rule
 
@@ -63,6 +63,21 @@ Read-optimized presentation of state. The user can:
 
 Observe surfaces carry **no input boxes and no edit buttons.** Their job is to
 make "what's going on" legible at a glance.
+
+Project overview posters, overview storyboard images, and persisted project-media
+previews use their stable asset identity to open the canonical Library asset
+viewer. In project media, that inspection link remains separate from selecting
+an asset for a new creation intent, and returning from inspection restores the
+in-progress selection and intent rather than discarding the creator's draft.
+Dedicated storyboard and run-review surfaces
+keep their object-scoped Request Changes interaction instead, and public shared
+projects do not link into an authenticated workspace library.
+
+For any owned asset with ready status, the canonical viewer exposes one quiet
+**Suggest an edit** action. It opens the same exact-asset Request Changes
+lifecycle described below; it does not regenerate or overwrite the asset
+directly. Public and non-ready assets do not expose this action. Existing failed
+image recovery remains a separate path.
 
 ### 2.2 Request Changes (the single edit affordance)
 
