@@ -38,6 +38,13 @@ change or same-tab reload can reuse the exact signed URL and therefore the
 browser's byte cache. Sign-out clears session state, and visibility mutations
 evict persisted media before invalidating the query.
 
+Creator-direct status uses that same focused query for ready recovered outputs.
+The status projection carries the asset's explicit nullable `expiresAt`, and
+its JSON is always `Cache-Control: private, no-store`. A terminal run does not
+need to keep polling merely to renew media: the asset query refreshes five
+minutes before expiry and retries once when the rendered image, video, or audio
+URL fails to load.
+
 `expiresAt` is nullable. Stable public, local, and remote URLs return `null`;
 private S3 URLs preserve their actual one-hour expiry, using the earlier expiry
 when the main media and thumbnail differ. Selected/open media schedules a

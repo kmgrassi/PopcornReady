@@ -14,6 +14,7 @@ import {
 import {
   agentCreationsRouter,
   creationStatusForRun,
+  creationStatusRoute,
   createCreationProposal,
   creationRequestDigest,
   parseCreation,
@@ -91,6 +92,7 @@ function readyAsset(
     status: "ready",
     source: { type: "generated", generatedAssetId: id },
     remoteUrl: `https://media.example/${id}.png`,
+    expiresAt: null,
     createdAt: "2026-08-03T00:00:30.000Z",
     updatedAt: "2026-08-03T00:00:30.000Z",
     ...overrides,
@@ -363,7 +365,12 @@ test("failed creator-direct status recovers ready run outputs in deterministic r
       },
       getRunAsset: async (_workspaceId, _projectId, assetId) => {
         assert.notEqual(assetId, "asset_missing");
-        return readyAsset(assetId);
+        return readyAsset(
+          assetId,
+          assetId === "asset_report"
+            ? { expiresAt: "2026-08-03T01:00:00.000Z" }
+            : {}
+        );
       },
     }
   );
@@ -378,7 +385,40 @@ test("failed creator-direct status recovers ready run outputs in deterministic r
     ["asset_report", "asset_recovered"]
   );
   assert.equal(result.outputs[0]?.url, "https://media.example/asset_report.png");
+  assert.equal(result.outputs[0]?.expiresAt, "2026-08-03T01:00:00.000Z");
+  assert.equal(result.outputs[1]?.expiresAt, null);
   assert.equal(result.run.status, "failed");
+});
+
+test("creator-direct status responses are private and no-store even without outputs", async () => {
+  const requiredProjects: string[] = [];
+  const response = await creationStatusRoute(
+    {
+      auth: {
+        mode: "local",
+        actor: { id: "actor_1", type: "local" },
+        workspaceId: "workspace_1",
+        isLocal: true,
+      },
+    },
+    { projectId: "project_1", runId: "run_1" },
+    {
+      requireProjectAccess: async (workspaceId, projectId) => {
+        requiredProjects.push(`${workspaceId}/${projectId}`);
+      },
+      getStatus: (input) =>
+        creationStatusForRun(input, {
+          getRun: async () => creatorRun({ taskParams: null }),
+          listHistory: async () => [],
+          listActions: async () => [],
+          getRunAsset: async () => readyAsset("unused"),
+        }),
+    }
+  );
+
+  assert.deepEqual(requiredProjects, ["workspace_1/project_1"]);
+  assert.equal(response.headers["Cache-Control"], "private, no-store");
+  assert.deepEqual(response.body.outputs, []);
 });
 
 test("creator-direct status rejects a mismatched actor before privileged output reads", async () => {

@@ -3,11 +3,13 @@ import { useEffect, useRef, useState } from "react";
 import type { V1Project } from "@popcorn/shared/v1/types";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { StudioCrewLoader } from "../components/creation/StudioCrewLoader";
+import { useAuth } from "../components/auth/AuthProvider";
 import { ProjectPicker } from "../components/projects/ProjectPicker";
 import { ImageWithSkeleton } from "../components/ui/ImageWithSkeleton";
 import { Button } from "../components/ui/Button";
 import { QuickLoadingState } from "../components/ui/QuickLoadingState";
 import { v1Api } from "../lib/api-client";
+import { useAssetMediaQuery } from "../lib/assetMediaQuery";
 import {
   useCreationStatus,
   type CreationGoal,
@@ -21,6 +23,7 @@ import {
 import {
   queryKeys,
   useCreateProjectMutation,
+  useMeQuery,
   useProjectQuery,
 } from "../lib/queryClient";
 import { RecentProjectSwitcher } from "./create/RecentProjectSwitcher";
@@ -190,8 +193,34 @@ function briefExcerpt(summary: string, maximumLength = 180) {
 }
 
 function CreationOutputPreview({ output }: { output: CreationStatusOutput }) {
+  const auth = useAuth();
+  const authScope =
+    auth.user?.id ?? (import.meta.env.DEV ? "dev-autopilot" : auth.status);
+  const meQuery = useMeQuery(authScope, { enabled: auth.status !== "loading" });
+  const mediaQuery = useAssetMediaQuery({
+    authScope,
+    workspaceId: meQuery.data?.workspaceId ?? "",
+    assetId: output.assetId,
+    initialMedia: {
+      url: output.url,
+      thumbnailUrl: output.thumbnailUrl,
+      expiresAt: output.expiresAt,
+    },
+    enabled: Boolean(meQuery.data?.workspaceId),
+    fetchWhenMissing: true,
+    proactiveRefresh: true,
+  });
   const title = output.name?.trim() || "Generated asset";
-  const stillUrl = output.url ?? output.thumbnailUrl;
+  const mediaUrl = mediaQuery.data
+    ? mediaQuery.data.url ?? undefined
+    : output.url;
+  const thumbnailUrl = mediaQuery.data
+    ? mediaQuery.data.thumbnailUrl ?? undefined
+    : output.thumbnailUrl;
+  const stillUrl = mediaUrl ?? thumbnailUrl;
+  const recoverMedia = (url: string) => {
+    void mediaQuery.refreshAfterError(url).catch(() => undefined);
+  };
 
   return (
     <section className={styles.outputPreview} aria-label={`${title} preview`}>
@@ -201,33 +230,41 @@ function CreationOutputPreview({ output }: { output: CreationStatusOutput }) {
           src={stillUrl}
           alt={title}
           fit="contain"
+          onError={() => recoverMedia(stillUrl)}
+          onLoad={() => mediaQuery.markLoaded(stillUrl)}
         />
-      ) : output.kind === "video" && output.url ? (
+      ) : output.kind === "video" && mediaUrl ? (
         <video
           className={styles.outputMedia}
-          src={output.url}
-          poster={output.thumbnailUrl}
+          src={mediaUrl}
+          poster={thumbnailUrl}
           aria-label={`${title} video`}
           controls
           playsInline
           preload="metadata"
+          onError={() => recoverMedia(mediaUrl)}
+          onLoadedData={() => mediaQuery.markLoaded(mediaUrl)}
         />
-      ) : output.kind === "video" && output.thumbnailUrl ? (
+      ) : output.kind === "video" && thumbnailUrl ? (
         <ImageWithSkeleton
           className={styles.outputMedia}
-          src={output.thumbnailUrl}
+          src={thumbnailUrl}
           alt={`${title} poster`}
           fit="contain"
+          onError={() => recoverMedia(thumbnailUrl)}
+          onLoad={() => mediaQuery.markLoaded(thumbnailUrl)}
         />
-      ) : output.kind === "audio" && output.url ? (
+      ) : output.kind === "audio" && mediaUrl ? (
         <div className={styles.audioPreview}>
           <span aria-hidden="true">♪</span>
           <strong>{title}</strong>
           <audio
-            src={output.url}
+            src={mediaUrl}
             aria-label={`${title} audio`}
             controls
             preload="metadata"
+            onError={() => recoverMedia(mediaUrl)}
+            onLoadedData={() => mediaQuery.markLoaded(mediaUrl)}
           />
         </div>
       ) : (

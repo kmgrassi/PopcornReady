@@ -48,7 +48,10 @@
   infrastructure propagation, and rejection before privileged reads.
 - `apps/web/src/routes/StandaloneCreationPage.tsx` previews ready media during
   wrap-up and after a terminal failure, with accessible video/audio labels and
-  truthful saved-result messaging.
+  truthful saved-result messaging. PR review follow-up routes those previews
+  through the shared signed-media query for expiry and load-error recovery.
+- Creator status now returns explicit nullable media expiry and unconditional
+  private/no-store headers so temporary credentials are not response-cached.
 - Browser coverage exercises image/video/audio recovery, active polling,
   mobile overflow, and the existing terminal-state matrix.
 - Updated the orchestration, prompt-enhancement, progress, interaction, and E2E
@@ -58,9 +61,10 @@
 ## Validation evidence
 
 - `pnpm exec tsx --test src/routes/v1/__tests__/agent-creations.test.ts` in
-  `apps/api`: 15 passed.
+  `apps/api`: 16 passed after PR review follow-up.
 - `pnpm --filter @popcorn/web exec playwright test e2e/asset-studio-progress.spec.ts`:
-  6 passed across Chromium, mobile Chrome, and mobile Safari.
+  8 passed across Chromium, mobile Chrome, and mobile Safari after adding
+  proactive-expiry and load-error recovery.
 - Full web Playwright suite during implementation: 137 passed, 5 skipped.
 - `pnpm agent:lint:fix`: passed.
 - `pnpm agent:validate -- --scope all`: passed, including API/web typechecks,
@@ -70,6 +74,10 @@
   recovered image and saved-result copy at 1350px desktop and a 390px requested
   mobile viewport, with document width equal to viewport width and no page
   errors. Existing React Router v7 future-flag warnings remained.
+- PR-comment manual check used the same local entry point with a near-expiry
+  orange seed URL and a distinct blue focused-media response. The terminal
+  failed-run preview visibly changed to the fresh focused URL at desktop and
+  390px mobile widths, with no horizontal overflow or page errors.
 - An accidental repository-wide API test invocation surfaced five unrelated
   baseline failures: two missing migration fixture files and three stale
   expectations. The focused tests and required repository validation pass.
@@ -87,6 +95,17 @@
   per-candidate production validation. The reviewer confirmed valid outputs
   survive a stale sibling, infrastructure failures propagate, prior findings
   are resolved, and no release blockers remain.
+- PR-comment research: approved both review findings and identified the existing
+  no-store policy, nullable expiry projection, and shared TanStack media query.
+- PR-comment plan: approved with required-nullable expiry, a route-level header
+  test, authoritative refreshed-null handling, separate browser recovery cases,
+  and real auth/workspace cache scoping.
+- PR-comment implementation: approved with no findings after independently
+  checking no-store coverage, nullable expiry, cache isolation, authoritative
+  refreshed-null handling, media events, tests, and documentation.
+- PR-comment wrap-up: approved with no findings or release blockers after
+  confirming the observable API/browser coverage, local desktop/mobile
+  evidence, documentation, and required repository validation.
 
 ## Blockers and risks
 
@@ -95,5 +114,6 @@
 
 ## Next action / handoff
 
-Complete wrap-up review, commit and tag the worksheet, then push and open the
-required ready-for-review pull request.
+Commit and push the fixes. Leave the two review threads open for reviewer
+resolution unless the user separately authorizes replying or resolving them on
+GitHub.

@@ -5,7 +5,10 @@ import {
   project,
   longRunSummary,
 } from "./fixtures/asset-studio";
-import { mockLocalApi } from "./fixtures/local-api";
+import { mockLocalApi, workspaceId } from "./fixtures/local-api";
+
+const refreshedPosterUrl =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 90'%3E%3Crect width='160' height='90' fill='%232f5a78'/%3E%3C/svg%3E";
 
 test.describe("Asset Studio", () => {
   test.beforeEach(async ({ page }) => {
@@ -61,6 +64,7 @@ test.describe("Asset Studio", () => {
                   kind: "image",
                   name: "Campaign still",
                   url: project.posterUrl,
+                  expiresAt: null,
                 }]
               : [],
         });
@@ -150,6 +154,7 @@ test.describe("Asset Studio", () => {
             intrinsicRole: `standalone_${kind}`,
             kind,
             name: `Recovered ${kind}`,
+            expiresAt: null,
             ...(kind === "image"
               ? { url: project.posterUrl }
               : kind === "video"
@@ -193,6 +198,100 @@ test.describe("Asset Studio", () => {
     await expect(page.getByText("Recovered audio", { exact: true })).toBeVisible();
   });
 
+  test("refreshes terminal recovered media before its signed URL expires", async ({
+    page,
+  }) => {
+    let meSupplied = false;
+    let mediaRequestedAfterMe = false;
+    await page.route("**/api/v1/me", (route) => {
+      meSupplied = true;
+      return fulfillJson(route, {
+        actor: { id: "local_dev", type: "local", email: "local@popcornready.test" },
+        workspaceId,
+        workspaceName: "E2E Local Workspace",
+        authMode: "local",
+        isLocal: true,
+      });
+    });
+    await page.route(
+      `**/api/v1/assets/asset_expiring/media`,
+      (route) => {
+        mediaRequestedAfterMe = meSupplied;
+        return fulfillJson(route, {
+          url: refreshedPosterUrl,
+          thumbnailUrl: refreshedPosterUrl,
+          expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+        });
+      },
+    );
+    await page.route(
+      `**/api/v1/projects/${project.id}/agent-creations/run_expiring`,
+      (route) =>
+        fulfillJson(route, {
+          sessionId: "session_expiring",
+          run: { id: "run_expiring", status: "failed" },
+          report: null,
+          outputs: [{
+            assetId: "asset_expiring",
+            intrinsicRole: "standalone_image",
+            kind: "image",
+            name: "Recovered expiring image",
+            url: project.posterUrl,
+            expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          }],
+        }),
+    );
+
+    await page.goto(`/create/asset?projectId=${project.id}&runId=run_expiring`);
+    const image = page.getByRole("img", { name: "Recovered expiring image" });
+    await expect(image).toHaveAttribute("src", refreshedPosterUrl);
+    expect(mediaRequestedAfterMe).toBe(true);
+  });
+
+  test("recovers terminal media after the signed URL fails to load", async ({
+    page,
+  }) => {
+    const brokenUrl = "https://media.example/broken-recovered.png";
+    let mediaRefreshes = 0;
+    await page.route(brokenUrl, (route) =>
+      route.fulfill({ status: 404, contentType: "image/png", body: "" }),
+    );
+    await page.route(
+      `**/api/v1/assets/asset_broken/media`,
+      (route) => {
+        mediaRefreshes += 1;
+        return fulfillJson(route, {
+          url: refreshedPosterUrl,
+          thumbnailUrl: refreshedPosterUrl,
+          expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+        });
+      },
+    );
+    await page.route(
+      `**/api/v1/projects/${project.id}/agent-creations/run_broken`,
+      (route) =>
+        fulfillJson(route, {
+          sessionId: "session_broken",
+          run: { id: "run_broken", status: "failed" },
+          report: null,
+          outputs: [{
+            assetId: "asset_broken",
+            intrinsicRole: "standalone_image",
+            kind: "image",
+            name: "Recovered after load error",
+            url: brokenUrl,
+            expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+          }],
+        }),
+    );
+
+    await page.goto(`/create/asset?projectId=${project.id}&runId=run_broken`);
+    await expect(
+      page.getByRole("img", { name: "Recovered after load error" }),
+    ).toHaveAttribute("src", refreshedPosterUrl);
+    expect(mediaRefreshes).toBeGreaterThan(0);
+  });
+
   test("keeps polling while a generated asset is ready and the run is finishing", async ({
     page,
   }) => {
@@ -214,6 +313,7 @@ test.describe("Asset Studio", () => {
             kind: "image",
             name: "Finished frame",
             url: project.posterUrl,
+            expiresAt: null,
           }],
         });
       },

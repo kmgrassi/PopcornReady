@@ -3,6 +3,8 @@ import { Router } from "express";
 import type { CreatorDirectTaskKind, DomainTaskV1 } from "@popcorn/shared/domain-agent-contract";
 import { mutation, route } from "@/core/adapter";
 import { ApiError } from "@/core/errors";
+import type { HandlerCtx } from "@/lib/api/v1/handler";
+import { SIGNED_MEDIA_JSON_HEADERS } from "@/lib/api/v1/cache-policy";
 import { createAction, getAsset, getProject } from "@/lib/api/v1/store";
 import {
   getDomainRun,
@@ -191,6 +193,7 @@ export interface CreationStatusOutput {
   kind: "image" | "video" | "audio";
   url?: string;
   thumbnailUrl?: string;
+  expiresAt: string | null;
   name?: string;
 }
 
@@ -244,6 +247,7 @@ async function hydrateCreationOutputs(input: {
           kind: asset.kind,
           ...(asset.remoteUrl ? { url: asset.remoteUrl } : {}),
           ...(asset.thumbnailUrl ? { thumbnailUrl: asset.thumbnailUrl } : {}),
+          expiresAt: asset.expiresAt ?? null,
           ...(asset.name ? { name: asset.name } : {}),
         } satisfies CreationStatusOutput;
       } catch (error) {
@@ -337,6 +341,37 @@ export async function creationStatusForRun(
     getRunAsset: loadAsset,
   });
   return { sessionId: run.agentSessionId, run, report, outputs };
+}
+
+interface CreationStatusRouteDeps {
+  requireProjectAccess: (workspaceId: string, projectId: string) => Promise<void>;
+  getStatus: typeof creationStatusForRun;
+}
+
+export async function creationStatusRoute(
+  ctx: Pick<HandlerCtx, "auth">,
+  params: Record<string, string | undefined>,
+  deps: Partial<CreationStatusRouteDeps> = {}
+) {
+  const projectId = string(params.projectId, "projectId", 128);
+  const resolved: CreationStatusRouteDeps = {
+    requireProjectAccess: async (workspaceId, requestedProjectId) => {
+      await getProject(workspaceId, requestedProjectId);
+    },
+    getStatus: creationStatusForRun,
+    ...deps,
+  };
+  await resolved.requireProjectAccess(ctx.auth.workspaceId, projectId);
+  return {
+    status: 200,
+    body: await resolved.getStatus({
+      workspaceId: ctx.auth.workspaceId,
+      actorId: ctx.auth.actor.id,
+      projectId,
+      runId: string(params.runId, "runId", 128),
+    }),
+    headers: SIGNED_MEDIA_JSON_HEADERS,
+  };
 }
 
 async function verifyReferences(workspaceId: string, projectId: string, request: CreationRequest) {
@@ -537,18 +572,10 @@ agentCreationsRouter.post("/projects/:projectId/agent-creations/proposals/:gateI
   return { status: 202, body: { sessionId: run.agentSessionId, runId: run.id, enqueued: confirmation.dispatchEnqueued } };
 }));
 
-agentCreationsRouter.get("/projects/:projectId/agent-creations/:runId", route(async ({ auth }, params) => {
-  const projectId = string(params.projectId, "projectId", 128); await getProject(auth.workspaceId, projectId);
-  return {
-    status: 200,
-    body: await creationStatusForRun({
-      workspaceId: auth.workspaceId,
-      actorId: auth.actor.id,
-      projectId,
-      runId: string(params.runId, "runId", 128),
-    }),
-  };
-}));
+agentCreationsRouter.get(
+  "/projects/:projectId/agent-creations/:runId",
+  route(creationStatusRoute)
+);
 
 agentCreationsRouter.post("/projects/:projectId/agent-creations/:runId/cancel", mutation(async ({ auth }, params) => {
   const projectId = string(params.projectId, "projectId", 128); await getProject(auth.workspaceId, projectId);

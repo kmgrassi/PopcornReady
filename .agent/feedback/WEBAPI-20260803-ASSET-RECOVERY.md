@@ -22,6 +22,12 @@ actions independently, hydrate only ready assets through the request's
 workspace/project boundary, and keep any failed runtime state intact. The UI
 can truthfully say “the asset was saved” without claiming the run succeeded.
 
+Once status exposes the asset's media URL, it also owns the signed-credential
+contract. The JSON must remain private and no-store, and terminal run polling
+cannot be the URL-renewal mechanism. Carry the real nullable expiry into the
+shared auth/workspace/asset-scoped media query so credential refresh remains
+independent of orchestration state.
+
 ## Follow-up
 
 - Keep detailed prompt content out of future acceptance-criterion fields; add a
@@ -30,3 +36,5 @@ can truthfully say “the asset was saved” without claiming the run succeeded.
   explicit output selection UX rather than silently changing the primary asset.
 - Continue testing terminal failure both with and without a persisted output so
   generic failure handling never hides usable media or invents one.
+- Reuse the focused media query whenever another status or activity surface
+  begins rendering signed asset URLs; do not add surface-specific refresh timers.

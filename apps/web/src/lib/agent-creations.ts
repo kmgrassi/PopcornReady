@@ -11,6 +11,7 @@ export type CreationStatusOutput = {
   kind: "image" | "video" | "audio";
   url?: string;
   thumbnailUrl?: string;
+  expiresAt: string | null;
   name?: string;
 };
 export type CreationStatus = { sessionId: string | null; run: { id: string; status: string; inputSummary?: string; spentUsd?: number | null }; report: DomainReportV1 | null; outputs: CreationStatusOutput[] };
