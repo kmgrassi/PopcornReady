@@ -71,6 +71,10 @@ deep-link behavior remain unchanged.
   while updating its title to the canonical label.
 - Constrained media to the viewer stage and added portrait/short-viewport
   responsive treatments so media cannot paint over the action footer.
+- Followed up on two PR review findings by giving the shared dialog a definite
+  safe-area-aware height, restoring the desktop inspection surface, and using a
+  compact horizontal audio layout at short viewport heights so native playback
+  controls remain reachable.
 - Updated interaction documentation, the E2E coverage inventory, and the
   focused Library Playwright behavior checks.
 
@@ -91,6 +95,16 @@ deep-link behavior remain unchanged.
   the new footer despite passing bounding-box checks. Media is now constrained
   to its grid track, and the regression test verifies that Request Changes is
   the topmost element at its center point.
+- PR review follow-up coverage asserts that a 1280 × 900 desktop viewer retains
+  an image area taller than 500px and that, at 844 × 390, all four edges of the
+  native audio control remain inside both the media stage and dialog and the
+  control remains topmost at its center.
+- Manual follow-up verification measured a 577px desktop image area and a
+  476 × 54 short-landscape audio control fully contained in the stage and
+  dialog.
+- Follow-up `pnpm agent:validate -- --scope web` — passed agent lint,
+  workflow-policy tests, migration tests and validation, and web type checking
+  across the six-file review update.
 
 ## Independent reviews
 
@@ -114,6 +128,20 @@ deep-link behavior remain unchanged.
   reviewer confirmed that the browser-found overlap is preserved in durable
   feedback and topmost-element regression coverage, and that validation is
   proportionate to the UI change.
+- PR review follow-up research/plan checkpoint: approved both P2 findings and
+  the definite-height plus compact-audio approach, with the adjustment that the
+  dialog height resolve against the overlay's padded content box so iOS safe
+  areas remain respected.
+- PR review follow-up implementation checkpoint: approved after correcting the
+  regression test to measure the actual inner clipped dialog. The reviewer
+  confirmed the CSS is safe-area-aware and that the test now checks the stage
+  and all audio-control edges against the right boundaries with no remaining
+  implementation blocker.
+- PR review follow-up wrap-up checkpoint: approved with no blocker. The
+  reviewer confirmed both P2 regressions are fixed at the shared viewer
+  boundary, the corrected tests and manual measurements directly cover them,
+  the original CTA overlap protection remains intact, and the six-file release
+  unit is documented and validated.
 
 ## Blockers and risks
 
@@ -124,5 +152,5 @@ deep-link behavior remain unchanged.
 
 ## Next action / handoff
 
-Commit all nine files together, tag the worksheet commit, push the branch, and
-open the required non-draft pull request.
+Commit all six follow-up files together, push PR #883, then reply to and resolve
+both addressed review threads.

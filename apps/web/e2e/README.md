@@ -65,7 +65,9 @@ preset, and intent draft.
 Owned ready assets expose a prominent exact-target **Request changes** entry
 into the durable proposal lifecycle. Mobile coverage verifies its full-width
 footer treatment and overflow containment; processing assets explain the
-disabled state, while public assets remain read-only without the action.
+disabled state, while public assets remain read-only without the action. The
+same coverage protects the shared viewer's full desktop inspection height and
+keeps native audio controls contained and reachable in short landscape views.
 It also verifies the shared quick route-loading state on mobile, including its
 180ms anti-flash threshold, accessible busy semantics, content-shaped layout
 reservation, reduced motion, overflow containment, and transition into loaded

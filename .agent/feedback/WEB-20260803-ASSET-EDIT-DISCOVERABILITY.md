@@ -8,7 +8,7 @@ Related worksheet: [WEB-20260803-ASSET-EDIT-DISCOVERABILITY](../worksheets/WEB-2
 <!-- agent-summary: Public-library assets remain read-only and should not render empty action chrome. -->
 <!-- agent-summary: Disabled-state guidance must be visibly adjacent and programmatically connected. -->
 <!-- agent-summary: Mobile geometry checks must also detect visual overlap, not only DOM visibility. -->
-<!-- agent-summary: Media inside a constrained grid track must not paint over a variable-height footer. -->
+<!-- agent-summary: A constrained media track needs definite height and compact short-view audio. -->
 
 ## Lesson
 
@@ -31,6 +31,15 @@ grid track and asserting that the button is the topmost element at its center
 turned that visual regression into deterministic coverage. Short landscape
 viewports also need a compact stage and horizontal action grouping so the main
 action remains visible without scrolling.
+
+Constraining visual media to `height: 100%` solves footer overlap only when the
+grid has a definite available height. Leaving the dialog at `max-height` alone
+let absolutely positioned image content collapse the shared stage to its
+minimum on ordinary desktop viewers. The dialog now takes a definite height
+from the overlay's safe-area-aware padded content box, preserving a large image
+inspection surface without letting media escape its track. Audio needs a
+different short-height adaptation: a compact horizontal glyph-and-controls row
+keeps native playback controls reachable inside the clipped stage.
 
 ## Follow-up
 

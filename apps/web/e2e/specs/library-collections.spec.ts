@@ -5,6 +5,8 @@ import { projectMediaDraftKey } from "../../src/routes/projectMediaDraft";
 const now = "2026-06-16T14:00:00.000Z";
 const imageDataUrl =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 640 360'%3E%3Crect width='640' height='360' fill='%230f766e'/%3E%3Ctext x='42' y='196' fill='white' font-size='48' font-family='Arial'%3ELibrary asset%3C/text%3E%3C/svg%3E";
+const audioDataUrl =
+  "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
 let assetBillingRequests = 0;
 
 type JsonValue = Record<string, unknown> | Array<unknown>;
@@ -231,6 +233,22 @@ async function mockLibraryApi(page: Page) {
         createdAt: now,
         updatedAt: now,
       },
+      {
+        id: "asset-audio-ready",
+        assetId: "asset-audio-ready",
+        projectId: "proj-alpha",
+        projectName: "Project Alpha",
+        kind: "audio",
+        status: "ready",
+        source: "generated",
+        title: "Campaign mix",
+        filename: "campaign-mix.wav",
+        durationSec: 8,
+        url: audioDataUrl,
+        visibility: "private",
+        createdAt: now,
+        updatedAt: now,
+      },
     ].filter((asset) => {
       return (!kind || asset.kind === kind) && (!source || asset.source === source);
     });
@@ -280,6 +298,14 @@ async function mockLibraryApi(page: Page) {
     return json(route, {
       asset: { id: "asset-image-ready" },
       billing: { creditsCharged: 84 },
+    });
+  });
+
+  await page.route("**/api/v1/projects/proj-alpha/assets/asset-audio-ready", (route) => {
+    assetBillingRequests += 1;
+    return json(route, {
+      asset: { id: "asset-audio-ready" },
+      billing: { creditsCharged: 12 },
     });
   });
 
@@ -575,11 +601,17 @@ test("covers library pagination, filters, media viewer, visibility, and watch li
 
   await page.getByLabel("Kind").selectOption("image");
   await page.getByLabel("Source").selectOption("generated");
+  await page.setViewportSize({ width: 1280, height: 900 });
   const keyframeCard = page.getByRole("button", { name: "View Keyframe still" });
   await expect(keyframeCard.locator("span[data-private='true']")).toHaveText("Private");
   await keyframeCard.click();
   const keyframeDialog = page.getByRole("dialog", { name: "Keyframe still" });
   await expect(keyframeDialog).toBeVisible();
+  const keyframeImageBox = await keyframeDialog
+    .getByRole("img", { name: "Keyframe still" })
+    .boundingBox();
+  expect(keyframeImageBox).not.toBeNull();
+  expect(keyframeImageBox!.height).toBeGreaterThan(500);
   await expect(keyframeDialog.getByText("84 credits used")).toBeVisible();
   const requestChanges = keyframeDialog.getByRole("button", { name: "Request changes" });
   await expect(requestChanges).toBeVisible();
@@ -796,7 +828,7 @@ test("@mobile retries failed media once with a newly signed URL", async ({ page 
   expect(focusedMediaRequests).toBe(1);
 });
 
-test("@mobile keeps Request changes prominent and explains processing state", async ({ page }) => {
+test("@mobile keeps Request changes and audio controls reachable", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/library/assets");
   await page.getByRole("button", { name: "View Keyframe still" }).click();
@@ -859,4 +891,52 @@ test("@mobile keeps Request changes prominent and explains processing state", as
   const processingDialog = page.getByRole("dialog", { name: "Processing still" });
   await expect(processingDialog.getByRole("button", { name: "Request changes" })).toBeDisabled();
   await expect(processingDialog.getByText("Available when this asset is ready.")).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.getByLabel("Kind").selectOption("audio");
+  await page.getByRole("button", { name: "View Campaign mix" }).click();
+  const audioDialog = page.getByRole("dialog", { name: "Campaign mix" });
+  const audioControl = audioDialog.locator("audio");
+  await expect(audioControl).toBeVisible();
+  const audioGeometry = await audioControl.evaluate((audio) => {
+    const audioRect = audio.getBoundingClientRect();
+    const stage = audio.parentElement?.parentElement;
+    const viewerDialog = stage?.parentElement;
+    const stageRect = stage?.getBoundingClientRect();
+    const dialogRect = viewerDialog?.getBoundingClientRect();
+    const topElement = document.elementFromPoint(
+      audioRect.left + audioRect.width / 2,
+      audioRect.top + audioRect.height / 2
+    );
+    return {
+      withinStage: Boolean(
+        stageRect &&
+          audioRect.left >= stageRect.left &&
+          audioRect.right <= stageRect.right &&
+          audioRect.top >= stageRect.top &&
+          audioRect.bottom <= stageRect.bottom
+      ),
+      withinDialog: Boolean(
+        dialogRect &&
+          audioRect.left >= dialogRect.left &&
+          audioRect.right <= dialogRect.right &&
+          audioRect.top >= dialogRect.top &&
+          audioRect.bottom <= dialogRect.bottom
+      ),
+      stageWithinDialog: Boolean(
+        stageRect &&
+          dialogRect &&
+          stageRect.left >= dialogRect.left &&
+          stageRect.right <= dialogRect.right &&
+          stageRect.top >= dialogRect.top &&
+          stageRect.bottom <= dialogRect.bottom
+      ),
+      isTopmost: Boolean(topElement && audio.contains(topElement)),
+    };
+  });
+  expect(audioGeometry.withinStage).toBe(true);
+  expect(audioGeometry.withinDialog).toBe(true);
+  expect(audioGeometry.stageWithinDialog).toBe(true);
+  expect(audioGeometry.isTopmost).toBe(true);
 });
