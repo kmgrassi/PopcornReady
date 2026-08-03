@@ -203,6 +203,10 @@ state.
   thresholds, but elapsed time alone never changes its terminal status.
 - Recovery does not erase history: a failed tool remains failed while a later
   running tool is highlighted as recovery work.
+- A ready, exact-run asset is an independently displayable fact. Creator status
+  may preview it while the run is active and continues polling; if later
+  terminal report bookkeeping fails, the run stays failed while the UI labels
+  the asset saved and leaves its image, video, or audio usable.
 - `completionKind: video` requires an applied export whose referenced asset is
   ready, video-shaped, and has a playable storage or remote source.
 - An intentional stop-after gate may end as `succeeded` with

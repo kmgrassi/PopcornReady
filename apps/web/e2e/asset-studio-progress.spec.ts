@@ -5,7 +5,10 @@ import {
   project,
   longRunSummary,
 } from "./fixtures/asset-studio";
-import { mockLocalApi } from "./fixtures/local-api";
+import { mockLocalApi, workspaceId } from "./fixtures/local-api";
+
+const refreshedPosterUrl =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 90'%3E%3Crect width='160' height='90' fill='%232f5a78'/%3E%3C/svg%3E";
 
 test.describe("Asset Studio", () => {
   test.beforeEach(async ({ page }) => {
@@ -55,7 +58,14 @@ test.describe("Asset Studio", () => {
               : null,
           outputs:
             status === "succeeded"
-              ? [{ assetId: "asset_ready", intrinsicRole: "hero_image" }]
+              ? [{
+                  assetId: "asset_ready",
+                  intrinsicRole: "hero_image",
+                  kind: "image",
+                  name: "Campaign still",
+                  url: project.posterUrl,
+                  expiresAt: null,
+                }]
               : [],
         });
       },
@@ -121,7 +131,199 @@ test.describe("Asset Studio", () => {
       page.getByRole("link", { name: "Open project assets" }),
     ).toBeVisible();
     await expect(page.getByText("1 asset is ready.")).toBeVisible();
+    await expect(page.getByRole("img", { name: "Campaign still" })).toBeVisible();
     await expect(page.getByTestId("creation-progress-track")).toHaveCount(0);
+  });
+
+  test("shows saved media when final run wrap-up fails @mobile", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    let kind: "image" | "video" | "audio" = "image";
+    await page.route(
+      `**/api/v1/projects/${project.id}/agent-creations/run_recovered`,
+      (route) =>
+        fulfillJson(route, {
+          sessionId: "session_recovered",
+          run: {
+            id: "run_recovered",
+            status: "failed",
+            inputSummary: longRunSummary,
+          },
+          report: null,
+          outputs: [{
+            assetId: `asset_${kind}`,
+            intrinsicRole: `standalone_${kind}`,
+            kind,
+            name: `Recovered ${kind}`,
+            expiresAt: null,
+            ...(kind === "image"
+              ? { url: project.posterUrl }
+              : kind === "video"
+                ? { url: "https://media.example/recovered.mp4" }
+                : { url: "https://media.example/recovered.mp3" }),
+          }],
+        }),
+    );
+
+    await page.goto(`/create/asset?projectId=${project.id}&runId=run_recovered`);
+    await expect(
+      page.getByRole("heading", { name: "Your asset was saved" }),
+    ).toBeVisible();
+    await expect(page.getByText("Asset saved", { exact: true })).toBeVisible();
+    await expect(page.getByRole("img", { name: "Recovered image" })).toBeVisible();
+    await expect(page.getByText("Your result is safe")).toBeVisible();
+    await expect(
+      page.getByText(/couldn’t complete its final wrap-up/),
+    ).toBeVisible();
+    await expect(page.getByTestId("studio-crew")).toHaveCount(0);
+    await expect(
+      page.getByRole("link", { name: "Open project assets" }),
+    ).toBeVisible();
+    const overflow = await page.evaluate(() => ({
+      document: document.documentElement.scrollWidth,
+      viewport: document.documentElement.clientWidth,
+    }));
+    expect(overflow.document).toBeLessThanOrEqual(overflow.viewport + 1);
+
+    kind = "video";
+    await page.reload();
+    await expect(
+      page.getByLabel("Recovered video video", { exact: true }),
+    ).toBeVisible();
+
+    kind = "audio";
+    await page.reload();
+    await expect(
+      page.getByLabel("Recovered audio audio", { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText("Recovered audio", { exact: true })).toBeVisible();
+  });
+
+  test("refreshes terminal recovered media before its signed URL expires", async ({
+    page,
+  }) => {
+    let meSupplied = false;
+    let mediaRequestedAfterMe = false;
+    await page.route("**/api/v1/me", (route) => {
+      meSupplied = true;
+      return fulfillJson(route, {
+        actor: { id: "local_dev", type: "local", email: "local@popcornready.test" },
+        workspaceId,
+        workspaceName: "E2E Local Workspace",
+        authMode: "local",
+        isLocal: true,
+      });
+    });
+    await page.route(
+      `**/api/v1/assets/asset_expiring/media`,
+      (route) => {
+        mediaRequestedAfterMe = meSupplied;
+        return fulfillJson(route, {
+          url: refreshedPosterUrl,
+          thumbnailUrl: refreshedPosterUrl,
+          expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+        });
+      },
+    );
+    await page.route(
+      `**/api/v1/projects/${project.id}/agent-creations/run_expiring`,
+      (route) =>
+        fulfillJson(route, {
+          sessionId: "session_expiring",
+          run: { id: "run_expiring", status: "failed" },
+          report: null,
+          outputs: [{
+            assetId: "asset_expiring",
+            intrinsicRole: "standalone_image",
+            kind: "image",
+            name: "Recovered expiring image",
+            url: project.posterUrl,
+            expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          }],
+        }),
+    );
+
+    await page.goto(`/create/asset?projectId=${project.id}&runId=run_expiring`);
+    const image = page.getByRole("img", { name: "Recovered expiring image" });
+    await expect(image).toHaveAttribute("src", refreshedPosterUrl);
+    expect(mediaRequestedAfterMe).toBe(true);
+  });
+
+  test("recovers terminal media after the signed URL fails to load", async ({
+    page,
+  }) => {
+    const brokenUrl = "https://media.example/broken-recovered.png";
+    let mediaRefreshes = 0;
+    await page.route(brokenUrl, (route) =>
+      route.fulfill({ status: 404, contentType: "image/png", body: "" }),
+    );
+    await page.route(
+      `**/api/v1/assets/asset_broken/media`,
+      (route) => {
+        mediaRefreshes += 1;
+        return fulfillJson(route, {
+          url: refreshedPosterUrl,
+          thumbnailUrl: refreshedPosterUrl,
+          expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+        });
+      },
+    );
+    await page.route(
+      `**/api/v1/projects/${project.id}/agent-creations/run_broken`,
+      (route) =>
+        fulfillJson(route, {
+          sessionId: "session_broken",
+          run: { id: "run_broken", status: "failed" },
+          report: null,
+          outputs: [{
+            assetId: "asset_broken",
+            intrinsicRole: "standalone_image",
+            kind: "image",
+            name: "Recovered after load error",
+            url: brokenUrl,
+            expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+          }],
+        }),
+    );
+
+    await page.goto(`/create/asset?projectId=${project.id}&runId=run_broken`);
+    await expect(
+      page.getByRole("img", { name: "Recovered after load error" }),
+    ).toHaveAttribute("src", refreshedPosterUrl);
+    expect(mediaRefreshes).toBeGreaterThan(0);
+  });
+
+  test("keeps polling while a generated asset is ready and the run is finishing", async ({
+    page,
+  }) => {
+    let requestCount = 0;
+    await page.route(
+      `**/api/v1/projects/${project.id}/agent-creations/run_finishing`,
+      (route) => {
+        requestCount += 1;
+        return fulfillJson(route, {
+          sessionId: "session_finishing",
+          run: {
+            id: "run_finishing",
+            status: "running",
+          },
+          report: null,
+          outputs: [{
+            assetId: "asset_finishing",
+            intrinsicRole: "standalone_image",
+            kind: "image",
+            name: "Finished frame",
+            url: project.posterUrl,
+            expiresAt: null,
+          }],
+        });
+      },
+    );
+
+    await page.goto(`/create/asset?projectId=${project.id}&runId=run_finishing`);
+    await expect(page.getByText("Finishing up", { exact: true })).toBeVisible();
+    await expect(page.getByRole("img", { name: "Finished frame" })).toBeVisible();
+    await expect(page.getByTestId("creation-progress-track")).toBeVisible();
+    await expect.poll(() => requestCount).toBeGreaterThan(1);
   });
 
   test("keeps the active crew calm and contained on mobile with reduced motion", async ({

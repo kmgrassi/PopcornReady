@@ -148,8 +148,12 @@ gates still require deliberate confirmation and never inherit this timer.
 After confirmation, the resulting creator-direct run remains project-scoped but
 uses a one-step **Image asset**, **Video asset**, or **Audio asset** activity
 surface. It must not infer Brief, Script, Storyboard, or final-render stages from
-the full video pipeline, and a terminal parent run must never keep a stale tool
-spinner active.
+the asset request or imply the full video pipeline, and a terminal parent run
+must never keep a stale tool spinner active. As soon as an exact-run ready asset is available, the status
+surface previews it even while final wrap-up is active. If later report
+bookkeeping fails, the UI says the asset was saved, keeps the run failure
+truthful, and preserves access to the ready image, video, or audio instead of
+replacing it with a generic error.
 If a summary surface cannot resolve a stable graph identity, Request Changes is
 disabled there and directs the creator to open a specific object. A checkpoint
 label must never be converted into a broader project target for convenience.
