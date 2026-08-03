@@ -31,8 +31,9 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   accessible busy status, reduced motion, no horizontal overflow, visible
   content-shaped reservation, and transition into loaded content. It also covers
   the compact panel variant on Watch. Long-running studio-crew coverage remains
-  in `asset-studio.spec.ts` for queued/running creative production.
-- `asset-studio.spec.ts` covers the `/create/asset` workspace, image as
+  in `asset-studio-progress.spec.ts` for queued/running creative production.
+- `asset-studio-projects.spec.ts`, `asset-studio-review.spec.ts`, and
+  `asset-studio-progress.spec.ts` cover the `/create/asset` workspace, image as
   the default goal, accessible media-type targets, the 30/70 desktop workspace,
   responsive mobile collapse, recent-project context and selection, proposal
   review without dispatch, immediate navigation to `/create/review`, visible

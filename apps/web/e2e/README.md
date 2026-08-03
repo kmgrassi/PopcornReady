@@ -15,7 +15,8 @@ is local auth:
 pnpm --filter @popcorn/web test:e2e
 ```
 
-`asset-studio.spec.ts` uses browser API fixtures to verify the production
+`asset-studio-projects.spec.ts`, `asset-studio-review.spec.ts`, and
+`asset-studio-progress.spec.ts` use browser API fixtures to verify the production
 `/create/asset` route, the 30/70 desktop context-to-prompt workspace, responsive
 mobile collapse, update-ordered recent-project loading/selection with real
 project media, expired-poster fallback and fresh-signed-URL recovery,
@@ -59,7 +60,7 @@ It also verifies the shared quick route-loading state on mobile, including its
 180ms anti-flash threshold, accessible busy semantics, content-shaped layout
 reservation, reduced motion, overflow containment, and transition into loaded
 project content. A Watch-route case covers the compact panel variant. The
-studio crew remains covered in `asset-studio.spec.ts` for known queued/running
+studio crew remains covered in `asset-studio-progress.spec.ts` for known queued/running
 creative production rather than ordinary data fetches.
 
 `rerun-proposal-lifecycle.spec.ts` verifies the durable Request Changes UI
