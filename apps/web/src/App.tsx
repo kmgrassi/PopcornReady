@@ -40,6 +40,7 @@ import { CreateLauncherPage } from "./routes/CreateLauncherPage";
 
 const isDevHarnessEnabled = import.meta.env.DEV;
 const devHarnessRoutes = {
+  creationProgress: "/dev/creation-progress",
   designSystem: "/dev/design-system",
   generationCards: "/dev/generation-cards",
   landingUpload: "/dev/landing-upload",
@@ -59,6 +60,12 @@ function lazyDevPage(path: string, exportName: string) {
 
 const DevDesignSystemPage = isDevHarnessEnabled
   ? lazyDevPage("/src/routes/dev/DesignSystemPage.tsx", "DesignSystemPage")
+  : null;
+const DevCreationProgressPage = isDevHarnessEnabled
+  ? lazyDevPage(
+      "/src/routes/dev/CreationProgressPage.tsx",
+      "CreationProgressPage",
+    )
   : null;
 const DevGenerationCardsPage = isDevHarnessEnabled
   ? lazyDevPage("/src/routes/dev/GenerationCardsPage.tsx", "GenerationCardsPage")
@@ -89,6 +96,10 @@ export function App() {
           <Route path="/p/:projectId" element={<PublicProjectPage />} />
           {isDevHarnessEnabled ? (
             <>
+              <Route
+                path={devHarnessRoutes.creationProgress}
+                element={<DevPage element={DevCreationProgressPage} />}
+              />
               <Route
                 path={devHarnessRoutes.designSystem}
                 element={<DevPage element={DevDesignSystemPage} />}

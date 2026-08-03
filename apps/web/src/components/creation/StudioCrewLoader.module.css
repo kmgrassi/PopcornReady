@@ -74,6 +74,15 @@
   background-position: 0 0;
 }
 
+.scene[data-prominent="true"] {
+  min-height: clamp(360px, 42vw, 440px);
+}
+
+.scene[data-prominent="true"] .actor {
+  bottom: 34px;
+  transform: translateX(-50%) scale(1.36);
+}
+
 @keyframes crewWorking {
   0%,
   49% {
@@ -86,12 +95,32 @@
   }
 }
 
+@media (max-width: 768px) {
+  .scene[data-prominent="true"] {
+    min-height: 280px;
+  }
+
+  .scene[data-prominent="true"] .actor {
+    bottom: 20px;
+    transform: translateX(-50%) scale(0.92);
+  }
+}
+
 @media (max-width: 640px) {
   .scene {
     min-height: 210px;
   }
 
+  .scene[data-prominent="true"] {
+    min-height: 210px;
+  }
+
   .actor {
+    bottom: 10px;
+    transform: translateX(-50%) scale(0.72);
+  }
+
+  .scene[data-prominent="true"] .actor {
     bottom: 10px;
     transform: translateX(-50%) scale(0.72);
   }
@@ -117,6 +146,10 @@
 
 @media (max-width: 360px) {
   .actor {
+    transform: translateX(-50%) scale(0.62);
+  }
+
+  .scene[data-prominent="true"] .actor {
     transform: translateX(-50%) scale(0.62);
   }
 }

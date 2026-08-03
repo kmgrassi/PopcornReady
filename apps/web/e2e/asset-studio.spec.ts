@@ -647,6 +647,35 @@ test.describe("Asset Studio", () => {
     expect(performanceBlocking.actress - performanceBlocking.actor).toBeLessThan(
       performanceBlocking.actor - performanceBlocking.camera,
     );
+    const activeGeometry = await page.evaluate(() => {
+      const bounds = (selector: string) => {
+        const element = document.querySelector<HTMLElement>(selector);
+        if (!element) throw new Error(`Missing ${selector}`);
+        const box = element.getBoundingClientRect();
+        return {
+          top: box.top,
+          bottom: box.bottom,
+          width: box.width,
+          height: box.height,
+        };
+      };
+      return {
+        experience: bounds('[data-testid="creation-progress-experience"]'),
+        badge: bounds('[role="status"]'),
+        scene: bounds('[data-testid="studio-crew"]'),
+        track: bounds('[data-testid="creation-progress-track"]'),
+        brief: bounds('[aria-label="View full request brief"]'),
+        director: bounds('[data-crew-member="director"]'),
+      };
+    });
+    expect(activeGeometry.badge.bottom).toBeLessThanOrEqual(activeGeometry.scene.top);
+    expect(activeGeometry.scene.bottom).toBeLessThanOrEqual(activeGeometry.track.top);
+    expect(activeGeometry.track.bottom).toBeLessThanOrEqual(activeGeometry.brief.top);
+    expect(activeGeometry.scene.width).toBeGreaterThan(
+      activeGeometry.experience.width * 0.9,
+    );
+    expect(activeGeometry.scene.height).toBeGreaterThan(350);
+    expect(activeGeometry.director.width).toBeGreaterThan(175);
     const brief = page.getByLabel("View full request brief");
     await expect(brief).toContainText("Create a single-panel 2D RPG boss");
     await expect(brief).toContainText("…");
@@ -654,6 +683,24 @@ test.describe("Asset Studio", () => {
     await brief.click();
     await expect(page.getByText(longRunSummary, { exact: true })).toBeVisible();
     expect(confirmationCount).toBe(1);
+  });
+
+  test("offers the production loading composition on a dedicated dev route", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/dev/creation-progress");
+
+    await expect(
+      page.getByRole("heading", { name: "The studio is making it" }),
+    ).toBeVisible();
+    const experience = page.getByTestId("creation-progress-experience");
+    await expect(experience).toHaveAttribute("data-prominent", "true");
+    await expect(page.getByText("In progress", { exact: true })).toBeVisible();
+    await expect(page.getByTestId("studio-crew")).toBeVisible();
+    await expect(page.getByLabel("View full request brief")).toContainText(
+      "Cartoon illustration",
+    );
   });
 
   test("keeps the progress state truthful across terminal outcomes", async ({ page }) => {
@@ -711,6 +758,9 @@ test.describe("Asset Studio", () => {
     await expect(page.getByTestId("studio-crew")).not.toHaveAttribute(
       "data-active",
     );
+    await expect(
+      page.getByTestId("creation-progress-experience"),
+    ).not.toHaveAttribute("data-prominent");
     await expect(page.getByTestId("creation-progress-track")).toHaveCount(0);
     const idleFrame = await page
       .locator('[data-crew-member="director"]')
@@ -794,6 +844,28 @@ test.describe("Asset Studio", () => {
       .locator("div")
       .evaluate((sprite) => getComputedStyle(sprite).animationName);
     expect(spriteAnimation).toBe("none");
+
+    await page.setViewportSize({ width: 767, height: 900 });
+    const tabletBounds = await page.evaluate(() => {
+      const scene = document.querySelector<HTMLElement>("[data-testid='studio-crew']");
+      if (!scene) throw new Error("Studio crew scene is missing");
+      const sceneBox = scene.getBoundingClientRect();
+      return {
+        scene: { left: sceneBox.left, right: sceneBox.right },
+        actors: Array.from(
+          document.querySelectorAll<HTMLElement>("[data-crew-member]"),
+        ).map((actor) => {
+          const box = actor.getBoundingClientRect();
+          return { left: box.left, right: box.right };
+        }),
+      };
+    });
+    for (const actor of tabletBounds.actors) {
+      expect(actor.left).toBeGreaterThanOrEqual(tabletBounds.scene.left - 1);
+      expect(actor.right).toBeLessThanOrEqual(tabletBounds.scene.right + 1);
+    }
+
+    await page.setViewportSize({ width: 390, height: 844 });
     const overflow = await page.evaluate(() => ({
       document: document.documentElement.scrollWidth,
       viewport: document.documentElement.clientWidth,

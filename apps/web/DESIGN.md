@@ -295,13 +295,17 @@ connected sequence with state-colored index nodes (running = coral glow, complet
 = reel-green). Ordinary route and data loading waits briefly before revealing a
 shared quick-loading state: content-dense routes show content-shaped skeleton
 geometry, while routes without useful geometry use a compact progress treatment.
-The active pixel-art studio crew is reserved for known queued or running creative
-production, where the wait is part of the product story rather than an incidental
-fetch. The same scene may rest in its idle frame as context after that production
-finishes; it is not then a loading indicator. Compact buttons, pagination,
-thumbnails, upload progress, and background refreshes keep their purpose-sized
-indicators. This is where "show the work, not the slot machine" lives — make it
-legible and provenance-rich.
+The active pixel-art studio crew is reserved for known queued, running, or
+non-actionable waiting creative production, where the wait is part of the product
+story rather than an incidental fetch. In creator-direct active production, the status leads into a large,
+full-width crew scene on desktop; the indeterminate track and compact creative
+brief sit beneath it as supporting context. Terminal, blocked, question, and
+ready outcomes keep the quieter split layout so their truthful outcome copy is
+not outranked by idle artwork. The same scene may rest in its idle frame as
+context after production finishes; it is not then a loading indicator. Compact
+buttons, pagination, thumbnails, upload progress, and background refreshes keep
+their purpose-sized indicators. This is where "show the work, not the slot
+machine" lives — make it legible and provenance-rich.
 
 Specialized recovery states may retain their own layout when they expose useful
 pending-state context or escape actions; the Run Progress opener keeps its

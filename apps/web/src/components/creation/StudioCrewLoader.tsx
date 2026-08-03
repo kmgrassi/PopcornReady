@@ -40,11 +40,18 @@ const crew: CrewMember[] = [
   },
 ];
 
-export function StudioCrewLoader({ active }: { active: boolean }) {
+export function StudioCrewLoader({
+  active,
+  prominent = false,
+}: {
+  active: boolean;
+  prominent?: boolean;
+}) {
   return (
     <div
       className={styles.scene}
       data-active={active || undefined}
+      data-prominent={prominent || undefined}
       data-testid="studio-crew"
       aria-hidden="true"
     >
