@@ -64,9 +64,12 @@ separate project-media selection control remains available for creation intent.
 The production-shaped deep-link fixture verifies `remoteUrl` video source
 normalization, and returning from preview restores the interrupted selection,
 preset, and intent draft.
-Owned ready assets expose the viewer's exact-target **Suggest an edit** entry
-into the durable Request Changes proposal lifecycle, while public and non-ready
-assets do not expose this action.
+Owned ready assets expose a prominent exact-target **Request changes** entry
+into the durable proposal lifecycle. Mobile coverage verifies its full-width
+footer treatment and overflow containment; processing assets explain the
+disabled state, while public assets remain read-only without the action. The
+same coverage protects the shared viewer's full desktop inspection height and
+keeps native audio controls contained and reachable in short landscape views.
 It also verifies the shared quick route-loading state on mobile, including its
 180ms anti-flash threshold, accessible busy semantics, content-shaped layout
 reservation, reduced motion, overflow containment, and transition into loaded

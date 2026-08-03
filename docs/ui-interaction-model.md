@@ -73,11 +73,13 @@ Dedicated storyboard and run-review surfaces
 keep their object-scoped Request Changes interaction instead, and public shared
 projects do not link into an authenticated workspace library.
 
-For any owned asset with ready status, the canonical viewer exposes one quiet
-**Suggest an edit** action. It opens the same exact-asset Request Changes
+For any owned asset with ready status, the canonical viewer presents one clear
+**Request changes** primary action. It opens the same exact-asset Request Changes
 lifecycle described below; it does not regenerate or overwrite the asset
-directly. Public and non-ready assets do not expose this action. Existing failed
-image recovery remains a separate path.
+directly. Owned pending and processing assets show the action disabled with
+readiness guidance, failed assets explain why it is unavailable, and public
+assets remain read-only without the action. Existing failed-image recovery
+remains a separate path.
 
 ### 2.2 Request Changes (the single edit affordance)
 

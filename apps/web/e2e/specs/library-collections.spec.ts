@@ -5,6 +5,8 @@ import { projectMediaDraftKey } from "../../src/routes/projectMediaDraft";
 const now = "2026-06-16T14:00:00.000Z";
 const imageDataUrl =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 640 360'%3E%3Crect width='640' height='360' fill='%230f766e'/%3E%3Ctext x='42' y='196' fill='white' font-size='48' font-family='Arial'%3ELibrary asset%3C/text%3E%3C/svg%3E";
+const audioDataUrl =
+  "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
 let assetBillingRequests = 0;
 
 type JsonValue = Record<string, unknown> | Array<unknown>;
@@ -201,6 +203,22 @@ async function mockLibraryApi(page: Page) {
         updatedAt: now,
       },
       {
+        id: "asset-image-failed",
+        assetId: "asset-image-failed",
+        projectId: "proj-alpha",
+        projectName: "Project Alpha",
+        kind: "image",
+        status: "failed",
+        source: "generated",
+        title: "Failed still",
+        filename: "failed.png",
+        url: imageDataUrl,
+        thumbnailUrl: imageDataUrl,
+        visibility: "private",
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
         id: "asset-video-missing",
         assetId: "asset-video-missing",
         projectId: "proj-beta",
@@ -212,6 +230,22 @@ async function mockLibraryApi(page: Page) {
         filename: "archive-teaser.mp4",
         durationSec: 12,
         visibility: "public",
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: "asset-audio-ready",
+        assetId: "asset-audio-ready",
+        projectId: "proj-alpha",
+        projectName: "Project Alpha",
+        kind: "audio",
+        status: "ready",
+        source: "generated",
+        title: "Campaign mix",
+        filename: "campaign-mix.wav",
+        durationSec: 8,
+        url: audioDataUrl,
+        visibility: "private",
         createdAt: now,
         updatedAt: now,
       },
@@ -264,6 +298,14 @@ async function mockLibraryApi(page: Page) {
     return json(route, {
       asset: { id: "asset-image-ready" },
       billing: { creditsCharged: 84 },
+    });
+  });
+
+  await page.route("**/api/v1/projects/proj-alpha/assets/asset-audio-ready", (route) => {
+    assetBillingRequests += 1;
+    return json(route, {
+      asset: { id: "asset-audio-ready" },
+      billing: { creditsCharged: 12 },
     });
   });
 
@@ -559,17 +601,25 @@ test("covers library pagination, filters, media viewer, visibility, and watch li
 
   await page.getByLabel("Kind").selectOption("image");
   await page.getByLabel("Source").selectOption("generated");
+  await page.setViewportSize({ width: 1280, height: 900 });
   const keyframeCard = page.getByRole("button", { name: "View Keyframe still" });
   await expect(keyframeCard.locator("span[data-private='true']")).toHaveText("Private");
   await keyframeCard.click();
   const keyframeDialog = page.getByRole("dialog", { name: "Keyframe still" });
   await expect(keyframeDialog).toBeVisible();
+  const keyframeImageBox = await keyframeDialog
+    .getByRole("img", { name: "Keyframe still" })
+    .boundingBox();
+  expect(keyframeImageBox).not.toBeNull();
+  expect(keyframeImageBox!.height).toBeGreaterThan(500);
   await expect(keyframeDialog.getByText("84 credits used")).toBeVisible();
-  const suggestEdit = keyframeDialog.getByRole("button", { name: "Suggest an edit" });
-  await expect(suggestEdit).toBeVisible();
-  await suggestEdit.click();
+  const requestChanges = keyframeDialog.getByRole("button", { name: "Request changes" });
+  await expect(requestChanges).toBeVisible();
+  await expect(requestChanges).toBeEnabled();
+  await expect(keyframeDialog.getByText("Tell the AI what you want to change.")).toBeVisible();
+  await requestChanges.click();
   await expect(keyframeDialog).toBeHidden();
-  const editDialog = page.getByRole("dialog", { name: "Suggest an edit" });
+  const editDialog = page.getByRole("dialog", { name: "Request changes" });
   await expect(editDialog).toBeVisible();
   await expect(editDialog.getByText("A bright editorial keyframe.")).toBeVisible();
   await editDialog.getByLabel("What should change?").fill("Make the background less busy.");
@@ -587,7 +637,7 @@ test("covers library pagination, filters, media viewer, visibility, and watch li
   await expect(editDialog).toBeHidden();
   await expect(keyframeDialog).toBeVisible();
   await expect(page).toHaveURL(/\/library\/assets\?assetId=asset-image-ready$/);
-  await expect(keyframeDialog.getByRole("button", { name: "Suggest an edit" })).toBeFocused();
+  await expect(keyframeDialog.getByRole("button", { name: "Request changes" })).toBeFocused();
   expect(assetBillingRequests).toBe(1);
   await keyframeDialog.getByRole("button", { name: "Make public" }).click();
   await expect(page.locator("span[data-private='false']")).toHaveText("Public");
@@ -597,7 +647,16 @@ test("covers library pagination, filters, media viewer, visibility, and watch li
   await page.getByRole("button", { name: "View Processing still" }).click();
   const processingDialog = page.getByRole("dialog", { name: "Processing still" });
   await expect(processingDialog).toBeVisible();
-  await expect(processingDialog.getByRole("button", { name: "Suggest an edit" })).toHaveCount(0);
+  await expect(processingDialog.getByRole("button", { name: "Request changes" })).toBeDisabled();
+  await expect(processingDialog.getByText("Available when this asset is ready.")).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "View Failed still" }).click();
+  const failedDialog = page.getByRole("dialog", { name: "Failed still" });
+  await expect(failedDialog.getByRole("button", { name: "Request changes" })).toBeDisabled();
+  await expect(failedDialog.getByText(
+    "Request changes is unavailable because this asset failed.",
+  )).toBeVisible();
   await page.keyboard.press("Escape");
 
   await page.getByLabel("Show").selectOption("public");
@@ -605,7 +664,7 @@ test("covers library pagination, filters, media viewer, visibility, and watch li
   await page.getByRole("button", { name: "View Keyframe still" }).click();
   const publicDialog = page.getByRole("dialog", { name: "Keyframe still" });
   await expect(publicDialog).toBeVisible();
-  await expect(publicDialog.getByRole("button", { name: "Suggest an edit" })).toHaveCount(0);
+  await expect(publicDialog.getByRole("button", { name: "Request changes" })).toHaveCount(0);
   await expect(publicDialog.getByText(/credits? used/)).toHaveCount(0);
   expect(assetBillingRequests).toBe(1);
   await page.keyboard.press("Escape");
@@ -631,7 +690,7 @@ test("covers library pagination, filters, media viewer, visibility, and watch li
   );
   const projectMediaDialog = page.getByRole("dialog", { name: "Project keyframe" });
   await expect(projectMediaDialog.getByText("84 credits used")).toBeVisible();
-  await expect(projectMediaDialog.getByRole("button", { name: "Suggest an edit" })).toBeVisible();
+  await expect(projectMediaDialog.getByRole("button", { name: "Request changes" })).toBeVisible();
   await expect(projectMediaDialog.getByRole("button", { name: "Make public" })).toHaveCount(0);
   await expect(projectMediaDialog.getByRole("button", { name: "Make private" })).toHaveCount(0);
   expect(assetBillingRequests).toBe(2);
@@ -767,4 +826,117 @@ test("@mobile retries failed media once with a newly signed URL", async ({ page 
   await expect(recovered).toHaveAttribute("src", freshUrl);
   await expect(recovered).toBeVisible();
   expect(focusedMediaRequests).toBe(1);
+});
+
+test("@mobile keeps Request changes and audio controls reachable", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/library/assets");
+  await page.getByRole("button", { name: "View Keyframe still" }).click();
+
+  const readyDialog = page.getByRole("dialog", { name: "Keyframe still" });
+  const requestChanges = readyDialog.getByRole("button", { name: "Request changes" });
+  await expect(requestChanges).toBeVisible();
+  await expect(requestChanges).toBeEnabled();
+  await expect(readyDialog.getByText("Tell the AI what you want to change.")).toBeVisible();
+
+  const readyGeometry = await requestChanges.evaluate((button) => {
+    const buttonRect = button.getBoundingClientRect();
+    const dialogRect = button.closest('[role="dialog"]')?.getBoundingClientRect();
+    return {
+      buttonWidth: buttonRect.width,
+      dialogWidth: dialogRect?.width ?? 0,
+      buttonBottom: buttonRect.bottom,
+      viewportHeight: document.documentElement.clientHeight,
+      documentWidth: document.documentElement.scrollWidth,
+      viewportWidth: document.documentElement.clientWidth,
+      isTopmost: Boolean(
+        document.elementFromPoint(
+          buttonRect.left + buttonRect.width / 2,
+          buttonRect.top + buttonRect.height / 2
+        ) &&
+          button.contains(
+            document.elementFromPoint(
+              buttonRect.left + buttonRect.width / 2,
+              buttonRect.top + buttonRect.height / 2
+            )
+          )
+      ),
+    };
+  });
+  expect(readyGeometry.buttonWidth).toBeGreaterThan(readyGeometry.dialogWidth * 0.7);
+  expect(readyGeometry.buttonBottom).toBeLessThanOrEqual(readyGeometry.viewportHeight);
+  expect(readyGeometry.documentWidth).toBeLessThanOrEqual(readyGeometry.viewportWidth + 1);
+  expect(readyGeometry.isTopmost).toBe(true);
+
+  await page.setViewportSize({ width: 844, height: 390 });
+  const shortViewportGeometry = await requestChanges.evaluate((button) => {
+    const buttonRect = button.getBoundingClientRect();
+    const topElement = document.elementFromPoint(
+      buttonRect.left + buttonRect.width / 2,
+      buttonRect.top + buttonRect.height / 2
+    );
+    return {
+      buttonBottom: buttonRect.bottom,
+      viewportHeight: document.documentElement.clientHeight,
+      isTopmost: Boolean(topElement && button.contains(topElement)),
+    };
+  });
+  expect(shortViewportGeometry.buttonBottom).toBeLessThanOrEqual(
+    shortViewportGeometry.viewportHeight
+  );
+  expect(shortViewportGeometry.isTopmost).toBe(true);
+
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "View Processing still" }).click();
+  const processingDialog = page.getByRole("dialog", { name: "Processing still" });
+  await expect(processingDialog.getByRole("button", { name: "Request changes" })).toBeDisabled();
+  await expect(processingDialog.getByText("Available when this asset is ready.")).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.getByLabel("Kind").selectOption("audio");
+  await page.getByRole("button", { name: "View Campaign mix" }).click();
+  const audioDialog = page.getByRole("dialog", { name: "Campaign mix" });
+  const audioControl = audioDialog.locator("audio");
+  await expect(audioControl).toBeVisible();
+  const audioGeometry = await audioControl.evaluate((audio) => {
+    const audioRect = audio.getBoundingClientRect();
+    const stage = audio.parentElement?.parentElement;
+    const viewerDialog = stage?.parentElement;
+    const stageRect = stage?.getBoundingClientRect();
+    const dialogRect = viewerDialog?.getBoundingClientRect();
+    const topElement = document.elementFromPoint(
+      audioRect.left + audioRect.width / 2,
+      audioRect.top + audioRect.height / 2
+    );
+    return {
+      withinStage: Boolean(
+        stageRect &&
+          audioRect.left >= stageRect.left &&
+          audioRect.right <= stageRect.right &&
+          audioRect.top >= stageRect.top &&
+          audioRect.bottom <= stageRect.bottom
+      ),
+      withinDialog: Boolean(
+        dialogRect &&
+          audioRect.left >= dialogRect.left &&
+          audioRect.right <= dialogRect.right &&
+          audioRect.top >= dialogRect.top &&
+          audioRect.bottom <= dialogRect.bottom
+      ),
+      stageWithinDialog: Boolean(
+        stageRect &&
+          dialogRect &&
+          stageRect.left >= dialogRect.left &&
+          stageRect.right <= dialogRect.right &&
+          stageRect.top >= dialogRect.top &&
+          stageRect.bottom <= dialogRect.bottom
+      ),
+      isTopmost: Boolean(topElement && audio.contains(topElement)),
+    };
+  });
+  expect(audioGeometry.withinStage).toBe(true);
+  expect(audioGeometry.withinDialog).toBe(true);
+  expect(audioGeometry.stageWithinDialog).toBe(true);
+  expect(audioGeometry.isTopmost).toBe(true);
 });
