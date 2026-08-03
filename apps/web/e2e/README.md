@@ -56,7 +56,7 @@ It also verifies the shared quick route-loading state on mobile, including its
 180ms anti-flash threshold, accessible busy semantics, content-shaped layout
 reservation, reduced motion, overflow containment, and transition into loaded
 project content. A Watch-route case covers the compact panel variant. The
-studio crew remains covered in `asset-studio.spec.ts` for known queued/running
+studio crew remains covered in `asset-studio-progress.spec.ts` for known queued/running
 creative production rather than ordinary data fetches.
 
 `rerun-proposal-lifecycle.spec.ts` verifies the durable Request Changes UI

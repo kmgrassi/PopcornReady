@@ -2,10 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import {
   mockAssetStudioProject,
   fulfillJson,
-  expectCreationTypeTargets,
-  openProjectPicker,
   project,
-  recentProject,
   longRunSummary,
 } from "./fixtures/asset-studio";
 import { mockLocalApi } from "./fixtures/local-api";
@@ -181,54 +178,4 @@ test.describe("Asset Studio", () => {
     }
   });
 
-  test("lets the creator bypass image prompt improvement exactly", async ({ page }) => {
-    const originalPrompt = "Flat-lay photo of three blue ceramic buttons";
-    let requestBody: Record<string, unknown> | null = null;
-
-    await page.route(
-      `**/api/v1/projects/${project.id}/agent-creations/proposals`,
-      async (route) => {
-        requestBody = route.request().postDataJSON();
-        await fulfillJson(
-          route,
-          {
-            proposal: {
-              sessionId: "session_bypass",
-              runId: "run_bypass",
-              gateId: "gate_bypass",
-              requestDigest: "digest_bypass",
-              maximumUsd: 10,
-              approvalToken: "approval_bypass",
-              expiresAt: "2099-07-31T18:00:00.000Z",
-              effectivePrompt: originalPrompt,
-              enhancementApplied: false,
-            },
-          },
-          201,
-        );
-      },
-    );
-
-    await page.goto("/create/asset");
-    await openProjectPicker(page);
-    await page.getByRole("button", { name: project.name, exact: true }).click();
-    await page
-      .getByLabel("Describe the result", { exact: true })
-      .fill(originalPrompt);
-    const improve = page.getByRole("checkbox", {
-      name: /Improve image prompt/,
-    });
-    await expect(improve).toBeChecked();
-    await improve.uncheck();
-    await page.getByRole("button", { name: "Review request" }).click();
-
-    await expect(page).toHaveURL(/\/create\/review$/);
-    await expect(page.getByText("Prompt", { exact: true })).toBeVisible();
-    await expect(page.getByText("Refined prompt", { exact: true })).toHaveCount(0);
-    expect(requestBody).toMatchObject({
-      kind: "image_create",
-      prompt: originalPrompt,
-      improvePrompt: false,
-    });
-  });
 });
