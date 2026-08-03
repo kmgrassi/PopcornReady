@@ -787,9 +787,47 @@ export function AssetsPage() {
               }
         }
         actions={
-          selectedAsset ? (
+          selectedAsset && !isPublic ? (
             <div className={styles.viewerActions}>
-              {!isPublic ? (
+              <div className={styles.viewerEditAction}>
+                {selectedAsset.status === "ready" ? (
+                  <Button
+                    ref={(node) => {
+                      if (!node || !restoreEditFocusRef.current) return;
+                      restoreEditFocusRef.current = false;
+                      node.focus();
+                    }}
+                    variant="cta"
+                    size="md"
+                    onClick={() => {
+                      restoreEditFocusRef.current = false;
+                      setEditingAsset({
+                        asset: selectedAsset,
+                        media: selectedMedia.data,
+                      });
+                    }}
+                  >
+                    Request changes
+                  </Button>
+                ) : (
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    disabled
+                    aria-describedby="asset-request-changes-hint"
+                  >
+                    Request changes
+                  </Button>
+                )}
+                <span className={styles.viewerActionHint} id="asset-request-changes-hint">
+                  {selectedAsset.status === "ready"
+                    ? "Tell the AI what you want to change."
+                    : selectedAsset.status === "failed"
+                      ? "Request changes is unavailable because this asset failed."
+                      : "Available when this asset is ready."}
+                </span>
+              </div>
+              <div className={styles.viewerUtilityActions}>
                 <ButtonLink
                   variant="ghost"
                   size="sm"
@@ -797,46 +835,26 @@ export function AssetsPage() {
                 >
                   Project
                 </ButtonLink>
-              ) : null}
-              {!isPublic && selectedAsset.status === "ready" ? (
-                <Button
-                  ref={(node) => {
-                    if (!node || !restoreEditFocusRef.current) return;
-                    restoreEditFocusRef.current = false;
-                    node.focus();
-                  }}
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    restoreEditFocusRef.current = false;
-                    setEditingAsset({
-                      asset: selectedAsset,
-                      media: selectedMedia.data,
-                    });
-                  }}
-                >
-                  Suggest an edit
-                </Button>
-              ) : null}
-              {!isPublic && selectedAsset.kind === "image" ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setPublishingAsset(selectedAsset)}
-                >
-                  Publish as anchor
-                </Button>
-              ) : null}
-              {!isPublic && selectedAsset.visibility ? (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={pendingIds.has(selectedAsset.assetId ?? selectedAsset.id)}
-                  onClick={() => void toggleVisibility(selectedAsset)}
-                >
-                  {selectedAsset.visibility === "private" ? "Make public" : "Make private"}
-                </Button>
-              ) : null}
+                {selectedAsset.kind === "image" ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setPublishingAsset(selectedAsset)}
+                  >
+                    Publish as anchor
+                  </Button>
+                ) : null}
+                {selectedAsset.visibility ? (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={pendingIds.has(selectedAsset.assetId ?? selectedAsset.id)}
+                    onClick={() => void toggleVisibility(selectedAsset)}
+                  >
+                    {selectedAsset.visibility === "private" ? "Make public" : "Make private"}
+                  </Button>
+                ) : null}
+              </div>
             </div>
           ) : null
         }
@@ -856,7 +874,7 @@ export function AssetsPage() {
               }
             : null
         }
-        title="Suggest an edit"
+        title="Request changes"
         subtitle={
           editingAsset
             ? editingAsset.asset.title ?? editingAsset.asset.filename ?? "Current asset"

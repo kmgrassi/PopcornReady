@@ -201,6 +201,22 @@ async function mockLibraryApi(page: Page) {
         updatedAt: now,
       },
       {
+        id: "asset-image-failed",
+        assetId: "asset-image-failed",
+        projectId: "proj-alpha",
+        projectName: "Project Alpha",
+        kind: "image",
+        status: "failed",
+        source: "generated",
+        title: "Failed still",
+        filename: "failed.png",
+        url: imageDataUrl,
+        thumbnailUrl: imageDataUrl,
+        visibility: "private",
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
         id: "asset-video-missing",
         assetId: "asset-video-missing",
         projectId: "proj-beta",
@@ -565,11 +581,13 @@ test("covers library pagination, filters, media viewer, visibility, and watch li
   const keyframeDialog = page.getByRole("dialog", { name: "Keyframe still" });
   await expect(keyframeDialog).toBeVisible();
   await expect(keyframeDialog.getByText("84 credits used")).toBeVisible();
-  const suggestEdit = keyframeDialog.getByRole("button", { name: "Suggest an edit" });
-  await expect(suggestEdit).toBeVisible();
-  await suggestEdit.click();
+  const requestChanges = keyframeDialog.getByRole("button", { name: "Request changes" });
+  await expect(requestChanges).toBeVisible();
+  await expect(requestChanges).toBeEnabled();
+  await expect(keyframeDialog.getByText("Tell the AI what you want to change.")).toBeVisible();
+  await requestChanges.click();
   await expect(keyframeDialog).toBeHidden();
-  const editDialog = page.getByRole("dialog", { name: "Suggest an edit" });
+  const editDialog = page.getByRole("dialog", { name: "Request changes" });
   await expect(editDialog).toBeVisible();
   await expect(editDialog.getByText("A bright editorial keyframe.")).toBeVisible();
   await editDialog.getByLabel("What should change?").fill("Make the background less busy.");
@@ -587,7 +605,7 @@ test("covers library pagination, filters, media viewer, visibility, and watch li
   await expect(editDialog).toBeHidden();
   await expect(keyframeDialog).toBeVisible();
   await expect(page).toHaveURL(/\/library\/assets\?assetId=asset-image-ready$/);
-  await expect(keyframeDialog.getByRole("button", { name: "Suggest an edit" })).toBeFocused();
+  await expect(keyframeDialog.getByRole("button", { name: "Request changes" })).toBeFocused();
   expect(assetBillingRequests).toBe(1);
   await keyframeDialog.getByRole("button", { name: "Make public" }).click();
   await expect(page.locator("span[data-private='false']")).toHaveText("Public");
@@ -597,7 +615,16 @@ test("covers library pagination, filters, media viewer, visibility, and watch li
   await page.getByRole("button", { name: "View Processing still" }).click();
   const processingDialog = page.getByRole("dialog", { name: "Processing still" });
   await expect(processingDialog).toBeVisible();
-  await expect(processingDialog.getByRole("button", { name: "Suggest an edit" })).toHaveCount(0);
+  await expect(processingDialog.getByRole("button", { name: "Request changes" })).toBeDisabled();
+  await expect(processingDialog.getByText("Available when this asset is ready.")).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "View Failed still" }).click();
+  const failedDialog = page.getByRole("dialog", { name: "Failed still" });
+  await expect(failedDialog.getByRole("button", { name: "Request changes" })).toBeDisabled();
+  await expect(failedDialog.getByText(
+    "Request changes is unavailable because this asset failed.",
+  )).toBeVisible();
   await page.keyboard.press("Escape");
 
   await page.getByLabel("Show").selectOption("public");
@@ -605,7 +632,7 @@ test("covers library pagination, filters, media viewer, visibility, and watch li
   await page.getByRole("button", { name: "View Keyframe still" }).click();
   const publicDialog = page.getByRole("dialog", { name: "Keyframe still" });
   await expect(publicDialog).toBeVisible();
-  await expect(publicDialog.getByRole("button", { name: "Suggest an edit" })).toHaveCount(0);
+  await expect(publicDialog.getByRole("button", { name: "Request changes" })).toHaveCount(0);
   await expect(publicDialog.getByText(/credits? used/)).toHaveCount(0);
   expect(assetBillingRequests).toBe(1);
   await page.keyboard.press("Escape");
@@ -631,7 +658,7 @@ test("covers library pagination, filters, media viewer, visibility, and watch li
   );
   const projectMediaDialog = page.getByRole("dialog", { name: "Project keyframe" });
   await expect(projectMediaDialog.getByText("84 credits used")).toBeVisible();
-  await expect(projectMediaDialog.getByRole("button", { name: "Suggest an edit" })).toBeVisible();
+  await expect(projectMediaDialog.getByRole("button", { name: "Request changes" })).toBeVisible();
   await expect(projectMediaDialog.getByRole("button", { name: "Make public" })).toHaveCount(0);
   await expect(projectMediaDialog.getByRole("button", { name: "Make private" })).toHaveCount(0);
   expect(assetBillingRequests).toBe(2);
@@ -767,4 +794,69 @@ test("@mobile retries failed media once with a newly signed URL", async ({ page 
   await expect(recovered).toHaveAttribute("src", freshUrl);
   await expect(recovered).toBeVisible();
   expect(focusedMediaRequests).toBe(1);
+});
+
+test("@mobile keeps Request changes prominent and explains processing state", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/library/assets");
+  await page.getByRole("button", { name: "View Keyframe still" }).click();
+
+  const readyDialog = page.getByRole("dialog", { name: "Keyframe still" });
+  const requestChanges = readyDialog.getByRole("button", { name: "Request changes" });
+  await expect(requestChanges).toBeVisible();
+  await expect(requestChanges).toBeEnabled();
+  await expect(readyDialog.getByText("Tell the AI what you want to change.")).toBeVisible();
+
+  const readyGeometry = await requestChanges.evaluate((button) => {
+    const buttonRect = button.getBoundingClientRect();
+    const dialogRect = button.closest('[role="dialog"]')?.getBoundingClientRect();
+    return {
+      buttonWidth: buttonRect.width,
+      dialogWidth: dialogRect?.width ?? 0,
+      buttonBottom: buttonRect.bottom,
+      viewportHeight: document.documentElement.clientHeight,
+      documentWidth: document.documentElement.scrollWidth,
+      viewportWidth: document.documentElement.clientWidth,
+      isTopmost: Boolean(
+        document.elementFromPoint(
+          buttonRect.left + buttonRect.width / 2,
+          buttonRect.top + buttonRect.height / 2
+        ) &&
+          button.contains(
+            document.elementFromPoint(
+              buttonRect.left + buttonRect.width / 2,
+              buttonRect.top + buttonRect.height / 2
+            )
+          )
+      ),
+    };
+  });
+  expect(readyGeometry.buttonWidth).toBeGreaterThan(readyGeometry.dialogWidth * 0.7);
+  expect(readyGeometry.buttonBottom).toBeLessThanOrEqual(readyGeometry.viewportHeight);
+  expect(readyGeometry.documentWidth).toBeLessThanOrEqual(readyGeometry.viewportWidth + 1);
+  expect(readyGeometry.isTopmost).toBe(true);
+
+  await page.setViewportSize({ width: 844, height: 390 });
+  const shortViewportGeometry = await requestChanges.evaluate((button) => {
+    const buttonRect = button.getBoundingClientRect();
+    const topElement = document.elementFromPoint(
+      buttonRect.left + buttonRect.width / 2,
+      buttonRect.top + buttonRect.height / 2
+    );
+    return {
+      buttonBottom: buttonRect.bottom,
+      viewportHeight: document.documentElement.clientHeight,
+      isTopmost: Boolean(topElement && button.contains(topElement)),
+    };
+  });
+  expect(shortViewportGeometry.buttonBottom).toBeLessThanOrEqual(
+    shortViewportGeometry.viewportHeight
+  );
+  expect(shortViewportGeometry.isTopmost).toBe(true);
+
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "View Processing still" }).click();
+  const processingDialog = page.getByRole("dialog", { name: "Processing still" });
+  await expect(processingDialog.getByRole("button", { name: "Request changes" })).toBeDisabled();
+  await expect(processingDialog.getByText("Available when this asset is ready.")).toBeVisible();
 });

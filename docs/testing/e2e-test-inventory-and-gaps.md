@@ -81,9 +81,11 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   a deep-linked video's viewer source normalizes `remoteUrl`, while Back navigation
   restores the project-media selection, preset, and creation intent that were
   active before preview. The viewer coverage also verifies an owned,
-  ready asset can suggest an exact-target edit through the durable Request
-  Changes proposal preview, restores the same deep-linked viewer on Escape, and
-  withholds that action from public and processing assets. It also proves one
+  ready asset presents a primary exact-target Request Changes action through the
+  durable proposal preview and restores the same deep-linked viewer on Escape.
+  Mobile coverage verifies that action spans the viewer footer without overflow,
+  processing assets explain their disabled state, and public assets remain
+  read-only without an edit action. It also proves one
   auth/workspace/asset-scoped media URL survives project-gallery to Library
   navigation and a same-tab reload without a focused URL request, plus a
   desktop/mobile failed-image path that makes exactly one focused refresh and
