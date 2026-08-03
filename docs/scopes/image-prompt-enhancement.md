@@ -45,7 +45,9 @@ The server:
 3. enhances only `image_create` requests whose flag is true;
 4. validates a non-empty result no longer than 4,000 characters;
 5. binds the effective prompt to the request digest, domain task objective and
-   instruction, acceptance criteria, run summary, and proposal rationale; and
+   instruction, run summary, proposal rationale, and action provenance, while
+   deriving a separate server-authored acceptance criterion bounded to the
+   domain completion contract; and
 6. stores the original prompt, effective prompt, applied state, and versioned
    enhancement policy in proposal action parameters.
 

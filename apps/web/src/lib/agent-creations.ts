@@ -5,7 +5,15 @@ import { queryKeys } from "./queryKeys";
 
 export type CreationGoal = "image" | "video" | "soundtrack";
 export type CreationProposal = { sessionId: string; runId: string; gateId: string; requestDigest: string; maximumUsd: number; approvalToken: string; expiresAt: string; effectivePrompt: string; enhancementApplied: boolean };
-export type CreationStatus = { sessionId: string | null; run: { id: string; status: string; inputSummary?: string; spentUsd?: number | null }; report: DomainReportV1 | null; outputs: Array<{ assetId: string; intrinsicRole: string }> };
+export type CreationStatusOutput = {
+  assetId: string;
+  intrinsicRole: string;
+  kind: "image" | "video" | "audio";
+  url?: string;
+  thumbnailUrl?: string;
+  name?: string;
+};
+export type CreationStatus = { sessionId: string | null; run: { id: string; status: string; inputSummary?: string; spentUsd?: number | null }; report: DomainReportV1 | null; outputs: CreationStatusOutput[] };
 export const creationKindFor = (goal: CreationGoal): CreatorDirectTaskKind =>
   goal === "image"
     ? "image_create"

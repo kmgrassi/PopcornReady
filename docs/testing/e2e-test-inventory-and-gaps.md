@@ -422,6 +422,10 @@ Covered:
   crew artwork from compact progress-only resources, a truncated request brief
   with full disclosure, active-only indeterminate progress, reduced-motion
   behavior, and mobile-safe layout.
+- A ready run-owned asset replaces the idle artwork with an image, video, or
+  audio preview. Active runs continue polling and show wrap-up progress; a
+  later failed terminal report keeps the asset visible with calm saved-result
+  copy, including at mobile width.
 - Completed, failed, canceled, question, and blocked fixtures preserve truthful
   terminal copy, idle artwork, exact report details, and asset navigation.
 - The mobile Create tab opens the launcher and remains active across both creation flows.

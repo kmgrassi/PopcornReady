@@ -11,6 +11,7 @@ import { v1Api } from "../lib/api-client";
 import {
   useCreationStatus,
   type CreationGoal,
+  type CreationStatusOutput,
 } from "../lib/agent-creations";
 import {
   creationDraftNavigationState,
@@ -48,7 +49,28 @@ function presentStatus(
   outcome: CreationStatusOutcome,
   hasOutputs: boolean,
 ): StatusPresentation {
+  const normalizedStatus = status.toLowerCase();
   if (hasOutputs) {
+    if (["queued", "running", "waiting"].includes(normalizedStatus)) {
+      return {
+        heading: "Your asset is ready",
+        description:
+          "The result is ready to review while the studio finishes wrapping up.",
+        label: "Finishing up",
+        tone: "active",
+        isActive: true,
+      };
+    }
+    if (["failed", "timed_out", "canceled", "cancelled"].includes(normalizedStatus)) {
+      return {
+        heading: "Your asset was saved",
+        description:
+          "The finished result is ready even though the studio hit a problem while wrapping up.",
+        label: "Asset saved",
+        tone: "success",
+        isActive: false,
+      };
+    }
     return {
       heading: "Your asset is ready",
       description:
@@ -78,7 +100,7 @@ function presentStatus(
     };
   }
 
-  switch (status.toLowerCase()) {
+  switch (normalizedStatus) {
     case "queued":
       return {
         heading: "Your asset is in motion",
@@ -167,6 +189,57 @@ function briefExcerpt(summary: string, maximumLength = 180) {
   return `${candidate.slice(0, cutAt).trimEnd()}…`;
 }
 
+function CreationOutputPreview({ output }: { output: CreationStatusOutput }) {
+  const title = output.name?.trim() || "Generated asset";
+  const stillUrl = output.url ?? output.thumbnailUrl;
+
+  return (
+    <section className={styles.outputPreview} aria-label={`${title} preview`}>
+      {output.kind === "image" && stillUrl ? (
+        <ImageWithSkeleton
+          className={styles.outputMedia}
+          src={stillUrl}
+          alt={title}
+          fit="contain"
+        />
+      ) : output.kind === "video" && output.url ? (
+        <video
+          className={styles.outputMedia}
+          src={output.url}
+          poster={output.thumbnailUrl}
+          aria-label={`${title} video`}
+          controls
+          playsInline
+          preload="metadata"
+        />
+      ) : output.kind === "video" && output.thumbnailUrl ? (
+        <ImageWithSkeleton
+          className={styles.outputMedia}
+          src={output.thumbnailUrl}
+          alt={`${title} poster`}
+          fit="contain"
+        />
+      ) : output.kind === "audio" && output.url ? (
+        <div className={styles.audioPreview}>
+          <span aria-hidden="true">♪</span>
+          <strong>{title}</strong>
+          <audio
+            src={output.url}
+            aria-label={`${title} audio`}
+            controls
+            preload="metadata"
+          />
+        </div>
+      ) : (
+        <div className={styles.outputPlaceholder}>
+          <strong>{title}</strong>
+          <span>The asset is saved in the project library.</span>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function StandaloneCreationPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -238,6 +311,12 @@ export function StandaloneCreationPage() {
       Boolean(status.data?.outputs.length),
     );
     const inputSummary = status.data?.run.inputSummary?.trim();
+    const primaryOutput = status.data?.outputs[0];
+    const hasPostOutputFailure =
+      Boolean(primaryOutput) &&
+      ["failed", "timed_out", "canceled", "cancelled"].includes(
+        status.data?.run.status.toLowerCase() ?? "",
+      );
 
     return (
       <main
@@ -293,7 +372,11 @@ export function StandaloneCreationPage() {
         ) : null}
         {status.data ? (
           <section className={styles.statusShell}>
-            <StudioCrewLoader active={presentation.isActive} />
+            {primaryOutput ? (
+              <CreationOutputPreview output={primaryOutput} />
+            ) : (
+              <StudioCrewLoader active={presentation.isActive} />
+            )}
             <div className={styles.statusDetails}>
               <div
                 className={styles.liveStatus}
@@ -345,6 +428,16 @@ export function StandaloneCreationPage() {
                 <div className={styles.outcomePanel}>
                   <strong>What the studio needs</strong>
                   <p>{status.data.report.outcome.question}</p>
+                </div>
+              ) : null}
+              {hasPostOutputFailure ? (
+                <div className={styles.savedAssetNotice} role="status">
+                  <strong>Your result is safe</strong>
+                  <p>
+                    The asset finished successfully, but the studio couldn’t
+                    complete its final wrap-up. You can still review and use the
+                    saved result.
+                  </p>
                 </div>
               ) : null}
               {status.data.outputs.length ? (

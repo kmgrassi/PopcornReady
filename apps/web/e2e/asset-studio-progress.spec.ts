@@ -55,7 +55,13 @@ test.describe("Asset Studio", () => {
               : null,
           outputs:
             status === "succeeded"
-              ? [{ assetId: "asset_ready", intrinsicRole: "hero_image" }]
+              ? [{
+                  assetId: "asset_ready",
+                  intrinsicRole: "hero_image",
+                  kind: "image",
+                  name: "Campaign still",
+                  url: project.posterUrl,
+                }]
               : [],
         });
       },
@@ -121,7 +127,103 @@ test.describe("Asset Studio", () => {
       page.getByRole("link", { name: "Open project assets" }),
     ).toBeVisible();
     await expect(page.getByText("1 asset is ready.")).toBeVisible();
+    await expect(page.getByRole("img", { name: "Campaign still" })).toBeVisible();
     await expect(page.getByTestId("creation-progress-track")).toHaveCount(0);
+  });
+
+  test("shows saved media when final run wrap-up fails @mobile", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    let kind: "image" | "video" | "audio" = "image";
+    await page.route(
+      `**/api/v1/projects/${project.id}/agent-creations/run_recovered`,
+      (route) =>
+        fulfillJson(route, {
+          sessionId: "session_recovered",
+          run: {
+            id: "run_recovered",
+            status: "failed",
+            inputSummary: longRunSummary,
+          },
+          report: null,
+          outputs: [{
+            assetId: `asset_${kind}`,
+            intrinsicRole: `standalone_${kind}`,
+            kind,
+            name: `Recovered ${kind}`,
+            ...(kind === "image"
+              ? { url: project.posterUrl }
+              : kind === "video"
+                ? { url: "https://media.example/recovered.mp4" }
+                : { url: "https://media.example/recovered.mp3" }),
+          }],
+        }),
+    );
+
+    await page.goto(`/create/asset?projectId=${project.id}&runId=run_recovered`);
+    await expect(
+      page.getByRole("heading", { name: "Your asset was saved" }),
+    ).toBeVisible();
+    await expect(page.getByText("Asset saved", { exact: true })).toBeVisible();
+    await expect(page.getByRole("img", { name: "Recovered image" })).toBeVisible();
+    await expect(page.getByText("Your result is safe")).toBeVisible();
+    await expect(
+      page.getByText(/couldn’t complete its final wrap-up/),
+    ).toBeVisible();
+    await expect(page.getByTestId("studio-crew")).toHaveCount(0);
+    await expect(
+      page.getByRole("link", { name: "Open project assets" }),
+    ).toBeVisible();
+    const overflow = await page.evaluate(() => ({
+      document: document.documentElement.scrollWidth,
+      viewport: document.documentElement.clientWidth,
+    }));
+    expect(overflow.document).toBeLessThanOrEqual(overflow.viewport + 1);
+
+    kind = "video";
+    await page.reload();
+    await expect(
+      page.getByLabel("Recovered video video", { exact: true }),
+    ).toBeVisible();
+
+    kind = "audio";
+    await page.reload();
+    await expect(
+      page.getByLabel("Recovered audio audio", { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText("Recovered audio", { exact: true })).toBeVisible();
+  });
+
+  test("keeps polling while a generated asset is ready and the run is finishing", async ({
+    page,
+  }) => {
+    let requestCount = 0;
+    await page.route(
+      `**/api/v1/projects/${project.id}/agent-creations/run_finishing`,
+      (route) => {
+        requestCount += 1;
+        return fulfillJson(route, {
+          sessionId: "session_finishing",
+          run: {
+            id: "run_finishing",
+            status: "running",
+          },
+          report: null,
+          outputs: [{
+            assetId: "asset_finishing",
+            intrinsicRole: "standalone_image",
+            kind: "image",
+            name: "Finished frame",
+            url: project.posterUrl,
+          }],
+        });
+      },
+    );
+
+    await page.goto(`/create/asset?projectId=${project.id}&runId=run_finishing`);
+    await expect(page.getByText("Finishing up", { exact: true })).toBeVisible();
+    await expect(page.getByRole("img", { name: "Finished frame" })).toBeVisible();
+    await expect(page.getByTestId("creation-progress-track")).toBeVisible();
+    await expect.poll(() => requestCount).toBeGreaterThan(1);
   });
 
   test("keeps the active crew calm and contained on mobile with reduced motion", async ({

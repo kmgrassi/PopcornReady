@@ -108,6 +108,12 @@ session.
 - the finite budget and optional approved proposal context; and
 - acceptance criteria.
 
+Acceptance criteria are concise, server-authored checks for the typed task kind;
+they are not a copy of the creator's prompt. The complete effective prompt
+remains available in the objective, instruction, request digest, run summary,
+and action provenance without exceeding the evidence contract's bounded
+criterion field.
+
 The public creator-direct API never accepts this structure directly. It accepts
 a discriminated product request, authenticates the project/actor, validates
 references, and derives domain, task kind, targets, graph closure, output scope,
@@ -156,6 +162,13 @@ has a queryable `media_job`, `domain`, or `approval` reason. A run is
 `succeeded` only after its terminal report action is durably persisted. Runtime
 failure, cancellation, timeout, or supersession cannot be recast as a domain
 report outcome.
+
+Creator-direct status treats graph persistence and terminal report persistence
+as separate facts. If an exact-run applied action already owns a ready,
+project-scoped semantic output but terminal report validation later fails, the
+run remains failed while status may recover and expose that asset. Reported
+outputs stay first, recovered outputs append deterministically, and status must
+never present the failed run itself as successful.
 
 The model boundary makes that terminal shape explicit: root turns may finish
 with a concise text summary, while every finite domain turn must return only the
