@@ -11,6 +11,7 @@ export interface AiAssetFeedbackDialogProps {
   subtitle?: string | null;
   asset: ReactNode;
   initialMessage?: string | null;
+  sourcePrompt?: string | null;
   onClose: () => void;
   onExecutionStarted?: (target: BoardRevisionTarget) => Promise<void> | void;
   onExecutionSettled?: (target: BoardRevisionTarget) => Promise<void> | void;

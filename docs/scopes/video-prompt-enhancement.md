@@ -43,8 +43,10 @@ The server:
 2. verifies the authenticated project and referenced assets before model spend;
 3. enhances only `video_create` requests whose flag is true;
 4. validates a non-empty result no longer than 4,000 characters;
-5. binds the effective prompt to the digest, domain task, run summary, proposal
-   rationale, and acceptance criteria; and
+5. binds the effective prompt to the digest, domain task objective and
+   instruction, run summary, proposal rationale, and action provenance, while
+   deriving a separate server-authored acceptance criterion bounded to the
+   domain completion contract; and
 6. stores original/effective prompts, applied state, and the versioned
    `video_motion_direction_v1` policy in action provenance.
 

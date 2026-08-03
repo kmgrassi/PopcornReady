@@ -9,6 +9,7 @@ import {
   listWorkspaceGenerationRuns,
   listWorkspaceOutputs,
 } from "@/lib/api/v1/store";
+import { SIGNED_MEDIA_JSON_HEADERS } from "@/lib/api/v1/cache-policy";
 
 const ASSET_KIND_VALUES: AssetKind[] = ["video", "image", "audio"];
 const GENERATION_RUN_STATUS_VALUES: GenerationRunStatus[] = [
@@ -106,6 +107,7 @@ workspacesRouter.get(
     return {
       status: 200,
       body: { assets: items, pagination: { limit, nextCursor } },
+      headers: SIGNED_MEDIA_JSON_HEADERS,
     };
   })
 );

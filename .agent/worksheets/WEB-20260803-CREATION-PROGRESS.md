@@ -52,6 +52,11 @@
 - Added relational desktop geometry and dev-route Playwright coverage.
 - Updated the design signature, E2E inventory/README, and manual route inventory.
 - Published the completed work as ready-for-review PR #882.
+- Merged the latest `main` changes, preserving the split Asset Studio E2E suite
+  and the new recovered-output preview behavior.
+- Addressed both unresolved review findings by replacing the tablet offset with
+  a spacing token and making prominent actor scale respond to the scene's
+  container width rather than viewport width.
 
 ## Validation evidence
 
@@ -68,6 +73,13 @@
   policy tests, migration tests/validation, and web typecheck.
 - After the wrap-up breakpoint fix, the focused 767px reduced-motion/containment
   Playwright case passed and `pnpm agent:validate -- --scope web` passed again.
+- Review follow-up adds a 960px authenticated-sidebar containment regression to
+  the split `asset-studio-progress.spec.ts` suite.
+- After merging `main`, all 8 Chromium cases in the split progress suite passed,
+  including recovered output media, the 960px sidebar case, the development
+  preview, terminal outcomes, polling, and reduced-motion mobile containment.
+- `pnpm --filter @popcorn/web build` and
+  `pnpm agent:validate -- --scope web` passed after conflict resolution.
 - Manual in-app-browser inspection:
   - `/dev/creation-progress`, 1440×900 and 390×844: status above prominent crew,
     compact brief below, no horizontal overflow.
@@ -96,11 +108,21 @@
   the skeleton breakpoint to 768px before the final review rerun.
 - Final wrap-up rerun by `/root/research_review` returned READY with no remaining
   code, test, documentation, validation, gating, or workflow findings.
+- Conflict-resolution review by `/root/research_review` verified the recovered
+  output integration and container-query fix, then identified merge-resurrected
+  route CSS, lost desktop hierarchy assertions after the E2E split, and final
+  unstaged records. Removed the dead CSS, restored real-route geometry coverage
+  before the 960px containment check, and staged the complete validated result.
+- The final conflict-resolution review rerun returned READY with no remaining
+  code, test, documentation, or merge findings.
 
 ## Blockers and risks
 
 - Enlarging a fixed-frame pixel sprite must preserve crisp scaling and keep all actors inside the scene at narrow widths.
 - The development preview must not drift from the live state or ship in production.
+- Recovered run outputs must continue replacing the crew visual after the
+  upstream merge; the shared experience accepts that preview without applying
+  the active crew's prominent layout.
 
 ## Next action / handoff
 

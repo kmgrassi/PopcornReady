@@ -217,6 +217,7 @@ export interface WorkspaceAsset {
   promptPreview?: string;
   url?: string;
   thumbnailUrl?: string;
+  expiresAt?: string | null;
   durationSec?: number;
   visibility?: "public" | "private";
   createdAt: string;
@@ -251,8 +252,15 @@ export interface ProjectAssetsResponse {
   pagination: ListPagination;
 }
 
+export type ProjectAssetDetailAsset = Omit<V1Asset, "url"> & {
+  /** Resolved media may arrive here from the project asset detail endpoint. */
+  remoteUrl?: string | null;
+  /** Older/local responses may still expose the resolved media as `url`. */
+  url?: string | null;
+};
+
 export interface ProjectAssetDetailResponse {
-  asset: V1Asset;
+  asset: ProjectAssetDetailAsset;
   billing: {
     /** Gross generation debits attributable to this one asset; null when unknown. */
     creditsCharged: number | null;
@@ -267,7 +275,7 @@ export interface WorkspaceOutputsResponse {
 export interface AssetMediaResponse {
   url: string | null;
   thumbnailUrl?: string | null;
-  expiresAt: string;
+  expiresAt: string | null;
 }
 
 export interface ProjectWatchMedia {
@@ -393,6 +401,15 @@ export interface StartUploadedFootageRunInput {
 export interface StartGenerationRunResponse {
   job: GenerationJob | null;
   runId: string | null;
+}
+
+export interface StartStoryboardGenerationRunResponse {
+  runId: string;
+  reused: boolean;
+}
+
+export interface StoryboardGenerationRunStatusResponse {
+  run: GenerationRun | null;
 }
 
 export type ExportDurationPolicy =

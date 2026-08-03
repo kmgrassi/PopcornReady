@@ -36,27 +36,30 @@ function LiveStatus({ presentation }: { presentation: CreationStatusPresentation
 export function CreationProgressExperience({
   presentation,
   inputSummary,
+  preview,
   children,
 }: {
   presentation: CreationStatusPresentation;
   inputSummary?: string;
+  preview?: ReactNode;
   children?: ReactNode;
 }) {
+  const isProminent = presentation.isActive && !preview;
+
   return (
     <section
       className={styles.statusShell}
-      data-prominent={presentation.isActive || undefined}
+      data-prominent={isProminent || undefined}
       data-testid="creation-progress-experience"
     >
-      {presentation.isActive ? <LiveStatus presentation={presentation} /> : null}
+      {isProminent ? <LiveStatus presentation={presentation} /> : null}
 
-      <StudioCrewLoader
-        active={presentation.isActive}
-        prominent={presentation.isActive}
-      />
+      {preview ?? (
+        <StudioCrewLoader active={presentation.isActive} prominent={isProminent} />
+      )}
 
       <div className={styles.statusDetails}>
-        {!presentation.isActive ? (
+        {!isProminent ? (
           <LiveStatus presentation={presentation} />
         ) : null}
 

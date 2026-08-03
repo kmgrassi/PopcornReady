@@ -1,5 +1,6 @@
 .scene {
   position: relative;
+  container-type: inline-size;
   min-height: 252px;
   overflow: hidden;
   border-radius: var(--radius-md);
@@ -95,14 +96,16 @@
   }
 }
 
+@container (max-width: 720px) {
+  .scene[data-prominent="true"] .actor {
+    bottom: var(--space-5);
+    transform: translateX(-50%) scale(0.92);
+  }
+}
+
 @media (max-width: 768px) {
   .scene[data-prominent="true"] {
     min-height: 280px;
-  }
-
-  .scene[data-prominent="true"] .actor {
-    bottom: 20px;
-    transform: translateX(-50%) scale(0.92);
   }
 }
 

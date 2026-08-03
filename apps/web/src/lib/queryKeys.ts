@@ -38,8 +38,8 @@ export const queryKeys = {
   project: (projectId: string) => ["projects", projectId] as const,
   projectStoryboard: (projectId: string) =>
     ["projects", projectId, "storyboard"] as const,
-  projectStoryboardJob: (projectId: string) =>
-    ["projects", projectId, "storyboards", "generate", "latest"] as const,
+  projectStoryboardRun: (projectId: string) =>
+    ["projects", projectId, "storyboard-run"] as const,
   projectGenerationRuns: (projectId: string) =>
     ["projects", projectId, "generation-runs"] as const,
   projectAssets: (
@@ -73,7 +73,8 @@ export const queryKeys = {
     workspaceId: string,
     params: { projectId?: string; limit?: number; cursor?: string | null } = {},
   ) => ["workspaces", workspaceId, "outputs", params] as const,
-  assetMedia: (assetId: string) => ["assets", assetId, "media"] as const,
+  assetMedia: (authScope: string, workspaceId: string, assetId: string) =>
+    ["asset-media", authScope, workspaceId, assetId] as const,
   generationRun: (projectId: string, runId: string) =>
     ["projects", projectId, "generation-runs", runId] as const,
   generationRunArtifact: (projectId: string, runId: string, artifactId: string) =>

@@ -5,7 +5,7 @@
 > Star defines the agent-orchestrated generation model, and this doc defines the
 > single interaction model every authenticated surface must follow from it. New
 > UI work (human or agent) aligns to this; deviations are conscious and
-> documented. Last updated 2026-06-21.
+> documented. Last updated 2026-08-03.
 
 ## 0. The one rule
 
@@ -64,6 +64,21 @@ Read-optimized presentation of state. The user can:
 Observe surfaces carry **no input boxes and no edit buttons.** Their job is to
 make "what's going on" legible at a glance.
 
+Project overview posters, overview storyboard images, and persisted project-media
+previews use their stable asset identity to open the canonical Library asset
+viewer. In project media, that inspection link remains separate from selecting
+an asset for a new creation intent, and returning from inspection restores the
+in-progress selection and intent rather than discarding the creator's draft.
+Dedicated storyboard and run-review surfaces
+keep their object-scoped Request Changes interaction instead, and public shared
+projects do not link into an authenticated workspace library.
+
+For any owned asset with ready status, the canonical viewer exposes one quiet
+**Suggest an edit** action. It opens the same exact-asset Request Changes
+lifecycle described below; it does not regenerate or overwrite the asset
+directly. Public and non-ready assets do not expose this action. Existing failed
+image recovery remains a separate path.
+
 ### 2.2 Request Changes (the single edit affordance)
 
 The **only** path to changing content. Selecting an object and choosing to change
@@ -97,6 +112,15 @@ shell's Create item remains active throughout the launcher, asset/review, and
 full-video creation routes; Library owns ordinary project routes. Once either
 flow has produced an object, subsequent content changes return to object-scoped
 **Request Changes**.
+
+An existing project with no storyboard may also expose **Create storyboard**.
+That action starts or returns the project’s storyboard-bounded Creative Director
+run; it does not call the low-level panel generator directly. The agent prepares
+missing scene-and-moment planning internally, generates the storyboard, and
+stops for review. The creator should never have to create or understand a “shot
+plan” prerequisite. Once a storyboard exists, the surface offers **Open
+storyboard** and object-scoped **Request Changes**, not a context-free “Generate
+again” mutation.
 
 ## 3. The "Request Changes" modal
 
@@ -139,8 +163,12 @@ gates still require deliberate confirmation and never inherit this timer.
 After confirmation, the resulting creator-direct run remains project-scoped but
 uses a one-step **Image asset**, **Video asset**, or **Audio asset** activity
 surface. It must not infer Brief, Script, Storyboard, or final-render stages from
-the full video pipeline, and a terminal parent run must never keep a stale tool
-spinner active.
+the asset request or imply the full video pipeline, and a terminal parent run
+must never keep a stale tool spinner active. As soon as an exact-run ready asset is available, the status
+surface previews it even while final wrap-up is active. If later report
+bookkeeping fails, the UI says the asset was saved, keeps the run failure
+truthful, and preserves access to the ready image, video, or audio instead of
+replacing it with a generic error.
 If a summary surface cannot resolve a stable graph identity, Request Changes is
 disabled there and directs the creator to open a specific object. A checkpoint
 label must never be converted into a broader project target for convenience.

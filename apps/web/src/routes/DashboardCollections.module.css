@@ -301,6 +301,24 @@
   gap: var(--space-2);
 }
 
+.assetEditAudio {
+  display: grid;
+  width: min(520px, calc(100% - var(--space-6)));
+  gap: var(--space-4);
+  place-items: center;
+  color: var(--text-strong);
+}
+
+.assetEditAudio audio {
+  width: 100%;
+}
+
+.assetEditEmpty {
+  padding: var(--space-5);
+  color: var(--muted);
+  text-align: center;
+}
+
 .projectCard {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -511,6 +529,16 @@
 
   .grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .viewerActions {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .viewerActions > * {
+    width: 100%;
   }
 
   .runRow {

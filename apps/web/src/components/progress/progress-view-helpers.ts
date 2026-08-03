@@ -113,8 +113,10 @@ export function lastCompletedPipelineStage(
         (toolName) => stagesByTool.get(toolName)?.status === "succeeded",
       );
     }
-    const fallbackStages = stages.filter((stage) =>
-      (group.fallbackTypes ?? [group.type]).includes(stage.type),
+    const fallbackStages = stages.filter(
+      (stage) =>
+        !stage.toolName &&
+        (group.fallbackTypes ?? [group.type]).includes(stage.type),
     );
     return fallbackStages.some((stage) => stage.status === "succeeded");
   });

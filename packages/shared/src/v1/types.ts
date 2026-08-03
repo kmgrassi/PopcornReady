@@ -380,6 +380,8 @@ export interface V1Asset {
   filename: string;
   url: string; // served/managed path the renderer can read
   thumbnailUrl?: string;
+  // Null for stable public/remote media; ISO timestamp for private signed URLs.
+  expiresAt?: string | null;
   durationSec: number;
   // Human display name written by the generating agent (falls back to a derived name).
   name?: string;
@@ -686,6 +688,8 @@ export interface GenerationRun {
     | "standalone_image"
     | "standalone_video"
     | "standalone_audio";
+  /** Server-projected state of the mandatory storyboard review boundary. */
+  storyboardBoundaryStatus?: "pending" | "reached" | "resolved";
   activityState?: GenerationRunActivityState;
   currentToolName?: string;
   reviewGates?: GateableGenerationStageType[];

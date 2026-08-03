@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import type { GenerationRunStatus } from "@popcorn/shared/v1/types";
 import {
   type WorkspaceAsset,
+  type AssetMediaResponse,
   type WorkspaceAssetSource,
   type WorkspaceOutput,
 } from "../lib/api-client";
 import { PublishAnchorDialog } from "../components/anchors/PublishAnchorDialog";
+import { AiAssetFeedbackDialog } from "../components/ai-edit/AiAssetFeedbackDialog";
 import { useAuth } from "../components/auth/AuthProvider";
 import { QuickLoadingState } from "../components/ui/QuickLoadingState";
 import { PageHeader } from "../components/ui/PageHeader";
@@ -18,7 +20,10 @@ import { VisibilityBadge } from "../components/ui/VisibilityBadge";
 import { MediaViewer, type MediaViewerItem } from "../components/media/MediaViewer";
 import { AssetImage } from "../components/media/AssetImage";
 import { RegenerateImageButton } from "../components/media/RegenerateImageButton";
-import { useAssetBillingQuery } from "../lib/queryClient";
+import {
+  useAssetBillingQuery,
+  useProjectAssetDetailQuery,
+} from "../lib/queryClient";
 import {
   useAssetMediaMutation,
   useAssetRegenerateMutation,
@@ -30,6 +35,7 @@ import {
   type LibraryScope,
 } from "../lib/v1/dashboard/query";
 import styles from "./DashboardCollections.module.css";
+import { useAssetMediaQuery } from "../lib/assetMediaQuery";
 
 const PAGE_SIZE = 24;
 const DEV_AUTOPILOT = import.meta.env.DEV;
@@ -113,7 +119,10 @@ function StatusChip({
   return <span className={`${styles.chip} ${statusChipClass(status)}`}>{label ?? titleCase(status)}</span>;
 }
 
-function assetViewerItem(asset: WorkspaceAsset): MediaViewerItem {
+function assetViewerItem(
+  asset: WorkspaceAsset,
+  media?: AssetMediaResponse,
+): MediaViewerItem {
   const id = asset.assetId ?? asset.id;
   return {
     id,
@@ -122,9 +131,41 @@ function assetViewerItem(asset: WorkspaceAsset): MediaViewerItem {
     filename: asset.filename,
     projectName: asset.projectName,
     durationSec: asset.durationSec,
-    url: asset.url,
-    thumbnailUrl: asset.thumbnailUrl,
+    url: media ? media.url ?? undefined : asset.url,
+    thumbnailUrl: media ? media.thumbnailUrl ?? undefined : asset.thumbnailUrl,
+    expiresAt: media?.expiresAt ?? asset.expiresAt,
   };
+}
+
+interface AssetEditSnapshot {
+  asset: WorkspaceAsset;
+  media?: AssetMediaResponse;
+}
+
+function AssetEditPreview({
+  snapshot,
+}: {
+  snapshot: AssetEditSnapshot;
+}) {
+  const { asset, media } = snapshot;
+  const url = media?.url ?? asset.url;
+  const thumbnailUrl = media?.thumbnailUrl ?? asset.thumbnailUrl;
+
+  if (asset.kind === "image" && (url || thumbnailUrl)) {
+    return <img alt="" src={url ?? thumbnailUrl} />;
+  }
+  if (asset.kind === "video" && url) {
+    return <video controls playsInline preload="metadata" poster={thumbnailUrl} src={url} />;
+  }
+  if (asset.kind === "audio" && url) {
+    return (
+      <div className={styles.assetEditAudio}>
+        <strong>{asset.title ?? asset.filename ?? "Audio asset"}</strong>
+        <audio controls preload="metadata" src={url} />
+      </div>
+    );
+  }
+  return <div className={styles.assetEditEmpty}>No preview available</div>;
 }
 
 function outputViewerItem(output: WorkspaceOutput): MediaViewerItem {
@@ -466,6 +507,8 @@ export function ProjectsPage() {
 
 export function AssetsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const requestedAssetId = searchParams.get("assetId");
+  const requestedProjectId = searchParams.get("projectId");
   const authScope = useDashboardAuthScope();
   const [scope, setScope] = useState<LibraryScope>("mine");
   const [kind, setKind] = useState<AssetKindFilter>("all");
@@ -473,10 +516,23 @@ export function AssetsPage() {
   const [pendingIds, setPendingIds] = useState<Set<string>>(() => new Set());
   const [openingIds, setOpeningIds] = useState<Set<string>>(() => new Set());
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+  const [editingAsset, setEditingAsset] = useState<AssetEditSnapshot | null>(null);
   const [publishingAsset, setPublishingAsset] = useState<WorkspaceAsset | null>(null);
+  const restoreEditFocusRef = useRef(false);
   const isPublic = scope === "public";
   const assetFilters = { kind, source, limit: PAGE_SIZE };
   const assetsQuery = useDashboardAssetsQuery(authScope, assetFilters, scope);
+  const requestedAssetInList = requestedAssetId
+    ? assetsQuery.items.find(
+        (asset) => (asset.assetId ?? asset.id) === requestedAssetId,
+      ) ?? null
+    : null;
+  const requestedAssetQuery = useProjectAssetDetailQuery(
+    authScope,
+    requestedProjectId ?? "",
+    requestedAssetId,
+    Boolean(requestedAssetId && requestedProjectId && !requestedAssetInList && !isPublic),
+  );
   const visibilityMutation = useAssetVisibilityMutation(authScope, assetFilters);
   const mediaMutation = useAssetMediaMutation(authScope, assetFilters);
   const regenerateMutation = useAssetRegenerateMutation(authScope, assetFilters);
@@ -528,15 +584,40 @@ export function AssetsPage() {
   const selectedIndex = selectedAssetId
     ? assetsQuery.items.findIndex((asset) => (asset.assetId ?? asset.id) === selectedAssetId)
     : -1;
-  const selectedAsset = selectedIndex >= 0 ? assetsQuery.items[selectedIndex] : null;
+  const deepLinkedAsset = requestedAssetQuery.data?.asset
+    ? {
+        ...requestedAssetQuery.data.asset,
+        assetId: requestedAssetQuery.data.asset.id,
+        projectName: "Project asset",
+        title: requestedAssetQuery.data.asset.name ?? requestedAssetQuery.data.asset.filename,
+        url:
+          requestedAssetQuery.data.asset.remoteUrl ??
+          requestedAssetQuery.data.asset.url ??
+          undefined,
+        visibility: undefined,
+      }
+    : null;
+  const selectedAsset = selectedIndex >= 0
+    ? assetsQuery.items[selectedIndex]
+    : selectedAssetId === requestedAssetId
+      ? deepLinkedAsset
+      : null;
+  const mediaWorkspaceId = isPublic ? "public" : assetsQuery.workspaceId;
+  const selectedMedia = useAssetMediaQuery({
+    authScope,
+    workspaceId: mediaWorkspaceId,
+    assetId: selectedAsset ? selectedAsset.assetId ?? selectedAsset.id : "",
+    initialMedia: selectedAsset,
+    enabled: Boolean(selectedAsset),
+    fetchWhenMissing: !isPublic,
+    proactiveRefresh: !isPublic,
+  });
   const billingQuery = useAssetBillingQuery(
     authScope,
     selectedAsset?.projectId ?? "",
     selectedAsset ? selectedAsset.assetId ?? selectedAsset.id : null,
     Boolean(selectedAsset && !isPublic),
   );
-  const requestedAssetId = searchParams.get("assetId");
-
   useEffect(() => {
     if (!requestedAssetId || selectedAssetId) return;
     const requestedAsset = assetsQuery.items.find(
@@ -546,13 +627,24 @@ export function AssetsPage() {
     void openAsset(requestedAsset);
   }, [assetsQuery.items, openAsset, requestedAssetId, selectedAssetId]);
 
+  useEffect(() => {
+    if (!requestedAssetId || selectedAssetId || !deepLinkedAsset) return;
+    setSelectedAssetId(requestedAssetId);
+  }, [deepLinkedAsset, requestedAssetId, selectedAssetId]);
+
   const closeAssetViewer = useCallback(() => {
     setSelectedAssetId(null);
     if (!searchParams.has("assetId")) return;
     const next = new URLSearchParams(searchParams);
     next.delete("assetId");
+    next.delete("projectId");
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
+
+  const closeAssetEdit = useCallback(() => {
+    restoreEditFocusRef.current = true;
+    setEditingAsset(null);
+  }, []);
 
   return (
     <DashboardFrame
@@ -622,7 +714,11 @@ export function AssetsPage() {
                     onClick={() => void openAsset(asset)}
                     aria-label={`View ${asset.title ?? asset.filename ?? id}`}
                   >
-                    <AssetPreview asset={asset} />
+                    <AssetPreview
+                      asset={asset}
+                      authScope={authScope}
+                      workspaceId={mediaWorkspaceId}
+                    />
                     <div className={styles.cardBody}>
                       <div><span className={styles.rowTitle}>{asset.title ?? asset.filename ?? asset.id}</span><span className={styles.rowSub}>{asset.projectName}</span></div>
                       <div className={styles.cardMeta}>
@@ -648,7 +744,11 @@ export function AssetsPage() {
         </>
       ) : null}
       <MediaViewer
-        item={selectedAsset ? assetViewerItem(selectedAsset) : null}
+        item={
+          !editingAsset && selectedAsset
+            ? assetViewerItem(selectedAsset, selectedMedia.data)
+            : null
+        }
         creditsCharged={isPublic ? undefined : billingQuery.data?.creditsCharged}
         hasPrevious={selectedIndex > 0}
         hasNext={selectedIndex >= 0 && selectedIndex < assetsQuery.items.length - 1}
@@ -666,10 +766,14 @@ export function AssetsPage() {
         onRefresh={
           isPublic
             ? undefined
-            : async (item) => {
-                return mediaMutation.mutateAsync(item.id);
-              }
+            : async (item) =>
+                (await selectedMedia.refreshAfterError(item.url ?? item.thumbnailUrl)) ?? {
+                  url: null,
+                  thumbnailUrl: null,
+                  expiresAt: null,
+                }
         }
+        onMediaLoad={isPublic ? undefined : selectedMedia.markLoaded}
         onRegenerate={
           isPublic
             ? undefined
@@ -694,6 +798,26 @@ export function AssetsPage() {
                   Project
                 </ButtonLink>
               ) : null}
+              {!isPublic && selectedAsset.status === "ready" ? (
+                <Button
+                  ref={(node) => {
+                    if (!node || !restoreEditFocusRef.current) return;
+                    restoreEditFocusRef.current = false;
+                    node.focus();
+                  }}
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    restoreEditFocusRef.current = false;
+                    setEditingAsset({
+                      asset: selectedAsset,
+                      media: selectedMedia.data,
+                    });
+                  }}
+                >
+                  Suggest an edit
+                </Button>
+              ) : null}
               {!isPublic && selectedAsset.kind === "image" ? (
                 <Button
                   variant="ghost"
@@ -703,7 +827,7 @@ export function AssetsPage() {
                   Publish as anchor
                 </Button>
               ) : null}
-              {!isPublic ? (
+              {!isPublic && selectedAsset.visibility ? (
                 <Button
                   variant="secondary"
                   size="sm"
@@ -716,6 +840,39 @@ export function AssetsPage() {
             </div>
           ) : null
         }
+      />
+      <AiAssetFeedbackDialog
+        open={Boolean(editingAsset)}
+        projectId={editingAsset?.asset.projectId ?? ""}
+        target={
+          editingAsset
+            ? {
+                scope: "asset",
+                assetId: editingAsset.asset.assetId ?? editingAsset.asset.id,
+                label:
+                  editingAsset.asset.title ??
+                  editingAsset.asset.filename ??
+                  "Asset",
+              }
+            : null
+        }
+        title="Suggest an edit"
+        subtitle={
+          editingAsset
+            ? editingAsset.asset.title ?? editingAsset.asset.filename ?? "Current asset"
+            : null
+        }
+        sourcePrompt={
+          editingAsset
+            ? editingAsset.asset.prompt ?? editingAsset.asset.promptPreview ?? null
+            : null
+        }
+        initialMessage={null}
+        onClose={closeAssetEdit}
+        onExecutionSettled={() => {
+          assetsQuery.refetch();
+        }}
+        asset={editingAsset ? <AssetEditPreview snapshot={editingAsset} /> : null}
       />
       <PublishAnchorDialog
         source={
@@ -735,7 +892,23 @@ export function AssetsPage() {
   );
 }
 
-function AssetPreview({ asset }: { asset: WorkspaceAsset }) {
+function AssetPreview({
+  asset,
+  authScope,
+  workspaceId,
+}: {
+  asset: WorkspaceAsset;
+  authScope: string;
+  workspaceId: string;
+}) {
+  const assetId = asset.assetId ?? asset.id;
+  const mediaQuery = useAssetMediaQuery({
+    authScope,
+    workspaceId,
+    assetId,
+    initialMedia: asset,
+  });
+  const media = mediaQuery.data;
   // Rows can reference media whose bytes are gone (pre-storage-cutover dev
   // assets); AssetImage degrades to the kind placeholder on error instead of a
   // broken-image glyph. Recovery is disabled here because the surrounding card
@@ -743,13 +916,15 @@ function AssetPreview({ asset }: { asset: WorkspaceAsset }) {
   return (
     <AssetImage
       kind={asset.kind === "video" ? "video" : asset.kind === "audio" ? "audio" : "image"}
-      url={asset.url}
-      thumbnailUrl={asset.thumbnailUrl}
+      url={media ? media.url ?? undefined : asset.url}
+      thumbnailUrl={media ? media.thumbnailUrl ?? undefined : asset.thumbnailUrl}
       status={asset.status}
       mediaClassName={styles.media}
       placeholderClassName={`${styles.media} ${styles.mediaEmpty}`}
       placeholder={<span>{titleCase(asset.kind)}</span>}
       allowRegenerate={false}
+      onMediaError={(failedUrl) => void mediaQuery.refreshAfterError(failedUrl)}
+      onMediaLoad={mediaQuery.markLoaded}
     />
   );
 }

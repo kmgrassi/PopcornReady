@@ -45,6 +45,8 @@ import type {
   SaveProjectStoryboardInput,
   StartGenerationRunInput,
   StartGenerationRunResponse,
+  StartStoryboardGenerationRunResponse,
+  StoryboardGenerationRunStatusResponse,
   StartTimelineExportInput,
   StartUploadedFootageRunInput,
   StoryboardGenerationJobResponse,
@@ -371,6 +373,22 @@ export const v1Api = {
   getProjectStoryboard: (projectId: string, signal?: AbortSignal) =>
     apiRequest<ProjectStoryboardResponse>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/storyboard`,
+      { signal }
+    ),
+  startProjectStoryboardRun: (projectId: string) =>
+    apiRequest<StartStoryboardGenerationRunResponse>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/generation-entrypoints/storyboard`,
+      {
+        method: "POST",
+        body: {},
+        headers: {
+          "Idempotency-Key": `storyboard-run:${projectId}:${globalThis.crypto?.randomUUID?.() ?? Date.now()}`,
+        },
+      }
+    ),
+  getProjectStoryboardRunStatus: (projectId: string, signal?: AbortSignal) =>
+    apiRequest<StoryboardGenerationRunStatusResponse>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/generation-entrypoints/storyboard`,
       { signal }
     ),
   generateProjectStoryboard: (projectId: string) =>

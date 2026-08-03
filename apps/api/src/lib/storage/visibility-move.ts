@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { copyS3ObjectWithMetadata } from "./object-store";
 
 export type AssetVisibility = "public" | "private";
 
@@ -25,6 +26,7 @@ export interface VisibilityObjectStore {
     sourceBucket: string;
     targetBucket: string;
     key: string;
+    targetVisibility: AssetVisibility;
   }): Promise<void>;
   deleteObject(input: { bucket: string; key: string }): Promise<void>;
   invalidatePublicObject(input: { key: string }): Promise<void>;
@@ -137,6 +139,7 @@ export async function reconcileAssetStorage(
         sourceBucket: move.sourceBucket,
         targetBucket: move.targetBucket,
         key: move.key,
+        targetVisibility: effectiveVisibility,
       });
     }
     await input.persistStorageBucket(targetBucket ?? sourceBucket, targetSidecars);
@@ -160,13 +163,19 @@ export async function reconcileAssetStorage(
   }
 
   if (storageKey && sourceBucket && targetBucket) {
-    await store.copyObject({ sourceBucket, targetBucket, key: storageKey });
+    await store.copyObject({
+      sourceBucket,
+      targetBucket,
+      key: storageKey,
+      targetVisibility: effectiveVisibility,
+    });
   }
   for (const move of sidecarMoves) {
     await store.copyObject({
       sourceBucket: move.sourceBucket,
       targetBucket: move.targetBucket,
       key: move.key,
+      targetVisibility: effectiveVisibility,
     });
   }
   await input.persistStorageBucket(targetBucket, targetSidecars);
@@ -238,16 +247,17 @@ class S3VisibilityObjectStore implements VisibilityObjectStore {
     sourceBucket: string;
     targetBucket: string;
     key: string;
+    targetVisibility: AssetVisibility;
   }): Promise<void> {
-    const { CopyObjectCommand } = await import("@aws-sdk/client-s3");
     const client = await this.s3Client();
-    await client.send(
-      new CopyObjectCommand({
-        Bucket: input.targetBucket,
-        Key: input.key,
-        CopySource: `${input.sourceBucket}/${encodeS3CopySourceKey(input.key)}`,
-      })
-    );
+    await copyS3ObjectWithMetadata({
+      client,
+      sourceBucket: input.sourceBucket,
+      sourceKey: input.key,
+      destinationBucket: input.targetBucket,
+      destinationKey: input.key,
+      destinationVisibility: input.targetVisibility,
+    });
   }
 
   async deleteObject(input: { bucket: string; key: string }): Promise<void> {
@@ -282,11 +292,4 @@ class S3VisibilityObjectStore implements VisibilityObjectStore {
       })
     );
   }
-}
-
-function encodeS3CopySourceKey(key: string): string {
-  return key
-    .split("/")
-    .map((part) => encodeURIComponent(part))
-    .join("/");
 }

@@ -3,8 +3,14 @@ import { Router } from "express";
 import type { CreatorDirectTaskKind, DomainTaskV1 } from "@popcorn/shared/domain-agent-contract";
 import { mutation, route } from "@/core/adapter";
 import { ApiError } from "@/core/errors";
+import type { HandlerCtx } from "@/lib/api/v1/handler";
+import { SIGNED_MEDIA_JSON_HEADERS } from "@/lib/api/v1/cache-policy";
 import { createAction, getAsset, getProject } from "@/lib/api/v1/store";
-import { getDomainRun, listSessionRuns } from "@/lib/api/v1/domain-session-store";
+import {
+  getDomainRun,
+  listSessionRuns,
+} from "@/lib/api/v1/domain-session-store";
+import { listRunActions } from "@/lib/api/v1/orchestrator-store";
 import {
   enhanceImagePrompt,
   type ImagePromptEnhancementDeps,
@@ -17,10 +23,25 @@ import { confirmCreatorDirectProposal } from "@/lib/postgres/creator-direct-conf
 import { getServiceSupabase } from "@/lib/supabase/clients";
 import { runQuery } from "@/lib/supabase/db-errors";
 import { cancelDomainRun, dispatchDomainRun } from "@/lib/orchestrator/domain-run-service";
+import {
+  DomainCompletionValidationError,
+  loadDomainCompletionOutputInventory,
+  type DomainCompletionOutputInventoryItem,
+} from "@/lib/orchestrator/agent-definition";
 
 export const agentCreationsRouter = Router();
 const MAX_PROMPT_LENGTH = 4_000;
 const MAX_BUDGET_USD = 100;
+
+const CREATOR_DIRECT_ACCEPTANCE_CRITERIA = {
+  image_create: "Create at least one ready image asset that fulfills the approved request.",
+  video_create: "Create at least one ready video asset that fulfills the approved request.",
+  video_edit:
+    "Create at least one ready edited video asset that fulfills the approved request while preserving the pinned source.",
+  soundtrack_create:
+    "Create at least one ready soundtrack asset that fulfills the approved request.",
+  audio_create: "Create at least one ready audio asset that fulfills the approved request.",
+} as const satisfies Record<CreatorDirectTaskKind, string>;
 
 export type CreationRequest = {
   kind: CreatorDirectTaskKind;
@@ -160,10 +181,197 @@ export function taskFor(args: { projectId: string; actorId: string; request: Cre
     preserve: { assetIds: args.request.sourceAssetId ? [args.request.sourceAssetId] : [], selections: [], fingerprints: args.request.sourceAssetId && args.sourceFingerprint ? [{ assetId: args.request.sourceAssetId, value: args.sourceFingerprint }] : [], pins: args.request.sourceAssetId ? [{ kind: "asset", id: args.request.sourceAssetId, ...(args.sourceFingerprint ? { fingerprint: args.sourceFingerprint } : {}) }] : [] },
     candidateAffectedAssetIds: [], budgetUsd: args.request.maximumUsd,
     approvalContext: { proposalActionId: args.proposalActionId as never, approvedBudgetUsd: args.request.maximumUsd, approvalFingerprint: args.requestDigest },
-    acceptanceCriteria: [args.request.prompt],
+    acceptanceCriteria: [CREATOR_DIRECT_ACCEPTANCE_CRITERIA[args.request.kind]],
     origin: { kind: "creator_direct", actorId: args.actorId, creatorMessageId: args.requestDigest, entrypoint: "project_api", requestDigest: args.requestDigest, idempotencyKey: args.idempotencyKey, approvalGateId: args.approvalGateId },
     responseRecipient: { kind: "creator_conversation" },
   } as DomainTaskV1;
+}
+
+export interface CreationStatusOutput {
+  assetId: string;
+  intrinsicRole: string;
+  kind: "image" | "video" | "audio";
+  url?: string;
+  thumbnailUrl?: string;
+  expiresAt: string | null;
+  name?: string;
+}
+
+interface CreationStatusDeps {
+  getRun?: typeof getDomainRun;
+  listHistory?: typeof listSessionRuns;
+  listActions?: typeof listRunActions;
+  loadOutputInventory?: typeof loadDomainCompletionOutputInventory;
+  getRunAsset?: typeof getAsset;
+}
+
+function doneReportOutputs(
+  report: Awaited<ReturnType<typeof listSessionRuns>>[number]["report"]
+): Array<Pick<CreationStatusOutput, "assetId" | "intrinsicRole">> {
+  return report?.outcome.outcome === "done" ? [...report.outcome.outputs] : [];
+}
+
+function mergeOutputCandidates(
+  reportOutputs: Array<Pick<CreationStatusOutput, "assetId" | "intrinsicRole">>,
+  recoveredOutputs: readonly DomainCompletionOutputInventoryItem[]
+): Array<Pick<CreationStatusOutput, "assetId" | "intrinsicRole">> {
+  const merged = new Map<string, Pick<CreationStatusOutput, "assetId" | "intrinsicRole">>();
+  for (const output of [...reportOutputs, ...recoveredOutputs]) {
+    if (!merged.has(output.assetId)) {
+      merged.set(output.assetId, {
+        assetId: output.assetId,
+        intrinsicRole: output.intrinsicRole,
+      });
+    }
+  }
+  return [...merged.values()];
+}
+
+async function hydrateCreationOutputs(input: {
+  workspaceId: string;
+  projectId: string;
+  candidates: Array<Pick<CreationStatusOutput, "assetId" | "intrinsicRole">>;
+  getRunAsset: typeof getAsset;
+}): Promise<CreationStatusOutput[]> {
+  const outputs = await Promise.all(
+    input.candidates.map(async (candidate) => {
+      try {
+        const asset = await input.getRunAsset(
+          input.workspaceId,
+          input.projectId,
+          candidate.assetId
+        );
+        if (asset.status !== "ready") return null;
+        return {
+          ...candidate,
+          kind: asset.kind,
+          ...(asset.remoteUrl ? { url: asset.remoteUrl } : {}),
+          ...(asset.thumbnailUrl ? { thumbnailUrl: asset.thumbnailUrl } : {}),
+          expiresAt: asset.expiresAt ?? null,
+          ...(asset.name ? { name: asset.name } : {}),
+        } satisfies CreationStatusOutput;
+      } catch (error) {
+        if (error instanceof ApiError && error.code === "not_found") return null;
+        throw error;
+      }
+    })
+  );
+  return outputs.filter((output): output is CreationStatusOutput => output !== null);
+}
+
+async function recoverCreationOutputs(input: {
+  projectId: string;
+  task: DomainTaskV1;
+  actions: Awaited<ReturnType<typeof listRunActions>>;
+  loadOutputInventory: typeof loadDomainCompletionOutputInventory;
+}): Promise<DomainCompletionOutputInventoryItem[]> {
+  const candidateIds = [
+    ...new Set(
+      input.actions.flatMap((action) =>
+        action.status === "applied" ? action.outputAssetIds : []
+      )
+    ),
+  ];
+  const inventories = await Promise.all(
+    candidateIds.map(async (candidateId) => {
+      const candidateActions = input.actions.map((action) => ({
+        ...action,
+        outputAssetIds:
+          action.status === "applied" && action.outputAssetIds.includes(candidateId)
+            ? [candidateId]
+            : [],
+      }));
+      try {
+        return await input.loadOutputInventory({
+          projectId: input.projectId,
+          task: input.task,
+          actions: candidateActions,
+          requireComplete: false,
+        });
+      } catch (error) {
+        if (error instanceof DomainCompletionValidationError) return [];
+        throw error;
+      }
+    })
+  );
+  return inventories.flat();
+}
+
+export async function creationStatusForRun(
+  input: {
+    workspaceId: string;
+    actorId: string;
+    projectId: string;
+    runId: string;
+  },
+  deps: CreationStatusDeps = {}
+) {
+  const loadRun = deps.getRun ?? getDomainRun;
+  const loadHistory = deps.listHistory ?? listSessionRuns;
+  const loadActions = deps.listActions ?? listRunActions;
+  const loadInventory = deps.loadOutputInventory ?? loadDomainCompletionOutputInventory;
+  const loadAsset = deps.getRunAsset ?? getAsset;
+  const run = await loadRun(input.projectId, input.runId);
+  if (
+    !run ||
+    run.originKind !== "creator_direct" ||
+    run.originActorId !== input.actorId
+  ) {
+    throw new ApiError("not_found", "Creator-direct run not found.");
+  }
+
+  const history = run.agentSessionId
+    ? await loadHistory(run.agentSessionId, "service")
+    : [];
+  const report = history.find((entry) => entry.runId === run.id)?.report ?? null;
+  let recoveredOutputs: readonly DomainCompletionOutputInventoryItem[] = [];
+  if (run.taskParams) {
+    const actions = await loadActions(run.id);
+    recoveredOutputs = await recoverCreationOutputs({
+      projectId: input.projectId,
+      task: run.taskParams,
+      actions,
+      loadOutputInventory: loadInventory,
+    });
+  }
+  const outputs = await hydrateCreationOutputs({
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    candidates: mergeOutputCandidates(doneReportOutputs(report), recoveredOutputs),
+    getRunAsset: loadAsset,
+  });
+  return { sessionId: run.agentSessionId, run, report, outputs };
+}
+
+interface CreationStatusRouteDeps {
+  requireProjectAccess: (workspaceId: string, projectId: string) => Promise<void>;
+  getStatus: typeof creationStatusForRun;
+}
+
+export async function creationStatusRoute(
+  ctx: Pick<HandlerCtx, "auth">,
+  params: Record<string, string | undefined>,
+  deps: Partial<CreationStatusRouteDeps> = {}
+) {
+  const projectId = string(params.projectId, "projectId", 128);
+  const resolved: CreationStatusRouteDeps = {
+    requireProjectAccess: async (workspaceId, requestedProjectId) => {
+      await getProject(workspaceId, requestedProjectId);
+    },
+    getStatus: creationStatusForRun,
+    ...deps,
+  };
+  await resolved.requireProjectAccess(ctx.auth.workspaceId, projectId);
+  return {
+    status: 200,
+    body: await resolved.getStatus({
+      workspaceId: ctx.auth.workspaceId,
+      actorId: ctx.auth.actor.id,
+      projectId,
+      runId: string(params.runId, "runId", 128),
+    }),
+    headers: SIGNED_MEDIA_JSON_HEADERS,
+  };
 }
 
 async function verifyReferences(workspaceId: string, projectId: string, request: CreationRequest) {
@@ -364,14 +572,10 @@ agentCreationsRouter.post("/projects/:projectId/agent-creations/proposals/:gateI
   return { status: 202, body: { sessionId: run.agentSessionId, runId: run.id, enqueued: confirmation.dispatchEnqueued } };
 }));
 
-agentCreationsRouter.get("/projects/:projectId/agent-creations/:runId", route(async ({ auth }, params) => {
-  const projectId = string(params.projectId, "projectId", 128); await getProject(auth.workspaceId, projectId);
-  const run = await getDomainRun(projectId, string(params.runId, "runId", 128));
-  if (!run || run.originKind !== "creator_direct" || run.originActorId !== auth.actor.id) throw new ApiError("not_found", "Creator-direct run not found.");
-  const history = run.agentSessionId ? await listSessionRuns(run.agentSessionId, "service") : [];
-  const report = history.find((entry) => entry.runId === run.id)?.report ?? null;
-  return { status: 200, body: { sessionId: run.agentSessionId, run, report, outputs: report?.outcome.outcome === "done" ? report.outcome.outputs : [] } };
-}));
+agentCreationsRouter.get(
+  "/projects/:projectId/agent-creations/:runId",
+  route(creationStatusRoute)
+);
 
 agentCreationsRouter.post("/projects/:projectId/agent-creations/:runId/cancel", mutation(async ({ auth }, params) => {
   const projectId = string(params.projectId, "projectId", 128); await getProject(auth.workspaceId, projectId);

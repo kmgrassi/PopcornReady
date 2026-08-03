@@ -1961,6 +1961,7 @@ async function mapAsset(row: AssetRow): Promise<V1Asset> {
   else delete asset.remoteUrl;
   if (media.thumbnailUrl) asset.thumbnailUrl = media.thumbnailUrl;
   else delete asset.thumbnailUrl;
+  asset.expiresAt = media.expiresAt;
   return asset;
 }
 
@@ -6108,6 +6109,7 @@ export interface WorkspaceAssetSummary {
   promptPreview?: string;
   url?: string;
   thumbnailUrl?: string;
+  expiresAt?: string | null;
   durationSec?: number;
   visibility: "public" | "private";
   createdAt: string;
@@ -6137,7 +6139,7 @@ export async function getAssetMediaUrls(
   if (!data) throw notFound(`Asset not found: ${assetId}`);
 
   const row = data as AssetRow;
-  return assetMediaUrlsForRow(row);
+  return assetMediaUrlsForRow(row, { verifyManagedObjects: true });
 }
 
 // Workspace-scoped asset read for flows that only carry an asset id (e.g. the
@@ -6328,6 +6330,7 @@ export async function listWorkspaceAssets(
         ...item,
         url: media.url ?? undefined,
         thumbnailUrl: media.thumbnailUrl ?? undefined,
+        expiresAt: media.expiresAt,
       };
     })
   );

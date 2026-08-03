@@ -7,14 +7,17 @@ import {
   CreationProgressSkeleton,
   type CreationStatusPresentation,
 } from "../components/creation/CreationProgressExperience";
+import { useAuth } from "../components/auth/AuthProvider";
 import { ProjectPicker } from "../components/projects/ProjectPicker";
 import { ImageWithSkeleton } from "../components/ui/ImageWithSkeleton";
 import { Button } from "../components/ui/Button";
 import { QuickLoadingState } from "../components/ui/QuickLoadingState";
 import { v1Api } from "../lib/api-client";
+import { useAssetMediaQuery } from "../lib/assetMediaQuery";
 import {
   useCreationStatus,
   type CreationGoal,
+  type CreationStatusOutput,
 } from "../lib/agent-creations";
 import {
   creationDraftNavigationState,
@@ -24,6 +27,7 @@ import {
 import {
   queryKeys,
   useCreateProjectMutation,
+  useMeQuery,
   useProjectQuery,
 } from "../lib/queryClient";
 import { RecentProjectSwitcher } from "./create/RecentProjectSwitcher";
@@ -49,7 +53,28 @@ function presentStatus(
   outcome: CreationStatusOutcome,
   hasOutputs: boolean,
 ): StatusPresentation {
+  const normalizedStatus = status.toLowerCase();
   if (hasOutputs) {
+    if (["queued", "running", "waiting"].includes(normalizedStatus)) {
+      return {
+        heading: "Your asset is ready",
+        description:
+          "The result is ready to review while the studio finishes wrapping up.",
+        label: "Finishing up",
+        tone: "active",
+        isActive: true,
+      };
+    }
+    if (["failed", "timed_out", "canceled", "cancelled"].includes(normalizedStatus)) {
+      return {
+        heading: "Your asset was saved",
+        description:
+          "The finished result is ready even though the studio hit a problem while wrapping up.",
+        label: "Asset saved",
+        tone: "success",
+        isActive: false,
+      };
+    }
     return {
       heading: "Your asset is ready",
       description:
@@ -79,7 +104,7 @@ function presentStatus(
     };
   }
 
-  switch (status.toLowerCase()) {
+  switch (normalizedStatus) {
     case "queued":
       return {
         heading: "Your asset is in motion",
@@ -159,6 +184,91 @@ function presentStatus(
 
 type CreationStatusOutcome = "blocked" | "question" | "other";
 
+function CreationOutputPreview({ output }: { output: CreationStatusOutput }) {
+  const auth = useAuth();
+  const authScope =
+    auth.user?.id ?? (import.meta.env.DEV ? "dev-autopilot" : auth.status);
+  const meQuery = useMeQuery(authScope, { enabled: auth.status !== "loading" });
+  const mediaQuery = useAssetMediaQuery({
+    authScope,
+    workspaceId: meQuery.data?.workspaceId ?? "",
+    assetId: output.assetId,
+    initialMedia: {
+      url: output.url,
+      thumbnailUrl: output.thumbnailUrl,
+      expiresAt: output.expiresAt,
+    },
+    enabled: Boolean(meQuery.data?.workspaceId),
+    fetchWhenMissing: true,
+    proactiveRefresh: true,
+  });
+  const title = output.name?.trim() || "Generated asset";
+  const mediaUrl = mediaQuery.data
+    ? mediaQuery.data.url ?? undefined
+    : output.url;
+  const thumbnailUrl = mediaQuery.data
+    ? mediaQuery.data.thumbnailUrl ?? undefined
+    : output.thumbnailUrl;
+  const stillUrl = mediaUrl ?? thumbnailUrl;
+  const recoverMedia = (url: string) => {
+    void mediaQuery.refreshAfterError(url).catch(() => undefined);
+  };
+
+  return (
+    <section className={styles.outputPreview} aria-label={`${title} preview`}>
+      {output.kind === "image" && stillUrl ? (
+        <ImageWithSkeleton
+          className={styles.outputMedia}
+          src={stillUrl}
+          alt={title}
+          fit="contain"
+          onError={() => recoverMedia(stillUrl)}
+          onLoad={() => mediaQuery.markLoaded(stillUrl)}
+        />
+      ) : output.kind === "video" && mediaUrl ? (
+        <video
+          className={styles.outputMedia}
+          src={mediaUrl}
+          poster={thumbnailUrl}
+          aria-label={`${title} video`}
+          controls
+          playsInline
+          preload="metadata"
+          onError={() => recoverMedia(mediaUrl)}
+          onLoadedData={() => mediaQuery.markLoaded(mediaUrl)}
+        />
+      ) : output.kind === "video" && thumbnailUrl ? (
+        <ImageWithSkeleton
+          className={styles.outputMedia}
+          src={thumbnailUrl}
+          alt={`${title} poster`}
+          fit="contain"
+          onError={() => recoverMedia(thumbnailUrl)}
+          onLoad={() => mediaQuery.markLoaded(thumbnailUrl)}
+        />
+      ) : output.kind === "audio" && mediaUrl ? (
+        <div className={styles.audioPreview}>
+          <span aria-hidden="true">♪</span>
+          <strong>{title}</strong>
+          <audio
+            src={mediaUrl}
+            aria-label={`${title} audio`}
+            controls
+            preload="metadata"
+            onError={() => recoverMedia(mediaUrl)}
+            onLoadedData={() => mediaQuery.markLoaded(mediaUrl)}
+          />
+        </div>
+      ) : (
+        <div className={styles.outputPlaceholder}>
+          <strong>{title}</strong>
+          <span>The asset is saved in the project library.</span>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function StandaloneCreationPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -230,6 +340,12 @@ export function StandaloneCreationPage() {
       Boolean(status.data?.outputs.length),
     );
     const inputSummary = status.data?.run.inputSummary?.trim();
+    const primaryOutput = status.data?.outputs[0];
+    const hasPostOutputFailure =
+      Boolean(primaryOutput) &&
+      ["failed", "timed_out", "canceled", "cancelled"].includes(
+        status.data?.run.status.toLowerCase() ?? "",
+      );
 
     return (
       <main
@@ -270,6 +386,11 @@ export function StandaloneCreationPage() {
           <CreationProgressExperience
             presentation={presentation}
             inputSummary={inputSummary}
+            preview={
+              primaryOutput ? (
+                <CreationOutputPreview output={primaryOutput} />
+              ) : undefined
+            }
           >
             {status.data.report?.outcome.outcome === "blocked" ? (
                 <div className={styles.outcomePanel} data-tone="danger">
@@ -281,6 +402,16 @@ export function StandaloneCreationPage() {
                 <div className={styles.outcomePanel}>
                   <strong>What the studio needs</strong>
                   <p>{status.data.report.outcome.question}</p>
+                </div>
+              ) : null}
+              {hasPostOutputFailure ? (
+                <div className={styles.savedAssetNotice} role="status">
+                  <strong>Your result is safe</strong>
+                  <p>
+                    The asset finished successfully, but the studio couldn’t
+                    complete its final wrap-up. You can still review and use the
+                    saved result.
+                  </p>
                 </div>
               ) : null}
               {status.data.outputs.length ? (

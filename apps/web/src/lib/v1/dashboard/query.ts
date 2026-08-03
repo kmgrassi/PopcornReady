@@ -20,6 +20,8 @@ import {
   type WorkspaceOutputsResponse,
 } from "../../api-client";
 import { useMeQuery } from "../../queryClient";
+import { clearPersistedAssetMediaFor } from "../../assetMediaQuery";
+import { queryKeys } from "../../queryKeys";
 
 type PageCursor = string | null;
 
@@ -260,6 +262,7 @@ export function useDashboardAssetsQuery(
     hasMore: query.hasNextPage,
     fetchNextPage: query.fetchNextPage,
     queryKey,
+    workspaceId: keyWorkspace,
     refetch: () => {
       if (!isPublic) void meQuery.refetch();
       void query.refetch();
@@ -361,6 +364,7 @@ export function useAssetVisibilityMutation(
     onSuccess: (payload, { asset, visibility }) => {
       const workspaceId = meQuery.data?.workspaceId;
       if (!workspaceId) return;
+      clearPersistedAssetMediaFor(authScope, workspaceId, assetKey(asset));
       updateMatchingAssetQueries(
         queryClient,
         workspaceId,
@@ -372,6 +376,9 @@ export function useAssetVisibilityMutation(
       );
       void queryClient.invalidateQueries({
         queryKey: ["dashboard", "assets", workspaceId],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.assetMedia(authScope, workspaceId, assetKey(asset)),
       });
     },
   });
@@ -397,7 +404,11 @@ export function useAssetMediaMutation(
   return useMutation({
     mutationFn: (assetId: string) => v1Api.refreshAssetMedia(assetId),
     onSuccess: (media: AssetMediaResponse, assetId) => {
-      if (!queryKey) return;
+      if (!queryKey || !meQuery.data) return;
+      queryClient.setQueryData(
+        queryKeys.assetMedia(authScope, meQuery.data.workspaceId, assetId),
+        media,
+      );
       queryClient.setQueryData<
         InfiniteData<WorkspaceAssetsResponse, PageCursor>
       >(queryKey, (current) =>
@@ -405,6 +416,7 @@ export function useAssetMediaMutation(
           ...asset,
           url: media.url ?? undefined,
           thumbnailUrl: media.thumbnailUrl ?? undefined,
+          expiresAt: media.expiresAt,
         })),
       );
     },
@@ -441,7 +453,11 @@ export function useAssetRegenerateMutation(
       model?: string;
     }) => v1Api.regenerateAsset(assetId, { prompt, provider, model }),
     onSuccess: (media: AssetMediaResponse, { assetId }) => {
-      if (!queryKey) return;
+      if (!queryKey || !meQuery.data) return;
+      queryClient.setQueryData(
+        queryKeys.assetMedia(authScope, meQuery.data.workspaceId, assetId),
+        media,
+      );
       queryClient.setQueryData<
         InfiniteData<WorkspaceAssetsResponse, PageCursor>
       >(queryKey, (current) =>
@@ -450,6 +466,7 @@ export function useAssetRegenerateMutation(
           status: "ready",
           url: media.url ?? undefined,
           thumbnailUrl: media.thumbnailUrl ?? undefined,
+          expiresAt: media.expiresAt,
         })),
       );
     },

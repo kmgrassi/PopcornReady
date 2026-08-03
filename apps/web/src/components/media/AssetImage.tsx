@@ -63,6 +63,8 @@ export interface AssetImageProps {
   onRegenerateStart?: () => void;
   onRegenerated?: (assetId: string, media: AssetMediaResponse) => void;
   onRegenerateSettled?: () => void;
+  onMediaError?: (failedUrl: string) => void;
+  onMediaLoad?: (loadedUrl: string) => void;
 }
 
 // Standardized media card: renders an asset's image/video (with an onError →
@@ -90,6 +92,8 @@ export function AssetImage({
   onRegenerateStart,
   onRegenerated,
   onRegenerateSettled,
+  onMediaError,
+  onMediaLoad,
 }: AssetImageProps) {
   // Track every src that has 404'd/errored, so a video can fall through to its
   // thumbnail poster and an image can fall through to the placeholder.
@@ -97,6 +101,7 @@ export function AssetImage({
   const markFailed = (s: string | null | undefined) => {
     if (!s) return;
     setFailedSrcs((prev) => (prev.has(s) ? prev : new Set(prev).add(s)));
+    onMediaError?.(s);
   };
   const usable = (s: string | null | undefined): s is string =>
     Boolean(s) && !failedSrcs.has(s as string);
@@ -136,6 +141,7 @@ export function AssetImage({
         preload="metadata"
         controls={videoControls}
         onError={() => markFailed(videoUrl)}
+        onLoadedData={() => onMediaLoad?.(videoUrl)}
       />
     );
   } else if (stillSrc) {
@@ -147,6 +153,7 @@ export function AssetImage({
         loading="lazy"
         fill
         onError={() => markFailed(stillSrc)}
+        onLoad={() => onMediaLoad?.(stillSrc)}
       />
     );
   } else {

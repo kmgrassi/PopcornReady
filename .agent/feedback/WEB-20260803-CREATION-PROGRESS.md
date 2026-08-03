@@ -19,6 +19,11 @@ Responsive sprite scaling needs a containment check at the breakpoint edge, not
 only at canonical desktop and phone widths; transformed bounds can clip just
 above an otherwise-correct mobile breakpoint.
 
+Viewport breakpoints are also insufficient when an authenticated application
+shell changes the content width independently. The actor transform now responds
+to the crew scene's inline size, and the regression test exercises the restored
+desktop sidebar width where the original clipping occurred.
+
 ## Follow-up
 
 Use `/dev/creation-progress` for future loading-state visual review, and keep its
