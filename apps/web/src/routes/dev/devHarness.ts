@@ -5,10 +5,12 @@ const viteEnv = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env;
 export const isDevHarnessEnabled = viteEnv?.DEV ?? false;
 
 export const devHarnessRoutes = {
+  creationProgress: "/dev/creation-progress",
   designSystem: "/dev/design-system",
   generationCards: "/dev/generation-cards",
   landingUpload: "/dev/landing-upload",
   mediaGallery: "/dev/media-gallery",
+  videoEdit: "/dev/video-edit",
 } as const;
 
 export type LandingUploadHarnessStatus =

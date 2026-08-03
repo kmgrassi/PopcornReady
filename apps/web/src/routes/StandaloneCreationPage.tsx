@@ -2,7 +2,11 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import type { V1Project } from "@popcorn/shared/v1/types";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { StudioCrewLoader } from "../components/creation/StudioCrewLoader";
+import {
+  CreationProgressExperience,
+  CreationProgressSkeleton,
+  type CreationStatusPresentation,
+} from "../components/creation/CreationProgressExperience";
 import { useAuth } from "../components/auth/AuthProvider";
 import { ProjectPicker } from "../components/projects/ProjectPicker";
 import { ImageWithSkeleton } from "../components/ui/ImageWithSkeleton";
@@ -39,12 +43,9 @@ const goals: Array<{
   { value: "soundtrack", label: "Audio", description: "Music or sound for this project." },
 ];
 
-type StatusPresentation = {
+type StatusPresentation = CreationStatusPresentation & {
   heading: string;
   description: string;
-  label: string;
-  tone: "active" | "neutral" | "success" | "danger";
-  isActive: boolean;
 };
 
 function presentStatus(
@@ -182,15 +183,6 @@ function presentStatus(
 }
 
 type CreationStatusOutcome = "blocked" | "question" | "other";
-
-function briefExcerpt(summary: string, maximumLength = 180) {
-  const normalized = summary.replace(/\s+/g, " ").trim();
-  if (normalized.length <= maximumLength) return normalized;
-  const candidate = normalized.slice(0, maximumLength + 1);
-  const lastSpace = candidate.lastIndexOf(" ");
-  const cutAt = lastSpace > maximumLength * 0.7 ? lastSpace : maximumLength;
-  return `${candidate.slice(0, cutAt).trimEnd()}…`;
-}
 
 function CreationOutputPreview({ output }: { output: CreationStatusOutput }) {
   const auth = useAuth();
@@ -380,24 +372,7 @@ export function StandaloneCreationPage() {
           <QuickLoadingState
             title="Loading creation status"
             description="Checking the latest progress on your asset."
-            reservation={(
-              <section className={styles.statusShell}>
-                <div className={styles.sceneSkeleton} />
-                <div className={styles.statusDetails}>
-                  <div
-                    className={`${styles.skeletonLine} ${styles.skeletonLabel}`}
-                  />
-                  <div
-                    className={`${styles.skeletonLine} ${styles.skeletonTitle}`}
-                  />
-                  <div className={styles.skeletonLine} />
-                  <div
-                    className={`${styles.skeletonLine} ${styles.skeletonShort}`}
-                  />
-                  <div className={styles.skeletonBrief} />
-                </div>
-              </section>
-            )}
+            reservation={<CreationProgressSkeleton />}
             variant="page"
           />
         ) : null}
@@ -408,54 +383,16 @@ export function StandaloneCreationPage() {
           </section>
         ) : null}
         {status.data ? (
-          <section className={styles.statusShell}>
-            {primaryOutput ? (
-              <CreationOutputPreview output={primaryOutput} />
-            ) : (
-              <StudioCrewLoader active={presentation.isActive} />
-            )}
-            <div className={styles.statusDetails}>
-              <div
-                className={styles.liveStatus}
-                role="status"
-                aria-live="polite"
-                aria-atomic="true"
-              >
-                <span
-                  className={styles.statusBadge}
-                  data-tone={presentation.tone}
-                >
-                  <span className={styles.statusDot} aria-hidden="true" />
-                  {presentation.label}
-                </span>
-              </div>
-
-              {presentation.isActive ? (
-                <div
-                  className={styles.progressTrack}
-                  data-testid="creation-progress-track"
-                  aria-hidden="true"
-                >
-                  <span />
-                </div>
-              ) : null}
-
-              {inputSummary ? (
-                <details className={styles.briefDisclosure}>
-                  <summary aria-label="View full request brief">
-                    <span className={styles.briefLabel}>Creative brief</span>
-                    <span className={styles.briefExcerpt} aria-hidden="true">
-                      {briefExcerpt(inputSummary)}
-                    </span>
-                    <span className={styles.briefAction} aria-hidden="true">
-                      View full brief
-                    </span>
-                  </summary>
-                  <p>{inputSummary}</p>
-                </details>
-              ) : null}
-
-              {status.data.report?.outcome.outcome === "blocked" ? (
+          <CreationProgressExperience
+            presentation={presentation}
+            inputSummary={inputSummary}
+            preview={
+              primaryOutput ? (
+                <CreationOutputPreview output={primaryOutput} />
+              ) : undefined
+            }
+          >
+            {status.data.report?.outcome.outcome === "blocked" ? (
                 <div className={styles.outcomePanel} data-tone="danger">
                   <strong>What’s blocking the run</strong>
                   <p>{status.data.report.outcome.reason}</p>
@@ -494,8 +431,7 @@ export function StandaloneCreationPage() {
                   without interrupting the work.
                 </p>
               ) : null}
-            </div>
-          </section>
+          </CreationProgressExperience>
         ) : null}
       </main>
     );

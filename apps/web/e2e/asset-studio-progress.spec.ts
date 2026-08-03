@@ -78,6 +78,9 @@ test.describe("Asset Studio", () => {
     await expect(page.getByTestId("studio-crew")).not.toHaveAttribute(
       "data-active",
     );
+    await expect(
+      page.getByTestId("creation-progress-experience"),
+    ).not.toHaveAttribute("data-prominent");
     await expect(page.getByTestId("creation-progress-track")).toHaveCount(0);
     const idleFrame = await page
       .locator('[data-crew-member="director"]')
@@ -322,8 +325,113 @@ test.describe("Asset Studio", () => {
     await page.goto(`/create/asset?projectId=${project.id}&runId=run_finishing`);
     await expect(page.getByText("Finishing up", { exact: true })).toBeVisible();
     await expect(page.getByRole("img", { name: "Finished frame" })).toBeVisible();
+    await expect(
+      page.getByTestId("creation-progress-experience"),
+    ).not.toHaveAttribute("data-prominent");
     await expect(page.getByTestId("creation-progress-track")).toBeVisible();
     await expect.poll(() => requestCount).toBeGreaterThan(1);
+  });
+
+  test("keeps the prominent crew contained beside the authenticated sidebar", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.route(
+      `**/api/v1/projects/${project.id}/agent-creations/run_sidebar`,
+      (route) =>
+        fulfillJson(route, {
+          sessionId: "session_sidebar",
+          run: {
+            id: "run_sidebar",
+            status: "running",
+            inputSummary: longRunSummary,
+          },
+          report: null,
+          outputs: [],
+        }),
+    );
+
+    await page.goto(`/create/asset?projectId=${project.id}&runId=run_sidebar`);
+    await expect(page.getByTestId("creation-progress-experience")).toHaveAttribute(
+      "data-prominent",
+      "true",
+    );
+
+    const activeGeometry = await page.evaluate(() => {
+      const measure = (selector: string) => {
+        const element = document.querySelector<HTMLElement>(selector);
+        if (!element) throw new Error(`Missing ${selector}`);
+        const box = element.getBoundingClientRect();
+        return {
+          top: box.top,
+          bottom: box.bottom,
+          width: box.width,
+          height: box.height,
+        };
+      };
+      return {
+        experience: measure('[data-testid="creation-progress-experience"]'),
+        badge: measure('[role="status"]'),
+        scene: measure('[data-testid="studio-crew"]'),
+        track: measure('[data-testid="creation-progress-track"]'),
+        brief: measure('[aria-label="View full request brief"]'),
+        director: measure('[data-crew-member="director"]'),
+      };
+    });
+    expect(activeGeometry.badge.bottom).toBeLessThanOrEqual(
+      activeGeometry.scene.top,
+    );
+    expect(activeGeometry.scene.bottom).toBeLessThanOrEqual(
+      activeGeometry.track.top,
+    );
+    expect(activeGeometry.track.bottom).toBeLessThanOrEqual(
+      activeGeometry.brief.top,
+    );
+    expect(activeGeometry.scene.width).toBeGreaterThan(
+      activeGeometry.experience.width * 0.9,
+    );
+    expect(activeGeometry.scene.height).toBeGreaterThan(350);
+    expect(activeGeometry.director.width).toBeGreaterThan(175);
+
+    await page.setViewportSize({ width: 960, height: 900 });
+
+    const bounds = await page.evaluate(() => {
+      const scene = document.querySelector<HTMLElement>("[data-testid='studio-crew']");
+      if (!scene) throw new Error("Studio crew scene is missing");
+      const sceneBox = scene.getBoundingClientRect();
+      return {
+        scene: { left: sceneBox.left, right: sceneBox.right },
+        actors: Array.from(
+          document.querySelectorAll<HTMLElement>("[data-crew-member]"),
+        ).map((actor) => {
+          const box = actor.getBoundingClientRect();
+          return { left: box.left, right: box.right };
+        }),
+      };
+    });
+    for (const actor of bounds.actors) {
+      expect(actor.left).toBeGreaterThanOrEqual(bounds.scene.left - 1);
+      expect(actor.right).toBeLessThanOrEqual(bounds.scene.right + 1);
+    }
+  });
+
+  test("offers the production loading composition on a dedicated dev route", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/dev/creation-progress");
+
+    await expect(
+      page.getByRole("heading", { name: "The studio is making it" }),
+    ).toBeVisible();
+    await expect(page.getByTestId("creation-progress-experience")).toHaveAttribute(
+      "data-prominent",
+      "true",
+    );
+    await expect(page.getByTestId("studio-crew")).toBeVisible();
+    await expect(page.getByLabel("View full request brief")).toContainText(
+      "Cartoon illustration",
+    );
   });
 
   test("keeps the active crew calm and contained on mobile with reduced motion", async ({

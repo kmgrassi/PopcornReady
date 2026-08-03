@@ -146,8 +146,9 @@ Authenticated routes:
 - `/uploads`, `/templates`, `/brand`, `/account`, `/settings`, `/faq`.
 - `/evals`, which redirects to `/admin/evals`.
 - `/admin`, `/admin/evals` for admin-capable sessions.
-- Dev-only visual routes: `/dev/design-system`, `/dev/generation-cards`,
-  `/dev/landing-upload`, `/dev/media-gallery`, `/dev/video-edit`.
+- Dev-only visual routes: `/dev/creation-progress`, `/dev/design-system`,
+  `/dev/generation-cards`, `/dev/landing-upload`, `/dev/media-gallery`,
+  `/dev/video-edit`.
 
 Retired route note: `/studio` is not currently mounted in the Vite route table.
 Older manual-test instructions that start with `/studio` should be treated as

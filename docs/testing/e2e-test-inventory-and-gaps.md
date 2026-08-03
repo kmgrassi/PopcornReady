@@ -8,7 +8,7 @@
 <!-- agent-summary: Async dispatch races require local Supabase concurrency coverage when no safe live completion is available. -->
 <!-- agent-summary: Keep remaining gaps concrete, behavior-focused, and tied to the smallest useful next test. -->
 
-Last reconciled with the active route table: 2026-08-01
+Last reconciled with the active route table: 2026-08-03
 
 This inventory covers the active split app described in `CLAUDE.md`: the Vite
 React SPA in `apps/web` and the Express API in `apps/api`. New end-to-end work
@@ -44,7 +44,8 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   and desktop/mobile Create and review layouts. After confirmation, progress
   assertions cover human-readable queued/running/terminal status, checked-in
   director, camera operator, actor, and actress artwork with its production-set
-  backdrop from compact progress-only resources, a semantically
+  backdrop from compact progress-only resources, the status-first prominent
+  desktop crew composition and its shared development preview, a semantically
   truncated request brief with full disclosure, active-only indeterminate
   progress, reduced motion, mobile overflow, successful asset navigation, and
   truthful failed, canceled, blocked, and question outcomes. It also covers the
@@ -286,7 +287,7 @@ Authenticated routes:
 - `/anchors`, `/anchors/mine`, `/anchors/:entryId`
 - `/uploads`, `/templates`, `/brand`, `/account`, `/settings`, `/faq`
 - `/evals`, `/admin`, `/admin/evals`
-- Dev-only: `/dev/design-system`, `/dev/generation-cards`,
+- Dev-only: `/dev/creation-progress`, `/dev/design-system`, `/dev/generation-cards`,
   `/dev/landing-upload`, `/dev/media-gallery`, `/dev/video-edit`
 
 Retired route note: `/studio` is not mounted in the current Vite route table.
@@ -429,10 +430,12 @@ Covered:
 - Direct `/create/review` navigation without request state fails closed and
   creates no proposal or confirmation.
 - Successful confirmation replace-navigates to the queued creator-direct run.
-- The progress view presents human-readable queued and running status, studio
-  crew artwork from compact progress-only resources, a truncated request brief
-  with full disclosure, active-only indeterminate progress, reduced-motion
-  behavior, and mobile-safe layout.
+- The progress view presents human-readable queued and running status, a
+  prominent full-width studio crew on desktop from compact progress-only
+  resources, a compact request brief with full disclosure, active-only
+  indeterminate progress, reduced-motion behavior, and container-aware actor
+  scaling beside the authenticated sidebar. The same production component is
+  directly inspectable at the development-only `/dev/creation-progress` route.
 - A ready run-owned asset replaces the idle artwork with an image, video, or
   audio preview. Active runs continue polling and show wrap-up progress; a
   later failed terminal report keeps the asset visible with calm saved-result
