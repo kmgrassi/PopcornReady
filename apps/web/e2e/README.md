@@ -56,12 +56,26 @@ It verifies that the project gallery and owned Library reuse the same scoped
 media URL across navigation and a same-tab reload, and that an unloadable image
 URL performs exactly one focused refresh to a working signed URL on desktop and
 both mobile browser projects.
+Project-media previews route to that same canonical viewer, including exact
+asset hydration when the linked asset is outside the first workspace page; the
+separate project-media selection control remains available for creation intent.
+The production-shaped deep-link fixture verifies `remoteUrl` video source
+normalization, and returning from preview restores the interrupted selection,
+preset, and intent draft.
+Owned ready assets expose the viewer's exact-target **Suggest an edit** entry
+into the durable Request Changes proposal lifecycle, while public and non-ready
+assets do not expose this action.
 It also verifies the shared quick route-loading state on mobile, including its
 180ms anti-flash threshold, accessible busy semantics, content-shaped layout
 reservation, reduced motion, overflow containment, and transition into loaded
 project content. A Watch-route case covers the compact panel variant. The
 studio crew remains covered in `asset-studio-progress.spec.ts` for known queued/running
 creative production rather than ordinary data fetches.
+
+`project-mobile-status.spec.ts` verifies the responsive project overview keeps
+one compact mobile status card, routes its current storyboard image to the
+canonical asset viewer, and exposes separate desktop links for the project
+poster, storyboard image, and storyboard scene navigation.
 
 `rerun-proposal-lifecycle.spec.ts` verifies the durable Request Changes UI
 without provider spend: exact-target proposal preview, preserved/affected work,

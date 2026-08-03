@@ -75,11 +75,22 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   graph target from colliding.
 - `specs/library-collections.spec.ts` covers Library pagination, filters, media
   viewer, exact attributed credit usage in owned asset detail, visibility
-  mutation behavior, and watch links with mocked fixtures. It also proves one
+  mutation behavior, project-media navigation into the canonical asset viewer,
+  exact hydration for a linked asset outside the loaded workspace page, and
+  watch links with mocked fixtures. A production-shaped detail response proves
+  a deep-linked video's viewer source normalizes `remoteUrl`, while Back navigation
+  restores the project-media selection, preset, and creation intent that were
+  active before preview. The viewer coverage also verifies an owned,
+  ready asset can suggest an exact-target edit through the durable Request
+  Changes proposal preview, restores the same deep-linked viewer on Escape, and
+  withholds that action from public and processing assets. It also proves one
   auth/workspace/asset-scoped media URL survives project-gallery to Library
   navigation and a same-tab reload without a focused URL request, plus a
   desktop/mobile failed-image path that makes exactly one focused refresh and
   renders the newly signed URL.
+- `project-mobile-status.spec.ts` covers the compact mobile project status and
+  its asset-detail navigation, plus separate desktop poster, storyboard-image,
+  and storyboard-scene links.
 - `inspiration-poster.spec.ts` covers opening a generated story poster in the
   shared media viewer and dismissing it with Escape.
 - `storyboard-editor.spec.ts` verifies the dedicated storyboard route renders

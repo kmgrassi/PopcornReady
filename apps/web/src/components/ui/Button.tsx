@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, MouseEvent, ReactNode } from "react";
+import { forwardRef, type ButtonHTMLAttributes, type MouseEvent, type ReactNode } from "react";
 import { Link, type LinkProps } from "react-router-dom";
 import styles from "./Button.module.css";
 
@@ -23,21 +23,28 @@ function buttonClass({ variant = "primary", size = "md", fullWidth, className }:
     .join(" ");
 }
 
-export function Button({
-  variant,
-  size,
-  fullWidth,
-  leadingIcon,
-  trailingIcon,
-  isLoading = false,
-  className,
-  children,
-  disabled,
-  type = "button",
-  ...rest
-}: ButtonStyleProps & ButtonHTMLAttributes<HTMLButtonElement>) {
+export const Button = forwardRef<
+  HTMLButtonElement,
+  ButtonStyleProps & ButtonHTMLAttributes<HTMLButtonElement>
+>(function Button(
+  {
+    variant,
+    size,
+    fullWidth,
+    leadingIcon,
+    trailingIcon,
+    isLoading = false,
+    className,
+    children,
+    disabled,
+    type = "button",
+    ...rest
+  },
+  ref,
+) {
   return (
     <button
+      ref={ref}
       type={type}
       className={buttonClass({ variant, size, fullWidth, className })}
       disabled={disabled || isLoading}
@@ -49,7 +56,7 @@ export function Button({
       {trailingIcon}
     </button>
   );
-}
+});
 
 export function ButtonLink({
   variant,

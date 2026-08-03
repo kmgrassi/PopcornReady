@@ -252,8 +252,15 @@ export interface ProjectAssetsResponse {
   pagination: ListPagination;
 }
 
+export type ProjectAssetDetailAsset = Omit<V1Asset, "url"> & {
+  /** Resolved media may arrive here from the project asset detail endpoint. */
+  remoteUrl?: string | null;
+  /** Older/local responses may still expose the resolved media as `url`. */
+  url?: string | null;
+};
+
 export interface ProjectAssetDetailResponse {
-  asset: V1Asset;
+  asset: ProjectAssetDetailAsset;
   billing: {
     /** Gross generation debits attributable to this one asset; null when unknown. */
     creditsCharged: number | null;

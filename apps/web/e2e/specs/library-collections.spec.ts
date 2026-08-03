@@ -1,5 +1,6 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { mockLocalApi, workspaceId } from "../fixtures/local-api";
+import { projectMediaDraftKey } from "../../src/routes/projectMediaDraft";
 
 const now = "2026-06-16T14:00:00.000Z";
 const imageDataUrl =
@@ -45,6 +46,7 @@ function project(index: number) {
     visibility: "private",
     hasStoryboard: index % 2 === 0,
     posterUrl: index === 1 ? imageDataUrl : null,
+    posterAssetId: index === 1 ? "asset-image-ready" : null,
     createdAt: now,
     updatedAt: now,
   };
@@ -175,9 +177,26 @@ async function mockLibraryApi(page: Page) {
         source: "generated",
         title: "Keyframe still",
         filename: "keyframe.png",
+        prompt: "A bright editorial keyframe.",
         url: imageDataUrl,
         thumbnailUrl: imageDataUrl,
         visibility: assetVisibility,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: "asset-image-processing",
+        assetId: "asset-image-processing",
+        projectId: "proj-alpha",
+        projectName: "Project Alpha",
+        kind: "image",
+        status: "processing",
+        source: "generated",
+        title: "Processing still",
+        filename: "processing.png",
+        url: imageDataUrl,
+        thumbnailUrl: imageDataUrl,
+        visibility: "private",
         createdAt: now,
         updatedAt: now,
       },
@@ -251,7 +270,22 @@ async function mockLibraryApi(page: Page) {
   await page.route("**/api/v1/projects/proj-alpha/assets/asset-project-media", (route) => {
     assetBillingRequests += 1;
     return json(route, {
-      asset: { id: "asset-project-media" },
+      asset: {
+        id: "asset-project-media",
+        schemaVersion: "asset.v1",
+        projectId: "proj-alpha",
+        workspaceId,
+        kind: "image",
+        status: "ready",
+        filename: "project-keyframe.png",
+        name: "Project keyframe",
+        url: imageDataUrl,
+        thumbnailUrl: imageDataUrl,
+        durationSec: 0,
+        source: "generated",
+        createdAt: now,
+        updatedAt: now,
+      },
       billing: { creditsCharged: 84 },
     });
   });
@@ -297,6 +331,36 @@ async function mockLibraryApi(page: Page) {
 test.beforeEach(async ({ page }) => {
   assetBillingRequests = 0;
   await mockLibraryApi(page);
+});
+
+test("normalizes a deep-linked project's remote URL as the video viewer source", async ({ page }) => {
+  await page.route("**/api/v1/projects/proj-alpha/assets/asset-deep-video", (route) =>
+    json(route, {
+      asset: {
+        id: "asset-deep-video",
+        schemaVersion: "asset.v1",
+        projectId: "proj-alpha",
+        workspaceId,
+        kind: "video",
+        status: "ready",
+        filename: "deep-video.mp4",
+        name: "Deep-linked video",
+        remoteUrl: imageDataUrl,
+        thumbnailUrl: imageDataUrl,
+        durationSec: 12,
+        source: "generated",
+        createdAt: now,
+        updatedAt: now,
+      },
+      billing: { creditsCharged: 21 },
+    }),
+  );
+  await page.route("**/api/v1/assets/asset-deep-video/media", (route) => route.abort());
+
+  await page.goto("/library/assets?assetId=asset-deep-video&projectId=proj-alpha");
+
+  const dialog = page.getByRole("dialog", { name: "Deep-linked video" });
+  await expect(dialog.locator("video")).toHaveAttribute("src", imageDataUrl);
 });
 
 test("uses a delayed content-shaped state for route-level library loading", async ({ page }) => {
@@ -401,6 +465,44 @@ test("does not flash a loading state for a cache-fast library request", async ({
 });
 
 test("covers library pagination, filters, media viewer, visibility, and watch links", async ({ page }) => {
+  let proposalRequestBody: unknown = null;
+  await page.route("**/api/v1/projects/proj-alpha/rerun-proposals/v2", async (route) => {
+    proposalRequestBody = await route.request().postDataJSON();
+    const target = {
+      kind: "asset",
+      projectId: "proj-alpha",
+      assetId: "asset-image-ready",
+    };
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({
+        actionId: "22222222-2222-4222-8222-222222222222",
+        proposal: {
+          schemaVersion: "RerunProposal.v2",
+          projectId: "proj-alpha",
+          source: "request_changes",
+          userIntent: "Make the background less busy.",
+          targets: [target],
+          inspectedAssetIds: ["asset-image-ready"],
+          candidateAffectedAssetIds: ["asset-image-ready"],
+          preservedAssetIds: [],
+          checklist: [{ target, decision: "change", reason: "Revise this image." }],
+          pins: { assets: [], selections: [], storySnapshots: [] },
+          estimate: { costUsd: 0.1, maxCostUsd: 0.2, latencyClass: "interactive" },
+          risk: "low",
+          requiresApproval: true,
+          rationale: "Only the selected image needs to change.",
+          userFacingSummary: "Revise the selected image",
+          outcome: "revision",
+          selectedWork: [],
+          plannedSelectionMoves: [],
+          plannedStoryPointerMoves: [],
+        },
+      }),
+    });
+  });
+
   await page.goto("/library");
   const tabs = page.getByLabel("Library collections");
   await expect(page).toHaveURL(/\/library\/projects$/);
@@ -430,6 +532,10 @@ test("covers library pagination, filters, media viewer, visibility, and watch li
   );
   await expect(page.getByRole("heading", { name: "Recent generation work" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Finished exports" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "View Project Alpha poster asset" })).toHaveAttribute(
+    "href",
+    "/library/assets?assetId=asset-image-ready&projectId=proj-alpha",
+  );
 
   await page.goto("/library/projects");
 
@@ -453,22 +559,53 @@ test("covers library pagination, filters, media viewer, visibility, and watch li
 
   await page.getByLabel("Kind").selectOption("image");
   await page.getByLabel("Source").selectOption("generated");
-  await expect(page.locator("span[data-private='true']")).toHaveText("Private");
-  await page.getByRole("button", { name: "View Keyframe still" }).click();
+  const keyframeCard = page.getByRole("button", { name: "View Keyframe still" });
+  await expect(keyframeCard.locator("span[data-private='true']")).toHaveText("Private");
+  await keyframeCard.click();
   const keyframeDialog = page.getByRole("dialog", { name: "Keyframe still" });
   await expect(keyframeDialog).toBeVisible();
   await expect(keyframeDialog.getByText("84 credits used")).toBeVisible();
+  const suggestEdit = keyframeDialog.getByRole("button", { name: "Suggest an edit" });
+  await expect(suggestEdit).toBeVisible();
+  await suggestEdit.click();
+  await expect(keyframeDialog).toBeHidden();
+  const editDialog = page.getByRole("dialog", { name: "Suggest an edit" });
+  await expect(editDialog).toBeVisible();
+  await expect(editDialog.getByText("A bright editorial keyframe.")).toBeVisible();
+  await editDialog.getByLabel("What should change?").fill("Make the background less busy.");
+  await editDialog.getByRole("button", { name: "Preview changes" }).click();
+  await expect(editDialog.getByRole("heading", { name: "Revise the selected image" })).toBeVisible();
+  expect(proposalRequestBody).toEqual({
+    message: "Make the background less busy.",
+    targets: [{
+      kind: "asset",
+      projectId: "proj-alpha",
+      assetId: "asset-image-ready",
+    }],
+  });
+  await page.keyboard.press("Escape");
+  await expect(editDialog).toBeHidden();
+  await expect(keyframeDialog).toBeVisible();
+  await expect(page).toHaveURL(/\/library\/assets\?assetId=asset-image-ready$/);
+  await expect(keyframeDialog.getByRole("button", { name: "Suggest an edit" })).toBeFocused();
   expect(assetBillingRequests).toBe(1);
   await keyframeDialog.getByRole("button", { name: "Make public" }).click();
   await expect(page.locator("span[data-private='false']")).toHaveText("Public");
   await page.keyboard.press("Escape");
   await expect(keyframeDialog).toBeHidden();
 
+  await page.getByRole("button", { name: "View Processing still" }).click();
+  const processingDialog = page.getByRole("dialog", { name: "Processing still" });
+  await expect(processingDialog).toBeVisible();
+  await expect(processingDialog.getByRole("button", { name: "Suggest an edit" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+
   await page.getByLabel("Show").selectOption("public");
   await expect(page.getByText("Keyframe still").first()).toBeVisible();
   await page.getByRole("button", { name: "View Keyframe still" }).click();
   const publicDialog = page.getByRole("dialog", { name: "Keyframe still" });
   await expect(publicDialog).toBeVisible();
+  await expect(publicDialog.getByRole("button", { name: "Suggest an edit" })).toHaveCount(0);
   await expect(publicDialog.getByText(/credits? used/)).toHaveCount(0);
   expect(assetBillingRequests).toBe(1);
   await page.keyboard.press("Escape");
@@ -477,15 +614,40 @@ test("covers library pagination, filters, media viewer, visibility, and watch li
   await expect(page.getByRole("heading", {
     name: "Choose from the clips attached to this project",
   })).toBeVisible();
+  const projectMediaLink = page.getByRole("link", { name: "View Project keyframe" });
+  const projectMediaTile = projectMediaLink.locator("..");
+  await projectMediaTile.getByRole("button", { name: "Select", exact: true }).click();
+  await page.getByLabel("Idea").selectOption("montage");
+  await expect(page.getByLabel("What should we make with these?")).toHaveValue(
+    "Cut these into a montage with a fitting soundtrack.",
+  );
   const projectMediaBilling = page.waitForResponse(
     "**/api/v1/projects/proj-alpha/assets/asset-project-media",
   );
-  await page.getByRole("button", { name: "View Project keyframe" }).click();
+  await projectMediaLink.click();
   expect((await projectMediaBilling).ok()).toBe(true);
+  await expect(page).toHaveURL(
+    /\/library\/assets\?assetId=asset-project-media&projectId=proj-alpha$/,
+  );
   const projectMediaDialog = page.getByRole("dialog", { name: "Project keyframe" });
   await expect(projectMediaDialog.getByText("84 credits used")).toBeVisible();
+  await expect(projectMediaDialog.getByRole("button", { name: "Suggest an edit" })).toBeVisible();
+  await expect(projectMediaDialog.getByRole("button", { name: "Make public" })).toHaveCount(0);
+  await expect(projectMediaDialog.getByRole("button", { name: "Make private" })).toHaveCount(0);
   expect(assetBillingRequests).toBe(2);
   await page.keyboard.press("Escape");
+  await expect(page).toHaveURL(/\/library\/assets$/);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/projects\/proj-alpha\/media$/);
+  await expect(projectMediaTile.getByRole("button", { name: "Selected 1" })).toBeVisible();
+  await expect(page.getByLabel("Idea")).toHaveValue("montage");
+  await expect(page.getByLabel("What should we make with these?")).toHaveValue(
+    "Cut these into a montage with a fitting soundtrack.",
+  );
+  expect(await page.evaluate(
+    (key) => window.sessionStorage.getItem(key),
+    projectMediaDraftKey("proj-alpha"),
+  )).toBeNull();
 
   await page.goto("/projects/proj-alpha");
   await page.getByRole("link", { name: "Watch" }).click();
@@ -552,7 +714,7 @@ test("reuses one auth-scoped media URL across the project gallery, library, and 
   });
 
   await page.goto("/projects/proj-alpha/media");
-  await expect(page.getByRole("button", { name: "View Shared keyframe" }).locator("img"))
+  await expect(page.getByRole("link", { name: "View Shared keyframe" }).locator("img"))
     .toHaveAttribute("src", projectSignedUrl);
 
   await page.goto("/library/assets");

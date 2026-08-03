@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import type {
   ProjectStoryboard,
   StoryboardPanel,
@@ -9,6 +10,7 @@ import { Button, ButtonLink } from "../components/ui/Button";
 import { ImageWithSkeleton } from "../components/ui/ImageWithSkeleton";
 import type { ProjectWatchMedia } from "../lib/api-client";
 import type { StoryboardProgress } from "../lib/v1/storyboard/progress";
+import { assetLibraryPath } from "../lib/assetLibraryPath";
 import { ProjectPoster } from "./ProjectDetailSections";
 import styles from "./ProjectMobileStatus.module.css";
 
@@ -45,7 +47,12 @@ export function MobileProjectStatus({
 
   return (
     <section className={styles.mobileProjectStatus} aria-label="Project status">
-      <MobileProjectHero project={project} storyboard={storyboard} media={media} />
+      <MobileProjectHero
+        project={project}
+        storyboard={storyboard}
+        media={media}
+        readOnly={readOnly}
+      />
       <div className={styles.mobileStatusCard}>
         <div className={styles.mobileStatusText}>
           <span className={styles.eyebrow}>Project</span>
@@ -151,13 +158,19 @@ function MobileProjectHero({
   project,
   storyboard,
   media,
+  readOnly,
 }: {
   project: V1Project;
   storyboard: ProjectStoryboard | null;
   media?: ProjectWatchMedia | null;
+  readOnly: boolean;
 }) {
+  const navigate = useNavigate();
   const panel = latestStoryboardPanel(storyboard);
   if (panel) {
+    const assetPath = !readOnly && panel.imageAssetId
+      ? assetLibraryPath(panel.imageAssetId, project.id)
+      : null;
     return (
       <AssetImage
         kind="image"
@@ -167,6 +180,9 @@ function MobileProjectHero({
         status={panel.status}
         mediaClassName={styles.mobileHeroImage}
         placeholderClassName={`${styles.mobileHeroImage} ${styles.posterEmpty}`}
+        alt={assetPath ? `View ${project.name} storyboard asset` : ""}
+        onActivate={assetPath ? () => navigate(assetPath) : undefined}
+        activateClassName={styles.mobileHeroButton}
       />
     );
   }
@@ -179,7 +195,7 @@ function MobileProjectHero({
       />
     );
   }
-  return (
+  const poster = (
     <ProjectPoster
       name={project.name}
       posterUrl={project.posterUrl}
@@ -187,6 +203,18 @@ function MobileProjectHero({
       emptyClassName={styles.posterEmpty}
     />
   );
+  if (!readOnly && project.posterAssetId) {
+    return (
+      <Link
+        className={styles.mobileHeroLink}
+        to={assetLibraryPath(project.posterAssetId, project.id)}
+        aria-label={`View ${project.name} poster asset`}
+      >
+        {poster}
+      </Link>
+    );
+  }
+  return poster;
 }
 
 export function ProjectMobilePrimaryAction({
