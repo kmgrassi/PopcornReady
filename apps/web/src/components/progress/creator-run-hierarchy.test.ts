@@ -3,6 +3,7 @@ import test from "node:test";
 import type { CreatorRunHierarchySession } from "../../lib/v1/generation-runs/status";
 import {
   currentHierarchyRun,
+  emptyHierarchyCopy,
   hierarchyCurrentLabel,
   hierarchyProgressLabel,
   sessionDescription,
@@ -125,4 +126,55 @@ test("labels an empty hierarchy as planning", () => {
 
   assert.equal(hierarchyCurrentLabel(hierarchy), "Director planning the work");
   assert.equal(hierarchyProgressLabel(hierarchy), "The director is planning the work");
+});
+
+test("uses root-state copy when an empty hierarchy is not actively planning", () => {
+  const expected = {
+    waiting: {
+      current: "Director waiting to continue",
+      progress: "Waiting before specialist work can begin",
+      description: "The director is waiting before assigning specialist work.",
+      directorMessage: "The creative director is waiting to continue.",
+    },
+    blocked: {
+      current: "Director needs attention",
+      progress: "Specialist work has not started",
+      description: "The director needs to resolve an issue before assigning specialist work.",
+      directorMessage: "The creative director needs attention before work can continue.",
+    },
+    failed: {
+      current: "Production failed",
+      progress: "No specialist work was delegated",
+      description: "The production stopped before specialist work began.",
+      directorMessage: "The creative director stopped before assigning specialist work.",
+    },
+    canceled: {
+      current: "Production canceled",
+      progress: "No specialist work was delegated",
+      description: "The production was canceled before specialist work began.",
+      directorMessage: "The creative director stopped this production.",
+    },
+    complete: {
+      current: "Production complete",
+      progress: "No specialist work was delegated",
+      description: "The production completed without specialist assignments.",
+      directorMessage: "The creative director completed this production.",
+    },
+  } as const;
+
+  for (const [state, copy] of Object.entries(expected)) {
+    const hierarchy = {
+      root: {
+        runId: "root-1",
+        state: state as keyof typeof expected,
+        message: "The creative director is guiding this production.",
+        needsDirectorDecision: false,
+      },
+      sessions: [],
+    };
+
+    assert.deepEqual(emptyHierarchyCopy(hierarchy.root.state), copy);
+    assert.equal(hierarchyCurrentLabel(hierarchy), copy.current);
+    assert.equal(hierarchyProgressLabel(hierarchy), copy.progress);
+  }
 });

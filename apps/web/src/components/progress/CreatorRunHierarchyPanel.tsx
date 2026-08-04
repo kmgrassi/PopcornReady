@@ -7,6 +7,7 @@ import type {
 import {
   currentHierarchyRun,
   DOMAIN_LABELS,
+  emptyHierarchyCopy,
   sessionDescription,
   sessionOutputAssetIds,
   sessionProgress,
@@ -132,6 +133,10 @@ export function CreatorRunHierarchyPanel({
   compact = false,
   stopAction,
 }: CreatorRunHierarchyPanelProps) {
+  const emptyCopy = hierarchy.sessions.length === 0
+    ? emptyHierarchyCopy(hierarchy.root.state)
+    : null;
+
   return (
     <section
       className={`${styles.panel}${compact ? ` ${styles.compact}` : ""}`}
@@ -141,7 +146,7 @@ export function CreatorRunHierarchyPanel({
         <span className={styles.directorMark} aria-hidden="true">CD</span>
         <div>
           <h2 id={`creative-director-${hierarchy.root.runId}`}>Creative Director</h2>
-          <p>{hierarchy.root.message}</p>
+          <p>{emptyCopy?.directorMessage ?? hierarchy.root.message}</p>
         </div>
         <div className={styles.directorActions}>
           <span className={styles.directorState} data-state={hierarchy.root.state} role="status">
@@ -172,7 +177,7 @@ export function CreatorRunHierarchyPanel({
             <SessionLane key={session.sessionId} session={session} projectId={projectId} />
           ))
         ) : (
-          <p className={styles.empty}>The director is deciding how to divide the work.</p>
+          <p className={styles.empty}>{emptyHierarchyCopy(hierarchy.root.state).description}</p>
         )}
       </div>
     </section>

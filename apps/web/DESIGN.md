@@ -318,7 +318,13 @@ semantic lanes: active or blocked work is open, completed work compresses to a
 checked row, and implementation-level assignments are a nested disclosure.
 State always pairs color with a label and shape. On narrow screens the director
 and current lane precede the approved-plan recap so the live production state is
-visible without navigating an internal pipeline.
+visible without navigating an internal pipeline. An empty hierarchy describes
+planning only while the root is queued or active; waiting, blocked, failed,
+canceled, and complete roots use state-specific copy so terminal history never
+looks like live work. Mobile breadcrumbs remain a single internally scrolling
+row with clipped labels rather than shrinking and painting across neighboring
+locations, and it aligns the current location into view on route, label, and
+desktop-to-mobile changes.
 
 ## 6. Do's and Don'ts
 
