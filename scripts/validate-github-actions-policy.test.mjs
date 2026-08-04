@@ -68,6 +68,15 @@ test("deployment verification cancels obsolete polling, not database mutations",
   );
   assert.match(
     deploy,
+    /node scripts\/verify-production-release\.mjs[\s\S]*--expected "\$GITHUB_SHA"[\s\S]*--web-origin "https:\/\/popcornready\.ai"[\s\S]*--api-origin "https:\/\/popcornready-production\.up\.railway\.app"/,
+  );
+  assert.doesNotMatch(
+    deploy,
+    /GITHUB_SHA#|Match by prefix|jq -r '\.commit/,
+    "production release verification must require exact full-SHA coherence",
+  );
+  assert.match(
+    deploy,
     /jobs:\n  verify:\n    runs-on: ubuntu-latest\n    timeout-minutes: 30\n    if: github\.ref == 'refs\/heads\/main'\n    steps:/,
   );
 

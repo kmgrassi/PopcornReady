@@ -1,17 +1,12 @@
 import type { AssetKind, AssetStatus } from "@popcorn/shared/v1/types";
+import { devHarnessRoutes } from "../app-route-registry";
 
-const viteEnv = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env;
+export { devHarnessRoutes } from "../app-route-registry";
 
-export const isDevHarnessEnabled = viteEnv?.DEV ?? false;
-
-export const devHarnessRoutes = {
-  creationProgress: "/dev/creation-progress",
-  designSystem: "/dev/design-system",
-  generationCards: "/dev/generation-cards",
-  landingUpload: "/dev/landing-upload",
-  mediaGallery: "/dev/media-gallery",
-  videoEdit: "/dev/video-edit",
-} as const;
+// Keep this as a direct Vite expression so production builds statically replace
+// and tree-shake every development-only route and lazy module reference.
+export const isDevHarnessEnabled =
+  typeof import.meta.env !== "undefined" && import.meta.env.DEV;
 
 export type LandingUploadHarnessStatus =
   | "queued"

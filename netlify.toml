@@ -20,6 +20,12 @@
 [build.environment]
   NODE_VERSION = "22"
 
+[[headers]]
+  for = "/release.json"
+  [headers.values]
+    Cache-Control = "no-store"
+    Content-Type = "application/json; charset=utf-8"
+
 # Same-origin API proxy for deployed SPA clients that use the default /api base.
 [[redirects]]
   from = "/api/*"

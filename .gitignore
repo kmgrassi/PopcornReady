@@ -15,6 +15,7 @@ yarn.lock
 /data
 /.local
 /apps/api/.local
+/apps/api/.release
 /public/uploads
 /public/exports
 /public/generated

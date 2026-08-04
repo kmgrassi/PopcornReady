@@ -50,24 +50,14 @@ jobs:
       - name: Build @popcorn/api
         run: pnpm --filter @popcorn/api... build
 
-      # Railway's native GitHub integration builds and deploys the pushed commit.
-      # Poll the public health endpoint until it reports this exact commit so a
-      # deploy that fails to boot/healthcheck fails this job instead of going
-      # unnoticed.
-      - name: Verify production is serving this commit
-        run: |
-          set -euo pipefail
-          url="https://popcornready-production.up.railway.app/api/v1/health"
-          echo "Waiting for $url to report commit $GITHUB_SHA"
-          for attempt in $(seq 1 60); do
-            live="$(curl -fsS --max-time 10 "$url" | jq -r '.commit // ""' || true)"
-            # Match by prefix so a short or full SHA both satisfy the check.
-            if [ -n "$live" ] && [ "${GITHUB_SHA#"$live"}" != "$GITHUB_SHA" ]; then
-              echo "✓ Production is live on $live"
-              exit 0
-            fi
-            echo "  attempt $attempt/60: live commit=${live:-<none>}; retrying in 10s"
-            sleep 10
-          done
-          echo "::error::Production never reported commit $GITHUB_SHA — the deploy likely failed to boot or failed its healthcheck, so prod is still on the previous image."
-          exit 1
+      # Native Railway, Netlify, and Supabase deploys can overlap. Observe them
+      # until the direct API is database-compatible, Netlify serves the exact
+      # web identity, and Netlify's same-origin proxy reaches that same API.
+      - name: Verify coherent production release
+        run: >-
+          node scripts/verify-production-release.mjs
+          --expected "$GITHUB_SHA"
+          --web-origin "https://popcornready.ai"
+          --api-origin "https://popcornready-production.up.railway.app"
+          --timeout-seconds 600
+          --interval-seconds 10
