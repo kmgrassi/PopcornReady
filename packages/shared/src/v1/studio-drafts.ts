@@ -1,5 +1,5 @@
 import type { StoryContext } from "../types";
-import type { AspectRatio, GateableGenerationStageType } from "./types";
+import type { AspectRatio } from "./types";
 
 export const STUDIO_DRAFT_SCHEMA_VERSION = "studioDraft.v1" as const;
 export const STUDIO_DRAFT_PAYLOAD_VERSION = 1 as const;
@@ -16,7 +16,6 @@ export type StudioDraftPlatform = NonNullable<StoryContext["platform"]>;
 export type StudioDraftFormat = NonNullable<StoryContext["format"]>;
 export type StudioDraftFootageChoice = "prompt_only" | "upload";
 export type StudioDraftFootageMode = "asset_driven" | "hybrid";
-export type StudioDraftSeedKind = "image" | "video";
 
 export interface StudioDraftBrief {
   goal?: string;
@@ -36,10 +35,6 @@ export interface StudioDraftBrief {
   style?: string;
   callToAction?: string;
   provider?: string;
-  seedKind?: StudioDraftSeedKind;
-  seedSize?: string;
-  showCaptions?: boolean;
-  reviewGates?: GateableGenerationStageType[];
 }
 
 export interface StudioDraftPayload<TDraft extends StudioDraftBrief = StudioDraftBrief> {

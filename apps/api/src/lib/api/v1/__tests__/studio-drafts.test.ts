@@ -47,12 +47,28 @@ test("parseCreateStudioDraft rejects invalid persisted draft fields", () => {
           ...payload,
           draft: {
             ...payload.draft,
-            showCaptions: "yes",
+            footageChoice: "stock_library",
           },
         },
       }),
     /The request body is invalid/
   );
+});
+
+test("parseCreateStudioDraft drops retired run-config fields from old payloads", () => {
+  const parsed = parseCreateStudioDraft({
+    payload: {
+      ...payload,
+      draft: {
+        ...payload.draft,
+        seedKind: "video",
+        seedSize: "1920x1080",
+        showCaptions: false,
+        reviewGates: ["storyboard", "export"],
+      },
+    },
+  });
+  assert.deepEqual(parsed.payload.draft, payload.draft);
 });
 
 test("displayExcerptForStudioDraft derives a compact goal snippet", () => {
