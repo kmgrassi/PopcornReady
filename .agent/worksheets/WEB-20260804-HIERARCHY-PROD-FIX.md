@@ -51,6 +51,8 @@ remains understandable.
 - Reused the state-aware copy in the hierarchy panel so stale generic API copy
   cannot make terminal runs look active.
 - Made mobile breadcrumb items non-shrinking and ellipsized long linked labels.
+- Align the internally scrolling row to its current/final crumb on route, label,
+  and desktop-to-mobile changes without animated motion or document scrolling.
 - Added a root-state unit matrix and a production-shaped canceled hierarchy
   browser fixture with a genuinely long project name.
 - Updated the design, interaction, and E2E source-of-truth documents.
@@ -73,6 +75,15 @@ remains understandable.
 - `pnpm agent:lint:fix` — passed, 11 changed files checked.
 - `pnpm agent:validate -- --scope web` — passed, including agent lint,
   workflow-policy tests, migration tests/validation, and web typecheck.
+- PR-review fix: strengthened initial-current-crumb regression passed in
+  Chromium, mobile Chrome, and mobile Safari (3 tests); web unit suite passed 77
+  tests; typecheck, Impeccable detector, `pnpm agent:lint:fix`, and scoped agent
+  validation passed again.
+- PR-review manual browser inspection delayed long project-name hydration at
+  phone width. The row aligned exactly to its maximum scroll (`206px`), `Run
+  detail` was visible without test-side scrolling, page width remained
+  contained, and resetting to desktop restored `scrollLeft: 0` with the current
+  crumb visible.
 
 ## Independent reviews
 
@@ -88,6 +99,13 @@ remains understandable.
 - Wrap-up checkpoint approved the narrow zero-session override, factual copy
   matrix, real long-label overflow proof, authoritative documentation, and
   recorded validation with no blocker.
+- PR-review research/plan confirmed the original E2E manually scrolled the
+  current crumb instead of proving initial visibility. The reviewed plan uses a
+  stable content signature and mobile media-query listener so route changes,
+  async project-name hydration, resize transitions, and StrictMode remain safe.
+- PR-review implementation/wrap-up approved the scroller-only layout effect,
+  structured content signature, media-query cleanup, reduced-motion behavior,
+  strengthened E2E assertions, and browser evidence with no blocker.
 
 ## Blockers and risks
 
@@ -101,4 +119,6 @@ remains understandable.
 
 ## Next action / handoff
 
-Commit and tag the completed worksheet, push the branch, and open a ready PR.
+Commit the PR-review fix, move the worksheet tag, and push the existing ready
+PR. Leave GitHub replies and thread resolution to the user unless explicitly
+requested.

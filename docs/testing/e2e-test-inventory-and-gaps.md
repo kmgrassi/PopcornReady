@@ -70,7 +70,8 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   lanes, output navigation, collapsed completed work, blocked/queued language,
   root-owned specialist questions, sanitized technical disclosure, mobile
   containment, response-driven polling updates, state-aware empty terminal copy,
-  and internally scrolling 390px run-detail breadcrumbs. A restored Studio
+  and internally scrolling 390px run-detail breadcrumbs that initially reveal
+  the current location. A restored Studio
   generation verifies the same projection replaces its legacy flat checklist.
   Hierarchy-backed operator runs retain their separate authorized diagnostics
   disclosure without exposing it inside the creator-safe lane panel.

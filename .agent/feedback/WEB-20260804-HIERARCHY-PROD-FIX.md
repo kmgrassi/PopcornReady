@@ -22,7 +22,9 @@ The breadcrumb bug was a paint-overflow problem rather than document overflow.
 The page width assertion already passed because flex items shrank to fit, while a
 long linked label continued drawing across later crumbs. Keeping mobile items at
 their content width, clipping links, and testing internal scroll width plus the
-current crumb's reachable bounds covers the actual failure mode.
+current crumb's bounds covers the actual failure mode. Because the current crumb
+is the last item, the component must also align the row to its end after route or
+label changes; a test-side scroll would hide that production responsibility.
 
 ## Follow-up
 

@@ -133,6 +133,7 @@ test("keeps terminal empty hierarchy copy and long breadcrumbs truthful on mobil
   const currentCrumb = breadcrumbs.getByText("Run detail", { exact: true });
   const initialMetrics = await list.evaluate((element) => ({
     clientWidth: element.clientWidth,
+    scrollLeft: element.scrollLeft,
     scrollWidth: element.scrollWidth,
   }));
   const projectLinkMetrics = await projectLink.evaluate((element) => {
@@ -146,10 +147,15 @@ test("keeps terminal empty hierarchy copy and long breadcrumbs truthful on mobil
   });
 
   expect(initialMetrics.scrollWidth).toBeGreaterThan(initialMetrics.clientWidth);
+  expect(initialMetrics.scrollLeft).toBeGreaterThan(0);
+  expect(
+    Math.abs(
+      initialMetrics.scrollLeft - (initialMetrics.scrollWidth - initialMetrics.clientWidth),
+    ),
+  ).toBeLessThanOrEqual(1);
   expect(projectLinkMetrics.scrollWidth).toBeGreaterThan(projectLinkMetrics.clientWidth);
   expect(projectLinkMetrics).toMatchObject({ overflow: "hidden", textOverflow: "ellipsis" });
 
-  await currentCrumb.scrollIntoViewIfNeeded();
   const [listBounds, currentBounds] = await Promise.all([
     list.boundingBox(),
     currentCrumb.boundingBox(),

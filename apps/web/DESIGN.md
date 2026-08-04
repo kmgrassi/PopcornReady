@@ -323,7 +323,8 @@ planning only while the root is queued or active; waiting, blocked, failed,
 canceled, and complete roots use state-specific copy so terminal history never
 looks like live work. Mobile breadcrumbs remain a single internally scrolling
 row with clipped labels rather than shrinking and painting across neighboring
-locations.
+locations, and it aligns the current location into view on route, label, and
+desktop-to-mobile changes.
 
 ## 6. Do's and Don'ts
 
