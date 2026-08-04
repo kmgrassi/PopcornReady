@@ -3,6 +3,11 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { mockLocalApi } from "./fixtures/local-api";
 
+test.skip(
+  process.env.POPCORN_E2E_PRODUCTION_BUILD !== "true",
+  "Run through test:e2e:production-build so the immutable dist manifest exists.",
+);
+
 test("production build emits release identity and excludes development routes", async ({
   page,
   request,
