@@ -293,17 +293,20 @@ Production start and review checkpoints:
   plan step; there is no separate plan-edit screen in the normal setup path.
 - If provider keys or credits are missing, verify the start-production error is
   readable and offers Retry, Edit idea, and Edit assets.
-- To test review checkpoints manually, deep-link with `reviewGates`, for
-  example `/projects/new?goal=...&length=30&reviewGates=creative_plan`, or use
-  a fixture run with a review gate.
+- Review checkpoints are server-owned policy: every initial production run
+  pauses after its complete storyboard, and the retired `reviewGates` /
+  `stopAfter` client parameters are ignored. To test a checkpoint manually,
+  start any production run and wait for the storyboard boundary, or use a
+  fixture run with a reached gate.
 - Expected checkpoint behavior: the run waits in the generating view with
   `Approve & continue` and `Reject / regenerate`; approving resumes polling and
   rejecting keeps the run from continuing silently.
 
 Production step:
 
-- Continue with no stop points selected and verify the run advances through the
-  remaining stages autonomously.
+- Continue and verify the run advances autonomously to the server-owned
+  storyboard checkpoint, then after approval advances through the remaining
+  stages autonomously.
 - While the run is active, verify `/projects/:projectId/runs/:runId` shows the
   same stage/progress state from dashboard and project links.
 - Use the visible stop/cancel affordance where available and confirm the run
