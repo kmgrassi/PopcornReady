@@ -59,17 +59,19 @@ project flow.
 - Choose prompt-only footage, then go back and test uploaded/source-footage mode.
 - Continue from footage. The current flow auto-starts production as it reaches
   the plan step and then redirects to the run progress route.
-- Test checkpoint behavior with a `reviewGates` deep link or fixture run; the
-  normal setup UI does not currently expose a checkpoint picker.
-- Verify each review-gated run waits for user action instead of silently
-  continuing.
+- Test checkpoint behavior by letting the run reach the server-owned storyboard
+  boundary (every initial run pauses there), or use a fixture run with a
+  reached gate; the retired `reviewGates` deep-link parameter is ignored and
+  the setup UI intentionally has no checkpoint picker.
+- Verify each run waits at the storyboard gate for user action instead of
+  silently continuing.
 - If provider keys are missing, verify generation surfaces a readable
   configuration error.
 
 Record as product gaps:
 
-- Missing visible review-checkpoint picker in the normal `/projects/new` setup
-  flow, if that remains the intended product behavior.
+- Do not record the absent review-checkpoint picker as a gap: the storyboard
+  boundary is server-owned policy and client-selected gates are retired.
 - Drafts that cannot be resumed from dashboard after leaving the flow.
 - Double-click or Enter-repeat behavior that creates duplicate drafts, projects,
   or runs.
