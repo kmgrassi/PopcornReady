@@ -16,6 +16,7 @@ import type {
 import type { StoryContext } from "@popcorn/shared/types";
 import { deleteDraft, saveDraft, type StudioDraftPayload } from "../../lib/draftStore";
 import type { GenerationRunResultArtifact } from "../../lib/v1/generation-runs/status";
+import type { CreatorRunHierarchy } from "../../lib/v1/generation-runs/status";
 import { createAndStartRun, type StartRunResult } from "../../lib/startRun";
 import type { SelectedFootage } from "../../lib/upload";
 import { useUpdateGenerationRunMutation } from "../../lib/queryClient";
@@ -123,6 +124,8 @@ export interface StudioFlow {
    * poll loop. PR 4's richer checklist consumes the same data.
    */
   stages: GenerationStage[];
+  /** Creator-safe Creative Director and specialist session projection. */
+  hierarchy?: CreatorRunHierarchy;
   /** Result artifacts attached to the active run, including timeline outputs. */
   resultArtifacts: GenerationRunResultArtifact[];
   /** Project id of the in-flight run, for deep-link / polling. */
@@ -230,6 +233,7 @@ export function useStudioFlow(options: UseStudioFlowOptions = {}): StudioFlow {
   }));
   const [run, setRun] = useState<GenerationRun | undefined>(restoredRun);
   const [stages, setStages] = useState<GenerationStage[]>([]);
+  const [hierarchy, setHierarchy] = useState<CreatorRunHierarchy | undefined>();
   const [resultArtifacts, setResultArtifacts] = useState<GenerationRunResultArtifact[]>([]);
   const [projectId, setProjectId] = useState<string | undefined>(
     options.initialPayload?.projectId,
@@ -373,6 +377,7 @@ export function useStudioFlow(options: UseStudioFlowOptions = {}): StudioFlow {
     setError(undefined);
     setRun(undefined);
     setStages([]);
+    setHierarchy(undefined);
     setResultArtifacts([]);
     setProjectId(undefined);
     setReviewProject(null);
@@ -399,6 +404,7 @@ export function useStudioFlow(options: UseStudioFlowOptions = {}): StudioFlow {
     if (!detail) return;
     setRun(detail.run);
     setStages(detail.stages);
+    setHierarchy(detail.hierarchy);
     setResultArtifacts(detail.resultArtifacts ?? []);
 
     if (state === "generating" && isReviewReady(detail.run)) {
@@ -428,6 +434,7 @@ export function useStudioFlow(options: UseStudioFlowOptions = {}): StudioFlow {
         });
         setRun(data.run);
         setStages(data.stages);
+        setHierarchy(data.hierarchy);
         setResultArtifacts(data.resultArtifacts ?? []);
         void runQuery.refetch();
       } catch (gateError) {
@@ -486,6 +493,7 @@ export function useStudioFlow(options: UseStudioFlowOptions = {}): StudioFlow {
       brief,
       run,
       stages,
+      hierarchy,
       resultArtifacts,
       projectId,
       reviewProject,
@@ -514,6 +522,6 @@ export function useStudioFlow(options: UseStudioFlowOptions = {}): StudioFlow {
       updateReviewSegmentNote,
       completeDraft,
     }),
-    [state, step, brief, run, stages, resultArtifacts, projectId, reviewProject, reviewTimeline, reviewTimelineId, reviewSegmentNotes, runQuery.isLoading, reviewCutQuery.isLoading, reviewCutQuery.error, error, goTo, back, next, update, startGeneration, resetGeneration, retryGeneration, approveGate, updateReviewSegment, updateReviewSegmentNote, completeDraft],
+    [state, step, brief, run, stages, hierarchy, resultArtifacts, projectId, reviewProject, reviewTimeline, reviewTimelineId, reviewSegmentNotes, runQuery.isLoading, reviewCutQuery.isLoading, reviewCutQuery.error, error, goTo, back, next, update, startGeneration, resetGeneration, retryGeneration, approveGate, updateReviewSegment, updateReviewSegmentNote, completeDraft],
   );
 }

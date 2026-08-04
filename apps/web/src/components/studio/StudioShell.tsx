@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "../ui/Button";
 import { RerunProposalDialog } from "../ai-edit/RerunProposalDialog";
 import { StatusChecklist } from "../ui/StatusChecklist";
+import { CreatorRunHierarchyPanel } from "../progress/CreatorRunHierarchyPanel";
 import { StudioEmptyState } from "./StudioEmptyState";
 import { STEP_LABELS, StudioStepper } from "./StudioStepper";
 import { buildChecklistItems } from "./statusChecklist";
@@ -623,7 +624,15 @@ function StudioFlowView({
               then review the rough cut in this same workspace.
             </p>
           </div>
-          <StatusChecklist items={items} />
+          {flow.hierarchy && flow.projectId ? (
+            <CreatorRunHierarchyPanel
+              hierarchy={flow.hierarchy}
+              projectId={flow.projectId}
+              compact
+            />
+          ) : (
+            <StatusChecklist items={items} />
+          )}
           {gate ? (
             <GateCard
               stageType={gate.stageType}

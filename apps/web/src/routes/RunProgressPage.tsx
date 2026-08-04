@@ -163,6 +163,7 @@ function RunProgress({
       run={payload.run}
       stages={payload.stages}
       stageItems={payload.stageItems}
+      hierarchy={payload.hierarchy}
       operatorDiagnostics={payload.operatorDiagnostics}
       studioReturnPath={studioReturnPath}
       headerSlot={<AnonymousUpgradeBanner />}

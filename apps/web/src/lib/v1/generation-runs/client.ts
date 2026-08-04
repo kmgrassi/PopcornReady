@@ -11,7 +11,7 @@ import {
   GenerationRun,
 } from "@popcorn/shared/v1/types";
 import { authenticatedFetch } from "../../supabase/fetch";
-import { GenerationRunDetail } from "./status";
+import { GenerationRunDetail, isGenerationRunDetail } from "./status";
 
 export interface GenerationRunClientOptions {
   // Defaults to the global `fetch`. Injected in tests.
@@ -57,16 +57,6 @@ function isGenerationRun(value: unknown): value is GenerationRun {
 
 function isListGenerationRunsResponse(value: unknown): value is ListGenerationRunsResponse {
   return isRecord(value) && Array.isArray(value.runs) && value.runs.every(isGenerationRun);
-}
-
-function isGenerationRunDetail(value: unknown): value is GenerationRunDetail {
-  return (
-    isRecord(value) &&
-    isGenerationRun(value.run) &&
-    Array.isArray(value.stages) &&
-    Array.isArray(value.stageItems) &&
-    (value.resultArtifacts === undefined || Array.isArray(value.resultArtifacts))
-  );
 }
 
 async function readJson<T>(

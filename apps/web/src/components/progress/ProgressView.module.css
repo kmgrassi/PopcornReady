@@ -270,6 +270,10 @@
   gap: var(--space-6);
 }
 
+.body.bodyHierarchy {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .main {
   display: flex;
   flex-direction: column;
@@ -1024,6 +1028,10 @@
   }
 
   .statusGrid {
+    display: none;
+  }
+
+  .headerStatusPanelHierarchy {
     display: none;
   }
 

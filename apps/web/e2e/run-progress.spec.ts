@@ -38,11 +38,104 @@ interface MockRunOptions {
   operatorDiagnostics?: Array<Record<string, unknown>>;
   completionKind?: "video" | "storyboard_assets" | "standalone_asset";
   presentationKind?: "standalone_image" | "standalone_video" | "standalone_audio";
+  hierarchy?: Record<string, unknown>;
 }
 
 test.beforeEach(async ({ page }) => {
   await mockLocalAuth(page);
   await mockProject(page);
+});
+
+test("shows Creative Director and specialist lanes instead of the primitive pipeline @mobile", async ({
+  page,
+}) => {
+  await page.route(`**${apiRunPath}`, async (route) => {
+    await route.fulfill({
+      json: runDetail({
+        status: "running",
+        message: "Generating shots.",
+        hierarchy: hierarchyFixture(),
+      }),
+    });
+  });
+
+  await page.goto(runPath);
+
+  await expect(page.getByRole("heading", { name: "Creative Director" })).toBeVisible();
+  await expect(page.getByText("The creative director is guiding this production.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Visuals", { exact: true })).toBeVisible();
+  await expect(page.getByText("Creating the planned picture and motion.")).toBeVisible();
+  await expect(page.getByRole("progressbar", { name: "Visuals 3 of 6 ready" })).toBeVisible();
+  await expect(page.getByText("Audio", { exact: true })).toBeVisible();
+  await expect(page.getByText("All assigned work is complete.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open project assets" })).toHaveAttribute(
+    "href",
+    `/projects/${projectId}/media`,
+  );
+  await expect(page.getByText(/tool steps complete/i)).toHaveCount(0);
+  await expect(page.getByText("Pipeline", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Tool activity", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("session-visuals", { exact: false })).toHaveCount(0);
+
+  const audioLane = page.locator("details").filter({ hasText: "Audio" }).first();
+  await expect(audioLane).not.toHaveAttribute("open", "");
+  await audioLane.locator("summary").first().click();
+  await expect(audioLane.getByText("Show production details")).toBeVisible();
+
+  const overflow = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  expect(overflow.scrollWidth).toBe(overflow.clientWidth);
+});
+
+test("keeps a specialist question owned by the director and explains blocked work @mobile", async ({
+  page,
+}) => {
+  const hierarchy = hierarchyFixture();
+  hierarchy.root.state = "waiting";
+  hierarchy.root.needsDirectorDecision = true;
+  hierarchy.root.message = "The creative director is resolving a specialist question.";
+  hierarchy.sessions[0]!.state = "blocked";
+  hierarchy.sessions[0]!.runs[0]!.state = "blocked";
+  hierarchy.sessions[0]!.runs[0]!.report = { outcome: "blocked", outputAssetIds: [] };
+  hierarchy.sessions[1]!.state = "queued";
+  hierarchy.sessions[1]!.runs[0]!.state = "queued";
+  hierarchy.sessions[1]!.runs[0]!.report = null;
+
+  await page.route(`**${apiRunPath}`, async (route) => {
+    await route.fulfill({ json: runDetail({ status: "running", hierarchy }) });
+  });
+  await page.goto(runPath);
+
+  await expect(page.getByText("Resolving a specialist question", { exact: true })).toBeVisible();
+  await expect(page.getByText("The director is resolving a missing dependency.")).toBeVisible();
+  await expect(page.getByText("Ready when the current work allows it.")).toBeVisible();
+  await expect(page.getByRole("textbox")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /answer/i })).toHaveCount(0);
+});
+
+test("updates specialist lanes when the run poll returns newer hierarchy state", async ({ page }) => {
+  let requests = 0;
+  await page.route(`**${apiRunPath}`, async (route) => {
+    requests += 1;
+    const hierarchy = hierarchyFixture();
+    if (requests === 1) {
+      hierarchy.sessions[0]!.state = "queued";
+      hierarchy.sessions[0]!.runs[0]!.state = "queued";
+      hierarchy.sessions[0]!.runs[0]!.actions[0]!.state = "queued";
+      hierarchy.sessions[0]!.runs[0]!.actions[0]!.jobs[0]!.state = "queued";
+      hierarchy.sessions[0]!.runs[0]!.actions[0]!.jobs[0]!.completedItems = 0;
+    }
+    await route.fulfill({ json: runDetail({ status: "running", hierarchy }) });
+  });
+
+  await page.goto(runPath);
+  await expect(page.getByText("Ready when the current work allows it.")).toBeVisible();
+  await expect(page.getByRole("progressbar", { name: "Visuals 3 of 6 ready" })).toBeVisible({
+    timeout: 5_000,
+  });
+  expect(requests).toBeGreaterThanOrEqual(2);
 });
 
 test("shows a completed one-off image as one asset step without video stages @mobile", async ({ page }) => {
@@ -836,6 +929,64 @@ function runDetail(options: MockRunOptions = {}) {
           ]
         : []),
     operatorDiagnostics: options.operatorDiagnostics,
+    hierarchy: options.hierarchy,
+  };
+}
+
+function hierarchyFixture() {
+  return {
+    root: {
+      runId,
+      state: "active",
+      message: "The creative director is guiding this production.",
+      needsDirectorDecision: false,
+    },
+    sessions: [
+      {
+        sessionId: "session-visuals",
+        domain: "visuals",
+        state: "active",
+        runs: [
+          {
+            runId: "run-visuals-1",
+            state: "active",
+            taskKind: "visual_production",
+            report: null,
+            actions: [
+              {
+                actionId: "action-visuals-1",
+                label: "Generate shots",
+                state: "active",
+                outputAssetIds: ["asset-shot-1", "asset-shot-2", "asset-shot-3"],
+                jobs: [{ state: "active", completedItems: 3, totalItems: 6 }],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        sessionId: "session-audio",
+        domain: "audio",
+        state: "complete",
+        runs: [
+          {
+            runId: "run-audio-1",
+            state: "complete",
+            taskKind: "audio_production",
+            report: { outcome: "done", outputAssetIds: ["asset-audio-1"] },
+            actions: [
+              {
+                actionId: "action-audio-1",
+                label: "Generate audio",
+                state: "complete",
+                outputAssetIds: ["asset-audio-1"],
+                jobs: [{ state: "complete", completedItems: 1, totalItems: 1 }],
+              },
+            ],
+          },
+        ],
+      },
+    ],
   };
 }
 

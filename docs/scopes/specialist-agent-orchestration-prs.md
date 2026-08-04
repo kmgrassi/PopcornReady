@@ -1399,6 +1399,13 @@ budget-reservation, fingerprint-conflict, and timed mocked-media tests.
 
 ### PR 17 — Hierarchical session/run API and observe-first production UI
 
+**Implementation status (2026-08-04):** the existing run-detail hierarchy
+projection is now consumed by both run detail and the restored Studio generation
+path. The creator UI leads with a Creative Director summary and Visuals/Audio
+lanes, keeps primitive activity behind a sanitized disclosure, preserves the
+root approval loop, and retains the legacy projection only when older responses
+omit `hierarchy`.
+
 **Depends on:** PR 16. It extends PR 12's stable domain projection rather than
 replacing it; web fixture work may begin earlier.
 
