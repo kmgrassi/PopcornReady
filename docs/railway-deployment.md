@@ -15,8 +15,8 @@ the health route.
 
 Current production origin: `https://popcornready-production.up.railway.app`
 (generated Railway domain). Netlify's `VITE_API_URL` must point at this; if it is
-unset the web client falls back to same-origin `/api/*` and receives the SPA
-`index.html` instead of JSON.
+unset the web client falls back to same-origin `/api/*`, which Netlify proxies to
+this Railway origin before the SPA fallback.
 
 The API must run on **Node 22+**. `@supabase/supabase-js` constructs a realtime
 client (which needs a global `WebSocket`) when `createClient` is called; on Node
@@ -199,11 +199,24 @@ healthcheckPath = "/api/v1/health"
 Railway calls this path during deployment and only marks the new deployment
 active once it returns HTTP 200.
 
-The `Verify API Deploy (Railway)` GitHub workflow builds the API and polls this
-health route until production reports the exact `main` commit. Because Railway
-deploys the latest `main` state, a newer push cancels verification of an older
-SHA; the newest run remains responsible for proving what is live. Database and
-hosted-auth mutation workflows stay serialized and are never canceled in
+The API build writes an ignored `.release/release.json` manifest with the exact
+full git SHA, shared release orchestration ID, API artifact SHA-256, build time,
+and canonical required migration-version set. Production health returns 503
+when that manifest is absent or invalid, Railway's commit disagrees, the
+least-privilege migration-ledger read fails, or a required migration is absent.
+Extra applied migrations remain compatible, including lower out-of-order
+versions applied by the repository's supported `--include-all` workflow.
+
+Netlify independently emits `/release.json` after Vite builds, hashing the
+deployed `dist` content while excluding the metadata file itself. Both metadata
+surfaces use `Cache-Control: no-store` and expose only nonsecret release fields.
+
+The `Verify API Deploy (Railway)` GitHub workflow builds the API, then observes
+native Railway, Netlify, and Supabase deploys until the direct API is
+database-compatible, Netlify serves the exact full `main` SHA, and Netlify's
+same-origin `/api` proxy reaches that same API artifact. It does not serialize or
+activate those deploys. A newer push cancels only obsolete observation; database
+and hosted-auth mutation workflows stay serialized and are never canceled in
 progress.
 
 ## File storage limitation

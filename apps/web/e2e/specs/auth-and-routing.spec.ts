@@ -5,9 +5,14 @@ test("health endpoint returns JSON through the browser API path", async ({ page 
   const response = await page.goto("/api/v1/health");
   expect(response?.ok()).toBe(true);
   expect(response?.headers()["content-type"]).toContain("application/json");
+  expect(response?.headers()["cache-control"]).toContain("no-store");
 
   const body = JSON.parse((await page.locator("body").textContent()) ?? "{}");
-  expect(body).toMatchObject({ status: "ok", authMode: "local" });
+  expect(body).toMatchObject({
+    status: "ok",
+    authMode: "local",
+    release: { ready: true },
+  });
 });
 
 test.describe("local auth and routing smoke", () => {

@@ -26,7 +26,9 @@
 - Production mutations require isolated test identity/data, bounded side
   effects, and verified cleanup. The proposed rollout is scoped in
   [`docs/scopes/production-browser-agent-testing.md`](../scopes/production-browser-agent-testing.md);
-  it grants no authority until its prerequisite PRs land.
+  PR 1 supplies release identity and route truth only, and grants no login or
+  mutation authority until the later sandbox, cleanup, and budget prerequisites
+  land.
 - Supabase migrations must use unique 14-digit filename versions. Run
   `pnpm db:migrations:validate`; `pnpm agent:validate` and the production
   migration workflow run this preflight before any database push.

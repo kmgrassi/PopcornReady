@@ -154,6 +154,14 @@ snapshot pointer, but stable scene/beat identity remains behind the service
 client or the bounded story-application function and is not a direct-role
 grant.
 
+Release readiness adds one non-workflow metadata exception outside `public`:
+`popcorn_api` has `USAGE` on `supabase_migrations` and column-level
+`SELECT(version)` on `supabase_migrations.schema_migrations`. It cannot select
+the table as a whole or read migration names/statements. Health uses those
+nonsecret versions only to prove that every version declared by the immutable
+API build artifact is applied. The query returns no customer data, carries no
+request identity, and is never exposed through PostgREST or an application RPC.
+
 The storyboard creator entrypoint takes a transaction-scoped advisory lock on
 the project before its service-store find-or-create decision. The lock carries
 no table access and adds no role grants; it only serializes this entrypoint
