@@ -101,8 +101,8 @@ export function deriveNextAction(
       run: failedRun,
       title: "A generation needs attention",
       body: failedRun.currentStageType
-        ? `${failedRun.projectName} stopped at ${formatStage(failedRun.currentStageType)}. Open the run to see what failed and retry from the failed stage.`
-        : `${failedRun.projectName} stopped. Open the run to see what failed and retry from the failed stage.`,
+        ? `${failedRun.projectName} stopped at ${formatStage(failedRun.currentStageType)}. Open the run to see what stopped, then request changes from the project when you are ready.`
+        : `${failedRun.projectName} stopped. Open the run to see what stopped, then request changes from the project when you are ready.`,
       ctaLabel: "Review failure",
       to: runPath(failedRun),
     };

@@ -21,6 +21,7 @@ import { InspirationPage } from "./routes/InspirationPage";
 import { LaunchpadPage } from "./routes/LaunchpadPage";
 import { LibraryPage } from "./routes/LibraryPage";
 import { LoginPage } from "./routes/LoginPage";
+import { NotFoundPage } from "./routes/NotFoundPage";
 import { ProjectCreationPage } from "./routes/ProjectCreationPage";
 import { ProjectDetailPage } from "./routes/ProjectDetailPage";
 import { ProjectMediaGalleryPage } from "./routes/ProjectMediaGalleryPage";
@@ -197,7 +198,7 @@ export function App() {
         </Route>
 
         <Route element={<AppLayout />}>
-          <Route path="*" element={<Placeholder name="Not found" />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Route>
     </Routes>

@@ -1,5 +1,32 @@
-import { expect, test } from "@playwright/test";
-import { expectNoAppCrash, mockLocalApi } from "../fixtures/local-api";
+import { expect, test, type Route } from "@playwright/test";
+import {
+  expectNoAppCrash,
+  mockLocalApi,
+  now,
+  workspaceId,
+} from "../fixtures/local-api";
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+async function fulfillJson(route: Route, body: unknown) {
+  const origin = route.request().headers().origin;
+  await route.fulfill({
+    status: 200,
+    headers: {
+      "access-control-allow-credentials": "true",
+      "access-control-allow-origin": origin ?? "*",
+      "content-type": "application/json",
+      vary: "origin",
+    },
+    body: JSON.stringify(body),
+  });
+}
 
 test("health endpoint returns JSON through the browser API path", async ({ page }) => {
   const response = await page.goto("/api/v1/health");
@@ -41,6 +68,82 @@ test.describe("local auth and routing smoke", () => {
     await expect(page.getByRole("navigation", { name: "Library collections" })).toBeVisible();
   });
 
+  test("direct protected routes wait for workspace bootstrap before showing data", async ({
+    page,
+  }) => {
+    await page.unroute("**/api/v1/me");
+    await page.unroute("**/api/v1/projects?**");
+    await page.unroute("**/api/v1/workspaces/*/dashboard");
+
+    let meGate = deferred();
+    const meMethods: string[] = [];
+    await page.route("**/api/v1/me", async (route) => {
+      meMethods.push(route.request().method());
+      await meGate.promise;
+      await fulfillJson(route, {
+        actor: { id: "local_dev", type: "local", email: "local@popcornready.test" },
+        workspaceId,
+        workspaceName: "E2E Local Workspace",
+        authMode: "local",
+        isLocal: true,
+      });
+    });
+    await page.route("**/api/v1/projects?**", (route) =>
+      fulfillJson(route, {
+        projects: [
+          {
+            id: "project-bootstrap",
+            schemaVersion: "project.v1",
+            workspaceId,
+            name: "Bootstrap project",
+            status: "active",
+            visibility: "private",
+            createdAt: now,
+            updatedAt: now,
+          },
+        ],
+        pagination: { limit: 24, nextCursor: null },
+      }),
+    );
+    await page.route("**/api/v1/workspaces/*/dashboard", (route) =>
+      fulfillJson(route, {
+        summary: {
+          schemaVersion: "dashboard.v1",
+          counts: { projects: 1, activeRuns: 1, outputs: 0 },
+          activeRuns: [
+            {
+              runId: "run-bootstrap",
+              projectId: "project-bootstrap",
+              projectName: "Bootstrap project",
+              status: "failed",
+              currentStageType: "quality_review",
+              progressPercent: 50,
+              updatedAt: now,
+            },
+          ],
+          recentOutputs: [],
+        },
+      }),
+    );
+
+    await page.goto("/library/projects");
+    await expect(page.getByTestId("quick-loading")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "No projects yet" })).toHaveCount(0);
+    meGate.resolve();
+    await expect(page.getByRole("link", { name: "Bootstrap project", exact: true })).toBeVisible();
+
+    meGate = deferred();
+    await page.goto("/activity");
+    await expect(page.getByTestId("quick-loading")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "No active generations" })).toHaveCount(0);
+    meGate.resolve();
+    await expect(page.getByRole("heading", { name: "In progress" })).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Open failure details for Bootstrap project" }),
+    ).toBeVisible();
+    expect(meMethods).toEqual(["GET", "GET"]);
+  });
+
   test("keeps compatibility redirects and not-found route working", async ({ page }) => {
     await page.goto("/projects?source=smoke");
     await expect(page).toHaveURL(/\/library\/projects\?source=smoke$/);
@@ -63,6 +166,24 @@ test.describe("local auth and routing smoke", () => {
     await expectNoAppCrash(page);
 
     await page.goto("/route-that-does-not-exist");
-    await expect(page.getByText("Not found is migrating from Next to Vite SPA.")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "That page isn’t here." })).toBeVisible();
+    const notFound = page.getByRole("region", { name: "That page isn’t here." });
+    await expect(notFound.getByRole("link", { name: "Go to homepage" })).toHaveAttribute(
+      "href",
+      "/",
+    );
+    await expect(notFound.getByRole("link", { name: "Open dashboard" })).toHaveAttribute(
+      "href",
+      "/dashboard",
+    );
+    await expect(page.getByText(/migrating from Next/i)).toHaveCount(0);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.getByRole("heading", { name: "That page isn’t here." })).toBeVisible();
+    const overflow = await page.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }));
+    expect(overflow.scrollWidth).toBe(overflow.clientWidth);
   });
 });

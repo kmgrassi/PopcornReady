@@ -2,6 +2,7 @@
 
 import type { GenerationRun } from "@popcorn/shared/v1/types";
 import { Button } from "../ui/Button";
+import { terminalRecoveryMode } from "./terminalRecovery";
 import { formatElapsed, useElapsedTime } from "./useElapsedTime";
 import styles from "./TerminalState.module.css";
 
@@ -57,6 +58,7 @@ export function TerminalState({ run, creditRecovery }: TerminalStateProps) {
 
   if (run.status === "failed") {
     const missingVideo = run.error?.code === "missing_video_output";
+    const recoveryMode = terminalRecoveryMode(run.error, Boolean(creditRecovery));
     return (
       <div className="terminal-state terminal-failed" role="alert">
         <div className="terminal-state-head">
@@ -80,12 +82,12 @@ export function TerminalState({ run, creditRecovery }: TerminalStateProps) {
             Stopped after {formatElapsed(elapsed)}.
           </p>
         ) : null}
-        {run.error?.retryable ? (
+        {recoveryMode === "request_changes" ? (
           <p className="terminal-state-meta muted">
-            This stage can be retried.
+            Open the project to request changes.
           </p>
         ) : null}
-        {run.error?.code === "insufficient_credits" && creditRecovery ? (
+        {recoveryMode === "continue_after_credit" && creditRecovery ? (
           <div className={styles.creditRecovery}>
             <p className="terminal-state-meta">
               Your balance is now {creditRecovery.balanceCredits.toLocaleString()} credits. Continue from
