@@ -533,6 +533,45 @@ test("reveals server-authorized operator diagnostics progressively @mobile", asy
   await expect(rail.getByText("2", { exact: true })).toBeVisible();
 });
 
+test("retains authorized operator diagnostics beside the Creative Director hierarchy @mobile", async ({
+  page,
+}) => {
+  const detail = runDetail({
+    status: "running",
+    stageType: "asset_generation",
+    hierarchy: hierarchyFixture(),
+    operatorDiagnostics: [
+      {
+        jobId: "job-hierarchy-123456789",
+        actionId: "action-hierarchy-123456789",
+        runId,
+        status: "running",
+        currentStep: "generate_hierarchy_keyframe",
+        provider: "openai",
+        attempt: 3,
+        startedAt: now,
+        heartbeatAt: now,
+        lastProgressAt: now,
+        updatedAt: now,
+        attentionState: "healthy",
+      },
+    ],
+  });
+  await page.route(`**${apiRunPath}`, async (route) => {
+    await route.fulfill({ json: detail });
+  });
+  await page.goto(runPath);
+
+  await expect(page.getByRole("heading", { name: "Creative Director" })).toBeVisible();
+  const diagnostics = page.getByText("Operator diagnostics", { exact: true });
+  await expect(diagnostics).toBeVisible();
+  await expect(page.getByText("generate_hierarchy_keyframe", { exact: true })).not.toBeVisible();
+  await diagnostics.click();
+  await expect(page.getByText("generate_hierarchy_keyframe", { exact: true })).toBeVisible();
+  await expect(page.getByText("openai", { exact: true })).toBeVisible();
+  await expect(page.getByText("3", { exact: true })).toBeVisible();
+});
+
 test("opens generated asset feedback and previews an exact durable proposal @mobile", async ({ page }) => {
   let proposalRequestBody: unknown = null;
   let getCount = 0;

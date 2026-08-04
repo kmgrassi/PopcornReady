@@ -70,6 +70,8 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   root-owned specialist questions, sanitized technical disclosure, mobile
   containment, and response-driven polling updates. A restored Studio
   generation verifies the same projection replaces its legacy flat checklist.
+  Hierarchy-backed operator runs retain their separate authorized diagnostics
+  disclosure without exposing it inside the creator-safe lane panel.
 - `rerun-proposal-lifecycle.spec.ts` covers proposal preview, explicit maximum
   cost approval, separate execution, waiting-state polling, durable reload
   recovery, visible owning-surface refresh after restored completion, truthful

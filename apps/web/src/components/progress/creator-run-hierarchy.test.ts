@@ -94,3 +94,35 @@ test("summarizes hierarchy completion and director-owned questions", () => {
   assert.equal(hierarchyProgressLabel(hierarchy), "1 of 2 specialist lanes complete");
   assert.equal(hierarchyCurrentLabel(hierarchy), "Director resolving a question");
 });
+
+test("prioritizes active work over an earlier queued lane", () => {
+  const hierarchy = {
+    root: {
+      runId: "root-1",
+      state: "active" as const,
+      message: "The creative director is guiding this production.",
+      needsDirectorDecision: false,
+    },
+    sessions: [
+      session({ sessionId: "session-audio", domain: "audio", state: "queued" }),
+      session(),
+    ],
+  };
+
+  assert.equal(hierarchyCurrentLabel(hierarchy), "Visuals · In progress");
+});
+
+test("labels an empty hierarchy as planning", () => {
+  const hierarchy = {
+    root: {
+      runId: "root-1",
+      state: "active" as const,
+      message: "The creative director is planning the work.",
+      needsDirectorDecision: false,
+    },
+    sessions: [],
+  };
+
+  assert.equal(hierarchyCurrentLabel(hierarchy), "Director planning the work");
+  assert.equal(hierarchyProgressLabel(hierarchy), "The director is planning the work");
+});

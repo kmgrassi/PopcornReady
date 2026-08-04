@@ -28,7 +28,7 @@ import {
 import { TerminalState } from "./TerminalState";
 import { ReviewGatePanel } from "./ReviewGatePanel";
 import { PlanRecap } from "./PlanRecap";
-import { PipelineDepth, usePipelineElapsed } from "./PipelineDepth";
+import { OperatorDiagnostics, PipelineDepth, usePipelineElapsed } from "./PipelineDepth";
 import { CreatorRunHierarchyPanel } from "./CreatorRunHierarchyPanel";
 import {
   hierarchyCurrentLabel,
@@ -522,6 +522,15 @@ export function ProgressView({
                   : undefined
               }
             />
+          ) : null}
+
+          {detail.hierarchy && operatorDiagnostics ? (
+            <section className={styles.hierarchyOperatorDiagnostics} aria-label="Operator tools">
+              <OperatorDiagnostics
+                runId={detail.run.runId}
+                diagnostics={operatorDiagnostics}
+              />
+            </section>
           ) : null}
 
           <PlanRecap project={project} loading={projectLoading} />

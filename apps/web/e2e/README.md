@@ -92,7 +92,8 @@ and no inferred Brief, Script, or Storyboard pipeline stages.
 `run-progress.spec.ts` also covers the full-video Creative Director projection:
 Visuals/Audio lane copy and outputs, collapsed completed work, blocked and
 queued states, root-owned specialist questions, sanitized production details,
-responsive overflow, and a response-driven polling transition.
+responsive overflow, a response-driven polling transition, and the separate
+server-authorized operator diagnostics disclosure on hierarchy-backed runs.
 
 The command starts the Express API and Vite app, using:
 

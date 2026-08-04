@@ -76,8 +76,10 @@ export function hierarchyProgressLabel(hierarchy: CreatorRunHierarchy): string {
 
 export function hierarchyCurrentLabel(hierarchy: CreatorRunHierarchy): string {
   if (hierarchy.root.needsDirectorDecision) return "Director resolving a question";
-  const current = hierarchy.sessions.find((session) =>
-    ["blocked", "failed", "active", "waiting", "queued"].includes(session.state),
-  );
+  if (hierarchy.sessions.length === 0) return "Director planning the work";
+  const statePriority: CreatorWorkState[] = ["blocked", "failed", "active", "waiting", "queued"];
+  const current = statePriority
+    .flatMap((state) => hierarchy.sessions.filter((session) => session.state === state))
+    .at(0);
   return current ? `${DOMAIN_LABELS[current.domain]} · ${WORK_STATE_LABELS[current.state]}` : "Finalizing production";
 }

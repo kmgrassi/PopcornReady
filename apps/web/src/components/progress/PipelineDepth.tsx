@@ -25,6 +25,50 @@ interface PipelineDepthProps {
   choosingNextStep: boolean;
 }
 
+interface OperatorDiagnosticsProps {
+  runId: string;
+  diagnostics: GenerationJobDiagnostics[];
+}
+
+export function OperatorDiagnostics({
+  runId,
+  diagnostics,
+}: OperatorDiagnosticsProps) {
+  return (
+    <details className={styles.operatorDiagnostics}>
+      <summary>Operator diagnostics</summary>
+      <div className={styles.operatorDiagnosticsBody}>
+        <div className={styles.diagnostics}>
+          <span className={styles.runIdLabel}>Run ID</span>
+          <code className={styles.runId} title={runId}>{shortId(runId)}</code>
+          <button type="button" className={styles.copyButton} onClick={() => void navigator.clipboard?.writeText(runId)}>
+            Copy
+          </button>
+        </div>
+        {diagnostics.length > 0 ? (
+          <ol className={styles.operatorJobList}>
+            {diagnostics.map((job) => (
+              <li className={styles.operatorJob} key={job.jobId}>
+                <div className={styles.operatorJobHeading}><strong>{job.currentStep ?? "Background job"}</strong><span>{job.status}</span></div>
+                <dl className={styles.operatorJobFacts}>
+                  <div><dt>Job</dt><dd><code>{shortId(job.jobId)}</code></dd></div>
+                  <div><dt>Action</dt><dd><code>{shortId(job.actionId)}</code></dd></div>
+                  {job.provider ? <div><dt>Provider</dt><dd>{job.provider}</dd></div> : null}
+                  {job.attempt != null ? <div><dt>Attempt</dt><dd>{job.attempt}</dd></div> : null}
+                  <div><dt>Updated</dt><dd>{formatDateTime(job.updatedAt)}</dd></div>
+                  {job.lastProgressAt ? <div><dt>Progress</dt><dd>{formatDateTime(job.lastProgressAt)}</dd></div> : null}
+                  {job.heartbeatAt ? <div><dt>Heartbeat</dt><dd>{formatDateTime(job.heartbeatAt)}</dd></div> : null}
+                  {job.nextRetryAt ? <div><dt>Next retry</dt><dd>{formatDateTime(job.nextRetryAt)}</dd></div> : null}
+                </dl>
+              </li>
+            ))}
+          </ol>
+        ) : <p className={styles.operatorEmpty}>No job diagnostics reported yet.</p>}
+      </div>
+    </details>
+  );
+}
+
 export function PipelineDepth({
   run,
   stages,
@@ -86,37 +130,7 @@ export function PipelineDepth({
             : "No meaningful progress timestamp was recorded."}
       </p>
       {operatorDiagnostics ? (
-        <details className={styles.operatorDiagnostics}>
-          <summary>Operator diagnostics</summary>
-          <div className={styles.operatorDiagnosticsBody}>
-            <div className={styles.diagnostics}>
-              <span className={styles.runIdLabel}>Run ID</span>
-              <code className={styles.runId} title={run.runId}>{shortId(run.runId)}</code>
-              <button type="button" className={styles.copyButton} onClick={() => void navigator.clipboard?.writeText(run.runId)}>
-                Copy
-              </button>
-            </div>
-            {operatorDiagnostics.length > 0 ? (
-              <ol className={styles.operatorJobList}>
-                {operatorDiagnostics.map((job) => (
-                  <li className={styles.operatorJob} key={job.jobId}>
-                    <div className={styles.operatorJobHeading}><strong>{job.currentStep ?? "Background job"}</strong><span>{job.status}</span></div>
-                    <dl className={styles.operatorJobFacts}>
-                      <div><dt>Job</dt><dd><code>{shortId(job.jobId)}</code></dd></div>
-                      <div><dt>Action</dt><dd><code>{shortId(job.actionId)}</code></dd></div>
-                      {job.provider ? <div><dt>Provider</dt><dd>{job.provider}</dd></div> : null}
-                      {job.attempt != null ? <div><dt>Attempt</dt><dd>{job.attempt}</dd></div> : null}
-                      <div><dt>Updated</dt><dd>{formatDateTime(job.updatedAt)}</dd></div>
-                      {job.lastProgressAt ? <div><dt>Progress</dt><dd>{formatDateTime(job.lastProgressAt)}</dd></div> : null}
-                      {job.heartbeatAt ? <div><dt>Heartbeat</dt><dd>{formatDateTime(job.heartbeatAt)}</dd></div> : null}
-                      {job.nextRetryAt ? <div><dt>Next retry</dt><dd>{formatDateTime(job.nextRetryAt)}</dd></div> : null}
-                    </dl>
-                  </li>
-                ))}
-              </ol>
-            ) : <p className={styles.operatorEmpty}>No job diagnostics reported yet.</p>}
-          </div>
-        </details>
+        <OperatorDiagnostics runId={run.runId} diagnostics={operatorDiagnostics} />
       ) : null}
     </>
   );
