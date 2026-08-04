@@ -104,6 +104,14 @@ planning copy and verifies that long run-detail breadcrumbs scroll internally,
 ellipsize linked labels, initially reveal the current location, and remain
 contained at 390px.
 
+`landing-mobile.spec.ts` keeps the mobile landing inside the viewport with a
+tappable primary CTA. `landing-agent-content.spec.ts` protects the landing
+page's agent-architecture content contract on desktop and both mobile browser
+projects: the creative-director-with-specialists section, the workflow copy in
+which the director delegates to visuals and audio specialists with current
+providers (Gemini Veo, ElevenLabs), the agent-crew FAQ, mobile overflow
+containment, and the absence of retired provider copy such as Sora.
+
 The command starts the Express API and Vite app, using:
 
 - `AUTH_MODE=local`

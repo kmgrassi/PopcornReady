@@ -379,6 +379,12 @@ Current coverage:
 
 - Not covered end to end. Some auth and run-progress pieces are covered
   separately.
+- `landing-mobile.spec.ts` covers mobile viewport containment and a tappable
+  primary CTA.
+- `landing-agent-content.spec.ts` covers the landing content contract on
+  desktop and both mobile projects: the creative-director-with-specialists
+  section, specialist delegation copy with current providers, the agent-crew
+  FAQ, and absence of retired provider copy (Sora).
 
 Recommended next test:
 

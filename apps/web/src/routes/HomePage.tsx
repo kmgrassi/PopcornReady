@@ -303,7 +303,7 @@ export function HomePage() {
           <LandingSection
             spacing="tight"
             title="One directed run, visible end to end."
-            subtitle="Watch the agent work: it turns the brief into beats, generates a keyframe per beat, and assembles the timeline — every step inspectable in one workspace."
+            subtitle="Watch the crew work: the creative director turns the brief into beats, hands generation to its specialists, and assembles the timeline — every step inspectable in one workspace."
           >
             <AgentRunPreview />
           </LandingSection>
@@ -314,8 +314,8 @@ export function HomePage() {
             <div className={styles.orchestratorCopy}>
               <LandingSectionHeader
                 align="start"
-                title="The agent coordinates every stage."
-                subtitle="Briefs, planning, asset generation, review, and rendering stay connected as one inspectable system instead of scattered one-off tools."
+                title="A creative director runs a crew of specialists."
+                subtitle="One director agent owns the plan and delegates production to specialist visuals and audio agents — so briefs, planning, asset generation, review, and rendering stay connected as one inspectable system instead of scattered one-off tools."
               />
             </div>
             <figure className={styles.orchestratorFrame}>
@@ -352,8 +352,9 @@ export function HomePage() {
             subtitle={
               <>
                 Other tools bolt AI onto a manual editor. Popcorn Ready is the
-                opposite: an agent that drives the whole pipeline &mdash; brief,
-                plan, assets, audio, timeline, and export &mdash; in one loop.
+                opposite: a creative director agent that drives the whole
+                pipeline &mdash; brief, plan, timeline, and export &mdash; with
+                specialist agents producing the visuals and audio, in one loop.
               </>
             }
           >

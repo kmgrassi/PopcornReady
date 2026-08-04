@@ -5,9 +5,9 @@ import styles from "./AgentRunPreview.module.css";
  * AgentRunPreview — a self-contained, looping animation of a run, staged so the
  * viewer reads one idea at a time instead of a single cluttered dump:
  *
- *   1. You type one short brief, the agent takes over.
- *   2. ACT ONE — PLAN: the agent writes the plan (hook + steps), shown large and
- *      on its own.
+ *   1. You type one short brief, the creative director takes over.
+ *   2. ACT ONE — PLAN: the director writes the plan (hook + steps), shown large
+ *      and on its own.
  *   3. A tiny "Want to continue on?" indicator counts 3 · 2 · 1.
  *   4. ACT TWO — PRODUCE: the plan demotes to a compact recap and the keyframes
  *      + timeline take over, now the prominent thing on screen.
@@ -79,10 +79,10 @@ type ClapState = "ask" | "count" | "action" | null;
 
 const PHASE_STATUS: Record<Phase, string> = {
   typing: "You · writing the brief",
-  handoff: "Handing to the agent",
-  planning: "Agent · writing the plan",
+  handoff: "Handing to the director",
+  planning: "Director · writing the plan",
   continue: "Plan ready · continuing",
-  keyframes: "Agent · generating keyframes",
+  keyframes: "Visuals specialist · generating keyframes",
   advance: "Keyframes ready · next step",
 };
 
@@ -396,7 +396,7 @@ export function AgentRunPreview() {
       ref={runRef}
       className={styles.run}
       role="img"
-      aria-label="Preview of a run: you type one short brief, the agent writes the plan, then on your go-ahead it generates the keyframes and assembles the timeline — and you can stop it at any step."
+      aria-label="Preview of a run: you type one short brief, the creative director writes the plan, then on your go-ahead its visuals specialist generates the keyframes and the director assembles the timeline — and you can stop it at any step."
     >
       <div className={styles.head}>
         <span className={`${styles.dot} ${DOT_CLASS[frame.actor]}`} aria-hidden="true" />
@@ -426,10 +426,10 @@ export function AgentRunPreview() {
           <span
             className={`${styles.actor} ${styles.actorAgent}${agentRunning ? ` ${styles.live}` : ""}`}
           >
-            Agent
+            Director
           </span>
           <span className={styles.handoffNote}>
-            Running autonomously — step in at any step
+            Running autonomously with its specialists — step in at any step
           </span>
         </div>
       )}
