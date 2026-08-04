@@ -26,11 +26,14 @@ test("catalog-backed run labels and ordering preserve legacy projection behavior
     request_approval: ["Approval", 14],
     export_video: ["Final Render", 15],
     publish_to_catalog: ["Publish", 16],
-    // Dispatch tools use the neutral stage-label/order fallback because they
-    // are hidden orchestration metadata rather than creator-visible stages.
-    delegate_visuals: ["Plan", 101],
-    delegate_audio: ["Plan", 101],
-    delegate_domains: ["Plan", 101],
+    // Dispatch tools are hidden orchestration metadata rather than
+    // creator-visible stages: toolStage() maps them to no stage, projectStages
+    // drops their actions entirely, and toolLabel/toolOrder fall through to the
+    // unknown-tool fallback (raw name, sorted last). Neither value reaches a
+    // creator surface.
+    delegate_visuals: ["delegate_visuals", Number.MAX_SAFE_INTEGER],
+    delegate_audio: ["delegate_audio", Number.MAX_SAFE_INTEGER],
+    delegate_domains: ["delegate_domains", Number.MAX_SAFE_INTEGER],
   } as const;
 
   assert.deepEqual(
