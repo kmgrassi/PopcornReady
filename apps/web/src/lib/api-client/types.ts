@@ -2,9 +2,7 @@ import type {
   AssetKind,
   AssetStatus,
   BriefVersion,
-  CompositionMode,
   JobStatus,
-  GateableGenerationStageType,
   GenerationJob,
   GenerationRun,
   GenerationRunStatus,
@@ -366,36 +364,12 @@ export interface RegisterProjectUploadResponse {
 export interface StartGenerationRunInput {
   brief: VideoBriefInput;
   briefVersionId?: string;
-  mode?: CompositionMode;
-  allowGeneratedGapFill?: boolean;
-  assetIds?: string[];
-  /** @deprecated Initial runs always stop after storyboard; this is ignored. */
-  reviewGates?: GateableGenerationStageType[];
-  /** @deprecated Initial runs always stop after storyboard; this is ignored. */
-  stopAfter?: GateableGenerationStageType;
-  /** @deprecated Initial runs always stop after storyboard; this is ignored. */
-  runThrough?: boolean;
   provider?: string;
-  seedAsset?: {
-    kind?: "image" | "video";
-    provider?: string;
-    prompt?: string;
-    description?: string;
-    durationSec?: number;
-    size?: string;
-    quality?: string;
-    preflightReviewIterations?: number;
-  };
-  showCaptions?: boolean;
 }
 
 export interface StartUploadedFootageRunInput {
   briefVersionId: string;
   assetIds: string[];
-  mode?: CompositionMode;
-  allowGeneratedGapFill?: boolean;
-  reviewGates?: GateableGenerationStageType[];
-  showCaptions?: boolean;
 }
 
 export interface StartGenerationRunResponse {

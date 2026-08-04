@@ -5,7 +5,7 @@ export const LENGTH_OPTIONS = [10, 15, 30, 45, 60];
 export const FEATURES = [
   {
     title: "Bring or generate footage",
-    body: "Upload your own clips, or generate missing shots with OpenAI, Gemini Veo, and ElevenLabs audio.",
+    body: "Upload your own clips, or let the specialists generate what's missing — Gemini Veo video, OpenAI or Ideogram images, ElevenLabs audio.",
   },
   {
     title: "Character consistency",
@@ -13,7 +13,7 @@ export const FEATURES = [
   },
   {
     title: "Revise by conversation",
-    body: "Requests flow through the agent and update the selected assets.",
+    body: "Requests flow through the creative director, which routes them to the right specialist and updates only the selected assets.",
   },
   {
     title: "Inspectable & safe",
