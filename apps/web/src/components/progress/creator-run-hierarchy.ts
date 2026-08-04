@@ -20,6 +20,60 @@ export const DOMAIN_LABELS: Record<CreatorRunHierarchySession["domain"], string>
   audio: "Audio",
 };
 
+interface EmptyHierarchyCopy {
+  current: string;
+  progress: string;
+  description: string;
+  directorMessage?: string;
+}
+
+export function emptyHierarchyCopy(state: CreatorWorkState): EmptyHierarchyCopy {
+  switch (state) {
+    case "queued":
+    case "active":
+      return {
+        current: "Director planning the work",
+        progress: "The director is planning the work",
+        description: "The director is deciding how to divide the work.",
+      };
+    case "waiting":
+      return {
+        current: "Director waiting to continue",
+        progress: "Waiting before specialist work can begin",
+        description: "The director is waiting before assigning specialist work.",
+        directorMessage: "The creative director is waiting to continue.",
+      };
+    case "blocked":
+      return {
+        current: "Director needs attention",
+        progress: "Specialist work has not started",
+        description: "The director needs to resolve an issue before assigning specialist work.",
+        directorMessage: "The creative director needs attention before work can continue.",
+      };
+    case "failed":
+      return {
+        current: "Production failed",
+        progress: "No specialist work was delegated",
+        description: "The production stopped before specialist work began.",
+        directorMessage: "The creative director stopped before assigning specialist work.",
+      };
+    case "canceled":
+      return {
+        current: "Production canceled",
+        progress: "No specialist work was delegated",
+        description: "The production was canceled before specialist work began.",
+        directorMessage: "The creative director stopped this production.",
+      };
+    case "complete":
+      return {
+        current: "Production complete",
+        progress: "No specialist work was delegated",
+        description: "The production completed without specialist assignments.",
+        directorMessage: "The creative director completed this production.",
+      };
+  }
+}
+
 export function currentHierarchyRun(
   session: CreatorRunHierarchySession,
 ): CreatorRunHierarchyRun | null {
@@ -69,14 +123,14 @@ export function sessionDescription(session: CreatorRunHierarchySession): string 
 }
 
 export function hierarchyProgressLabel(hierarchy: CreatorRunHierarchy): string {
-  if (hierarchy.sessions.length === 0) return "The director is planning the work";
+  if (hierarchy.sessions.length === 0) return emptyHierarchyCopy(hierarchy.root.state).progress;
   const complete = hierarchy.sessions.filter((session) => session.state === "complete").length;
   return `${complete} of ${hierarchy.sessions.length} specialist lanes complete`;
 }
 
 export function hierarchyCurrentLabel(hierarchy: CreatorRunHierarchy): string {
   if (hierarchy.root.needsDirectorDecision) return "Director resolving a question";
-  if (hierarchy.sessions.length === 0) return "Director planning the work";
+  if (hierarchy.sessions.length === 0) return emptyHierarchyCopy(hierarchy.root.state).current;
   const statePriority: CreatorWorkState[] = ["blocked", "failed", "active", "waiting", "queued"];
   const current = statePriority
     .flatMap((state) => hierarchy.sessions.filter((session) => session.state === state))

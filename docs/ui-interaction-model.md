@@ -132,7 +132,10 @@ current work stays expanded, while finite runs, actions, and jobs remain behind
 an optional production-details disclosure. Internal run/session identifiers and
 reasoning traces are never creator copy. A specialist question is shown as work
 the Creative Director is resolving, not as a second user conversation. The
-existing root review gate remains the only production approval loop.
+existing root review gate remains the only production approval loop. If no
+specialist lane was created, the empty state follows the root outcome: active
+work may still be planning, while waiting, blocked, failed, canceled, and
+complete roots must not imply that production is still underway.
 
 ## 3. The "Request Changes" modal
 

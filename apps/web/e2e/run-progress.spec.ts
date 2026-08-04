@@ -89,6 +89,85 @@ test("shows Creative Director and specialist lanes instead of the primitive pipe
   expect(overflow.scrollWidth).toBe(overflow.clientWidth);
 });
 
+test("keeps terminal empty hierarchy copy and long breadcrumbs truthful on mobile @mobile", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const longProjectName = "A Very Long Orbital Garden Production Title";
+  await mockProject(page, longProjectName);
+  const hierarchy = hierarchyFixture();
+  hierarchy.root.state = "canceled";
+  hierarchy.sessions = [];
+
+  await page.route(`**${apiRunPath}`, async (route) => {
+    await route.fulfill({
+      json: runDetail({
+        status: "canceled",
+        message: "Generation was superseded by a newer run.",
+        hierarchy,
+      }),
+    });
+  });
+
+  await page.goto(runPath);
+
+  await expect(page.getByText("Run canceled", { exact: true })).toBeVisible();
+  await expect(page.getByText("Production canceled", { exact: true })).toHaveCount(1);
+  await expect(page.getByText("No specialist work was delegated", { exact: true })).toHaveCount(1);
+  await expect(
+    page.getByText("The creative director stopped this production.", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("The creative director is guiding this production.", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("The production was canceled before specialist work began.", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText(/planning|deciding how to divide/i)).toHaveCount(0);
+  await expect(page.getByText("Visuals", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Audio", { exact: true })).toHaveCount(0);
+
+  const breadcrumbs = page.getByRole("navigation", { name: "Breadcrumb" });
+  const list = breadcrumbs.locator("ol");
+  const projectLink = breadcrumbs.getByRole("link", { name: longProjectName });
+  const currentCrumb = breadcrumbs.getByText("Run detail", { exact: true });
+  const initialMetrics = await list.evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+  }));
+  const projectLinkMetrics = await projectLink.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+      overflow: style.overflow,
+      textOverflow: style.textOverflow,
+    };
+  });
+
+  expect(initialMetrics.scrollWidth).toBeGreaterThan(initialMetrics.clientWidth);
+  expect(projectLinkMetrics.scrollWidth).toBeGreaterThan(projectLinkMetrics.clientWidth);
+  expect(projectLinkMetrics).toMatchObject({ overflow: "hidden", textOverflow: "ellipsis" });
+
+  await currentCrumb.scrollIntoViewIfNeeded();
+  const [listBounds, currentBounds] = await Promise.all([
+    list.boundingBox(),
+    currentCrumb.boundingBox(),
+  ]);
+  expect(listBounds).not.toBeNull();
+  expect(currentBounds).not.toBeNull();
+  expect(currentBounds!.x).toBeGreaterThanOrEqual(listBounds!.x);
+  expect(currentBounds!.x + currentBounds!.width).toBeLessThanOrEqual(
+    listBounds!.x + listBounds!.width + 1,
+  );
+
+  const documentWidth = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  expect(documentWidth.scrollWidth).toBe(documentWidth.clientWidth);
+});
+
 test("keeps a specialist question owned by the director and explains blocked work @mobile", async ({
   page,
 }) => {
@@ -858,7 +937,7 @@ async function mockLocalAuth(page: Page) {
   });
 }
 
-async function mockProject(page: Page) {
+async function mockProject(page: Page, name = "Progress E2E project") {
   await page.route(`**/api/v1/projects/${projectId}`, async (route) => {
     await route.fulfill({
       json: {
@@ -866,7 +945,7 @@ async function mockProject(page: Page) {
           id: projectId,
           schemaVersion: 1,
           workspaceId: "dev_workspace",
-          name: "Progress E2E project",
+          name,
           status: "active",
           visibility: "private",
           brief: {

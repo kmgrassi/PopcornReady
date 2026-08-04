@@ -98,7 +98,10 @@ and no inferred Brief, Script, or Storyboard pipeline stages.
 Visuals/Audio lane copy and outputs, collapsed completed work, blocked and
 queued states, root-owned specialist questions, sanitized production details,
 responsive overflow, a response-driven polling transition, and the separate
-server-authorized operator diagnostics disclosure on hierarchy-backed runs.
+server-authorized operator diagnostics disclosure on hierarchy-backed runs. A
+terminal zero-session fixture prevents canceled production from reverting to
+planning copy and verifies that long run-detail breadcrumbs scroll internally,
+ellipsize linked labels, and remain contained at 390px.
 
 The command starts the Express API and Vite app, using:
 
