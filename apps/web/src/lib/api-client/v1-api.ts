@@ -13,8 +13,11 @@ import type {
   RerunProposalLifecycleView,
   RerunProposalV2,
 } from "@popcorn/shared/rerun-proposal";
-import type { GenerationRunDetail } from "../v1/generation-runs/status";
-import { apiRequest } from "./transport";
+import {
+  isGenerationRunDetail,
+  type GenerationRunDetail,
+} from "../v1/generation-runs/status";
+import { ApiClientError, apiRequest } from "./transport";
 import type {
   AccountMutationResponse,
   AnonymousDeviceRecoveryResponse,
@@ -170,6 +173,14 @@ export interface CreditPacksResponse {
 
 export interface CreditCheckoutResponse {
   url: string | null;
+}
+
+function requireGenerationRunDetail(value: unknown): GenerationRunDetail {
+  if (isGenerationRunDetail(value)) return value;
+  throw new ApiClientError(502, {
+    code: "invalid_generation_run_detail",
+    message: "The production status response was malformed.",
+  });
 }
 
 export const v1Api = {
@@ -440,10 +451,10 @@ export const v1Api = {
     runId: string,
     signal?: AbortSignal
   ) =>
-    apiRequest<GenerationRunDetail>(
+    apiRequest<unknown>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/generation-runs/${encodeURIComponent(runId)}`,
       { signal }
-    ),
+    ).then(requireGenerationRunDetail),
   listProjectGenerationRuns: (projectId: string, signal?: AbortSignal) =>
     apiRequest<{ runs: GenerationRun[] }>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/generation-runs`,
@@ -550,18 +561,18 @@ export const v1Api = {
     action: "approve" | "cancel",
     body?: { note?: string }
   ) =>
-    apiRequest<GenerationRunDetail>(
+    apiRequest<unknown>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/generation-runs/${encodeURIComponent(runId)}/${action}`,
       {
         method: "POST",
         body: body ?? {},
       }
-    ),
+    ).then(requireGenerationRunDetail),
   retryGenerationRunAfterCreditUpdate: (projectId: string, runId: string) =>
-    apiRequest<GenerationRunDetail>(
+    apiRequest<unknown>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/generation-runs/${encodeURIComponent(runId)}/retry-after-credit-update`,
       { method: "POST" }
-    ),
+    ).then(requireGenerationRunDetail),
   createRerunProposal: (
     projectId: string,
     input: CreateRerunProposalV2Request

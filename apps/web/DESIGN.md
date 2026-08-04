@@ -312,6 +312,14 @@ pending-state context or escape actions; the Run Progress opener keeps its
 stored-run hint and project link before handing off to the crew-based production
 view.
 
+Hierarchy-backed full-video production replaces the primitive stage rail with a
+quiet, divider-based Creative Director summary. Visuals and Audio appear as
+semantic lanes: active or blocked work is open, completed work compresses to a
+checked row, and implementation-level assignments are a nested disclosure.
+State always pairs color with a label and shape. On narrow screens the director
+and current lane precede the approved-plan recap so the live production state is
+visible without navigating an internal pipeline.
+
 ## 6. Do's and Don'ts
 
 ### Do:

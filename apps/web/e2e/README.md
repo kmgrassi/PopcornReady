@@ -49,7 +49,9 @@ mobile shell, Dashboard, Activity, and both populated/empty Library actions use
 the `/create` intent launcher; its keyboard/pointer choices reach the distinct
 `/projects/new` full-video and `/create/asset` asset flows. It also covers Create
 navigation ownership, mobile overflow, legacy query links, and validated legacy
-draft-history restoration.
+draft-history restoration. A restored full-video Studio draft also proves the
+generating workspace consumes the Creative Director hierarchy instead of its
+legacy flat checklist.
 
 `specs/library-collections.spec.ts` verifies that an owned generated asset's
 detail viewer shows its exact attributed credit debit without spending provider
@@ -92,6 +94,11 @@ of posting the retired reject, board-revision, or stage-restart mutations.
 Run-progress and project-overview fixtures additionally cover successful
 creator-direct image work as one **Image asset** activity, with asset-ready copy
 and no inferred Brief, Script, or Storyboard pipeline stages.
+`run-progress.spec.ts` also covers the full-video Creative Director projection:
+Visuals/Audio lane copy and outputs, collapsed completed work, blocked and
+queued states, root-owned specialist questions, sanitized production details,
+responsive overflow, a response-driven polling transition, and the separate
+server-authorized operator diagnostics disclosure on hierarchy-backed runs.
 
 The command starts the Express API and Vite app, using:
 

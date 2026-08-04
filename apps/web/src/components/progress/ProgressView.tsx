@@ -17,6 +17,7 @@ import {
   GenerationRunClient,
   GenerationRunRequestError,
 } from "../../lib/v1/generation-runs/client";
+import type { CreatorRunHierarchy } from "../../lib/v1/generation-runs/status";
 import { useProjectQuery } from "../../lib/queryClient";
 import { v1Api } from "../../lib/api-client";
 import { reviewProposalTarget as resolveReviewProposalTarget } from "../../lib/reviewProposalTarget";
@@ -27,7 +28,12 @@ import {
 import { TerminalState } from "./TerminalState";
 import { ReviewGatePanel } from "./ReviewGatePanel";
 import { PlanRecap } from "./PlanRecap";
-import { PipelineDepth, usePipelineElapsed } from "./PipelineDepth";
+import { OperatorDiagnostics, PipelineDepth, usePipelineElapsed } from "./PipelineDepth";
+import { CreatorRunHierarchyPanel } from "./CreatorRunHierarchyPanel";
+import {
+  hierarchyCurrentLabel,
+  hierarchyProgressLabel,
+} from "./creator-run-hierarchy";
 import {
   currentRunStage,
   headerStatus,
@@ -72,6 +78,7 @@ interface ProgressViewProps {
   alternateRuns?: { runId: string; label: string }[];
   /** Present only for operators; the API also omits this projection for creators. */
   operatorDiagnostics?: GenerationJobDiagnostics[];
+  hierarchy?: CreatorRunHierarchy;
 }
 
 function mobileProgressSentence({
@@ -145,8 +152,9 @@ export function ProgressView({
   headerSlot,
   alternateRuns,
   operatorDiagnostics,
+  hierarchy,
 }: ProgressViewProps) {
-  const [detail, setDetail] = useState({ run, stages, stageItems });
+  const [detail, setDetail] = useState({ run, stages, stageItems, hierarchy });
   const [projectStoryboard, setProjectStoryboard] = useState<ProjectStoryboard | null>(null);
   const [fallbackApproving, setFallbackApproving] = useState(false);
   const [fallbackError, setFallbackError] = useState<string | null>(null);
@@ -160,10 +168,10 @@ export function ProgressView({
   const projectLoading = projectQuery.isLoading;
 
   useEffect(() => {
-    setDetail({ run, stages, stageItems });
+    setDetail({ run, stages, stageItems, hierarchy });
     setFallbackApproving(false);
     setFallbackError(null);
-  }, [run, stages, stageItems]);
+  }, [run, stages, stageItems, hierarchy]);
 
   useEffect(() => {
     setSelectedAssetItemId(null);
@@ -329,6 +337,7 @@ export function ProgressView({
         run: nextDetail.run,
         stages: nextDetail.stages,
         stageItems: nextDetail.stageItems,
+        hierarchy: nextDetail.hierarchy,
       });
     } catch (err) {
       setFallbackError(
@@ -345,20 +354,22 @@ export function ProgressView({
     ? () => reviewActions.onApprove(feedbackNote)
     : approveFallback;
 
-  const progressSentence = mobileProgressSentence({
-    run: detail.run,
-    currentStageDisplay,
-    progress,
-    hasExplicitAction,
-  });
+  const progressSentence = detail.hierarchy
+    ? detail.hierarchy.root.message
+    : mobileProgressSentence({
+        run: detail.run,
+        currentStageDisplay,
+        progress,
+        hasExplicitAction,
+      });
 
   const progressContext = [
     lastCompletedStageLabel ? `Last completed: ${lastCompletedStageLabel}` : null,
     nextStageLabel ? `Next: ${nextStageLabel}` : null,
   ].filter((item): item is string => Boolean(item));
   const progressDetails = [
-    choosingNextStep ? null : detail.run.message,
-    ...progressContext,
+    detail.hierarchy || choosingNextStep ? null : detail.run.message,
+    ...(detail.hierarchy ? [] : progressContext),
   ].filter((item): item is string => Boolean(item));
 
   async function markBoardFeedbackStarted(target: BoardRevisionTarget) {
@@ -380,6 +391,12 @@ export function ProgressView({
   const selectedAssetTarget = selectedAssetItem
     ? stageItemRevisionTarget(detail.run.runId, selectedAssetItem)
     : null;
+  const hierarchyCurrent = detail.hierarchy
+    ? hierarchyCurrentLabel(detail.hierarchy)
+    : null;
+  const hierarchyProgress = detail.hierarchy
+    ? hierarchyProgressLabel(detail.hierarchy)
+    : null;
   return (
     <div className={styles.shell}>
       <header className={styles.header}>
@@ -396,13 +413,16 @@ export function ProgressView({
           {headerSlot ? <div className={styles.headerSlot}>{headerSlot}</div> : null}
         </div>
         <div className={styles.headerActions}>
-          <div className={styles.headerStatusPanel} aria-label="Current run status">
-            <div className={styles.mobileStatusNarrative}>
+          <div
+            className={`${styles.headerStatusPanel}${detail.hierarchy ? ` ${styles.headerStatusPanelHierarchy}` : ""}`}
+            aria-label="Current run status"
+          >
+            {!detail.hierarchy ? <div className={styles.mobileStatusNarrative}>
               <strong>{progressSentence}</strong>
               {progressDetails.map((item) => (
                 <p key={item}>{item}</p>
               ))}
-            </div>
+            </div> : null}
             <div className={styles.statusGrid}>
               <div>
                 <span className={styles.statusLabel}>Status</span>
@@ -410,16 +430,18 @@ export function ProgressView({
               </div>
               {lastCompletedStageLabel ? (
                 <div>
-                  <span className={styles.statusLabel}>Last completed</span>
-                  <strong>{lastCompletedStageLabel}</strong>
+                  <span className={styles.statusLabel}>
+                    {detail.hierarchy ? "Current work" : "Last completed"}
+                  </span>
+                  <strong>{hierarchyCurrent ?? lastCompletedStageLabel}</strong>
                 </div>
               ) : (
                 <div>
                   <span className={styles.statusLabel}>Current step</span>
-                  <strong>{currentStageDisplay}</strong>
+                  <strong>{hierarchyCurrent ?? currentStageDisplay}</strong>
                 </div>
               )}
-              {nextStageLabel ? (
+              {nextStageLabel && !detail.hierarchy ? (
                 <div>
                   <span className={styles.statusLabel}>Next step</span>
                   <strong>{nextStageLabel}</strong>
@@ -427,10 +449,10 @@ export function ProgressView({
               ) : null}
               <div>
                 <span className={styles.statusLabel}>Progress</span>
-                <strong>{progress.completed} tool steps complete</strong>
+                <strong>{hierarchyProgress ?? `${progress.completed} tool steps complete`}</strong>
               </div>
             </div>
-            {progress.percent == null && detail.run.status === "running" ? (
+            {!detail.hierarchy && progress.percent == null && detail.run.status === "running" ? (
               <div
                 className={`${styles.headerMeter} ${styles.headerMeterIndeterminate}`}
                 role="progressbar"
@@ -438,7 +460,7 @@ export function ProgressView({
               >
                 <div className={styles.headerMeterFill} />
               </div>
-            ) : progress.percent != null ? (
+            ) : !detail.hierarchy && progress.percent != null ? (
               <div
                 className={styles.headerMeter}
                 role="progressbar"
@@ -482,9 +504,34 @@ export function ProgressView({
         </div>
       </header>
 
-      <div className={styles.body}>
+      <div className={`${styles.body}${detail.hierarchy ? ` ${styles.bodyHierarchy}` : ""}`}>
         <section className={styles.main}>
           {terminal ? <TerminalState run={detail.run} creditRecovery={creditRecovery} /> : null}
+
+          {detail.hierarchy ? (
+            <CreatorRunHierarchyPanel
+              hierarchy={detail.hierarchy}
+              projectId={detail.run.projectId}
+              stopAction={
+                showCancelAction && cancelAction
+                  ? {
+                      pending: cancelAction.pending,
+                      error: cancelAction.error,
+                      onStop: cancelAction.onCancel,
+                    }
+                  : undefined
+              }
+            />
+          ) : null}
+
+          {detail.hierarchy && operatorDiagnostics ? (
+            <section className={styles.hierarchyOperatorDiagnostics} aria-label="Operator tools">
+              <OperatorDiagnostics
+                runId={detail.run.runId}
+                diagnostics={operatorDiagnostics}
+              />
+            </section>
+          ) : null}
 
           <PlanRecap project={project} loading={projectLoading} />
 
@@ -606,7 +653,7 @@ export function ProgressView({
             </section>
           ) : null}
 
-          <details className={styles.mobilePipelineDetails}>
+          {!detail.hierarchy ? <details className={styles.mobilePipelineDetails}>
             <summary>
               {standaloneLabel ? "Show asset status" : "Show pipeline"}
               <span aria-hidden="true">+</span>
@@ -629,10 +676,10 @@ export function ProgressView({
                 choosingNextStep={choosingNextStep}
               />
             </div>
-          </details>
+          </details> : null}
         </section>
 
-        <aside className={styles.sidePanel} aria-label="Stage rail">
+        {!detail.hierarchy ? <aside className={styles.sidePanel} aria-label="Stage rail">
           <PipelineDepth
             run={detail.run}
             stages={detail.stages}
@@ -645,7 +692,7 @@ export function ProgressView({
             standaloneLabel={standaloneLabel}
             choosingNextStep={choosingNextStep}
           />
-        </aside>
+        </aside> : null}
       </div>
     </div>
   );

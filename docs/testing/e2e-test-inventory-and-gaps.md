@@ -65,7 +65,14 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   generated-asset edits no longer post the retired reject or board-revision
   mutations. A creator-direct image fixture also verifies one-step asset-ready
   completion with no Brief, Script, or Storyboard rail, and the project overview
-  repeats that assertion for its compact status panel.
+  repeats that assertion for its compact status panel. Hierarchy fixtures
+  additionally verify the creator-facing Creative Director with Visuals/Audio
+  lanes, output navigation, collapsed completed work, blocked/queued language,
+  root-owned specialist questions, sanitized technical disclosure, mobile
+  containment, and response-driven polling updates. A restored Studio
+  generation verifies the same projection replaces its legacy flat checklist.
+  Hierarchy-backed operator runs retain their separate authorized diagnostics
+  disclosure without exposing it inside the creator-safe lane panel.
 - `rerun-proposal-lifecycle.spec.ts` covers proposal preview, explicit maximum
   cost approval, separate execution, waiting-state polling, durable reload
   recovery, visible owning-surface refresh after restored completion, truthful

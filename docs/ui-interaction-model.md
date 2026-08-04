@@ -124,6 +124,16 @@ plan” prerequisite. Once a storyboard exists, the surface offers **Open
 storyboard** and object-scoped **Request Changes**, not a context-free “Generate
 again” mutation.
 
+Full-video production presents one creator-facing **Creative Director** with
+separate **Visuals** and **Audio** work lanes. The lanes explain whether work is
+active, queued, waiting, blocked, failed, or complete, and link durable outputs
+back to project assets. Completed lanes collapse to a compact checked summary;
+current work stays expanded, while finite runs, actions, and jobs remain behind
+an optional production-details disclosure. Internal run/session identifiers and
+reasoning traces are never creator copy. A specialist question is shown as work
+the Creative Director is resolving, not as a second user conversation. The
+existing root review gate remains the only production approval loop.
+
 ## 3. The "Request Changes" modal
 
 Clicking an object the user wants to change — a project, a storyboard, a scene, a

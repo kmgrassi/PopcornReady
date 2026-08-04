@@ -216,3 +216,100 @@ test("mobile Create stays active across both creation flows without overflow", a
     mobileNav.getByRole("link", { name: "Library", exact: true }),
   ).toHaveAttribute("aria-current", "page");
 });
+
+test("a restored Studio generation shows the Creative Director hierarchy @mobile", async ({ page }) => {
+  const draftId = "draft-hierarchy";
+  const runId = "run-hierarchy";
+
+  await page.route(`**/api/v1/workspaces/*/studio-drafts/${draftId}`, async (route) => {
+    const requestPayload = route.request().method() === "PUT"
+      ? (await route.request().postDataJSON()).payload
+      : {
+          v: 1,
+          step: "generate",
+          projectId: project.id,
+          runId,
+          draft: {
+            goal: "Make a launch video",
+            projectName: project.name,
+            targetLengthSec: 30,
+            aspectRatio: "9:16",
+          },
+        };
+    await json(route, {
+      draft: {
+        draftId,
+        step: "generate",
+        updatedAt: now,
+        projectId: project.id,
+        runId,
+        payload: requestPayload,
+      },
+    });
+  });
+  await page.route(
+    `**/api/v1/projects/${project.id}/generation-runs/${runId}`,
+    (route) => json(route, studioRunDetail(project.id, runId)),
+  );
+
+  await page.goto(`/projects/new?draft=${draftId}`);
+
+  await expect(page.getByRole("heading", { name: "Creative Director" })).toBeVisible();
+  await expect(page.getByText("Visuals", { exact: true })).toBeVisible();
+  await expect(page.getByText("Audio", { exact: true })).toBeVisible();
+  await expect(page.getByText("Building the plan", { exact: true })).toHaveCount(0);
+});
+
+function studioRunDetail(projectId: string, runId: string) {
+  return {
+    run: {
+      runId,
+      projectId,
+      status: "running",
+      currentStageType: "asset_generation",
+      progressPercent: 50,
+      message: "Specialists are producing the approved plan.",
+      reviewGate: null,
+      createdAt: now,
+      updatedAt: now,
+      startedAt: now,
+    },
+    stages: [],
+    stageItems: [],
+    resultArtifacts: [],
+    hierarchy: {
+      root: {
+        runId,
+        state: "active",
+        message: "The creative director is guiding this production.",
+        needsDirectorDecision: false,
+      },
+      sessions: [
+        {
+          sessionId: "visual-session",
+          domain: "visuals",
+          state: "active",
+          runs: [{
+            runId: "visual-run",
+            state: "active",
+            taskKind: "visual_production",
+            report: null,
+            actions: [],
+          }],
+        },
+        {
+          sessionId: "audio-session",
+          domain: "audio",
+          state: "queued",
+          runs: [{
+            runId: "audio-run",
+            state: "queued",
+            taskKind: "audio_production",
+            report: null,
+            actions: [],
+          }],
+        },
+      ],
+    },
+  };
+}
