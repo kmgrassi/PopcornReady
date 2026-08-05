@@ -58,6 +58,15 @@ function shouldPollRun(run: GenerationRunDetail | undefined): boolean {
   return Boolean(run && !isTerminal(run.run.status));
 }
 
+export function generationRunRefetchInterval(query: {
+  state: { data: GenerationRunDetail | undefined };
+}): number | false {
+  const data = query.state.data;
+  if (!shouldPollRun(data)) return false;
+  if (document.visibilityState === "hidden") return HIDDEN_POLL_INTERVAL_MS;
+  return data?.run.reviewGate ? REVIEW_POLL_INTERVAL_MS : POLL_INTERVAL_MS;
+}
+
 function shouldPollProjectAssets(assets: V1Asset[] | undefined): boolean {
   return Boolean(
     assets?.some((asset) => asset.status === "pending" || asset.status === "processing"),
@@ -686,12 +695,7 @@ export function useGenerationRunQuery(projectId: string, runId: string, enabled 
     queryFn: ({ signal }: { signal: QuerySignal }) =>
       v1Api.getGenerationRun(projectId, runId, signal),
     enabled: enabled && Boolean(projectId && runId),
-    refetchInterval: (query) => {
-      const data = query.state.data as GenerationRunDetail | undefined;
-      if (!shouldPollRun(data)) return false;
-      if (document.visibilityState === "hidden") return HIDDEN_POLL_INTERVAL_MS;
-      return data?.run.reviewGate ? REVIEW_POLL_INTERVAL_MS : POLL_INTERVAL_MS;
-    },
+    refetchInterval: generationRunRefetchInterval,
     refetchIntervalInBackground: true,
   });
 }

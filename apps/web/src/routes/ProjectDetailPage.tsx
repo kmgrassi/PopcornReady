@@ -1,20 +1,25 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
+import { useQueries } from "@tanstack/react-query";
 import type {
   BoardRevisionTarget,
   ProjectStoryboard,
   V1Project,
 } from "@popcorn/shared/v1/types";
-import type { ProjectWatchMedia, WorkspaceOutput } from "../lib/api-client";
+import { v1Api, type ProjectWatchMedia, type WorkspaceOutput } from "../lib/api-client";
 import { useAuth } from "../components/auth/AuthProvider";
 import { AiAssetFeedbackDialog } from "../components/ai-edit/AiAssetFeedbackDialog";
 import { QuickLoadingState } from "../components/ui/QuickLoadingState";
-import { ButtonLink } from "../components/ui/Button";
+import { Button, ButtonLink } from "../components/ui/Button";
 import { ErrorState } from "../components/ui/StateCard";
 import { ProjectUploadButton } from "../components/project-upload/ProjectUploadButton";
 import { storyboardProgress, type StoryboardProgress } from "../lib/v1/storyboard/progress";
+import { assetLibraryPath } from "../lib/assetLibraryPath";
+import { queryKeys } from "../lib/queryKeys";
 import {
   useDeleteProjectMutation,
+  generationRunRefetchInterval,
+  useGenerationRunQuery,
   useProjectQuery,
   useProjectStoryboardQuery,
   useProjectStoryboardRunQuery,
@@ -24,7 +29,11 @@ import {
   useDashboardOutputsQuery,
   useDashboardRunsQuery,
 } from "../lib/v1/dashboard/query";
-import { ProjectStagePanel } from "./ProjectStagePanel";
+import {
+  ProjectStagePanel,
+  selectAssetRuns,
+  selectStageRun,
+} from "./ProjectStagePanel";
 import { StoryboardPreview } from "./StoryboardPreview";
 import {
   ProjectBrief,
@@ -40,6 +49,11 @@ import {
 } from "./ProjectMobileStatus";
 import styles from "./ProjectDetailPage.module.css";
 import { formatDate } from "./project-detail-format";
+import {
+  latestReadyRunAsset,
+  readyAssetStatus,
+  readyAssetViewLabel,
+} from "./project-ready-asset";
 
 export { ProjectDangerSection } from "./ProjectDetailSections";
 
@@ -123,6 +137,39 @@ export function ProjectDetailPage() {
     limit: RUN_LIMIT,
   });
   const latestRun = runsQuery.items[0] ?? null;
+  const selectedStageRun = selectStageRun(runsQuery.items);
+  const selectedAssetRuns = selectAssetRuns(runsQuery.items);
+  const stageRunDetailQuery = useGenerationRunQuery(
+    projectId ?? "",
+    selectedStageRun?.runId ?? "",
+    Boolean(projectId && selectedStageRun),
+  );
+  const assetRunDetailQueries = useQueries({
+    queries: selectedAssetRuns.map((assetRun) => ({
+      queryKey: queryKeys.generationRun(projectId ?? "", assetRun.runId),
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        v1Api.getGenerationRun(projectId ?? "", assetRun.runId, signal),
+      enabled: Boolean(projectId),
+      refetchInterval: generationRunRefetchInterval,
+      refetchIntervalInBackground: true,
+    })),
+  });
+  const readyAsset = assetRunDetailQueries
+    .map((query) => latestReadyRunAsset(query.data?.stageItems ?? []))
+    .find((item) => Boolean(item)) ?? null;
+  const standaloneReadyAsset = readyAsset?.assetId
+    ? { ...readyAsset, assetId: readyAsset.assetId }
+    : null;
+  const readyAssetLoading = !standaloneReadyAsset && (
+    runsQuery.loading || assetRunDetailQueries.some((query) => query.isLoading)
+  );
+  const readyAssetError = !standaloneReadyAsset && (
+    Boolean(runsQuery.error) || assetRunDetailQueries.some((query) => Boolean(query.error))
+  );
+  const retryReadyAssets = () => {
+    runsQuery.refetch();
+    for (const query of assetRunDetailQueries) void query.refetch();
+  };
   const storyboardRunQuery = useProjectStoryboardRunQuery(projectId ?? "", Boolean(projectId));
   const storyboardBoundRun = storyboardRunQuery.data?.run ?? null;
   const storyboardRunActive = Boolean(
@@ -227,6 +274,10 @@ export function ProjectDetailPage() {
           project.brief
       )}
       onGenerate={startStoryboardRun}
+      readyAsset={standaloneReadyAsset}
+      readyAssetLoading={readyAssetLoading}
+      readyAssetError={readyAssetError}
+      onRetryReadyAsset={retryReadyAssets}
     />
   ) : null;
 
@@ -284,6 +335,31 @@ export function ProjectDetailPage() {
                 Watch
               </ButtonLink>
             </>
+          ) : standaloneReadyAsset ? (
+            <>
+              <p className={styles.outputUnavailable} role="status">
+                {readyAssetStatus(standaloneReadyAsset)}
+              </p>
+              <ButtonLink
+                variant="primary"
+                to={assetLibraryPath(standaloneReadyAsset.assetId, projectId)}
+              >
+                {readyAssetViewLabel(standaloneReadyAsset)}
+              </ButtonLink>
+            </>
+          ) : readyAssetLoading ? (
+            <p className={styles.outputUnavailable} role="status">
+              Checking recent project assets…
+            </p>
+          ) : readyAssetError ? (
+            <>
+              <p className={styles.outputUnavailable} role="alert">
+                Unable to check recent project assets.
+              </p>
+              <Button variant="secondary" onClick={retryReadyAssets}>
+                Retry assets
+              </Button>
+            </>
           ) : outputsQuery.error ? (
             <p className={styles.outputUnavailable} role="alert">
               Unable to check video outputs right now. Open Runs to inspect the latest generation state.
@@ -321,6 +397,9 @@ export function ProjectDetailPage() {
         hasBrief: Boolean(project?.brief),
         projectStatus: project?.status,
         storyboardError: startStoryboardRunMutation.error ?? storyboardRunError,
+        readyAsset: standaloneReadyAsset,
+        readyAssetLoading,
+        readyAssetError,
       })}
       mobileRunLink={
         storyboardRunActive && storyboardBoundRun
@@ -350,6 +429,11 @@ export function ProjectDetailPage() {
           loading={runsQuery.loading}
           error={runsQuery.error}
           onRetry={runsQuery.refetch}
+          runDetail={stageRunDetailQuery.data ?? null}
+          runDetailLoading={stageRunDetailQuery.isLoading}
+          runDetailError={stageRunDetailQuery.error ?? null}
+          onRunDetailRetry={() => void stageRunDetailQuery.refetch()}
+          projectReadyAsset={standaloneReadyAsset}
         />
       }
       />
