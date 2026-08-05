@@ -36,7 +36,8 @@ apps/
     src/core/             adapter.ts, errors.ts, ids.ts
     src/lib/              backend logic: agent/ agent-api/ generation-run/ generative/
                            orchestrator/ orchestrator-tools/ tool-tests/ oneshot/ eval/
-                           assets/ edit-graph/ provenance/ store.ts supabase/ v1/
+                           assets/ edit-graph/ provenance/ store.ts /
+                           store-asset-discovery.ts supabase/ v1/
                            uploaded-footage.ts
     src/lib/postgres/     lazy direct-Postgres pool + trusted transaction helper
 
