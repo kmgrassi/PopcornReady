@@ -120,7 +120,8 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   overviews explain automatic scene-and-moment planning, start the
   storyboard-specific orchestrator entrypoint, navigate to its run, replace a
   missing-brief dead end with a **Finish brief** path, and suppress duplicate
-  creation while a storyboard-bound run is active. It also proves an active
+  creation while a storyboard-bound run is active or paused at mandatory Script
+  review, where **Review script** links to the existing run. It also proves an active
   run that fails while the project remains open becomes retryable, and that
   polling uses the one-boundary status endpoint rather than full run history.
 - `evals.spec.ts` covers the eval dashboard and admin workbench judgment action.

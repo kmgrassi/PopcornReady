@@ -62,3 +62,22 @@ test("a second script decision loses the reached-state compare-and-set", async (
   );
   assert.equal(fixture.queries.length, 1);
 });
+
+test("script rejection stores a schema-marked board revision request", async () => {
+  const fixture = transactionFixture();
+  await decideScriptReviewTransaction(
+    { ...base, decision: "rejected", note: "Make Maya more suspicious." },
+    fixture.transaction as never,
+  );
+
+  const insert = fixture.queries.find(({ sql }) =>
+    /insert into public\.actions/i.test(sql)
+  );
+  assert.ok(insert);
+  assert.deepEqual(JSON.parse(String(insert.params?.[3])), {
+    schema_version: "action_params.v1",
+    schemaVersion: "board_revision_request.v1",
+    message: "Make Maya more suspicious.",
+    target: { scope: "script", scriptDraftId: "script-1" },
+  });
+});

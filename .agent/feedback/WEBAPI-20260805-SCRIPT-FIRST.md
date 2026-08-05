@@ -29,6 +29,13 @@ project, brief, prompt, upload, and storyboard entrypoints can each initiate it.
 The trigger belongs on successful script approval, where the creator has
 explicitly authorized downstream visual work.
 
+Direct transaction writes must preserve the same typed JSON envelope as the
+normal action store. Satisfying a generic JSONB column type is not enough: the
+schema marker and target nesting are what let later orchestrator turns consume
+feedback consistently. Likewise, a multi-gate status surface must project the
+complete gate set and treat a terminalized after-gate pass as reusable; omitting
+either rule can hide the active review and allow a duplicate root run.
+
 ## Follow-up
 
 - Keep future phase gates paired with an allowlisted registry and adversarial

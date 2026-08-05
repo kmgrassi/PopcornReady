@@ -125,11 +125,19 @@ export function ProjectDetailPage() {
   const latestRun = runsQuery.items[0] ?? null;
   const storyboardRunQuery = useProjectStoryboardRunQuery(projectId ?? "", Boolean(projectId));
   const storyboardBoundRun = storyboardRunQuery.data?.run ?? null;
+  const storyboardRunNeedsReview = Boolean(
+    storyboardBoundRun?.storyboardBoundaryStatus === "pending" &&
+      storyboardBoundRun.reviewGate,
+  );
   const storyboardRunActive = Boolean(
     storyboardBoundRun &&
       storyboardBoundRun.storyboardBoundaryStatus === "pending" &&
       (storyboardBoundRun.status === "queued" || storyboardBoundRun.status === "running")
   );
+  const storyboardRunBlocksCreate = storyboardRunActive || storyboardRunNeedsReview;
+  const storyboardReviewRunLink = storyboardRunNeedsReview && storyboardBoundRun
+    ? `/projects/${encodeURIComponent(projectId ?? "")}/runs/${encodeURIComponent(storyboardBoundRun.runId)}`
+    : null;
   const storyboardQuery = useProjectStoryboardQuery(
     projectId ?? "",
     Boolean(projectId),
@@ -220,10 +228,12 @@ export function ProjectDetailPage() {
       storyboard={storyboard}
       storyboardGenerating={storyboardGenerating}
       storyboardError={startStoryboardRunMutation.error ?? storyboardRunError}
+      scriptReviewRunLink={storyboardReviewRunLink}
       hasBrief={Boolean(project.brief)}
       canGenerateStoryboard={Boolean(
         !storyboardPreviewIsBlocked(storyboardQuery.isLoading, storyboardQuery.error) &&
           !storyboardGenerating &&
+          !storyboardRunBlocksCreate &&
           project.brief
       )}
       onGenerate={startStoryboardRun}
@@ -307,8 +317,11 @@ export function ProjectDetailPage() {
         progress: storyboardProgressState,
         generationError: startStoryboardRunMutation.error ?? storyboardRunError,
         unavailableReason: project?.brief
-          ? null
+          ? storyboardRunNeedsReview
+            ? "Review and approve the script before storyboard production begins."
+            : null
           : "Finish the project brief before creating a storyboard.",
+        reviewRunLink: storyboardReviewRunLink,
         onGenerate: startStoryboardRun,
       }}
       media={null}
@@ -321,9 +334,10 @@ export function ProjectDetailPage() {
         hasBrief: Boolean(project?.brief),
         projectStatus: project?.status,
         storyboardError: startStoryboardRunMutation.error ?? storyboardRunError,
+        scriptReviewPending: storyboardRunNeedsReview,
       })}
       mobileRunLink={
-        storyboardRunActive && storyboardBoundRun
+        storyboardRunBlocksCreate && storyboardBoundRun
           ? `/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(storyboardBoundRun.runId)}`
           : latestRun
           ? `/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(latestRun.runId)}`
@@ -431,6 +445,7 @@ export function ProjectOverviewPage({
     progress: StoryboardProgress;
     generationError: Error | null;
     unavailableReason?: string | null;
+    reviewRunLink?: string | null;
     onGenerate?: () => void;
   };
   media?: ProjectWatchMedia | null;
@@ -507,6 +522,7 @@ export function ProjectOverviewPage({
                     progress={storyboardPreview.progress}
                     generationError={storyboardPreview.generationError}
                     unavailableReason={storyboardPreview.unavailableReason}
+                    reviewRunLink={storyboardPreview.reviewRunLink}
                     onGenerate={storyboardPreview.onGenerate}
                     onRequestChanges={
                       onRequestChanges ? () => onRequestChanges("board") : undefined

@@ -335,6 +335,7 @@ export interface StoryboardEntrypointDeps {
 export interface StoryboardEntrypointStatusDeps {
   requireProjectAccess: typeof requireProjectAccess;
   getLatestRunForGate: typeof getLatestOrchestratorRunForGate;
+  listGates: typeof listRunGates;
 }
 
 export async function storyboardGenerationEntrypointStatusRoute(
@@ -346,6 +347,7 @@ export async function storyboardGenerationEntrypointStatusRoute(
   const resolved: StoryboardEntrypointStatusDeps = {
     requireProjectAccess,
     getLatestRunForGate: getLatestOrchestratorRunForGate,
+    listGates: listRunGates,
     ...deps,
   };
   await resolved.requireProjectAccess(ctx.auth.workspaceId, projectId);
@@ -353,11 +355,12 @@ export async function storyboardGenerationEntrypointStatusRoute(
     projectId,
     `${AFTER_GATE_PREFIX}generate_storyboard`
   );
+  const gates = boundary ? await resolved.listGates(boundary.run.id) : [];
   return {
     status: 200,
     headers: NO_STORE_HEADERS,
     body: {
-      run: boundary ? projectRun(boundary.run, [boundary.gate]) : null,
+      run: boundary ? projectRun(boundary.run, gates) : null,
     },
   };
 }
@@ -368,12 +371,16 @@ async function activeStoryboardRoot(
 ): Promise<{ run: OrchestratorRun; gate: OrchestratorRunGate } | null> {
   const runs = await deps.listRuns(projectId);
   for (const run of runs) {
-    if (!ACTIVE_RUN_STATUSES.has(run.status) || !isCreativeDirectorHierarchyRoot(run)) {
-      continue;
-    }
+    if (!isCreativeDirectorHierarchyRoot(run)) continue;
     const gates = await deps.listGates(run.id);
     const storyboardGate = gates.find(isStoryboardAfterGate);
-    if (storyboardGate?.status === "pending" || storyboardGate?.status === "reached") {
+    const pausedAtReview = gates.some((gate) => gate.status === "reached" && isAfterGate(gate));
+    const reusableStatus = ACTIVE_RUN_STATUSES.has(run.status) ||
+      (run.status === "succeeded" && pausedAtReview);
+    if (
+      reusableStatus &&
+      (storyboardGate?.status === "pending" || storyboardGate?.status === "reached")
+    ) {
       return { run, gate: storyboardGate };
     }
   }

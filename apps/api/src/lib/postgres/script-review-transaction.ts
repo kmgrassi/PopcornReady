@@ -90,7 +90,12 @@ export async function decideScriptReviewTransaction(
           feedbackActionId,
           input.projectId,
           input.runId,
-          JSON.stringify({ scope: "script", message: note, scriptDraftId: input.scriptDraftId }),
+          JSON.stringify({
+            schema_version: "action_params.v1",
+            schemaVersion: "board_revision_request.v1",
+            message: note,
+            target: { scope: "script", scriptDraftId: input.scriptDraftId },
+          }),
         ],
       );
     }

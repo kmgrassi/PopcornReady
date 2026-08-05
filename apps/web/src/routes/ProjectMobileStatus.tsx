@@ -225,6 +225,7 @@ export function ProjectMobilePrimaryAction({
   storyboard,
   storyboardGenerating,
   storyboardError,
+  scriptReviewRunLink,
   hasBrief,
   canGenerateStoryboard,
   onGenerate,
@@ -236,6 +237,7 @@ export function ProjectMobilePrimaryAction({
   storyboard: ProjectStoryboard | null;
   storyboardGenerating: boolean;
   storyboardError: Error | null;
+  scriptReviewRunLink?: string | null;
   hasBrief: boolean;
   canGenerateStoryboard: boolean;
   onGenerate: () => void;
@@ -245,6 +247,13 @@ export function ProjectMobilePrimaryAction({
       <Button variant="cta" fullWidth onClick={onGenerate}>
         Retry storyboard workflow
       </Button>
+    );
+  }
+  if (scriptReviewRunLink) {
+    return (
+      <ButtonLink variant="cta" fullWidth to={scriptReviewRunLink}>
+        Review script
+      </ButtonLink>
     );
   }
   if (storyboardGenerating) {
@@ -309,6 +318,7 @@ export function mobileProjectStatus({
   hasBrief = true,
   projectStatus,
   storyboardError,
+  scriptReviewPending = false,
 }: {
   storyboard: ProjectStoryboard | null;
   progress: StoryboardProgress;
@@ -317,8 +327,10 @@ export function mobileProjectStatus({
   hasBrief?: boolean;
   projectStatus?: string;
   storyboardError?: Error | null;
+  scriptReviewPending?: boolean;
 }) {
   if (storyboardError) return "Storyboard could not load. Retry to continue.";
+  if (scriptReviewPending) return "Script ready for review.";
   if (generating) {
     if (progress.total > 0) {
       return `Generating storyboard: ${progress.ready + progress.failed} of ${progress.total} panels ready.`;

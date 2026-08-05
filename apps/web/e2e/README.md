@@ -106,6 +106,9 @@ Visuals/Audio lane copy and outputs, collapsed completed work, blocked and
 queued states, plus the mandatory authoritative Script review and its direct
 text-only rewrite request before media work. `creation-entry-points.spec.ts`
 covers idea-first and script-first full-video intake at mobile width.
+`storyboard-orchestration.spec.ts` covers returning to Project Detail at the
+Script gate: the existing run is linked for review, duplicate storyboard
+creation stays hidden, and the page does not mislabel review as generation.
 The hierarchy coverage also includes root-owned specialist questions, sanitized production details,
 responsive overflow, a response-driven polling transition, and the separate
 server-authorized operator diagnostics disclosure on hierarchy-backed runs. A

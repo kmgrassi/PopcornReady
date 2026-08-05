@@ -51,6 +51,10 @@
   revisions, and sequential script/storyboard after-gate continuation.
 - Updated the project Script route to prefer the active relational draft.
 - Updated North Star, interaction, API, and E2E contracts.
+- PR review follow-up marks direct script feedback with the established
+  `board_revision_request.v1` envelope, projects every gate in storyboard
+  entrypoint status, reuses a succeeded root paused at script review, and links
+  Project Detail back to that review instead of offering duplicate creation.
 
 ## Validation evidence
 
@@ -64,6 +68,8 @@
   only stale test locators, which were corrected.
 - Targeted Playwright intake — 2 pass in desktop Chromium and mobile Chrome.
   Script revision/fail-closed review — 4 pass in the same projects.
+- PR review regressions — 42 focused API tests pass; Project Detail script-review
+  behavior passes in desktop Chromium and mobile Chrome.
 - `pnpm db:migrations:validate`, migration tests, RPC-boundary validation, and
   relation-boundary validation — pass. Local Supabase status completed without
   a configured service to exercise the concurrency integration path.
@@ -73,6 +79,10 @@
   field, approval-boundary copy, sticky continuation action, and no mobile
   horizontal overflow. A raw unmocked load also confirmed the local API lacks
   configured Supabase persistence.
+- Manually inspected the corrected Project Detail script-review state at
+  1440×1000 and 412×915: **Review script** links to the existing run, **Create
+  storyboard** is absent, no generation banner appears, and the mobile layout
+  has no horizontal overflow.
 
 ## Independent reviews
 
@@ -88,6 +98,11 @@
   closed; rejection evicts the stale script query.
 - Wrap-up review from `/root/plan_review` found no release-blocking issues after
   the authorization-order and fail-closed test fixes.
+- PR comment research confirmed both review threads and the adjacent duplicate
+  root risk; plan review required full-gate projection plus backend reuse and an
+  actionable Project Detail review link.
+- Implementation and wrap-up re-reviews found no remaining release blockers;
+  final `pnpm agent:validate -- --scope all` passed.
 
 ## Blockers and risks
 
@@ -97,5 +112,5 @@
 
 ## Next action / handoff
 
-- Run agent lint and validation, request wrap-up review, then commit and open
-  the required ready PR.
+- Validate, commit, and push the PR review fixes; leave GitHub thread replies and
+  resolution to an explicitly authorized follow-up.
