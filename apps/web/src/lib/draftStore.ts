@@ -13,6 +13,7 @@ import type {
   StudioDraftListResponse,
   StudioDraftPayload as SharedStudioDraftPayload,
   StudioDraftPlatform,
+  StudioDraftStartSource,
   StudioDraftResponse,
   StudioDraftStep,
   UpdateStudioDraftRequest,
@@ -45,6 +46,8 @@ export interface StudioDraftRecord extends StudioDraftSummary {
 }
 
 const DEFAULT_BRIEF_DRAFT: BriefDraft = {
+  startSource: "idea",
+  scriptText: "",
   goal: "",
   targetLengthSec: 30,
   aspectRatio: "9:16",
@@ -100,6 +103,10 @@ function footageModeOrUndefined(value: unknown): StudioDraftFootageMode | undefi
   return value === "asset_driven" || value === "hybrid" ? value : undefined;
 }
 
+function startSourceOrUndefined(value: unknown): StudioDraftStartSource | undefined {
+  return value === "idea" || value === "script" ? value : undefined;
+}
+
 function platformOrUndefined(value: unknown): StudioDraftPlatform | undefined {
   return value === "youtube" ||
     value === "tiktok" ||
@@ -150,6 +157,8 @@ function wireStepFromStudioStep(step: StudioStep): StudioDraftStep {
 
 function serializeDraft(draft: BriefDraft): StudioDraftBrief {
   return {
+    startSource: draft.startSource,
+    scriptText: draft.scriptText,
     goal: draft.goal,
     targetLengthSec: draft.targetLengthSec,
     aspectRatio: draft.aspectRatio,
@@ -203,6 +212,8 @@ function persistedDraftFromUnknown(value: unknown): StudioDraftBrief | null {
   if (!isRecord(value)) return null;
 
   const draft: StudioDraftBrief = {};
+  const startSource = startSourceOrUndefined(value.startSource);
+  const scriptText = stringOrUndefined(value.scriptText);
   const goal = stringOrUndefined(value.goal);
   const targetLengthSec = numberOrUndefined(value.targetLengthSec);
   const aspectRatio = aspectRatioOrUndefined(value.aspectRatio);
@@ -221,6 +232,8 @@ function persistedDraftFromUnknown(value: unknown): StudioDraftBrief | null {
   const callToAction = stringOrUndefined(value.callToAction);
   const provider = stringOrUndefined(value.provider);
 
+  if (startSource !== undefined) draft.startSource = startSource;
+  if (scriptText !== undefined) draft.scriptText = scriptText;
   if (goal !== undefined) draft.goal = goal;
   if (targetLengthSec !== undefined) draft.targetLengthSec = targetLengthSec;
   if (aspectRatio !== undefined) draft.aspectRatio = aspectRatio;

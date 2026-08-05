@@ -38,6 +38,8 @@ export const queryKeys = {
   project: (projectId: string) => ["projects", projectId] as const,
   projectStoryboard: (projectId: string) =>
     ["projects", projectId, "storyboard"] as const,
+  projectScript: (projectId: string) =>
+    ["projects", projectId, "script"] as const,
   projectStoryboardRun: (projectId: string) =>
     ["projects", projectId, "storyboard-run"] as const,
   projectGenerationRuns: (projectId: string) =>

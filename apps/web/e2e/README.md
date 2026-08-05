@@ -111,7 +111,13 @@ creator-direct image work as one **Image asset** activity, with asset-ready copy
 and no inferred Brief, Script, or Storyboard pipeline stages.
 `run-progress.spec.ts` also covers the full-video Creative Director projection:
 Visuals/Audio lane copy and outputs, collapsed completed work, blocked and
-queued states, root-owned specialist questions, sanitized production details,
+queued states, plus the mandatory authoritative Script review and its direct
+text-only rewrite request before media work. `creation-entry-points.spec.ts`
+covers idea-first and script-first full-video intake at mobile width.
+`storyboard-orchestration.spec.ts` covers returning to Project Detail at the
+Script gate: the existing run is linked for review, duplicate storyboard
+creation stays hidden, and the page does not mislabel review as generation.
+The hierarchy coverage also includes root-owned specialist questions, sanitized production details,
 responsive overflow, a response-driven polling transition, and the separate
 server-authorized operator diagnostics disclosure on hierarchy-backed runs. A
 terminal zero-session fixture prevents canceled production from reverting to

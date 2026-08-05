@@ -4,6 +4,7 @@ import {
   type GenerationStageType,
   type VideoBriefInput,
 } from "@popcorn/shared/v1/types";
+import type { ScriptDraft } from "@popcorn/shared/types";
 import { StageItemCard } from "../generation-progress/StageItemCard";
 import { StoryboardBoard as ReadonlyStoryboardBoard } from "../studio/StoryboardBoard";
 import styles from "./ReviewGatePanel.module.css";
@@ -27,6 +28,9 @@ interface ReviewGatePanelProps {
   stageType: GenerationStageType;
   projectBrief: VideoBriefInput | null;
   projectLoading: boolean;
+  projectScript: ScriptDraft | null;
+  scriptLoading: boolean;
+  scriptError?: string | null;
   reviewItems: GenerationStageItem[];
   reviewOutputGroups: ReviewOutputGroups;
   feedbackNote: string;
@@ -42,6 +46,7 @@ interface ReviewGatePanelProps {
 const REVIEW_STAGE_LABELS: Partial<Record<GenerationStageType, string>> = {
   brief_intake: "Concept",
   creative_plan: "Brief",
+  script: "Script",
   storyboard: "Storyboard",
   asset_generation: "Assets",
   audio_generation: "Audio",
@@ -57,6 +62,7 @@ function reviewStageLabel(stageType: GenerationStageType): string {
 
 function reviewHeading(stageType: GenerationStageType): string {
   if (stageType === "brief_intake") return "Concept ready for review";
+  if (stageType === "script") return "Script ready for review";
   if (stageType === "storyboard") return "Plan ready for review";
   return `${reviewStageLabel(stageType)} ready for review`;
 }
@@ -68,6 +74,10 @@ function reviewDescription(stageType: GenerationStageType): string {
 
   if (stageType === "storyboard") {
     return "Review the plan before the agent starts storyboard, keyframe, or clip generation. Stop here if you do not want the agent to keep producing from this boundary.";
+  }
+
+  if (stageType === "script") {
+    return "Read the words and request any writing changes now. No poster, storyboard, image, audio, or video work starts until you approve this script.";
   }
 
   return "Review this stage before the run continues to the next generation step. Stop here if you do not want the agent to keep producing from this boundary.";
@@ -170,10 +180,56 @@ function BriefReviewOutput({
   );
 }
 
+function ScriptReviewOutput({
+  script,
+  loading,
+}: {
+  script: ScriptDraft | null;
+  loading: boolean;
+}) {
+  if (loading) {
+    return <div className={styles.briefReviewCard}>Loading script…</div>;
+  }
+  if (!script) {
+    return (
+      <div className={styles.reviewOutputEmpty} role="status">
+        The script is still being selected. Refresh before approving.
+      </div>
+    );
+  }
+  return (
+    <article className={styles.briefReviewCard} aria-label="Script draft">
+      <div className={styles.briefReviewMetaRow}>
+        <span>{script.targetLengthSec} seconds</span>
+        <span>{script.scenes.length} {script.scenes.length === 1 ? "scene" : "scenes"}</span>
+        <span>{script.status}</span>
+      </div>
+      <h3 className={styles.briefReviewGoal}>Script</h3>
+      <div className={styles.scriptCopy}>
+        {script.scenes.map((scene) => (
+          <section key={scene.id}>
+            <h4>{scene.title}</h4>
+            {scene.narration ? <p>{scene.narration}</p> : null}
+            {scene.dialogue.map((line, index) => (
+              <p key={`${scene.id}:${index}`}>
+                {line.characterName ? <strong>{line.characterName}: </strong> : null}
+                {line.text}
+              </p>
+            ))}
+          </section>
+        ))}
+      </div>
+    </article>
+  );
+}
+
 export function ReviewGatePanel({
   stageType,
   projectBrief,
   projectLoading,
+  projectScript,
+  scriptLoading,
+  scriptError,
   reviewItems,
   reviewOutputGroups,
   feedbackNote,
@@ -196,7 +252,15 @@ export function ReviewGatePanel({
         </h2>
         <p className={styles.reviewDescription}>{reviewDescription(stageType)}</p>
       </div>
-      {isBriefReviewGate && (projectBrief || projectLoading) ? (
+      {stageType === "script" ? (
+        scriptError ? (
+          <div className={styles.reviewOutputEmpty} role="alert">
+            Could not load the script for review. Refresh before approving.
+          </div>
+        ) : (
+          <ScriptReviewOutput script={projectScript} loading={scriptLoading} />
+        )
+      ) : isBriefReviewGate && (projectBrief || projectLoading) ? (
         <BriefReviewOutput brief={projectBrief} loading={projectLoading} />
       ) : reviewItems.length > 0 ? (
         <div className={styles.reviewOutputs}>
@@ -234,7 +298,10 @@ export function ReviewGatePanel({
           value={feedbackNote}
           onChange={(event) => onFeedbackNoteChange(event.target.value)}
           placeholder="Optional feedback before continuing..."
-          disabled={!!pending}
+          disabled={
+            !!pending ||
+            (stageType === "script" && (scriptLoading || !!scriptError || !projectScript))
+          }
           rows={4}
         />
         <p className={styles.feedbackHint}>
@@ -272,7 +339,9 @@ export function ReviewGatePanel({
             </button>
             {!canRequestChanges ? (
               <span className={styles.feedbackHint}>
-                Open a specific generated object to request changes safely.
+                {stageType === "script"
+                  ? "Describe the script changes you want first."
+                  : "Open a specific generated object to request changes safely."}
               </span>
             ) : null}
           </>
@@ -281,9 +350,17 @@ export function ReviewGatePanel({
           type="button"
           className={styles.primaryButton}
           onClick={onApprove}
-          disabled={!!pending}
+          disabled={
+            !!pending ||
+            (stageType === "script" &&
+              (scriptLoading || Boolean(scriptError) || !projectScript))
+          }
         >
-          {pending === "approve" ? "Approving..." : "Approve and continue"}
+          {pending === "approve"
+            ? "Approving..."
+            : stageType === "script"
+              ? "Approve script & continue"
+              : "Approve and continue"}
         </button>
       </div>
     </section>

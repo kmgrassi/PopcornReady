@@ -34,6 +34,7 @@ import type {
   ModelProvider,
   ModelSettingPurpose,
   ProjectResponse,
+  ProjectScriptResponse,
   ProjectStoryboardJobResponse,
   ProjectStoryboardResponse,
   ProjectTimelineResponse,
@@ -353,6 +354,11 @@ export const v1Api = {
     apiRequest<ProjectResponse>(
       `/api/v1/projects/${encodeURIComponent(projectId)}`
     ),
+  getProjectScript: (projectId: string, signal?: AbortSignal) =>
+    apiRequest<ProjectScriptResponse>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/script`,
+      { signal }
+    ),
   setProjectVisibility: (projectId: string, visibility: ProjectVisibility) =>
     apiRequest<ProjectResponse>(
       `/api/v1/projects/${encodeURIComponent(projectId)}`,
@@ -558,8 +564,8 @@ export const v1Api = {
   updateGenerationRun: (
     projectId: string,
     runId: string,
-    action: "approve" | "cancel",
-    body?: { note?: string }
+    action: "approve" | "reject" | "cancel",
+    body?: { note?: string; scriptDraftId?: string }
   ) =>
     apiRequest<unknown>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/generation-runs/${encodeURIComponent(runId)}/${action}`,

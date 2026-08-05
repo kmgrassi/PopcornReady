@@ -8,7 +8,7 @@
 <!-- agent-summary: Async dispatch races require local Supabase concurrency coverage when no safe live completion is available. -->
 <!-- agent-summary: Keep remaining gaps concrete, behavior-focused, and tied to the smallest useful next test. -->
 
-Last reconciled with the active route table: 2026-08-04
+Last reconciled with the active route table: 2026-08-05
 
 This inventory covers the active split app described in `CLAUDE.md`: the Vite
 React SPA in `apps/web` and the Express API in `apps/api`. New end-to-end work
@@ -64,9 +64,11 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   with mocked browser API fixtures, including truthful grouped-tool progress,
   between-action copy, job item/provider activity, progressive local-admin
   diagnostics, and response-driven review-gate transitions that clear feedback
-  without racing page reloads. They explicitly verify that review feedback and
-  generated-asset edits no longer post the retired reject or board-revision
-  mutations. Failed-run detail and Dashboard/Activity fixtures also replace the
+  without racing page reloads. Script review specifically verifies the
+  authoritative draft, the no-media-before-approval explanation, and the
+  text-only reject/rewrite action; other review feedback and generated-asset
+  edits do not post retired reject or board-revision mutations. Failed-run
+  detail and Dashboard/Activity fixtures also replace the
   retired failed-stage retry promise with project-scoped Request Changes
   guidance. A focused recovery-mode unit test preserves the real
   insufficient-credit continuation as the only guidance when it is available. A
@@ -119,11 +121,15 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   a ready beat card visual while disclosing its generation prompt only in the
   exact-target Request Changes dialog, and exposes **Generate video** at a
   storyboard-review stop before production media can continue.
+- `creation-entry-points.spec.ts` verifies the full-video intake can start from
+  either an idea or a pasted script, requires the selected starting material,
+  explains the text-only script boundary, and stays overflow-free on mobile.
 - `storyboard-orchestration.spec.ts` verifies desktop and mobile project
   overviews explain automatic scene-and-moment planning, start the
   storyboard-specific orchestrator entrypoint, navigate to its run, replace a
   missing-brief dead end with a **Finish brief** path, and suppress duplicate
-  creation while a storyboard-bound run is active. It also proves an active
+  creation while a storyboard-bound run is active or paused at mandatory Script
+  review, where **Review script** links to the existing run. It also proves an active
   run that fails while the project remains open becomes retryable, and that
   polling uses the one-boundary status endpoint rather than full run history.
 - `evals.spec.ts` covers the eval dashboard and admin workbench judgment action.

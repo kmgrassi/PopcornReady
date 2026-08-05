@@ -215,6 +215,45 @@ test("returning while a storyboard-bound production run is active shows progress
   expect(fullHistoryReads).toBe(0);
 });
 
+test("returning at script review opens the existing run instead of creating a storyboard @mobile", async ({
+  page,
+}) => {
+  await mockProjectOverview(page);
+  await page.route(`**/api/v1/projects/${projectId}/generation-entrypoints/storyboard`, (route) =>
+    json(route, {
+      run: {
+        runId,
+        projectId,
+        status: "succeeded",
+        currentStageType: "script",
+        progressPercent: 30,
+        message: "Script is ready for review.",
+        storyboardBoundaryStatus: "pending",
+        reviewGate: {
+          stageType: "script",
+          stageId: `${runId}:review:after:draft_script`,
+          state: "awaiting_review",
+          enteredAt: now,
+        },
+        createdAt: now,
+        updatedAt: now,
+        startedAt: now,
+      },
+    }),
+  );
+
+  await page.goto(`/projects/${projectId}`);
+
+  await expect(
+    page.getByRole("button", { name: "Create storyboard" }).filter({ visible: true }),
+  ).toHaveCount(0);
+  const reviewScript = page.getByRole("link", { name: "Review script" }).filter({ visible: true });
+  await expect(reviewScript).toHaveAttribute("href", `/projects/${projectId}/runs/${runId}`);
+  await expect(
+    page.getByText(/generating storyboard/i).filter({ visible: true }),
+  ).toHaveCount(0);
+});
+
 test("a storyboard-bound run that fails while the project is open becomes retryable @mobile", async ({
   page,
 }) => {

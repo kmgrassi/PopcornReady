@@ -91,6 +91,7 @@ const STUDIO_DRAFT_STEPS: StudioDraftStep[] = [
 ];
 const STUDIO_DRAFT_FOOTAGE_CHOICES: StudioDraftFootageChoice[] = ["prompt_only", "upload"];
 const STUDIO_DRAFT_FOOTAGE_MODES: StudioDraftFootageMode[] = ["asset_driven", "hybrid"];
+const STUDIO_DRAFT_START_SOURCES = ["idea", "script"] as const;
 
 export interface NarrationInput {
   mode: NarrationMode;
@@ -397,6 +398,13 @@ function parseStudioDraftBrief(input: Record<string, unknown>, path: string): St
   );
 
   const draft: StudioDraftBrief = {};
+  const startSource = parseEnum(
+    input.startSource,
+    [...STUDIO_DRAFT_START_SOURCES],
+    `${path}.startSource`,
+    fields
+  );
+  const scriptText = optionalString(input.scriptText, `${path}.scriptText`, fields);
   const goal = optionalString(input.goal, `${path}.goal`, fields);
   const aspectRatio = parseEnum(input.aspectRatio, ASPECT_RATIOS, `${path}.aspectRatio`, fields);
   const projectName = optionalString(input.projectName, `${path}.projectName`, fields);
@@ -426,6 +434,8 @@ function parseStudioDraftBrief(input: Record<string, unknown>, path: string): St
 
   throwIfInvalid(fields);
 
+  if (startSource !== undefined) draft.startSource = startSource;
+  if (scriptText !== undefined) draft.scriptText = scriptText;
   if (goal !== undefined) draft.goal = goal;
   if (input.targetLengthSec !== undefined && input.targetLengthSec !== null) {
     draft.targetLengthSec = targetLengthSec;

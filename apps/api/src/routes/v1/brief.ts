@@ -2,7 +2,6 @@ import { Router } from "express";
 import { mutation, route } from "@/core/adapter";
 import { ApiError } from "@/core/errors";
 import { parseBrief, parsePagination } from "@/lib/api/v1/schemas";
-import { startPosterGenerationInBackground } from "@/lib/api/v1/poster-background";
 import {
   createBriefVersion,
   getProject,
@@ -42,7 +41,6 @@ briefRouter.put(
     const brief = parseBrief(body, "");
     const projectId = requireProjectId(params.projectId);
     const project = await setBrief(auth.workspaceId, projectId, brief);
-    startPosterGenerationInBackground(auth, projectId);
     return { status: 200, body: { project } };
   })
 );
@@ -74,7 +72,6 @@ briefRouter.post(
       projectId,
       brief
     );
-    startPosterGenerationInBackground(auth, projectId);
     return { status: 201, body: { briefVersion } };
   })
 );
