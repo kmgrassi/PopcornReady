@@ -33,6 +33,7 @@ import { runQuery } from "@/lib/supabase/db-errors";
 import { AUDIO_AGENT_SYSTEM_PROMPT } from "./audio-agent";
 import { CREATIVE_DIRECTOR_SYSTEM_PROMPT } from "./creative-director-agent";
 import { loadRootGraphProjection } from "@/lib/orchestrator-context/root-projection";
+import type { GraphAssetKind } from "@/lib/api/v1/store-content";
 
 export interface AgentDefinition {
   role: AgentRole;
@@ -228,49 +229,43 @@ function actionOutputIds(actions: readonly RunActionSummary[]): string[] {
 interface OutputAssetRow {
   id: string;
   project_id: string;
-  kind: string;
+  kind: GraphAssetKind;
   role: string | null;
   status: string;
 }
 
 export interface DomainCompletionOutputInventoryItem {
   assetId: string;
-  kind: string;
+  kind: GraphAssetKind;
   intrinsicRole: string;
 }
 
 function semanticOutputKind(
   output: DomainCompletionOutputInventoryItem
 ): DomainOutputKind | undefined {
-  if (output.kind === "composite" || output.kind === "render") return output.kind;
-  if (output.kind === "critique") {
-    return output.intrinsicRole === "audio_fit" ? "audio_fit" : undefined;
+  switch (output.kind) {
+    case "image":
+    case "poster":
+    case "anchor":
+    case "clip":
+    case "audio_track":
+    case "composite":
+    case "render":
+      return output.kind;
+    case "keyframe":
+      if (["storyboard", "beat_storyboard", "scene_storyboard", "act_mockup"].includes(
+        output.intrinsicRole
+      )) {
+        return "storyboard";
+      }
+      return ["keyframe", "beat_keyframe"].includes(output.intrinsicRole)
+        ? "keyframe"
+        : undefined;
+    case "critique":
+      return output.intrinsicRole === "audio_fit" ? "audio_fit" : undefined;
+    default:
+      return undefined;
   }
-  if (output.kind === "video") {
-    return ["beat_clip", "standalone_video", "upload", "primary_footage"].includes(
-      output.intrinsicRole
-    )
-      ? "clip"
-      : undefined;
-  }
-  if (output.kind === "audio") {
-    return ["audio_track", "soundtrack", "voiceover", "dialogue", "sound_effect"].includes(
-      output.intrinsicRole
-    )
-      ? "audio_track"
-      : undefined;
-  }
-  if (output.kind !== "image") return undefined;
-  if (["standalone_image", "image", "upload"].includes(output.intrinsicRole)) return "image";
-  if (output.intrinsicRole === "poster") return "poster";
-  if (["visual_anchor", "character_anchor", "scene_anchor"].includes(output.intrinsicRole)) {
-    return "anchor";
-  }
-  if (["storyboard", "beat_storyboard", "scene_storyboard"].includes(output.intrinsicRole)) {
-    return "storyboard";
-  }
-  if (["keyframe", "beat_keyframe"].includes(output.intrinsicRole)) return "keyframe";
-  return undefined;
 }
 
 function outputMatchesRequirement(
@@ -360,7 +355,7 @@ export function validateDomainCompletionOutputInventory(input: {
       false
     );
   }
-  const allowedGraphKinds = new Set<string>(
+  const allowedGraphKinds = new Set<GraphAssetKind>(
     input.task.allowedOutputKinds.map(domainOutputAssetKind)
   );
   if (input.rows.some((row) => !allowedGraphKinds.has(row.kind))) {

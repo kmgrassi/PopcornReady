@@ -23,19 +23,19 @@ test("story snapshot graph kind follows its stable relational target", () => {
   }), ["beat"]);
 });
 
-test("non-story rerun outputs retain the reviewed semantic normalization", () => {
+test("non-story rerun outputs authorize their persisted graph kinds", () => {
   assert.deepEqual(rerunOutputAssetKinds({
     kind: "keyframe",
     target: { kind: "beat", projectId, beatId: "beat-1" },
-  }), ["image"]);
+  }), ["keyframe"]);
   assert.deepEqual(rerunOutputAssetKinds({
     kind: "clip",
     target: { kind: "beat", projectId, beatId: "beat-1" },
-  }), ["video"]);
+  }), ["clip"]);
   assert.deepEqual(rerunOutputAssetKinds({
     kind: "audio_track",
     target: { kind: "project", projectId },
-  }), ["audio"]);
+  }), ["audio_track"]);
   assert.deepEqual(rerunOutputAssetKinds({
     kind: "audio_fit",
     target: { kind: "beat", projectId, beatId: "beat-1" },

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { DomainTaskV1 } from "@popcorn/shared/domain-agent-contract";
+import type { DomainOutputKind, DomainTaskV1 } from "@popcorn/shared/domain-agent-contract";
+import type { GraphAssetKind } from "@/lib/api/v1/store-content";
 import type { OrchestratorRun } from "@/lib/api/v1/orchestrator-store";
 import { runOrchestratorToCompletion } from "../engine";
 import {
@@ -14,7 +15,10 @@ import {
 } from "../agent-definition";
 import { CREATIVE_DIRECTOR_SYSTEM_PROMPT } from "../creative-director-agent";
 import type { ToolRegistry } from "../registry";
-import type { AgentDefinition } from "../agent-definition";
+import type {
+  AgentDefinition,
+  DomainCompletionOutputInventoryItem,
+} from "../agent-definition";
 
 const rootRun: OrchestratorRun = {
   id: "root-run",
@@ -341,7 +345,7 @@ test("unbound semantic requirements need distinct role-compatible assets", () =>
       task: multiStillTask,
       inventory: [{
         assetId: "generic-image",
-        kind: "image",
+        kind: "anchor",
         intrinsicRole: "standalone_image",
       }],
     }),
@@ -351,7 +355,7 @@ test("unbound semantic requirements need distinct role-compatible assets", () =>
   assert.doesNotThrow(() => assertDomainCompletionOutputCoverage({
     task: multiStillTask,
     inventory: [
-      { assetId: "anchor", kind: "image", intrinsicRole: "character_anchor" },
+      { assetId: "anchor", kind: "anchor", intrinsicRole: "character_anchor" },
       { assetId: "generic-image", kind: "image", intrinsicRole: "standalone_image" },
     ],
   }));
@@ -371,6 +375,104 @@ test("unbound semantic requirements need distinct role-compatible assets", () =>
     }),
     /distinct role-compatible assets/
   );
+});
+
+test("completion accepts every persisted domain graph kind, including creator-direct clips", () => {
+  const cases = [
+    { semanticKind: "image", graphKind: "image", role: "standalone_image" },
+    { semanticKind: "poster", graphKind: "poster", role: "poster" },
+    { semanticKind: "anchor", graphKind: "anchor", role: "character_anchor" },
+    { semanticKind: "storyboard", graphKind: "keyframe", role: "beat_storyboard" },
+    { semanticKind: "storyboard", graphKind: "keyframe", role: "scene_storyboard" },
+    { semanticKind: "storyboard", graphKind: "keyframe", role: "act_mockup" },
+    { semanticKind: "keyframe", graphKind: "keyframe", role: "beat_keyframe" },
+    { semanticKind: "clip", graphKind: "clip", role: "standalone_video" },
+    { semanticKind: "audio_track", graphKind: "audio_track", role: "voiceover" },
+    { semanticKind: "audio_fit", graphKind: "critique", role: "audio_fit" },
+    { semanticKind: "composite", graphKind: "composite", role: "composition" },
+    { semanticKind: "render", graphKind: "render", role: "export_video" },
+  ] satisfies readonly {
+    semanticKind: DomainOutputKind;
+    graphKind: GraphAssetKind;
+    role: string;
+  }[];
+
+  for (const { semanticKind, graphKind, role } of cases) {
+    const task = {
+      ...visualTask,
+      requiredOutputs: [{ kind: semanticKind, role: "primary", minimumCount: 1 }],
+      allowedOutputKinds: [semanticKind],
+    } as DomainTaskV1;
+    assert.doesNotThrow(() => validateDomainCompletionOutputInventory({
+      projectId: "project-1",
+      task,
+      ids: [`${semanticKind}-${role}`],
+      rows: [{
+        id: `${semanticKind}-${role}`,
+        project_id: "project-1",
+        kind: graphKind,
+        role,
+        status: "ready",
+      }],
+      requireComplete: true,
+    }), `${semanticKind} should accept ${graphKind}/${role}`);
+  }
+});
+
+test("completion trusts canonical graph kinds and fails closed for overloaded roles", () => {
+  const assertAccepted = (input: {
+    semanticKind: DomainOutputKind;
+    graphKind: GraphAssetKind;
+    role: string;
+  }) => assert.doesNotThrow(() => validateDomainCompletionOutputInventory({
+    projectId: "project-1",
+    task: {
+      ...visualTask,
+      requiredOutputs: [{ kind: input.semanticKind, role: "primary", minimumCount: 1 }],
+      allowedOutputKinds: [input.semanticKind],
+    } as DomainTaskV1,
+    ids: ["asset-1"],
+    rows: [{
+      id: "asset-1",
+      project_id: "project-1",
+      kind: input.graphKind,
+      role: input.role,
+      status: "ready",
+    }],
+    requireComplete: true,
+  }));
+
+  assertAccepted({ semanticKind: "clip", graphKind: "clip", role: "standalone_image" });
+  assertAccepted({ semanticKind: "image", graphKind: "image", role: "beat_clip" });
+
+  for (const input of [
+    { semanticKind: "keyframe", graphKind: "keyframe", role: "beat_storyboard" },
+    { semanticKind: "storyboard", graphKind: "keyframe", role: "beat_keyframe" },
+    { semanticKind: "keyframe", graphKind: "keyframe", role: "unknown" },
+    { semanticKind: "audio_fit", graphKind: "critique", role: "visual_critique" },
+  ] satisfies readonly {
+    semanticKind: DomainOutputKind;
+    graphKind: GraphAssetKind;
+    role: string;
+  }[]) {
+    assert.throws(() => validateDomainCompletionOutputInventory({
+      projectId: "project-1",
+      task: {
+        ...visualTask,
+        requiredOutputs: [{ kind: input.semanticKind, role: "primary", minimumCount: 1 }],
+        allowedOutputKinds: [input.semanticKind],
+      } as DomainTaskV1,
+      ids: ["asset-1"],
+      rows: [{
+        id: "asset-1",
+        project_id: "project-1",
+        kind: input.graphKind,
+        role: input.role,
+        status: "ready",
+      }],
+      requireComplete: true,
+    }), /allowed semantic output kinds/);
+  }
 });
 
 test("bound claims enforce semantic roles and one distinct asset per binding", () => {
@@ -404,10 +506,18 @@ test("bound claims enforce semantic roles and one distinct asset per binding", (
     allowedOutputKinds: ["anchor", "image"],
   } as DomainTaskV1;
   const inventory = [
-    { assetId: "anchor", kind: "image", intrinsicRole: "character_anchor" },
+    { assetId: "anchor", kind: "anchor", intrinsicRole: "character_anchor" },
     { assetId: "image", kind: "image", intrinsicRole: "standalone_image" },
-  ];
+  ] satisfies DomainCompletionOutputInventoryItem[];
 
+  assert.doesNotThrow(() => validateDomainCompletionBoundOutputClaims({
+    task: boundTask,
+    inventory,
+    claimedOutputs: [
+      { bindingId: "anchor-binding", assetId: "anchor" },
+      { bindingId: "image-binding", assetId: "image" },
+    ],
+  }));
   assert.throws(
     () => validateDomainCompletionBoundOutputClaims({
       task: boundTask,
@@ -417,7 +527,7 @@ test("bound claims enforce semantic roles and one distinct asset per binding", (
         { bindingId: "image-binding", assetId: "anchor" },
       ],
     }),
-    /does not satisfy binding anchor-binding/
+    /does not satisfy binding (anchor|image)-binding/
   );
   assert.throws(
     () => validateDomainCompletionBoundOutputClaims({
@@ -497,13 +607,13 @@ test("partial completion inventory still rejects missing, foreign, and semantic 
       rows: [{
         id: "semantic-mismatch",
         project_id: "project-1",
-        kind: "image",
+        kind: "anchor",
         role: "character_anchor",
         status: "ready",
       }],
       requireComplete: false,
     }),
-    /allowed semantic output kinds/
+    /allowed output kinds/
   );
 
   const partialTask = {
@@ -521,11 +631,11 @@ test("partial completion inventory still rejects missing, foreign, and semantic 
     rows: [{
       id: "anchor",
       project_id: "project-1",
-      kind: "image",
+      kind: "anchor",
       role: "character_anchor",
       status: "ready",
     }],
-  };
+  } as const;
   assert.doesNotThrow(() => validateDomainCompletionOutputInventory({
     ...partialInput,
     requireComplete: false,
