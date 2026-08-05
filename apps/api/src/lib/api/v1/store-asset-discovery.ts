@@ -14,7 +14,7 @@ import type { GenerationRunStatus } from "@popcorn/shared/v1/types";
 import type { V1Project } from "./store-types";
 import type { GetWorkspaceDashboardSummaryDeps, ListWorkspaceGenerationRunsDeps, ListWorkspaceOutputsDeps, WorkspaceGenerationRunSummary, WorkspaceOutputSummary, WorkspaceProjectRef } from "./workspace-dashboard";
 import { getWorkspaceDashboardSummaryWithDeps, listWorkspaceGenerationRunsWithDeps, listWorkspaceOutputsWithDeps } from "./workspace-dashboard";
-import { assetGenerationPrompt, assetMediaToKind, embeddingVectorLiteral, getProject, getServiceSupabase, mapAsset, mapAssets, mapProject, selectedDataAsset } from "./store";
+import { assetMediaToKind, embeddingVectorLiteral, getProject, getServiceSupabase, mapAsset, mapAssets, mapProject, selectedDataAsset } from "./store";
 import type { AssetRow, AssetSemanticSearchResponse, AssetSemanticSearchRpcRow, AssetWithProjectRow, CurrentSelectionRow, ProjectRow, V1Asset } from "./store";
 
 export interface WorkspaceAssetSummary {
@@ -40,6 +40,11 @@ export interface WorkspaceAssetSummary {
 
 interface WorkspaceAssetJoinRow extends AssetRow {
   projects?: { name: string; status: "active" | "deleted" };
+}
+
+function assetGenerationPrompt(row: Pick<AssetRow, "params">): string | undefined {
+  const prompt = row.params?.provenance?.prompt?.trim();
+  return prompt || undefined;
 }
 
 export async function listWorkspaceAssets(

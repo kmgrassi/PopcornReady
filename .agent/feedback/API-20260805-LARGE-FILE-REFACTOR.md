@@ -8,11 +8,14 @@
 <!-- agent-summary: Independent reviewer was unavailable and local review covered the diff. -->
 <!-- agent-summary: The change is ready for open pull request review. -->
 
-`store.ts` dropped from 7,032 to 6,574 lines. The extracted
-`store-asset-discovery.ts` owns the read-oriented asset catalog boundary while
-keeping the existing store exports and route contracts stable.
+`store.ts` first dropped from 7,032 to 6,574 lines when the read-oriented asset
+catalog moved to `store-asset-discovery.ts`. This follow-up moved storyboard
+row mapping, hydration, validation, and save persistence to
+`store-storyboard.ts`, bringing `store.ts` to 5,596 lines while keeping the
+existing store exports and route contracts stable.
 
-Validation: API typecheck passed; focused store tests passed (2 passed, 14
-skipped); semantic-search and media-url tests passed (14 passed);
-`pnpm agent:validate -- --scope api` passed. The independent reviewer was
-unavailable, so implementation and wrap-up review were completed locally.
+Validation: storyboard/keyframe tests passed (25); focused store,
+semantic-search, and media-url tests passed (16 passed, 14 skipped); API
+typecheck and `pnpm agent:validate -- --scope api` passed. The independent
+reviewer was unavailable, so implementation and wrap-up review were completed
+locally.

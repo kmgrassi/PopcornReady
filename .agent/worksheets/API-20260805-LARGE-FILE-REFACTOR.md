@@ -10,8 +10,9 @@
 
 ## Goal
 
-Extract the read-oriented asset catalog from `apps/api/src/lib/api/v1/store.ts`
-into a focused module without changing the public store API.
+Extract the read-oriented asset catalog and storyboard persistence from
+`apps/api/src/lib/api/v1/store.ts` into focused modules without changing the
+public store API.
 
 ## Research
 
@@ -20,13 +21,15 @@ into a focused module without changing the public store API.
   a distinct API boundary.
 - Selected slice: workspace asset listing, project watch media, dashboard
   aggregation, public discovery, and character-anchor listing.
+- Follow-up slice: storyboard row mapping, hydration, validation, and save.
 
 ## Plan
 
 1. Move the selected functions to `store-asset-discovery.ts`.
-2. Preserve the existing named exports through the store module.
-3. Run focused API tests, lint repair, typecheck, and agent validation.
-4. Request review evidence, commit, push, and open a non-draft PR.
+2. Move the storyboard workflow to `store-storyboard.ts`.
+3. Preserve the existing named exports through the store module.
+4. Run focused API tests, lint repair, typecheck, and agent validation.
+5. Update the existing open PR with the follow-up extraction.
 
 ## Validation log
 
@@ -37,10 +40,16 @@ into a focused module without changing the public store API.
 | `pnpm agent:lint:fix` | passed |
 | `pnpm agent:validate -- --scope api` | passed |
 
+Follow-up validation: storyboard/keyframe tests passed (25); combined store,
+semantic-search, and media-url tests passed (16 passed, 14 skipped); final API
+typecheck and scoped agent validation passed.
+
 ## Decisions and blockers
 
 - `store.ts` is now 6,574 lines (down from 7,032); the new discovery module is
   494 lines.
+- After the storyboard extraction, `store.ts` is 5,596 lines and
+  `store-storyboard.ts` is 1,001 lines.
 - No behavior or route contract changes are intended.
 - Independent reviewer was unavailable; local diff review covered the
   implementation and validation evidence.
@@ -49,5 +58,6 @@ into a focused module without changing the public store API.
 
 - `apps/api/src/lib/api/v1/store.ts`
 - `apps/api/src/lib/api/v1/store-asset-discovery.ts`
+- `apps/api/src/lib/api/v1/store-storyboard.ts`
 - `docs/repository-structure.md`
 - `.agent/feedback/API-20260805-LARGE-FILE-REFACTOR.md`
