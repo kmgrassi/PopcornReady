@@ -102,4 +102,8 @@ Acceptance criteria:
 
 ## Next action / handoff
 
-Commit and tag the bounded change, then push and open a ready-for-review PR.
+Ready-for-review PR: https://github.com/kmgrassi/PopcornReady/pull/894
+
+After review, continue the prevention plan in a separate slice: harden
+`BoundRequiredOutput.kind` and completion/finalization authorization, then plan
+the generated Supabase database-type rollout and canonical vocabulary facade.
