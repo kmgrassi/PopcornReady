@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "build": "tsc --noEmit",
+    "build": "tsc --noEmit && node ../../scripts/generate-api-release.mjs",
     "typecheck": "tsc --noEmit",
     "cli": "tsx scripts/cli.ts",
     "storage:smoke": "tsx scripts/storage-smoke.ts",

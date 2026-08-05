@@ -8,8 +8,15 @@
 <!-- agent-summary: Superseded runs cancel, jobs have a 15-minute cap, and failure reports upload. -->
 <!-- agent-summary: Required checks need a successful no-op path before workflow filters are enabled. -->
 
-This suite covers split-app browser behavior with Playwright. The default mode
-is local auth:
+This suite covers split-app browser behavior with Playwright. The mounted route
+source of truth is `apps/web/src/routes/app-route-registry.ts`. It separates
+route-smoke IDs from feature-flow coverage and classifies access, fixture needs,
+required viewports, and allowed navigation writes. `App.tsx` renders that
+registry directly, while unit parity tests keep production and development-only
+paths distinct. The remote production runner remains PR 2 scope; this local
+suite does not claim deployed-browser evidence.
+
+The default mode is local auth:
 
 ```sh
 pnpm --filter @popcorn/web test:e2e
@@ -119,6 +126,14 @@ continuation remains implemented because it owns a real recovery mutation;
 unit coverage gives that direct continuation priority over generic Request
 Changes guidance.
 
+`landing-mobile.spec.ts` keeps the mobile landing inside the viewport with a
+tappable primary CTA. `landing-agent-content.spec.ts` protects the landing
+page's agent-architecture content contract on desktop and both mobile browser
+projects: the creative-director-with-specialists section, the workflow copy in
+which the director delegates to visuals and audio specialists with current
+providers (Gemini Veo, ElevenLabs), the agent-crew FAQ, mobile overflow
+containment, and the absence of retired provider copy such as Sora.
+
 The command starts the Express API and Vite app, using:
 
 - `AUTH_MODE=local`
@@ -171,6 +186,15 @@ pnpm --filter @popcorn/web test:e2e:pwa
 
 That command validates the web app manifest, confirms the share-target service
 worker registers, and simulates the OS share-target POST with a fixture file.
+
+The release-identity route boundary has a focused local production-build check:
+
+```sh
+pnpm --filter @popcorn/web test:e2e:production-build
+```
+
+It verifies the build emits a typed `/release.json` and that `/dev/*` resolves
+through the production catch-all without importing a development harness.
 
 ## GitHub Actions runner policy
 

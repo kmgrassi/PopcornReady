@@ -45,6 +45,8 @@ function hasRequestedProject(name: string): boolean {
 
 const includePwaProject =
   hasRequestedProject("pwa") || e2eEnv.POPCORN_E2E_INCLUDE_PWA === "true";
+const useProductionBuildRouting =
+  e2eEnv.POPCORN_E2E_PRODUCTION_BUILD === "true";
 const apiPort = Number(
   e2eEnv.POPCORN_E2E_API_PORT ?? e2eEnv.PLAYWRIGHT_API_PORT ?? e2eEnv.PORT ?? 4100,
 );
@@ -76,6 +78,7 @@ process.env.VITE_API_URL = apiURL;
 const apiServerEnv = {
   ...e2eEnv,
   AUTH_MODE: authMode,
+  ORCHESTRATOR_RECOVERY_ENABLED: "false",
   PORT: String(apiPort),
   VITE_API_URL: apiURL,
 };
@@ -100,10 +103,18 @@ const pwaWebServerEnv = {
   ...webServerEnv,
   NODE_ENV: "production",
 };
+const productionBuildWebServerEnv = {
+  ...webServerEnv,
+  NODE_ENV: "production",
+  RELEASE_ENVIRONMENT: "production",
+};
 
 const usePwaWebServer = includePwaProject && !hostedAuthMode;
-const usePreviewWebServer = hostedAuthMode || includePwaProject;
-const webCommand = usePwaWebServer
+const usePreviewWebServer =
+  hostedAuthMode || includePwaProject || useProductionBuildRouting;
+const webCommand = useProductionBuildRouting
+  ? `pnpm --filter @popcorn/web build && pnpm --filter @popcorn/web exec vite preview --host 127.0.0.1 --port ${webPort} --strictPort`
+  : usePwaWebServer
   ? `pnpm --filter @popcorn/web exec tsc --noEmit && pnpm --filter @popcorn/web exec vite build && pnpm --filter @popcorn/web exec vite preview --host 127.0.0.1 --port ${webPort} --strictPort`
   : usePreviewWebServer
   ? `pnpm --filter @popcorn/web exec vite build && pnpm --filter @popcorn/web exec vite preview --host 127.0.0.1 --port ${webPort} --strictPort`
@@ -122,7 +133,11 @@ const apiWebServer = {
 const appWebServer = {
   command: webCommand,
   cwd: repoRoot,
-  env: usePwaWebServer ? pwaWebServerEnv : webServerEnv,
+  env: usePwaWebServer
+    ? pwaWebServerEnv
+    : useProductionBuildRouting
+      ? productionBuildWebServerEnv
+      : webServerEnv,
   url: baseURL,
   reuseExistingServer: false,
   timeout: 120_000,

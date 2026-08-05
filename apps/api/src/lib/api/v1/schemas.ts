@@ -7,7 +7,6 @@ import type {
   StudioDraftBrief,
   StudioDraftFootageChoice,
   StudioDraftFootageMode,
-  StudioDraftSeedKind,
   StudioDraftPayload,
   StudioDraftStep,
   UpdateStudioDraftRequest,
@@ -17,8 +16,6 @@ import { validationError } from "./errors";
 import { parsePagination } from "./schema-pagination";
 import {
   isPlainObject,
-  optionalBoolean,
-  optionalEnumArray,
   optionalInteger,
   optionalString,
   optionalStringArray,
@@ -94,17 +91,6 @@ const STUDIO_DRAFT_STEPS: StudioDraftStep[] = [
 ];
 const STUDIO_DRAFT_FOOTAGE_CHOICES: StudioDraftFootageChoice[] = ["prompt_only", "upload"];
 const STUDIO_DRAFT_FOOTAGE_MODES: StudioDraftFootageMode[] = ["asset_driven", "hybrid"];
-const STUDIO_DRAFT_SEED_KINDS: StudioDraftSeedKind[] = ["image", "video"];
-const STUDIO_DRAFT_REVIEW_GATES = [
-  "brief_intake",
-  "creative_plan",
-  "storyboard",
-  "asset_generation",
-  "audio_generation",
-  "timeline_assembly",
-  "quality_review",
-  "export",
-] as const;
 
 export interface NarrationInput {
   mode: NarrationMode;
@@ -437,20 +423,6 @@ function parseStudioDraftBrief(input: Record<string, unknown>, path: string): St
   const style = optionalString(input.style, `${path}.style`, fields);
   const callToAction = optionalString(input.callToAction, `${path}.callToAction`, fields);
   const provider = optionalString(input.provider, `${path}.provider`, fields);
-  const seedKind = parseEnum(
-    input.seedKind,
-    STUDIO_DRAFT_SEED_KINDS,
-    `${path}.seedKind`,
-    fields
-  );
-  const seedSize = optionalString(input.seedSize, `${path}.seedSize`, fields);
-  const showCaptions = optionalBoolean(input.showCaptions, `${path}.showCaptions`, fields);
-  const reviewGates = optionalEnumArray(
-    input.reviewGates,
-    [...STUDIO_DRAFT_REVIEW_GATES],
-    `${path}.reviewGates`,
-    fields
-  );
 
   throwIfInvalid(fields);
 
@@ -473,10 +445,6 @@ function parseStudioDraftBrief(input: Record<string, unknown>, path: string): St
   if (style !== undefined) draft.style = style;
   if (callToAction !== undefined) draft.callToAction = callToAction;
   if (provider !== undefined) draft.provider = provider;
-  if (seedKind !== undefined) draft.seedKind = seedKind;
-  if (seedSize !== undefined) draft.seedSize = seedSize;
-  if (showCaptions !== undefined) draft.showCaptions = showCaptions;
-  if (reviewGates !== undefined) draft.reviewGates = reviewGates;
 
   return draft;
 }

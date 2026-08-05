@@ -59,6 +59,10 @@ Address every actionable result from the production manual browser test:
   recovery-mode unit coverage, and desktop/mobile not-found assertions.
 - Updated the E2E README and inventory to describe the current coverage and the
   anti-flash test boundary accurately.
+- On 2026-08-05, merged the latest `origin/main` into the PR branch. Preserved
+  main's typed route registry and changed its `notFound` renderer to the branded
+  `NotFoundPage`; updated main's new production-build routing regression to the
+  same branded recovery contract.
 
 ## Validation evidence
 
@@ -82,6 +86,17 @@ Address every actionable result from the production manual browser test:
   recovery copy, no `retry` promise, and no horizontal overflow; unknown routes
   at both viewports showed the branded recovery page with no overflow. The only
   console messages were the existing React Router development future warnings.
+- Post-merge typecheck passed and the web unit suite passed 85/85, including the
+  route-registry contract.
+- Post-merge Playwright run passed 168 tests with six intentional skips across
+  Chromium and the tagged mobile projects. The production-build routing smoke
+  passed 1/1 after its stale placeholder assertion was updated.
+- Post-merge manual browser check of `/route-that-does-not-exist` passed at
+  1280-by-720 and 390-by-844: the branded heading and both recovery links were
+  present, document width did not overflow, and no browser errors were logged.
+- Post-merge `pnpm agent:lint:fix` and
+  `pnpm agent:validate -- --scope web` passed, including workflow policy tests,
+  100 migration validations, lint, and web typecheck.
 
 ## Independent reviews
 
@@ -101,6 +116,17 @@ Address every actionable result from the production manual browser test:
 - Wrap-up checkpoint: passed with no release blockers. One documentation-only
   finding tightened this worksheet's greppable summary from “authenticated” to
   “protected local-mode” so it does not overstate Supabase-auth coverage.
+- Merge research/plan checkpoint: confirmed the registry-based conflict
+  resolution preserves both branches, then caught a semantic conflict outside
+  Git's markers: main's new production-build test still asserted the retired
+  placeholder. The test was updated before final validation.
+- Merge implementation checkpoint: passed with no blockers. The reviewer
+  confirmed the 17-file PR-relative diff is scoped, the branded fallback stays
+  registry-owned, the production-build regression matches the new contract,
+  and the automated and manual checks directly cover the semantic merge.
+- Merge wrap-up checkpoint: passed with no blockers. The reviewer confirmed no
+  unresolved conflicts or unstaged drift, a clean 17-file PR-relative diff,
+  complete worksheet/feedback records, and proportionate validation evidence.
 
 ## Blockers and risks
 
@@ -111,4 +137,4 @@ Address every actionable result from the production manual browser test:
 
 ## Next action / handoff
 
-Commit, tag, push, and publish the ready-for-review pull request.
+Commit and push the merge resolution to the existing pull request.

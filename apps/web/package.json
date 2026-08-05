@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:device": "node ../../scripts/dev-device.mjs",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && node ../../scripts/generate-web-release.mjs",
     "start": "vite preview",
     "preview": "vite preview",
     "test": "tsx --test \"src/**/*.test.ts\"",
@@ -15,6 +15,7 @@
     "test:e2e:local-db": "node ../../scripts/with-local-supabase-env.mjs pnpm --filter @popcorn/web test:e2e",
     "test:e2e:hosted": "POPCORN_E2E_AUTH_MODE=supabase playwright test e2e/auth-hosted.spec.ts",
     "test:e2e:pwa": "POPCORN_E2E_INCLUDE_PWA=true playwright test --project=pwa",
+    "test:e2e:production-build": "POPCORN_E2E_PRODUCTION_BUILD=true playwright test e2e/production-build-routing.spec.ts --project=chromium",
     "typecheck": "tsc --noEmit",
     "test:e2e:headed": "playwright test --headed"
   },

@@ -23,3 +23,9 @@ Keep production browser test notes explicit about the selector or state that
 ended each wait. Prefer direct assertions against known safe read data for
 managed QA identities, and retain a deterministic fixture that proves delayed
 auth/bootstrap data ultimately renders.
+
+When resolving a merge, also search incoming tests and documentation for the
+behavior replaced by the conflict resolution. Git correctly identified the
+route mount overlap, but it could not identify main's new production-build test
+that still asserted the retired placeholder. Semantic conflict review must
+extend beyond files containing conflict markers.

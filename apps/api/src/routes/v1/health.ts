@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { authMode } from "@/lib/api/v1/auth";
 import { creatorDirectDatabaseReadiness } from "@/lib/postgres/creator-direct-readiness";
+import { releaseReadiness } from "@/lib/release-readiness";
 
 export const healthRouter = Router();
 
@@ -12,12 +13,19 @@ export const healthRouter = Router();
 // until prod serves the pushed commit, so "what commit is live?" is answerable
 // with one curl.
 healthRouter.get("/health", async (req, res) => {
-  const database = await creatorDirectDatabaseReadiness();
-  res.status(database.ready ? 200 : 503).json({
-    status: database.ready ? "ok" : "unavailable",
+  const [database, release] = await Promise.all([
+    creatorDirectDatabaseReadiness(),
+    releaseReadiness(),
+  ]);
+  const ready = database.ready && release.ready;
+  const fallbackCommit =
+    process.env.RAILWAY_GIT_COMMIT_SHA ?? process.env.APP_COMMIT_SHA ?? null;
+  res.set("Cache-Control", "no-store");
+  res.status(ready ? 200 : 503).json({
+    status: ready ? "ok" : "unavailable",
     authMode: authMode(),
-    commit:
-      process.env.RAILWAY_GIT_COMMIT_SHA ?? process.env.APP_COMMIT_SHA ?? null,
+    commit: release.manifestReady ? release.gitSha : fallbackCommit,
+    release,
     creatorDirectDatabase: database,
     time: new Date().toISOString(),
   });

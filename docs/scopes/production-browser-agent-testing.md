@@ -2,7 +2,7 @@
 
 <!-- agent-summary: This proposal makes deployed production browser testing safe, repeatable, and agent-runnable. -->
 <!-- agent-summary: Local deterministic and local-Supabase suites remain required; production is an additional tier. -->
-<!-- agent-summary: A shared release identity must prove Netlify, Railway, and database compatibility before testing. -->
+<!-- agent-summary: Exact release identities must prove Netlify, Railway, and required database migrations before testing. -->
 <!-- agent-summary: Production mutations require service-authenticated sandboxes, normal user RLS paths, and complete cleanup. -->
 <!-- agent-summary: Provider canaries require isolated credits, hard spend limits, concurrency caps, and circuit breakers. -->
 <!-- agent-summary: Irreversible billing, destructive administration, and injected outages remain outside production. -->
@@ -127,9 +127,11 @@ No tier can claim coverage owned by another tier. In particular:
   ID, initially the merge commit SHA.
 - The web build and API health response report that shared orchestration ID plus
   their separate artifact hashes.
-- Database compatibility is not an artifact identity. API health checks the
-  deployed binary's required ordered migration-prefix digest against the same
-  prefix of the production migration ledger before reporting the release ready.
+- Database compatibility is not an artifact identity. API health checks that
+  every migration version required by the deployed binary exists in the
+  production ledger and that the canonical required-version-set digest matches
+  before reporting the release ready. Extra applied versions may appear anywhere
+  because the repository intentionally supports out-of-order additive merges.
 - A run must fail closed before login or mutation when the deployed web and API
   are on incompatible releases.
 - Rolling deploy overlap must not allow an old web build to be marked verified
@@ -268,20 +270,32 @@ The Playwright/browser runner and control plane have different authority:
 
 ## Release identity contract
 
-Add one release contract shared by deployment and testing:
+Add separate typed envelopes for the independently built web and API artifacts:
 
 ```ts
-interface ReleaseIdentity {
+interface WebReleaseIdentity {
   releaseOrchestrationId: string;
   gitSha: string;
   webArtifactSha256: string;
+  builtAt: string;
+  environment: "production";
+}
+
+interface ApiReleaseIdentity {
+  releaseOrchestrationId: string;
+  gitSha: string;
   apiArtifactSha256: string;
   builtAt: string;
   requiredMigrationCount: number;
-  requiredMigrationPrefixSha256: string;
-  appliedMigrationCount: number;
-  appliedRequiredPrefixSha256: string;
+  requiredMigrationSetSha256: string;
   environment: "production";
+}
+
+interface ApiReleaseReadiness extends ApiReleaseIdentity {
+  appliedMigrationCount: number;
+  appliedRequiredMigrationCount: number;
+  appliedRequiredMigrationSetSha256: string;
+  databaseCompatible: boolean;
 }
 ```
 
@@ -290,18 +304,19 @@ Proposed surfaces:
 - Netlify publishes immutable `/release.json` generated at build time with the
   orchestration ID, git SHA, and web artifact hash.
 - Railway `/api/v1/health` returns the same orchestration ID/git SHA, its API
-  artifact hash, and the required/applied migration-prefix fields.
-- API build metadata declares the count and SHA-256 digest of its ordered
-  migration-version prefix. Health reads the applied ledger, requires at least
-  that many migrations, hashes the same first `requiredMigrationCount` versions,
-  and compares that digest exactly. Additive forward-compatible migrations may
-  extend the ledger without changing the required prefix.
+  artifact hash, and the required/applied migration-set fields.
+- API build metadata declares the canonical sorted unique migration versions it
+  requires plus their SHA-256 set digest. Health reads the applied ledger,
+  requires every declared version, filters the ledger to that required set, and
+  compares the digest exactly. Additive forward-compatible migrations may be
+  lower or higher than the build's versions without breaking compatibility.
 - The post-deploy workflow waits for the expected web and API identities.
 - Production Playwright verifies both directly and through the same-origin
   `/api` proxy before beginning route checks.
 
-The release orchestration ID, artifact hashes, and matching ordered
-migration-prefix digest form the browser-test target. A most-recent deploy or
+The release orchestration ID, artifact hashes, and matching required-migration
+set digest form the browser-test target. Web and API build timestamps are
+independent observations, not a shared identity field. A most-recent deploy or
 health response from only one service is insufficient.
 
 ## Production runner modes
@@ -627,6 +642,9 @@ test-run store, not embedded as the main coverage definition.
 
 ### PR 1 — Release identity and living coverage truth
 
+**Implementation status (2026-08-04):** implemented on the production release
+identity branch. Mutation and provider authority remain deferred to PRs 3-7.
+
 Goal:
 
 - establish a shared release identity and repair route/flow documentation drift.
@@ -636,7 +654,7 @@ Scope:
 - generate Netlify `/release.json` with shared orchestration identity and a
   distinct web artifact hash;
 - extend API health with the shared orchestration identity, distinct API
-  artifact hash, and required/applied migration-prefix fields;
+  artifact hash, and required/applied migration-set fields;
 - add deployment tests for identity mismatch and rolling overlap;
 - introduce the initial typed production route registry;
 - make `App.tsx` consume the registry without changing visible routing;
@@ -646,7 +664,7 @@ Validation:
 
 - web build exposes the expected orchestration identity and artifact hash;
 - API health reports the same orchestration identity, its own artifact hash, and
-  an exact digest match for the build's required ordered migration prefix;
+  an exact digest match for the build's canonical required migration-version set;
 - the migration workflow, API deploy, and web deploy ordering is exercised for
   roll-forward and compatible rollback;
 - route-registry parity tests cover every current production/dev route;
@@ -978,7 +996,8 @@ Failure classes:
 ## Acceptance criteria for the complete program
 
 - Production web and API artifacts are tied to one release orchestration ID and
-  the API proves its required ordered migration prefix is applied exactly.
+  the API proves every required migration version is applied with the exact
+  canonical set digest.
 - A checked inventory enumerates every production route, customer workflow, and
   reversible persisted surface with exactly one status:
   `covered`, `local_only`, `staging_only`, `manual_only`, or `unsupported`.
@@ -1023,7 +1042,7 @@ The implementation owner must resolve these before the named PR:
    advisory to release-blocking.
 
 Recommended defaults are: merge commit SHA as the shared release orchestration
-ID with separate web/API artifact hashes, ordered migration-prefix digests,
+ID with separate web/API artifact hashes, required migration-set digests,
 GitHub OIDC, one ephemeral QA identity per mutating sandbox, a separate test
 credit ledger, capability-like unlisted canaries inside `internal_test`,
 restricted GitHub artifacts with

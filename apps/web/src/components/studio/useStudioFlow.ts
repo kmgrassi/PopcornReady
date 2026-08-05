@@ -9,7 +9,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Clip, Project, Timeline, TimelineSegment } from "@popcorn/shared/types";
 import type {
   AspectRatio,
-  GateableGenerationStageType,
   GenerationRun,
   GenerationStage,
 } from "@popcorn/shared/v1/types";
@@ -42,7 +41,6 @@ export type Platform = NonNullable<StoryContext["platform"]>;
 export type StoryFormat = NonNullable<StoryContext["format"]>;
 export type FootageChoice = "prompt_only" | "upload";
 export type FootageMode = "asset_driven" | "hybrid";
-export type SeedKind = "image" | "video";
 
 /**
  * BriefDraft — the superset of every step's fields, accumulated across the
@@ -74,12 +72,9 @@ export interface BriefDraft {
   style: string;
   callToAction: string;
 
-  // Run handoff config (seed, captions, and review checkpoints).
+  // Run handoff config. Initial runs always gate after the storyboard
+  // (server policy); the provider is the only client-side run knob.
   provider: string;
-  seedKind: SeedKind;
-  seedSize: string;
-  showCaptions: boolean;
-  reviewGates: GateableGenerationStageType[];
 }
 
 /** Initial draft — calm defaults; the empty state seeds goal/length over this. */
@@ -102,10 +97,6 @@ export const EMPTY_BRIEF_DRAFT: BriefDraft = {
   style: "fast-paced social ad",
   callToAction: "",
   provider: "openai",
-  seedKind: "image",
-  seedSize: "1024x1792",
-  showCaptions: true,
-  reviewGates: [],
 };
 
 // --- Flow + step contracts -------------------------------------------------

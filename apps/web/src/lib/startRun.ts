@@ -4,7 +4,6 @@
 // generation run; useStudioFlow.startGeneration() calls it.
 
 import type { AssetKind, VideoBriefInput } from "@popcorn/shared/v1/types";
-import type { CompositionMode } from "@popcorn/shared/v1/types";
 import { inferMobileUploadKind } from "@popcorn/shared/mobile-upload-policy";
 import { v1Api } from "./api-client";
 import { assertGuestRunAllowed, recordGuestRunStarted } from "./guestRunLimit";
@@ -46,14 +45,6 @@ function briefInputFromDraft(draft: BriefDraft): VideoBriefInput {
           }
         : undefined,
   };
-}
-
-/** Prompt-only vs. footage-backed runs map onto composition modes. */
-function compositionModeFromDraft(draft: BriefDraft): CompositionMode {
-  if (draft.footageChoice === "upload") {
-    return "hybrid";
-  }
-  return "prompt_only";
 }
 
 function assetKindForFile(file: File): AssetKind | null {
@@ -156,9 +147,6 @@ export async function createAndStartRun(
     const { runId } = await v1Api.startUploadedFootageGenerationRun(project.id, {
       briefVersionId: briefVersion.id,
       assetIds,
-      mode: compositionModeFromDraft(draft),
-      allowGeneratedGapFill: true,
-      showCaptions: draft.showCaptions,
     });
 
     if (!runId) {
@@ -171,25 +159,10 @@ export async function createAndStartRun(
     return { projectId: project.id, runId };
   }
 
-  const effectiveSeedKind =
-    draft.provider === "gemini" ? "video" : draft.seedKind;
-
   const { runId } = await v1Api.startPromptGenerationRun(project.id, {
     brief,
     ...(briefVersion?.id ? { briefVersionId: briefVersion.id } : {}),
-    mode: compositionModeFromDraft(draft),
-    allowGeneratedGapFill: true,
     provider: draft.provider,
-    showCaptions: draft.showCaptions,
-    seedAsset: {
-      kind: effectiveSeedKind,
-      provider: draft.provider,
-      prompt: draft.goal.trim(),
-      description: draft.goal.trim(),
-      durationSec: effectiveSeedKind === "image" ? 4 : 8,
-      size: draft.seedSize,
-      preflightReviewIterations: 1,
-    },
   });
 
   if (!runId) {
