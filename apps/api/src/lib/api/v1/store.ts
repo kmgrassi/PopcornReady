@@ -176,6 +176,7 @@ import type {
   UpdateActionPatch,
   V1Action,
   V1Asset,
+  V1AssetEmbeddingSource,
   V1AssetAnalysis,
   V1BriefVersion,
   V1Project,
@@ -209,6 +210,7 @@ export type {
   UpdateActionPatch,
   V1Action,
   V1Asset,
+  V1AssetEmbeddingSource,
   V1AssetAnalysis,
   V1BriefVersion,
   V1Project,
@@ -1952,6 +1954,17 @@ function mapAssetRow(row: AssetRow): V1Asset {
   }
   if (row.visibility != null) asset.visibility = row.visibility;
   return asset;
+}
+
+/** Pure raw-row projection used by the embedding worker and boundary tests. */
+export function mapAssetEmbeddingSourceRow(
+  row: AssetRow
+): V1AssetEmbeddingSource {
+  return {
+    ...mapAssetRow(row),
+    graphKind: row.kind,
+    media: row.media,
+  };
 }
 
 async function mapAsset(row: AssetRow): Promise<V1Asset> {
@@ -5663,6 +5676,27 @@ export async function getAsset(
 ): Promise<V1Asset> {
   const db = getServiceSupabase();
   return mapAsset(await getAssetRow(db, workspaceId, projectId, assetId, "getAsset"));
+}
+
+/**
+ * Read the authoritative embedding identity from the persisted asset row.
+ * The public V1 projection intentionally exposes physical media as `kind`, so
+ * embedding code must not use it to reconstruct the semantic graph kind.
+ */
+export async function getAssetEmbeddingSource(
+  workspaceId: string,
+  projectId: string,
+  assetId: string
+): Promise<V1AssetEmbeddingSource> {
+  const db = getServiceSupabase();
+  const row = await getAssetRow(
+    db,
+    workspaceId,
+    projectId,
+    assetId,
+    "getAssetEmbeddingSource"
+  );
+  return mapAssetEmbeddingSourceRow(row);
 }
 
 // Canonicalize a mix of asset uuids and agent-written slugs to uuids. Reads accept

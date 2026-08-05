@@ -2,10 +2,11 @@ import type { Job } from "@popcorn/shared/v1/types";
 import { ApiError } from "../errors";
 import {
   createJob,
-  getAsset,
+  getAssetEmbeddingSource,
   getServiceSupabaseForStore,
   updateJob,
   type V1Asset,
+  type V1AssetEmbeddingSource,
 } from "../store";
 import { assetEmbeddingConfig, type AssetEmbeddingConfig } from "./config";
 import {
@@ -39,6 +40,23 @@ export interface EnqueueAssetEmbeddingOptions {
   startWorker?: boolean;
   provider?: AssetEmbeddingProvider;
   config?: AssetEmbeddingConfig;
+}
+
+type LoadAssetEmbeddingSource = (
+  workspaceId: string,
+  projectId: string,
+  assetId: string
+) => Promise<V1AssetEmbeddingSource>;
+
+export async function loadAssetEmbeddingChunks(
+  input: { workspaceId: string; projectId: string; assetId: string },
+  loadSource: LoadAssetEmbeddingSource = getAssetEmbeddingSource
+): Promise<{
+  asset: V1AssetEmbeddingSource;
+  chunks: AssetEmbeddingSourceChunk[];
+}> {
+  const asset = await loadSource(input.workspaceId, input.projectId, input.assetId);
+  return { asset, chunks: buildAssetEmbeddingSourceChunks(asset) };
 }
 
 function vectorLiteral(values: number[]): string {
@@ -104,11 +122,16 @@ export async function enqueueAssetEmbeddingRefresh(
   options: EnqueueAssetEmbeddingOptions
 ): Promise<Job | null> {
   const config = options.config ?? assetEmbeddingConfig();
-  const chunks = buildAssetEmbeddingSourceChunks(asset);
-  const existing = await existingSourceHashes({ asset, model: config.model });
+  const persisted = await loadAssetEmbeddingChunks({
+    workspaceId: asset.workspaceId,
+    projectId: asset.projectId,
+    assetId: asset.id,
+  });
+  const chunks = persisted.chunks;
+  const existing = await existingSourceHashes({ asset: persisted.asset, model: config.model });
   const staleChunkKeys = staleAssetEmbeddingChunkKeys(existing.keys(), chunks);
   await deleteStaleAssetEmbeddingChunks({
-    asset,
+    asset: persisted.asset,
     model: config.model,
     chunkKeys: staleChunkKeys,
   });
@@ -118,13 +141,13 @@ export async function enqueueAssetEmbeddingRefresh(
   if (changed.length === 0) return null;
 
   const job = await createJob({
-    workspaceId: asset.workspaceId,
-    projectId: asset.projectId,
+    workspaceId: persisted.asset.workspaceId,
+    projectId: persisted.asset.projectId,
     type: "asset_embedding",
     status: "queued",
     payload: {
       schemaVersion: "assetEmbeddingJob.v1",
-      assetId: asset.id,
+      assetId: persisted.asset.id,
       reason: options.reason,
       model: config.model,
       dimensions: config.dimensions,
@@ -135,8 +158,8 @@ export async function enqueueAssetEmbeddingRefresh(
   if (options.startWorker !== false) {
     const provider = options.provider ?? defaultAssetEmbeddingProvider;
     void processAssetEmbeddingJob({
-      workspaceId: asset.workspaceId,
-      projectId: asset.projectId,
+      workspaceId: persisted.asset.workspaceId,
+      projectId: persisted.asset.projectId,
       jobId: job.id,
       provider,
       config,
@@ -178,8 +201,12 @@ export async function processAssetEmbeddingJob(input: {
       model: jobInput.model,
       dimensions: jobInput.dimensions,
     };
-    const asset = await getAsset(input.workspaceId, input.projectId, jobInput.assetId);
-    const chunks = buildAssetEmbeddingSourceChunks(asset);
+    const persisted = await loadAssetEmbeddingChunks({
+      workspaceId: input.workspaceId,
+      projectId: input.projectId,
+      assetId: jobInput.assetId,
+    });
+    const { asset, chunks } = persisted;
     const requestedHashes = new Map(Object.entries(jobInput.sourceHashes));
     const changed = chunks.filter(
       (chunk) => requestedHashes.get(chunk.chunkKey) === chunk.sourceHash
