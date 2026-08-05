@@ -21,6 +21,7 @@ import { InspirationPage } from "./routes/InspirationPage";
 import { LaunchpadPage } from "./routes/LaunchpadPage";
 import { LibraryPage } from "./routes/LibraryPage";
 import { LoginPage } from "./routes/LoginPage";
+import { NotFoundPage } from "./routes/NotFoundPage";
 import { ProjectCreationPage } from "./routes/ProjectCreationPage";
 import { ProjectDetailPage } from "./routes/ProjectDetailPage";
 import { ProjectMediaGalleryPage } from "./routes/ProjectMediaGalleryPage";
@@ -128,7 +129,7 @@ const routeRenderers: Record<AppRouteElementKey, () => JSX.Element> = {
     </AdminRoute>
   ),
   runProgress: () => <RunProgressPage />,
-  notFound: () => <Placeholder name="Not found" />,
+  notFound: () => <NotFoundPage />,
 };
 
 // The pure registry owns every mounted path and its production-test metadata.

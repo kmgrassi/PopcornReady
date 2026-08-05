@@ -8,7 +8,7 @@
 <!-- agent-summary: Async dispatch races require local Supabase concurrency coverage when no safe live completion is available. -->
 <!-- agent-summary: Keep remaining gaps concrete, behavior-focused, and tied to the smallest useful next test. -->
 
-Last reconciled with the active route table: 2026-08-03
+Last reconciled with the active route table: 2026-08-04
 
 This inventory covers the active split app described in `CLAUDE.md`: the Vite
 React SPA in `apps/web` and the Express API in `apps/api`. New end-to-end work
@@ -25,7 +25,10 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
 - `auth-hosted.spec.ts` verifies hosted Supabase login/sign-out when explicit
   credentials and Supabase env are provided.
 - `specs/auth-and-routing.spec.ts` covers public auth routes, protected local
-  routes, compatibility redirects, and not-found behavior.
+  routes, compatibility redirects, the branded not-found recovery page, and
+  delayed workspace bootstrap on direct Library and Activity loads. The
+  direct-load fixture waits for known populated results and proves the routes
+  do not show false empty states while `/me` is pending.
 - `specs/library-collections.spec.ts` covers the shared quick route-loading
   contract on a mobile Library route, including the anti-flash threshold,
   accessible busy status, reduced motion, no horizontal overflow, visible
@@ -63,7 +66,11 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   diagnostics, and response-driven review-gate transitions that clear feedback
   without racing page reloads. They explicitly verify that review feedback and
   generated-asset edits no longer post the retired reject or board-revision
-  mutations. A creator-direct image fixture also verifies one-step asset-ready
+  mutations. Failed-run detail and Dashboard/Activity fixtures also replace the
+  retired failed-stage retry promise with project-scoped Request Changes
+  guidance. A focused recovery-mode unit test preserves the real
+  insufficient-credit continuation as the only guidance when it is available. A
+  creator-direct image fixture also verifies one-step asset-ready
   completion with no Brief, Script, or Storyboard rail, and the project overview
   repeats that assertion for its compact status panel. Hierarchy fixtures
   additionally verify the creator-facing Creative Director with Visuals/Audio
@@ -260,7 +267,11 @@ Covered:
 - Public auth routes render.
 - Local protected routes are reachable.
 - Health JSON works through `/api`.
-- Compatibility redirects and not-found route work.
+- Compatibility redirects and the branded not-found recovery route work at
+  desktop and 390px without horizontal overflow.
+- Direct protected local-mode Library and Activity loads hold their loading state
+  through delayed workspace bootstrap, avoid false empty states, and resolve
+  known fixture data.
 - Local `/me` resolves the deterministic workspace.
 - Hosted Supabase login/sign-out is covered when secrets are supplied.
 

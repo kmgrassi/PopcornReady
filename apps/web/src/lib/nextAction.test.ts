@@ -37,6 +37,8 @@ test("deriveNextAction sends failed dashboard runs to recovery", () => {
   assert.equal(action.ctaLabel, "Review failure");
   assert.equal(action.to, "/projects/project-1/runs/run-1");
   assert.match(action.body, /Cookie launch stopped at Export/);
+  assert.match(action.body, /request changes from the project/i);
+  assert.doesNotMatch(action.body, /retry/i);
 });
 
 test("deriveNextAction does not call unknown failed stages preparing", () => {
@@ -59,7 +61,7 @@ test("deriveNextAction does not call unknown failed stages preparing", () => {
   assert.equal(action.type, "failed_run");
   assert.equal(
     action.body,
-    "Cookie launch stopped. Open the run to see what failed and retry from the failed stage.",
+    "Cookie launch stopped. Open the run to see what stopped, then request changes from the project when you are ready.",
   );
 });
 

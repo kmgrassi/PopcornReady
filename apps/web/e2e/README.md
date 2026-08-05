@@ -22,6 +22,14 @@ The default mode is local auth:
 pnpm --filter @popcorn/web test:e2e
 ```
 
+`specs/auth-and-routing.spec.ts` verifies public authentication routes,
+protected-route compatibility redirects, the branded not-found recovery page,
+and protected local-mode direct loads through a deliberately delayed workspace
+bootstrap. The direct-load case waits for an authoritative populated result on
+Library and Activity, and proves neither route flashes a false empty state while
+`/me` is pending; it does not treat the shared 180ms anti-flash interval as a
+completed request.
+
 `asset-studio-projects.spec.ts`, `asset-studio-review.spec.ts`, and
 `asset-studio-progress.spec.ts` use browser API fixtures to verify the production
 `/create/asset` route, the 30/70 desktop context-to-prompt workspace, responsive
@@ -110,6 +118,13 @@ terminal zero-session fixture prevents canceled production from reverting to
 planning copy and verifies that long run-detail breadcrumbs scroll internally,
 ellipsize linked labels, initially reveal the current location, and remain
 contained at 390px.
+Failed-run fixtures in `dashboard-indeterminate-progress.spec.ts` and
+`run-progress-actions.spec.ts` additionally keep creator recovery copy aligned
+with the object-scoped Request Changes flow and prevent the retired
+failed-stage retry promise from returning. The separate insufficient-credit
+continuation remains implemented because it owns a real recovery mutation;
+unit coverage gives that direct continuation priority over generic Request
+Changes guidance.
 
 `landing-mobile.spec.ts` keeps the mobile landing inside the viewport with a
 tappable primary CTA. `landing-agent-content.spec.ts` protects the landing
