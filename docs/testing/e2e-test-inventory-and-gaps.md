@@ -61,9 +61,10 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   with mocked browser API fixtures, including truthful grouped-tool progress,
   between-action copy, job item/provider activity, progressive local-admin
   diagnostics, and response-driven review-gate transitions that clear feedback
-  without racing page reloads. They explicitly verify that review feedback and
-  generated-asset edits no longer post the retired reject or board-revision
-  mutations. A creator-direct image fixture also verifies one-step asset-ready
+  without racing page reloads. Script review specifically verifies the
+  authoritative draft, the no-media-before-approval explanation, and the
+  text-only reject/rewrite action; other review feedback and generated-asset
+  edits do not post retired reject or board-revision mutations. A creator-direct image fixture also verifies one-step asset-ready
   completion with no Brief, Script, or Storyboard rail, and the project overview
   repeats that assertion for its compact status panel. Hierarchy fixtures
   additionally verify the creator-facing Creative Director with Visuals/Audio
@@ -112,6 +113,9 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   a ready beat card visual while disclosing its generation prompt only in the
   exact-target Request Changes dialog, and exposes **Generate video** at a
   storyboard-review stop before production media can continue.
+- `creation-entry-points.spec.ts` verifies the full-video intake can start from
+  either an idea or a pasted script, requires the selected starting material,
+  explains the text-only script boundary, and stays overflow-free on mobile.
 - `storyboard-orchestration.spec.ts` verifies desktop and mobile project
   overviews explain automatic scene-and-moment planning, start the
   storyboard-specific orchestrator entrypoint, navigate to its run, replace a

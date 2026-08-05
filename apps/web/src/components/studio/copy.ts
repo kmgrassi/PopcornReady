@@ -8,7 +8,7 @@ export const studioCopy = {
   brief: {
     heading: "What are we making?",
     description:
-      "Describe the outcome, audience, and message. You can keep it rough - the next steps will refine the footage, story, and plan.",
+      "Start with an idea or bring a script. We’ll stop on the script for your approval before creating any media.",
     goalLabel: "Video idea",
     goalPlaceholder:
       "Make a 60-second launch video for Popcorn Ready showing how raw clips become a polished movie trailer.",

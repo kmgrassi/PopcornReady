@@ -103,7 +103,7 @@ test("makes an unexpected terminal success without video a terminal partial fail
   assert.equal(payload.resultArtifacts?.length, 0);
 });
 
-test("every initial run stops after a complete storyboard", () => {
+test("every initial run stops for script review before storyboard review", () => {
   assert.deepEqual(stopAfterTools({}), []);
   assert.deepEqual(stopAfterTools({ runThrough: true }), []);
   assert.deepEqual(stopAfterTools({ runThrough: false }), ["generate_storyboard"]);
@@ -111,17 +111,17 @@ test("every initial run stops after a complete storyboard", () => {
   assert.deepEqual(stopAfterTools({ runThrough: true, stopAfter: "storyboard" }), [
     "generate_storyboard",
   ]);
-  assert.deepEqual(initialRunStopAfterTools({}), ["generate_storyboard"]);
-  assert.deepEqual(initialRunStopAfterTools({ runThrough: true }), ["generate_storyboard"]);
-  assert.deepEqual(initialRunStopAfterTools({ stopAfter: "brief_intake" }), ["generate_storyboard"]);
-  assert.deepEqual(initialRunStopAfterTools({ stopAfter: "creative_plan" }), ["generate_storyboard"]);
-  assert.deepEqual(initialRunStopAfterTools({ stopAfter: "asset_generation" }), ["generate_storyboard"]);
+  assert.deepEqual(initialRunStopAfterTools({}), ["draft_script", "generate_storyboard"]);
+  assert.deepEqual(initialRunStopAfterTools({ runThrough: true }), ["draft_script", "generate_storyboard"]);
+  assert.deepEqual(initialRunStopAfterTools({ stopAfter: "brief_intake" }), ["draft_script", "generate_storyboard"]);
+  assert.deepEqual(initialRunStopAfterTools({ stopAfter: "creative_plan" }), ["draft_script", "generate_storyboard"]);
+  assert.deepEqual(initialRunStopAfterTools({ stopAfter: "asset_generation" }), ["draft_script", "generate_storyboard"]);
   assert.deepEqual(
     initialRunGates({
       reviewGates: ["brief_intake", "creative_plan", "asset_generation"],
       stopAfter: "creative_plan",
     }),
-    ["after:generate_storyboard"],
+    ["after:draft_script", "after:generate_storyboard"],
   );
 });
 
@@ -292,7 +292,7 @@ test("storyboard entrypoint creates a storyboard-bounded run from the active bri
 
   assert.equal(result.status, 202);
   assert.deepEqual(result.body, { runId: "run_storyboard", reused: false });
-  assert.deepEqual(createdInput?.gates, ["after:generate_storyboard"]);
+  assert.deepEqual(createdInput?.gates, ["after:draft_script", "after:generate_storyboard"]);
   assert.equal(createdInput?.entrypoint, "storyboard");
   assert.equal(createdInput?.idempotencyKey, "storyboard-request-1");
   assert.match(String(createdInput?.inputSummary), /scene-and-moment planning/i);

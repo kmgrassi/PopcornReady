@@ -21,6 +21,7 @@ import {
   deletePublicProjectAsAdmin,
   forkPublicProject,
   getProject,
+  getActiveProjectScriptDraft,
   getProjectWatchMedia,
   listProjects,
   recordProjectActivity,
@@ -29,8 +30,8 @@ import {
 } from "@/lib/api/v1/store";
 import { buildUserScopedSupabase } from "@/lib/supabase/clients";
 import { generatePoster } from "@/lib/api/v1/poster-generation";
-import { startPosterGenerationInBackground } from "@/lib/api/v1/poster-background";
 import { getStoryboard, putStoryboard } from "@/lib/api/v1/storyboard";
+import { requireApprovedScriptForProjectMedia } from "@/lib/api/v1/project-media-boundary";
 
 export const projectsRouter = Router();
 
@@ -107,11 +108,6 @@ projectsRouter.post(
     const { project, briefVersion } = await createProject(
       projectCreationParams(auth.workspaceId, input),
     );
-    if (briefVersion) {
-      startPosterGenerationInBackground(auth, project.id, {
-        provider: input.posterProvider,
-      });
-    }
     return {
       status: 201,
       body: {
@@ -131,6 +127,18 @@ projectsRouter.get(
     await recordProjectActivity(auth.workspaceId, params.projectId);
     const project = await getProject(auth.workspaceId, params.projectId);
     return { status: 200, body: { project } };
+  })
+);
+
+projectsRouter.get(
+  "/projects/:projectId/script",
+  route(async ({ auth }, params) => {
+    if (!params.projectId) {
+      throw new ApiError("validation_failed", "projectId is required.");
+    }
+    await getProject(auth.workspaceId, params.projectId);
+    const script = await getActiveProjectScriptDraft(params.projectId);
+    return { status: 200, body: { script }, headers: { "Cache-Control": "no-store" } };
   })
 );
 
@@ -215,6 +223,7 @@ projectsRouter.post(
       body && typeof body === "object" && !Array.isArray(body)
         ? (body as Record<string, unknown>)
         : {};
+    await requireApprovedScriptForProjectMedia(auth.workspaceId, params.projectId);
     const result = await generatePoster(auth, params.projectId, {
       force: record.force === true,
       provider: typeof record.provider === "string" ? record.provider : undefined,

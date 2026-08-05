@@ -41,6 +41,7 @@ export type Platform = NonNullable<StoryContext["platform"]>;
 export type StoryFormat = NonNullable<StoryContext["format"]>;
 export type FootageChoice = "prompt_only" | "upload";
 export type FootageMode = "asset_driven" | "hybrid";
+export type StudioStartSource = "idea" | "script";
 
 /**
  * BriefDraft — the superset of every step's fields, accumulated across the
@@ -49,6 +50,10 @@ export type FootageMode = "asset_driven" | "hybrid";
  * contract stays one object.
  */
 export interface BriefDraft {
+  // Starting material. Supplied script text is an intake input; persisted script
+  // versions are reviewed read-only and revised through the agent.
+  startSource: StudioStartSource;
+  scriptText: string;
   // Brief (step 1) — the < 5 visible controls.
   goal: string;
   targetLengthSec: number;
@@ -79,6 +84,8 @@ export interface BriefDraft {
 
 /** Initial draft — calm defaults; the empty state seeds goal/length over this. */
 export const EMPTY_BRIEF_DRAFT: BriefDraft = {
+  startSource: "idea",
+  scriptText: "",
   goal: "",
   targetLengthSec: 30,
   aspectRatio: "9:16",
@@ -98,6 +105,14 @@ export const EMPTY_BRIEF_DRAFT: BriefDraft = {
   callToAction: "",
   provider: "openai",
 };
+
+export function hasStudioStartingMaterial(
+  draft: Pick<BriefDraft, "startSource" | "goal" | "scriptText">
+): boolean {
+  return draft.startSource === "script"
+    ? Boolean(draft.scriptText.trim())
+    : Boolean(draft.goal.trim());
+}
 
 // --- Flow + step contracts -------------------------------------------------
 
