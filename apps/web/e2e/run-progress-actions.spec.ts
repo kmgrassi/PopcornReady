@@ -157,6 +157,8 @@ test.describe("run progress actions", () => {
     await page.goto(`/projects/${e2eProjectId}/runs/${failed.run.runId}`);
     await expect(page.getByText("Generation failed", { exact: true })).toBeVisible();
     await expect(page.getByText("Continuity check failed.")).toBeVisible();
+    await expect(page.getByText("Open the project to request changes.")).toBeVisible();
+    await expect(page.getByText(/stage can be retried/i)).toHaveCount(0);
 
     const succeeded = makeRunDetail("run-succeeded", {
       status: "succeeded",

@@ -37,6 +37,11 @@ test("production build emits release identity and excludes development routes", 
 
   await mockLocalApi(page);
   await page.goto("/dev/design-system");
-  await expect(page.getByRole("heading", { name: "Popcorn Ready" })).toBeVisible();
-  await expect(page.locator("body")).toContainText("Not found");
+  const notFound = page.getByRole("region", { name: "That page isn’t here." });
+  await expect(notFound).toBeVisible();
+  await expect(notFound.getByRole("link", { name: "Go to homepage" })).toHaveAttribute(
+    "href",
+    "/",
+  );
+  await expect(page.getByText(/migrating from Next/i)).toHaveCount(0);
 });

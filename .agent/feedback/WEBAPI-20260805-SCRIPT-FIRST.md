@@ -44,3 +44,6 @@ either rule can hide the active review and allow a duplicate root run.
   gate, root run, active project pointer, and exact script draft together.
 - Preserve separate script and storyboard review stops when adding future
   creator checkpoints; terminal run status alone must not hide an active gate.
+- When merging test inventories, keep the dedicated script-gate reject action
+  as an explicit exception to the broader rule that media feedback uses durable
+  Request Changes proposals.

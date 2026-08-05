@@ -70,6 +70,12 @@
   Script revision/fail-closed review — 4 pass in the same projects.
 - PR review regressions — 42 focused API tests pass; Project Detail script-review
   behavior passes in desktop Chromium and mobile Chrome.
+- Merge-conflict regression — merged `origin/main` at `9ad8fb2d`, preserving
+  both script-first coverage and production routing/recovery coverage. The
+  post-merge API selection passes 119 tests, the focused browser selection
+  passes 67 tests across Chromium and mobile Chrome, the new recovery unit
+  selection passes 8 tests, the production-build routing smoke passes, and
+  `pnpm agent:validate -- --scope all` completes successfully.
 - `pnpm db:migrations:validate`, migration tests, RPC-boundary validation, and
   relation-boundary validation — pass. Local Supabase status completed without
   a configured service to exercise the concurrency integration path.
@@ -103,6 +109,10 @@
   actionable Project Detail review link.
 - Implementation and wrap-up re-reviews found no remaining release blockers;
   final `pnpm agent:validate -- --scope all` passed.
+- Merge research confirmed that only the two E2E documentation inventories
+  overlapped; all implementation changes were disjoint. The resolved inventory
+  keeps the script `/reject` exception scoped to script review while retaining
+  main's project-scoped failed-run recovery and real credit continuation.
 
 ## Blockers and risks
 
@@ -112,5 +122,5 @@
 
 ## Next action / handoff
 
-- Validate, commit, and push the PR review fixes; leave GitHub thread replies and
-  resolution to an explicitly authorized follow-up.
+- Commit the validated merge and push the existing PR; leave GitHub thread
+  replies and resolution to an explicitly authorized follow-up.
