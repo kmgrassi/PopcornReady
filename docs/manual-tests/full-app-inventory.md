@@ -231,8 +231,9 @@ recovery.
 - Verify the empty or low-data state has clear next actions.
 - Verify whether the authenticated shell exposes the intended creation CTA:
   - Target behavior: `Create` should open `/create`, where Full video leads to
-    `/projects/new` and Project asset leads to `/create/asset`.
-  - Asset Studio defaults to Image with Video/Soundtrack available alongside it.
+    `/projects/new` and Asset or script leads to `/create/asset`.
+  - Asset Studio defaults to Image with Video, Audio, and Script available
+    alongside it; Script starts a new Creative Director project.
   - Library remains available as a separate sidebar menu item.
 - If the workspace has active runs or recent outputs, verify counts and cards
   match the project/run/output links they open.

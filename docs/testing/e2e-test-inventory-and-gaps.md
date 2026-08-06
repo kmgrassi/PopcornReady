@@ -245,9 +245,12 @@ Authenticated routes:
 Retired route note: `/studio` is not mounted in the current Vite route table.
 Standalone Image, Video, and Audio creation enters through the authenticated
 shell plus Dashboard, Activity, and Library **Create** actions, then the `/create`
-intent launcher and `/create/asset` workspace. Full video-project creation
-remains distinct through the launcher's Full video choice, explicit video
-actions, the landing prompt, and `/projects/new`.
+intent launcher and `/create/asset` workspace. That workspace also exposes a
+Script entry that transfers a validated, URL-private story prompt into a new
+Creative Director project at `/projects/new`; it does not submit a standalone
+media proposal or start generation during the handoff. Full video-project
+creation remains distinct through the launcher's Full video choice, explicit
+video actions, the landing prompt, the Script handoff, and `/projects/new`.
 
 Dashboard creation note: global Create actions open the intent launcher. Create
 owns active navigation through `/create`, `/create/asset`, `/create/review`, and
@@ -366,8 +369,10 @@ Covered:
 
 - The authenticated global Create action opens the `/create` intent launcher.
 - Dashboard, Activity, populated/empty Library, desktop shell, and mobile shell
-  use that launcher; its Full video and Project asset choices lead to
+  use that launcher; its Full video and Asset or script choices lead to
   `/projects/new` and `/create/asset` while Create retains navigation ownership.
+- Script is named at the launcher, hands validated URL-private intent to a new
+  Creative Director project, and ignores delayed draft persistence after Back.
 - Legacy asset-status query links and validated `/create` draft-history entries
   redirect to `/create/asset` without losing their state.
 - Desktop creation uses a roughly 30/70 project/media context-to-prompt layout;

@@ -143,6 +143,14 @@
   line-height: var(--line-body);
 }
 
+.scriptProjectHint {
+  max-width: 38ch;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--line-body);
+}
+
 .selectedProject {
   display: grid;
   grid-template-columns: 72px minmax(0, 1fr);
@@ -435,6 +443,14 @@
   opacity: 1;
 }
 
+.promptHelp {
+  max-width: 70ch;
+  padding: 0 var(--space-5) var(--space-4);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--line-body);
+}
+
 .enhancementControl {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -552,7 +568,7 @@
   }
 
   .mediaTypes {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .mediaType {
@@ -603,6 +619,10 @@
 
   .mediaType strong {
     font-size: var(--text-sm);
+  }
+
+  .promptHelp {
+    padding: 0 var(--space-4) var(--space-4);
   }
 
   .projectContext {

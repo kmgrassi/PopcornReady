@@ -52,14 +52,14 @@ export function CreateLauncherPage() {
 
         <article className={styles.projectAsset}>
           <div className={styles.optionCopy}>
-            <h2>Project asset</h2>
+            <h2>Asset or script</h2>
             <p>
-              Make one image, short video, or audio asset for a new or existing
-              project.
+              Make one image, short video, or audio asset—or start a text-first
+              script for a new video project.
             </p>
           </div>
           <ButtonLink variant="secondary" size="lg" to="/create/asset">
-            Create an asset
+            Create an asset or script
           </ButtonLink>
         </article>
       </section>

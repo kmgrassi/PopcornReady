@@ -31,16 +31,23 @@ import {
   useProjectQuery,
 } from "../lib/queryClient";
 import { RecentProjectSwitcher } from "./create/RecentProjectSwitcher";
+import {
+  SCRIPT_CREATION_PROMPT_MAX_LENGTH,
+  scriptCreationHandoffState,
+} from "../lib/scriptCreationHandoff";
 import styles from "./StandaloneCreationPage.module.css";
 
+type CreationChoice = CreationGoal | "script";
+
 const goals: Array<{
-  value: CreationGoal;
+  value: CreationChoice;
   label: string;
   description: string;
 }> = [
   { value: "image", label: "Image", description: "A still visual for this project." },
   { value: "video", label: "Video", description: "A short motion asset for this project." },
   { value: "soundtrack", label: "Audio", description: "Music or sound for this project." },
+  { value: "script", label: "Script", description: "A text-first draft for a new video project." },
 ];
 
 type StatusPresentation = CreationStatusPresentation & {
@@ -291,11 +298,12 @@ export function StandaloneCreationPage() {
     !listedProjects.some((project) => project.id === recentProject.id)
       ? [recentProject, ...listedProjects]
       : listedProjects;
-  const [goal, setGoal] = useState<CreationGoal>(returnedDraft?.goal ?? "image");
+  const [goal, setGoal] = useState<CreationChoice>(returnedDraft?.goal ?? "image");
   const [projectId, setProjectId] = useState(
     returnedDraft?.projectId ?? params.get("projectId") ?? "",
   );
   const [prompt, setPrompt] = useState(returnedDraft?.prompt ?? "");
+  const [scriptPrompt, setScriptPrompt] = useState("");
   const [improveImagePrompt, setImproveImagePrompt] = useState(
     returnedDraft?.goal === "image" ? returnedDraft.improvePrompt : true,
   );
@@ -447,10 +455,17 @@ export function StandaloneCreationPage() {
     setProjectId(nextProjectId);
     resetProposal();
   };
-  const canPropose = Boolean(prompt.trim());
+  const activePrompt = goal === "script" ? scriptPrompt : prompt;
+  const canPropose = Boolean(activePrompt.trim());
 
   async function startReview() {
     if (!canPropose || createProject.isPending || reviewAttemptRef.current) return;
+    if (goal === "script") {
+      navigate("/projects/new", {
+        state: scriptCreationHandoffState(scriptPrompt),
+      });
+      return;
+    }
     reviewAttemptRef.current = true;
     const lifecycle = pageLifecycleRef.current;
     setAutoProjectError(null);
@@ -502,18 +517,20 @@ export function StandaloneCreationPage() {
 
   return (
     <main className={styles.page}>
-      <RecentProjectSwitcher
-        projects={projects}
-        selectedProjectId={projectId}
-        loading={projectsQuery.isLoading}
-        disabled={isAutoCreatingProject}
-        onSelect={selectProject}
-      />
+      {goal !== "script" ? (
+        <RecentProjectSwitcher
+          projects={projects}
+          selectedProjectId={projectId}
+          loading={projectsQuery.isLoading}
+          disabled={isAutoCreatingProject}
+          onSelect={selectProject}
+        />
+      ) : null}
 
       <div className={styles.workspace}>
         <aside className={styles.contextRail} aria-label="Creation context">
           <fieldset className={styles.mediaTypes}>
-            <legend>Media type</legend>
+            <legend>Creation type</legend>
             {goals.map(({ value, label, description }) => (
               <label className={styles.mediaType} key={value}>
                 <input
@@ -537,65 +554,90 @@ export function StandaloneCreationPage() {
           </fieldset>
 
           <section className={styles.projectContext} aria-labelledby="project-context-heading">
-            <h2 id="project-context-heading">Project</h2>
-            <ProjectPicker
-              projects={projects}
-              value={projectId}
-              selectedName={selectedName}
-              isLoading={projectsQuery.isLoading}
-              error={projectsQuery.data ? null : projectsQuery.error}
-              loadMoreError={
-                projectsQuery.isFetchNextPageError ? projectsQuery.error : null
-              }
-              hasNextPage={Boolean(projectsQuery.hasNextPage)}
-              isFetchingNextPage={projectsQuery.isFetchingNextPage}
-              isCreating={createProject.isPending}
-              disabled={isAutoCreatingProject}
-              createError={createProject.error}
-              onChange={selectProject}
-              onCreate={async (name) =>
-                (await createProject.mutateAsync({ name })).project
-              }
-              onResetCreateError={createProject.reset}
-              onLoadMore={() => void projectsQuery.fetchNextPage()}
-              onRetry={() => void projectsQuery.refetch()}
-            />
-            {!projectId ? (
-              <p className={styles.projectHint}>
-                Optional — we’ll create and name one when you review.
+            <h2 id="project-context-heading">
+              {goal === "script" ? "Script project" : "Project"}
+            </h2>
+            {goal === "script" ? (
+              <p className={styles.scriptProjectHint} role="status">
+                The Creative Director will start a new video project, write a
+                text-only script, and stop for your review before making media.
               </p>
-            ) : null}
-            {selectedProject ? <SelectedProjectContext project={selectedProject} /> : null}
+            ) : (
+              <>
+                <ProjectPicker
+                  projects={projects}
+                  value={projectId}
+                  selectedName={selectedName}
+                  isLoading={projectsQuery.isLoading}
+                  error={projectsQuery.data ? null : projectsQuery.error}
+                  loadMoreError={
+                    projectsQuery.isFetchNextPageError ? projectsQuery.error : null
+                  }
+                  hasNextPage={Boolean(projectsQuery.hasNextPage)}
+                  isFetchingNextPage={projectsQuery.isFetchingNextPage}
+                  isCreating={createProject.isPending}
+                  disabled={isAutoCreatingProject}
+                  createError={createProject.error}
+                  onChange={selectProject}
+                  onCreate={async (name) =>
+                    (await createProject.mutateAsync({ name })).project
+                  }
+                  onResetCreateError={createProject.reset}
+                  onLoadMore={() => void projectsQuery.fetchNextPage()}
+                  onRetry={() => void projectsQuery.refetch()}
+                />
+                {!projectId ? (
+                  <p className={styles.projectHint}>
+                    Optional — we’ll create and name one when you review.
+                  </p>
+                ) : null}
+                {selectedProject ? <SelectedProjectContext project={selectedProject} /> : null}
+              </>
+            )}
           </section>
         </aside>
 
         <section className={styles.canvas} aria-label="Creation prompt">
           <header className={styles.header}>
-            <h1>Create</h1>
+            <h1>{goal === "script" ? "Create a script" : "Create"}</h1>
             <p>
-              Describe the result, then review the exact request before generation.
-              If untouched, generation starts 10 seconds after the proposal is ready.
+              {goal === "script"
+                ? "Describe the story you want to tell. You’ll choose its length and direction before the Creative Director writes the first draft."
+                : "Describe the result, then review the exact request before generation. If untouched, generation starts 10 seconds after the proposal is ready."}
             </p>
           </header>
 
           <label className={styles.promptField}>
-            <span>Describe the result</span>
+            <span>{goal === "script" ? "Describe the script" : "Describe the result"}</span>
             <textarea
-              value={prompt}
+              value={activePrompt}
+              maxLength={goal === "script" ? SCRIPT_CREATION_PROMPT_MAX_LENGTH : undefined}
               disabled={isAutoCreatingProject}
               onChange={(event) => {
                 setAutoProjectError(null);
-                setPrompt(event.target.value);
+                if (goal === "script") {
+                  setScriptPrompt(event.target.value);
+                } else {
+                  setPrompt(event.target.value);
+                }
                 resetProposal();
               }}
               placeholder={
-                goal === "video"
+                goal === "script"
+                  ? "A sharp 30-second founder story about turning a rough idea into a finished video"
+                  : goal === "video"
                   ? "A cyclist crossing a rain-slick street as the camera holds still"
                   : goal === "soundtrack"
                     ? "Sparse brushed percussion building to a warm final chord"
                     : "A quiet amber-lit close-up of popcorn falling into a bowl"
               }
             />
+            {goal === "script" ? (
+              <small className={styles.promptHelp}>
+                This starts a new video project and stops at script review. Approving
+                the script later continues into storyboard and production.
+              </small>
+            ) : null}
           </label>
 
           {goal === "image" || goal === "video" ? (
@@ -637,7 +679,11 @@ export function StandaloneCreationPage() {
               isLoading={isAutoCreatingProject}
               onClick={() => void startReview()}
             >
-              {isAutoCreatingProject ? "Creating project…" : "Review request"}
+              {isAutoCreatingProject
+                ? "Creating project…"
+                : goal === "script"
+                  ? "Continue to script brief"
+                  : "Review request"}
             </Button>
           </div>
         </section>
@@ -681,7 +727,7 @@ function SelectedProjectContext({ project }: { project: V1Project }) {
   );
 }
 
-function CreationTypeIcon({ goal }: { goal: CreationGoal }) {
+function CreationTypeIcon({ goal }: { goal: CreationChoice }) {
   if (goal === "image") {
     return (
       <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -696,6 +742,14 @@ function CreationTypeIcon({ goal }: { goal: CreationGoal }) {
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <rect x="3" y="4" width="18" height="16" rx="3" />
         <path d="m10 9 5 3-5 3Z" />
+      </svg>
+    );
+  }
+  if (goal === "script") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M6 3h9l3 3v15H6Z" />
+        <path d="M15 3v4h4M9 11h6M9 15h6" />
       </svg>
     );
   }
