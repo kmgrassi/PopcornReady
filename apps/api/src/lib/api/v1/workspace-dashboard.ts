@@ -5,6 +5,7 @@ import {
 } from "@popcorn/shared/v1/types";
 import type { AgentApiStore } from "../../agent-api/jobs";
 import type { OrchestratorRun, OrchestratorRunGate } from "./orchestrator-store";
+import { orchestratorRunPresentationKind } from "./orchestrator-presentation-kind";
 import { paginate, type PageResult } from "./pagination";
 
 export interface WorkspaceProjectRef {
@@ -90,6 +91,7 @@ function mapOrchestratorSummary(
       : undefined,
     reviewGate,
     currentStageType: reviewGate?.stageType,
+    presentationKind: orchestratorRunPresentationKind(run),
   };
 }
 

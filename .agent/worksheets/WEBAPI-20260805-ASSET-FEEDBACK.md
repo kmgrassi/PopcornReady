@@ -95,6 +95,15 @@
   narration/dialogue, and succeeded-only progress feedback.
 - Review-fix `pnpm agent:lint:fix`, `git diff --check`, and
   `pnpm agent:validate -- --scope all` passed for the 20-file change set.
+- After the review-fix push, `origin/main` advanced through PRs #895 and #896.
+  Merge resolution preserved the request-client critique functions in the core
+  store, moved `canReceiveFeedback` into main's extracted
+  `store-asset-discovery.ts`, combined Project Detail's authoritative-script and
+  ready-asset imports, and taught the new project-upload browser fixture about
+  the authoritative null-script response.
+- Post-merge API/web typechecks passed. Fifteen focused API tests, four focused
+  web unit tests, and 32 Chromium tests across Library, run progress, and project
+  upload passed.
 - Local Vite app and provider-free mock API started successfully. The in-app
   browser reached `/projects/proj-alpha/script`, after which its URL security
   policy blocked all further local-page inspection. Per policy, no alternate
@@ -148,6 +157,11 @@
   matched stage items there, while unmatched persisted panels require
   `ready`/`approved`; expanded browser coverage exercises succeeded, running,
   and failed generic and board items. Re-review found no remaining P1/P2 blocker.
+- Independent merge/wrap-up review confirmed the extracted store retained every
+  request-scoped critique dependency, the discovery re-export carries feedback
+  eligibility, Project Detail keeps both authoritative-script and ready-asset
+  behavior, and the new fixture closes the null-script boundary. No P1/P2 merge
+  blocker or unresolved marker remained.
 
 ## Blockers and risks
 
@@ -159,4 +173,4 @@
 
 ## Next action / handoff
 
-- Commit and push the validated review fixes to PR #897.
+- Commit and push the validated main reconciliation to PR #897.

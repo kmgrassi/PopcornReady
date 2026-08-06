@@ -231,6 +231,11 @@ The GET form returns `{ "run": GenerationRun | null }` for only the latest run
 that owns this boundary. It is the lightweight polling contract for project
 overview state and does not load full run history, actions, or asset metadata.
 
+Workspace generation-run summaries preserve `presentationKind` for
+creator-direct standalone image, video, and audio work. Project and Activity
+surfaces use that discriminator to fetch the exact run detail and saved asset;
+Creative Director production summaries leave it unset.
+
 ### Assets
 
 - `POST /api/v1/projects/:projectId/assets`

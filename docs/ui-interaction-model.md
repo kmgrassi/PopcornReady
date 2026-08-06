@@ -83,6 +83,10 @@ previews use their stable asset identity to open the canonical Library asset
 viewer. In project media, that inspection link remains separate from selecting
 an asset for a new creation intent, and returning from inspection restores the
 in-progress selection and intent rather than discarding the creator's draft.
+Project overviews also keep the latest ready standalone-run asset directly
+viewable through that canonical viewer, even when later run bookkeeping fails or
+a newer full-video run becomes active. A playable final output still owns the
+primary Watch action; otherwise the ready standalone asset becomes the next step.
 Dedicated storyboard and run-review surfaces
 keep their object-scoped Request Changes interaction instead, and public shared
 projects do not link into an authenticated workspace library.

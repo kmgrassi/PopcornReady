@@ -19,6 +19,7 @@ import {
   type OrchestratorRunGate,
   type RunActionSummary,
 } from "@/lib/api/v1/orchestrator-store";
+import { orchestratorRunPresentationKind } from "@/lib/api/v1/orchestrator-presentation-kind";
 import {
   getToolCapability,
   isToolName,
@@ -85,20 +86,6 @@ function generationActions(actions: RunActionSummary[]): RunActionSummary[] {
 
 function operatorDiagnosticActions(actions: RunActionSummary[]): RunActionSummary[] {
   return actions.filter((action) => !CREATOR_HIDDEN_ACTION_TOOLS.has(action.tool));
-}
-
-function presentationKind(
-  run: OrchestratorRun
-): GenerationRun["presentationKind"] {
-  if (run.originKind !== "creator_direct") return undefined;
-  if (run.taskKind === "image_create") return "standalone_image";
-  if (run.taskKind === "video_create" || run.taskKind === "video_edit") {
-    return "standalone_video";
-  }
-  if (run.taskKind === "soundtrack_create" || run.taskKind === "audio_create") {
-    return "standalone_audio";
-  }
-  return undefined;
 }
 
 export function toolStage(tool: string): GenerationStageType | undefined {
@@ -276,7 +263,7 @@ function hasReadyStandaloneAsset(
   actions: RunActionSummary[],
   assets: ReadonlyMap<string, RunAssetPrompt>
 ): boolean {
-  const kind = presentationKind(run);
+  const kind = orchestratorRunPresentationKind(run);
   if (!kind) return false;
   const expectedKind = kind === "standalone_image"
     ? "image"
@@ -300,7 +287,7 @@ function projectedRunStatus(
   assets: ReadonlyMap<string, RunAssetPrompt>
 ): GenerationRunStatus {
   if (run.status !== "succeeded") return runStatus(run.status);
-  if (presentationKind(run)) {
+  if (orchestratorRunPresentationKind(run)) {
     return hasReadyStandaloneAsset(run, actions, assets) ? "succeeded" : "failed";
   }
   if (hasFinishedVideo(actions, assets)) return "succeeded";
@@ -562,7 +549,7 @@ export function projectRun(
     projectId: run.projectId,
     status,
     completionKind: completionKind(run, gates, actions, assets),
-    presentationKind: presentationKind(run),
+    presentationKind: orchestratorRunPresentationKind(run),
     storyboardBoundaryStatus: storyboardBoundaryStatus(gates),
     activityState,
     currentToolName: latestRunningAction?.tool,
@@ -584,10 +571,10 @@ export function projectRun(
     error:
       status === "failed" && run.status === "succeeded"
         ? {
-            code: presentationKind(run)
+            code: orchestratorRunPresentationKind(run)
               ? "missing_asset_output"
               : "missing_video_output",
-            message: presentationKind(run)
+            message: orchestratorRunPresentationKind(run)
               ? "Run ended; no ready standalone asset was created."
               : "Run ended; no playable video was created.",
             retryable: true,
@@ -719,7 +706,7 @@ function projectStageItems(
         itemId: `${action.id}:${assetId}`,
         stageId: toolStageId(run.id, action.tool),
         kind: toolItemKind(action.tool),
-        purpose: toolItemPurpose(action.tool, presentationKind(run)),
+        purpose: toolItemPurpose(action.tool, orchestratorRunPresentationKind(run)),
         label: `${action.tool} output ${index + 1}`,
         status,
         ...(prompt ? { prompt, promptPreview: promptPreview(prompt) } : {}),
