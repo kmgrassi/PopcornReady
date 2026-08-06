@@ -616,6 +616,7 @@ export type GenerationRunActivityState =
 export type GenerationStageType =
   | "brief_intake"
   | "creative_plan"
+  | "script"
   | "storyboard"
   | "asset_generation"
   | "audio_generation"
@@ -629,6 +630,7 @@ export type GenerationStageType =
 export const GATEABLE_GENERATION_STAGE_TYPES = [
   "brief_intake",
   "creative_plan",
+  "script",
   "storyboard",
   "asset_generation",
   "audio_generation",
@@ -829,18 +831,20 @@ export interface BoardRevisionTarget {
 export const GENERATION_STAGE_ORDER: Record<GenerationStageType, number> = {
   brief_intake: 0,
   creative_plan: 1,
-  storyboard: 2,
-  asset_generation: 3,
-  audio_generation: 4,
-  timeline_assembly: 5,
-  quality_review: 6,
-  export: 7,
-  ready: 8,
+  script: 2,
+  storyboard: 3,
+  asset_generation: 4,
+  audio_generation: 5,
+  timeline_assembly: 6,
+  quality_review: 7,
+  export: 8,
+  ready: 9,
 };
 
 export const GENERATION_STAGE_LABELS: Record<GenerationStageType, string> = {
   brief_intake: "Brief",
   creative_plan: "Plan",
+  script: "Script",
   storyboard: "Storyboard",
   asset_generation: "Visuals",
   audio_generation: "Audio",

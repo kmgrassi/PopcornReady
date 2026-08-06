@@ -14,6 +14,7 @@ import { STEP_LABELS, StudioStepper } from "./StudioStepper";
 import { buildChecklistItems } from "./statusChecklist";
 import {
   EMPTY_BRIEF_DRAFT,
+  hasStudioStartingMaterial,
   STUDIO_SETUP_STEPS,
   STUDIO_STEPS,
   useStudioFlow,
@@ -279,7 +280,11 @@ export function StudioShell({
     if (newDraftRequest) return;
     if (activeDraftId || autoStartRequestedRef.current) return;
     autoStartRequestedRef.current = true;
-    if (seededBrief.goal?.trim()) {
+    if (
+      seededBrief.startSource === "script"
+        ? seededBrief.scriptText?.trim()
+        : seededBrief.goal?.trim()
+    ) {
       void createPersistedDraft(initialStep ?? "brief");
     } else {
       startUnsavedDraft(initialStep ?? "brief");
@@ -292,6 +297,8 @@ export function StudioShell({
     initialStep,
     newDraftRequest,
     seededBrief.goal,
+    seededBrief.scriptText,
+    seededBrief.startSource,
     startUnsavedDraft,
   ]);
 
@@ -412,7 +419,7 @@ function StudioFlowView({
   // survive a refresh before the first step advance. After the draft record is
   // adopted, useStudioFlow's own debounced persistDraft takes over.
   useEffect(() => {
-    if (draftId !== LOCAL_DRAFT_ID || !flow.brief.goal.trim()) return;
+    if (draftId !== LOCAL_DRAFT_ID || !hasStudioStartingMaterial(flow.brief)) return;
     const timer = window.setTimeout(() => {
       void onPersistLocalDraft(briefRef.current, flow.step);
     }, LOCAL_DRAFT_AUTOSAVE_DELAY_MS);
@@ -436,7 +443,7 @@ function StudioFlowView({
   const guardedGoToStep = useCallback(
     (nextStep: StudioStep) => {
       if (draftId === LOCAL_DRAFT_ID && nextStep !== "brief") {
-        if (!briefRef.current.goal.trim()) {
+        if (!hasStudioStartingMaterial(briefRef.current)) {
           flow.goTo("brief");
           return;
         }
@@ -482,7 +489,11 @@ function StudioFlowView({
   );
 
   useEffect(() => {
-    if (flow.state !== "initial" || flow.step !== "plan" || flow.brief.goal.trim()) return;
+    if (
+      flow.state !== "initial" ||
+      flow.step !== "plan" ||
+      hasStudioStartingMaterial(flow.brief)
+    ) return;
     flow.goTo("brief");
   }, [flow]);
 
@@ -491,7 +502,7 @@ function StudioFlowView({
       autoStartGeneration || (flow.state === "initial" && flow.step === "plan");
     if (!shouldStartGeneration || autoStartRequestedRef.current) return;
     if (flow.error || startRunTimedOut) return;
-    if (flow.state !== "initial" || !flow.brief.goal.trim()) return;
+    if (flow.state !== "initial" || !hasStudioStartingMaterial(flow.brief)) return;
 
     autoStartRequestedRef.current = true;
     setIsRedirectingToRun(true);
@@ -518,7 +529,7 @@ function StudioFlowView({
     isRedirectingToRun ||
     (flow.state === "initial" &&
       flow.step === "plan" &&
-      Boolean(flow.brief.goal.trim()) &&
+      hasStudioStartingMaterial(flow.brief) &&
       !flow.error);
 
   useEffect(() => {
@@ -617,7 +628,7 @@ function StudioFlowView({
             <p className={styles.workspaceEyebrow}>Produce</p>
             <h2 className={styles.generatingHeading}>Producing your video</h2>
             <p className={styles.workspaceGoal}>
-              {flow.brief.projectName || flow.brief.goal || "Your Studio draft"}
+              {flow.brief.projectName || flow.brief.goal || flow.brief.scriptText || "Your Studio draft"}
             </p>
             <p className="muted">
               The agent is running autonomously. You can stop at a checkpoint,

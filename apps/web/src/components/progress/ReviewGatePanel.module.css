@@ -100,6 +100,36 @@
   padding-top: var(--space-3);
 }
 
+.scriptCopy {
+  display: grid;
+  gap: var(--space-5);
+  max-height: min(52vh, 640px);
+  overflow: auto;
+  padding-right: var(--space-2);
+}
+
+.scriptCopy section {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.scriptCopy h4,
+.scriptCopy p {
+  margin: 0;
+}
+
+.scriptCopy h4 {
+  color: var(--text-strong);
+  font-size: var(--text-md);
+}
+
+.scriptCopy p {
+  max-width: 72ch;
+  color: var(--text);
+  line-height: var(--line-body);
+  white-space: pre-wrap;
+}
+
 .briefReviewMore summary {
   width: max-content;
   max-width: 100%;

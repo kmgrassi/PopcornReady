@@ -25,7 +25,11 @@ function briefInputFromDraft(draft: BriefDraft): VideoBriefInput {
     .filter(Boolean);
 
   return {
-    goal: draft.goal.trim(),
+    goal:
+      draft.goal.trim() ||
+      (draft.startSource === "script"
+        ? "Create a video from the supplied script."
+        : "Create a video."),
     targetLengthSec: draft.targetLengthSec,
     aspectRatio: draft.aspectRatio,
     platform: draft.platform,
@@ -37,6 +41,10 @@ function briefInputFromDraft(draft: BriefDraft): VideoBriefInput {
     oneBigIdea: draft.bigIdea.trim() || undefined,
     caveat: draft.accuracyNote.trim() || undefined,
     payoff: draft.payoff.trim() || undefined,
+    narration:
+      draft.startSource === "script"
+        ? { mode: "provided_text", script: draft.scriptText.trim() }
+        : { mode: "generate" },
     constraints:
       requiredBeats.length > 0 || draft.payoff.trim() || draft.callToAction.trim()
         ? {
@@ -135,7 +143,6 @@ export async function createAndStartRun(
   const projectInput = {
     ...(draft.projectName.trim() ? { name: draft.projectName.trim() } : {}),
     brief,
-    posterProvider: draft.provider,
   };
   const { project, briefVersion } = await v1Api.createProject(projectInput);
 

@@ -136,7 +136,12 @@ current work stays expanded, while finite runs, actions, and jobs remain behind
 an optional production-details disclosure. Internal run/session identifiers and
 reasoning traces are never creator copy. A specialist question is shown as work
 the Creative Director is resolving, not as a second user conversation. The
-existing root review gate remains the only production approval loop. If no
+root review gate remains the only production approval loop. Its first mandatory
+boundary is **Script**: the creator reads the authoritative relational script,
+can request a text-only rewrite, and must explicitly approve it before poster,
+storyboard, image, audio, or video generation begins. A supplied script is the
+initial draft rather than a prompt to silently rewrite. The same root run later
+stops at the complete storyboard boundary. If no
 specialist lane was created, the empty state follows the root outcome: active
 work may still be planning, while waiting, blocked, failed, canceled, and
 complete roots must not imply that production is still underway.
@@ -179,6 +184,12 @@ the creator does not revise. The countdown begins only after the proposal is
 ready, is canceled by revision or a failed manual attempt, and shares the same
 one-use server gate as manual approval. Request Changes and production review
 gates still require deliberate confirmation and never inherit this timer.
+Script review is a second narrow exception to the cost-preview proposal UI:
+because its gate is bound to one exact script draft and the revision is
+text-only with zero media spend, submitting **Request changes** is itself the
+deliberate instruction to persist a superseding script and return to the same
+gate. The atomic decision includes the reviewed draft id; stale or concurrent
+decisions fail instead of broadening to the project.
 After confirmation, the resulting creator-direct run remains project-scoped but
 uses a one-step **Image asset**, **Video asset**, or **Audio asset** activity
 surface. It must not infer Brief, Script, Storyboard, or final-render stages from

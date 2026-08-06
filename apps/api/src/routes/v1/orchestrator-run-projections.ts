@@ -19,6 +19,7 @@ import {
   type OrchestratorRunGate,
   type RunActionSummary,
 } from "@/lib/api/v1/orchestrator-store";
+import { orchestratorRunPresentationKind } from "@/lib/api/v1/orchestrator-presentation-kind";
 import {
   getToolCapability,
   isToolName,
@@ -87,20 +88,6 @@ function operatorDiagnosticActions(actions: RunActionSummary[]): RunActionSummar
   return actions.filter((action) => !CREATOR_HIDDEN_ACTION_TOOLS.has(action.tool));
 }
 
-function presentationKind(
-  run: OrchestratorRun
-): GenerationRun["presentationKind"] {
-  if (run.originKind !== "creator_direct") return undefined;
-  if (run.taskKind === "image_create") return "standalone_image";
-  if (run.taskKind === "video_create" || run.taskKind === "video_edit") {
-    return "standalone_video";
-  }
-  if (run.taskKind === "soundtrack_create" || run.taskKind === "audio_create") {
-    return "standalone_audio";
-  }
-  return undefined;
-}
-
 export function toolStage(tool: string): GenerationStageType | undefined {
   const normalizedTool = tool.startsWith(AFTER_GATE_PREFIX)
     ? tool.slice(AFTER_GATE_PREFIX.length)
@@ -108,6 +95,12 @@ export function toolStage(tool: string): GenerationStageType | undefined {
   switch (normalizedTool) {
     case "create_or_load_brief":
       return "brief_intake";
+    case "develop_story_blueprint":
+    case "plan_shots":
+    case "plan_visual_anchors":
+      return "creative_plan";
+    case "draft_script":
+      return "script";
     case "generate_storyboard":
       return "storyboard";
     case "generate_poster":
@@ -270,7 +263,7 @@ function hasReadyStandaloneAsset(
   actions: RunActionSummary[],
   assets: ReadonlyMap<string, RunAssetPrompt>
 ): boolean {
-  const kind = presentationKind(run);
+  const kind = orchestratorRunPresentationKind(run);
   if (!kind) return false;
   const expectedKind = kind === "standalone_image"
     ? "image"
@@ -294,7 +287,7 @@ function projectedRunStatus(
   assets: ReadonlyMap<string, RunAssetPrompt>
 ): GenerationRunStatus {
   if (run.status !== "succeeded") return runStatus(run.status);
-  if (presentationKind(run)) {
+  if (orchestratorRunPresentationKind(run)) {
     return hasReadyStandaloneAsset(run, actions, assets) ? "succeeded" : "failed";
   }
   if (hasFinishedVideo(actions, assets)) return "succeeded";
@@ -491,8 +484,8 @@ export function projectRun(
 ): GenerationRun {
   const reviewGates = gates.filter((gate) => !gate.stage.startsWith(AFTER_GATE_PREFIX));
   const status = projectedRunStatus(run, actions, gates, assets);
-  // A post-tool gate is the storyboard-review stop: the storyboard work is
-  // complete, but production must not start until the creator continues it.
+  // A post-tool gate is a creator-review stop: its work is complete, but the
+  // next phase must not start until the creator continues it.
   // Project it just like a conventional review gate so every surface has one
   // clear, actionable state rather than a misleading terminal success.
   const reachedGate = gates.find(
@@ -541,7 +534,7 @@ export function projectRun(
   const currentStageType =
     reviewGate?.stageType ??
     (status === "succeeded"
-      ? "ready"
+      ? (reviewGate ? reviewGate.stageType : "ready")
       : latestRunningAction
         ? toolStage(latestRunningAction.tool)
         : latestAction
@@ -556,7 +549,7 @@ export function projectRun(
     projectId: run.projectId,
     status,
     completionKind: completionKind(run, gates, actions, assets),
-    presentationKind: presentationKind(run),
+    presentationKind: orchestratorRunPresentationKind(run),
     storyboardBoundaryStatus: storyboardBoundaryStatus(gates),
     activityState,
     currentToolName: latestRunningAction?.tool,
@@ -578,10 +571,10 @@ export function projectRun(
     error:
       status === "failed" && run.status === "succeeded"
         ? {
-            code: presentationKind(run)
+            code: orchestratorRunPresentationKind(run)
               ? "missing_asset_output"
               : "missing_video_output",
-            message: presentationKind(run)
+            message: orchestratorRunPresentationKind(run)
               ? "Run ended; no ready standalone asset was created."
               : "Run ended; no playable video was created.",
             retryable: true,
@@ -713,7 +706,7 @@ function projectStageItems(
         itemId: `${action.id}:${assetId}`,
         stageId: toolStageId(run.id, action.tool),
         kind: toolItemKind(action.tool),
-        purpose: toolItemPurpose(action.tool, presentationKind(run)),
+        purpose: toolItemPurpose(action.tool, orchestratorRunPresentationKind(run)),
         label: `${action.tool} output ${index + 1}`,
         status,
         ...(prompt ? { prompt, promptPreview: promptPreview(prompt) } : {}),

@@ -16,8 +16,11 @@ export type StudioDraftPlatform = NonNullable<StoryContext["platform"]>;
 export type StudioDraftFormat = NonNullable<StoryContext["format"]>;
 export type StudioDraftFootageChoice = "prompt_only" | "upload";
 export type StudioDraftFootageMode = "asset_driven" | "hybrid";
+export type StudioDraftStartSource = "idea" | "script";
 
 export interface StudioDraftBrief {
+  startSource?: StudioDraftStartSource;
+  scriptText?: string;
   goal?: string;
   targetLengthSec?: number;
   aspectRatio?: AspectRatio;

@@ -18,6 +18,12 @@ visible when its parent later fails and when newer full-video work starts. The
 stage item is the safe identity boundary: it names the exact asset, while the
 canonical Library viewer owns URL refresh, playback, billing, and Request Changes.
 
+Browser fixtures can conceal a production projection gap when they hand-author
+optional fields that the real summary endpoint drops. Any UI filter that depends
+on a run discriminator needs an assertion at the API summary boundary, not only
+an E2E response fixture. Loading and error states also need lower precedence than
+real workflow actions: failed historical enrichment must not hide current review.
+
 ## Follow-up
 
 If project overviews eventually need complete asset history rather than the most

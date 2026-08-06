@@ -18,7 +18,7 @@ import {
   GenerationRunRequestError,
 } from "../../lib/v1/generation-runs/client";
 import type { CreatorRunHierarchy } from "../../lib/v1/generation-runs/status";
-import { useProjectQuery } from "../../lib/queryClient";
+import { useProjectQuery, useProjectScriptQuery } from "../../lib/queryClient";
 import { v1Api } from "../../lib/api-client";
 import { reviewProposalTarget as resolveReviewProposalTarget } from "../../lib/reviewProposalTarget";
 import {
@@ -59,7 +59,8 @@ interface ProgressViewProps {
     error?: string | null;
     feedbackNote?: string;
     onFeedbackNoteChange?: (note: string) => void;
-    onApprove: (note: string) => void;
+    onApprove: (note: string, scriptDraftId?: string) => void;
+    onRequestChanges?: (note: string, scriptDraftId: string) => void;
     onCancel: () => void;
   };
   cancelAction?: {
@@ -164,6 +165,10 @@ export function ProgressView({
   const [reviewProposalOpen, setReviewProposalOpen] = useState(false);
   const reviewGateKey = detail.run.reviewGate?.stageId ?? null;
   const projectQuery = useProjectQuery(detail.run.projectId);
+  const scriptQuery = useProjectScriptQuery(
+    detail.run.projectId,
+    detail.run.reviewGate?.stageType === "script",
+  );
   const project = projectQuery.data?.project ?? null;
   const projectLoading = projectQuery.isLoading;
 
@@ -188,7 +193,7 @@ export function ProgressView({
     setFallbackFeedbackNote("");
   }, [reviewGateKey]);
 
-  const terminal = isTerminal(detail.run.status);
+  const terminal = isTerminal(detail.run.status) && !detail.run.reviewGate;
   const reviewItems = detail.run.reviewGate
     ? detail.stageItems
         .filter((item) => item.stageId === detail.run.reviewGate?.stageId)
@@ -351,7 +356,12 @@ export function ProgressView({
   }
 
   const onApprove = reviewActions
-    ? () => reviewActions.onApprove(feedbackNote)
+    ? () => reviewActions.onApprove(
+        feedbackNote,
+        detail.run.reviewGate?.stageType === "script"
+          ? scriptQuery.data?.script?.scriptDraftId
+          : undefined,
+      )
     : approveFallback;
 
   const progressSentence = detail.hierarchy
@@ -540,6 +550,9 @@ export function ProgressView({
               stageType={detail.run.reviewGate.stageType}
               projectBrief={projectBrief}
               projectLoading={projectLoading}
+              projectScript={scriptQuery.data?.script?.scriptDraft ?? null}
+              scriptLoading={scriptQuery.isLoading}
+              scriptError={scriptQuery.error instanceof Error ? scriptQuery.error.message : null}
               reviewItems={reviewItems}
               reviewOutputGroups={reviewOutputGroups}
               feedbackNote={feedbackNote}
@@ -548,8 +561,23 @@ export function ProgressView({
               reviewActions={reviewActions}
               onFeedbackNoteChange={setFeedbackNote}
               onApprove={onApprove}
-              onRequestChanges={() => setReviewProposalOpen(true)}
-              canRequestChanges={Boolean(reviewProposalTarget)}
+              onRequestChanges={() => {
+                if (detail.run.reviewGate?.stageType === "script") {
+                  const scriptDraftId = scriptQuery.data?.script?.scriptDraftId;
+                  if (scriptDraftId) reviewActions?.onRequestChanges?.(feedbackNote, scriptDraftId);
+                  return;
+                }
+                setReviewProposalOpen(true);
+              }}
+              canRequestChanges={
+                detail.run.reviewGate.stageType === "script"
+                  ? Boolean(
+                      reviewActions?.onRequestChanges &&
+                      feedbackNote.trim() &&
+                      scriptQuery.data?.script?.scriptDraftId
+                    )
+                  : Boolean(reviewProposalTarget)
+              }
             />
           ) : null}
           <AiAssetFeedbackDialog

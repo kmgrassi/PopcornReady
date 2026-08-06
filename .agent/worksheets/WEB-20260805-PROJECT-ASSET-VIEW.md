@@ -51,6 +51,11 @@ after saving the asset.
 - Poll active standalone details with the same cadence as the run surface, and
   include the recent-runs request in asset discovery's loading, error, and retry
   state.
+- Preserve the creator-direct `presentationKind` discriminator in workspace run
+  summaries; the project page cannot select standalone runs from production data
+  without that wire field.
+- A real ready asset outranks script review, but an asset lookup's loading or
+  error state never masks an existing storyboard recovery or script-review action.
 
 ## Changes
 
@@ -65,6 +70,12 @@ after saving the asset.
 - The browser fixture begins with an active empty standalone run, waits for the
   detail poll to reveal its asset, then layers in newer active and failed runs.
 - Updated the UI interaction model and E2E ownership documents.
+- Extracted the creator-direct presentation mapping so full run detail and
+  workspace summaries share one projection rule, with positive standalone and
+  negative Creative Director boundary assertions.
+- Merged current `main` and preserved its script-review project-page behavior;
+  added a mobile regression where a prior standalone detail request fails while
+  script review remains actionable.
 
 ## Validation evidence
 
@@ -87,6 +98,20 @@ after saving the asset.
 - Independent wrap-up verification also ran the broader Playwright suite across
   Chromium, mobile Safari, and mobile Chrome: 170 passed with 6 environment
   skips; the changed project-overview case passed in all three.
+- PR feedback follow-up:
+  - targeted workspace-list and orchestrator projection tests — 47 passed;
+  - API and web typechecks — passed;
+  - web unit tests — 88 passed;
+  - project ready-asset Playwright across Chromium, mobile Safari, and mobile
+    Chrome — 4 passed;
+  - script-review precedence Playwright across the same projects — 3 passed.
+- `pnpm agent:lint:fix` — passed on the 70-file merge candidate.
+- `pnpm agent:validate -- --scope all` — passed after conflict resolution and
+  feedback fixes, including API/web typechecks and all repository boundary checks.
+- Post-merge manual local browser fixture at `/projects/manual-ready-asset`:
+  desktop 1440×900 retained both direct viewer links; mobile 390×844 retained
+  the ready status and full-width gold CTA with no alert or viewport overflow;
+  the CTA navigated to the exact canonical Library URL.
 
 ## Independent reviews
 
@@ -104,6 +129,16 @@ after saving the asset.
   issues.
 - Wrap-up review found no code, scope, acceptance, documentation, worksheet, or
   PR-readiness blockers.
+- PR-comment research confirmed the production summary omission as the root
+  cause and found no missing type, persistence, or migration change.
+- Merge-plan review approved the shared projection approach and found one
+  mobile precedence regression; asset loading/error was moved behind existing
+  storyboard and script-review workflow actions and covered in Playwright.
+- Post-fix implementation review found no remaining correctness or conflict
+  blockers and independently verified the API projection, ready-asset helpers,
+  web typecheck, diff hygiene, and merge index.
+- Final wrap-up review found the staged diff conflict-free, scoped against
+  `origin/main`, fully documented, and ready to publish.
 
 ## Blockers and risks
 
@@ -115,5 +150,5 @@ after saving the asset.
 
 ## Next action / handoff
 
-Commit and tag the validated change, push the feature branch, and open a ready
-pull request.
+Commit the resolved merge and feedback fixes, retag the worksheet, push, then
+reply to and resolve the addressed GitHub thread.

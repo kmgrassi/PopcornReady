@@ -166,6 +166,32 @@ test("launcher routes both intents and preserves legacy asset status links", asy
   await expect(page.getByLabel("Improve video prompt")).not.toBeChecked();
 });
 
+test("full-video intake starts from either an idea or a script @mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/projects/new");
+  const firstVideo = page.getByRole("button", { name: "Create your first video" });
+  if (await firstVideo.isVisible()) await firstVideo.click();
+
+  await expect(page.getByRole("radio", { name: "An idea We’ll write the script", exact: true })).toBeChecked();
+  await page.getByLabel("Video idea").fill("A tiny mystery in a popcorn shop");
+  await expect(page.getByRole("button", { name: "Continue →" })).toBeEnabled();
+
+  await page.getByText("A script", { exact: true }).click();
+  await expect(page.getByRole("radio", { name: "A script Use your words as the draft", exact: true })).toBeChecked();
+  const script = page.getByRole("textbox", { name: /Script Paste narration/ });
+  await expect(script).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continue →" })).toBeDisabled();
+  await script.fill("OPEN ON: An empty counter.\n\nMAYA: The last kernel is missing.");
+  await expect(page.getByRole("button", { name: "Continue →" })).toBeEnabled();
+  await expect(page.getByText(/text-only until you approve it/i)).toBeVisible();
+
+  const overflow = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  expect(overflow.scrollWidth).toBe(overflow.clientWidth);
+});
+
 test("mobile Create stays active across both creation flows without overflow", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/dashboard");

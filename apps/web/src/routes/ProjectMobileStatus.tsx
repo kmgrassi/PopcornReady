@@ -233,6 +233,7 @@ export function ProjectMobilePrimaryAction({
   storyboard,
   storyboardGenerating,
   storyboardError,
+  scriptReviewRunLink,
   hasBrief,
   canGenerateStoryboard,
   onGenerate,
@@ -248,6 +249,7 @@ export function ProjectMobilePrimaryAction({
   storyboard: ProjectStoryboard | null;
   storyboardGenerating: boolean;
   storyboardError: Error | null;
+  scriptReviewRunLink?: string | null;
   hasBrief: boolean;
   canGenerateStoryboard: boolean;
   onGenerate: () => void;
@@ -280,25 +282,18 @@ export function ProjectMobilePrimaryAction({
       </ButtonLink>
     );
   }
-  if (readyAssetLoading) {
-    return (
-      <Button variant="secondary" fullWidth disabled>
-        Checking assets…
-      </Button>
-    );
-  }
-  if (readyAssetError) {
-    return (
-      <Button variant="secondary" fullWidth onClick={onRetryReadyAsset}>
-        Retry asset check
-      </Button>
-    );
-  }
   if (storyboardError) {
     return (
       <Button variant="cta" fullWidth onClick={onGenerate}>
         Retry storyboard workflow
       </Button>
+    );
+  }
+  if (scriptReviewRunLink) {
+    return (
+      <ButtonLink variant="cta" fullWidth to={scriptReviewRunLink}>
+        Review script
+      </ButtonLink>
     );
   }
   if (storyboardGenerating) {
@@ -330,6 +325,27 @@ export function ProjectMobilePrimaryAction({
       </ButtonLink>
     );
   }
+  if (canGenerateStoryboard) {
+    return (
+      <Button variant="cta" fullWidth onClick={onGenerate}>
+        Create storyboard
+      </Button>
+    );
+  }
+  if (readyAssetLoading) {
+    return (
+      <Button variant="secondary" fullWidth disabled>
+        Checking assets…
+      </Button>
+    );
+  }
+  if (readyAssetError) {
+    return (
+      <Button variant="secondary" fullWidth onClick={onRetryReadyAsset}>
+        Retry asset check
+      </Button>
+    );
+  }
   return (
     <Button
       variant="cta"
@@ -353,6 +369,7 @@ export function mobileProjectStatus({
   readyAsset,
   readyAssetLoading,
   readyAssetError,
+  scriptReviewPending = false,
 }: {
   storyboard: ProjectStoryboard | null;
   progress: StoryboardProgress;
@@ -364,12 +381,12 @@ export function mobileProjectStatus({
   readyAsset?: Pick<GenerationStageItem, "kind"> | null;
   readyAssetLoading?: boolean;
   readyAssetError?: boolean;
+  scriptReviewPending?: boolean;
 }) {
   if (hasPlayableOutput) return "Ready to watch.";
   if (readyAsset) return readyAssetStatus(readyAsset);
-  if (readyAssetLoading) return "Checking recent project assets.";
-  if (readyAssetError) return "Could not check recent project assets.";
   if (storyboardError) return "Storyboard could not load. Retry to continue.";
+  if (scriptReviewPending) return "Script ready for review.";
   if (generating) {
     if (progress.total > 0) {
       return `Generating storyboard: ${progress.ready + progress.failed} of ${progress.total} panels ready.`;
@@ -382,6 +399,8 @@ export function mobileProjectStatus({
   }
   if (projectStatus === "failed") return "Needs attention before generation can continue.";
   if (!hasBrief) return "Finish the brief to create a storyboard.";
+  if (readyAssetLoading) return "Checking recent project assets.";
+  if (readyAssetError) return "Could not check recent project assets.";
   return "Ready for a storyboard.";
 }
 

@@ -21,7 +21,7 @@ interface ChecklistStepDef {
 }
 
 export const CHECKLIST_STEPS: ChecklistStepDef[] = [
-  { id: "planning", label: "Planning story structure", stageTypes: ["brief_intake", "creative_plan"] },
+  { id: "planning", label: "Writing the script", stageTypes: ["brief_intake", "creative_plan", "script"] },
   { id: "clips", label: "Selecting clips", stageTypes: ["storyboard", "asset_generation", "audio_generation"] },
   { id: "timeline", label: "Building timeline", stageTypes: ["timeline_assembly"] },
   { id: "preview", label: "Generating preview", stageTypes: ["quality_review", "export"] },

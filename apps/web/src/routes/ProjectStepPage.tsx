@@ -6,12 +6,17 @@ import type {
   V1Project,
   VideoBriefInput,
 } from "@popcorn/shared/v1/types";
+import type { ScriptDraft } from "@popcorn/shared/types";
 import { AiAssetFeedbackDialog } from "../components/ai-edit/AiAssetFeedbackDialog";
 import { QuickLoadingState } from "../components/ui/QuickLoadingState";
 import { ButtonLink } from "../components/ui/Button";
 import { ImageWithSkeleton } from "../components/ui/ImageWithSkeleton";
 import { EmptyState, ErrorState } from "../components/ui/StateCard";
-import { useProjectQuery, useProjectStoryboardQuery } from "../lib/queryClient";
+import {
+  useProjectQuery,
+  useProjectScriptQuery,
+  useProjectStoryboardQuery,
+} from "../lib/queryClient";
 import styles from "./ProjectStepPage.module.css";
 
 type ProjectStep = "concept" | "brief" | "script";
@@ -57,23 +62,28 @@ export function ProjectStepPage({ step }: { step: ProjectStep }) {
     projectId ?? "",
     Boolean(projectId && step === "script")
   );
+  const scriptQuery = useProjectScriptQuery(
+    projectId ?? "",
+    Boolean(projectId && step === "script"),
+  );
   const [activeEdit, setActiveEdit] = useState<ActiveEdit | null>(null);
   const [sentLabel, setSentLabel] = useState<string | null>(null);
 
   const project = projectQuery.data?.project ?? null;
   const storyboard = storyboardQuery.data?.storyboard ?? null;
+  const activeScript = scriptQuery.data?.script?.scriptDraft ?? null;
   const copy = STEP_COPY[step];
   const fields = useMemo(() => {
     if (!project) return [];
     if (step === "concept") return conceptFields(project);
     if (step === "brief") return briefFields(project.brief ?? null);
-    return scriptFields(project, storyboard);
-  }, [project, step, storyboard]);
+    return scriptFields(project, activeScript, storyboard);
+  }, [activeScript, project, step, storyboard]);
 
   if (!projectId) return <Navigate to="/library/projects" replace />;
 
-  const loading = projectQuery.isLoading || (step === "script" && storyboardQuery.isLoading);
-  const error = projectQuery.error ?? (step === "script" ? storyboardQuery.error : null);
+  const loading = projectQuery.isLoading || (step === "script" && scriptQuery.isLoading);
+  const error = projectQuery.error ?? (step === "script" ? scriptQuery.error : null);
 
   return (
     <main className={styles.shell}>
@@ -128,7 +138,7 @@ export function ProjectStepPage({ step }: { step: ProjectStep }) {
           error={error}
           onRetry={() => {
             void projectQuery.refetch();
-            if (step === "script") void storyboardQuery.refetch();
+            if (step === "script") void scriptQuery.refetch();
           }}
         />
       ) : null}
@@ -139,6 +149,7 @@ export function ProjectStepPage({ step }: { step: ProjectStep }) {
             project={project}
             step={step}
             storyboard={storyboard}
+            activeScript={activeScript}
             onEdit={(item) => {
               setSentLabel(null);
               setActiveEdit({
@@ -195,6 +206,7 @@ export function ProjectStepPage({ step }: { step: ProjectStep }) {
         onExecutionSettled={() => {
           void projectQuery.refetch();
           void storyboardQuery.refetch();
+          void scriptQuery.refetch();
         }}
         onClose={() => setActiveEdit(null)}
         asset={activeEdit ? <EditPreview item={activeEdit.item} project={project} /> : null}
@@ -207,15 +219,17 @@ function StepSummary({
   project,
   step,
   storyboard,
+  activeScript,
   onEdit,
 }: {
   project: V1Project;
   step: ProjectStep;
   storyboard: ProjectStoryboard | null;
+  activeScript: ScriptDraft | null;
   onEdit: (item: FieldItem) => void;
 }) {
   const brief = project.brief;
-  const scriptCount = storyboardScriptLines(storyboard).length;
+  const scriptCount = activeScript?.scenes.length ?? storyboardScriptLines(storyboard).length;
   const posterItem = conceptFields(project).find((field) => field.id === "poster");
 
   return (
@@ -394,7 +408,21 @@ function briefFields(brief: VideoBriefInput | null): FieldItem[] {
   ];
 }
 
-function scriptFields(project: V1Project, storyboard: ProjectStoryboard | null): FieldItem[] {
+function scriptFields(
+  project: V1Project,
+  activeScript: ScriptDraft | null,
+  storyboard: ProjectStoryboard | null,
+): FieldItem[] {
+  if (activeScript?.narration?.trim()) {
+    return [
+      {
+        id: activeScript.id ?? "active-script",
+        label: "Active script",
+        value: activeScript.narration,
+        scope: "script",
+      },
+    ];
+  }
   const narrationScript = project.brief?.narration?.script?.trim();
   if (narrationScript) {
     return [

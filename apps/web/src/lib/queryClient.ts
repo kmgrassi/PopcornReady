@@ -490,6 +490,15 @@ export function useProjectStoryboardQuery(
   });
 }
 
+export function useProjectScriptQuery(projectId: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.projectScript(projectId),
+    queryFn: ({ signal }: { signal: QuerySignal }) =>
+      v1Api.getProjectScript(projectId, signal),
+    enabled: enabled && Boolean(projectId),
+  });
+}
+
 export function useStartProjectStoryboardRunMutation(projectId: string) {
   const client = useQueryClient();
 
@@ -740,11 +749,16 @@ export function useUpdateGenerationRunMutation(projectId: string, runId: string)
       action,
       body,
     }: {
-      action: "approve" | "cancel";
-      body?: { note?: string };
+      action: "approve" | "reject" | "cancel";
+      body?: { note?: string; scriptDraftId?: string };
     }) => v1Api.updateGenerationRun(projectId, runId, action, body),
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       client.setQueryData(queryKeys.generationRun(projectId, runId), data);
+      if (variables.action === "reject") {
+        client.removeQueries({ queryKey: queryKeys.projectScript(projectId) });
+      } else if (variables.action === "approve") {
+        void client.invalidateQueries({ queryKey: queryKeys.projectScript(projectId) });
+      }
       void client.invalidateQueries({ queryKey: queryKeys.projectGenerationRuns(projectId) });
       void client.invalidateQueries({ queryKey: ["dashboard"] });
       void client.invalidateQueries({ queryKey: ["workspaces"] });
