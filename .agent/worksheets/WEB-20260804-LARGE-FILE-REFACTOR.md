@@ -56,5 +56,6 @@ module without changing route behavior.
 
 The merge conflict is resolved by merging current `origin/main` and preserving
 its newer library behavior inside the extracted boundary. Independent review
-was dispatched but unavailable within bounded waits; local review, commit,
-push, and PR status follow validation.
+confirmed the resolution. Merge commit `e1229899` is pushed to PR #886, which
+is open, non-draft, and mergeable; GitHub currently reports `BLOCKED` pending
+repository-required checks/review.

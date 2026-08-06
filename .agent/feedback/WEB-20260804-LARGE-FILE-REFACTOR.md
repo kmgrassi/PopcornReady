@@ -22,6 +22,7 @@ horizontal overflow.
 The fresh worktree had no dependencies, so `pnpm install --frozen-lockfile`
 was required before checks. An independent reviewer found no concrete
 regressions, including in the responsive library route; the merge resolution
-also has no unresolved conflict markers. A second independent reviewer was
-dispatched for this merge checkpoint but did not return within bounded waits;
-local review completed.
+also has no unresolved conflict markers. The independent reviewer confirmed
+the same result. Merge commit `e1229899` is pushed and PR #886 is open,
+non-draft, and mergeable; GitHub currently reports it blocked on required
+checks/review.
