@@ -75,7 +75,9 @@ export interface DataAssetRow {
   role: string | null;
   content: unknown;
   content_hash: string | null;
+  inputs?: GraphAssetInput[] | null;
   inputs_fingerprint: string | null;
+  created_by_action_id?: string | null;
   created_at: string;
   updated_at: string;
 }

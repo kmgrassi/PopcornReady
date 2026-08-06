@@ -6,6 +6,7 @@ import type {
   ProjectStoryboard,
   V1Project,
 } from "@popcorn/shared/v1/types";
+import type { ScriptDraft } from "@popcorn/shared/types";
 import { v1Api, type ProjectWatchMedia, type WorkspaceOutput } from "../lib/api-client";
 import { useAuth } from "../components/auth/AuthProvider";
 import { AiAssetFeedbackDialog } from "../components/ai-edit/AiAssetFeedbackDialog";
@@ -21,6 +22,7 @@ import {
   generationRunRefetchInterval,
   useGenerationRunQuery,
   useProjectQuery,
+  useProjectScriptQuery,
   useProjectStoryboardQuery,
   useProjectStoryboardRunQuery,
   useStartProjectStoryboardRunMutation,
@@ -129,6 +131,7 @@ export function ProjectDetailPage() {
   const activeSection = isProjectSectionId(section) ? section : null;
   const authScope = useDashboardAuthScope();
   const projectQuery = useProjectQuery(projectId ?? "", Boolean(projectId));
+  const scriptQuery = useProjectScriptQuery(projectId ?? "", Boolean(projectId));
   const deleteProjectMutation = useDeleteProjectMutation(projectId ?? "");
   const startStoryboardRunMutation = useStartProjectStoryboardRunMutation(projectId ?? "");
   const runsQuery = useDashboardRunsQuery(authScope, {
@@ -241,8 +244,8 @@ export function ProjectDetailPage() {
     startStoryboardRunMutation.isPending ||
     storyboardRunActive ||
     storyboardProgressState.isGenerating;
-  const loading = projectQuery.isLoading;
-  const error = projectQuery.error ?? null;
+  const loading = projectQuery.isLoading || scriptQuery.isLoading;
+  const error = projectQuery.error ?? scriptQuery.error ?? null;
   const hasPlayableOutput = outputsQuery.items.some(isPlayableOutput);
   const watchDisabled = outputsQuery.loading || !hasPlayableOutput;
   const watchTitle = outputsQuery.loading
@@ -297,6 +300,8 @@ export function ProjectDetailPage() {
       projectId={projectId}
       project={project}
       storyboard={storyboard}
+      activeScript={scriptQuery.data?.script?.scriptDraft ?? null}
+      scriptAssetId={scriptQuery.data?.script?.assetId ?? null}
       loading={loading}
       error={error}
       onRequestChanges={(scope) => {
@@ -312,7 +317,10 @@ export function ProjectDetailPage() {
           </p>
         ) : null
       }
-      onProjectRetry={() => void projectQuery.refetch()}
+      onProjectRetry={() => {
+        void projectQuery.refetch();
+        void scriptQuery.refetch();
+      }}
       backLink={{ to: "/library/projects", label: "Projects" }}
       titleFallback="Project overview"
       loadingSubtitle="Loading project details."
@@ -473,6 +481,7 @@ export function ProjectDetailPage() {
         }}
         onExecutionSettled={() => {
           void projectQuery.refetch();
+          void scriptQuery.refetch();
           void storyboardQuery.refetch();
           void outputsQuery.refetch();
         }}
@@ -490,6 +499,8 @@ export function ProjectOverviewPage({
   projectId,
   project,
   storyboard,
+  activeScript,
+  scriptAssetId,
   loading,
   error,
   onProjectRetry,
@@ -511,6 +522,8 @@ export function ProjectOverviewPage({
   projectId: string;
   project: V1Project | null;
   storyboard: ProjectStoryboard | null;
+  activeScript?: ScriptDraft | null;
+  scriptAssetId?: string | null;
   loading: boolean;
   error: Error | null;
   onProjectRetry: () => void;
@@ -626,6 +639,8 @@ export function ProjectOverviewPage({
                       project={project}
                       projectId={projectId}
                       storyboard={storyboard}
+                      activeScript={activeScript ?? null}
+                      scriptAssetId={scriptAssetId ?? null}
                       readOnly={readOnly}
                       onRequestChanges={
                         onRequestChanges ? () => onRequestChanges("script") : undefined

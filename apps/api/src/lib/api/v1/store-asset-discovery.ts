@@ -33,6 +33,7 @@ export interface WorkspaceAssetSummary {
   thumbnailUrl?: string;
   expiresAt?: string | null;
   durationSec?: number;
+  canReceiveFeedback: boolean;
   visibility: "public" | "private";
   createdAt: string;
   updatedAt: string;
@@ -86,6 +87,7 @@ export async function listWorkspaceAssets(
       prompt,
       promptPreview: prompt,
       durationSec: row.duration_sec ?? undefined,
+      canReceiveFeedback: Boolean(row.storage_key && row.storage_bucket),
       visibility: row.visibility ?? "public",
       createdAt: iso(row.created_at),
       updatedAt: iso(row.updated_at),

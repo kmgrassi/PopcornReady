@@ -139,6 +139,9 @@ test("project overview keeps a completed one-off video viewable after the run fa
   await page.route(`**/api/v1/projects/${projectId}`, (route) =>
     json(route, { project }),
   );
+  await page.route(`**/api/v1/projects/${projectId}/script`, (route) =>
+    json(route, { script: null }),
+  );
   await page.route(`**/api/v1/projects/${projectId}/storyboard`, (route) =>
     json(route, { storyboard: null }),
   );

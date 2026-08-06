@@ -1184,8 +1184,10 @@ async function setActiveProjectScopedAssetSelection(
   );
 }
 
-export async function createAction(input: CreateActionInput): Promise<V1Action> {
-  const db = getServiceSupabase();
+export async function createAction(
+  input: CreateActionInput,
+  db: SupabaseClient = getServiceSupabase()
+): Promise<V1Action> {
   const row = {
     ...(input.id ? { id: input.id } : {}),
     schema_version: "action.v1",
@@ -1238,7 +1240,8 @@ export async function createAction(input: CreateActionInput): Promise<V1Action> 
 
 export async function updateAction(
   actionId: string,
-  patch: UpdateActionPatch
+  patch: UpdateActionPatch,
+  db: SupabaseClient = getServiceSupabase()
 ): Promise<V1Action> {
   const row: Record<string, unknown> = {};
   if (patch.status !== undefined) row.status = patch.status;
@@ -1246,7 +1249,6 @@ export async function updateAction(
   if (patch.outputAssetIds !== undefined) row.output_asset_ids = patch.outputAssetIds;
   if (patch.error !== undefined) row.error = markedJson("action_error.v1", patch.error) ?? null;
 
-  const db = getServiceSupabase();
   const data = await runQuery(
     `store.updateAction ${actionId}`,
     db.from("actions").update(row).eq("id", actionId).select("*").single()
@@ -2992,6 +2994,87 @@ export async function addProjectTimelineCritique(input: {
   return { critiqueAssetId: asset.id };
 }
 
+export async function addProjectAssetCritique(input: {
+  db: SupabaseClient;
+  critiqueAssetId: string;
+  workspaceId: string;
+  projectId: string;
+  sourceAssetId: string;
+  sourceContentHash?: string;
+  actionId: string;
+  critique: unknown;
+}): Promise<{ critiqueAssetId: string }> {
+  const db = input.db;
+  const graphInputs: GraphAssetInput[] = [
+    {
+      assetId: input.sourceAssetId,
+      relation: "input",
+      role: "reviewed_asset",
+      position: 0,
+      ...(input.sourceContentHash ? { contentHash: input.sourceContentHash } : {}),
+    },
+  ];
+  const expectedContentHash = canonicalContentHash(markedContent("critique", input.critique));
+  const expectedInputsFingerprint = inputsFingerprint(graphInputs, null);
+  const asset = await insertDataAsset({
+    db,
+    id: input.critiqueAssetId,
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    kind: "critique",
+    contentSchemaKind: "critique",
+    role: "asset_advisory_critique",
+    content: input.critique,
+    inputs: graphInputs,
+    createdByActionId: input.actionId,
+  });
+  if (
+    asset.workspace_id !== input.workspaceId ||
+    asset.project_id !== input.projectId ||
+    asset.kind !== "critique" ||
+    asset.role !== "asset_advisory_critique" ||
+    asset.content_hash !== expectedContentHash ||
+    asset.inputs_fingerprint !== expectedInputsFingerprint ||
+    asset.created_by_action_id !== input.actionId
+  ) {
+    throw new ApiError(
+      "idempotency_conflict",
+      "Asset critique replay changed immutable content or causation."
+    );
+  }
+  await updateAction(input.actionId, {
+    status: "applied",
+    outputAssetIds: [asset.id],
+  }, db);
+  return { critiqueAssetId: asset.id };
+}
+
+export async function getProjectAssetCritique(input: {
+  db: SupabaseClient;
+  workspaceId: string;
+  projectId: string;
+  critiqueAssetId: string;
+  sourceAssetId: string;
+  actionId: string;
+}): Promise<unknown | null> {
+  const asset = await dataAssetById(input.db, input.critiqueAssetId);
+  if (!asset) return null;
+  const reviewedSource = Array.isArray(asset.inputs)
+    ? asset.inputs.find((edge) => edge.role === "reviewed_asset")
+    : undefined;
+  if (
+    asset.workspace_id !== input.workspaceId ||
+    asset.project_id !== input.projectId ||
+    asset.kind !== "critique" ||
+    asset.role !== "asset_advisory_critique" ||
+    asset.created_by_action_id !== input.actionId ||
+    reviewedSource?.assetId !== input.sourceAssetId
+  ) {
+    throw new ApiError("idempotency_conflict", "Stored asset critique identity changed.");
+  }
+  return unmarkedContent<unknown>(asset.content);
+}
+
 export async function addAudioFitCritique(input: {
   workspaceId: string;
   projectId: string;
@@ -4700,6 +4783,51 @@ export async function getAsset(
 ): Promise<V1Asset> {
   const db = getServiceSupabase();
   return mapAsset(await getAssetRow(db, workspaceId, projectId, assetId, "getAsset"));
+}
+
+export type AssetCritiqueSource =
+  | { kind: "script"; assetId: string; contentHash: string; script: ScriptDraft }
+  | { kind: "image" | "video"; asset: V1Asset };
+
+/** Load the immutable graph asset named by Receive feedback. */
+export async function getAssetCritiqueSource(input: {
+  db: SupabaseClient;
+  workspaceId: string;
+  projectId: string;
+  assetId: string;
+}): Promise<AssetCritiqueSource> {
+  const row = await getAssetRow(
+    input.db,
+    input.workspaceId,
+    input.projectId,
+    input.assetId,
+    "getAssetCritiqueSource"
+  );
+  if (row.status !== "ready") {
+    throw new ApiError("asset_invalid", "AI feedback is available once this asset is ready.");
+  }
+  if (row.kind === "narration_script" && row.media === "data") {
+    return {
+      kind: "script",
+      assetId: row.id,
+      contentHash: row.content_hash ?? "",
+      script: unmarkedContent<ScriptDraft>(row.content),
+    };
+  }
+  if (row.media !== "image" && row.media !== "video") {
+    throw new ApiError(
+      "asset_invalid",
+      "AI feedback is currently available for scripts, images, and videos."
+    );
+  }
+  const asset = await mapAsset(row);
+  if (!asset.storageKey || !asset.storageBucket) {
+    throw new ApiError(
+      "asset_invalid",
+      "AI feedback needs stored source media. Re-import this asset before requesting feedback."
+    );
+  }
+  return { kind: row.media, asset };
 }
 
 /**

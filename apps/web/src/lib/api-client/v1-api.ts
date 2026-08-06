@@ -65,6 +65,7 @@ import type {
   ProjectsResponse,
   ProjectAssetsResponse,
   ProjectAssetDetailResponse,
+  AssetCritiqueResponse,
 } from "./types";
 
 function studioProjectFromV1(project: V1Project): Project {
@@ -349,6 +350,20 @@ export const v1Api = {
     apiRequest<ProjectAssetDetailResponse>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(assetId)}`,
       { signal }
+    ),
+  createAssetCritique: (
+    projectId: string,
+    assetId: string,
+    question: string,
+    idempotencyKey: string,
+  ) =>
+    apiRequest<AssetCritiqueResponse>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(assetId)}/critique`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: { question },
+      }
     ),
   getProject: (projectId: string) =>
     apiRequest<ProjectResponse>(

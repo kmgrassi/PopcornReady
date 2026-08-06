@@ -159,6 +159,9 @@ on the dedicated routes below.
   - Query params: `kind` (`image|video|audio|...`), `source`
     (`uploaded|generated`), `projectId`, `limit`, `cursor`.
   - Items reference assets by ID and URL/thumbnail URL, storage-neutral.
+  - Each item includes `canReceiveFeedback`, a storage-neutral eligibility flag
+    indicating that the ready image/video has managed source bytes the critique
+    workflow can materialize. Remote-only media keeps the action hidden.
 
 ### Cross-project outputs
 

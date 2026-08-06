@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
+import { AssetCritiqueDialog } from "../components/ai-edit/AssetCritiqueDialog";
 import { AnonymousUpgradeBanner } from "../components/auth/AnonymousUpgradeBanner";
 import { QuickLoadingState } from "../components/ui/QuickLoadingState";
-import { ButtonLink } from "../components/ui/Button";
+import { Button, ButtonLink } from "../components/ui/Button";
 import { useProjectWatchQuery } from "../lib/project-queries";
 import styles from "./ProjectWatchPage.module.css";
 
@@ -9,6 +11,7 @@ export function ProjectWatchPage() {
   const { projectId } = useParams();
   const watchQuery = useProjectWatchQuery(projectId ?? null);
   const media = watchQuery.data?.media ?? null;
+  const [critiqueOpen, setCritiqueOpen] = useState(false);
   const error =
     watchQuery.error instanceof Error
       ? watchQuery.error
@@ -89,8 +92,27 @@ export function ProjectWatchPage() {
             preload="metadata"
             autoFocus
           />
+          <div className={styles.videoActions}>
+            <Button variant="secondary" onClick={() => setCritiqueOpen(true)}>
+              Receive feedback
+            </Button>
+            <span>Ask the AI to review this final video without changing it.</span>
+          </div>
         </section>
       ) : null}
+      <AssetCritiqueDialog
+        open={critiqueOpen}
+        projectId={projectId}
+        assetId={media?.assetId ?? ""}
+        title="Review this video"
+        subtitle={media?.filename ?? null}
+        preview={
+          media ? (
+            <video src={media.url} poster={media.posterUrl} controls playsInline preload="metadata" />
+          ) : null
+        }
+        onClose={() => setCritiqueOpen(false)}
+      />
     </main>
   );
 }

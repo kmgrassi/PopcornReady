@@ -8,8 +8,9 @@ import type {
 } from "@popcorn/shared/v1/types";
 import type { ScriptDraft } from "@popcorn/shared/types";
 import { AiAssetFeedbackDialog } from "../components/ai-edit/AiAssetFeedbackDialog";
+import { AssetCritiqueDialog } from "../components/ai-edit/AssetCritiqueDialog";
 import { QuickLoadingState } from "../components/ui/QuickLoadingState";
-import { ButtonLink } from "../components/ui/Button";
+import { Button, ButtonLink } from "../components/ui/Button";
 import { ImageWithSkeleton } from "../components/ui/ImageWithSkeleton";
 import { EmptyState, ErrorState } from "../components/ui/StateCard";
 import {
@@ -68,6 +69,7 @@ export function ProjectStepPage({ step }: { step: ProjectStep }) {
   );
   const [activeEdit, setActiveEdit] = useState<ActiveEdit | null>(null);
   const [sentLabel, setSentLabel] = useState<string | null>(null);
+  const [critiqueOpen, setCritiqueOpen] = useState(false);
 
   const project = projectQuery.data?.project ?? null;
   const storyboard = storyboardQuery.data?.storyboard ?? null;
@@ -96,6 +98,11 @@ export function ProjectStepPage({ step }: { step: ProjectStep }) {
           <p>{copy.description}</p>
         </div>
         <div className={styles.headerActions}>
+          {step === "script" && scriptQuery.data?.script?.assetId && activeScript ? (
+            <Button variant="secondary" onClick={() => setCritiqueOpen(true)}>
+              Receive feedback
+            </Button>
+          ) : null}
           <ButtonLink
             variant="secondary"
             to={`/projects/${encodeURIComponent(projectId)}/concept`}
@@ -210,6 +217,19 @@ export function ProjectStepPage({ step }: { step: ProjectStep }) {
         }}
         onClose={() => setActiveEdit(null)}
         asset={activeEdit ? <EditPreview item={activeEdit.item} project={project} /> : null}
+      />
+      <AssetCritiqueDialog
+        open={critiqueOpen}
+        projectId={projectId}
+        assetId={scriptQuery.data?.script?.assetId ?? ""}
+        title="Review this script"
+        subtitle="Ask about clarity, structure, pacing, dialogue, or tone."
+        preview={
+          <div className={styles.modalPreview}>
+            {activeScriptText(activeScript)}
+          </div>
+        }
+        onClose={() => setCritiqueOpen(false)}
       />
     </main>
   );
@@ -413,14 +433,32 @@ function scriptFields(
   activeScript: ScriptDraft | null,
   storyboard: ProjectStoryboard | null,
 ): FieldItem[] {
-  if (activeScript?.narration?.trim()) {
+  if (activeScript) {
     return [
-      {
-        id: activeScript.id ?? "active-script",
-        label: "Active script",
-        value: activeScript.narration,
-        scope: "script",
-      },
+      ...(activeScript.narration?.trim()
+        ? [{
+            id: activeScript.id ?? "active-script",
+            label: "Active script",
+            value: activeScript.narration.trim(),
+            scope: "script" as const,
+          }]
+        : []),
+      ...activeScript.scenes.flatMap((scene) => [
+        ...(scene.narration
+          ? [{
+              id: `${scene.id}-narration`,
+              label: scene.title,
+              value: scene.narration,
+              scope: "script" as const,
+            }]
+          : []),
+        ...scene.dialogue.map((line, index) => ({
+          id: `${scene.id}-dialogue-${index}`,
+          label: line.characterName ?? scene.title,
+          value: line.text,
+          scope: "script" as const,
+        })),
+      ]),
     ];
   }
   const narrationScript = project.brief?.narration?.script?.trim();
@@ -441,6 +479,19 @@ function scriptFields(
     scope: "script",
     target: line.target,
   }));
+}
+
+function activeScriptText(activeScript: ScriptDraft | null): string {
+  if (!activeScript) return "";
+  return [
+    activeScript.narration?.trim(),
+    ...activeScript.scenes.flatMap((scene) => [
+      scene.narration?.trim(),
+      ...scene.dialogue.map((line) => line.text.trim()),
+    ]),
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join("\n\n");
 }
 
 function storyboardScriptLines(storyboard: ProjectStoryboard | null) {

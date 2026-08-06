@@ -102,6 +102,15 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   active before preview. The viewer coverage also verifies an owned,
   ready asset presents a primary exact-target Request Changes action through the
   durable proposal preview and restores the same deep-linked viewer on Escape.
+  It also covers exact-target advisory Receive feedback across an owned image,
+  the authoritative active-script endpoint's exact asset, and the selected
+  final video. Assertions protect the editable/default question, request
+  idempotency header, structured response, video frame-sampling limitation copy,
+  complete narration-plus-dialogue preview, remote-only media ineligibility,
+  and mobile overflow. Delayed and failing script-response cases prove the
+  project overview waits for the authoritative snapshot and fails closed with
+  retryable error UI rather than rendering legacy text. The fixture response
+  leaves source assets and active selections unchanged.
   Mobile coverage verifies that action spans the viewer footer without overflow,
   processing assets explain their disabled state, and public assets remain
   read-only without an edit action. Viewer geometry coverage also preserves a

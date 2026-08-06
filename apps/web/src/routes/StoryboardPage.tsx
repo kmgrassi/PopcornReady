@@ -8,6 +8,7 @@ import type {
   StoryboardScene,
 } from "@popcorn/shared/v1/types";
 import { AssetEditModal } from "../components/media/AssetEditModal";
+import { AssetCritiqueButton } from "../components/ai-edit/AssetCritiqueButton";
 import { AssetImage } from "../components/media/AssetImage";
 import { QuickLoadingState } from "../components/ui/QuickLoadingState";
 import { Button, ButtonLink } from "../components/ui/Button";
@@ -160,6 +161,7 @@ export function StoryboardPage() {
             </p>
           ) : null}
           <StoryboardBody
+            projectId={projectId}
             storyboard={storyboard}
             revisingBeats={revisingBeats}
             sceneWireframe={sceneWireframe}
@@ -206,6 +208,7 @@ export function StoryboardPage() {
 }
 
 function StoryboardBody({
+  projectId,
   storyboard,
   revisingBeats,
   sceneWireframe,
@@ -213,6 +216,7 @@ function StoryboardBody({
   onRegenerateStart,
   onRegenerateSettled,
 }: {
+  projectId: string;
   storyboard: ProjectStoryboard;
   revisingBeats: Set<string>;
   sceneWireframe: SceneWireframeMutation;
@@ -230,6 +234,7 @@ function StoryboardBody({
     <div className={styles.scenes}>
       {scenes.map((scene, index) => (
         <SceneSection
+          projectId={projectId}
           key={scene.id}
           scene={scene}
           storyboardId={storyboard.id}
@@ -249,6 +254,7 @@ function StoryboardBody({
 }
 
 function SceneSection({
+  projectId,
   scene,
   storyboardId,
   revisingBeats,
@@ -259,6 +265,7 @@ function SceneSection({
   onRegenerateStart,
   onRegenerateSettled,
 }: {
+  projectId: string;
   scene: StoryboardScene;
   storyboardId: string;
   revisingBeats: Set<string>;
@@ -341,6 +348,17 @@ function SceneSection({
               : {})}
           />
         )}
+        {scene.sceneAssetId && sceneImage ? (
+          <div className={styles.feedbackAction}>
+            <AssetCritiqueButton
+              projectId={projectId}
+              assetId={scene.sceneAssetId}
+              title={`Review ${sceneTitle} storyboard image`}
+              subtitle={`Scene ${order}`}
+              preview={<img src={sceneImage} alt={`${sceneTitle} storyboard image`} />}
+            />
+          </div>
+        ) : null}
       </div>
       {beats.length === 0 ? (
         // A scene with no beats yet (e.g. its storyboard stage never ran): offer
@@ -371,7 +389,8 @@ function SceneSection({
       ) : (
         <div className={styles.beats}>
           {beats.map((beat, index) => (
-            <BeatCard
+          <BeatCard
+            projectId={projectId}
               key={beat.id}
               beat={beat}
               storyboardId={storyboardId}
@@ -396,6 +415,7 @@ function selectedPanel(beat: StoryboardBeat): StoryboardPanel | null {
 }
 
 function BeatCard({
+  projectId,
   beat,
   storyboardId,
   sceneId,
@@ -406,6 +426,7 @@ function BeatCard({
   onRegenerateStart,
   onRegenerateSettled,
 }: {
+  projectId: string;
   beat: StoryboardBeat;
   storyboardId: string;
   sceneId: string;
@@ -511,6 +532,17 @@ function BeatCard({
             : {})}
         />
       )}
+      {panel?.imageAssetId && image && !revising ? (
+        <div className={styles.feedbackAction}>
+          <AssetCritiqueButton
+            projectId={projectId}
+            assetId={panel.imageAssetId}
+            title={`Review ${label}`}
+            subtitle={`Scene ${sceneOrder} · Beat ${order}`}
+            preview={<img src={image} alt={label} />}
+          />
+        </div>
+      ) : null}
       <div className={styles.beatBody}>
         <p className={styles.beatIntent}>{label}</p>
       </div>

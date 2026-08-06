@@ -64,6 +64,20 @@ Read-optimized presentation of state. The user can:
 Observe surfaces carry **no input boxes and no edit buttons.** Their job is to
 make "what's going on" legible at a glance.
 
+An owned ready script, image, or video may expose **Receive feedback** as an
+observe-time advisory action. It opens an exact-object critique dialog with
+“How can we improve upon this?” prefilled and editable, sends the immutable
+asset snapshot plus that question to the configured AI, and presents strengths,
+improvements, evidence, and limitations. The response may be persisted as a
+critique asset linked to its subject for provenance, but it never changes the
+subject, moves a selection, creates a rerun proposal, or starts generation.
+This is an explicit observe-mode exception to the no-input rule: the question
+changes only the requested analysis, not product content. Audio and public or
+unresolved assets do not expose the action. A remote playback URL is not enough:
+image/video surfaces expose feedback only when the source also has managed
+storage bytes the API can materialize. Script previews render the complete
+active snapshot, including top-level narration, scene narration, and dialogue.
+
 Project overview posters, overview storyboard images, and persisted project-media
 previews use their stable asset identity to open the canonical Library asset
 viewer. In project media, that inspection link remains separate from selecting
@@ -91,9 +105,10 @@ The **only** path to changing content. Selecting an object and choosing to chang
 it opens the **Request Changes modal** (§3) — a scoped prompt to the agent. The user
 describes intent in natural language; the agent does the rest.
 
-There is no third primitive. If a proposed interaction is neither "observe" nor
-"request changes," it does not belong in the product without an explicit, documented
-exception (§5).
+There is no third primitive. Receive feedback is advisory observation, not a
+content-editing primitive. If a proposed interaction is neither "observe" nor
+"request changes," it does not belong in the product without an explicit,
+documented exception (§5).
 
 ### 2.3 Initial creation entry points
 

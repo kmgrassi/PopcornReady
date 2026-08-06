@@ -79,6 +79,12 @@ request this billing projection. Only actions with exactly one output asset
 are attributable; ambiguous and historical unlinked debits return `null`
 instead of inventing a per-asset split.
 
+Exact-asset advisory critique is also request-scoped. The signed-in critique
+route threads its JWT-backed Supabase client through source lookup, durable
+action creation and finalization, replay lookup, and critique-asset insertion,
+so project, asset, action, edge, and selection policies evaluate the caller.
+Local authentication mode alone uses the service client for this workflow.
+
 ## Direct Postgres safety rules
 
 `DATABASE_URL` is server-only. The pool is lazy, but production readiness now
