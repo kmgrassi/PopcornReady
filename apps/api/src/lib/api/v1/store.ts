@@ -176,6 +176,7 @@ import type {
   UpdateActionPatch,
   V1Action,
   V1Asset,
+  V1AssetEmbeddingSource,
   V1AssetAnalysis,
   V1BriefVersion,
   V1Project,
@@ -209,6 +210,7 @@ export type {
   UpdateActionPatch,
   V1Action,
   V1Asset,
+  V1AssetEmbeddingSource,
   V1AssetAnalysis,
   V1BriefVersion,
   V1Project,
@@ -402,8 +404,6 @@ function mapProject(
     hasStoryboard?: boolean;
     posterAssetId?: string | null;
     posterUrl?: string | null;
-    scriptAssetId?: string | null;
-    activeScript?: ScriptDraft | null;
   } = {}
 ): V1Project {
   return {
@@ -419,8 +419,6 @@ function mapProject(
     hasStoryboard: projection.hasStoryboard ?? false,
     posterAssetId: projection.posterAssetId ?? null,
     posterUrl: projection.posterUrl ?? null,
-    scriptAssetId: projection.scriptAssetId ?? null,
-    activeScript: projection.activeScript ?? null,
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
   };
@@ -1111,10 +1109,8 @@ async function projectProjection(
   hasStoryboard: boolean;
   posterAssetId: string | null;
   posterUrl: string | null;
-  scriptAssetId: string | null;
-  activeScript: ScriptDraft | null;
 }> {
-  const [briefAsset, storyboard, posterAsset, scriptAsset] = await Promise.all([
+  const [briefAsset, storyboard, posterAsset] = await Promise.all([
     selectedDataAsset(db, projectId, "brief", "brief"),
     runQuery(
       "store.projectProjection storyboard",
@@ -1126,7 +1122,6 @@ async function projectProjection(
         .maybeSingle()
     ),
     projectPosterAsset(db, projectId, opts),
-    selectedDataAsset(db, projectId, "script_draft", "narration_script", "script_draft"),
   ]);
   const poster = {
     posterAssetId: posterAsset?.id ?? null,
@@ -1136,8 +1131,6 @@ async function projectProjection(
     brief: briefAsset ? unmarkedContent<VideoBrief>(briefAsset.content) : null,
     currentBriefVersionId: briefAsset?.id ?? null,
     hasStoryboard: Boolean(storyboard),
-    scriptAssetId: scriptAsset?.id ?? null,
-    activeScript: scriptAsset ? unmarkedContent<ScriptDraft>(scriptAsset.content) : null,
     ...poster,
   };
 }
@@ -1961,6 +1954,17 @@ function mapAssetRow(row: AssetRow): V1Asset {
   }
   if (row.visibility != null) asset.visibility = row.visibility;
   return asset;
+}
+
+/** Pure raw-row projection used by the embedding worker and boundary tests. */
+export function mapAssetEmbeddingSourceRow(
+  row: AssetRow
+): V1AssetEmbeddingSource {
+  return {
+    ...mapAssetRow(row),
+    graphKind: row.kind,
+    media: row.media,
+  };
 }
 
 async function mapAsset(row: AssetRow): Promise<V1Asset> {
@@ -5796,6 +5800,27 @@ export async function getAssetCritiqueSource(input: {
     );
   }
   return { kind: row.media, asset };
+}
+
+/**
+ * Read the authoritative embedding identity from the persisted asset row.
+ * The public V1 projection intentionally exposes physical media as `kind`, so
+ * embedding code must not use it to reconstruct the semantic graph kind.
+ */
+export async function getAssetEmbeddingSource(
+  workspaceId: string,
+  projectId: string,
+  assetId: string
+): Promise<V1AssetEmbeddingSource> {
+  const db = getServiceSupabase();
+  const row = await getAssetRow(
+    db,
+    workspaceId,
+    projectId,
+    assetId,
+    "getAssetEmbeddingSource"
+  );
+  return mapAssetEmbeddingSourceRow(row);
 }
 
 // Canonicalize a mix of asset uuids and agent-written slugs to uuids. Reads accept

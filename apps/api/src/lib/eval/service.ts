@@ -78,6 +78,7 @@ export interface EvalSuiteSummary extends EvalSuite {
 
 const GENERATION_STAGE_TYPES: GenerationStageType[] = [
   "creative_plan",
+  "script",
   "storyboard",
   "asset_generation",
   "audio_generation",

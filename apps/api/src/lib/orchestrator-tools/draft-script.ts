@@ -1,5 +1,6 @@
 import {
   addProjectScriptDraft as realAddProjectScriptDraft,
+  getActiveProjectScriptDraft as realGetActiveProjectScriptDraft,
   getActiveProjectBrief as realGetActiveProjectBrief,
   getActiveProjectStoryBlueprint as realGetActiveProjectStoryBlueprint,
   type ActiveProjectBrief,
@@ -27,6 +28,7 @@ import { ToolInputError } from "./types";
 
 export interface DraftScriptInput {
   feedback?: string;
+  revisedScript?: string;
 }
 
 export interface DraftScriptOutput {
@@ -39,6 +41,7 @@ export interface DraftScriptDeps {
   getActiveProjectBrief: typeof realGetActiveProjectBrief;
   getActiveProjectStoryBlueprint: typeof realGetActiveProjectStoryBlueprint;
   addProjectScriptDraft: typeof realAddProjectScriptDraft;
+  getActiveProjectScriptDraft: typeof realGetActiveProjectScriptDraft;
   buildFootageGroundingContext: typeof buildFootageGroundingContext;
 }
 
@@ -46,6 +49,7 @@ const defaultDeps: DraftScriptDeps = {
   getActiveProjectBrief: realGetActiveProjectBrief,
   getActiveProjectStoryBlueprint: realGetActiveProjectStoryBlueprint,
   addProjectScriptDraft: realAddProjectScriptDraft,
+  getActiveProjectScriptDraft: realGetActiveProjectScriptDraft,
   buildFootageGroundingContext,
 };
 
@@ -89,6 +93,10 @@ export const draftScriptInputSchema = {
     revisionInstruction: {
       type: "string",
       description: "Alias used by approval-rejection retries.",
+    },
+    revisedScript: {
+      type: "string",
+      description: "Complete revised script text that incorporates the requested changes.",
     },
   },
   required: [],
@@ -152,7 +160,7 @@ export function parseDraftScriptInput(input: unknown): DraftScriptInput {
       expected: draftScriptInputSchema,
     });
   }
-  const allowed = new Set(["feedback", "revisionInstruction"]);
+  const allowed = new Set(["feedback", "revisionInstruction", "revisedScript"]);
   const extra = Object.keys(input).filter((key) => !allowed.has(key));
   if (extra.length > 0) {
     throw new ToolInputError("draft_script received unsupported fields.", {
@@ -167,8 +175,15 @@ export function parseDraftScriptInput(input: unknown): DraftScriptInput {
   if (revisionInstruction !== undefined && typeof revisionInstruction !== "string") {
     throw new ToolInputError("draft_script revisionInstruction must be a string.", {});
   }
+  const revisedScript = input.revisedScript;
+  if (revisedScript !== undefined && typeof revisedScript !== "string") {
+    throw new ToolInputError("draft_script revisedScript must be a string.", {});
+  }
   const instruction = feedback ?? revisionInstruction;
-  return instruction && instruction.trim() ? { feedback: instruction.trim() } : {};
+  return {
+    ...(instruction && instruction.trim() ? { feedback: instruction.trim() } : {}),
+    ...(revisedScript && revisedScript.trim() ? { revisedScript: revisedScript.trim() } : {}),
+  };
 }
 
 function briefRequired(): ToolCallResult<DraftScriptOutput> {
@@ -319,6 +334,7 @@ export function draftScriptFromState(input: {
   brief: ActiveProjectBrief;
   blueprint: ActiveProjectStoryBlueprint;
   feedback?: string;
+  revisedScript?: string;
   footageGrounding?: FootageGroundingContext | null;
 }): Omit<
   ScriptDraft,
@@ -330,22 +346,31 @@ export function draftScriptFromState(input: {
   const characters = story.characters.slice(0, 2);
   const perSceneDuration = sceneDuration(story.targetLengthSec, acts.length);
   const grounding = groundingNarrationParts(input.footageGrounding);
+  const providedScript = input.revisedScript ??
+    (input.brief.brief.narration?.mode === "provided_text"
+      ? input.brief.brief.narration.script?.trim()
+      : undefined);
 
   const scenes: ScriptScene[] = acts.map((act, index) => {
-    const narrationParts = [
-      act.summary,
-      act.purpose,
-      index === 0 ? grounding.narration.join(" ") : undefined,
-      index === acts.length - 1 ? story.ending : undefined,
-      input.feedback ? `Revision note: ${input.feedback}` : undefined,
-    ].filter(Boolean);
+    const narrationParts = providedScript
+      ? [
+          index === 0 ? providedScript : undefined,
+        ].filter(Boolean)
+      : [
+          act.summary,
+          act.purpose,
+          index === 0 ? grounding.narration.join(" ") : undefined,
+          index === acts.length - 1 ? story.ending : undefined,
+          input.feedback ? `Revision note: ${input.feedback}` : undefined,
+        ].filter(Boolean);
     return {
       id: `script_scene_${index + 1}`,
       title: act.title,
       summary: act.summary,
       narration: narrationParts.join(" "),
-      dialogue:
-        index === 0 && grounding.dialogue.length > 0
+      dialogue: providedScript
+        ? []
+        : index === 0 && grounding.dialogue.length > 0
           ? grounding.dialogue
           : characters.map((character, characterIndex) =>
               characterLine(character, act, characterIndex)
@@ -355,11 +380,13 @@ export function draftScriptFromState(input: {
     };
   });
 
-  const narration = [
-    story.logline ?? story.premise,
-    ...scenes.map((scene) => scene.narration).filter(Boolean),
-    story.ending,
-  ].join("\n\n");
+  const narration = providedScript
+    ? providedScript
+    : [
+        story.logline ?? story.premise,
+        ...scenes.map((scene) => scene.narration).filter(Boolean),
+        story.ending,
+      ].join("\n\n");
 
   return {
     schemaVersion: "scriptDraft.v1",
@@ -391,7 +418,7 @@ export function createDraftScriptTool(
       ],
       useWhen: [
         "The story blueprint is ready and the project needs scene-level dialogue or narration before shot planning or audio generation.",
-        "A script-stage review was rejected and narration/dialogue needs revising (pass feedback).",
+        "A script-stage review was rejected: rewrite the complete script from the feedback and pass it as revisedScript.",
       ],
     },
     inputSchema: draftScriptInputSchema,
@@ -413,6 +440,19 @@ export function createDraftScriptTool(
           },
         };
       }
+      if (input.feedback && !input.revisedScript) {
+        return {
+          status: "failed",
+          error: {
+            kind: "invalid_input",
+            message: "A script revision requires the complete rewritten script in revisedScript.",
+            recoverable: true,
+            suggestedNextTools: [
+              { tool: "draft_script", inputHint: { revisedScript: "Complete rewritten script" } },
+            ],
+          },
+        };
+      }
 
       const brief = await resolved.getActiveProjectBrief(context.projectId);
       if (!brief) return briefRequired();
@@ -424,11 +464,13 @@ export function createDraftScriptTool(
         projectId: context.projectId,
         assetIds: selectedUploadedFootageAssetIds(context.metadata),
       });
+      const predecessor = await resolved.getActiveProjectScriptDraft(context.projectId);
 
       const scriptDraft = draftScriptFromState({
         brief,
         blueprint,
         feedback: input.feedback,
+        revisedScript: input.revisedScript,
         footageGrounding,
       });
       const persisted = await resolved.addProjectScriptDraft({
@@ -441,6 +483,7 @@ export function createDraftScriptTool(
         storyBlueprintAssetId: blueprint.assetId,
         storyBlueprintContentHash: blueprint.contentHash,
         groundingInputs: groundingGraphInputs(footageGrounding, 2),
+        ...(predecessor ? { supersedesId: predecessor.scriptDraftId } : {}),
       });
 
       const output: ScriptDraft = {

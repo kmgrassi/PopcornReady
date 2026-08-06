@@ -14,6 +14,7 @@ import type {
   VideoBriefInput,
 } from "@popcorn/shared/v1/types";
 import type { Project } from "@popcorn/shared/types";
+import type { ScriptDraft } from "@popcorn/shared/types";
 
 export type {
   AssetKind,
@@ -155,6 +156,15 @@ export interface ForkProjectResponse {
 
 export interface ProjectStoryboardResponse {
   storyboard: ProjectStoryboard | null;
+}
+
+export interface ProjectScriptResponse {
+  script: {
+    scriptDraft: ScriptDraft;
+    scriptDraftId: string;
+    assetId: string;
+    contentHash: string;
+  } | null;
 }
 
 export interface SaveStoryboardBeatInput {

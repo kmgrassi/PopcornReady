@@ -10,6 +10,8 @@ import type {
 import {
   resumeOrchestratorRun,
   runOrchestratorToCompletion,
+  registryBeforeScriptApproval,
+  hasUnresolvedAfterGate,
   type EngineDeps,
   type InvocationRecord,
   type OrchestratorEngineStore,
@@ -243,6 +245,100 @@ function imageReportBuilder(input: Parameters<typeof buildDomainReportFromComple
 }
 
 // ---------- tests ----------
+
+test("an unresolved script gate hides every media and delegation tool", () => {
+  const registry = fakeRegistry({
+    create_or_load_brief: () => ok(),
+    develop_story_blueprint: () => ok(),
+    draft_script: () => ok(),
+    plan_shots: () => ok(),
+    generate_storyboard: () => ok(),
+    delegate_visuals: () => ok(),
+    delegate_audio: () => ok(),
+  });
+
+  const visible = registryBeforeScriptApproval(
+    registry,
+    [gateFixture("after:draft_script", "pending")],
+  );
+
+  assert.deepEqual([...visible.keys()], [
+    "create_or_load_brief",
+    "develop_story_blueprint",
+    "draft_script",
+  ]);
+  assert.equal(visible.has("generate_storyboard"), false);
+  assert.equal(visible.has("delegate_visuals"), false);
+  assert.equal(visible.has("delegate_audio"), false);
+});
+
+test("the root cannot finish while a required after-tool gate is unresolved", async () => {
+  const store = new FakeStore(
+    runFixture(),
+    [gateFixture("after:draft_script", "pending")],
+  );
+  const { model } = scriptedModel([
+    { type: "done" },
+    { type: "tool_call", toolName: "draft_script" },
+  ]);
+
+  const result = await runOrchestratorToCompletion(
+    "run1",
+    deps(store, model, fakeRegistry({ draft_script: () => ok() })),
+  );
+
+  assert.equal(hasUnresolvedAfterGate(store.gates), false);
+  assert.equal(store.gates[0]?.status, "reached");
+  assert.equal(result.status, "succeeded");
+});
+
+test("a root crosses script rejection, script approval, and storyboard approval in order", async () => {
+  const store = new FakeStore(
+    runFixture(),
+    [
+      gateFixture("after:draft_script", "pending"),
+      gateFixture("after:generate_storyboard", "pending"),
+    ],
+  );
+  const registry = fakeRegistry({
+    draft_script: () => ok(["script-asset"]),
+    generate_storyboard: () => ok(["storyboard-asset"]),
+  });
+
+  let result = await runOrchestratorToCompletion(
+    "run1",
+    deps(store, scriptedModel([{ type: "tool_call", toolName: "draft_script" }]).model, registry),
+  );
+  assert.equal(result.status, "succeeded");
+  assert.equal(store.gates[0]?.status, "reached");
+  assert.equal(store.actions.some((action) => action.tool === "generate_storyboard"), false);
+
+  store.gates[0]!.status = "rejected";
+  store.run = { ...store.run, status: "waiting" };
+  result = await resumeOrchestratorRun(
+    "run1",
+    deps(store, scriptedModel([{ type: "tool_call", toolName: "draft_script" }]).model, registry),
+  );
+  assert.equal(result.status, "succeeded");
+  assert.equal(store.gates[0]?.status, "reached");
+
+  store.gates[0]!.status = "approved";
+  store.run = { ...store.run, status: "waiting" };
+  result = await resumeOrchestratorRun(
+    "run1",
+    deps(store, scriptedModel([{ type: "tool_call", toolName: "generate_storyboard" }]).model, registry),
+  );
+  assert.equal(result.status, "succeeded");
+  assert.equal(store.gates[1]?.status, "reached");
+
+  store.gates[1]!.status = "approved";
+  store.run = { ...store.run, status: "waiting" };
+  result = await resumeOrchestratorRun(
+    "run1",
+    deps(store, scriptedModel([{ type: "done" }]).model, registry),
+  );
+  assert.equal(result.status, "succeeded");
+});
 
 test("prepares once before persistence and reuses the canonical input", async () => {
   const store = new FakeStore(runFixture());

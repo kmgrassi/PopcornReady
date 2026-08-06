@@ -33,8 +33,8 @@
 
 - Treat “Receive feedback” as an advisory critique, separate from graph-mutating
   “Request Changes” proposals.
-- Use one exact-target API contract for a media asset ID or the projected active
-  script asset ID. Never broaden a missing target to the project.
+- Use one exact-target API contract for a media asset ID or the authoritative
+  active-script endpoint's asset ID. Never broaden a missing target to the project.
 - Run image critique against stored image bytes, video critique against sampled
   frames, and script critique against the typed active script snapshot.
 - Persist each completed response as a pooled `critique` data asset with a graph
@@ -50,7 +50,7 @@
 ## Changes
 
 - Added a workspace-scoped, idempotent critique endpoint for exact graph assets.
-  Script requests use the projected typed active script snapshot, image requests
+  Script requests use the exact typed script asset snapshot, image requests
   use stored bytes, and video requests use representative sampled frames.
 - Persisted successful responses as linked `critique` graph assets and recorded
   `critique_asset` actions without moving content selections. Failed requests
@@ -73,6 +73,12 @@
 - `git diff --check` — passed.
 - `pnpm agent:validate -- --scope all` — passed, including repository lint,
   workflow, migration, RPC/relation-boundary, web typecheck, and API typecheck.
+- Post-merge API and web typechecks passed. The targeted API selection passed 10
+  tests (the 8 critique tests plus the project script-approval boundary), and
+  the final Library Chromium selection passed all 11 tests, including delayed
+  authoritative-script loading and fail-closed error handling.
+- Post-merge `pnpm agent:lint:fix`, `git diff --check`, and
+  `pnpm agent:validate -- --scope all` passed across the combined 69-file diff.
 - Local Vite app and provider-free mock API started successfully. The in-app
   browser reached `/projects/proj-alpha/script`, after which its URL security
   policy blocked all further local-page inspection. Per policy, no alternate
@@ -109,6 +115,14 @@
 - Wrap-up review reran the 8 targeted API tests and full repository validation;
   both passed, with no remaining P1/P2 implementation or documentation blocker
   after this worksheet cleanup.
+- Merge-conflict resolution incorporated `origin/main`'s script-first and
+  embedding-source work. Both asset-source readers remain available, while web
+  script surfaces now take the immutable draft and exact graph asset ID from
+  `GET /projects/:projectId/script` instead of duplicating those fields on the
+  general project projection. Merge review required the overview to include
+  the authoritative script query in its loading/error boundary; delayed and
+  failing browser regressions now cover that behavior. Final re-review found no
+  remaining P1/P2 implementation blocker.
 
 ## Blockers and risks
 
@@ -120,4 +134,5 @@
 
 ## Next action / handoff
 
-- Commit, tag, push, and open the ready-for-review PR.
+- Complete merge review and full validation, commit the merge resolution, and
+  push the updated ready-for-review PR.

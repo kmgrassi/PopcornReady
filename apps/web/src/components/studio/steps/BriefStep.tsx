@@ -1,4 +1,4 @@
-import type { StepProps } from "../useStudioFlow";
+import { hasStudioStartingMaterial, type StepProps } from "../useStudioFlow";
 import { AdvancedDirection } from "../AdvancedDirection";
 import { lengthOptions, studioCopy } from "../copy";
 import { StepShell } from "./StepShell";
@@ -49,37 +49,87 @@ export function BriefStep({ draft, update, next, openPanel }: BriefStepProps) {
       onNext={next}
       nextCta
       nextLabel="Continue →"
-      nextDisabled={!draft.goal.trim()}
+      nextDisabled={!hasStudioStartingMaterial(draft)}
       stage
     >
       <div className={styles.form}>
-        <label className={styles.field}>
-          <span className={styles.label}>{studioCopy.brief.goalLabel}</span>
-          <textarea
-            className={styles.goal}
-            value={draft.goal}
-            placeholder={studioCopy.brief.goalPlaceholder}
-            onChange={(event) => update({ goal: event.target.value })}
-          />
-        </label>
+        <fieldset className={styles.field}>
+          <legend className={styles.label}>Start with</legend>
+          <div className={`${styles.segmented} ${styles.sourceChoice}`}>
+            <label className={styles.option}>
+              <input
+                className={styles.optionInput}
+                type="radio"
+                name="brief-start-source"
+                checked={draft.startSource === "idea"}
+                onChange={() => update({ startSource: "idea" })}
+              />
+              <span className={styles.optionLabel}>
+                <span className={styles.optionValue}>An idea</span>
+                <span className={styles.optionDescription}>We’ll write the script</span>
+              </span>
+            </label>
+            <label className={styles.option}>
+              <input
+                className={styles.optionInput}
+                type="radio"
+                name="brief-start-source"
+                checked={draft.startSource === "script"}
+                onChange={() => update({ startSource: "script" })}
+              />
+              <span className={styles.optionLabel}>
+                <span className={styles.optionValue}>A script</span>
+                <span className={styles.optionDescription}>Use your words as the draft</span>
+              </span>
+            </label>
+          </div>
+        </fieldset>
 
-        <div className={styles.promptChips} aria-label="Prompt examples">
-          {promptChips.map((chip) => (
-            <button
-              className={styles.promptChip}
-              type="button"
-              key={chip.label}
-              onClick={() =>
-                update({
-                  goal: chip.prompt,
-                  targetLengthSec: chip.targetLengthSec,
-                })
-              }
-            >
-              {chip.label}
-            </button>
-          ))}
-        </div>
+        {draft.startSource === "idea" ? (
+          <>
+            <label className={styles.field}>
+              <span className={styles.label}>{studioCopy.brief.goalLabel}</span>
+              <textarea
+                className={styles.goal}
+                value={draft.goal}
+                placeholder={studioCopy.brief.goalPlaceholder}
+                onChange={(event) => update({ goal: event.target.value })}
+              />
+            </label>
+
+            <div className={styles.promptChips} aria-label="Prompt examples">
+              {promptChips.map((chip) => (
+                <button
+                  className={styles.promptChip}
+                  type="button"
+                  key={chip.label}
+                  onClick={() =>
+                    update({
+                      goal: chip.prompt,
+                      targetLengthSec: chip.targetLengthSec,
+                    })
+                  }
+                >
+                  {chip.label}
+                </button>
+              ))}
+            </div>
+          </>
+        ) : (
+          <label className={styles.field}>
+            <span className={styles.label}>Script</span>
+            <span className={styles.fieldHelp}>
+              Paste narration, dialogue, or scene copy. Your first draft stays
+              text-only until you approve it.
+            </span>
+            <textarea
+              className={`${styles.goal} ${styles.script}`}
+              value={draft.scriptText}
+              placeholder={'OPEN ON: A quiet kitchen before sunrise.\n\nNARRATOR: Every good day starts with one small ritual…'}
+              onChange={(event) => update({ scriptText: event.target.value })}
+            />
+          </label>
+        )}
 
         <fieldset className={styles.field}>
           <legend className={styles.label}>{studioCopy.brief.lengthLabel}</legend>
@@ -107,7 +157,9 @@ export function BriefStep({ draft, update, next, openPanel }: BriefStepProps) {
         </fieldset>
 
         <p className={styles.advancedHint}>
-          Style, tone, pacing, format, references, constraints.
+          {draft.startSource === "script"
+            ? "Add optional context for how the script should become a video."
+            : "Style, tone, pacing, format, references, constraints."}
         </p>
         <AdvancedDirection
           draft={draft}

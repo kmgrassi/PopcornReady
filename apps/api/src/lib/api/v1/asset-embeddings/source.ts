@@ -1,6 +1,6 @@
 import { createHash } from "crypto";
 import type { AssetSemanticAnalysis } from "@/lib/assets/semantic-analysis";
-import type { V1Asset } from "../store";
+import type { V1Asset, V1AssetEmbeddingSource } from "../store";
 
 export type AssetEmbeddingChunkKind = "asset_summary" | "transcript" | "planning";
 
@@ -58,7 +58,7 @@ function transcriptText(asset: V1Asset): string | undefined {
   );
 }
 
-function summaryLines(asset: V1Asset): string[] {
+function summaryLines(asset: V1AssetEmbeddingSource): string[] {
   const meaningful: string[] = [];
   addLine(meaningful, "Role", asset.role);
   addLine(meaningful, "Description", asset.userContext?.description);
@@ -89,42 +89,32 @@ function summaryLines(asset: V1Asset): string[] {
 
   const lines: string[] = [
     `Asset kind: ${asset.kind}`,
-    `Graph kind: ${graphKindForAsset(asset)}`,
+    `Graph kind: ${asset.graphKind}`,
   ];
   addLine(lines, "Filename", asset.filename);
   lines.push(...meaningful);
   return lines;
 }
 
-function graphKindForAsset(asset: V1Asset): string {
-  if (asset.kind === "audio") return "audio_track";
-  if (asset.kind === "image") {
-    if (asset.role === "poster") return "poster";
-    if (asset.role === "character_anchor" || asset.role === "scene_anchor") return "anchor";
-    return asset.provenance ? "keyframe" : "anchor";
-  }
-  if (asset.role === "export_video") return "render";
-  return asset.provenance ? "clip" : "source_footage";
-}
-
-function isEligible(asset: V1Asset): boolean {
+function isEligible(asset: V1AssetEmbeddingSource): boolean {
   if (asset.status !== "ready") return false;
-  const graphKind = graphKindForAsset(asset);
-  return [
-    "source_footage",
-    "anchor",
-    "keyframe",
-    "poster",
-    "clip",
-    "audio_track",
-    "brief",
-    "plan",
-    "story_blueprint",
-    "narration_script",
-  ].includes(graphKind);
+  if (asset.graphKind === "source_footage") return asset.media !== "data";
+  if (
+    asset.graphKind === "image" ||
+    asset.graphKind === "anchor" ||
+    asset.graphKind === "keyframe" ||
+    asset.graphKind === "poster"
+  ) {
+    return asset.media === "image";
+  }
+  if (asset.graphKind === "clip") return asset.media === "video";
+  if (asset.graphKind === "audio_track") return asset.media === "audio";
+  return false;
 }
 
-export function buildAssetEmbeddingSourceChunks(asset: V1Asset): AssetEmbeddingSourceChunk[] {
+export function buildAssetEmbeddingSourceChunks(
+  asset: V1AssetEmbeddingSource
+): AssetEmbeddingSourceChunk[] {
   if (!isEligible(asset)) return [];
   const chunks: AssetEmbeddingSourceChunk[] = [];
   const summary = textChunk("asset.summary", "asset_summary", summaryLines(asset));

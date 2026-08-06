@@ -5,6 +5,7 @@ import type {
   ProjectStoryboard,
   V1Project,
 } from "@popcorn/shared/v1/types";
+import type { ScriptDraft } from "@popcorn/shared/types";
 import type { ProjectWatchMedia, WorkspaceOutput } from "../lib/api-client";
 import { useAuth } from "../components/auth/AuthProvider";
 import { AiAssetFeedbackDialog } from "../components/ai-edit/AiAssetFeedbackDialog";
@@ -16,6 +17,7 @@ import { storyboardProgress, type StoryboardProgress } from "../lib/v1/storyboar
 import {
   useDeleteProjectMutation,
   useProjectQuery,
+  useProjectScriptQuery,
   useProjectStoryboardQuery,
   useProjectStoryboardRunQuery,
   useStartProjectStoryboardRunMutation,
@@ -115,6 +117,7 @@ export function ProjectDetailPage() {
   const activeSection = isProjectSectionId(section) ? section : null;
   const authScope = useDashboardAuthScope();
   const projectQuery = useProjectQuery(projectId ?? "", Boolean(projectId));
+  const scriptQuery = useProjectScriptQuery(projectId ?? "", Boolean(projectId));
   const deleteProjectMutation = useDeleteProjectMutation(projectId ?? "");
   const startStoryboardRunMutation = useStartProjectStoryboardRunMutation(projectId ?? "");
   const runsQuery = useDashboardRunsQuery(authScope, {
@@ -125,11 +128,19 @@ export function ProjectDetailPage() {
   const latestRun = runsQuery.items[0] ?? null;
   const storyboardRunQuery = useProjectStoryboardRunQuery(projectId ?? "", Boolean(projectId));
   const storyboardBoundRun = storyboardRunQuery.data?.run ?? null;
+  const storyboardRunNeedsReview = Boolean(
+    storyboardBoundRun?.storyboardBoundaryStatus === "pending" &&
+      storyboardBoundRun.reviewGate,
+  );
   const storyboardRunActive = Boolean(
     storyboardBoundRun &&
       storyboardBoundRun.storyboardBoundaryStatus === "pending" &&
       (storyboardBoundRun.status === "queued" || storyboardBoundRun.status === "running")
   );
+  const storyboardRunBlocksCreate = storyboardRunActive || storyboardRunNeedsReview;
+  const storyboardReviewRunLink = storyboardRunNeedsReview && storyboardBoundRun
+    ? `/projects/${encodeURIComponent(projectId ?? "")}/runs/${encodeURIComponent(storyboardBoundRun.runId)}`
+    : null;
   const storyboardQuery = useProjectStoryboardQuery(
     projectId ?? "",
     Boolean(projectId),
@@ -186,8 +197,8 @@ export function ProjectDetailPage() {
     startStoryboardRunMutation.isPending ||
     storyboardRunActive ||
     storyboardProgressState.isGenerating;
-  const loading = projectQuery.isLoading;
-  const error = projectQuery.error ?? null;
+  const loading = projectQuery.isLoading || scriptQuery.isLoading;
+  const error = projectQuery.error ?? scriptQuery.error ?? null;
   const hasPlayableOutput = outputsQuery.items.some(isPlayableOutput);
   const watchDisabled = outputsQuery.loading || !hasPlayableOutput;
   const watchTitle = outputsQuery.loading
@@ -220,10 +231,12 @@ export function ProjectDetailPage() {
       storyboard={storyboard}
       storyboardGenerating={storyboardGenerating}
       storyboardError={startStoryboardRunMutation.error ?? storyboardRunError}
+      scriptReviewRunLink={storyboardReviewRunLink}
       hasBrief={Boolean(project.brief)}
       canGenerateStoryboard={Boolean(
         !storyboardPreviewIsBlocked(storyboardQuery.isLoading, storyboardQuery.error) &&
           !storyboardGenerating &&
+          !storyboardRunBlocksCreate &&
           project.brief
       )}
       onGenerate={startStoryboardRun}
@@ -236,6 +249,8 @@ export function ProjectDetailPage() {
       projectId={projectId}
       project={project}
       storyboard={storyboard}
+      activeScript={scriptQuery.data?.script?.scriptDraft ?? null}
+      scriptAssetId={scriptQuery.data?.script?.assetId ?? null}
       loading={loading}
       error={error}
       onRequestChanges={(scope) => {
@@ -251,7 +266,10 @@ export function ProjectDetailPage() {
           </p>
         ) : null
       }
-      onProjectRetry={() => void projectQuery.refetch()}
+      onProjectRetry={() => {
+        void projectQuery.refetch();
+        void scriptQuery.refetch();
+      }}
       backLink={{ to: "/library/projects", label: "Projects" }}
       titleFallback="Project overview"
       loadingSubtitle="Loading project details."
@@ -307,8 +325,11 @@ export function ProjectDetailPage() {
         progress: storyboardProgressState,
         generationError: startStoryboardRunMutation.error ?? storyboardRunError,
         unavailableReason: project?.brief
-          ? null
+          ? storyboardRunNeedsReview
+            ? "Review and approve the script before storyboard production begins."
+            : null
           : "Finish the project brief before creating a storyboard.",
+        reviewRunLink: storyboardReviewRunLink,
         onGenerate: startStoryboardRun,
       }}
       media={null}
@@ -321,9 +342,10 @@ export function ProjectDetailPage() {
         hasBrief: Boolean(project?.brief),
         projectStatus: project?.status,
         storyboardError: startStoryboardRunMutation.error ?? storyboardRunError,
+        scriptReviewPending: storyboardRunNeedsReview,
       })}
       mobileRunLink={
-        storyboardRunActive && storyboardBoundRun
+        storyboardRunBlocksCreate && storyboardBoundRun
           ? `/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(storyboardBoundRun.runId)}`
           : latestRun
           ? `/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(latestRun.runId)}`
@@ -375,6 +397,7 @@ export function ProjectDetailPage() {
         }}
         onExecutionSettled={() => {
           void projectQuery.refetch();
+          void scriptQuery.refetch();
           void storyboardQuery.refetch();
           void outputsQuery.refetch();
         }}
@@ -392,6 +415,8 @@ export function ProjectOverviewPage({
   projectId,
   project,
   storyboard,
+  activeScript,
+  scriptAssetId,
   loading,
   error,
   onProjectRetry,
@@ -413,6 +438,8 @@ export function ProjectOverviewPage({
   projectId: string;
   project: V1Project | null;
   storyboard: ProjectStoryboard | null;
+  activeScript?: ScriptDraft | null;
+  scriptAssetId?: string | null;
   loading: boolean;
   error: Error | null;
   onProjectRetry: () => void;
@@ -431,6 +458,7 @@ export function ProjectOverviewPage({
     progress: StoryboardProgress;
     generationError: Error | null;
     unavailableReason?: string | null;
+    reviewRunLink?: string | null;
     onGenerate?: () => void;
   };
   media?: ProjectWatchMedia | null;
@@ -507,6 +535,7 @@ export function ProjectOverviewPage({
                     progress={storyboardPreview.progress}
                     generationError={storyboardPreview.generationError}
                     unavailableReason={storyboardPreview.unavailableReason}
+                    reviewRunLink={storyboardPreview.reviewRunLink}
                     onGenerate={storyboardPreview.onGenerate}
                     onRequestChanges={
                       onRequestChanges ? () => onRequestChanges("board") : undefined
@@ -526,6 +555,8 @@ export function ProjectOverviewPage({
                       project={project}
                       projectId={projectId}
                       storyboard={storyboard}
+                      activeScript={activeScript ?? null}
+                      scriptAssetId={scriptAssetId ?? null}
                       readOnly={readOnly}
                       onRequestChanges={
                         onRequestChanges ? () => onRequestChanges("script") : undefined

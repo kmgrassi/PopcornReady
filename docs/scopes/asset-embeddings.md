@@ -1,5 +1,13 @@
 # Asset Embeddings Scope
 
+<!-- agent-summary: Asset embeddings are rebuildable search projections over immutable graph assets. -->
+<!-- agent-summary: Persisted assets.kind is the semantic graph identity; assets.media is physical representation. -->
+<!-- agent-summary: Embedding workers must read kind and media directly from a tenant-scoped database row. -->
+<!-- agent-summary: Never reconstruct graph kind from the legacy V1 media kind, role, or provenance. -->
+<!-- agent-summary: Source hashes make metadata refreshes and model backfills deterministic. -->
+<!-- agent-summary: Search queries retain workspace, project, visibility, and RLS boundaries. -->
+<!-- agent-summary: Provider failures do not block the underlying asset lifecycle. -->
+
 > **Goal:** Add embeddings to the asset graph deliberately: embed the asset
 > representations people and agents actually search for, at lifecycle points
 > where the searchable meaning is stable, without embedding every internal row or
@@ -7,11 +15,17 @@
 
 ## Status
 
-- **Status:** Planning document. No implementation in this PR.
+- **Status:** Implemented for reusable media assets, asynchronous refresh jobs,
+  and project/public hybrid search. Typed planning-source extraction exists in
+  the shared package, but production planning-asset enqueue remains pending.
+  This document remains the source of truth for boundary rules and later
+  retrieval expansion.
 - **This scope owns:** what gets embedded, when embeddings are created/refreshed,
   and the data model shape for asset-search embeddings.
-- **This scope does not own yet:** provider choice, vector dimensions, rollout
-  tuning, ranking weights, or UI copy.
+- **Current provider contract:** `text-embedding-3-small` at 1536 dimensions;
+  changing it requires a deliberate migration and backfill.
+- **This scope does not own yet:** rollout tuning, ranking-weight experiments,
+  later non-asset chunks, or UI copy.
 
 ## Current State
 
@@ -29,6 +43,17 @@ consume:
 
 That means embeddings should sit beside the asset graph as a search projection,
 not replace the asset graph or turn relational product structure into JSONB.
+
+Production enqueue and worker paths read a private, tenant-scoped embedding
+projection from the persisted `assets` row. That projection carries both
+`kind` and `media` as required fields. The public V1 asset projection remains
+media-shaped for compatibility and must never be used to infer semantic graph
+identity from media, role, or provider provenance.
+
+The current production worker projects the metadata envelope used by reusable
+media. It intentionally rejects `media = data` until the worker consumes the
+typed planning source projection, including canonical `assets.content`, rather
+than labeling data through the media-shaped V1 compatibility model.
 
 ## Principles
 
@@ -58,9 +83,10 @@ These are high-signal and directly useful for search or agent retrieval:
   media description. This lets users find their own footage and lets agents pick
   useful references.
 - **Generated reusable images**: `kind = anchor`, `keyframe`, or `poster`, media
-  `image`. Embed the prompt intent, visual description, subject/character/scene
-  context, and semantic analysis. These are likely to be reused as anchors,
-  posters, references, or visual direction.
+  `image`, plus generic reusable images with `kind = image`, media `image`.
+  Embed the prompt intent, visual description, subject/character/scene context,
+  and semantic analysis. These are likely to be reused as anchors, posters,
+  references, standalone artwork, or visual direction.
 - **Generated clips**: `kind = clip`, media `video`. Embed beat intent, visual
   summary, transcript/narration if present, selected upstream anchor/keyframe
   context, and semantic analysis.

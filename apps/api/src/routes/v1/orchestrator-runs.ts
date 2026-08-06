@@ -27,7 +27,6 @@ import {
   type UpdateOrchestratorRunPatch,
 } from "@/lib/api/v1/orchestrator-store";
 import {
-  createAction,
   createBriefVersion,
   getActiveProjectBrief,
   getAsset,
@@ -36,6 +35,7 @@ import {
   recordProjectActivity,
 } from "@/lib/api/v1/store";
 import { startPosterGenerationInBackground } from "@/lib/api/v1/poster-background";
+import { decideScriptReviewTransaction } from "@/lib/postgres/script-review-transaction";
 import {
   withStoryboardEntrypointLock,
   type StoryboardEntrypointLock,
@@ -163,16 +163,18 @@ export function stopAfterTools(body: unknown): string[] {
 }
 
 /**
- * Every newly started production run pauses after its complete storyboard.
+ * Every newly started production run pauses for script approval, then again
+ * after its complete storyboard.
  * This is server-owned policy: a client checkbox or an orchestrator decision
  * must never be able to skip the creator's first visual review.
  */
 export function initialRunStopAfterTools(body: unknown): string[] {
   // `stopAfter` and review-gate payloads are legacy controls. An initial
-  // production run has exactly one boundary: a complete storyboard. They are
-  // deliberately ignored rather than becoming an earlier client-created stop.
+  // production run has two server-owned boundaries: the script and complete
+  // storyboard. They are deliberately ignored rather than becoming
+  // client-created stops.
   void body;
-  return ["generate_storyboard"];
+  return ["draft_script", "generate_storyboard"];
 }
 
 function afterGateTools(tools: string[]): string[] {
@@ -184,7 +186,7 @@ export function initialRunGates(body: unknown): string[] {
   return afterGateTools(initialRunStopAfterTools(body));
 }
 
-/** Re-open a storyboard-complete run so approval can continue production. */
+/** Re-open a completed after-tool pass so approval can continue production. */
 export function storyboardContinuationPatch(run: OrchestratorRun): UpdateOrchestratorRunPatch {
   return {
     status: "waiting",
@@ -196,6 +198,14 @@ export function storyboardContinuationPatch(run: OrchestratorRun): UpdateOrchest
 
 export function isStoryboardAfterGate(gate: Pick<OrchestratorRunGate, "stage">): boolean {
   return gate.stage === `${AFTER_GATE_PREFIX}generate_storyboard`;
+}
+
+export function isScriptAfterGate(gate: Pick<OrchestratorRunGate, "stage">): boolean {
+  return gate.stage === `${AFTER_GATE_PREFIX}draft_script`;
+}
+
+export function isAfterGate(gate: Pick<OrchestratorRunGate, "stage">): boolean {
+  return gate.stage.startsWith(AFTER_GATE_PREFIX);
 }
 
 function canonicalize(value: unknown): unknown {
@@ -306,12 +316,6 @@ function budgetUsd(body: unknown): number | undefined {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
-function requestedProvider(body: unknown): string | undefined {
-  if (!isRecord(body) || typeof body.provider !== "string") return undefined;
-  const trimmed = body.provider.trim();
-  return trimmed || undefined;
-}
-
 const ACTIVE_RUN_STATUSES = new Set<OrchestratorRun["status"]>([
   "queued",
   "running",
@@ -331,6 +335,7 @@ export interface StoryboardEntrypointDeps {
 export interface StoryboardEntrypointStatusDeps {
   requireProjectAccess: typeof requireProjectAccess;
   getLatestRunForGate: typeof getLatestOrchestratorRunForGate;
+  listGates: typeof listRunGates;
 }
 
 export async function storyboardGenerationEntrypointStatusRoute(
@@ -342,6 +347,7 @@ export async function storyboardGenerationEntrypointStatusRoute(
   const resolved: StoryboardEntrypointStatusDeps = {
     requireProjectAccess,
     getLatestRunForGate: getLatestOrchestratorRunForGate,
+    listGates: listRunGates,
     ...deps,
   };
   await resolved.requireProjectAccess(ctx.auth.workspaceId, projectId);
@@ -349,11 +355,12 @@ export async function storyboardGenerationEntrypointStatusRoute(
     projectId,
     `${AFTER_GATE_PREFIX}generate_storyboard`
   );
+  const gates = boundary ? await resolved.listGates(boundary.run.id) : [];
   return {
     status: 200,
     headers: NO_STORE_HEADERS,
     body: {
-      run: boundary ? projectRun(boundary.run, [boundary.gate]) : null,
+      run: boundary ? projectRun(boundary.run, gates) : null,
     },
   };
 }
@@ -364,12 +371,16 @@ async function activeStoryboardRoot(
 ): Promise<{ run: OrchestratorRun; gate: OrchestratorRunGate } | null> {
   const runs = await deps.listRuns(projectId);
   for (const run of runs) {
-    if (!ACTIVE_RUN_STATUSES.has(run.status) || !isCreativeDirectorHierarchyRoot(run)) {
-      continue;
-    }
+    if (!isCreativeDirectorHierarchyRoot(run)) continue;
     const gates = await deps.listGates(run.id);
     const storyboardGate = gates.find(isStoryboardAfterGate);
-    if (storyboardGate?.status === "pending" || storyboardGate?.status === "reached") {
+    const pausedAtReview = gates.some((gate) => gate.status === "reached" && isAfterGate(gate));
+    const reusableStatus = ACTIVE_RUN_STATUSES.has(run.status) ||
+      (run.status === "succeeded" && pausedAtReview);
+    if (
+      reusableStatus &&
+      (storyboardGate?.status === "pending" || storyboardGate?.status === "reached")
+    ) {
       return { run, gate: storyboardGate };
     }
   }
@@ -726,10 +737,7 @@ orchestratorRunsRouter.post(
       body,
       anonymousQuota: anonymousRunQuotaForAuth(auth),
     });
-    if (!replayed) {
-      await enqueueOrchestratorDispatch(run.id, auth.workspaceId);
-      startPosterGenerationInBackground(auth, projectId, { provider: requestedProvider(body) });
-    }
+    if (!replayed) await enqueueOrchestratorDispatch(run.id, auth.workspaceId);
     return { status: 202, body: { runId: run.id } };
   })
 );
@@ -774,10 +782,7 @@ orchestratorRunsRouter.post(
       body,
       anonymousQuota: anonymousRunQuotaForAuth(auth),
     });
-    if (!replayed) {
-      await enqueueOrchestratorDispatch(run.id, auth.workspaceId);
-      startPosterGenerationInBackground(auth, projectId, { provider: requestedProvider(body) });
-    }
+    if (!replayed) await enqueueOrchestratorDispatch(run.id, auth.workspaceId);
     return { status: 202, body: { runId: run.id } };
   })
 );
@@ -814,7 +819,7 @@ orchestratorRunsRouter.get(
 
 orchestratorRunsRouter.post(
   "/projects/:projectId/generation-runs/:runId/approve",
-  mutation(async ({ auth }, params) => {
+  mutation(async ({ auth, body }, params) => {
     const projectId = requireParam(params, "projectId");
     const runId = requireParam(params, "runId");
     await requireProjectAccess(auth.workspaceId, projectId);
@@ -823,15 +828,72 @@ orchestratorRunsRouter.post(
     const gates = await listRunGates(runId);
     const gate = gates.find((candidate) => candidate.status === "reached");
     if (gate) {
-      await resolveGate(gate.id, "approved");
-      // An after-gate deliberately finishes the first review pass. Approval
-      // turns that completed storyboard pass back into a resumable production
-      // run so the orchestrator continues from its selected board assets.
-      if (isStoryboardAfterGate(gate)) {
-        await updateOrchestratorRun(runId, storyboardContinuationPatch(await getOrchestratorRun(runId)));
+      if (isScriptAfterGate(gate)) {
+        const scriptDraftId = isRecord(body) && typeof body.scriptDraftId === "string"
+          ? body.scriptDraftId
+          : "";
+        if (!scriptDraftId) {
+          throw new ApiError("validation_failed", "scriptDraftId is required for script approval.");
+        }
+        await decideScriptReviewTransaction({
+          workspaceId: auth.workspaceId,
+          projectId,
+          runId,
+          gateId: gate.id,
+          scriptDraftId,
+          decision: "approved",
+        });
+      } else {
+        await resolveGate(gate.id, "approved");
+        // An after-gate deliberately finishes one review pass. Approval turns it
+        // back into a resumable production run without losing completed text or
+        // selected graph state.
+        if (isAfterGate(gate)) {
+          await updateOrchestratorRun(runId, storyboardContinuationPatch(await getOrchestratorRun(runId)));
+        }
       }
       await enqueueOrchestratorDispatch(runId, auth.workspaceId);
+      if (isScriptAfterGate(gate)) {
+        startPosterGenerationInBackground(auth, projectId);
+      }
     }
+    return { status: 202, body: await assembleRunDetail(runId, auth.workspaceId, projectId) };
+  })
+);
+
+orchestratorRunsRouter.post(
+  "/projects/:projectId/generation-runs/:runId/reject",
+  mutation(async ({ auth, body }, params) => {
+    const projectId = requireParam(params, "projectId");
+    const runId = requireParam(params, "runId");
+    const note = isRecord(body) && typeof body.note === "string" ? body.note.trim() : "";
+    const scriptDraftId = isRecord(body) && typeof body.scriptDraftId === "string"
+      ? body.scriptDraftId
+      : "";
+    if (!note) {
+      throw new ApiError("validation_failed", "Describe the script changes before requesting them.");
+    }
+    if (!scriptDraftId) {
+      throw new ApiError("validation_failed", "scriptDraftId is required for script revision.");
+    }
+    await requireProjectAccess(auth.workspaceId, projectId);
+    const run = await requireProjectRun(runId, projectId);
+    assertCreativeDirectorHierarchyRoot(run, "request script changes");
+    const gates = await listRunGates(runId);
+    const gate = gates.find((candidate) => candidate.status === "reached");
+    if (!gate || !isScriptAfterGate(gate)) {
+      throw new ApiError("validation_failed", "Only an active script review can be revised here.");
+    }
+    await decideScriptReviewTransaction({
+      workspaceId: auth.workspaceId,
+      projectId,
+      runId,
+      gateId: gate.id,
+      scriptDraftId,
+      decision: "rejected",
+      note,
+    });
+    await enqueueOrchestratorDispatch(runId, auth.workspaceId);
     return { status: 202, body: await assembleRunDetail(runId, auth.workspaceId, projectId) };
   })
 );

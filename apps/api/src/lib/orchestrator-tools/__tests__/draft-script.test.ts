@@ -6,7 +6,7 @@ import type {
   ActiveProjectBrief,
   ActiveProjectStoryBlueprint,
 } from "@/lib/api/v1/store";
-import { createDraftScriptTool } from "../draft-script";
+import { createDraftScriptTool, draftScriptFromState } from "../draft-script";
 import { ToolInputError } from "../types";
 import type { ToolCallResult } from "../types";
 
@@ -100,6 +100,7 @@ test("draft_script validates input before reading graph state", () => {
 test("draft_script requires a brief before the blueprint", async () => {
   const tool = createDraftScriptTool({
     getActiveProjectBrief: async () => null,
+    getActiveProjectScriptDraft: async () => null,
     getActiveProjectStoryBlueprint: async () => {
       throw new Error("must not read blueprint when brief is missing");
     },
@@ -126,6 +127,7 @@ test("draft_script persists a script draft with brief and blueprint provenance",
     | undefined;
   const tool = createDraftScriptTool({
     getActiveProjectBrief: async () => activeBrief,
+    getActiveProjectScriptDraft: async () => null,
     getActiveProjectStoryBlueprint: async () => activeBlueprint,
     buildFootageGroundingContext: async () => ({ excerpts: [], promptText: null }),
     addProjectScriptDraft: async (input) => {
@@ -143,7 +145,10 @@ test("draft_script persists a script draft with brief and blueprint provenance",
     },
   });
 
-  const parsed = tool.parseInput({ revisionInstruction: "make the banter sharper" });
+  const parsed = tool.parseInput({
+    revisionInstruction: "make the banter sharper",
+    revisedScript: "Every clone thinks they are captain, and every vote makes it worse.",
+  });
   const result = (await tool.execute(parsed, { auth, projectId: "proj_1" })) as ToolCallResult;
 
   assert.equal(result.status, "succeeded");
@@ -158,7 +163,7 @@ test("draft_script persists a script draft with brief and blueprint provenance",
     assert.deepEqual(result.resourceIds, ["script_1", "script_asset_1"]);
     assert.equal(
       (result.output as { scriptDraft?: { narration?: string } }).scriptDraft?.narration?.includes(
-        "Every clone thinks they are captain."
+        "Every clone thinks they are captain, and every vote makes it worse."
       ),
       true
     );
@@ -168,6 +173,7 @@ test("draft_script persists a script draft with brief and blueprint provenance",
 test("draft_script includes transcript excerpts and moment windows when present", async () => {
   const tool = createDraftScriptTool({
     getActiveProjectBrief: async () => activeBrief,
+    getActiveProjectScriptDraft: async () => null,
     getActiveProjectStoryBlueprint: async () => activeBlueprint,
     buildFootageGroundingContext: async () => ({
       excerpts: [
@@ -214,4 +220,55 @@ test("draft_script includes transcript excerpts and moment windows when present"
   const result = await tool.execute({}, { auth, projectId: "proj_1" });
 
   assert.equal(result.status, "succeeded");
+});
+
+test("draft_script preserves supplied script text exactly until the user requests a rewrite", () => {
+  const supplied = "OPEN ON: A quiet kitchen.\n\nMAYA: We are out of popcorn.";
+  const script = draftScriptFromState({
+    brief: {
+      ...activeBrief,
+      brief: {
+        ...activeBrief.brief,
+        narration: { mode: "provided_text", script: supplied },
+      },
+    },
+    blueprint: activeBlueprint,
+  });
+
+  assert.equal(script.narration, supplied);
+  assert.equal(script.scenes[0]?.narration, supplied);
+  assert.equal(script.scenes[0]?.dialogue.length, 0);
+});
+
+test("draft_script persists the model's complete revised script without annotations", () => {
+  const revised = "OPEN ON: A loud kitchen.\n\nMAYA: The popcorn has escaped.";
+  const script = draftScriptFromState({
+    brief: activeBrief,
+    blueprint: activeBlueprint,
+    feedback: "Make it louder.",
+    revisedScript: revised,
+  });
+
+  assert.equal(script.narration, revised);
+  assert.equal(script.scenes[0]?.narration, revised);
+  assert.doesNotMatch(script.narration ?? "", /Revision direction/);
+});
+
+test("draft_script refuses feedback-only revisions before reading or persisting state", async () => {
+  let briefReads = 0;
+  const tool = createDraftScriptTool({
+    getActiveProjectBrief: async () => {
+      briefReads += 1;
+      return activeBrief;
+    },
+  });
+
+  const result = await tool.execute(
+    tool.parseInput({ feedback: "Make Maya more suspicious." }),
+    { auth, projectId: "proj_1" },
+  );
+
+  assert.equal(result.status, "failed");
+  if (result.status === "failed") assert.equal(result.error.kind, "invalid_input");
+  assert.equal(briefReads, 0);
 });

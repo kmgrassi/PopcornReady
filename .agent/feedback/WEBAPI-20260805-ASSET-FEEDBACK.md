@@ -3,7 +3,7 @@
 <!-- agent-summary: Task feedback for exact-asset advisory AI critique. -->
 <!-- agent-summary: Advisory analysis and content mutation need separate product contracts. -->
 <!-- agent-summary: Exact asset identity must survive every summary and review surface. -->
-<!-- agent-summary: Scripts need a projected active graph asset ID, not project-level fallback. -->
+<!-- agent-summary: Scripts need an authoritative active graph asset ID, not project-level fallback. -->
 <!-- agent-summary: Video critique must disclose that representative frames are sampled. -->
 <!-- agent-summary: Retry-safe model calls require a stable client idempotency key. -->
 <!-- agent-summary: This feedback ships with worksheet WEBAPI-20260805-ASSET-FEEDBACK. -->
@@ -21,9 +21,10 @@ fence if a process dies after domain persistence but before the HTTP record is
 completed.
 
 Exact identity is the enabling primitive. Images and videos already carried
-asset IDs through most review surfaces; scripts did not. Projecting the selected
-active script asset and its typed immutable snapshot lets the UI display and
-review the same object, avoiding a tempting but incorrect project-level fallback.
+asset IDs through most review surfaces; scripts did not. Reading the selected
+active script asset and its typed immutable snapshot from the dedicated script
+boundary lets the UI display and review the same object, avoiding a tempting but
+incorrect project-level fallback or duplicate general-project projection.
 
 Multimodal fidelity also needs honest limits. Image critique can send the stored
 bytes directly. Video critique sends representative sampled frames, so every

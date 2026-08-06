@@ -85,8 +85,11 @@ Owned ready assets expose a prominent exact-target **Request changes** entry
 into the durable proposal lifecycle. Mobile coverage verifies its full-width
 footer treatment and overflow containment; processing assets explain the
 disabled state, while public assets remain read-only without the action. The
-same suite covers advisory **Receive feedback** for an owned image, the active
-script snapshot, and the selected final video. It verifies the editable custom
+same suite covers advisory **Receive feedback** for an owned image, the
+authoritative active-script endpoint's snapshot and exact asset ID, and the
+selected final video. It verifies that project overview waits for that script
+response and fails closed with retryable error UI when it is unavailable. It
+also verifies the editable custom
 question and idempotency header, the default “How can we improve upon this?”
 question, structured answer rendering, sampled-video limitations, and mobile
 dialog overflow without conflating feedback with Request Changes. The
@@ -116,7 +119,13 @@ creator-direct image work as one **Image asset** activity, with asset-ready copy
 and no inferred Brief, Script, or Storyboard pipeline stages.
 `run-progress.spec.ts` also covers the full-video Creative Director projection:
 Visuals/Audio lane copy and outputs, collapsed completed work, blocked and
-queued states, root-owned specialist questions, sanitized production details,
+queued states, plus the mandatory authoritative Script review and its direct
+text-only rewrite request before media work. `creation-entry-points.spec.ts`
+covers idea-first and script-first full-video intake at mobile width.
+`storyboard-orchestration.spec.ts` covers returning to Project Detail at the
+Script gate: the existing run is linked for review, duplicate storyboard
+creation stays hidden, and the page does not mislabel review as generation.
+The hierarchy coverage also includes root-owned specialist questions, sanitized production details,
 responsive overflow, a response-driven polling transition, and the separate
 server-authorized operator diagnostics disclosure on hierarchy-backed runs. A
 terminal zero-session fixture prevents canceled production from reverting to

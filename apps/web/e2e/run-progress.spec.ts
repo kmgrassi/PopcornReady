@@ -11,6 +11,7 @@ type RunStatus = "queued" | "running" | "succeeded" | "failed" | "canceled";
 type StageType =
   | "brief_intake"
   | "creative_plan"
+  | "script"
   | "storyboard"
   | "asset_generation"
   | "audio_generation"
@@ -867,6 +868,118 @@ test("submits review-gate approval and previews durable requested changes @mobil
   expect(requests.some((request) => request.action === "reject")).toBe(false);
 });
 
+test("shows the authoritative script and requests a text-only rewrite @mobile", async ({ page }) => {
+  let rejectBody: unknown = null;
+  let scriptRevision = 1;
+  let detail = runDetail({
+    status: "succeeded",
+    stageType: "script",
+    progressPercent: 30,
+    reviewGate: {
+      stageId: "stage-script",
+      stageType: "script",
+      state: "awaiting_review",
+      enteredAt: now,
+    },
+    message: "Script is ready for review.",
+  });
+  await page.route(`**/api/v1/projects/${projectId}/script`, async (route) => {
+    await route.fulfill({
+      json: {
+        script: {
+          scriptDraftId: `script-${scriptRevision}`,
+          assetId: `script-asset-${scriptRevision}`,
+          contentHash: `script-hash-${scriptRevision}`,
+          scriptDraft: {
+            schemaVersion: "scriptDraft.v1",
+            id: `script-${scriptRevision}`,
+            projectId,
+            briefAssetId: "brief-1",
+            storyBlueprintId: "blueprint-1",
+            targetLengthSec: 30,
+            durationClass: "micro",
+            durationPlan: { durationClass: "micro", targetLengthSec: 30, actCount: 1, sceneCount: 1 },
+            scenes: [{
+              id: "scene-1",
+              title: "The missing kernel",
+              summary: "Maya investigates.",
+              narration: scriptRevision === 1
+                ? "The last kernel had vanished."
+                : "The cashier watched as the last kernel vanished.",
+              dialogue: [{ characterName: "Maya", text: "Nobody leaves until we find it." }],
+              durationSec: 30,
+            }],
+            narration: scriptRevision === 1
+              ? "The last kernel had vanished."
+              : "The cashier watched as the last kernel vanished.",
+            status: "draft",
+            createdAt: now,
+            updatedAt: now,
+          },
+        },
+      },
+    });
+  });
+  await page.route(`**${apiRunPath}`, async (route) => route.fulfill({ json: detail }));
+  await page.route(`**${apiRunPath}/reject`, async (route) => {
+    rejectBody = await route.request().postDataJSON();
+    scriptRevision = 2;
+    detail = runDetail({
+      status: "succeeded",
+      stageType: "script",
+      reviewGate: {
+        stageId: "stage-script-revised",
+        stageType: "script",
+        state: "awaiting_review",
+        enteredAt: now,
+      },
+      message: "Revised script is ready for review.",
+    });
+    await route.fulfill({ status: 202, json: detail });
+  });
+
+  await page.goto(runPath);
+
+  await expect(page.getByRole("heading", { name: "Script ready for review" })).toBeVisible();
+  await expect(page.getByText("The last kernel had vanished.", { exact: true })).toBeVisible();
+  await expect(page.locator("p", { hasText: "Nobody leaves until we find it." })).toBeVisible();
+  await expect(page.getByText(/No poster, storyboard, image, audio, or video work starts/i)).toBeVisible();
+  await fillReviewFeedback(page, "Make Maya more suspicious of the cashier.");
+  await page.getByRole("button", { name: "Request changes" }).click();
+
+  await expect.poll(() => rejectBody).toEqual({
+    note: "Make Maya more suspicious of the cashier.",
+    scriptDraftId: "script-1",
+  });
+  await expect(page.getByText(
+    "The cashier watched as the last kernel vanished.",
+    { exact: true },
+  )).toBeVisible();
+});
+
+test("fails closed when the authoritative script cannot be loaded @mobile", async ({ page }) => {
+  await page.route(`**/api/v1/projects/${projectId}/script`, async (route) => {
+    await route.fulfill({ status: 500, json: { error: { message: "Script unavailable" } } });
+  });
+  await page.route(`**${apiRunPath}`, async (route) => route.fulfill({
+    json: runDetail({
+      status: "succeeded",
+      stageType: "script",
+      reviewGate: {
+        stageId: "stage-script",
+        stageType: "script",
+        state: "awaiting_review",
+        enteredAt: now,
+      },
+    }),
+  }));
+
+  await page.goto(runPath);
+
+  await expect(page.getByText(/could not load the script for review/i)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Approve script & continue" })).toBeDisabled();
+});
+
 test("shows a stored recovery hint while loading and then renders failure details @mobile", async ({
   page,
 }) => {
@@ -1125,6 +1238,7 @@ function buildStages(
   const stageTypes: StageType[] = [
     "brief_intake",
     "creative_plan",
+    "script",
     "storyboard",
     "asset_generation",
     "audio_generation",

@@ -49,31 +49,44 @@ function project(index: number) {
     hasStoryboard: index % 2 === 0,
     posterUrl: index === 1 ? imageDataUrl : null,
     posterAssetId: index === 1 ? "asset-image-ready" : null,
-    scriptAssetId: index === 1 ? "script-asset-1" : null,
-    activeScript: index === 1 ? {
-      schemaVersion: "scriptDraft.v1",
-      id: "script-draft-1",
-      projectId: "proj-alpha",
-      briefAssetId: "brief-1",
-      storyBlueprintId: "blueprint-1",
-      targetLengthSec: 30,
-      durationClass: "short",
-      durationPlan: {
-        targetLengthSec: 30,
-        durationClass: "short",
-        expectedActCount: 1,
-        expectedSceneCount: 1,
-        expectedBeatCount: 3,
-        planningGranularity: "beats_only",
-      },
-      scenes: [],
-      narration: "Meet the small idea that changes the whole afternoon.",
-      createdAt: now,
-      updatedAt: now,
-      status: "draft",
-    } : null,
     createdAt: now,
     updatedAt: now,
+  };
+}
+
+function activeScript() {
+  return {
+    schemaVersion: "scriptDraft.v1",
+    id: "script-draft-1",
+    projectId: "proj-alpha",
+    briefAssetId: "brief-1",
+    storyBlueprintId: "blueprint-1",
+    targetLengthSec: 30,
+    durationClass: "short",
+    durationPlan: {
+      targetLengthSec: 30,
+      durationClass: "short",
+      expectedActCount: 1,
+      expectedSceneCount: 1,
+      expectedBeatCount: 3,
+      planningGranularity: "beats_only",
+    },
+    scenes: [],
+    narration: "Meet the small idea that changes the whole afternoon.",
+    createdAt: now,
+    updatedAt: now,
+    status: "draft",
+  };
+}
+
+function activeScriptResponse() {
+  return {
+    script: {
+      scriptDraft: activeScript(),
+      scriptDraftId: "script-draft-1",
+      assetId: "script-asset-1",
+      contentHash: "script-hash-1",
+    },
   };
 }
 
@@ -140,6 +153,10 @@ async function mockLibraryApi(page: Page) {
 
   await page.route("**/api/v1/projects/proj-alpha/storyboard", (route) =>
     json(route, { storyboard: null }),
+  );
+
+  await page.route("**/api/v1/projects/proj-alpha/script", (route) =>
+    json(route, activeScriptResponse()),
   );
 
   await page.route(/\/api\/v1\/projects\/proj-alpha\/assets(?:\?.*)?$/, (route) =>
@@ -437,6 +454,14 @@ test("receives advisory AI feedback for image, script, and final video assets", 
   await expect(imageFeedback).toContainText("Strong opening focus");
   await imageFeedback.locator("footer").getByRole("button", { name: "Close" }).click();
 
+  await page.goto("/projects/proj-alpha");
+  await page.getByRole("button", { name: "Receive feedback" }).click();
+  const overviewScriptFeedback = page.getByRole("dialog", { name: "Review this script" });
+  await expect(
+    overviewScriptFeedback.getByText("Meet the small idea that changes the whole afternoon."),
+  ).toBeVisible();
+  await overviewScriptFeedback.locator("footer").getByRole("button", { name: "Close" }).click();
+
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/projects/proj-alpha/script");
   await page.getByRole("button", { name: "Receive feedback" }).click();
@@ -456,6 +481,40 @@ test("receives advisory AI feedback for image, script, and final video assets", 
   const videoFeedback = page.getByRole("dialog", { name: "Review this video" });
   await videoFeedback.getByRole("button", { name: "Receive feedback" }).click();
   await expect(videoFeedback).toContainText("sampled frames without audio");
+});
+
+test("waits for the authoritative script before rendering the project overview", async ({ page }) => {
+  let releaseScript!: () => void;
+  const scriptGate = new Promise<void>((resolve) => {
+    releaseScript = resolve;
+  });
+  await page.route("**/api/v1/projects/proj-alpha/script", async (route) => {
+    await scriptGate;
+    await json(route, activeScriptResponse());
+  });
+
+  await page.goto("/projects/proj-alpha");
+  await expect(page.getByTestId("quick-loading")).toBeVisible();
+  releaseScript();
+
+  await expect(page.getByRole("button", { name: "Receive feedback" })).toBeVisible();
+  await expect(page.getByText("Meet the small idea that changes the whole afternoon.")).toBeVisible();
+});
+
+test("fails the project overview closed when the authoritative script cannot load", async ({ page }) => {
+  await page.route("**/api/v1/projects/proj-alpha/script", (route) =>
+    route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: { code: "service_unavailable", message: "Script unavailable." },
+      }),
+    }),
+  );
+
+  await page.goto("/projects/proj-alpha");
+  await expect(page.getByRole("heading", { name: "Unable to load project" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Receive feedback" })).toHaveCount(0);
 });
 
 test("normalizes a deep-linked project's remote URL as the video viewer source", async ({ page }) => {

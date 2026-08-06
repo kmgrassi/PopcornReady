@@ -66,7 +66,7 @@ export const PIPELINE_GROUPS: StageGroup[] = [
   },
   {
     id: "script",
-    type: "creative_plan",
+    type: "script",
     label: "Script",
     description: "Narrative beats, voiceover, and scene intent.",
     tools: ["draft_script"],

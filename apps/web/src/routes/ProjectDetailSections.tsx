@@ -5,6 +5,7 @@ import type {
   ProjectStoryboard,
   V1Project,
 } from "@popcorn/shared/v1/types";
+import type { ScriptDraft } from "@popcorn/shared/types";
 import type { ProjectWatchMedia } from "../lib/api-client";
 import { Button, ButtonLink } from "../components/ui/Button";
 import { AssetCritiqueDialog } from "../components/ai-edit/AssetCritiqueDialog";
@@ -353,18 +354,21 @@ export function ProjectScript({
   project,
   projectId,
   storyboard,
+  activeScript,
+  scriptAssetId,
   readOnly,
   onRequestChanges,
 }: {
   project: V1Project;
   projectId: string;
   storyboard: ProjectStoryboard | null;
+  activeScript: ScriptDraft | null;
+  scriptAssetId: string | null;
   readOnly: boolean;
   onRequestChanges?: () => void;
 }) {
   const [critiqueOpen, setCritiqueOpen] = useState(false);
   const scriptLines = storyboardScriptLines(storyboard);
-  const activeScript = project.activeScript ?? null;
   const narrationScript = activeScript
     ? activeScript.narration?.trim()
     : project.brief?.narration?.script?.trim();
@@ -389,7 +393,7 @@ export function ProjectScript({
         </div>
         {!readOnly ? (
           <div className={styles.sectionHeaderActions}>
-            {project.scriptAssetId && activeScript ? (
+            {scriptAssetId && activeScript ? (
               <Button variant="secondary" size="sm" onClick={() => setCritiqueOpen(true)}>
                 Receive feedback
               </Button>
@@ -426,7 +430,7 @@ export function ProjectScript({
       <AssetCritiqueDialog
         open={critiqueOpen}
         projectId={projectId}
-        assetId={project.scriptAssetId ?? ""}
+        assetId={scriptAssetId ?? ""}
         title="Review this script"
         subtitle="Ask about clarity, structure, pacing, dialogue, or tone."
         preview={

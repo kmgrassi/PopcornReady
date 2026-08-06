@@ -24,6 +24,7 @@ export function StoryboardPreview({
   progress,
   generationError,
   unavailableReason,
+  reviewRunLink,
   onGenerate,
   onRequestChanges,
   readOnly,
@@ -37,6 +38,7 @@ export function StoryboardPreview({
   progress: StoryboardProgress;
   generationError: Error | null;
   unavailableReason?: string | null;
+  reviewRunLink?: string | null;
   onGenerate?: () => void;
   onRequestChanges?: () => void;
   readOnly: boolean;
@@ -86,15 +88,22 @@ export function StoryboardPreview({
             </ButtonLink>
           ) : null}
           {!readOnly && !storyboard && unavailableReason && !generating ? (
-            <ButtonLink
-              variant="ghost"
-              size="sm"
-              to={`/projects/${encodeURIComponent(projectId)}/brief`}
-            >
-              Finish brief
-            </ButtonLink>
+            reviewRunLink ? (
+              <ButtonLink variant="secondary" size="sm" to={reviewRunLink}>
+                Review script
+              </ButtonLink>
+            ) : (
+              <ButtonLink
+                variant="ghost"
+                size="sm"
+                to={`/projects/${encodeURIComponent(projectId)}/brief`}
+              >
+                Finish brief
+              </ButtonLink>
+            )
           ) : null}
-          {!readOnly && !storyboard && onGenerate && !loading && !error && !generating ? (
+          {!readOnly && !storyboard && onGenerate && !loading && !error && !generating &&
+          !reviewRunLink ? (
             <Button
               variant="secondary"
               size="sm"

@@ -14,6 +14,7 @@ export function isTerminal(status: GenerationRun["status"]): boolean {
 export const REVIEW_STAGE_LABELS: Record<GenerationStageType, string> = {
   brief_intake: "Concept",
   creative_plan: "Brief",
+  script: "Script",
   storyboard: "Storyboard",
   asset_generation: "Assets",
   audio_generation: "Audio",
