@@ -71,7 +71,20 @@ function activeScript() {
       expectedBeatCount: 3,
       planningGranularity: "beats_only",
     },
-    scenes: [],
+    scenes: [
+      {
+        id: "scene-1",
+        title: "The reveal",
+        summary: "The idea becomes tangible.",
+        narration: "A quiet detail brings the promise into focus.",
+        dialogue: [
+          {
+            characterName: "Maya",
+            text: "That is exactly what I needed.",
+          },
+        ],
+      },
+    ],
     narration: "Meet the small idea that changes the whole afternoon.",
     createdAt: now,
     updatedAt: now,
@@ -220,6 +233,7 @@ async function mockLibraryApi(page: Page) {
         title: "Keyframe still",
         filename: "keyframe.png",
         prompt: "A bright editorial keyframe.",
+        canReceiveFeedback: true,
         url: imageDataUrl,
         thumbnailUrl: imageDataUrl,
         visibility: assetVisibility,
@@ -269,6 +283,7 @@ async function mockLibraryApi(page: Page) {
         title: "Archive teaser",
         filename: "archive-teaser.mp4",
         durationSec: 12,
+        canReceiveFeedback: false,
         visibility: "public",
         createdAt: now,
         updatedAt: now,
@@ -460,6 +475,7 @@ test("receives advisory AI feedback for image, script, and final video assets", 
   await expect(
     overviewScriptFeedback.getByText("Meet the small idea that changes the whole afternoon."),
   ).toBeVisible();
+  await expect(overviewScriptFeedback).toContainText("That is exactly what I needed.");
   await overviewScriptFeedback.locator("footer").getByRole("button", { name: "Close" }).click();
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -467,6 +483,7 @@ test("receives advisory AI feedback for image, script, and final video assets", 
   await page.getByRole("button", { name: "Receive feedback" }).click();
   const scriptFeedback = page.getByRole("dialog", { name: "Review this script" });
   await expect(scriptFeedback.getByText("Meet the small idea that changes the whole afternoon.")).toBeVisible();
+  await expect(scriptFeedback).toContainText("That is exactly what I needed.");
   await scriptFeedback.getByRole("button", { name: "Receive feedback" }).click();
   await expect(scriptFeedback.getByRole("heading", { name: "Response" })).toBeVisible();
   const mobileOverflow = await page.evaluate(() => ({
@@ -545,6 +562,13 @@ test("normalizes a deep-linked project's remote URL as the video viewer source",
 
   const dialog = page.getByRole("dialog", { name: "Deep-linked video" });
   await expect(dialog.locator("video")).toHaveAttribute("src", imageDataUrl);
+});
+
+test("does not offer feedback for remote-only library media", async ({ page }) => {
+  await page.goto("/library/assets?assetId=asset-video-missing&projectId=proj-beta");
+
+  await expect(page.getByRole("dialog", { name: "Archive teaser" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Receive feedback" })).toHaveCount(0);
 });
 
 test("uses a delayed content-shaped state for route-level library loading", async ({ page }) => {

@@ -225,6 +225,7 @@ export interface WorkspaceAsset {
   thumbnailUrl?: string;
   expiresAt?: string | null;
   durationSec?: number;
+  canReceiveFeedback?: boolean;
   visibility?: "public" | "private";
   createdAt: string;
   updatedAt?: string;
@@ -259,6 +260,9 @@ export interface ProjectAssetsResponse {
 }
 
 export type ProjectAssetDetailAsset = Omit<V1Asset, "url"> & {
+  /** Managed object identity is present only for stored, materializable media. */
+  storageKey?: string;
+  storageBucket?: string;
   /** Resolved media may arrive here from the project asset detail endpoint. */
   remoteUrl?: string | null;
   /** Older/local responses may still expose the resolved media as `url`. */

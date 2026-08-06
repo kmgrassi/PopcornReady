@@ -87,7 +87,9 @@ footer treatment and overflow containment; processing assets explain the
 disabled state, while public assets remain read-only without the action. The
 same suite covers advisory **Receive feedback** for an owned image, the
 authoritative active-script endpoint's snapshot and exact asset ID, and the
-selected final video. It verifies that project overview waits for that script
+selected final video. It verifies that the script preview includes narration
+and dialogue, that remote-only Library media does not advertise an unavailable
+critique action, and that project overview waits for that script
 response and fails closed with retryable error UI when it is unavailable. It
 also verifies the editable custom
 question and idempotency header, the default “How can we improve upon this?”
@@ -116,7 +118,9 @@ storyboard suites also assert that their entry points open this lifecycle instea
 of posting the retired reject, board-revision, or stage-restart mutations.
 Run-progress and project-overview fixtures additionally cover successful
 creator-direct image work as one **Image asset** activity, with asset-ready copy
-and no inferred Brief, Script, or Storyboard pipeline stages.
+and no inferred Brief, Script, or Storyboard pipeline stages. Progress output
+coverage also keeps advisory feedback off queued, running, and failed items even
+when their provider reservations already expose asset IDs.
 `run-progress.spec.ts` also covers the full-video Creative Director projection:
 Visuals/Audio lane copy and outputs, collapsed completed work, blocked and
 queued states, plus the mandatory authoritative Script review and its direct

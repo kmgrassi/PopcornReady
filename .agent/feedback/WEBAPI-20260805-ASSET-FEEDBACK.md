@@ -26,6 +26,14 @@ active script asset and its typed immutable snapshot from the dedicated script
 boundary lets the UI display and review the same object, avoiding a tempting but
 incorrect project-level fallback or duplicate general-project projection.
 
+Exact identity is also an authorization boundary. A signed-in critique must use
+the request's JWT-backed Supabase client for the source read, action lifecycle,
+replay lookup, and graph persistence; workspace and project IDs passed through
+a service-role client are not a substitute for RLS. Summary surfaces should
+project capability (`canReceiveFeedback`) without leaking storage details, and
+compatibility views must omit critique links when they cannot carry the exact
+selected graph asset to the destination.
+
 Multimodal fidelity also needs honest limits. Image critique can send the stored
 bytes directly. Video critique sends representative sampled frames, so every
 answer must disclose that temporal nuance, audio, and unsampled moments may be

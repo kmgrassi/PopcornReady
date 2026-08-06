@@ -20,6 +20,7 @@ import {
 import {
   getAsset,
   getAssetMediaUrls,
+  getServiceSupabaseForStore,
   listAssets,
   searchProjectAssetsSemantic,
   setAssetVisibility,
@@ -32,6 +33,7 @@ import {
 import type { TranscriptionProvider } from "@/lib/generative/transcription";
 import { getAssetCreditsCharged } from "@/lib/api/v1/asset-credit-usage";
 import { createAssetCritique } from "@/lib/api/v1/asset-critique";
+import { getRequestSupabase } from "@/lib/supabase/clients";
 
 export const assetsRouter = Router();
 
@@ -125,6 +127,7 @@ assetsRouter.post(
     }
     const raw = body === undefined || body === null ? {} : readBodyObject(body);
     const critique = await createAssetCritique({
+      db: auth.isLocal ? getServiceSupabaseForStore() : getRequestSupabase(),
       workspaceId: auth.workspaceId,
       projectId,
       assetId,

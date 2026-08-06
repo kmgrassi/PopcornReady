@@ -48,6 +48,7 @@ import {
   standaloneAssetLabel,
   workspaceReturnLabel,
 } from "./progress-view-helpers";
+import { canReceiveStageItemFeedback } from "./asset-feedback-eligibility";
 import styles from "./ProgressView.module.css";
 
 interface ProgressViewProps {
@@ -647,7 +648,7 @@ export function ProgressView({
                                 <button> would be invalid markup, so suppress it. */}
                             <StageItemCard item={item} allowInlineRegenerate={false} />
                           </button>
-                          {(item.kind === "image" || item.kind === "video") && item.assetId ? (
+                          {canReceiveStageItemFeedback(item) && item.assetId ? (
                             <AssetCritiqueButton
                               projectId={detail.run.projectId}
                               assetId={item.assetId}

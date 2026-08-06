@@ -106,6 +106,7 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   the authoritative active-script endpoint's exact asset, and the selected
   final video. Assertions protect the editable/default question, request
   idempotency header, structured response, video frame-sampling limitation copy,
+  complete narration-plus-dialogue preview, remote-only media ineligibility,
   and mobile overflow. Delayed and failing script-response cases prove the
   project overview waits for the authoritative snapshot and fails closed with
   retryable error UI rather than rendering legacy text. The fixture response

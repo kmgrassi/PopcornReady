@@ -13,6 +13,7 @@ import { AiAssetFeedbackDialog } from "../ai-edit/AiAssetFeedbackDialog";
 import { AssetCritiqueButton } from "../ai-edit/AssetCritiqueButton";
 import { RegenerateImageButton } from "../media/RegenerateImageButton";
 import { ImageWithSkeleton } from "../ui/ImageWithSkeleton";
+import { canReceiveStageItemFeedback } from "./asset-feedback-eligibility";
 import styles from "./StoryboardBoard.module.css";
 
 interface StoryboardBoardProps {
@@ -136,6 +137,11 @@ function statusLabel(item?: GenerationStageItem, beat?: StoryboardBeat): string 
   return "ready";
 }
 
+function canReceiveTileFeedback(tile: Tile): boolean {
+  if (tile.item) return canReceiveStageItemFeedback(tile.item);
+  return tile.panel?.status === "ready" || tile.panel?.status === "approved";
+}
+
 export function StoryboardBoard({
   projectId,
   runId,
@@ -223,7 +229,7 @@ export function StoryboardBoard({
                   />
                 </div>
               ) : null}
-              {regenAssetId && tile.mediaUrl ? (
+              {regenAssetId && tile.mediaUrl && canReceiveTileFeedback(tile) ? (
                 <div className={styles.tileActions}>
                   <AssetCritiqueButton
                     projectId={projectId}

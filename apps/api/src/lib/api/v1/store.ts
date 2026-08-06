@@ -1181,8 +1181,10 @@ async function setActiveProjectScopedAssetSelection(
   );
 }
 
-export async function createAction(input: CreateActionInput): Promise<V1Action> {
-  const db = getServiceSupabase();
+export async function createAction(
+  input: CreateActionInput,
+  db: SupabaseClient = getServiceSupabase()
+): Promise<V1Action> {
   const row = {
     ...(input.id ? { id: input.id } : {}),
     schema_version: "action.v1",
@@ -1235,7 +1237,8 @@ export async function createAction(input: CreateActionInput): Promise<V1Action> 
 
 export async function updateAction(
   actionId: string,
-  patch: UpdateActionPatch
+  patch: UpdateActionPatch,
+  db: SupabaseClient = getServiceSupabase()
 ): Promise<V1Action> {
   const row: Record<string, unknown> = {};
   if (patch.status !== undefined) row.status = patch.status;
@@ -1243,7 +1246,6 @@ export async function updateAction(
   if (patch.outputAssetIds !== undefined) row.output_asset_ids = patch.outputAssetIds;
   if (patch.error !== undefined) row.error = markedJson("action_error.v1", patch.error) ?? null;
 
-  const db = getServiceSupabase();
   const data = await runQuery(
     `store.updateAction ${actionId}`,
     db.from("actions").update(row).eq("id", actionId).select("*").single()
@@ -2990,6 +2992,7 @@ export async function addProjectTimelineCritique(input: {
 }
 
 export async function addProjectAssetCritique(input: {
+  db: SupabaseClient;
   critiqueAssetId: string;
   workspaceId: string;
   projectId: string;
@@ -2998,7 +3001,7 @@ export async function addProjectAssetCritique(input: {
   actionId: string;
   critique: unknown;
 }): Promise<{ critiqueAssetId: string }> {
-  const db = getServiceSupabase();
+  const db = input.db;
   const graphInputs: GraphAssetInput[] = [
     {
       assetId: input.sourceAssetId,
@@ -3039,18 +3042,19 @@ export async function addProjectAssetCritique(input: {
   await updateAction(input.actionId, {
     status: "applied",
     outputAssetIds: [asset.id],
-  });
+  }, db);
   return { critiqueAssetId: asset.id };
 }
 
 export async function getProjectAssetCritique(input: {
+  db: SupabaseClient;
   workspaceId: string;
   projectId: string;
   critiqueAssetId: string;
   sourceAssetId: string;
   actionId: string;
 }): Promise<unknown | null> {
-  const asset = await dataAssetById(getServiceSupabase(), input.critiqueAssetId);
+  const asset = await dataAssetById(input.db, input.critiqueAssetId);
   if (!asset) return null;
   const reviewedSource = Array.isArray(asset.inputs)
     ? asset.inputs.find((edge) => edge.role === "reviewed_asset")
@@ -5763,13 +5767,13 @@ export type AssetCritiqueSource =
 
 /** Load the immutable graph asset named by Receive feedback. */
 export async function getAssetCritiqueSource(input: {
+  db: SupabaseClient;
   workspaceId: string;
   projectId: string;
   assetId: string;
 }): Promise<AssetCritiqueSource> {
-  const db = getServiceSupabase();
   const row = await getAssetRow(
-    db,
+    input.db,
     input.workspaceId,
     input.projectId,
     input.assetId,
@@ -6269,6 +6273,7 @@ export interface WorkspaceAssetSummary {
   thumbnailUrl?: string;
   expiresAt?: string | null;
   durationSec?: number;
+  canReceiveFeedback: boolean;
   visibility: "public" | "private";
   createdAt: string;
   updatedAt: string;
@@ -6469,6 +6474,7 @@ export async function listWorkspaceAssets(
       prompt,
       promptPreview: prompt,
       durationSec: row.duration_sec ?? undefined,
+      canReceiveFeedback: Boolean(row.storage_key && row.storage_bucket),
       visibility: row.visibility ?? "public",
       createdAt: iso(row.created_at),
       updatedAt: iso(row.updated_at),

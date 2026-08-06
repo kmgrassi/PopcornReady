@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { LlmClient, StructuredVisionImage } from "@/lib/llm";
 import { getLlmClient } from "@/lib/llm";
@@ -189,6 +190,7 @@ async function critiqueVisual(input: {
 }
 
 export async function createAssetCritique(input: {
+  db: SupabaseClient;
   workspaceId: string;
   projectId: string;
   assetId: string;
@@ -199,6 +201,7 @@ export async function createAssetCritique(input: {
   const deps = { ...defaultDeps, ...input.deps };
   const question = normalizeAssetCritiqueQuestion(input.question);
   const source = await deps.getAssetCritiqueSource({
+    db: input.db,
     workspaceId: input.workspaceId,
     projectId: input.projectId,
     assetId: input.assetId,
@@ -219,9 +222,10 @@ export async function createAssetCritique(input: {
     params: { source: "receive_feedback", question },
     inputAssetIds: [sourceAssetId],
     rationale: "Answer an advisory question about one exact asset without changing it.",
-  });
+  }, input.db);
 
   const replay = await deps.getProjectAssetCritique({
+    db: input.db,
     workspaceId: input.workspaceId,
     projectId: input.projectId,
     critiqueAssetId,
@@ -232,7 +236,7 @@ export async function createAssetCritique(input: {
     await deps.updateAction(action.id, {
       status: "applied",
       outputAssetIds: [critiqueAssetId],
-    });
+    }, input.db);
     const saved = replay as Omit<AssetCritiqueResponse, "critiqueAssetId">;
     return { critiqueAssetId, ...saved };
   }
@@ -259,6 +263,7 @@ export async function createAssetCritique(input: {
     }
 
     const persisted = await deps.addProjectAssetCritique({
+      db: input.db,
       critiqueAssetId,
       workspaceId: input.workspaceId,
       projectId: input.projectId,
@@ -290,7 +295,7 @@ export async function createAssetCritique(input: {
       status: "failed",
       outputAssetIds: [],
       error: { message: error instanceof Error ? error.message : "Asset critique failed." },
-    }).catch(() => undefined);
+    }, input.db).catch(() => undefined);
     throw error;
   }
 }

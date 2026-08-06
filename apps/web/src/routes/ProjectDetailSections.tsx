@@ -413,9 +413,8 @@ export function ProjectScript({
           </div>
         ) : null}
       </div>
-      {narrationScript ? (
-        <p className={styles.scriptBlock}>{narrationScript}</p>
-      ) : displayedLines.length > 0 ? (
+      {narrationScript ? <p className={styles.scriptBlock}>{narrationScript}</p> : null}
+      {displayedLines.length > 0 ? (
         <ol className={styles.scriptList}>
           {displayedLines.map((line) => (
             <li key={line.id}>
@@ -424,9 +423,9 @@ export function ProjectScript({
             </li>
           ))}
         </ol>
-      ) : (
+      ) : !narrationScript ? (
         <p className={styles.muted}>No script or narrated storyboard moments are ready yet.</p>
-      )}
+      ) : null}
       <AssetCritiqueDialog
         open={critiqueOpen}
         projectId={projectId}
@@ -435,7 +434,9 @@ export function ProjectScript({
         subtitle="Ask about clarity, structure, pacing, dialogue, or tone."
         preview={
           <div className={styles.scriptBlock}>
-            {narrationScript ?? displayedLines.map((line) => line.text).join("\n\n")}
+            {[narrationScript, ...displayedLines.map((line) => line.text)]
+              .filter((line): line is string => Boolean(line))
+              .join("\n\n")}
           </div>
         }
         onClose={() => setCritiqueOpen(false)}

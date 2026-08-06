@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { LlmClient } from "@/lib/llm";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   createAssetCritique,
   DEFAULT_ASSET_CRITIQUE_QUESTION,
@@ -18,6 +19,8 @@ const answer: AssetCritiqueAnswer = {
   evidence: ["The subject occupies the center third"],
   limitations: [],
 };
+
+const requestDb = {} as SupabaseClient;
 
 function llm(overrides: Partial<LlmClient> = {}): LlmClient {
   return {
@@ -56,25 +59,36 @@ function baseDeps(options: {
   const persisted: unknown[] = [];
   const updates: unknown[] = [];
   const actions: unknown[] = [];
+  const databases: unknown[] = [];
   return {
     persisted,
     updates,
     actions,
+    databases,
     deps: {
-      getAssetCritiqueSource: async () => options.script
-        ? { kind: "script" as const, ...options.script }
-        : { kind: "image" as const, asset: options.asset ?? imageAsset() },
-      getProjectAssetCritique: async (): Promise<unknown | null> => null,
-      createAction: async (input: unknown) => {
+      getAssetCritiqueSource: async (input: { db: unknown }) => {
+        databases.push(input.db);
+        return options.script
+          ? { kind: "script" as const, ...options.script }
+          : { kind: "image" as const, asset: options.asset ?? imageAsset() };
+      },
+      getProjectAssetCritique: async (input: { db: unknown }): Promise<unknown | null> => {
+        databases.push(input.db);
+        return null;
+      },
+      createAction: async (input: unknown, db?: unknown) => {
         actions.push(input);
+        databases.push(db);
         return { id: (input as { id: string }).id, status: "running" } as never;
       },
       updateAction: async (...args: unknown[]) => {
         updates.push(args);
+        databases.push(args[2]);
         return {} as never;
       },
-      addProjectAssetCritique: async (input: unknown) => {
+      addProjectAssetCritique: async (input: { db: unknown }) => {
         persisted.push(input);
+        databases.push(input.db);
         return { critiqueAssetId: "critique-1" };
       },
       getLlmClient: () => options.client ?? llm(),
@@ -115,6 +129,7 @@ test("replays a persisted critique without another model call", async () => {
   fixture.deps.getProjectAssetCritique = async () => saved;
 
   const result = await createAssetCritique({
+    db: requestDb,
     workspaceId: "workspace-1",
     projectId: "project-1",
     assetId: "image-1",
@@ -145,6 +160,7 @@ test("reviews an exact stored image and persists a pooled critique with source i
     }),
   });
   const result = await createAssetCritique({
+    db: requestDb,
     workspaceId: "workspace-1",
     projectId: "project-1",
     assetId: "image-1",
@@ -165,6 +181,8 @@ test("reviews an exact stored image and persists a pooled critique with source i
     (fixture.persisted[0] as { sourceContentHash: string }).sourceContentHash,
     "image-hash",
   );
+  assert.equal(fixture.databases.length, 4);
+  assert.ok(fixture.databases.every((db) => db === requestDb));
 });
 
 test("canonicalizes a project-scoped asset slug before UUID-backed writes", async () => {
@@ -172,6 +190,7 @@ test("canonicalizes a project-scoped asset slug before UUID-backed writes", asyn
   const fixture = baseDeps({ asset: canonicalAsset });
 
   const result = await createAssetCritique({
+    db: requestDb,
     workspaceId: "workspace-1",
     projectId: "project-1",
     assetId: "poster-slug",
@@ -199,6 +218,7 @@ test("reviews only the exact active script snapshot", async () => {
   const fixture = baseDeps({ script });
 
   const result = await createAssetCritique({
+    db: requestDb,
     workspaceId: "workspace-1",
     projectId: "project-1",
     assetId: "script-asset-1",
@@ -218,6 +238,7 @@ test("rejects missing stored media and finalizes the action as failed", async ()
   const fixture = baseDeps({ asset: { ...imageAsset(), storageKey: undefined } });
   await assert.rejects(
     createAssetCritique({
+      db: requestDb,
       workspaceId: "workspace-1",
       projectId: "project-1",
       assetId: "image-1",

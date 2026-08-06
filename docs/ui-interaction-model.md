@@ -73,7 +73,10 @@ critique asset linked to its subject for provenance, but it never changes the
 subject, moves a selection, creates a rerun proposal, or starts generation.
 This is an explicit observe-mode exception to the no-input rule: the question
 changes only the requested analysis, not product content. Audio and public or
-unresolved assets do not expose the action.
+unresolved assets do not expose the action. A remote playback URL is not enough:
+image/video surfaces expose feedback only when the source also has managed
+storage bytes the API can materialize. Script previews render the complete
+active snapshot, including top-level narration, scene narration, and dialogue.
 
 Project overview posters, overview storyboard images, and persisted project-media
 previews use their stable asset identity to open the canonical Library asset

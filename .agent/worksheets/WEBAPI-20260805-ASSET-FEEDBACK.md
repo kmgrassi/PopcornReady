@@ -46,6 +46,8 @@
   thumbnails already deep-link to the canonical asset viewer.
 - Keep public discovery/read-only surfaces unchanged because feedback is an
   authenticated model call over workspace-owned source data.
+- Keep every signed-in critique read and graph write on the request-scoped
+  Supabase client so the caller's RLS policies remain authoritative.
 
 ## Changes
 
@@ -62,6 +64,11 @@
   image custom questions, the script default question/mobile layout, and video
   sampling limitations.
 - Updated the product, interaction-model, and browser-test source-of-truth docs.
+- Addressed PR review by threading the JWT-backed request client through source,
+  action, replay, and critique persistence; hiding feedback for remote-only
+  Library media and non-succeeded progress items; rendering complete script
+  narration and dialogue; and removing the dormant Outputs shortcut that could
+  not preserve the selected export's graph identity.
 
 ## Validation evidence
 
@@ -79,6 +86,15 @@
   authoritative-script loading and fail-closed error handling.
 - Post-merge `pnpm agent:lint:fix`, `git diff --check`, and
   `pnpm agent:validate -- --scope all` passed across the combined 69-file diff.
+- Review-fix API and web typechecks passed. The critique route/service selection
+  passed 7 targeted tests, including verification that the same request client
+  reaches source, action, replay, and persistence dependencies. The progress
+  eligibility unit test passed all succeeded/running/failed/media-kind cases.
+- `PLAYWRIGHT_WEB_PORT=3199 POPCORN_E2E_API_PORT=4199 pnpm --filter @popcorn/web exec playwright test e2e/specs/library-collections.spec.ts e2e/run-progress.spec.ts --project=chromium`
+  passed all 30 tests, including remote-only media suppression, complete script
+  narration/dialogue, and succeeded-only progress feedback.
+- Review-fix `pnpm agent:lint:fix`, `git diff --check`, and
+  `pnpm agent:validate -- --scope all` passed for the 20-file change set.
 - Local Vite app and provider-free mock API started successfully. The in-app
   browser reached `/projects/proj-alpha/script`, after which its URL security
   policy blocked all further local-page inspection. Per policy, no alternate
@@ -123,6 +139,15 @@
   the authoritative script query in its loading/error boundary; delayed and
   failing browser regressions now cover that behavior. Final re-review found no
   remaining P1/P2 implementation blocker.
+- PR review identified five follow-up gaps: service-role critique persistence,
+  an identity-losing dormant Outputs shortcut, narration masking dialogue,
+  remote-only Library eligibility, and reserved progress asset IDs. All five
+  are addressed with request-client propagation and focused UI regressions.
+- Independent implementation review found the same readiness gap in the
+  storyboard-tile progress renderer. The shared eligibility predicate now gates
+  matched stage items there, while unmatched persisted panels require
+  `ready`/`approved`; expanded browser coverage exercises succeeded, running,
+  and failed generic and board items. Re-review found no remaining P1/P2 blocker.
 
 ## Blockers and risks
 
@@ -134,5 +159,4 @@
 
 ## Next action / handoff
 
-- Complete merge review and full validation, commit the merge resolution, and
-  push the updated ready-for-review PR.
+- Commit and push the validated review fixes to PR #897.

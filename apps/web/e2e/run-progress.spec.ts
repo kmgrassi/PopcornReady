@@ -752,6 +752,162 @@ test("opens generated asset feedback and previews an exact durable proposal @mob
   });
 });
 
+test("offers advisory feedback only for succeeded generated media", async ({ page }) => {
+  const imageDataUrl =
+    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%230f766e'/%3E%3C/svg%3E";
+  const stageItems = [
+    {
+      itemId: "item-ready-image",
+      stageId: "stage-asset_generation",
+      kind: "image",
+      purpose: "visual_anchor",
+      label: "Ready keyframe",
+      status: "succeeded",
+      assetId: "asset-ready-image",
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      itemId: "item-running-video",
+      stageId: "stage-asset_generation",
+      kind: "video",
+      purpose: "shot",
+      label: "Reserved clip",
+      status: "running",
+      assetId: "asset-reserved-video",
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      itemId: "item-failed-image",
+      stageId: "stage-asset_generation",
+      kind: "image",
+      purpose: "keyframe",
+      label: "Failed keyframe",
+      status: "failed",
+      assetId: "asset-failed-image",
+      error: { code: "provider_failed", message: "Provider failed." },
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      itemId: "item-ready-board",
+      stageId: "stage-asset_generation",
+      kind: "image",
+      purpose: "keyframe",
+      label: "generate_keyframe Ready board frame",
+      status: "succeeded",
+      assetId: "asset-ready-board",
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      itemId: "item-running-board",
+      stageId: "stage-asset_generation",
+      kind: "image",
+      purpose: "keyframe",
+      label: "generate_keyframe Reserved board frame",
+      status: "running",
+      assetId: "asset-running-board",
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      itemId: "item-failed-board",
+      stageId: "stage-asset_generation",
+      kind: "image",
+      purpose: "keyframe",
+      label: "generate_keyframe Failed board frame",
+      status: "failed",
+      assetId: "asset-failed-board",
+      error: { code: "provider_failed", message: "Provider failed." },
+      createdAt: now,
+      updatedAt: now,
+    },
+  ];
+  await page.route(`**${apiRunPath}`, async (route) => {
+    await route.fulfill({
+      json: runDetail({
+        status: "running",
+        stageType: "asset_generation",
+        stageItems,
+      }),
+    });
+  });
+  await page.route(`**/api/v1/projects/${projectId}/storyboard`, async (route) => {
+    const panels = [
+      ["ready", "asset-ready-board"],
+      ["running", "asset-running-board"],
+      ["failed", "asset-failed-board"],
+    ].map(([suffix, assetId]) => ({
+      id: `panel-${suffix}`,
+      projectId,
+      beatId: `beat-${suffix}`,
+      panelIndex: 0,
+      imageAssetId: assetId,
+      promptAssetId: null,
+      url: imageDataUrl,
+      thumbnailUrl: imageDataUrl,
+      status: "ready",
+      isSelected: true,
+      approvedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    }));
+    await route.fulfill({
+      json: {
+        storyboard: {
+          id: "storyboard-progress-feedback",
+          projectId,
+          planAssetId: null,
+          status: "ready",
+          scenes: [{
+            id: "scene-progress-feedback",
+            projectId,
+            storyboardId: "storyboard-progress-feedback",
+            sceneIndex: 0,
+            title: "Progress feedback",
+            summary: null,
+            setting: null,
+            mood: null,
+            durationSec: 3,
+            sceneAssetId: null,
+            status: "ready",
+            beats: panels.map((panel, index) => ({
+              id: panel.beatId,
+              projectId,
+              sceneId: "scene-progress-feedback",
+              beatIndex: index,
+              intent: `Frame ${index + 1}`,
+              visualDescription: null,
+              dialogueSummary: null,
+              narration: null,
+              durationSec: 1,
+              shotType: null,
+              camera: null,
+              framing: null,
+              status: "ready",
+              beatAssetId: null,
+              panels: [panel],
+              createdAt: now,
+              updatedAt: now,
+            })),
+            createdAt: now,
+            updatedAt: now,
+          }],
+          createdAt: now,
+          updatedAt: now,
+        },
+      },
+    });
+  });
+
+  await page.goto(runPath);
+
+  await expect(page.getByRole("heading", { name: "Generated assets" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Receive feedback" })).toHaveCount(2);
+});
+
 test("submits review-gate approval and previews durable requested changes @mobile", async ({ page }) => {
   const requests: Array<{ action: string; body: unknown }> = [];
   let detail = runDetail({

@@ -597,6 +597,10 @@ export function AssetsPage() {
           requestedAssetQuery.data.asset.url ??
           undefined,
         visibility: undefined,
+        canReceiveFeedback: Boolean(
+          requestedAssetQuery.data.asset.storageKey &&
+          requestedAssetQuery.data.asset.storageBucket,
+        ),
       }
     : null;
   const selectedAsset = selectedIndex >= 0
@@ -793,6 +797,7 @@ export function AssetsPage() {
             <div className={styles.viewerActions}>
               <div className={styles.viewerEditAction}>
                 {selectedAsset.status === "ready" &&
+                selectedAsset.canReceiveFeedback === true &&
                 (selectedAsset.kind === "image" || selectedAsset.kind === "video") ? (
                   <Button
                     variant="secondary"
@@ -1055,11 +1060,6 @@ export function OutputsPage() {
       ) : null}
       <MediaViewer
         item={selectedOutput ? outputViewerItem(selectedOutput) : null}
-        actions={selectedOutput ? (
-          <ButtonLink variant="secondary" to={projectWatchPath(selectedOutput.projectId)}>
-            Receive feedback
-          </ButtonLink>
-        ) : null}
         hasPrevious={selectedIndex > 0}
         hasNext={selectedIndex >= 0 && selectedIndex < outputsQuery.items.length - 1}
         onClose={() => setSelectedOutputId(null)}

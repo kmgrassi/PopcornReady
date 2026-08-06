@@ -226,14 +226,7 @@ export function ProjectStepPage({ step }: { step: ProjectStep }) {
         subtitle="Ask about clarity, structure, pacing, dialogue, or tone."
         preview={
           <div className={styles.modalPreview}>
-            {activeScript?.narration?.trim() ||
-              activeScript?.scenes
-                .flatMap((scene) => [
-                  scene.narration,
-                  ...scene.dialogue.map((line) => line.text),
-                ])
-                .filter(Boolean)
-                .join("\n\n")}
+            {activeScriptText(activeScript)}
           </div>
         }
         onClose={() => setCritiqueOpen(false)}
@@ -441,25 +434,32 @@ function scriptFields(
   storyboard: ProjectStoryboard | null,
 ): FieldItem[] {
   if (activeScript) {
-    if (activeScript.narration?.trim()) {
-      return [{
-        id: activeScript.id ?? "active-script",
-        label: "Active script",
-        value: activeScript.narration.trim(),
-        scope: "script",
-      }];
-    }
-    return activeScript.scenes.flatMap((scene) => [
-      ...(scene.narration
-        ? [{ id: `${scene.id}-narration`, label: scene.title, value: scene.narration, scope: "script" as const }]
+    return [
+      ...(activeScript.narration?.trim()
+        ? [{
+            id: activeScript.id ?? "active-script",
+            label: "Active script",
+            value: activeScript.narration.trim(),
+            scope: "script" as const,
+          }]
         : []),
-      ...scene.dialogue.map((line, index) => ({
-        id: `${scene.id}-dialogue-${index}`,
-        label: line.characterName ?? scene.title,
-        value: line.text,
-        scope: "script" as const,
-      })),
-    ]);
+      ...activeScript.scenes.flatMap((scene) => [
+        ...(scene.narration
+          ? [{
+              id: `${scene.id}-narration`,
+              label: scene.title,
+              value: scene.narration,
+              scope: "script" as const,
+            }]
+          : []),
+        ...scene.dialogue.map((line, index) => ({
+          id: `${scene.id}-dialogue-${index}`,
+          label: line.characterName ?? scene.title,
+          value: line.text,
+          scope: "script" as const,
+        })),
+      ]),
+    ];
   }
   const narrationScript = project.brief?.narration?.script?.trim();
   if (narrationScript) {
@@ -479,6 +479,19 @@ function scriptFields(
     scope: "script",
     target: line.target,
   }));
+}
+
+function activeScriptText(activeScript: ScriptDraft | null): string {
+  if (!activeScript) return "";
+  return [
+    activeScript.narration?.trim(),
+    ...activeScript.scenes.flatMap((scene) => [
+      scene.narration?.trim(),
+      ...scene.dialogue.map((line) => line.text.trim()),
+    ]),
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join("\n\n");
 }
 
 function storyboardScriptLines(storyboard: ProjectStoryboard | null) {
