@@ -49,6 +49,29 @@ function project(index: number) {
     hasStoryboard: index % 2 === 0,
     posterUrl: index === 1 ? imageDataUrl : null,
     posterAssetId: index === 1 ? "asset-image-ready" : null,
+    scriptAssetId: index === 1 ? "script-asset-1" : null,
+    activeScript: index === 1 ? {
+      schemaVersion: "scriptDraft.v1",
+      id: "script-draft-1",
+      projectId: "proj-alpha",
+      briefAssetId: "brief-1",
+      storyBlueprintId: "blueprint-1",
+      targetLengthSec: 30,
+      durationClass: "short",
+      durationPlan: {
+        targetLengthSec: 30,
+        durationClass: "short",
+        expectedActCount: 1,
+        expectedSceneCount: 1,
+        expectedBeatCount: 3,
+        planningGranularity: "beats_only",
+      },
+      scenes: [],
+      narration: "Meet the small idea that changes the whole afternoon.",
+      createdAt: now,
+      updatedAt: now,
+      status: "draft",
+    } : null,
     createdAt: now,
     updatedAt: now,
   };
@@ -368,11 +391,71 @@ async function mockLibraryApi(page: Page) {
       fallback: { storyboardUrl: "/projects/proj-alpha/storyboard" },
     }),
   );
+
+  await page.route(/\/api\/v1\/projects\/proj-alpha\/assets\/[^/]+\/critique$/, async (route) => {
+    const body = route.request().postDataJSON() as { question?: string };
+    const assetId = new URL(route.request().url()).pathname.split("/").at(-2) ?? "asset";
+    return json(route, {
+      critique: {
+        critiqueAssetId: `critique-${assetId}`,
+        sourceAssetId: assetId,
+        sourceKind: assetId.startsWith("script") ? "script" : assetId === "output-main" ? "video" : "image",
+        question: body.question,
+        answer: "The core idea reads quickly and the focal point is clear.",
+        strengths: ["Strong opening focus"],
+        improvements: ["Create more contrast around the key message"],
+        evidence: ["The subject holds the visual center"],
+        limitations: assetId === "output-main"
+          ? ["Video feedback is based on sampled frames without audio."]
+          : [],
+        provider: "openai",
+        model: "gpt-test",
+      },
+    });
+  });
 }
 
 test.beforeEach(async ({ page }) => {
   assetBillingRequests = 0;
   await mockLibraryApi(page);
+});
+
+test("receives advisory AI feedback for image, script, and final video assets", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/library/assets?assetId=asset-image-ready&projectId=proj-alpha");
+  await page.getByRole("button", { name: "Receive feedback" }).click();
+
+  const imageFeedback = page.getByRole("dialog", { name: "Keyframe still" });
+  const imageQuestion = imageFeedback.getByLabel("What would you like the AI to review?");
+  await expect(imageQuestion).toHaveValue("How can we improve upon this?");
+  await imageQuestion.fill("What is already working well?");
+  const imageResponsePromise = page.waitForResponse(/\/assets\/asset-image-ready\/critique$/);
+  await imageFeedback.getByRole("button", { name: "Receive feedback" }).click();
+  const imageResponse = await imageResponsePromise;
+  expect((await imageResponse.request().allHeaders())["idempotency-key"]).toBeTruthy();
+  await expect(imageFeedback.getByRole("heading", { name: "Response" })).toBeVisible();
+  await expect(imageFeedback).toContainText("Strong opening focus");
+  await imageFeedback.locator("footer").getByRole("button", { name: "Close" }).click();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/projects/proj-alpha/script");
+  await page.getByRole("button", { name: "Receive feedback" }).click();
+  const scriptFeedback = page.getByRole("dialog", { name: "Review this script" });
+  await expect(scriptFeedback.getByText("Meet the small idea that changes the whole afternoon.")).toBeVisible();
+  await scriptFeedback.getByRole("button", { name: "Receive feedback" }).click();
+  await expect(scriptFeedback.getByRole("heading", { name: "Response" })).toBeVisible();
+  const mobileOverflow = await page.evaluate(() => ({
+    document: document.documentElement.scrollWidth,
+    viewport: document.documentElement.clientWidth,
+  }));
+  expect(mobileOverflow.document).toBeLessThanOrEqual(mobileOverflow.viewport + 1);
+  await scriptFeedback.locator("footer").getByRole("button", { name: "Close" }).click();
+
+  await page.goto("/projects/proj-alpha/watch");
+  await page.getByRole("button", { name: "Receive feedback" }).click();
+  const videoFeedback = page.getByRole("dialog", { name: "Review this video" });
+  await videoFeedback.getByRole("button", { name: "Receive feedback" }).click();
+  await expect(videoFeedback).toContainText("sampled frames without audio");
 });
 
 test("normalizes a deep-linked project's remote URL as the video viewer source", async ({ page }) => {

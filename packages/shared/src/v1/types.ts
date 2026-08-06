@@ -6,7 +6,7 @@
 // them and writes Jobs + VersionedTimelines. They live here as the agreed
 // contract so every PR builds against the same shapes.
 
-import { AspectRatio, CriticReport, ShotPlan, StoryContext, TimelineSegment } from "../types";
+import { AspectRatio, CriticReport, ScriptDraft, ShotPlan, StoryContext, TimelineSegment } from "../types";
 
 export type { AspectRatio } from "../types";
 
@@ -40,6 +40,10 @@ export interface V1Project {
   // back to the project's newest ready image). Signed, short-lived URL.
   posterAssetId?: string | null;
   posterUrl?: string | null;
+  // Exact graph asset backing the active script snapshot. Null when the project
+  // only has legacy brief/storyboard text and no active narration_script asset.
+  scriptAssetId?: string | null;
+  activeScript?: ScriptDraft | null;
   createdAt: string;
   updatedAt: string;
 }

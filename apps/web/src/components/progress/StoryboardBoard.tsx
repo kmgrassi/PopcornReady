@@ -10,6 +10,7 @@ import type {
   StoryboardScene,
 } from "@popcorn/shared/v1/types";
 import { AiAssetFeedbackDialog } from "../ai-edit/AiAssetFeedbackDialog";
+import { AssetCritiqueButton } from "../ai-edit/AssetCritiqueButton";
 import { RegenerateImageButton } from "../media/RegenerateImageButton";
 import { ImageWithSkeleton } from "../ui/ImageWithSkeleton";
 import styles from "./StoryboardBoard.module.css";
@@ -219,6 +220,28 @@ export function StoryboardBoard({
                   <RegenerateImageButton
                     assetId={regenAssetId}
                     prompt={tile.prompt}
+                  />
+                </div>
+              ) : null}
+              {regenAssetId && tile.mediaUrl ? (
+                <div className={styles.tileActions}>
+                  <AssetCritiqueButton
+                    projectId={projectId}
+                    assetId={regenAssetId}
+                    title={`Review ${tile.label}`}
+                    subtitle={tile.intent}
+                    preview={
+                      tile.item?.kind === "video" ? (
+                        <video src={tile.mediaUrl} controls muted playsInline preload="metadata" />
+                      ) : (
+                        <ImageWithSkeleton
+                          src={tile.mediaUrl}
+                          alt={tile.intent ? `${tile.label}: ${tile.intent}` : tile.label}
+                          fit="contain"
+                          fill
+                        />
+                      )
+                    }
                   />
                 </div>
               ) : null}

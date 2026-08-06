@@ -9,6 +9,7 @@ import {
 } from "../lib/api-client";
 import { PublishAnchorDialog } from "../components/anchors/PublishAnchorDialog";
 import { AiAssetFeedbackDialog } from "../components/ai-edit/AiAssetFeedbackDialog";
+import { AssetCritiqueDialog } from "../components/ai-edit/AssetCritiqueDialog";
 import { useAuth } from "../components/auth/AuthProvider";
 import { QuickLoadingState } from "../components/ui/QuickLoadingState";
 import { PageHeader } from "../components/ui/PageHeader";
@@ -517,6 +518,7 @@ export function AssetsPage() {
   const [openingIds, setOpeningIds] = useState<Set<string>>(() => new Set());
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [editingAsset, setEditingAsset] = useState<AssetEditSnapshot | null>(null);
+  const [critiquingAsset, setCritiquingAsset] = useState<AssetEditSnapshot | null>(null);
   const [publishingAsset, setPublishingAsset] = useState<WorkspaceAsset | null>(null);
   const restoreEditFocusRef = useRef(false);
   const isPublic = scope === "public";
@@ -745,7 +747,7 @@ export function AssetsPage() {
       ) : null}
       <MediaViewer
         item={
-          !editingAsset && selectedAsset
+          !editingAsset && !critiquingAsset && selectedAsset
             ? assetViewerItem(selectedAsset, selectedMedia.data)
             : null
         }
@@ -790,6 +792,21 @@ export function AssetsPage() {
           selectedAsset && !isPublic ? (
             <div className={styles.viewerActions}>
               <div className={styles.viewerEditAction}>
+                {selectedAsset.status === "ready" &&
+                (selectedAsset.kind === "image" || selectedAsset.kind === "video") ? (
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    onClick={() =>
+                      setCritiquingAsset({
+                        asset: selectedAsset,
+                        media: selectedMedia.data,
+                      })
+                    }
+                  >
+                    Receive feedback
+                  </Button>
+                ) : null}
                 {selectedAsset.status === "ready" ? (
                   <Button
                     ref={(node) => {
@@ -891,6 +908,23 @@ export function AssetsPage() {
           assetsQuery.refetch();
         }}
         asset={editingAsset ? <AssetEditPreview snapshot={editingAsset} /> : null}
+      />
+      <AssetCritiqueDialog
+        open={Boolean(critiquingAsset)}
+        projectId={critiquingAsset?.asset.projectId ?? ""}
+        assetId={
+          critiquingAsset
+            ? critiquingAsset.asset.assetId ?? critiquingAsset.asset.id
+            : ""
+        }
+        title={
+          critiquingAsset?.asset.title ??
+          critiquingAsset?.asset.filename ??
+          "Review asset"
+        }
+        subtitle="Ask the AI for an advisory review. This won’t change the asset."
+        preview={critiquingAsset ? <AssetEditPreview snapshot={critiquingAsset} /> : null}
+        onClose={() => setCritiquingAsset(null)}
       />
       <PublishAnchorDialog
         source={
@@ -1021,6 +1055,11 @@ export function OutputsPage() {
       ) : null}
       <MediaViewer
         item={selectedOutput ? outputViewerItem(selectedOutput) : null}
+        actions={selectedOutput ? (
+          <ButtonLink variant="secondary" to={projectWatchPath(selectedOutput.projectId)}>
+            Receive feedback
+          </ButtonLink>
+        ) : null}
         hasPrevious={selectedIndex > 0}
         hasNext={selectedIndex >= 0 && selectedIndex < outputsQuery.items.length - 1}
         onClose={() => setSelectedOutputId(null)}

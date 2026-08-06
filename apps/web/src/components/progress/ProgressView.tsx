@@ -13,6 +13,7 @@ import {
 } from "@popcorn/shared/v1/types";
 import { StageItemCard } from "../generation-progress/StageItemCard";
 import { AiAssetFeedbackDialog } from "../ai-edit/AiAssetFeedbackDialog";
+import { AssetCritiqueButton } from "../ai-edit/AssetCritiqueButton";
 import {
   GenerationRunClient,
   GenerationRunRequestError,
@@ -600,24 +601,34 @@ export function ProgressView({
                   <div className={`${styles.itemGrid} ${styles.reviewOutputGrid}`}>
                     {generatedOutputGroups.genericItems.map((item) => (
                       item.assetId ? (
-                        <button
-                          className={styles.assetEditButton}
-                          type="button"
-                          key={item.itemId}
-                          onClick={() => setSelectedAssetItemId(item.itemId)}
-                          aria-label={`Edit ${item.label} with AI`}
-                          aria-busy={
-                            boardFeedbackActiveKeys.includes(
-                              storyboardFeedbackTargetKey(
-                                stageItemRevisionTarget(detail.run.runId, item)
-                              )
-                            ) || undefined
-                          }
-                        >
-                          {/* Embedded in the edit <button>; a nested regenerate
-                              <button> would be invalid markup, so suppress it. */}
-                          <StageItemCard item={item} allowInlineRegenerate={false} />
-                        </button>
+                        <div className={styles.assetReviewItem} key={item.itemId}>
+                          <button
+                            className={styles.assetEditButton}
+                            type="button"
+                            onClick={() => setSelectedAssetItemId(item.itemId)}
+                            aria-label={`Edit ${item.label} with AI`}
+                            aria-busy={
+                              boardFeedbackActiveKeys.includes(
+                                storyboardFeedbackTargetKey(
+                                  stageItemRevisionTarget(detail.run.runId, item)
+                                )
+                              ) || undefined
+                            }
+                          >
+                            {/* Embedded in the edit <button>; a nested regenerate
+                                <button> would be invalid markup, so suppress it. */}
+                            <StageItemCard item={item} allowInlineRegenerate={false} />
+                          </button>
+                          {(item.kind === "image" || item.kind === "video") && item.assetId ? (
+                            <AssetCritiqueButton
+                              projectId={detail.run.projectId}
+                              assetId={item.assetId}
+                              title={`Review ${item.label}`}
+                              subtitle={item.promptPreview ?? item.purpose}
+                              preview={<StageItemCard item={item} allowInlineRegenerate={false} />}
+                            />
+                          ) : null}
+                        </div>
                       ) : (
                         <div key={item.itemId}>
                           <StageItemCard item={item} allowInlineRegenerate={false} />

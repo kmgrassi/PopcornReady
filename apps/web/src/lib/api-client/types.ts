@@ -263,6 +263,24 @@ export interface ProjectAssetDetailResponse {
   };
 }
 
+export interface AssetCritique {
+  critiqueAssetId: string;
+  sourceAssetId: string;
+  sourceKind: "script" | "image" | "video";
+  question: string;
+  answer: string;
+  strengths: string[];
+  improvements: string[];
+  evidence: string[];
+  limitations: string[];
+  provider: string;
+  model: string;
+}
+
+export interface AssetCritiqueResponse {
+  critique: AssetCritique;
+}
+
 export interface WorkspaceOutputsResponse {
   outputs: WorkspaceOutput[];
   pagination: ListPagination;

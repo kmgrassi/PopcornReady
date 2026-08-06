@@ -1,0 +1,222 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal-backdrop, 80);
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+}
+
+.dialog {
+  width: min(1040px, 100%);
+  max-height: calc(100dvh - (var(--space-4) * 2));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: var(--space-4);
+  overflow: hidden;
+  padding: var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-lg);
+}
+
+.header,
+.actions,
+.questionMeta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.header h2,
+.header p,
+.result h3,
+.result p {
+  margin: 0;
+}
+
+.header h2 {
+  font-size: var(--title-sm);
+  line-height: var(--line-heading);
+  text-wrap: balance;
+}
+
+.header > div > p:last-child {
+  margin-top: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.contextLabel {
+  margin-bottom: var(--space-1) !important;
+  color: var(--accent);
+  font-size: var(--text-sm);
+  font-weight: 800;
+}
+
+.body {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.9fr);
+  gap: var(--space-4);
+}
+
+.preview {
+  min-width: 0;
+  min-height: 320px;
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  border-radius: var(--radius-sm);
+  background: var(--media-bg);
+}
+
+.preview img,
+.preview video {
+  width: 100%;
+  height: 100%;
+  max-height: 560px;
+  object-fit: contain;
+}
+
+.conversation {
+  min-width: 0;
+  overflow-y: auto;
+  padding-right: var(--space-1);
+}
+
+.conversation > label {
+  display: block;
+  margin-bottom: var(--space-2);
+  color: var(--text-strong);
+  font-size: var(--text-sm);
+  font-weight: 800;
+}
+
+.conversation textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  line-height: var(--line-body);
+  padding: var(--space-3);
+}
+
+.conversation textarea:focus {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+  outline: none;
+}
+
+.questionMeta {
+  margin-top: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: var(--line-caption);
+}
+
+.questionMeta span:first-child {
+  max-width: 48ch;
+}
+
+.loading,
+.error {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+
+.loading {
+  align-items: center;
+  background: var(--surface-2);
+}
+
+.loading > span {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: critique-spin 800ms linear infinite;
+}
+
+.error {
+  flex-direction: column;
+  border: 1px solid var(--danger-border);
+  background: var(--danger-soft);
+  color: var(--danger-text);
+}
+
+.result {
+  display: grid;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.result h3 {
+  margin-bottom: var(--space-1);
+  font-size: var(--text-sm);
+}
+
+.result p,
+.result li {
+  max-width: 68ch;
+  font-size: var(--text-sm);
+  line-height: var(--line-body);
+  text-wrap: pretty;
+}
+
+.result ul {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding-left: var(--space-5);
+}
+
+.limits {
+  color: var(--muted);
+}
+
+.actions {
+  justify-content: flex-end;
+  align-items: center;
+}
+
+@keyframes critique-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 760px) {
+  .backdrop { padding: 0; }
+  .dialog {
+    width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+    padding: var(--space-4);
+  }
+  .body {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+  .preview { min-height: 220px; max-height: 38dvh; }
+  .conversation { overflow: visible; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading > span { animation: none; }
+}

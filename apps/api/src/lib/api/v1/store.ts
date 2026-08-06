@@ -402,6 +402,8 @@ function mapProject(
     hasStoryboard?: boolean;
     posterAssetId?: string | null;
     posterUrl?: string | null;
+    scriptAssetId?: string | null;
+    activeScript?: ScriptDraft | null;
   } = {}
 ): V1Project {
   return {
@@ -417,6 +419,8 @@ function mapProject(
     hasStoryboard: projection.hasStoryboard ?? false,
     posterAssetId: projection.posterAssetId ?? null,
     posterUrl: projection.posterUrl ?? null,
+    scriptAssetId: projection.scriptAssetId ?? null,
+    activeScript: projection.activeScript ?? null,
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
   };
@@ -1107,8 +1111,10 @@ async function projectProjection(
   hasStoryboard: boolean;
   posterAssetId: string | null;
   posterUrl: string | null;
+  scriptAssetId: string | null;
+  activeScript: ScriptDraft | null;
 }> {
-  const [briefAsset, storyboard, posterAsset] = await Promise.all([
+  const [briefAsset, storyboard, posterAsset, scriptAsset] = await Promise.all([
     selectedDataAsset(db, projectId, "brief", "brief"),
     runQuery(
       "store.projectProjection storyboard",
@@ -1120,6 +1126,7 @@ async function projectProjection(
         .maybeSingle()
     ),
     projectPosterAsset(db, projectId, opts),
+    selectedDataAsset(db, projectId, "script_draft", "narration_script", "script_draft"),
   ]);
   const poster = {
     posterAssetId: posterAsset?.id ?? null,
@@ -1129,6 +1136,8 @@ async function projectProjection(
     brief: briefAsset ? unmarkedContent<VideoBrief>(briefAsset.content) : null,
     currentBriefVersionId: briefAsset?.id ?? null,
     hasStoryboard: Boolean(storyboard),
+    scriptAssetId: scriptAsset?.id ?? null,
+    activeScript: scriptAsset ? unmarkedContent<ScriptDraft>(scriptAsset.content) : null,
     ...poster,
   };
 }
@@ -2974,6 +2983,85 @@ export async function addProjectTimelineCritique(input: {
     outputAssetIds: [asset.id],
   });
   return { critiqueAssetId: asset.id };
+}
+
+export async function addProjectAssetCritique(input: {
+  critiqueAssetId: string;
+  workspaceId: string;
+  projectId: string;
+  sourceAssetId: string;
+  sourceContentHash?: string;
+  actionId: string;
+  critique: unknown;
+}): Promise<{ critiqueAssetId: string }> {
+  const db = getServiceSupabase();
+  const graphInputs: GraphAssetInput[] = [
+    {
+      assetId: input.sourceAssetId,
+      relation: "input",
+      role: "reviewed_asset",
+      position: 0,
+      ...(input.sourceContentHash ? { contentHash: input.sourceContentHash } : {}),
+    },
+  ];
+  const expectedContentHash = canonicalContentHash(markedContent("critique", input.critique));
+  const expectedInputsFingerprint = inputsFingerprint(graphInputs, null);
+  const asset = await insertDataAsset({
+    db,
+    id: input.critiqueAssetId,
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    kind: "critique",
+    contentSchemaKind: "critique",
+    role: "asset_advisory_critique",
+    content: input.critique,
+    inputs: graphInputs,
+    createdByActionId: input.actionId,
+  });
+  if (
+    asset.workspace_id !== input.workspaceId ||
+    asset.project_id !== input.projectId ||
+    asset.kind !== "critique" ||
+    asset.role !== "asset_advisory_critique" ||
+    asset.content_hash !== expectedContentHash ||
+    asset.inputs_fingerprint !== expectedInputsFingerprint ||
+    asset.created_by_action_id !== input.actionId
+  ) {
+    throw new ApiError(
+      "idempotency_conflict",
+      "Asset critique replay changed immutable content or causation."
+    );
+  }
+  await updateAction(input.actionId, {
+    status: "applied",
+    outputAssetIds: [asset.id],
+  });
+  return { critiqueAssetId: asset.id };
+}
+
+export async function getProjectAssetCritique(input: {
+  workspaceId: string;
+  projectId: string;
+  critiqueAssetId: string;
+  sourceAssetId: string;
+  actionId: string;
+}): Promise<unknown | null> {
+  const asset = await dataAssetById(getServiceSupabase(), input.critiqueAssetId);
+  if (!asset) return null;
+  const reviewedSource = Array.isArray(asset.inputs)
+    ? asset.inputs.find((edge) => edge.role === "reviewed_asset")
+    : undefined;
+  if (
+    asset.workspace_id !== input.workspaceId ||
+    asset.project_id !== input.projectId ||
+    asset.kind !== "critique" ||
+    asset.role !== "asset_advisory_critique" ||
+    asset.created_by_action_id !== input.actionId ||
+    reviewedSource?.assetId !== input.sourceAssetId
+  ) {
+    throw new ApiError("idempotency_conflict", "Stored asset critique identity changed.");
+  }
+  return unmarkedContent<unknown>(asset.content);
 }
 
 export async function addAudioFitCritique(input: {
@@ -5663,6 +5751,51 @@ export async function getAsset(
 ): Promise<V1Asset> {
   const db = getServiceSupabase();
   return mapAsset(await getAssetRow(db, workspaceId, projectId, assetId, "getAsset"));
+}
+
+export type AssetCritiqueSource =
+  | { kind: "script"; assetId: string; contentHash: string; script: ScriptDraft }
+  | { kind: "image" | "video"; asset: V1Asset };
+
+/** Load the immutable graph asset named by Receive feedback. */
+export async function getAssetCritiqueSource(input: {
+  workspaceId: string;
+  projectId: string;
+  assetId: string;
+}): Promise<AssetCritiqueSource> {
+  const db = getServiceSupabase();
+  const row = await getAssetRow(
+    db,
+    input.workspaceId,
+    input.projectId,
+    input.assetId,
+    "getAssetCritiqueSource"
+  );
+  if (row.status !== "ready") {
+    throw new ApiError("asset_invalid", "AI feedback is available once this asset is ready.");
+  }
+  if (row.kind === "narration_script" && row.media === "data") {
+    return {
+      kind: "script",
+      assetId: row.id,
+      contentHash: row.content_hash ?? "",
+      script: unmarkedContent<ScriptDraft>(row.content),
+    };
+  }
+  if (row.media !== "image" && row.media !== "video") {
+    throw new ApiError(
+      "asset_invalid",
+      "AI feedback is currently available for scripts, images, and videos."
+    );
+  }
+  const asset = await mapAsset(row);
+  if (!asset.storageKey || !asset.storageBucket) {
+    throw new ApiError(
+      "asset_invalid",
+      "AI feedback needs stored source media. Re-import this asset before requesting feedback."
+    );
+  }
+  return { kind: row.media, asset };
 }
 
 // Canonicalize a mix of asset uuids and agent-written slugs to uuids. Reads accept

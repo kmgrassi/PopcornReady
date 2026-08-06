@@ -85,6 +85,11 @@ Owned ready assets expose a prominent exact-target **Request changes** entry
 into the durable proposal lifecycle. Mobile coverage verifies its full-width
 footer treatment and overflow containment; processing assets explain the
 disabled state, while public assets remain read-only without the action. The
+same suite covers advisory **Receive feedback** for an owned image, the active
+script snapshot, and the selected final video. It verifies the editable custom
+question and idempotency header, the default “How can we improve upon this?”
+question, structured answer rendering, sampled-video limitations, and mobile
+dialog overflow without conflating feedback with Request Changes. The
 same coverage protects the shared viewer's full desktop inspection height and
 keeps native audio controls contained and reachable in short landscape views.
 It also verifies the shared quick route-loading state on mobile, including its

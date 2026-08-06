@@ -12,6 +12,7 @@ import type {
 } from "./schemas";
 import type { GeneratedAssetProvenance } from "./provenance";
 import type { GraphAssetInput } from "./asset-graph";
+import type { ScriptDraft } from "@popcorn/shared/types";
 
 export interface V1Workspace {
   id: string;
@@ -37,6 +38,8 @@ export interface V1Project {
   hasStoryboard?: boolean;
   posterAssetId: string | null;
   posterUrl: string | null;
+  scriptAssetId?: string | null;
+  activeScript?: ScriptDraft | null;
   createdAt: string;
   updatedAt: string;
 }

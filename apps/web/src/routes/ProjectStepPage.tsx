@@ -7,8 +7,9 @@ import type {
   VideoBriefInput,
 } from "@popcorn/shared/v1/types";
 import { AiAssetFeedbackDialog } from "../components/ai-edit/AiAssetFeedbackDialog";
+import { AssetCritiqueDialog } from "../components/ai-edit/AssetCritiqueDialog";
 import { QuickLoadingState } from "../components/ui/QuickLoadingState";
-import { ButtonLink } from "../components/ui/Button";
+import { Button, ButtonLink } from "../components/ui/Button";
 import { ImageWithSkeleton } from "../components/ui/ImageWithSkeleton";
 import { EmptyState, ErrorState } from "../components/ui/StateCard";
 import { useProjectQuery, useProjectStoryboardQuery } from "../lib/queryClient";
@@ -59,6 +60,7 @@ export function ProjectStepPage({ step }: { step: ProjectStep }) {
   );
   const [activeEdit, setActiveEdit] = useState<ActiveEdit | null>(null);
   const [sentLabel, setSentLabel] = useState<string | null>(null);
+  const [critiqueOpen, setCritiqueOpen] = useState(false);
 
   const project = projectQuery.data?.project ?? null;
   const storyboard = storyboardQuery.data?.storyboard ?? null;
@@ -86,6 +88,11 @@ export function ProjectStepPage({ step }: { step: ProjectStep }) {
           <p>{copy.description}</p>
         </div>
         <div className={styles.headerActions}>
+          {step === "script" && project?.scriptAssetId && project.activeScript ? (
+            <Button variant="secondary" onClick={() => setCritiqueOpen(true)}>
+              Receive feedback
+            </Button>
+          ) : null}
           <ButtonLink
             variant="secondary"
             to={`/projects/${encodeURIComponent(projectId)}/concept`}
@@ -198,6 +205,26 @@ export function ProjectStepPage({ step }: { step: ProjectStep }) {
         }}
         onClose={() => setActiveEdit(null)}
         asset={activeEdit ? <EditPreview item={activeEdit.item} project={project} /> : null}
+      />
+      <AssetCritiqueDialog
+        open={critiqueOpen}
+        projectId={projectId}
+        assetId={project?.scriptAssetId ?? ""}
+        title="Review this script"
+        subtitle="Ask about clarity, structure, pacing, dialogue, or tone."
+        preview={
+          <div className={styles.modalPreview}>
+            {project?.activeScript?.narration?.trim() ||
+              project?.activeScript?.scenes
+                .flatMap((scene) => [
+                  scene.narration,
+                  ...scene.dialogue.map((line) => line.text),
+                ])
+                .filter(Boolean)
+                .join("\n\n")}
+          </div>
+        }
+        onClose={() => setCritiqueOpen(false)}
       />
     </main>
   );
@@ -395,6 +422,27 @@ function briefFields(brief: VideoBriefInput | null): FieldItem[] {
 }
 
 function scriptFields(project: V1Project, storyboard: ProjectStoryboard | null): FieldItem[] {
+  if (project.activeScript) {
+    if (project.activeScript.narration?.trim()) {
+      return [{
+        id: "active-script.narration",
+        label: "Narration script",
+        value: project.activeScript.narration.trim(),
+        scope: "script",
+      }];
+    }
+    return project.activeScript.scenes.flatMap((scene) => [
+      ...(scene.narration
+        ? [{ id: `${scene.id}-narration`, label: scene.title, value: scene.narration, scope: "script" as const }]
+        : []),
+      ...scene.dialogue.map((line, index) => ({
+        id: `${scene.id}-dialogue-${index}`,
+        label: line.characterName ?? scene.title,
+        value: line.text,
+        scope: "script" as const,
+      })),
+    ]);
+  }
   const narrationScript = project.brief?.narration?.script?.trim();
   if (narrationScript) {
     return [
