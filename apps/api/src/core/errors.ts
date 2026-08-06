@@ -18,6 +18,7 @@ export type ApiErrorCode =
   | "account_collision"
   | "prompt_required"
   | "brief_missing"
+  | "plan_missing"
   | "timeline_invalid"
   | "job_not_cancelable"
   | "budget_exceeded"
@@ -50,6 +51,7 @@ const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
   // The caller must supply a prompt because the asset has none stored to reuse.
   prompt_required: 422,
   brief_missing: 400,
+  plan_missing: 409,
   timeline_invalid: 400,
   job_not_cancelable: 409,
   budget_exceeded: 409,

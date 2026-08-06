@@ -7,6 +7,7 @@ import {
   registerAsset,
   updateAssetContext,
 } from "@/lib/api/v1/assets";
+import { SIGNED_MEDIA_JSON_HEADERS } from "@/lib/api/v1/cache-policy";
 import { writeLocalSignedUpload } from "@/lib/api/v1/asset-upload";
 import {
   parseAssetInventory,
@@ -19,6 +20,7 @@ import {
 import {
   getAsset,
   getAssetMediaUrls,
+  getServiceSupabaseForStore,
   listAssets,
   searchProjectAssetsSemantic,
   setAssetVisibility,
@@ -29,6 +31,9 @@ import {
   transcribeAsset,
 } from "@/lib/api/v1/transcription";
 import type { TranscriptionProvider } from "@/lib/generative/transcription";
+import { getAssetCreditsCharged } from "@/lib/api/v1/asset-credit-usage";
+import { createAssetCritique } from "@/lib/api/v1/asset-critique";
+import { getRequestSupabase } from "@/lib/supabase/clients";
 
 export const assetsRouter = Router();
 
@@ -108,6 +113,32 @@ assetsRouter.get(
 );
 
 assetsRouter.post(
+  "/projects/:projectId/assets/:assetId/critique",
+  mutation(async ({ auth, body, req }, params) => {
+    const projectId = requiredParam(params, "projectId");
+    const assetId = requiredParam(params, "assetId");
+    const rawIdempotencyKey = req.header("Idempotency-Key");
+    const idempotencyKey = rawIdempotencyKey?.trim();
+    if (!idempotencyKey || idempotencyKey !== rawIdempotencyKey) {
+      throw new ApiError("validation_failed", "Idempotency-Key is required.");
+    }
+    if (idempotencyKey.length > 200) {
+      throw new ApiError("validation_failed", "Idempotency-Key must be 200 characters or fewer.");
+    }
+    const raw = body === undefined || body === null ? {} : readBodyObject(body);
+    const critique = await createAssetCritique({
+      db: auth.isLocal ? getServiceSupabaseForStore() : getRequestSupabase(),
+      workspaceId: auth.workspaceId,
+      projectId,
+      assetId,
+      idempotencyKey,
+      question: raw.question,
+    });
+    return { status: 201, body: { critique } };
+  })
+);
+
+assetsRouter.post(
   "/assets/:assetId/regenerate",
   mutation(async ({ auth, body, requestId }, params) => {
     const assetId = requiredParam(params, "assetId");
@@ -142,6 +173,7 @@ assetsRouter.get(
     return {
       status: 200,
       body: { assets: items, pagination: { limit, nextCursor } },
+      headers: SIGNED_MEDIA_JSON_HEADERS,
     };
   })
 );
@@ -250,7 +282,10 @@ assetsRouter.get(
     const projectId = requiredParam(params, "projectId");
     const assetId = requiredParam(params, "assetId");
     const asset = await getAsset(auth.workspaceId, projectId, assetId);
-    return { status: 200, body: { asset } };
+    const creditsCharged = auth.isLocal
+      ? null
+      : await getAssetCreditsCharged(asset.projectId, asset.id);
+    return { status: 200, body: { asset, billing: { creditsCharged } } };
   })
 );
 

@@ -30,10 +30,6 @@ test("payloadFromUnknown parses valid stored drafts without trusting raw casts",
       style: "cinematic",
       callToAction: "Book a demo",
       provider: "openai",
-      seedKind: "video",
-      seedSize: "1920x1080",
-      showCaptions: false,
-      reviewGates: ["storyboard", "export"],
     },
   });
 
@@ -44,9 +40,28 @@ test("payloadFromUnknown parses valid stored drafts without trusting raw casts",
   assert.equal(payload.draft.aspectRatio, "16:9");
   assert.equal(payload.draft.footageChoice, "upload");
   assert.equal(payload.draft.footageMode, "hybrid");
-  assert.equal(payload.draft.seedKind, "video");
-  assert.deepEqual(payload.draft.reviewGates, ["storyboard", "export"]);
   assert.deepEqual(payload.draft.selectedFootage, []);
+});
+
+test("payloadFromUnknown drops retired run-config fields from old drafts", () => {
+  const payload = payloadFromUnknown({
+    v: STUDIO_DRAFT_PAYLOAD_VERSION,
+    step: "brief",
+    draft: {
+      goal: "Saved before the run-config cleanup",
+      seedKind: "video",
+      seedSize: "1920x1080",
+      showCaptions: false,
+      reviewGates: ["storyboard", "export"],
+    },
+  });
+
+  assert.ok(payload);
+  assert.equal(payload.draft.goal, "Saved before the run-config cleanup");
+  assert.ok(!("seedKind" in payload.draft));
+  assert.ok(!("seedSize" in payload.draft));
+  assert.ok(!("showCaptions" in payload.draft));
+  assert.ok(!("reviewGates" in payload.draft));
 });
 
 test("payloadFromUnknown falls back for invalid enum-like values", () => {
@@ -60,8 +75,6 @@ test("payloadFromUnknown falls back for invalid enum-like values", () => {
       footageMode: "bad_mode",
       platform: "myspace",
       format: "docuseries",
-      seedKind: "audio",
-      reviewGates: ["storyboard", "not_a_stage", 42],
     },
   });
 
@@ -72,8 +85,6 @@ test("payloadFromUnknown falls back for invalid enum-like values", () => {
   assert.equal(payload.draft.footageMode, "hybrid");
   assert.equal(payload.draft.platform, "tiktok");
   assert.equal(payload.draft.format, "visual_reveal");
-  assert.equal(payload.draft.seedKind, "image");
-  assert.deepEqual(payload.draft.reviewGates, ["storyboard"]);
 });
 
 test("recordFromUnknown synthesizes a safe fallback payload when payload is unreadable", () => {

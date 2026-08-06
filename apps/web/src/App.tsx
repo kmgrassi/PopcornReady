@@ -21,6 +21,7 @@ import { InspirationPage } from "./routes/InspirationPage";
 import { LaunchpadPage } from "./routes/LaunchpadPage";
 import { LibraryPage } from "./routes/LibraryPage";
 import { LoginPage } from "./routes/LoginPage";
+import { NotFoundPage } from "./routes/NotFoundPage";
 import { ProjectCreationPage } from "./routes/ProjectCreationPage";
 import { ProjectDetailPage } from "./routes/ProjectDetailPage";
 import { ProjectMediaGalleryPage } from "./routes/ProjectMediaGalleryPage";
@@ -35,15 +36,14 @@ import { SettingsPage } from "./routes/SettingsPage";
 import { TemplatesPage } from "./routes/TemplatesPage";
 import { UploadsPage } from "./routes/UploadsPage";
 import { StandaloneCreationPage } from "./routes/StandaloneCreationPage";
-
-const isDevHarnessEnabled = import.meta.env.DEV;
-const devHarnessRoutes = {
-  designSystem: "/dev/design-system",
-  generationCards: "/dev/generation-cards",
-  landingUpload: "/dev/landing-upload",
-  mediaGallery: "/dev/media-gallery",
-  videoEdit: "/dev/video-edit",
-} as const;
+import { AssetCreationReviewPage } from "./routes/AssetCreationReviewPage";
+import { CreateLauncherPage } from "./routes/CreateLauncherPage";
+import {
+  appRoutesForBuild,
+  type AppRouteElementKey,
+  type RouteLayout,
+} from "./routes/app-route-registry";
+import { isDevHarnessEnabled } from "./routes/dev/devHarness";
 
 function lazyDevPage(path: string, exportName: string) {
   return lazy(async () => {
@@ -58,6 +58,12 @@ function lazyDevPage(path: string, exportName: string) {
 const DevDesignSystemPage = isDevHarnessEnabled
   ? lazyDevPage("/src/routes/dev/DesignSystemPage.tsx", "DesignSystemPage")
   : null;
+const DevCreationProgressPage = isDevHarnessEnabled
+  ? lazyDevPage(
+      "/src/routes/dev/CreationProgressPage.tsx",
+      "CreationProgressPage",
+    )
+  : null;
 const DevGenerationCardsPage = isDevHarnessEnabled
   ? lazyDevPage("/src/routes/dev/GenerationCardsPage.tsx", "GenerationCardsPage")
   : null;
@@ -71,122 +77,95 @@ const DevVideoEditPage = isDevHarnessEnabled
   ? lazyDevPage("/src/routes/dev/VideoEditPage.tsx", "VideoEditPage")
   : null;
 
-// Route table for the SPA. Each page PR ports one former Next app route into
-// apps/web/src/routes/* and adds exactly one child <Route> here.
+const routeRenderers: Record<AppRouteElementKey, () => JSX.Element> = {
+  home: () => <HomePage />,
+  authCallback: () => <AuthCallbackPage />,
+  login: () => <LoginPage />,
+  signup: () => <SignupPage />,
+  sprite: () => <SpritePage />,
+  publicProject: () => <PublicProjectPage />,
+  devCreationProgress: () => <DevPage element={DevCreationProgressPage} />,
+  devDesignSystem: () => <DevPage element={DevDesignSystemPage} />,
+  devGenerationCards: () => <DevPage element={DevGenerationCardsPage} />,
+  devLandingUpload: () => <DevPage element={DevLandingUploadPage} />,
+  devMediaGallery: () => <DevPage element={DevMediaGalleryPage} />,
+  devVideoEdit: () => <DevPage element={DevVideoEditPage} />,
+  dashboard: () => <LaunchpadPage />,
+  activity: () => <ActivityPage />,
+  inspiration: () => <InspirationPage />,
+  library: () => <LibraryPage />,
+  libraryTab: () => <LibraryPage />,
+  projectsCompat: () => <RedirectWithSearch to="/library/projects" />,
+  projectNew: () => <ProjectCreationPage />,
+  create: () => <CreateLauncherPage />,
+  createAsset: () => <StandaloneCreationPage />,
+  createReview: () => <AssetCreationReviewPage />,
+  runsCompat: () => <CollectionCompatRedirect section="runs" />,
+  assetsCompat: () => <RedirectWithSearch to="/library/assets" />,
+  outputsCompat: () => <CollectionCompatRedirect section="outputs" />,
+  anchors: () => <AnchorsPage />,
+  anchorsMine: () => <AnchorsMinePage />,
+  anchorDetail: () => <AnchorDetailPage />,
+  uploads: () => <UploadsPage />,
+  templates: () => <TemplatesPage />,
+  brand: () => <BrandKitPage />,
+  storyboardCompat: () => <Navigate to="/library/projects" replace />,
+  project: () => <ProjectDetailPage />,
+  projectConcept: () => <ProjectStepPage step="concept" />,
+  projectBrief: () => <ProjectStepPage step="brief" />,
+  projectScript: () => <ProjectStepPage step="script" />,
+  projectStoryboard: () => <StoryboardPage />,
+  projectMedia: () => <ProjectMediaGalleryPage />,
+  projectWatch: () => <ProjectWatchPage />,
+  projectSection: () => <ProjectDetailPage />,
+  account: () => <AccountPage />,
+  settings: () => <SettingsPage />,
+  faq: () => <FaqPage />,
+  evalsCompat: () => <Navigate to="/admin/evals" replace />,
+  admin: () => <AdminPage />,
+  adminEvals: () => (
+    <AdminRoute>
+      <AdminEvalsPage />
+    </AdminRoute>
+  ),
+  runProgress: () => <RunProgressPage />,
+  notFound: () => <NotFoundPage />,
+};
+
+// The pure registry owns every mounted path and its production-test metadata.
+// This renderer supplies components without making Node-side registry tests
+// import the application or development-only pages.
 export function App() {
   return (
     <Routes>
       <Route element={<RootLayout />}>
         <Route element={<AppLayout />}>
-          <Route index element={<HomePage />} />
-          <Route path="/auth/callback" element={<AuthCallbackPage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/signup" element={<SignupPage />} />
-          <Route path="/sprite" element={<SpritePage />} />
-          {/* Public, no-login read-only share view of a public project. */}
-          <Route path="/p/:projectId" element={<PublicProjectPage />} />
-          {isDevHarnessEnabled ? (
-            <>
-              <Route
-                path={devHarnessRoutes.designSystem}
-                element={<DevPage element={DevDesignSystemPage} />}
-              />
-              <Route
-                path={devHarnessRoutes.generationCards}
-                element={<DevPage element={DevGenerationCardsPage} />}
-              />
-              <Route
-                path={devHarnessRoutes.landingUpload}
-                element={<DevPage element={DevLandingUploadPage} />}
-              />
-              <Route
-                path={devHarnessRoutes.mediaGallery}
-                element={<DevPage element={DevMediaGalleryPage} />}
-              />
-              <Route
-                path={devHarnessRoutes.videoEdit}
-                element={<DevPage element={DevVideoEditPage} />}
-              />
-            </>
-          ) : null}
+          {renderRegisteredRoutes("public")}
         </Route>
 
         <Route element={<AuthenticatedAppLayout />}>
-          <Route path="/dashboard" element={<LaunchpadPage />} />
-          <Route path="/activity" element={<ActivityPage />} />
-          <Route path="/inspiration" element={<InspirationPage />} />
-          <Route path="/library" element={<LibraryPage />} />
-          <Route path="/library/:tab" element={<LibraryPage />} />
-          <Route path="/projects" element={<RedirectWithSearch to="/library/projects" />} />
-          <Route path="/projects/new" element={<ProjectCreationPage />} />
-          <Route path="/create" element={<StandaloneCreationPage />} />
-          <Route path="/runs" element={<CollectionCompatRedirect section="runs" />} />
-          <Route path="/assets" element={<RedirectWithSearch to="/library/assets" />} />
-          <Route path="/outputs" element={<CollectionCompatRedirect section="outputs" />} />
-          <Route path="/anchors" element={<AnchorsPage />} />
-          <Route path="/anchors/mine" element={<AnchorsMinePage />} />
-          <Route path="/anchors/:entryId" element={<AnchorDetailPage />} />
-          <Route path="/uploads" element={<UploadsPage />} />
-          <Route path="/templates" element={<TemplatesPage />} />
-          <Route path="/brand" element={<BrandKitPage />} />
-          <Route path="/storyboard" element={<Navigate to="/library/projects" replace />} />
-          <Route
-            path="/projects/:projectId"
-            element={<ProjectDetailPage />}
-          />
-          <Route
-            path="/projects/:projectId/concept"
-            element={<ProjectStepPage step="concept" />}
-          />
-          <Route
-            path="/projects/:projectId/brief"
-            element={<ProjectStepPage step="brief" />}
-          />
-          <Route
-            path="/projects/:projectId/script"
-            element={<ProjectStepPage step="script" />}
-          />
-          <Route
-            path="/projects/:projectId/storyboard"
-            element={<StoryboardPage />}
-          />
-          <Route
-            path="/projects/:projectId/media"
-            element={<ProjectMediaGalleryPage />}
-          />
-          <Route
-            path="/projects/:projectId/watch"
-            element={<ProjectWatchPage />}
-          />
-          <Route
-            path="/projects/:projectId/:section"
-            element={<ProjectDetailPage />}
-          />
-          <Route path="/account" element={<AccountPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/faq" element={<FaqPage />} />
-          <Route path="/evals" element={<Navigate to="/admin/evals" replace />} />
-          <Route path="/admin" element={<AdminPage />} />
-          <Route
-            path="/admin/evals"
-            element={
-              <AdminRoute>
-                <AdminEvalsPage />
-              </AdminRoute>
-            }
-          />
-          <Route
-            path="/projects/:projectId/runs/:runId"
-            element={<RunProgressPage />}
-          />
+          {renderRegisteredRoutes("authenticated")}
         </Route>
 
         <Route element={<AppLayout />}>
-          <Route path="*" element={<Placeholder name="Not found" />} />
+          {renderRegisteredRoutes("fallback")}
         </Route>
       </Route>
     </Routes>
   );
+}
+
+function renderRegisteredRoutes(layout: RouteLayout) {
+  return appRoutesForBuild(isDevHarnessEnabled)
+    .filter((definition) => definition.layout === layout)
+    .map((definition) => {
+      const element = routeRenderers[definition.element]();
+      return definition.kind === "index" ? (
+        <Route key={definition.id} index element={element} />
+      ) : (
+        <Route key={definition.id} path={definition.path} element={element} />
+      );
+    });
 }
 
 function DevPage({

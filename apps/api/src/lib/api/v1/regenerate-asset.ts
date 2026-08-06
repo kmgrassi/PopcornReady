@@ -67,6 +67,7 @@ export interface RegenerateImageAssetDeps {
     update: RegeneratedAssetMedia
   ) => Promise<RegeneratedAssetResult>;
   getRunSessionClaim: typeof realGetRunSessionClaim;
+  createStorageObjectId: () => string;
   logger: Logger;
 }
 
@@ -91,6 +92,7 @@ const defaultDeps: RegenerateImageAssetDeps = {
   resolveVisibility: effectiveAssetStorageVisibility,
   applyMedia: applyRegeneratedAssetMedia,
   getRunSessionClaim: realGetRunSessionClaim,
+  createStorageObjectId: randomUUID,
   logger: createLogger(),
 };
 
@@ -139,6 +141,7 @@ export async function regenerateImageAsset(
     resolveVisibility,
     applyMedia,
     getRunSessionClaim,
+    createStorageObjectId,
     logger: baseLogger,
   } = {
     ...defaultDeps,
@@ -256,6 +259,7 @@ export async function regenerateImageAsset(
           assetVisibility: asset.visibility ?? "public",
         })
     );
+    const storageObjectId = createStorageObjectId();
     const stored = await timed(
       assetLogger,
       "asset_regenerate.storage_write",
@@ -264,7 +268,7 @@ export async function regenerateImageAsset(
         writeObject({
           workspaceId,
           projectId: asset.projectId,
-          assetId,
+          assetId: storageObjectId,
           filename,
           bytes: result.bytes,
           visibility,

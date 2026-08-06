@@ -5,6 +5,7 @@ import {
 } from "@popcorn/shared/v1/types";
 import type { AgentApiStore } from "../../agent-api/jobs";
 import type { OrchestratorRun, OrchestratorRunGate } from "./orchestrator-store";
+import { orchestratorRunPresentationKind } from "./orchestrator-presentation-kind";
 import { paginate, type PageResult } from "./pagination";
 
 export interface WorkspaceProjectRef {
@@ -44,6 +45,7 @@ function mapOrchestratorSummary(
   const storyboardGate = gates.find(
     (gate) => gate.stage === AFTER_STORYBOARD_GATE && gate.status === "reached"
   );
+  const storyboardBoundary = gates.find((gate) => gate.stage === AFTER_STORYBOARD_GATE);
   const reviewGate = storyboardGate
     ? {
         stageType: "storyboard" as const,
@@ -56,6 +58,12 @@ function mapOrchestratorSummary(
     runId: run.id,
     projectId: run.projectId,
     status,
+    storyboardBoundaryStatus:
+      storyboardBoundary?.status === "pending" || storyboardBoundary?.status === "reached"
+        ? storyboardBoundary.status
+        : storyboardBoundary
+          ? "resolved"
+          : undefined,
     progressPercent: status === "queued" ? 0 : undefined,
     message:
       reviewGate
@@ -83,6 +91,7 @@ function mapOrchestratorSummary(
       : undefined,
     reviewGate,
     currentStageType: reviewGate?.stageType,
+    presentationKind: orchestratorRunPresentationKind(run),
   };
 }
 
@@ -255,6 +264,7 @@ export async function getWorkspaceDashboardSummaryWithDeps(
       projectId: run.projectId,
       projectName: run.projectName,
       status: run.status,
+      storyboardBoundaryStatus: run.storyboardBoundaryStatus,
       reviewGate: run.reviewGate ?? null,
       currentStageType: run.currentStageType,
       progressPercent: run.progressPercent,

@@ -37,6 +37,8 @@ test("deriveNextAction sends failed dashboard runs to recovery", () => {
   assert.equal(action.ctaLabel, "Review failure");
   assert.equal(action.to, "/projects/project-1/runs/run-1");
   assert.match(action.body, /Cookie launch stopped at Export/);
+  assert.match(action.body, /request changes from the project/i);
+  assert.doesNotMatch(action.body, /retry/i);
 });
 
 test("deriveNextAction does not call unknown failed stages preparing", () => {
@@ -59,7 +61,7 @@ test("deriveNextAction does not call unknown failed stages preparing", () => {
   assert.equal(action.type, "failed_run");
   assert.equal(
     action.body,
-    "Cookie launch stopped. Open the run to see what failed and retry from the failed stage.",
+    "Cookie launch stopped. Open the run to see what stopped, then request changes from the project when you are ready.",
   );
 });
 
@@ -83,4 +85,28 @@ test("deriveNextAction does not invent a percentage for active work", () => {
   assert.equal(action.type, "watch_run");
   assert.doesNotMatch(action.body, /0%|50%/);
   assert.match(action.body, /Progress will update/);
+});
+
+test("deriveNextAction sends a zero-project workspace to the creation launcher", () => {
+  const action = deriveNextAction(
+    summary({
+      counts: { projects: 0, activeRuns: 0, outputs: 0 },
+    }),
+  );
+
+  assert.equal(action.type, "start");
+  assert.equal(action.title, "Create your first video or asset");
+  assert.equal(action.ctaLabel, "Create");
+  assert.equal(action.to, "/create");
+  assert.match(action.body, /full video/);
+});
+
+test("deriveNextAction sends an idle existing workspace to the creation launcher", () => {
+  const action = deriveNextAction(summary({}));
+
+  assert.equal(action.type, "new");
+  assert.equal(action.title, "Create something new");
+  assert.equal(action.ctaLabel, "Create");
+  assert.equal(action.to, "/create");
+  assert.match(action.body, /full video/);
 });

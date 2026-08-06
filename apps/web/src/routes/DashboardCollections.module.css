@@ -297,8 +297,50 @@
 .viewerActions {
   display: flex;
   flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.viewerEditAction {
+  display: grid;
+  min-width: min(280px, 100%);
+  gap: var(--space-2);
+}
+
+.viewerEditAction > button {
+  min-height: var(--touch-target-min);
+}
+
+.viewerActionHint {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: var(--line-caption);
+}
+
+.viewerUtilityActions {
+  display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--space-2);
+}
+
+.assetEditAudio {
+  display: grid;
+  width: min(520px, calc(100% - var(--space-6)));
+  gap: var(--space-4);
+  place-items: center;
+  color: var(--text-strong);
+}
+
+.assetEditAudio audio {
+  width: 100%;
+}
+
+.assetEditEmpty {
+  padding: var(--space-5);
+  color: var(--muted);
+  text-align: center;
 }
 
 .projectCard {
@@ -513,6 +555,29 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .viewerActions {
+    display: grid;
+    width: 100%;
+  }
+
+  .viewerEditAction {
+    width: 100%;
+  }
+
+  .viewerEditAction > button {
+    width: 100%;
+  }
+
+  .viewerUtilityActions {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .viewerUtilityActions > * {
+    width: 100%;
+  }
+
   .runRow {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -527,5 +592,25 @@
 
   .scopeButton {
     flex: 1 1 0;
+  }
+}
+
+@media (max-height: 500px) and (min-width: 540px) {
+  .viewerActions {
+    display: flex;
+  }
+
+  .viewerEditAction {
+    width: auto;
+    min-width: min(280px, 100%);
+  }
+
+  .viewerUtilityActions {
+    display: flex;
+    width: auto;
+  }
+
+  .viewerUtilityActions > * {
+    width: auto;
   }
 }

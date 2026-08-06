@@ -1,7 +1,5 @@
 import { promises as fs } from "fs";
 import path from "path";
-import { execFile } from "child_process";
-import { promisify } from "util";
 import { buildSemanticAnalysis } from "@/lib/assets/semantic-analysis";
 import {
   materializeAssetObject,
@@ -21,8 +19,13 @@ import {
   V1AssetAnalysis,
   withLocalDir,
 } from "./store";
+import {
+  extractVideoFramesFromPath,
+  videoSampleTimes,
+} from "./video-frame-sampling";
 
-const execFileAsync = promisify(execFile);
+export { videoSampleTimes } from "./video-frame-sampling";
+
 const ANALYSIS_VERSION = "asset-analysis.v1";
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const DEFAULT_OPENAI_VISION_MODEL = "gpt-4.1-mini";
@@ -85,44 +88,6 @@ export interface AssetAnalysisToolPayload {
   confidence: AssetAnalysisConfidence;
 }
 
-export function videoSampleTimes(
-  durationSec: number | undefined,
-  defaultSamples: number,
-  maxSamples: number
-): number[] {
-  const sampleCount =
-    durationSec && durationSec >= 120
-      ? maxSamples
-      : Math.min(defaultSamples, maxSamples);
-  if (!durationSec || !Number.isFinite(durationSec) || durationSec <= 0) {
-    return [0];
-  }
-  if (sampleCount <= 1) return [Math.max(0, durationSec / 2)];
-
-  const usableEnd = Math.max(0, durationSec - 0.2);
-  return Array.from({ length: sampleCount }, (_, index) => {
-    const ratio = (index + 1) / (sampleCount + 1);
-    return Number((usableEnd * ratio).toFixed(3));
-  });
-}
-
-async function runFfmpeg(args: string[]): Promise<void> {
-  const ffmpegPath = process.env.FFMPEG_PATH || "ffmpeg";
-  try {
-    await execFileAsync(ffmpegPath, args);
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === "ENOENT") {
-      throw new ApiError(
-        "asset_invalid",
-        "ffmpeg is not available. Install ffmpeg or set FFMPEG_PATH to enable video frame analysis."
-      );
-    }
-    const message = err instanceof Error ? err.message : "ffmpeg failed.";
-    throw new ApiError("asset_invalid", message);
-  }
-}
-
 async function assetLocalPath(
   asset: V1Asset
 ): Promise<MaterializedAssetObject | null> {
@@ -170,31 +135,15 @@ async function extractVideoFrames(args: {
       args.defaultVideoSamples,
       args.maxVideoSamples
     );
-    const frames: FrameSample[] = [];
-
-    for (const [index, sec] of times.entries()) {
-      const filename = `sample-${String(index + 1).padStart(2, "0")}.jpg`;
-      const outputPath = path.join(outputDir, filename);
-      await runFfmpeg([
-        "-y",
-        "-ss",
-        String(sec),
-        "-i",
-        srcPath,
-        "-frames:v",
-        "1",
-        "-q:v",
-        "2",
-        outputPath,
-      ]);
-      frames.push({
-        sec,
-        path: outputPath,
-        storageKey: path.relative(localDir(), outputPath),
-      });
-    }
-
-    return frames;
+    return (await extractVideoFramesFromPath({
+      sourcePath: srcPath,
+      outputDir,
+      timesSec: times,
+    })).map((frame) => ({
+      sec: frame.sec,
+      path: frame.path,
+      storageKey: path.relative(localDir(), frame.path),
+    }));
   } finally {
     await materialized.cleanup();
   }

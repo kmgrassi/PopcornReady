@@ -3,7 +3,7 @@
 <!-- agent-summary: The Vite UI and agent clients share the versioned Express API contract. -->
 <!-- agent-summary: Mutations are idempotent and long-running work returns pollable jobs. -->
 <!-- agent-summary: Every response uses stable resource or error envelopes. -->
-<!-- agent-summary: Error codes distinguish input, provider, database, and storage failures. -->
+<!-- agent-summary: plan_missing is a recoverable 409 prerequisite, distinct from brief_missing. -->
 <!-- agent-summary: storage_error identifies recoverable managed-object infrastructure failures. -->
 <!-- agent-summary: object_not_found is reserved for a confirmed missing object. -->
 <!-- agent-summary: Local and hosted auth modes preserve the same response contract. -->
@@ -139,8 +139,11 @@ Users self-create their first workspace after Supabase sign-up. In
 ### Projects
 
 - `POST /api/v1/projects`
-- `GET /api/v1/projects`
+- `GET /api/v1/projects` — defaults to `createdAt` descending; pass
+  `order=updatedAt` for recent-work recovery. Cursors follow the selected order.
 - `GET /api/v1/projects/:projectId`
+- `GET /api/v1/projects/:projectId/script` — returns the active relational
+  script draft (or `null`) for authoritative review; responses are not cached.
 - `PATCH /api/v1/projects/:projectId`
 - `DELETE /api/v1/projects/:projectId`
 
@@ -190,6 +193,48 @@ Project response:
 - `GET /api/v1/projects/:projectId/brief-versions`
 
 Generation jobs should reference an immutable `briefVersionId`.
+
+### Storyboard production entrypoint
+
+- `GET /api/v1/projects/:projectId/generation-entrypoints/storyboard`
+- `POST /api/v1/projects/:projectId/generation-entrypoints/storyboard`
+
+This creator-facing mutation loads the active brief and starts a Creative
+Director run whose mandatory boundaries are `after:draft_script` and
+`after:generate_storyboard`. Until the script gate is approved, the engine
+exposes only brief, story-development, and script tools to the root model, so
+media generation and specialist delegation cannot start. The agent
+prepares any missing scene-and-moment plan before it generates storyboard
+panels. If the project already has a nonterminal Creative Director root with an
+unresolved storyboard boundary, the endpoint returns that run instead of
+starting duplicate work. A queued reuse with a still-pending boundary, or a
+queued idempotency replay, is re-woken through the lease-safe dispatch
+primitive, repairing a failed initial dispatch without creating another run.
+Running, waiting, reached-boundary, and terminal work is not re-woken. The
+entrypoint does not launch poster generation.
+
+Response:
+
+```json
+{
+  "runId": "run_123",
+  "reused": false
+}
+```
+
+Run summaries include `storyboardBoundaryStatus` (`pending`, `reached`, or
+`resolved`) when the run owns this boundary. Clients use that server-projected
+identity instead of inferring storyboard progress from any active production
+run.
+
+The GET form returns `{ "run": GenerationRun | null }` for only the latest run
+that owns this boundary. It is the lightweight polling contract for project
+overview state and does not load full run history, actions, or asset metadata.
+
+Workspace generation-run summaries preserve `presentationKind` for
+creator-direct standalone image, video, and audio work. Project and Activity
+surfaces use that discriminator to fetch the exact run detail and saved asset;
+Creative Director production summaries leave it unset.
 
 ### Assets
 
@@ -359,6 +404,9 @@ Minimum v1 error codes:
 - `asset_not_ready`
 - `asset_invalid`
 - `brief_missing`
+- `plan_missing` — HTTP 409; a valid request needs a persisted scene-and-moment
+  plan before a low-level generation tool can run. Agent recovery uses
+  `plan_shots`; creator-facing storyboard creation satisfies this automatically.
 - `timeline_invalid`
 - `job_not_cancelable`
 - `job_failed`

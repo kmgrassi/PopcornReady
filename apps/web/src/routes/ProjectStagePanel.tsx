@@ -1,16 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
-import type { GenerationRun } from "@popcorn/shared/v1/types";
+import type {
+  GenerationRun,
+  GenerationStageItem,
+} from "@popcorn/shared/v1/types";
+import type { GenerationRunDetail } from "../lib/v1/generation-runs/status";
 import { RerunProposalDialog } from "../components/ai-edit/RerunProposalDialog";
 import { StageRail } from "../components/progress/StageRail";
 import { Button, ButtonLink } from "../components/ui/Button";
 import { EmptyState, ErrorState } from "../components/ui/StateCard";
-import {
-  useGenerationRunQuery,
-  useUpdateGenerationRunMutation,
-} from "../lib/queryClient";
+import { useUpdateGenerationRunMutation } from "../lib/queryClient";
+import { assetLibraryPath } from "../lib/assetLibraryPath";
 import { reviewProposalTarget as resolveReviewProposalTarget } from "../lib/reviewProposalTarget";
 import styles from "./ProjectStagePanel.module.css";
 import { formatDate, titleCase } from "./project-detail-format";
+import {
+  latestReadyRunAsset,
+  readyAssetViewLabel,
+} from "./project-ready-asset";
 
 const STAGE_PANEL_COMPACT_QUERY = "(max-width: 900px)";
 
@@ -20,12 +26,22 @@ export function ProjectStagePanel({
   loading,
   error,
   onRetry,
+  runDetail,
+  runDetailLoading,
+  runDetailError,
+  onRunDetailRetry,
+  projectReadyAsset,
 }: {
   projectId: string;
   runs: GenerationRun[];
   loading: boolean;
   error: Error | null;
   onRetry: () => void;
+  runDetail: GenerationRunDetail | null;
+  runDetailLoading: boolean;
+  runDetailError: Error | null;
+  onRunDetailRetry: () => void;
+  projectReadyAsset?: GenerationStageItem | null;
 }) {
   const selectedRun = useMemo(() => selectStageRun(runs), [runs]);
   const [pendingGateAction, setPendingGateAction] = useState<"approve" | null>(null);
@@ -34,16 +50,14 @@ export function ProjectStagePanel({
     if (typeof window === "undefined") return true;
     return !window.matchMedia(STAGE_PANEL_COMPACT_QUERY).matches;
   });
-  const runDetailQuery = useGenerationRunQuery(
-    projectId,
-    selectedRun?.runId ?? "",
-    Boolean(selectedRun),
-  );
-  const runDetail = runDetailQuery.data ?? null;
   const run = runDetail?.run ?? selectedRun ?? null;
+  const standaloneStage = run?.presentationKind
+    ? runDetail?.stages.slice().sort((a, b) => b.order - a.order)[0]
+    : undefined;
   const updateRunMutation = useUpdateGenerationRunMutation(projectId, run?.runId ?? "");
-  const activeError = error ?? runDetailQuery.error ?? null;
-  const activeLoading = loading || (Boolean(selectedRun) && runDetailQuery.isLoading);
+  const activeError = error ?? runDetailError ?? null;
+  const activeLoading = loading || (Boolean(selectedRun) && runDetailLoading);
+  const readyAsset = projectReadyAsset ?? latestReadyRunAsset(runDetail?.stageItems ?? []);
   const nextStage = runDetail?.stages
     .slice()
     .sort((a, b) => a.order - b.order)
@@ -99,10 +113,21 @@ export function ProjectStagePanel({
     <section className={`${styles.panel} ${styles.stagePanel}`} aria-labelledby="project-stage-heading">
       <div className={styles.sectionHeader}>
         <div>
-          <span className={styles.eyebrow}>Run pipeline</span>
-          <h2 id="project-stage-heading">Stage and next step</h2>
+          <span className={styles.eyebrow}>{run?.presentationKind ? "Asset activity" : "Run pipeline"}</span>
+          <h2 id="project-stage-heading">
+            {run?.presentationKind ? "Generation status" : "Stage and next step"}
+          </h2>
         </div>
         <div className={styles.sectionHeaderActions}>
+          {readyAsset?.assetId ? (
+            <ButtonLink
+              variant="secondary"
+              size="sm"
+              to={assetLibraryPath(readyAsset.assetId, projectId)}
+            >
+              {readyAssetViewLabel(readyAsset)}
+            </ButtonLink>
+          ) : null}
           {run ? (
             <ButtonLink
               variant="ghost"
@@ -138,7 +163,7 @@ export function ProjectStagePanel({
             error={activeError}
             onRetry={() => {
               onRetry();
-              void runDetailQuery.refetch();
+              onRunDetailRetry();
             }}
           />
         ) : null}
@@ -156,9 +181,13 @@ export function ProjectStagePanel({
                 <dd>
                   {run.reviewGate
                     ? `${titleCase(run.reviewGate.stageType)} review`
-                    : run.currentStageType
-                      ? titleCase(run.currentStageType)
-                      : titleCase(run.status)}
+                    : run.status === "failed" || run.status === "canceled"
+                      ? titleCase(run.status)
+                    : standaloneStage
+                      ? standaloneStage.label
+                      : run.currentStageType
+                        ? titleCase(run.currentStageType)
+                        : titleCase(run.status)}
                 </dd>
               </div>
               <div>
@@ -166,13 +195,21 @@ export function ProjectStagePanel({
                 <dd>
                   {nextStage
                     ? titleCase(nextStage.type)
+                    : run.status === "failed"
+                      ? "Needs attention"
+                      : run.status === "canceled"
+                        ? "Stopped"
                     : run.status === "succeeded"
-                      ? run.completionKind === "video"
-                        ? "Video ready"
-                        : run.completionKind === "storyboard_assets"
-                          ? "Storyboard ready"
-                          : "Run ended"
-                      : "Pending"}
+                      ? run.completionKind === "standalone_asset"
+                        ? "Asset ready"
+                        : run.completionKind === "video"
+                          ? "Video ready"
+                          : run.completionKind === "storyboard_assets"
+                            ? "Storyboard ready"
+                            : "Run ended"
+                      : run.presentationKind && run.status === "running"
+                        ? "Finishing asset"
+                        : "Pending"}
                 </dd>
               </div>
               <div>
@@ -191,6 +228,7 @@ export function ProjectStagePanel({
                 reviewGate={run.reviewGate}
                 stageLinks={stageLinks}
                 showUpcomingStages
+                presentationKind={run.presentationKind}
               />
             ) : (
               <p className={styles.muted}>
@@ -265,11 +303,11 @@ export function ProjectStagePanel({
           }
           onClose={() => setProposalOpen(false)}
           onExecutionStarted={() => {
-            void runDetailQuery.refetch();
+            onRunDetailRetry();
             onRetry();
           }}
           onExecutionSettled={() => {
-            void runDetailQuery.refetch();
+            onRunDetailRetry();
             onRetry();
           }}
         />
@@ -278,11 +316,15 @@ export function ProjectStagePanel({
   );
 }
 
-function selectStageRun(runs: GenerationRun[]) {
+export function selectStageRun(runs: GenerationRun[]) {
   return (
     runs.find((run) => run.reviewGate) ??
     runs.find((run) => run.status === "running" || run.status === "queued") ??
     runs[0] ??
     null
   );
+}
+
+export function selectAssetRuns(runs: GenerationRun[]) {
+  return runs.filter((run) => Boolean(run.presentationKind));
 }

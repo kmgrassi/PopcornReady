@@ -2,11 +2,11 @@
 
 <!-- agent-summary: The required workflow for every repository change. -->
 <!-- agent-summary: It routes discovery, implementation, testing, review, documentation, and handoff. -->
-<!-- agent-summary: Agents must run the relevant application path, not only static checks. -->
+<!-- agent-summary: Browser-facing changes require manual exercise against the locally running web app. -->
 <!-- agent-summary: Record durable work in a committed worksheet and feedback log entry. -->
 <!-- agent-summary: Use independent reviewers at the four defined checkpoints when available. -->
 <!-- agent-summary: Follow AGENTS.md for task-specific source-of-truth documents. -->
-<!-- agent-summary: Run agent:validate before handoff; do not claim checks that did not run. -->
+<!-- agent-summary: Automated tests do not replace changed-feature browser inspection. -->
 
 ## Required loop
 
@@ -14,7 +14,11 @@
 2. Create or continue an `.agent/worksheets/<WORKSHEET_ID>.md` record. Use a stable ID such as `WEB-20260713-01`; name the eventual git tag `worksheet/<WORKSHEET_ID>`.
 3. Research the affected code and documentation. Request an independent review at the research and plan checkpoints when another configured agent is available; otherwise record why it was unavailable.
 4. Implement in small, reversible increments. Run targeted unit, API, or E2E checks as each behavior becomes testable.
-5. Run the application path yourself. UI work requires browser inspection at desktop and mobile widths; API work requires a real local request or the documented smoke harness.
+5. Run the application path yourself. Every browser-facing feature change must
+   be manually exercised through its actual entry point against the locally
+   running web app to an observable changed result. Inspect every affected state
+   in a browser at desktop and mobile widths. API work requires a real local
+   request or the documented smoke harness.
 6. Request independent implementation review, resolve findings, then update every source-of-truth document affected by the change.
 7. Run `pnpm agent:validate -- --scope <web|api|docs|all>`, complete the worksheet and feedback entry, and request wrap-up review.
 8. Commit the implementation, worksheet, and documentation together. Add the worksheet tag after the commit and create a ready-for-review PR.
@@ -22,6 +26,12 @@
 ## Non-negotiable checks
 
 - Do not substitute type-checking for running the relevant app or test path.
+- For browser-facing work, automated tests do not replace manually exercising
+  and inspecting the changed feature against the locally running web app before
+  handoff. Record the route or entry point, exercised state, viewport, and
+  observed result in the worksheet. If the local browser run is blocked, do not
+  hand off or open a PR as complete unless the user explicitly accepts the
+  exception; record the blocker and acceptance.
 - Add or update a targeted test for changed behavior unless the worksheet documents why a test is infeasible and names the manual verification used.
 - Treat a test as suspect until it proves an observable result, not only that a mock was called. Follow `docs/agent-system/false-confidence-audits.md`.
 - Run `pnpm agent:lint:fix` before final validation. It repairs safe repository-hygiene issues; it never invokes an LLM or changes product code.

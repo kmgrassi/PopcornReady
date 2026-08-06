@@ -57,6 +57,14 @@ const REQUIRED_POLICIES = [
   "orchestrator_runs_popcorn_api_rerun_select",
   "orchestrator_runs_popcorn_api_rerun_insert",
   "orchestrator_runs_popcorn_api_rerun_update",
+  "script_drafts_popcorn_api_review_select",
+  "script_drafts_popcorn_api_review_update",
+  "orchestrator_runs_popcorn_api_script_review_select",
+  "orchestrator_runs_popcorn_api_script_review_update",
+  "orchestrator_run_gates_popcorn_api_script_review_select",
+  "orchestrator_run_gates_popcorn_api_script_review_update",
+  "actions_popcorn_api_script_feedback_insert",
+  "projects_popcorn_api_script_review_update",
 ];
 
 const LIFECYCLE_COLUMN_PRIVILEGES = {
@@ -76,7 +84,7 @@ const LIFECYCLE_COLUMN_PRIVILEGES = {
     UPDATE: [],
   },
   story_blueprint_scenes: {
-    SELECT: ["id","project_id","scene_asset_id"],
+    SELECT: ["id","project_id","scene_asset_id","story_snapshot_asset_id"],
     INSERT: [],
     UPDATE: [],
   },
@@ -94,6 +102,11 @@ const LIFECYCLE_COLUMN_PRIVILEGES = {
     SELECT: ["error","id","input_asset_ids","orchestrator_run_id","output_asset_ids","params","project_id","proposal","rationale","status","tool"],
     INSERT: ["error","id","input_asset_ids","job_ids","orchestrator_run_id","output_asset_ids","params","project_id","proposal","rationale","schema_version","status","tool"],
     UPDATE: ["error","output_asset_ids","status"],
+  },
+  script_drafts: {
+    SELECT: ["id", "project_id", "status"],
+    INSERT: [],
+    UPDATE: ["status", "updated_at"],
   },
   action_assets: {
     SELECT: ["action_id","asset_id","direction","ordinal","project_id","role"],
@@ -242,9 +255,10 @@ export function createCreatorDirectDatabaseReadiness(
                  select 1
                    from (
                      values
-                       ('projects', array['id', 'workspace_id']::text[], array[]::text[], array[]::text[]),
+                       ('projects', array['id', 'workspace_id', 'current_script_draft_id']::text[], array['current_script_draft_id']::text[], array[]::text[]),
                        ('orchestrator_runs', array['id','project_id','origin_kind','status','parent_run_id','root_action_id','task_params','agent_role','budget_usd','spent_usd']::text[], array['updated_at','status','started_at','completed_at','error']::text[], array['schema_version','project_id','status','input_summary','budget_usd','spent_usd','agent_role']::text[]),
-                       ('orchestrator_run_gates', array['id', 'orchestrator_run_id', 'subject_proposal_action_id', 'gate_kind', 'project_id', 'actor_id', 'request_digest', 'approved_max_usd', 'approval_token_hash', 'expires_at', 'token_consumed_at', 'status']::text[], array['status', 'token_consumed_at', 'decided_at', 'updated_at']::text[], array[]::text[]),
+                       ('orchestrator_run_gates', array['id', 'orchestrator_run_id', 'subject_proposal_action_id', 'gate_kind', 'project_id', 'actor_id', 'request_digest', 'approved_max_usd', 'approval_token_hash', 'expires_at', 'token_consumed_at', 'status', 'stage', 'decided_by_action_id']::text[], array['status', 'token_consumed_at', 'decided_at', 'decided_by_action_id', 'updated_at']::text[], array[]::text[]),
+                       ('script_drafts', array['id','project_id','status']::text[], array['status','updated_at']::text[], array[]::text[]),
                        ('idempotency', array['scope', 'key', 'body_hash', 'response_body']::text[], array[]::text[], array['scope', 'key', 'body_hash', 'status', 'response_body']::text[])
                    ) as allowed(table_name, select_columns, update_columns, insert_columns)
                    join pg_class c on c.relname = allowed.table_name
@@ -314,6 +328,8 @@ export function createCreatorDirectDatabaseReadiness(
                ) as lifecycle_routine_boundary,
                has_column_privilege(current_user, 'public.projects', 'id', 'SELECT')
                  and has_column_privilege(current_user, 'public.projects', 'workspace_id', 'SELECT')
+                 and has_column_privilege(current_user, 'public.projects', 'current_script_draft_id', 'SELECT')
+                 and has_column_privilege(current_user, 'public.projects', 'current_script_draft_id', 'UPDATE')
                  as projects_read,
                has_column_privilege(current_user, 'public.orchestrator_runs', 'id', 'SELECT')
                  and has_column_privilege(current_user, 'public.orchestrator_runs', 'project_id', 'SELECT')
@@ -334,10 +350,13 @@ export function createCreatorDirectDatabaseReadiness(
                  and has_column_privilege(current_user, 'public.orchestrator_run_gates', 'expires_at', 'SELECT')
                  and has_column_privilege(current_user, 'public.orchestrator_run_gates', 'token_consumed_at', 'SELECT')
                  and has_column_privilege(current_user, 'public.orchestrator_run_gates', 'status', 'SELECT')
+                 and has_column_privilege(current_user, 'public.orchestrator_run_gates', 'stage', 'SELECT')
+                 and has_column_privilege(current_user, 'public.orchestrator_run_gates', 'decided_by_action_id', 'SELECT')
                  as gates_read,
                has_column_privilege(current_user, 'public.orchestrator_run_gates', 'status', 'UPDATE')
                  and has_column_privilege(current_user, 'public.orchestrator_run_gates', 'token_consumed_at', 'UPDATE')
                  and has_column_privilege(current_user, 'public.orchestrator_run_gates', 'decided_at', 'UPDATE')
+                 and has_column_privilege(current_user, 'public.orchestrator_run_gates', 'decided_by_action_id', 'UPDATE')
                  and has_column_privilege(current_user, 'public.orchestrator_run_gates', 'updated_at', 'UPDATE')
                  as gates_update,
                has_column_privilege(current_user, 'public.idempotency', 'scope', 'SELECT')
@@ -387,6 +406,7 @@ export function createCreatorDirectDatabaseReadiness(
                 "rerun_execution_callbacks",
                 "rerun_proposal_successors",
                 "orchestrator_budget_reservations",
+                "script_drafts",
               ],
               JSON.stringify(LIFECYCLE_COLUMN_PRIVILEGES),
               RETIRED_LIFECYCLE_ROUTINES,

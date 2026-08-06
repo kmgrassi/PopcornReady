@@ -69,9 +69,10 @@ export function ActiveRunsPanel({
                 {failed ? (
                   <div className={styles.recovery} aria-label="Failed run recovery">
                     <span>
-                      Open the run to see what stopped and retry from the failed stage.
+                      Open the run to see what stopped. Request changes from the
+                      project when you are ready.
                     </span>
-                    <span className={styles.recoveryAction}>See why and retry</span>
+                    <span className={styles.recoveryAction}>See what stopped</span>
                   </div>
                 ) : null}
 

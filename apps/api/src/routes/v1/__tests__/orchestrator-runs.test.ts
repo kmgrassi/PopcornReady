@@ -6,6 +6,9 @@ import type {
   OrchestratorRunGate,
   RunActionSummary,
 } from "@/lib/api/v1/orchestrator-store";
+import { ApiError } from "@/core/errors";
+import type { StoryboardEntrypointLock } from "@/lib/postgres/storyboard-entrypoint";
+import { SCHEMA, type Job } from "@popcorn/shared/v1/types";
 import { projectRunDetailFromParts } from "../orchestrator-run-projections.js";
 import {
   initialRunGates,
@@ -13,7 +16,10 @@ import {
   isStoryboardAfterGate,
   runFailedForInsufficientCredits,
   storyboardContinuationPatch,
+  storyboardGenerationEntrypointRoute,
+  storyboardGenerationEntrypointStatusRoute,
   stopAfterTools,
+  type StoryboardEntrypointDeps,
 } from "../orchestrator-runs";
 
 
@@ -62,6 +68,23 @@ function gateFixture(
   };
 }
 
+function jobFixture(status: Job["status"], id = "job_1"): Job {
+  return {
+    id,
+    schemaVersion: SCHEMA.job,
+    workspaceId: "workspace_1",
+    projectId: "project_1",
+    type: "asset_generation",
+    status,
+    progress: {},
+    input: null,
+    result: null,
+    error: null,
+    createdAt: "2026-06-15T00:00:01.000Z",
+    updatedAt: "2026-06-15T00:00:02.000Z",
+  };
+}
+
 test("makes an unexpected terminal success without video a terminal partial failure", () => {
   const payload = projectRunDetailFromParts(
     runFixture(),
@@ -80,7 +103,7 @@ test("makes an unexpected terminal success without video a terminal partial fail
   assert.equal(payload.resultArtifacts?.length, 0);
 });
 
-test("every initial run stops after a complete storyboard", () => {
+test("every initial run stops for script review before storyboard review", () => {
   assert.deepEqual(stopAfterTools({}), []);
   assert.deepEqual(stopAfterTools({ runThrough: true }), []);
   assert.deepEqual(stopAfterTools({ runThrough: false }), ["generate_storyboard"]);
@@ -88,17 +111,391 @@ test("every initial run stops after a complete storyboard", () => {
   assert.deepEqual(stopAfterTools({ runThrough: true, stopAfter: "storyboard" }), [
     "generate_storyboard",
   ]);
-  assert.deepEqual(initialRunStopAfterTools({}), ["generate_storyboard"]);
-  assert.deepEqual(initialRunStopAfterTools({ runThrough: true }), ["generate_storyboard"]);
-  assert.deepEqual(initialRunStopAfterTools({ stopAfter: "brief_intake" }), ["generate_storyboard"]);
-  assert.deepEqual(initialRunStopAfterTools({ stopAfter: "creative_plan" }), ["generate_storyboard"]);
-  assert.deepEqual(initialRunStopAfterTools({ stopAfter: "asset_generation" }), ["generate_storyboard"]);
+  assert.deepEqual(initialRunStopAfterTools({}), ["draft_script", "generate_storyboard"]);
+  assert.deepEqual(initialRunStopAfterTools({ runThrough: true }), ["draft_script", "generate_storyboard"]);
+  assert.deepEqual(initialRunStopAfterTools({ stopAfter: "brief_intake" }), ["draft_script", "generate_storyboard"]);
+  assert.deepEqual(initialRunStopAfterTools({ stopAfter: "creative_plan" }), ["draft_script", "generate_storyboard"]);
+  assert.deepEqual(initialRunStopAfterTools({ stopAfter: "asset_generation" }), ["draft_script", "generate_storyboard"]);
   assert.deepEqual(
     initialRunGates({
       reviewGates: ["brief_intake", "creative_plan", "asset_generation"],
       stopAfter: "creative_plan",
     }),
-    ["after:generate_storyboard"],
+    ["after:draft_script", "after:generate_storyboard"],
+  );
+});
+
+test("storyboard entrypoint reuses an active Creative Director root with an unresolved board gate", async () => {
+  const existing = runFixture({ status: "waiting" });
+  let created = false;
+  let enqueued = false;
+  const result = await storyboardGenerationEntrypointRoute(
+    {
+      auth: {
+        workspaceId: "workspace_1",
+        actor: { id: "actor_1" },
+      } as never,
+      body: {},
+    },
+    { projectId: "project_1" },
+    {
+      requireProjectAccess: async () => undefined,
+      listRuns: async () => [existing],
+      listGates: async () => [gateFixture("after:generate_storyboard", { status: "pending" })],
+      createRun: async () => {
+        created = true;
+        return { run: existing, replayed: false };
+      },
+      enqueueRun: async () => {
+        enqueued = true;
+      },
+      withProjectLock: async (_projectId, operation) => operation(),
+    }
+  );
+
+  assert.deepEqual(result, {
+    status: 200,
+    body: { runId: "run_1", reused: true },
+  });
+  assert.equal(created, false);
+  assert.equal(enqueued, false);
+});
+
+test("storyboard entrypoint reuses a succeeded root paused at script review", async () => {
+  const existing = runFixture({ status: "succeeded" });
+  let createCalls = 0;
+  let enqueueCalls = 0;
+  const result = await storyboardGenerationEntrypointRoute(
+    {
+      auth: {
+        workspaceId: "workspace_1",
+        actor: { id: "actor_1" },
+      } as never,
+      body: {},
+    },
+    { projectId: "project_1" },
+    {
+      requireProjectAccess: async () => undefined,
+      listRuns: async () => [existing],
+      listGates: async () => [
+        gateFixture("after:draft_script", { status: "reached" }),
+        gateFixture("after:generate_storyboard", { status: "pending" }),
+      ],
+      createRun: async () => {
+        createCalls += 1;
+        return { run: existing, replayed: false };
+      },
+      enqueueRun: async () => {
+        enqueueCalls += 1;
+      },
+      withProjectLock: async (_projectId, operation) => operation(),
+    },
+  );
+
+  assert.deepEqual(result, {
+    status: 200,
+    body: { runId: "run_1", reused: true },
+  });
+  assert.equal(createCalls, 0);
+  assert.equal(enqueueCalls, 0);
+});
+
+test("storyboard entrypoint retry reuses and re-wakes a queued run after initial dispatch failure", async () => {
+  const existing = runFixture({ id: "run_orphaned", status: "queued" });
+  const runs: ReturnType<typeof runFixture>[] = [];
+  const enqueued: string[] = [];
+  let createCount = 0;
+  let enqueueAttempts = 0;
+  const withProjectLock: StoryboardEntrypointLock = async (_projectId, operation) =>
+    operation();
+  const deps: Partial<StoryboardEntrypointDeps> = {
+    requireProjectAccess: async () => undefined,
+    listRuns: async () => runs,
+    listGates: async () => [gateFixture("after:generate_storyboard", { status: "pending" })],
+    getActiveProjectBrief: async () => ({ assetId: "brief_1" }) as never,
+    createRun: async () => {
+      createCount += 1;
+      runs.push(existing);
+      return { run: existing, replayed: false };
+    },
+    enqueueRun: async (runId: string) => {
+      enqueueAttempts += 1;
+      if (enqueueAttempts === 1) throw new Error("dispatch unavailable");
+      enqueued.push(runId);
+    },
+    withProjectLock,
+  };
+  const request = () =>
+    storyboardGenerationEntrypointRoute(
+      {
+        auth: {
+          workspaceId: "workspace_1",
+          actor: { id: "actor_1" },
+        } as never,
+        body: {},
+      },
+      { projectId: "project_1" },
+      deps
+    );
+
+  await assert.rejects(request(), /dispatch unavailable/);
+  const result = await request();
+
+  assert.deepEqual(result, {
+    status: 200,
+    body: { runId: "run_orphaned", reused: true },
+  });
+  assert.equal(createCount, 1);
+  assert.equal(enqueueAttempts, 2);
+  assert.deepEqual(enqueued, ["run_orphaned"]);
+});
+
+test("storyboard entrypoint does not wake a queued run whose storyboard gate is reached", async () => {
+  const existing = runFixture({ id: "run_at_review", status: "queued" });
+  let enqueued = false;
+  const result = await storyboardGenerationEntrypointRoute(
+    {
+      auth: { workspaceId: "workspace_1", actor: { id: "actor_1" } } as never,
+      body: {},
+    },
+    { projectId: "project_1" },
+    {
+      requireProjectAccess: async () => undefined,
+      listRuns: async () => [existing],
+      listGates: async () => [gateFixture("after:generate_storyboard", { status: "reached" })],
+      enqueueRun: async () => {
+        enqueued = true;
+      },
+      withProjectLock: async (_projectId, operation) => operation(),
+    }
+  );
+
+  assert.deepEqual(result.body, { runId: "run_at_review", reused: true });
+  assert.equal(enqueued, false);
+});
+
+test("storyboard status returns only the latest server-projected boundary run", async () => {
+  let requestedStage = "";
+  let listedRunId = "";
+  const result = await storyboardGenerationEntrypointStatusRoute(
+    {
+      auth: { workspaceId: "workspace_1" } as never,
+    },
+    { projectId: "project_1" },
+    {
+      requireProjectAccess: async () => undefined,
+      getLatestRunForGate: async (_projectId, stage) => {
+        requestedStage = stage;
+        return {
+          run: runFixture({ status: "succeeded" }),
+          gate: gateFixture("after:generate_storyboard", { status: "pending" }),
+        };
+      },
+      listGates: async (runId) => {
+        listedRunId = runId;
+        return [
+          gateFixture("after:draft_script", { status: "reached" }),
+          gateFixture("after:generate_storyboard", { status: "pending" }),
+        ];
+      },
+    }
+  );
+
+  assert.equal(requestedStage, "after:generate_storyboard");
+  assert.equal(listedRunId, "run_1");
+  assert.equal(result.body.run?.runId, "run_1");
+  assert.equal(result.body.run?.storyboardBoundaryStatus, "pending");
+  assert.equal(result.body.run?.status, "succeeded");
+  assert.equal(result.body.run?.reviewGate?.stageType, "script");
+  assert.equal(result.body.run?.currentStageType, "script");
+});
+
+test("storyboard entrypoint creates a storyboard-bounded run from the active brief without poster work", async () => {
+  const created = runFixture({ id: "run_storyboard", status: "queued" });
+  let createdInput: Record<string, unknown> | undefined;
+  const enqueued: string[] = [];
+  const result = await storyboardGenerationEntrypointRoute(
+    {
+      auth: {
+        workspaceId: "workspace_1",
+        actor: { id: "actor_1", isAnonymous: false },
+      } as never,
+      body: {},
+      req: { header: () => "storyboard-request-1" } as never,
+    },
+    { projectId: "project_1" },
+    {
+      requireProjectAccess: async () => undefined,
+      listRuns: async () => [runFixture({ status: "canceled" })],
+      listGates: async () => [],
+      getActiveProjectBrief: async () => ({ assetId: "brief_1" }) as never,
+      createRun: async (input) => {
+        createdInput = input as unknown as Record<string, unknown>;
+        return { run: created, replayed: false };
+      },
+      enqueueRun: async (runId) => {
+        enqueued.push(runId);
+      },
+      withProjectLock: async (_projectId, operation) => operation(),
+    }
+  );
+
+  assert.equal(result.status, 202);
+  assert.deepEqual(result.body, { runId: "run_storyboard", reused: false });
+  assert.deepEqual(createdInput?.gates, ["after:draft_script", "after:generate_storyboard"]);
+  assert.equal(createdInput?.entrypoint, "storyboard");
+  assert.equal(createdInput?.idempotencyKey, "storyboard-request-1");
+  assert.match(String(createdInput?.inputSummary), /scene-and-moment planning/i);
+  assert.deepEqual(enqueued, ["run_storyboard"]);
+});
+
+test("storyboard entrypoint does not reuse a resolved board gate and requires an active brief", async () => {
+  await assert.rejects(
+    storyboardGenerationEntrypointRoute(
+      {
+        auth: {
+          workspaceId: "workspace_1",
+          actor: { id: "actor_1" },
+        } as never,
+        body: {},
+      },
+      { projectId: "project_1" },
+      {
+        requireProjectAccess: async () => undefined,
+        listRuns: async () => [runFixture({ status: "running" })],
+        listGates: async () => [
+          gateFixture("after:generate_storyboard", { status: "approved" }),
+        ],
+        getActiveProjectBrief: async () => null,
+        withProjectLock: async (_projectId, operation) => operation(),
+      }
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof ApiError);
+      assert.equal(error.code, "brief_missing");
+      assert.match(error.message, /finish the project brief/i);
+      return true;
+    }
+  );
+});
+
+test("storyboard entrypoint re-wakes a queued idempotent replay", async () => {
+  const replayed = runFixture({ id: "run_replayed", status: "queued" });
+  const enqueued: string[] = [];
+  const result = await storyboardGenerationEntrypointRoute(
+    {
+      auth: { workspaceId: "workspace_1", actor: { id: "actor_1" } } as never,
+      body: {},
+      req: { header: () => "storyboard-replay" } as never,
+    },
+    { projectId: "project_1" },
+    {
+      requireProjectAccess: async () => undefined,
+      listRuns: async () => [],
+      listGates: async () => [],
+      getActiveProjectBrief: async () => ({ assetId: "brief_1" }) as never,
+      createRun: async () => ({ run: replayed, replayed: true }),
+      enqueueRun: async (runId) => {
+        enqueued.push(runId);
+      },
+      withProjectLock: async (_projectId, operation) => operation(),
+    }
+  );
+
+  assert.deepEqual(result, {
+    status: 200,
+    body: { runId: "run_replayed", reused: true },
+  });
+  assert.deepEqual(enqueued, ["run_replayed"]);
+});
+
+test("storyboard entrypoint does not re-wake a completed idempotent replay", async () => {
+  const replayed = runFixture({ id: "run_completed", status: "succeeded" });
+  let enqueued = false;
+  const result = await storyboardGenerationEntrypointRoute(
+    {
+      auth: { workspaceId: "workspace_1", actor: { id: "actor_1" } } as never,
+      body: {},
+      req: { header: () => "storyboard-completed-replay" } as never,
+    },
+    { projectId: "project_1" },
+    {
+      requireProjectAccess: async () => undefined,
+      listRuns: async () => [],
+      listGates: async () => [],
+      getActiveProjectBrief: async () => ({ assetId: "brief_1" }) as never,
+      createRun: async () => ({ run: replayed, replayed: true }),
+      enqueueRun: async () => {
+        enqueued = true;
+      },
+      withProjectLock: async (_projectId, operation) => operation(),
+    }
+  );
+
+  assert.deepEqual(result, {
+    status: 200,
+    body: { runId: "run_completed", reused: true },
+  });
+  assert.equal(enqueued, false);
+});
+
+test("storyboard entrypoint serializes concurrent find-or-create requests per project", async () => {
+  const created = runFixture({ id: "run_serialized", status: "queued" });
+  const runs: ReturnType<typeof runFixture>[] = [];
+  let createCount = 0;
+  const enqueued: string[] = [];
+  let lockTail = Promise.resolve();
+  const withProjectLock: StoryboardEntrypointLock = async (_projectId, operation) => {
+    const previous = lockTail;
+    let release: () => void = () => undefined;
+    lockTail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release();
+    }
+  };
+  const deps = {
+    requireProjectAccess: async () => undefined,
+    listRuns: async () => runs,
+    listGates: async (runId: string) =>
+      runId === created.id
+        ? [gateFixture("after:generate_storyboard", { status: "pending" })]
+        : [],
+    getActiveProjectBrief: async () => ({ assetId: "brief_1" }) as never,
+    createRun: async () => {
+      createCount += 1;
+      runs.unshift(created);
+      return { run: created, replayed: false };
+    },
+    enqueueRun: async (runId: string) => {
+      enqueued.push(runId);
+    },
+    withProjectLock,
+  };
+
+  const [first, second] = await Promise.all(
+    ["request-a", "request-b"].map((key) =>
+      storyboardGenerationEntrypointRoute(
+        {
+          auth: { workspaceId: "workspace_1", actor: { id: "actor_1" } } as never,
+          body: {},
+          req: { header: () => key } as never,
+        },
+        { projectId: "project_1" },
+        deps
+      )
+    )
+  );
+
+  assert.equal(createCount, 1);
+  assert.deepEqual(enqueued, ["run_serialized", "run_serialized"]);
+  assert.deepEqual(
+    [first.body.reused, second.body.reused].sort(),
+    [false, true]
   );
 });
 
@@ -149,6 +546,148 @@ test("surfaces orchestrator success as ready once export_video produced output",
   ]);
 });
 
+test("projects a creator-direct image as one successful standalone asset step", () => {
+  const payload = projectRunDetailFromParts(
+    runFixture({
+      agentRole: "visuals",
+      originKind: "creator_direct",
+      taskKind: "image_create",
+    }),
+    [],
+    [
+      actionFixture("creator_direct_proposal"),
+      actionFixture("generate_image_asset", { outputAssetIds: ["image_1"] }),
+      actionFixture("store_asset_bytes", { outputAssetIds: ["image_1"] }),
+      actionFixture("domain_report"),
+    ],
+    new Map([["image_1", { status: "ready", kind: "image" }]])
+  );
+
+  assert.equal(payload.run.status, "succeeded");
+  assert.equal(payload.run.completionKind, "standalone_asset");
+  assert.equal(payload.run.presentationKind, "standalone_image");
+  assert.match(payload.run.message ?? "", /asset is ready/i);
+  assert.deepEqual(payload.stages.map((stage) => ({
+    tool: stage.toolName,
+    type: stage.type,
+    status: stage.status,
+  })), [{ tool: "generate_image_asset", type: "asset_generation", status: "succeeded" }]);
+  assert.deepEqual(payload.stageItems.map((item) => ({
+    kind: item.kind,
+    purpose: item.purpose,
+    assetId: item.assetId,
+  })), [{ kind: "image", purpose: "asset", assetId: "image_1" }]);
+});
+
+test("projects legacy poster work as an asset and hides unknown tools", () => {
+  const payload = projectRunDetailFromParts(
+    runFixture({ status: "canceled" }),
+    [gateFixture("after:generate_storyboard", { status: "pending" })],
+    [
+      actionFixture("generate_poster", { outputAssetIds: ["poster_1"] }),
+      actionFixture("unknown_legacy_tool", { outputAssetIds: ["unknown_1"] }),
+    ]
+  );
+
+  assert.equal(payload.run.storyboardBoundaryStatus, "pending");
+  assert.deepEqual(
+    payload.stages.map((stage) => ({ tool: stage.toolName, type: stage.type })),
+    [{ tool: "generate_poster", type: "asset_generation" }]
+  );
+  assert.deepEqual(
+    payload.stageItems.map((item) => ({ assetId: item.assetId, purpose: item.purpose })),
+    [{ assetId: "poster_1", purpose: "asset" }]
+  );
+});
+
+test("keeps unknown tool jobs in operator diagnostics without creating creator stages", () => {
+  const payload = projectRunDetailFromParts(
+    runFixture({ status: "failed" }),
+    [],
+    [actionFixture("unknown_legacy_tool", { status: "failed", jobIds: ["job_unknown"] })],
+    new Map(),
+    {
+      includeOperatorDiagnostics: true,
+      jobs: new Map([["job_unknown", jobFixture("failed", "job_unknown")]]),
+    }
+  );
+
+  assert.deepEqual(payload.stages, []);
+  assert.deepEqual(
+    payload.operatorDiagnostics?.map((diagnostic) => diagnostic.jobId),
+    ["job_unknown"]
+  );
+});
+
+test("fails a completed standalone run that has no ready asset", () => {
+  const payload = projectRunDetailFromParts(
+    runFixture({ originKind: "creator_direct", taskKind: "image_create" }),
+    [],
+    [actionFixture("generate_image_asset", { outputAssetIds: ["image_1"] })],
+    new Map([["image_1", { status: "pending", kind: "image" }]])
+  );
+
+  assert.equal(payload.run.status, "failed");
+  assert.equal(payload.run.error?.code, "missing_asset_output");
+});
+
+test("terminal parent state prevents stale tool actions from appearing active", () => {
+  for (const status of ["failed", "canceled"] as const) {
+    const payload = projectRunDetailFromParts(
+      runFixture({
+        status,
+        originKind: "creator_direct",
+        taskKind: "image_create",
+      }),
+      [],
+      [actionFixture("generate_image_asset", { status: "running", jobIds: ["job_1"] })],
+      new Map(),
+      { jobs: new Map([["job_1", jobFixture("canceled")]]) }
+    );
+
+    assert.equal(payload.run.currentToolName, undefined);
+    assert.equal(payload.stages[0]?.status, "canceled");
+    assert.notEqual(payload.stages[0]?.status, "running");
+  }
+});
+
+test("latest retry jobs control stage status while earlier attempts remain visible", () => {
+  for (const latestJobStatus of ["running", "succeeded"] as const) {
+    const payload = projectRunDetailFromParts(
+      runFixture({ status: "running" }),
+      [],
+      [
+        actionFixture("generate_image_asset", {
+          id: "attempt_old",
+          status: "failed",
+          jobIds: ["job_old"],
+          createdAt: "2026-06-15T00:00:01.000Z",
+        }),
+        actionFixture("generate_image_asset", {
+          id: "attempt_new",
+          status: "running",
+          jobIds: ["job_new"],
+          createdAt: "2026-06-15T00:00:02.000Z",
+        }),
+      ],
+      new Map(),
+      {
+        jobs: new Map([
+          ["job_old", jobFixture("failed", "job_old")],
+          ["job_new", jobFixture(latestJobStatus, "job_new")],
+        ]),
+      }
+    );
+
+    assert.equal(payload.stages[0]?.status, latestJobStatus);
+    assert.deepEqual(payload.stages[0]?.jobIds, ["job_old", "job_new"]);
+    assert.deepEqual(
+      payload.stages[0]?.jobActivities?.map((activity) => activity.status),
+      ["failed", latestJobStatus]
+    );
+  }
+});
+
 test("playable export wins over an after-export stop gate", () => {
   const payload = projectRunDetailFromParts(
     runFixture(),
@@ -185,13 +724,20 @@ test("rejects applied exports whose output is missing or not playable", () => {
 
 test("active work has unknown progress and reports provider waits and recovery", () => {
   const waiting = projectRunDetailFromParts(
-    runFixture({ status: "waiting" }),
+    runFixture({ status: "waiting", agentRole: "visuals", waitReason: "media_job" }),
     [],
-    [actionFixture("generate_anchor", { status: "running", jobIds: ["job_1"] })]
+    [actionFixture("generate_anchor", { status: "running" })]
   );
   assert.equal(waiting.run.progressPercent, undefined);
   assert.equal(waiting.run.activityState, "waiting_on_job");
   assert.equal(waiting.run.currentToolName, "generate_anchor");
+
+  const historicalRootWait = projectRunDetailFromParts(
+    runFixture({ status: "waiting" }),
+    [],
+    [actionFixture("generate_anchor", { status: "running", jobIds: ["job_1"] })]
+  );
+  assert.equal(historicalRootWait.run.activityState, "waiting_on_job");
 
   const recovering = projectRunDetailFromParts(
     runFixture({ status: "running" }),

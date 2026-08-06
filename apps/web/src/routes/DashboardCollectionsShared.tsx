@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { GenerationRunStatus } from "@popcorn/shared/v1/types";
 import type { WorkspaceAsset } from "../lib/api-client";
+import { QuickLoadingState } from "../components/ui/QuickLoadingState";
 import { PageHeader } from "../components/ui/PageHeader";
 import { Toolbar, ToolbarField } from "../components/ui/Toolbar";
 import { Button, ButtonLink } from "../components/ui/Button";
@@ -25,14 +26,8 @@ export function formatDate(value?: string) {
   if (!value) return "Unknown";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(date);
 }
-
 export function formatDuration(seconds?: number) {
   if (!Number.isFinite(seconds)) return null;
   const totalSeconds = Math.max(0, Math.round(seconds ?? 0));
@@ -44,7 +39,6 @@ export function formatDuration(seconds?: number) {
 export function titleCase(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, (match) => match.toUpperCase());
 }
-
 export function projectCollectionPath(projectId: string, extraParams?: Record<string, string | undefined>) {
   const params = new URLSearchParams({ projectId });
   for (const [key, value] of Object.entries(extraParams ?? {})) {
@@ -89,18 +83,19 @@ export function StatusChip({
   return <span className={`${styles.chip} ${statusChipClass(status)}`}>{label ?? titleCase(status)}</span>;
 }
 
+
 export function DashboardFrame({
   title,
   description,
   children,
   action,
-  showNewVideoAction = true,
+  showCreateAction = true,
 }: {
   title: string;
   description: string;
   children: ReactNode;
   action?: ReactNode;
-  showNewVideoAction?: boolean;
+  showCreateAction?: boolean;
 }) {
   return (
     <div className={styles.page}>
@@ -109,10 +104,14 @@ export function DashboardFrame({
         title={title}
         description={description}
         action={
-          action || showNewVideoAction ? (
+          action || showCreateAction ? (
             <>
               {action}
-              {showNewVideoAction ? <ButtonLink variant="primary" to="/library/projects">Projects</ButtonLink> : null}
+              {showCreateAction ? (
+                <ButtonLink variant="primary" to="/create">
+                  Create
+                </ButtonLink>
+              ) : null}
             </>
           ) : null
         }
@@ -123,19 +122,30 @@ export function DashboardFrame({
 }
 
 export function DashboardSkeleton({
+  title,
+  description,
   variant = "rows",
 }: {
+  title: string;
+  description?: string;
   variant?: "rows" | "grid";
 }) {
   const isGrid = variant === "grid";
   return (
-    <div className={isGrid ? styles.grid : styles.list} aria-hidden="true">
-      {Array.from({ length: isGrid ? 8 : 5 }, (_, index) => (
-        <div className={`${styles.skeleton} ${isGrid ? styles.skeletonGrid : ""}`} key={index}>
-          <span /><span /><span />
+    <QuickLoadingState
+      title={title}
+      description={description}
+      reservation={(
+        <div className={isGrid ? styles.grid : styles.list}>
+          {Array.from({ length: isGrid ? 8 : 5 }, (_, index) => (
+            <div className={`${styles.skeleton} ${isGrid ? styles.skeletonGrid : ""}`} key={index}>
+              <span /><span /><span />
+            </div>
+          ))}
         </div>
-      ))}
-    </div>
+      )}
+      variant="page"
+    />
   );
 }
 
@@ -143,21 +153,33 @@ export function ScopeField({ scope, onChange }: { scope: LibraryScope; onChange:
   return (
     <ToolbarField label="Show">
       <select value={scope} onChange={(event) => onChange(event.target.value as LibraryScope)}>
-        {LIBRARY_SCOPES.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+        {LIBRARY_SCOPES.map((option) => (
+          <option key={option.id} value={option.id}>{option.label}</option>
+        ))}
       </select>
     </ToolbarField>
   );
 }
 
-function ScopeIcon({ scope }: { scope: LibraryScope }) {
+export function ScopeIcon({ scope }: { scope: LibraryScope }) {
   if (scope === "public") {
     return (
       <svg className={styles.scopeIcon} viewBox="0 0 16 16" aria-hidden="true" focusable="false">
         <circle cx="8" cy="8" r="5.75" fill="none" stroke="currentColor" strokeWidth="1.5" />
-        <path d="M8 2.25c1.65 1.45 2.5 3.38 2.5 5.75s-.85 4.3-2.5 5.75C6.35 12.3 5.5 10.37 5.5 8s.85-4.3 2.5-5.75ZM2.75 8h10.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+        <path
+          d="M8 2.25c1.65 1.45 2.5 3.38 2.5 5.75s-.85 4.3-2.5 5.75C6.35 12.3 5.5 10.37 5.5 8s.85-4.3 2.5-5.75ZM2.75 8h10.5"
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.5"
+        />
       </svg>
     );
   }
+
+  // "My library" is the whole workspace (public + private projects), not a
+  // private-only view — so use a neutral collection glyph, never a lock.
   return (
     <svg className={styles.scopeIcon} viewBox="0 0 16 16" aria-hidden="true" focusable="false">
       <rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5" />
@@ -173,6 +195,7 @@ export function ScopeToggle({ scope, onChange }: { scope: LibraryScope; onChange
     <div className={styles.scopeToggle} role="radiogroup" aria-label="Show projects">
       {LIBRARY_SCOPES.map((option) => {
         const isSelected = option.id === scope;
+        const label = option.label;
         return (
           <button
             key={option.id}
@@ -184,7 +207,7 @@ export function ScopeToggle({ scope, onChange }: { scope: LibraryScope; onChange
             onClick={() => onChange(option.id)}
           >
             <ScopeIcon scope={option.id} />
-            <span>{option.label}</span>
+            <span>{label}</span>
           </button>
         );
       })}

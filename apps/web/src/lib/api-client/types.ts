@@ -2,9 +2,7 @@ import type {
   AssetKind,
   AssetStatus,
   BriefVersion,
-  CompositionMode,
   JobStatus,
-  GateableGenerationStageType,
   GenerationJob,
   GenerationRun,
   GenerationRunStatus,
@@ -16,14 +14,13 @@ import type {
   VideoBriefInput,
 } from "@popcorn/shared/v1/types";
 import type { Project } from "@popcorn/shared/types";
+import type { ScriptDraft } from "@popcorn/shared/types";
 
 export type {
   AssetKind,
   AssetStatus,
   BriefVersion,
-  CompositionMode,
   JobStatus,
-  GateableGenerationStageType,
   GenerationJob,
   GenerationRun,
   GenerationRunStatus,
@@ -161,6 +158,15 @@ export interface ProjectStoryboardResponse {
   storyboard: ProjectStoryboard | null;
 }
 
+export interface ProjectScriptResponse {
+  script: {
+    scriptDraft: ScriptDraft;
+    scriptDraftId: string;
+    assetId: string;
+    contentHash: string;
+  } | null;
+}
+
 export interface SaveStoryboardBeatInput {
   id: string;
   intent: string;
@@ -217,7 +223,9 @@ export interface WorkspaceAsset {
   promptPreview?: string;
   url?: string;
   thumbnailUrl?: string;
+  expiresAt?: string | null;
   durationSec?: number;
+  canReceiveFeedback?: boolean;
   visibility?: "public" | "private";
   createdAt: string;
   updatedAt?: string;
@@ -251,6 +259,42 @@ export interface ProjectAssetsResponse {
   pagination: ListPagination;
 }
 
+export type ProjectAssetDetailAsset = Omit<V1Asset, "url"> & {
+  /** Managed object identity is present only for stored, materializable media. */
+  storageKey?: string;
+  storageBucket?: string;
+  /** Resolved media may arrive here from the project asset detail endpoint. */
+  remoteUrl?: string | null;
+  /** Older/local responses may still expose the resolved media as `url`. */
+  url?: string | null;
+};
+
+export interface ProjectAssetDetailResponse {
+  asset: ProjectAssetDetailAsset;
+  billing: {
+    /** Gross generation debits attributable to this one asset; null when unknown. */
+    creditsCharged: number | null;
+  };
+}
+
+export interface AssetCritique {
+  critiqueAssetId: string;
+  sourceAssetId: string;
+  sourceKind: "script" | "image" | "video";
+  question: string;
+  answer: string;
+  strengths: string[];
+  improvements: string[];
+  evidence: string[];
+  limitations: string[];
+  provider: string;
+  model: string;
+}
+
+export interface AssetCritiqueResponse {
+  critique: AssetCritique;
+}
+
 export interface WorkspaceOutputsResponse {
   outputs: WorkspaceOutput[];
   pagination: ListPagination;
@@ -259,7 +303,7 @@ export interface WorkspaceOutputsResponse {
 export interface AssetMediaResponse {
   url: string | null;
   thumbnailUrl?: string | null;
-  expiresAt: string;
+  expiresAt: string | null;
 }
 
 export interface ProjectWatchMedia {
@@ -307,6 +351,8 @@ export interface CreateProjectInput {
   name?: string;
   brief?: VideoBriefInput;
   posterProvider?: string;
+  namingPrompt?: string;
+  namingContext?: "image" | "video" | "soundtrack";
 }
 
 export interface CreateProjectResponse extends ProjectResponse {
@@ -348,41 +394,26 @@ export interface RegisterProjectUploadResponse {
 export interface StartGenerationRunInput {
   brief: VideoBriefInput;
   briefVersionId?: string;
-  mode?: CompositionMode;
-  allowGeneratedGapFill?: boolean;
-  assetIds?: string[];
-  /** @deprecated Initial runs always stop after storyboard; this is ignored. */
-  reviewGates?: GateableGenerationStageType[];
-  /** @deprecated Initial runs always stop after storyboard; this is ignored. */
-  stopAfter?: GateableGenerationStageType;
-  /** @deprecated Initial runs always stop after storyboard; this is ignored. */
-  runThrough?: boolean;
   provider?: string;
-  seedAsset?: {
-    kind?: "image" | "video";
-    provider?: string;
-    prompt?: string;
-    description?: string;
-    durationSec?: number;
-    size?: string;
-    quality?: string;
-    preflightReviewIterations?: number;
-  };
-  showCaptions?: boolean;
 }
 
 export interface StartUploadedFootageRunInput {
   briefVersionId: string;
   assetIds: string[];
-  mode?: CompositionMode;
-  allowGeneratedGapFill?: boolean;
-  reviewGates?: GateableGenerationStageType[];
-  showCaptions?: boolean;
 }
 
 export interface StartGenerationRunResponse {
   job: GenerationJob | null;
   runId: string | null;
+}
+
+export interface StartStoryboardGenerationRunResponse {
+  runId: string;
+  reused: boolean;
+}
+
+export interface StoryboardGenerationRunStatusResponse {
+  run: GenerationRun | null;
 }
 
 export type ExportDurationPolicy =

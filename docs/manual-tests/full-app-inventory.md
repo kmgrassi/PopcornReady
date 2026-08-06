@@ -146,8 +146,9 @@ Authenticated routes:
 - `/uploads`, `/templates`, `/brand`, `/account`, `/settings`, `/faq`.
 - `/evals`, which redirects to `/admin/evals`.
 - `/admin`, `/admin/evals` for admin-capable sessions.
-- Dev-only visual routes: `/dev/design-system`, `/dev/generation-cards`,
-  `/dev/landing-upload`, `/dev/media-gallery`, `/dev/video-edit`.
+- Dev-only visual routes: `/dev/creation-progress`, `/dev/design-system`,
+  `/dev/generation-cards`, `/dev/landing-upload`, `/dev/media-gallery`,
+  `/dev/video-edit`.
 
 Retired route note: `/studio` is not currently mounted in the Vite route table.
 Older manual-test instructions that start with `/studio` should be treated as
@@ -229,9 +230,10 @@ recovery.
 - Open `/dashboard` in a fresh workspace.
 - Verify the empty or low-data state has clear next actions.
 - Verify whether the authenticated shell exposes the intended creation CTA:
-  - Target behavior: `Create new asset` should open `/create` with Image selected
-    by default and Video/Soundtrack available alongside it.
-  - Full video-project production remains available at `/projects/new`.
+  - Target behavior: `Create` should open `/create`, where Full video leads to
+    `/projects/new` and Asset or script leads to `/create/asset`.
+  - Asset Studio defaults to Image with Video, Audio, and Script available
+    alongside it; Script starts a new Creative Director project.
   - Library remains available as a separate sidebar menu item.
 - If the workspace has active runs or recent outputs, verify counts and cards
   match the project/run/output links they open.
@@ -292,17 +294,20 @@ Production start and review checkpoints:
   plan step; there is no separate plan-edit screen in the normal setup path.
 - If provider keys or credits are missing, verify the start-production error is
   readable and offers Retry, Edit idea, and Edit assets.
-- To test review checkpoints manually, deep-link with `reviewGates`, for
-  example `/projects/new?goal=...&length=30&reviewGates=creative_plan`, or use
-  a fixture run with a review gate.
+- Review checkpoints are server-owned policy: every initial production run
+  pauses after its complete storyboard, and the retired `reviewGates` /
+  `stopAfter` client parameters are ignored. To test a checkpoint manually,
+  start any production run and wait for the storyboard boundary, or use a
+  fixture run with a reached gate.
 - Expected checkpoint behavior: the run waits in the generating view with
   `Approve & continue` and `Reject / regenerate`; approving resumes polling and
   rejecting keeps the run from continuing silently.
 
 Production step:
 
-- Continue with no stop points selected and verify the run advances through the
-  remaining stages autonomously.
+- Continue and verify the run advances autonomously to the server-owned
+  storyboard checkpoint, then after approval advances through the remaining
+  stages autonomously.
 - While the run is active, verify `/projects/:projectId/runs/:runId` shows the
   same stage/progress state from dashboard and project links.
 - Use the visible stop/cancel affordance where available and confirm the run
@@ -375,7 +380,8 @@ Outputs:
 
 ### 7. Landing Quick-Start Generation
 
-This is the current creation entry point while `/studio` is retired.
+This public quick-start remains distinct from the authenticated `/create`
+launcher while `/studio` is retired.
 
 - Configure provider keys if you expect generation to run end to end. Without
   provider keys, verify the app surfaces a readable configuration error.

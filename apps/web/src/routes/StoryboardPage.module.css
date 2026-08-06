@@ -199,6 +199,12 @@
   width: min(100%, 480px);
 }
 
+.feedbackAction {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: var(--space-2);
+}
+
 @media (max-width: 640px) {
   .productionGate {
     align-items: stretch;

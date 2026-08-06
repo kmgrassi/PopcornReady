@@ -33,6 +33,8 @@ function makeRun(
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
     ...("status" in overrides ? { status: overrides.status } : {}),
+    ...("originKind" in overrides ? { originKind: overrides.originKind } : {}),
+    ...("taskKind" in overrides ? { taskKind: overrides.taskKind } : {}),
     ...("createdAt" in overrides ? { createdAt: overrides.createdAt } : {}),
     ...("updatedAt" in overrides ? { updatedAt: overrides.updatedAt } : {}),
   };
@@ -78,6 +80,8 @@ test("listWorkspaceGenerationRuns aggregates runs across projects with project n
     makeRun("p2", {
       runId: "r2",
       status: "running",
+      originKind: "creator_direct",
+      taskKind: "video_create",
       createdAt: "2026-01-02T00:00:00.000Z",
     }),
   ];
@@ -103,10 +107,12 @@ test("listWorkspaceGenerationRuns aggregates runs across projects with project n
   assert.equal(items[0].runId, "r2");
   assert.equal(items[0].projectName, "Beta");
   assert.equal(items[0].progressPercent, undefined);
+  assert.equal(items[0].presentationKind, "standalone_video");
   assert.equal(items[1].runId, "r1");
   assert.equal(items[1].projectName, "Alpha");
   assert.equal(items[1].status, "succeeded");
   assert.equal(items[1].progressPercent, undefined);
+  assert.equal(items[1].presentationKind, undefined);
   assert.equal(items[1].completionKind, undefined);
   assert.match(items[1].message ?? "", /Run succeeded/);
   assert.doesNotMatch(items[1].message ?? "", /Run ended|Video ready/);
@@ -372,6 +378,7 @@ test("getWorkspaceDashboardSummary surfaces storyboard reviews from completed ru
   assert.equal(summary.counts.activeRuns, 1);
   assert.equal(summary.activeRuns[0].runId, "r_storyboard");
   assert.equal(summary.activeRuns[0].status, "succeeded");
+  assert.equal(summary.activeRuns[0].storyboardBoundaryStatus, "reached");
   assert.deepEqual(summary.activeRuns[0].reviewGate, {
     stageType: "storyboard",
     stageId: "r_storyboard:tool:generate_storyboard",

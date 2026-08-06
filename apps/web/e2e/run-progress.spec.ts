@@ -11,6 +11,7 @@ type RunStatus = "queued" | "running" | "succeeded" | "failed" | "canceled";
 type StageType =
   | "brief_intake"
   | "creative_plan"
+  | "script"
   | "storyboard"
   | "asset_generation"
   | "audio_generation"
@@ -36,6 +37,9 @@ interface MockRunOptions {
     retryable?: boolean;
   };
   operatorDiagnostics?: Array<Record<string, unknown>>;
+  completionKind?: "video" | "storyboard_assets" | "standalone_asset";
+  presentationKind?: "standalone_image" | "standalone_video" | "standalone_audio";
+  hierarchy?: Record<string, unknown>;
 }
 
 test.beforeEach(async ({ page }) => {
@@ -43,25 +47,325 @@ test.beforeEach(async ({ page }) => {
   await mockProject(page);
 });
 
+test("shows Creative Director and specialist lanes instead of the primitive pipeline @mobile", async ({
+  page,
+}) => {
+  await page.route(`**${apiRunPath}`, async (route) => {
+    await route.fulfill({
+      json: runDetail({
+        status: "running",
+        message: "Generating shots.",
+        hierarchy: hierarchyFixture(),
+      }),
+    });
+  });
+
+  await page.goto(runPath);
+
+  await expect(page.getByRole("heading", { name: "Creative Director" })).toBeVisible();
+  await expect(page.getByText("The creative director is guiding this production.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Visuals", { exact: true })).toBeVisible();
+  await expect(page.getByText("Creating the planned picture and motion.")).toBeVisible();
+  await expect(page.getByRole("progressbar", { name: "Visuals 3 of 6 ready" })).toBeVisible();
+  await expect(page.getByText("Audio", { exact: true })).toBeVisible();
+  await expect(page.getByText("All assigned work is complete.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open project assets" })).toHaveAttribute(
+    "href",
+    `/projects/${projectId}/media`,
+  );
+  await expect(page.getByText(/tool steps complete/i)).toHaveCount(0);
+  await expect(page.getByText("Pipeline", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Tool activity", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("session-visuals", { exact: false })).toHaveCount(0);
+
+  const audioLane = page.locator("details").filter({ hasText: "Audio" }).first();
+  await expect(audioLane).not.toHaveAttribute("open", "");
+  await audioLane.locator("summary").first().click();
+  await expect(audioLane.getByText("Show production details")).toBeVisible();
+
+  const overflow = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  expect(overflow.scrollWidth).toBe(overflow.clientWidth);
+});
+
+test("keeps terminal empty hierarchy copy and long breadcrumbs truthful on mobile @mobile", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const longProjectName = "A Very Long Orbital Garden Production Title";
+  await mockProject(page, longProjectName);
+  const hierarchy = hierarchyFixture();
+  hierarchy.root.state = "canceled";
+  hierarchy.sessions = [];
+
+  await page.route(`**${apiRunPath}`, async (route) => {
+    await route.fulfill({
+      json: runDetail({
+        status: "canceled",
+        message: "Generation was superseded by a newer run.",
+        hierarchy,
+      }),
+    });
+  });
+
+  await page.goto(runPath);
+
+  await expect(page.getByText("Run canceled", { exact: true })).toBeVisible();
+  await expect(page.getByText("Production canceled", { exact: true })).toHaveCount(1);
+  await expect(page.getByText("No specialist work was delegated", { exact: true })).toHaveCount(1);
+  await expect(
+    page.getByText("The creative director stopped this production.", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("The creative director is guiding this production.", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("The production was canceled before specialist work began.", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText(/planning|deciding how to divide/i)).toHaveCount(0);
+  await expect(page.getByText("Visuals", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Audio", { exact: true })).toHaveCount(0);
+
+  const breadcrumbs = page.getByRole("navigation", { name: "Breadcrumb" });
+  const list = breadcrumbs.locator("ol");
+  const projectLink = breadcrumbs.getByRole("link", { name: longProjectName });
+  const currentCrumb = breadcrumbs.getByText("Run detail", { exact: true });
+  const initialMetrics = await list.evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollLeft: element.scrollLeft,
+    scrollWidth: element.scrollWidth,
+  }));
+  const projectLinkMetrics = await projectLink.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+      overflow: style.overflow,
+      textOverflow: style.textOverflow,
+    };
+  });
+
+  expect(initialMetrics.scrollWidth).toBeGreaterThan(initialMetrics.clientWidth);
+  expect(initialMetrics.scrollLeft).toBeGreaterThan(0);
+  expect(
+    Math.abs(
+      initialMetrics.scrollLeft - (initialMetrics.scrollWidth - initialMetrics.clientWidth),
+    ),
+  ).toBeLessThanOrEqual(1);
+  expect(projectLinkMetrics.scrollWidth).toBeGreaterThan(projectLinkMetrics.clientWidth);
+  expect(projectLinkMetrics).toMatchObject({ overflow: "hidden", textOverflow: "ellipsis" });
+
+  const [listBounds, currentBounds] = await Promise.all([
+    list.boundingBox(),
+    currentCrumb.boundingBox(),
+  ]);
+  expect(listBounds).not.toBeNull();
+  expect(currentBounds).not.toBeNull();
+  expect(currentBounds!.x).toBeGreaterThanOrEqual(listBounds!.x);
+  expect(currentBounds!.x + currentBounds!.width).toBeLessThanOrEqual(
+    listBounds!.x + listBounds!.width + 1,
+  );
+
+  const documentWidth = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  expect(documentWidth.scrollWidth).toBe(documentWidth.clientWidth);
+});
+
+test("keeps a specialist question owned by the director and explains blocked work @mobile", async ({
+  page,
+}) => {
+  const hierarchy = hierarchyFixture();
+  hierarchy.root.state = "waiting";
+  hierarchy.root.needsDirectorDecision = true;
+  hierarchy.root.message = "The creative director is resolving a specialist question.";
+  hierarchy.sessions[0]!.state = "blocked";
+  hierarchy.sessions[0]!.runs[0]!.state = "blocked";
+  hierarchy.sessions[0]!.runs[0]!.report = { outcome: "blocked", outputAssetIds: [] };
+  hierarchy.sessions[1]!.state = "queued";
+  hierarchy.sessions[1]!.runs[0]!.state = "queued";
+  hierarchy.sessions[1]!.runs[0]!.report = null;
+
+  await page.route(`**${apiRunPath}`, async (route) => {
+    await route.fulfill({ json: runDetail({ status: "running", hierarchy }) });
+  });
+  await page.goto(runPath);
+
+  await expect(page.getByText("Resolving a specialist question", { exact: true })).toBeVisible();
+  await expect(page.getByText("The director is resolving a missing dependency.")).toBeVisible();
+  await expect(page.getByText("Ready when the current work allows it.")).toBeVisible();
+  await expect(page.getByRole("textbox")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /answer/i })).toHaveCount(0);
+});
+
+test("updates specialist lanes when the run poll returns newer hierarchy state", async ({ page }) => {
+  let requests = 0;
+  await page.route(`**${apiRunPath}`, async (route) => {
+    requests += 1;
+    const hierarchy = hierarchyFixture();
+    if (requests === 1) {
+      hierarchy.sessions[0]!.state = "queued";
+      hierarchy.sessions[0]!.runs[0]!.state = "queued";
+      hierarchy.sessions[0]!.runs[0]!.actions[0]!.state = "queued";
+      hierarchy.sessions[0]!.runs[0]!.actions[0]!.jobs[0]!.state = "queued";
+      hierarchy.sessions[0]!.runs[0]!.actions[0]!.jobs[0]!.completedItems = 0;
+    }
+    await route.fulfill({ json: runDetail({ status: "running", hierarchy }) });
+  });
+
+  await page.goto(runPath);
+  await expect(page.getByText("Ready when the current work allows it.")).toBeVisible();
+  await expect(page.getByRole("progressbar", { name: "Visuals 3 of 6 ready" })).toBeVisible({
+    timeout: 5_000,
+  });
+  expect(requests).toBeGreaterThanOrEqual(2);
+});
+
+test("shows a completed one-off image as one asset step without video stages @mobile", async ({ page }) => {
+  await page.route(`**${apiRunPath}`, async (route) => {
+    await route.fulfill({
+      json: runDetail({
+        status: "succeeded",
+        stageType: "asset_generation",
+        completionKind: "standalone_asset",
+        presentationKind: "standalone_image",
+        message: "Asset is ready.",
+      }),
+    });
+  });
+
+  await page.goto(runPath);
+
+  await expect(page.getByText("Your asset is ready", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Image asset for/ })).toBeVisible();
+  await expect(page.getByText(/This one-off asset and its generation history/)).toBeVisible();
+  await expect(page.getByText("Unified workspace", { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/^Producing /)).toHaveCount(0);
+  const rail = await getVisibleStageRail(page);
+  await expect(rail.getByText("Asset activity", { exact: true })).toBeVisible();
+  await expect(rail.getByText("Pipeline", { exact: true })).toHaveCount(0);
+  await expect(rail.getByText("Image asset", { exact: true })).toBeVisible();
+  await expect(rail.getByText("Complete", { exact: true })).toBeVisible();
+  await expect(rail.getByText("Script", { exact: true })).toHaveCount(0);
+  await expect(rail.getByText("Brief", { exact: true })).toHaveCount(0);
+  await expect(rail.getByText("Storyboard", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Shots", { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/Visuals needs attention/i)).toHaveCount(0);
+  if ((page.viewportSize()?.width ?? 1_024) <= 760) {
+    await expect(page.getByText("Last completed: Image asset", { exact: true })).toBeVisible();
+  } else {
+    await expect(
+      page.getByLabel("Current run status").getByText("Image asset", { exact: true }),
+    ).toBeVisible();
+  }
+});
+
+test("legacy poster work is shown as Poster and never backfills Brief or Script @mobile", async ({
+  page,
+}) => {
+  await page.route(`**${apiRunPath}`, async (route) => {
+    await route.fulfill({
+      json: {
+        run: {
+          runId,
+          projectId,
+          status: "canceled",
+          currentStageType: "creative_plan",
+          progressPercent: 100,
+          message: "Generation was canceled.",
+          reviewGate: null,
+          createdAt: now,
+          updatedAt: now,
+          startedAt: now,
+          completedAt: now,
+        },
+        stages: [
+          {
+            stageId: `${runId}:tool:create_or_load_brief`,
+            runId,
+            type: "brief_intake",
+            toolName: "create_or_load_brief",
+            label: "Concept",
+            order: 0,
+            status: "succeeded",
+            progressPercent: 100,
+            message: "Brief loaded.",
+            startedAt: now,
+            completedAt: now,
+            jobIds: [],
+            artifactIds: ["brief_asset"],
+            createdAt: now,
+            updatedAt: now,
+          },
+          {
+            stageId: `${runId}:tool:generate_poster`,
+            runId,
+            type: "creative_plan",
+            toolName: "generate_poster",
+            label: "Poster",
+            order: 1,
+            status: "succeeded",
+            progressPercent: 100,
+            message: "Poster ready.",
+            startedAt: now,
+            completedAt: now,
+            jobIds: [],
+            artifactIds: ["poster_asset"],
+            createdAt: now,
+            updatedAt: now,
+          },
+        ],
+        stageItems: [],
+      },
+    });
+  });
+
+  await page.goto(runPath);
+
+  const rail = await getVisibleStageRail(page);
+  await expect(rail.getByText("Poster", { exact: true })).toBeVisible();
+  const posterStage = rail.locator("li").filter({ hasText: "Poster" }).first();
+  await posterStage.getByText("Tool activity", { exact: true }).click();
+  await expect(posterStage.getByText("Generate poster", { exact: true })).toBeVisible();
+  await expect(rail.getByText("Brief", { exact: true })).toHaveCount(0);
+  await expect(rail.getByText("Script", { exact: true })).toHaveCount(0);
+  if ((page.viewportSize()?.width ?? 1_024) <= 760) {
+    await expect(page.getByText("Last completed: Poster", { exact: true })).toBeVisible();
+  } else {
+    await expect(
+      page.getByLabel("Current run status").getByText("Poster", { exact: true }),
+    ).toBeVisible();
+  }
+});
+
 async function getVisibleStageRail(page: Page) {
   const visibleRail = page
     .getByRole("complementary", { name: "Stage rail" })
     .filter({ visible: true });
-  if (await visibleRail.first().getByText("Pipeline").isVisible().catch(() => false)) {
+  if (
+    await visibleRail
+      .first()
+      .getByText(/^(Pipeline|Asset activity)$/)
+      .isVisible()
+      .catch(() => false)
+  ) {
     return visibleRail.first();
   }
 
   const summaryToggle = page
     .locator("summary")
-    .filter({ hasText: "Show pipeline" })
+    .filter({ hasText: /Show (pipeline|asset status)/ })
     .filter({ visible: true });
   if ((await summaryToggle.count()) > 0) {
     await summaryToggle.first().click();
   } else {
-    await page.getByText("Show pipeline").filter({ visible: true }).first().click();
+    await page.getByText(/Show (pipeline|asset status)/).filter({ visible: true }).first().click();
   }
 
-  await expect(visibleRail.first().getByText("Pipeline")).toBeVisible();
+  await expect(visibleRail.first().getByText(/^(Pipeline|Asset activity)$/)).toBeVisible();
   return visibleRail.first();
 }
 
@@ -315,6 +619,45 @@ test("reveals server-authorized operator diagnostics progressively @mobile", asy
   await expect(rail.getByText("2", { exact: true })).toBeVisible();
 });
 
+test("retains authorized operator diagnostics beside the Creative Director hierarchy @mobile", async ({
+  page,
+}) => {
+  const detail = runDetail({
+    status: "running",
+    stageType: "asset_generation",
+    hierarchy: hierarchyFixture(),
+    operatorDiagnostics: [
+      {
+        jobId: "job-hierarchy-123456789",
+        actionId: "action-hierarchy-123456789",
+        runId,
+        status: "running",
+        currentStep: "generate_hierarchy_keyframe",
+        provider: "openai",
+        attempt: 3,
+        startedAt: now,
+        heartbeatAt: now,
+        lastProgressAt: now,
+        updatedAt: now,
+        attentionState: "healthy",
+      },
+    ],
+  });
+  await page.route(`**${apiRunPath}`, async (route) => {
+    await route.fulfill({ json: detail });
+  });
+  await page.goto(runPath);
+
+  await expect(page.getByRole("heading", { name: "Creative Director" })).toBeVisible();
+  const diagnostics = page.getByText("Operator diagnostics", { exact: true });
+  await expect(diagnostics).toBeVisible();
+  await expect(page.getByText("generate_hierarchy_keyframe", { exact: true })).not.toBeVisible();
+  await diagnostics.click();
+  await expect(page.getByText("generate_hierarchy_keyframe", { exact: true })).toBeVisible();
+  await expect(page.getByText("openai", { exact: true })).toBeVisible();
+  await expect(page.getByText("3", { exact: true })).toBeVisible();
+});
+
 test("opens generated asset feedback and previews an exact durable proposal @mobile", async ({ page }) => {
   let proposalRequestBody: unknown = null;
   let getCount = 0;
@@ -407,6 +750,162 @@ test("opens generated asset feedback and previews an exact durable proposal @mob
       assetId: "asset-score-1",
     }],
   });
+});
+
+test("offers advisory feedback only for succeeded generated media", async ({ page }) => {
+  const imageDataUrl =
+    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%230f766e'/%3E%3C/svg%3E";
+  const stageItems = [
+    {
+      itemId: "item-ready-image",
+      stageId: "stage-asset_generation",
+      kind: "image",
+      purpose: "visual_anchor",
+      label: "Ready keyframe",
+      status: "succeeded",
+      assetId: "asset-ready-image",
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      itemId: "item-running-video",
+      stageId: "stage-asset_generation",
+      kind: "video",
+      purpose: "shot",
+      label: "Reserved clip",
+      status: "running",
+      assetId: "asset-reserved-video",
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      itemId: "item-failed-image",
+      stageId: "stage-asset_generation",
+      kind: "image",
+      purpose: "keyframe",
+      label: "Failed keyframe",
+      status: "failed",
+      assetId: "asset-failed-image",
+      error: { code: "provider_failed", message: "Provider failed." },
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      itemId: "item-ready-board",
+      stageId: "stage-asset_generation",
+      kind: "image",
+      purpose: "keyframe",
+      label: "generate_keyframe Ready board frame",
+      status: "succeeded",
+      assetId: "asset-ready-board",
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      itemId: "item-running-board",
+      stageId: "stage-asset_generation",
+      kind: "image",
+      purpose: "keyframe",
+      label: "generate_keyframe Reserved board frame",
+      status: "running",
+      assetId: "asset-running-board",
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      itemId: "item-failed-board",
+      stageId: "stage-asset_generation",
+      kind: "image",
+      purpose: "keyframe",
+      label: "generate_keyframe Failed board frame",
+      status: "failed",
+      assetId: "asset-failed-board",
+      error: { code: "provider_failed", message: "Provider failed." },
+      createdAt: now,
+      updatedAt: now,
+    },
+  ];
+  await page.route(`**${apiRunPath}`, async (route) => {
+    await route.fulfill({
+      json: runDetail({
+        status: "running",
+        stageType: "asset_generation",
+        stageItems,
+      }),
+    });
+  });
+  await page.route(`**/api/v1/projects/${projectId}/storyboard`, async (route) => {
+    const panels = [
+      ["ready", "asset-ready-board"],
+      ["running", "asset-running-board"],
+      ["failed", "asset-failed-board"],
+    ].map(([suffix, assetId]) => ({
+      id: `panel-${suffix}`,
+      projectId,
+      beatId: `beat-${suffix}`,
+      panelIndex: 0,
+      imageAssetId: assetId,
+      promptAssetId: null,
+      url: imageDataUrl,
+      thumbnailUrl: imageDataUrl,
+      status: "ready",
+      isSelected: true,
+      approvedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    }));
+    await route.fulfill({
+      json: {
+        storyboard: {
+          id: "storyboard-progress-feedback",
+          projectId,
+          planAssetId: null,
+          status: "ready",
+          scenes: [{
+            id: "scene-progress-feedback",
+            projectId,
+            storyboardId: "storyboard-progress-feedback",
+            sceneIndex: 0,
+            title: "Progress feedback",
+            summary: null,
+            setting: null,
+            mood: null,
+            durationSec: 3,
+            sceneAssetId: null,
+            status: "ready",
+            beats: panels.map((panel, index) => ({
+              id: panel.beatId,
+              projectId,
+              sceneId: "scene-progress-feedback",
+              beatIndex: index,
+              intent: `Frame ${index + 1}`,
+              visualDescription: null,
+              dialogueSummary: null,
+              narration: null,
+              durationSec: 1,
+              shotType: null,
+              camera: null,
+              framing: null,
+              status: "ready",
+              beatAssetId: null,
+              panels: [panel],
+              createdAt: now,
+              updatedAt: now,
+            })),
+            createdAt: now,
+            updatedAt: now,
+          }],
+          createdAt: now,
+          updatedAt: now,
+        },
+      },
+    });
+  });
+
+  await page.goto(runPath);
+
+  await expect(page.getByRole("heading", { name: "Generated assets" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Receive feedback" })).toHaveCount(2);
 });
 
 test("submits review-gate approval and previews durable requested changes @mobile", async ({ page }) => {
@@ -525,6 +1024,118 @@ test("submits review-gate approval and previews durable requested changes @mobil
   expect(requests.some((request) => request.action === "reject")).toBe(false);
 });
 
+test("shows the authoritative script and requests a text-only rewrite @mobile", async ({ page }) => {
+  let rejectBody: unknown = null;
+  let scriptRevision = 1;
+  let detail = runDetail({
+    status: "succeeded",
+    stageType: "script",
+    progressPercent: 30,
+    reviewGate: {
+      stageId: "stage-script",
+      stageType: "script",
+      state: "awaiting_review",
+      enteredAt: now,
+    },
+    message: "Script is ready for review.",
+  });
+  await page.route(`**/api/v1/projects/${projectId}/script`, async (route) => {
+    await route.fulfill({
+      json: {
+        script: {
+          scriptDraftId: `script-${scriptRevision}`,
+          assetId: `script-asset-${scriptRevision}`,
+          contentHash: `script-hash-${scriptRevision}`,
+          scriptDraft: {
+            schemaVersion: "scriptDraft.v1",
+            id: `script-${scriptRevision}`,
+            projectId,
+            briefAssetId: "brief-1",
+            storyBlueprintId: "blueprint-1",
+            targetLengthSec: 30,
+            durationClass: "micro",
+            durationPlan: { durationClass: "micro", targetLengthSec: 30, actCount: 1, sceneCount: 1 },
+            scenes: [{
+              id: "scene-1",
+              title: "The missing kernel",
+              summary: "Maya investigates.",
+              narration: scriptRevision === 1
+                ? "The last kernel had vanished."
+                : "The cashier watched as the last kernel vanished.",
+              dialogue: [{ characterName: "Maya", text: "Nobody leaves until we find it." }],
+              durationSec: 30,
+            }],
+            narration: scriptRevision === 1
+              ? "The last kernel had vanished."
+              : "The cashier watched as the last kernel vanished.",
+            status: "draft",
+            createdAt: now,
+            updatedAt: now,
+          },
+        },
+      },
+    });
+  });
+  await page.route(`**${apiRunPath}`, async (route) => route.fulfill({ json: detail }));
+  await page.route(`**${apiRunPath}/reject`, async (route) => {
+    rejectBody = await route.request().postDataJSON();
+    scriptRevision = 2;
+    detail = runDetail({
+      status: "succeeded",
+      stageType: "script",
+      reviewGate: {
+        stageId: "stage-script-revised",
+        stageType: "script",
+        state: "awaiting_review",
+        enteredAt: now,
+      },
+      message: "Revised script is ready for review.",
+    });
+    await route.fulfill({ status: 202, json: detail });
+  });
+
+  await page.goto(runPath);
+
+  await expect(page.getByRole("heading", { name: "Script ready for review" })).toBeVisible();
+  await expect(page.getByText("The last kernel had vanished.", { exact: true })).toBeVisible();
+  await expect(page.locator("p", { hasText: "Nobody leaves until we find it." })).toBeVisible();
+  await expect(page.getByText(/No poster, storyboard, image, audio, or video work starts/i)).toBeVisible();
+  await fillReviewFeedback(page, "Make Maya more suspicious of the cashier.");
+  await page.getByRole("button", { name: "Request changes" }).click();
+
+  await expect.poll(() => rejectBody).toEqual({
+    note: "Make Maya more suspicious of the cashier.",
+    scriptDraftId: "script-1",
+  });
+  await expect(page.getByText(
+    "The cashier watched as the last kernel vanished.",
+    { exact: true },
+  )).toBeVisible();
+});
+
+test("fails closed when the authoritative script cannot be loaded @mobile", async ({ page }) => {
+  await page.route(`**/api/v1/projects/${projectId}/script`, async (route) => {
+    await route.fulfill({ status: 500, json: { error: { message: "Script unavailable" } } });
+  });
+  await page.route(`**${apiRunPath}`, async (route) => route.fulfill({
+    json: runDetail({
+      status: "succeeded",
+      stageType: "script",
+      reviewGate: {
+        stageId: "stage-script",
+        stageType: "script",
+        state: "awaiting_review",
+        enteredAt: now,
+      },
+    }),
+  }));
+
+  await page.goto(runPath);
+
+  await expect(page.getByText(/could not load the script for review/i)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Approve script & continue" })).toBeDisabled();
+});
+
 test("shows a stored recovery hint while loading and then renders failure details @mobile", async ({
   page,
 }) => {
@@ -601,7 +1212,7 @@ async function mockLocalAuth(page: Page) {
   });
 }
 
-async function mockProject(page: Page) {
+async function mockProject(page: Page, name = "Progress E2E project") {
   await page.route(`**/api/v1/projects/${projectId}`, async (route) => {
     await route.fulfill({
       json: {
@@ -609,7 +1220,7 @@ async function mockProject(page: Page) {
           id: projectId,
           schemaVersion: 1,
           workspaceId: "dev_workspace",
-          name: "Progress E2E project",
+          name,
           status: "active",
           visibility: "private",
           brief: {
@@ -650,6 +1261,8 @@ function runDetail(options: MockRunOptions = {}) {
       currentStageType: stageType,
       progressPercent: options.progressPercent ?? 25,
       message: options.message ?? "Generating your video.",
+      completionKind: options.completionKind,
+      presentationKind: options.presentationKind,
       createdAt: now,
       updatedAt: now,
       startedAt: now,
@@ -659,11 +1272,37 @@ function runDetail(options: MockRunOptions = {}) {
           : undefined,
       error: options.error,
     },
-    stages: buildStages(stageType, {
-      status: options.status ?? "running",
-      reviewStageId: options.reviewGate?.stageId,
-      error: options.error,
-    }),
+    stages: options.presentationKind
+      ? [{
+          stageId,
+          runId,
+          type: stageType,
+          toolName: options.presentationKind === "standalone_image"
+            ? "generate_image_asset"
+            : options.presentationKind === "standalone_video"
+              ? "generate_video_asset"
+              : "generate_audio",
+          label: options.presentationKind === "standalone_image"
+            ? "Image asset"
+            : options.presentationKind === "standalone_video"
+              ? "Video asset"
+              : "Audio asset",
+          order: 9,
+          status: options.status ?? "running",
+          progressPercent: options.status === "succeeded" ? 100 : 25,
+          message: options.message,
+          startedAt: now,
+          completedAt: options.status === "succeeded" ? now : undefined,
+          jobIds: [],
+          artifactIds: ["asset-1"],
+          createdAt: now,
+          updatedAt: now,
+        }]
+      : buildStages(stageType, {
+          status: options.status ?? "running",
+          reviewStageId: options.reviewGate?.stageId,
+          error: options.error,
+        }),
     stageItems:
       options.stageItems ??
       (options.reviewGate
@@ -683,6 +1322,64 @@ function runDetail(options: MockRunOptions = {}) {
           ]
         : []),
     operatorDiagnostics: options.operatorDiagnostics,
+    hierarchy: options.hierarchy,
+  };
+}
+
+function hierarchyFixture() {
+  return {
+    root: {
+      runId,
+      state: "active",
+      message: "The creative director is guiding this production.",
+      needsDirectorDecision: false,
+    },
+    sessions: [
+      {
+        sessionId: "session-visuals",
+        domain: "visuals",
+        state: "active",
+        runs: [
+          {
+            runId: "run-visuals-1",
+            state: "active",
+            taskKind: "visual_production",
+            report: null,
+            actions: [
+              {
+                actionId: "action-visuals-1",
+                label: "Generate shots",
+                state: "active",
+                outputAssetIds: ["asset-shot-1", "asset-shot-2", "asset-shot-3"],
+                jobs: [{ state: "active", completedItems: 3, totalItems: 6 }],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        sessionId: "session-audio",
+        domain: "audio",
+        state: "complete",
+        runs: [
+          {
+            runId: "run-audio-1",
+            state: "complete",
+            taskKind: "audio_production",
+            report: { outcome: "done", outputAssetIds: ["asset-audio-1"] },
+            actions: [
+              {
+                actionId: "action-audio-1",
+                label: "Generate audio",
+                state: "complete",
+                outputAssetIds: ["asset-audio-1"],
+                jobs: [{ state: "complete", completedItems: 1, totalItems: 1 }],
+              },
+            ],
+          },
+        ],
+      },
+    ],
   };
 }
 
@@ -697,6 +1394,7 @@ function buildStages(
   const stageTypes: StageType[] = [
     "brief_intake",
     "creative_plan",
+    "script",
     "storyboard",
     "asset_generation",
     "audio_generation",

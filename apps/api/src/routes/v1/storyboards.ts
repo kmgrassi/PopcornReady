@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { mutation, route } from "@/core/adapter";
 import { ApiError } from "@/core/errors";
+import type { HandlerCtx } from "@/lib/api/v1/handler";
 import { agentApiStore } from "@/lib/agent-api/jobs";
 import {
   createBeat,
@@ -35,6 +36,7 @@ import {
   getProject,
 } from "@/lib/api/v1/store";
 import { runStoryboardJob } from "@/lib/orchestrator-tools/storyboard-job";
+import { requireApprovedScriptForProjectMedia } from "@/lib/api/v1/project-media-boundary";
 
 export const storyboardsRouter = Router();
 
@@ -55,6 +57,59 @@ function scopedIdempotencyKey(
 ): string | null {
   const key = req.header("Idempotency-Key");
   return key ? `${projectId}:${key}` : null;
+}
+
+interface GenerateStoryboardPanelsDeps {
+  getProject: typeof getProject;
+  getActiveProjectPlan: typeof getActiveProjectPlan;
+  createOrGetJob: typeof agentApiStore.createOrGetJob;
+  runStoryboardJob: typeof runStoryboardJob;
+  requireApprovedScript: typeof requireApprovedScriptForProjectMedia;
+}
+
+export async function generateStoryboardPanelsRoute(
+  ctx: Pick<HandlerCtx, "auth" | "req">,
+  params: Record<string, string | undefined>,
+  deps: Partial<GenerateStoryboardPanelsDeps> = {}
+) {
+  const resolved: GenerateStoryboardPanelsDeps = {
+    getProject,
+    getActiveProjectPlan,
+    createOrGetJob: agentApiStore.createOrGetJob,
+    runStoryboardJob,
+    requireApprovedScript: requireApprovedScriptForProjectMedia,
+    ...deps,
+  };
+  const projectId = requiredParam(params, "projectId");
+  await resolved.getProject(ctx.auth.workspaceId, projectId);
+  await resolved.requireApprovedScript(ctx.auth.workspaceId, projectId);
+
+  const activePlan = await resolved.getActiveProjectPlan(projectId);
+  if (!activePlan) {
+    throw new ApiError(
+      "plan_missing",
+      "A shot plan is required before generating storyboard panels."
+    );
+  }
+
+  const { job, created } = await resolved.createOrGetJob({
+    type: "asset_generation",
+    projectId,
+    idempotencyKey: scopedIdempotencyKey(ctx.req, projectId),
+  });
+
+  if (created) {
+    void resolved.runStoryboardJob({
+      jobId: job.id,
+      workspaceId: ctx.auth.workspaceId,
+      projectId,
+      plan: activePlan.plan,
+      planAssetId: activePlan.assetId,
+      planContentHash: activePlan.contentHash,
+    });
+  }
+
+  return { status: created ? 202 : 200, body: { job } };
 }
 
 storyboardsRouter.get(
@@ -82,37 +137,7 @@ storyboardsRouter.post(
 
 storyboardsRouter.post(
   "/projects/:projectId/storyboards/generate",
-  route(async ({ auth, req }, params) => {
-    const projectId = requiredParam(params, "projectId");
-    await getProject(auth.workspaceId, projectId);
-
-    const activePlan = await getActiveProjectPlan(projectId);
-    if (!activePlan) {
-      throw new ApiError(
-        "brief_missing",
-        "A shot plan is required before generating storyboard panels."
-      );
-    }
-
-    const { job, created } = await agentApiStore.createOrGetJob({
-      type: "asset_generation",
-      projectId,
-      idempotencyKey: scopedIdempotencyKey(req, projectId),
-    });
-
-    if (created) {
-      void runStoryboardJob({
-        jobId: job.id,
-        workspaceId: auth.workspaceId,
-        projectId,
-        plan: activePlan.plan,
-        planAssetId: activePlan.assetId,
-        planContentHash: activePlan.contentHash,
-      });
-    }
-
-    return { status: created ? 202 : 200, body: { job } };
-  })
+  route((ctx, params) => generateStoryboardPanelsRoute(ctx, params))
 );
 
 // Latest storyboard generation job for the project (or null). The job id only
@@ -260,6 +285,8 @@ storyboardsRouter.get(
 storyboardsRouter.post(
   "/projects/:projectId/storyboards/:storyboardId/acts/:actId/mockup",
   mutation(async ({ auth, body }, params) => {
+    const projectId = requiredParam(params, "projectId");
+    await requireApprovedScriptForProjectMedia(auth.workspaceId, projectId);
     const prompt =
       body && typeof body === "object" && !Array.isArray(body) &&
       typeof (body as { prompt?: unknown }).prompt === "string"
@@ -267,7 +294,7 @@ storyboardsRouter.post(
         : undefined;
     const result = await generateActMockup({
       auth,
-      projectId: requiredParam(params, "projectId"),
+      projectId,
       storyboardId: requiredParam(params, "storyboardId"),
       actId: requiredParam(params, "actId"),
       prompt,
@@ -449,6 +476,8 @@ storyboardsRouter.delete(
 storyboardsRouter.post(
   "/projects/:projectId/storyboards/:storyboardId/scenes/:sceneId/wireframe",
   mutation(async ({ auth, body }, params) => {
+    const projectId = requiredParam(params, "projectId");
+    await requireApprovedScriptForProjectMedia(auth.workspaceId, projectId);
     const prompt =
       body && typeof body === "object" && !Array.isArray(body) &&
       typeof (body as { prompt?: unknown }).prompt === "string"
@@ -456,7 +485,7 @@ storyboardsRouter.post(
         : undefined;
     const result = await generateSceneWireframe({
       auth,
-      projectId: requiredParam(params, "projectId"),
+      projectId,
       storyboardId: requiredParam(params, "storyboardId"),
       sceneId: requiredParam(params, "sceneId"),
       prompt,

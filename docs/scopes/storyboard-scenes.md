@@ -170,11 +170,18 @@ Requirements:
 
 A first-class storyboard surface in the SPA (`apps/web`):
 
+Current creator entrypoint: a project without a storyboard offers **Create
+storyboard**, which starts or returns an orchestrated run through the mandatory
+storyboard review boundary. The run prepares missing scenes/moments before panel
+generation. The low-level panel endpoint may still require a persisted plan,
+but that prerequisite is not exposed as creator workflow. Existing storyboards
+use **Request Changes** for revision rather than an unscoped regenerate action.
+
 - **Scenes as sections/rows**, **beats as tiles** within: sketch image + beat name +
   duration + intent (one-line). Reads top-to-bottom as the video.
-- **Editable plan:** reorder/add/remove/reword/re-time beats and scenes; edit a
-  scene's setting/cast/mood; **regenerate a tile**. Each edit recomputes only the
-  affected tiles.
+- **Agent-mediated revision:** object-scoped **Request Changes** can reorder,
+  add, remove, reword, or re-time beats and scenes, change scene context, or
+  regenerate a tile. The agent recomputes only affected assets.
 - **"Generate video"** proceeds from the approved storyboard to full asset
   generation (keyframes + clips), per beat, recomputing only what changed.
 - **Integration with the Studio redesign** ([studio-dashboard-redesign.md](./studio-dashboard-redesign.md)):

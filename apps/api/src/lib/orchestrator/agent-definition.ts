@@ -8,6 +8,7 @@ import {
   domainOutputAssetKind,
   type AgentDomain,
   type AgentRole,
+  type DomainOutputKind,
   type DomainTaskV1,
 } from "@popcorn/shared/domain-agent-contract";
 import type { DomainReportV1 } from "@popcorn/shared/domain-agent-contract";
@@ -175,16 +176,47 @@ export const AGENT_DEFINITION_PROMPTS = {
 
 type CompletionObject = Record<string, unknown>;
 
+export type DomainCompletionValidationCode =
+  | "invalid_json"
+  | "invalid_shape"
+  | "invalid_output_claims"
+  | "invalid_evidence"
+  | "invalid_question"
+  | "missing_run_outputs"
+  | "invalid_output_state";
+
+export class DomainCompletionValidationError extends Error {
+  constructor(
+    readonly code: DomainCompletionValidationCode,
+    message: string,
+    readonly repairable: boolean
+  ) {
+    super(message);
+    this.name = "DomainCompletionValidationError";
+  }
+}
+
+function completionValidationError(
+  code: DomainCompletionValidationCode,
+  message: string,
+  repairable = true
+): DomainCompletionValidationError {
+  return new DomainCompletionValidationError(code, message, repairable);
+}
+
 function completionObject(value: unknown): CompletionObject {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error("Domain completion must be a JSON object.");
+    throw completionValidationError("invalid_shape", "Domain completion must be a JSON object.");
   }
   return value as CompletionObject;
 }
 
 function boundedString(value: unknown, field: string, max: number): string {
   if (typeof value !== "string" || !value.trim() || value.length > max) {
-    throw new Error(`Domain completion ${field} must be a non-empty string of at most ${max} characters.`);
+    throw completionValidationError(
+      "invalid_shape",
+      `Domain completion ${field} must be a non-empty string of at most ${max} characters.`
+    );
   }
   return value.trim();
 }
@@ -198,14 +230,194 @@ interface OutputAssetRow {
   project_id: string;
   kind: string;
   role: string | null;
+  status: string;
 }
 
-async function validatedOutputs(input: {
+export interface DomainCompletionOutputInventoryItem {
+  assetId: string;
+  kind: string;
+  intrinsicRole: string;
+}
+
+function semanticOutputKind(
+  output: DomainCompletionOutputInventoryItem
+): DomainOutputKind | undefined {
+  if (output.kind === "composite" || output.kind === "render") return output.kind;
+  if (output.kind === "critique") {
+    return output.intrinsicRole === "audio_fit" ? "audio_fit" : undefined;
+  }
+  if (output.kind === "video") {
+    return ["beat_clip", "standalone_video", "upload", "primary_footage"].includes(
+      output.intrinsicRole
+    )
+      ? "clip"
+      : undefined;
+  }
+  if (output.kind === "audio") {
+    return ["audio_track", "soundtrack", "voiceover", "dialogue", "sound_effect"].includes(
+      output.intrinsicRole
+    )
+      ? "audio_track"
+      : undefined;
+  }
+  if (output.kind !== "image") return undefined;
+  if (["standalone_image", "image", "upload"].includes(output.intrinsicRole)) return "image";
+  if (output.intrinsicRole === "poster") return "poster";
+  if (["visual_anchor", "character_anchor", "scene_anchor"].includes(output.intrinsicRole)) {
+    return "anchor";
+  }
+  if (["storyboard", "beat_storyboard", "scene_storyboard"].includes(output.intrinsicRole)) {
+    return "storyboard";
+  }
+  if (["keyframe", "beat_keyframe"].includes(output.intrinsicRole)) return "keyframe";
+  return undefined;
+}
+
+function outputMatchesRequirement(
+  output: DomainCompletionOutputInventoryItem,
+  required: DomainTaskV1["requiredOutputs"][number]
+): boolean {
+  return semanticOutputKind(output) === required.kind;
+}
+
+export function assertDomainCompletionOutputInventoryAllowed(input: {
+  task: DomainTaskV1;
+  inventory: readonly DomainCompletionOutputInventoryItem[];
+}): void {
+  const allowedSemanticKinds = new Set<DomainOutputKind>(input.task.allowedOutputKinds);
+  if (input.inventory.some((output) => {
+    const semanticKind = semanticOutputKind(output);
+    return semanticKind === undefined || !allowedSemanticKinds.has(semanticKind);
+  })) {
+    throw completionValidationError(
+      "invalid_output_state",
+      "Domain completion output assets do not match the task's allowed semantic output kinds.",
+      false
+    );
+  }
+}
+
+export function assertDomainCompletionOutputCoverage(input: {
+  task: DomainTaskV1;
+  inventory: readonly DomainCompletionOutputInventoryItem[];
+}): void {
+  const slots = input.task.requiredOutputs.flatMap((required) =>
+    Array.from({ length: required.minimumCount }, () => required)
+  );
+  const candidatesBySlot = slots.map((required) =>
+    input.inventory.flatMap((output, index) =>
+      outputMatchesRequirement(output, required) ? [index] : []
+    )
+  );
+  const slotOrder = slots
+    .map((_, index) => index)
+    .sort((left, right) => candidatesBySlot[left].length - candidatesBySlot[right].length);
+  const assetAssignments = new Map<number, number>();
+
+  const assign = (slotIndex: number, visitedAssets: Set<number>): boolean => {
+    for (const assetIndex of candidatesBySlot[slotIndex]) {
+      if (visitedAssets.has(assetIndex)) continue;
+      visitedAssets.add(assetIndex);
+      const priorSlot = assetAssignments.get(assetIndex);
+      if (priorSlot === undefined || assign(priorSlot, visitedAssets)) {
+        assetAssignments.set(assetIndex, slotIndex);
+        return true;
+      }
+    }
+    return false;
+  };
+
+  if (slotOrder.some((slotIndex) => !assign(slotIndex, new Set()))) {
+    throw completionValidationError(
+      "invalid_output_state",
+      "Domain completion requires distinct role-compatible assets for every required output.",
+      false
+    );
+  }
+}
+
+export function validateDomainCompletionOutputInventory(input: {
+  projectId: string;
+  task: DomainTaskV1;
+  ids: readonly string[];
+  rows: readonly OutputAssetRow[];
+  requireComplete: boolean;
+}): DomainCompletionOutputInventoryItem[] {
+  if (
+    input.rows.length !== input.ids.length ||
+    input.rows.some((row) => row.project_id !== input.projectId)
+  ) {
+    throw completionValidationError(
+      "invalid_output_state",
+      "Domain completion referenced an output outside its project.",
+      false
+    );
+  }
+  if (input.rows.some((row) => row.status !== "ready")) {
+    throw completionValidationError(
+      "invalid_output_state",
+      "Domain completion referenced an output that is not ready.",
+      false
+    );
+  }
+  const allowedGraphKinds = new Set<string>(
+    input.task.allowedOutputKinds.map(domainOutputAssetKind)
+  );
+  if (input.rows.some((row) => !allowedGraphKinds.has(row.kind))) {
+    throw completionValidationError(
+      "invalid_output_state",
+      "Domain completion output assets do not match the task's allowed output kinds.",
+      false
+    );
+  }
+  const inventory = input.ids.map((id) => {
+    const row = input.rows.find((candidate) => candidate.id === id)!;
+    return {
+      assetId: row.id,
+      kind: row.kind,
+      intrinsicRole: row.role ?? row.kind,
+    };
+  });
+  assertDomainCompletionOutputInventoryAllowed({ task: input.task, inventory });
+  if (input.requireComplete) {
+    assertDomainCompletionOutputCoverage({ task: input.task, inventory });
+  }
+  return inventory;
+}
+
+export async function loadDomainCompletionOutputInventory(input: {
   projectId: string;
   task: DomainTaskV1;
   actions: readonly RunActionSummary[];
-  claimedOutputs?: unknown;
-}): Promise<Array<{
+  requireComplete?: boolean;
+}): Promise<DomainCompletionOutputInventoryItem[]> {
+  const ids = actionOutputIds(input.actions);
+  if (ids.length === 0) {
+    if (input.requireComplete === false) return [];
+    throw completionValidationError(
+      "missing_run_outputs",
+      "Domain done completion requires outputs created by this run.",
+      false
+    );
+  }
+  const rows = await runQuery(
+    "agentDefinition.validatedOutputs",
+    getServiceSupabase()
+      .from("assets")
+      .select("id, project_id, kind, role, status")
+      .eq("project_id", input.projectId)
+      .in("id", ids)
+  ) as OutputAssetRow[];
+  return validateDomainCompletionOutputInventory({
+    projectId: input.projectId,
+    task: input.task,
+    ids,
+    rows,
+    requireComplete: input.requireComplete !== false,
+  });
+}
+
+type ValidatedDomainCompletionOutput = {
   assetId: string;
   intrinsicRole: string;
   kind: string;
@@ -214,78 +426,95 @@ async function validatedOutputs(input: {
   target?: import("@popcorn/shared/domain-agent-contract").DomainTaskTarget;
   role?: string;
   ordinal?: number;
-}>> {
-  const ids = actionOutputIds(input.actions);
-  if (ids.length === 0) throw new Error("Domain done completion requires outputs created by this run.");
-  const rows = await runQuery(
-    "agentDefinition.validatedOutputs",
-    getServiceSupabase()
-      .from("assets")
-      .select("id, project_id, kind, role")
-      .eq("project_id", input.projectId)
-      .in("id", ids)
-  ) as OutputAssetRow[];
-  if (rows.length !== ids.length || rows.some((row) => row.project_id !== input.projectId)) {
-    throw new Error("Domain completion referenced an output outside its project.");
-  }
+};
+
+export function validateDomainCompletionBoundOutputClaims(input: {
+  task: DomainTaskV1;
+  inventory: readonly DomainCompletionOutputInventoryItem[];
+  claimedOutputs?: unknown;
+}): ValidatedDomainCompletionOutput[] | undefined {
   const bound = input.task.requiredOutputs.filter(
     (required): required is Extract<typeof required, { bindingId: string }> =>
       "bindingId" in required
   );
-  if (bound.length > 0) {
-    if (
-      bound.length !== input.task.requiredOutputs.length ||
-      !Array.isArray(input.claimedOutputs) ||
-      input.claimedOutputs.length !== bound.length
-    ) {
-      throw new Error("Bound domain completion must claim every required binding exactly once.");
-    }
-    const seen = new Set<string>();
-    const outputs = input.claimedOutputs.map((raw) => {
-      const claim = completionObject(raw);
-      const bindingId = boundedString(claim.bindingId, "outputs.bindingId", 128);
-      const assetId = boundedString(claim.assetId, "outputs.assetId", 128);
-      if (seen.has(bindingId)) throw new Error("Domain completion repeated an output binding.");
-      seen.add(bindingId);
-      const required = bound.find((candidate) => candidate.bindingId === bindingId);
-      if (!required) throw new Error("Domain completion claimed a binding outside its task.");
-      const row = rows.find((candidate) => candidate.id === assetId);
-      const expectedAssetKind = domainOutputAssetKind(required.kind);
-      if (!row || row.kind !== expectedAssetKind) {
-        throw new Error(`Domain completion output ${assetId} does not satisfy binding ${bindingId}.`);
-      }
-      return {
-        assetId,
-        intrinsicRole: row.role ?? required.role,
-        bindingId: required.bindingId,
-        workItemId: required.workItemId,
-        target: required.target,
-        kind: required.kind,
-        role: required.role,
-        ordinal: required.ordinal,
-      };
-    });
-    if (new Set(outputs.map((output) => output.assetId)).size !== ids.length ||
-        outputs.some((output) => !ids.includes(output.assetId))) {
-      throw new Error("Bound completion must claim exactly this run's output assets.");
-    }
-    return outputs;
+  if (bound.length === 0) return undefined;
+  if (
+    bound.length !== input.task.requiredOutputs.length ||
+    !Array.isArray(input.claimedOutputs) ||
+    input.claimedOutputs.length !== bound.length
+  ) {
+    throw completionValidationError(
+      bound.length !== input.task.requiredOutputs.length
+        ? "invalid_output_state"
+        : "invalid_output_claims",
+      "Bound domain completion must claim every required binding exactly once.",
+      bound.length === input.task.requiredOutputs.length
+    );
   }
-  const allowed = new Set<string>(input.task.allowedOutputKinds);
-  const outputs = ids.map((id) => {
-    const row = rows.find((candidate) => candidate.id === id);
-    if (!row || !allowed.has(row.kind)) {
-      throw new Error(`Domain completion output ${id} is not an allowed task output.`);
+  const seen = new Set<string>();
+  const outputs = input.claimedOutputs.map((raw) => {
+    const claim = completionObject(raw);
+    const bindingId = boundedString(claim.bindingId, "outputs.bindingId", 128);
+    const assetId = boundedString(claim.assetId, "outputs.assetId", 128);
+    if (seen.has(bindingId)) {
+      throw completionValidationError(
+        "invalid_output_claims",
+        "Domain completion repeated an output binding."
+      );
     }
-    const required = input.task.requiredOutputs.find((candidate) => candidate.kind === row.kind);
-    return { assetId: id, intrinsicRole: row.role ?? required?.role ?? row.kind, kind: row.kind };
+    seen.add(bindingId);
+    const required = bound.find((candidate) => candidate.bindingId === bindingId);
+    if (!required) {
+      throw completionValidationError(
+        "invalid_output_claims",
+        "Domain completion claimed a binding outside its task."
+      );
+    }
+    const row = input.inventory.find((candidate) => candidate.assetId === assetId);
+    const expectedAssetKind = domainOutputAssetKind(required.kind);
+    if (!row || row.kind !== expectedAssetKind || !outputMatchesRequirement(row, required)) {
+      throw completionValidationError(
+        "invalid_output_claims",
+        `Domain completion output ${assetId} does not satisfy binding ${bindingId}.`
+      );
+    }
+    return {
+      assetId,
+      intrinsicRole: row.intrinsicRole,
+      bindingId: required.bindingId,
+      workItemId: required.workItemId,
+      target: required.target,
+      kind: required.kind,
+      role: required.role,
+      ordinal: required.ordinal,
+    };
   });
-  for (const required of input.task.requiredOutputs) {
-    if (outputs.filter((output) => output.kind === required.kind).length < required.minimumCount) {
-      throw new Error(`Domain completion is missing required ${required.kind} outputs.`);
-    }
+  const inventoryIds = input.inventory.map((output) => output.assetId);
+  if (
+    new Set(outputs.map((output) => output.assetId)).size !== outputs.length ||
+    outputs.length !== inventoryIds.length ||
+    outputs.some((output) => !inventoryIds.includes(output.assetId))
+  ) {
+    throw completionValidationError(
+      "invalid_output_claims",
+      "Bound completion must claim exactly this run's output assets."
+    );
   }
   return outputs;
+}
+
+async function validatedOutputs(input: {
+  projectId: string;
+  task: DomainTaskV1;
+  actions: readonly RunActionSummary[];
+  claimedOutputs?: unknown;
+}): Promise<ValidatedDomainCompletionOutput[]> {
+  const inventory = await loadDomainCompletionOutputInventory(input);
+  return validateDomainCompletionBoundOutputClaims({
+    task: input.task,
+    inventory,
+    claimedOutputs: input.claimedOutputs,
+  }) ?? inventory;
 }
 
 function parseEvidence(input: {
@@ -294,22 +523,42 @@ function parseEvidence(input: {
   outputIds: ReadonlySet<string>;
 }) {
   if (!Array.isArray(input.value) || input.value.length !== input.task.acceptanceCriteria.length) {
-    throw new Error("Domain done completion must include one acceptance evidence item per criterion.");
+    throw completionValidationError(
+      "invalid_evidence",
+      "Domain done completion must include one acceptance evidence item per criterion."
+    );
   }
   const seen = new Set<string>();
   return input.value.map((raw) => {
     const item = completionObject(raw);
     const criterion = boundedString(item.criterion, "acceptanceEvidence.criterion", 500);
     if (!input.task.acceptanceCriteria.includes(criterion) || seen.has(criterion)) {
-      throw new Error("Domain completion evidence must use each trusted acceptance criterion exactly once.");
+      throw completionValidationError(
+        "invalid_evidence",
+        "Domain completion evidence must use each trusted acceptance criterion exactly once."
+      );
     }
     seen.add(criterion);
-    if (typeof item.satisfied !== "boolean") throw new Error("Domain completion evidence satisfied must be boolean.");
+    if (typeof item.satisfied !== "boolean") {
+      throw completionValidationError(
+        "invalid_evidence",
+        "Domain completion evidence satisfied must be boolean."
+      );
+    }
+    if (!item.satisfied) {
+      throw completionValidationError(
+        "invalid_evidence",
+        "Domain done completion requires every acceptance criterion to be satisfied."
+      );
+    }
     const assetIds = Array.isArray(item.assetIds)
       ? item.assetIds.map((id) => boundedString(id, "acceptanceEvidence.assetIds", 128))
       : [];
     if (assetIds.some((id) => !input.outputIds.has(id))) {
-      throw new Error("Domain completion evidence may reference only this run's validated outputs.");
+      throw completionValidationError(
+        "invalid_evidence",
+        "Domain completion evidence may reference only this run's validated outputs."
+      );
     }
     return {
       criterion,
@@ -327,6 +576,17 @@ function questionFingerprint(runId: string, question: string, options: unknown):
 }
 
 /** Strictly convert the domain model's terminal JSON into the immutable report. */
+function parseDomainCompletion(summary: string): unknown {
+  const trimmed = summary.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*\n([\s\S]*?)\n```$/i);
+  const payload = fenced?.[1]?.trim() ?? trimmed;
+  try {
+    return JSON.parse(payload);
+  } catch {
+    throw completionValidationError("invalid_json", "Domain completion must be valid JSON.");
+  }
+}
+
 export async function buildDomainReportFromCompletion(
   input: {
     runId: string;
@@ -339,12 +599,7 @@ export async function buildDomainReportFromCompletion(
     validatedOutputs?: typeof validatedOutputs;
   } = {}
 ): Promise<DomainReportV1> {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(input.summary);
-  } catch {
-    throw new Error("Domain completion must be valid JSON.");
-  }
+  const parsed = parseDomainCompletion(input.summary);
   const completion = completionObject(parsed);
   const outcome = completion.outcome;
   if (outcome === "done") {
@@ -382,16 +637,29 @@ export async function buildDomainReportFromCompletion(
       },
     };
   }
-  if (outcome !== "question") throw new Error("Domain completion outcome must be done or question.");
+  if (outcome !== "question") {
+    throw completionValidationError(
+      "invalid_shape",
+      "Domain completion outcome must be done or question."
+    );
+  }
   const optionsRaw = completion.options;
   if (!Array.isArray(optionsRaw) || optionsRaw.length < 2 || optionsRaw.length > 6) {
-    throw new Error("Domain question must contain between two and six options.");
+    throw completionValidationError(
+      "invalid_question",
+      "Domain question must contain between two and six options."
+    );
   }
   const ids = new Set<string>();
   const options = optionsRaw.map((raw) => {
     const option = completionObject(raw);
     const id = boundedString(option.id, "question.options.id", 80);
-    if (!/^[A-Za-z0-9_-]+$/.test(id) || ids.has(id)) throw new Error("Domain question option ids must be unique stable tokens.");
+    if (!/^[A-Za-z0-9_-]+$/.test(id) || ids.has(id)) {
+      throw completionValidationError(
+        "invalid_question",
+        "Domain question option ids must be unique stable tokens."
+      );
+    }
     ids.add(id);
     return {
       id,

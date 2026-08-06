@@ -7,8 +7,10 @@ import {
   parseAnalyzeBatch,
   parseCreateProject,
   parsePagination,
+  parseProjectListOrder,
   parseSetProjectVisibility,
 } from "@/lib/api/v1/schemas";
+import type { CreateProjectInput } from "@/lib/api/v1/schemas";
 import {
   analyzeAssetBatch,
   getAssetAnalysisJob,
@@ -19,6 +21,7 @@ import {
   deletePublicProjectAsAdmin,
   forkPublicProject,
   getProject,
+  getActiveProjectScriptDraft,
   getProjectWatchMedia,
   listProjects,
   recordProjectActivity,
@@ -27,10 +30,23 @@ import {
 } from "@/lib/api/v1/store";
 import { buildUserScopedSupabase } from "@/lib/supabase/clients";
 import { generatePoster } from "@/lib/api/v1/poster-generation";
-import { startPosterGenerationInBackground } from "@/lib/api/v1/poster-background";
 import { getStoryboard, putStoryboard } from "@/lib/api/v1/storyboard";
+import { requireApprovedScriptForProjectMedia } from "@/lib/api/v1/project-media-boundary";
 
 export const projectsRouter = Router();
+
+export function projectCreationParams(
+  workspaceId: string,
+  input: CreateProjectInput,
+): Parameters<typeof createProject>[0] {
+  return {
+    workspaceId,
+    name: input.name,
+    brief: input.brief,
+    namingPrompt: input.namingPrompt,
+    namingContext: input.namingContext,
+  };
+}
 
 const ADMIN_ROLES = new Set(["admin", "owner"]);
 
@@ -71,7 +87,13 @@ projectsRouter.get(
   "/projects",
   route(async ({ auth, req }) => {
     const { limit, cursor } = parsePagination(req.searchParams);
-    const { items, nextCursor } = await listProjects(auth.workspaceId, limit, cursor);
+    const order = parseProjectListOrder(req.searchParams);
+    const { items, nextCursor } = await listProjects(
+      auth.workspaceId,
+      limit,
+      cursor,
+      order
+    );
     return {
       status: 200,
       body: { projects: items, pagination: { limit, nextCursor } },
@@ -83,16 +105,9 @@ projectsRouter.post(
   "/projects",
   mutation(async ({ auth, body }) => {
     const input = parseCreateProject(body);
-    const { project, briefVersion } = await createProject({
-      workspaceId: auth.workspaceId,
-      name: input.name,
-      brief: input.brief,
-    });
-    if (briefVersion) {
-      startPosterGenerationInBackground(auth, project.id, {
-        provider: input.posterProvider,
-      });
-    }
+    const { project, briefVersion } = await createProject(
+      projectCreationParams(auth.workspaceId, input),
+    );
     return {
       status: 201,
       body: {
@@ -112,6 +127,18 @@ projectsRouter.get(
     await recordProjectActivity(auth.workspaceId, params.projectId);
     const project = await getProject(auth.workspaceId, params.projectId);
     return { status: 200, body: { project } };
+  })
+);
+
+projectsRouter.get(
+  "/projects/:projectId/script",
+  route(async ({ auth }, params) => {
+    if (!params.projectId) {
+      throw new ApiError("validation_failed", "projectId is required.");
+    }
+    await getProject(auth.workspaceId, params.projectId);
+    const script = await getActiveProjectScriptDraft(params.projectId);
+    return { status: 200, body: { script }, headers: { "Cache-Control": "no-store" } };
   })
 );
 
@@ -196,6 +223,7 @@ projectsRouter.post(
       body && typeof body === "object" && !Array.isArray(body)
         ? (body as Record<string, unknown>)
         : {};
+    await requireApprovedScriptForProjectMedia(auth.workspaceId, params.projectId);
     const result = await generatePoster(auth, params.projectId, {
       force: record.force === true,
       provider: typeof record.provider === "string" ? record.provider : undefined,

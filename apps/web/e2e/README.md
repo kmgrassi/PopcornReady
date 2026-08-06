@@ -8,22 +8,119 @@
 <!-- agent-summary: Superseded runs cancel, jobs have a 15-minute cap, and failure reports upload. -->
 <!-- agent-summary: Required checks need a successful no-op path before workflow filters are enabled. -->
 
-This suite covers split-app browser behavior with Playwright. The default mode
-is local auth:
+This suite covers split-app browser behavior with Playwright. The mounted route
+source of truth is `apps/web/src/routes/app-route-registry.ts`. It separates
+route-smoke IDs from feature-flow coverage and classifies access, fixture needs,
+required viewports, and allowed navigation writes. `App.tsx` renders that
+registry directly, while unit parity tests keep production and development-only
+paths distinct. The remote production runner remains PR 2 scope; this local
+suite does not claim deployed-browser evidence.
+
+The default mode is local auth:
 
 ```sh
 pnpm --filter @popcorn/web test:e2e
 ```
 
-`asset-studio.spec.ts` uses browser API fixtures to verify the production
-`/create` route, default Image selection, choice-card padding, proposal review,
-default-on prompt refinement, exact effective-prompt preview, creator bypass,
-explicit confirmation, queued status, desktop/mobile Create navigation, project
-picker keyboard behavior, existing/first/new-project selection, and project-list
-and creation failure recovery. It also verifies that an in-flight cost proposal
-cannot reappear after its project or refinement setting changes, a delayed
-project creation cannot override a newer selection, and pagination failures
-preserve loaded projects, without spending provider credits.
+`specs/auth-and-routing.spec.ts` verifies public authentication routes,
+protected-route compatibility redirects, the branded not-found recovery page,
+and protected local-mode direct loads through a deliberately delayed workspace
+bootstrap. The direct-load case waits for an authoritative populated result on
+Library and Activity, and proves neither route flashes a false empty state while
+`/me` is pending; it does not treat the shared 180ms anti-flash interval as a
+completed request.
+
+`creation-entry-points.spec.ts` also verifies the Script choice in the Create
+workspace: project-specific asset controls disappear, the story prompt stays out
+of the URL, and a validated handoff prefills the existing Creative Director brief
+without posting an asset proposal, creating a project, or starting a run. Desktop
+and mobile coverage preserves keyboard reachability and four-choice overflow.
+
+`asset-studio-projects.spec.ts`, `asset-studio-review.spec.ts`, and
+`asset-studio-progress.spec.ts` use browser API fixtures to verify the production
+`/create/asset` route, the 30/70 desktop context-to-prompt workspace, responsive
+mobile collapse, update-ordered recent-project loading/selection with real
+project media, expired-poster fallback and fresh-signed-URL recovery,
+default Image selection, accessible media-type targets, proposal review,
+default-on image and video prompt refinement, motion-specific progress, exact
+effective-prompt preview, creator bypass, draft-preserving video revision,
+immediate navigation to `/create/review`, manual **Approve this** confirmation,
+the visible 10-second automatic-confirmation boundary, at-most-once dispatch,
+Back/Forward proposal restoration without reposting, stale-proposal recovery,
+queued status, invalid review-state recovery, desktop/mobile Create and review
+layouts, project-picker keyboard behavior, existing/first/new-project selection,
+automatic AI-named project creation when review starts without a selection,
+same-tick duplicate-submit protection, draft-preserving automatic-create
+failure, stale-completion suppression after leaving Create, open-picker locking,
+and project-list, proposal, confirmation, and creation failure recovery. It also
+verifies that revising preserves the editable draft, failed confirmation remains
+manual-only on Forward, a delayed project creation cannot override a newer
+selection, and pagination failures preserve loaded projects, without spending
+provider credits. After confirmation, it also covers human-readable
+queued/running/terminal progress, four-role studio-crew artwork and its
+production-set backdrop from compact progress-only resources, the active desktop
+hierarchy (status, prominent full-width crew, supporting progress and brief),
+the shared development preview at `/dev/creation-progress`, semantic
+request-brief truncation, active-only indeterminate progress, reduced motion,
+mobile overflow, successful asset links, and truthful failed, canceled, blocked,
+and question outcomes.
+
+`creation-entry-points.spec.ts` verifies that the desktop and
+mobile shell, Dashboard, Activity, and both populated/empty Library actions use
+the `/create` intent launcher; its keyboard/pointer choices reach the distinct
+`/projects/new` full-video and `/create/asset` asset flows. It also covers Create
+navigation ownership, mobile overflow, legacy query links, and validated legacy
+draft-history restoration. A restored full-video Studio draft also proves the
+generating workspace consumes the Creative Director hierarchy instead of its
+legacy flat checklist.
+
+`specs/library-collections.spec.ts` verifies that an owned generated asset's
+detail viewer shows its exact attributed credit debit without spending provider
+credits. Public asset viewers do not request or receive owner billing metadata.
+It verifies that the project gallery and owned Library reuse the same scoped
+media URL across navigation and a same-tab reload, and that an unloadable image
+URL performs exactly one focused refresh to a working signed URL on desktop and
+both mobile browser projects.
+Project-media previews route to that same canonical viewer, including exact
+asset hydration when the linked asset is outside the first workspace page; the
+separate project-media selection control remains available for creation intent.
+The production-shaped deep-link fixture verifies `remoteUrl` video source
+normalization, and returning from preview restores the interrupted selection,
+preset, and intent draft.
+Owned ready assets expose a prominent exact-target **Request changes** entry
+into the durable proposal lifecycle. Mobile coverage verifies its full-width
+footer treatment and overflow containment; processing assets explain the
+disabled state, while public assets remain read-only without the action. The
+same suite covers advisory **Receive feedback** for an owned image, the
+authoritative active-script endpoint's snapshot and exact asset ID, and the
+selected final video. It verifies that the script preview includes narration
+and dialogue, that remote-only Library media does not advertise an unavailable
+critique action, and that project overview waits for that script
+response and fails closed with retryable error UI when it is unavailable. It
+also verifies the editable custom
+question and idempotency header, the default “How can we improve upon this?”
+question, structured answer rendering, sampled-video limitations, and mobile
+dialog overflow without conflating feedback with Request Changes. The
+same coverage protects the shared viewer's full desktop inspection height and
+keeps native audio controls contained and reachable in short landscape views.
+It also verifies the shared quick route-loading state on mobile, including its
+180ms anti-flash threshold, accessible busy semantics, content-shaped layout
+reservation, reduced motion, overflow containment, and transition into loaded
+project content. A Watch-route case covers the compact panel variant. The
+studio crew remains covered in `asset-studio-progress.spec.ts` for known queued/running
+creative production rather than ordinary data fetches.
+
+`project-mobile-status.spec.ts` verifies the responsive project overview keeps
+one compact mobile status card, routes its current storyboard image to the
+canonical asset viewer, and exposes separate desktop links for the project
+poster, storyboard image, and storyboard scene navigation.
+
+`project-upload-more.spec.ts` verifies a completed standalone media asset remains
+directly viewable from the project overview on desktop and mobile after its parent
+run fails. The fixture first lets polling discover the saved asset, then adds a
+newer active full-video run and a newer empty standalone attempt to prove current
+or unsuccessful activity does not hide the prior result. The link carries exact
+project and asset identity into the canonical Library viewer.
 
 `rerun-proposal-lifecycle.spec.ts` verifies the durable Request Changes UI
 without provider spend: exact-target proposal preview, preserved/affected work,
@@ -32,6 +129,41 @@ visible owning-surface refresh after restored completion, truthful cancellation,
 terminal cleanup, keyboard focus restoration, and mobile overflow. The run and
 storyboard suites also assert that their entry points open this lifecycle instead
 of posting the retired reject, board-revision, or stage-restart mutations.
+Run-progress and project-overview fixtures additionally cover successful
+creator-direct image work as one **Image asset** activity, with asset-ready copy
+and no inferred Brief, Script, or Storyboard pipeline stages. Progress output
+coverage also keeps advisory feedback off queued, running, and failed items even
+when their provider reservations already expose asset IDs.
+`run-progress.spec.ts` also covers the full-video Creative Director projection:
+Visuals/Audio lane copy and outputs, collapsed completed work, blocked and
+queued states, plus the mandatory authoritative Script review and its direct
+text-only rewrite request before media work. `creation-entry-points.spec.ts`
+covers idea-first and script-first full-video intake at mobile width.
+`storyboard-orchestration.spec.ts` covers returning to Project Detail at the
+Script gate: the existing run is linked for review, duplicate storyboard
+creation stays hidden, and the page does not mislabel review as generation.
+The hierarchy coverage also includes root-owned specialist questions, sanitized production details,
+responsive overflow, a response-driven polling transition, and the separate
+server-authorized operator diagnostics disclosure on hierarchy-backed runs. A
+terminal zero-session fixture prevents canceled production from reverting to
+planning copy and verifies that long run-detail breadcrumbs scroll internally,
+ellipsize linked labels, initially reveal the current location, and remain
+contained at 390px.
+Failed-run fixtures in `dashboard-indeterminate-progress.spec.ts` and
+`run-progress-actions.spec.ts` additionally keep creator recovery copy aligned
+with the object-scoped Request Changes flow and prevent the retired
+failed-stage retry promise from returning. The separate insufficient-credit
+continuation remains implemented because it owns a real recovery mutation;
+unit coverage gives that direct continuation priority over generic Request
+Changes guidance.
+
+`landing-mobile.spec.ts` keeps the mobile landing inside the viewport with a
+tappable primary CTA. `landing-agent-content.spec.ts` protects the landing
+page's agent-architecture content contract on desktop and both mobile browser
+projects: the creative-director-with-specialists section, the workflow copy in
+which the director delegates to visuals and audio specialists with current
+providers (Gemini Veo, ElevenLabs), the agent-crew FAQ, mobile overflow
+containment, and the absence of retired provider copy such as Sora.
 
 The command starts the Express API and Vite app, using:
 
@@ -85,6 +217,15 @@ pnpm --filter @popcorn/web test:e2e:pwa
 
 That command validates the web app manifest, confirms the share-target service
 worker registers, and simulates the OS share-target POST with a fixture file.
+
+The release-identity route boundary has a focused local production-build check:
+
+```sh
+pnpm --filter @popcorn/web test:e2e:production-build
+```
+
+It verifies the build emits a typed `/release.json` and that `/dev/*` resolves
+through the production catch-all without importing a development harness.
 
 ## GitHub Actions runner policy
 

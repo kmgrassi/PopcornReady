@@ -19,6 +19,7 @@ import {
   type OrchestratorRunGate,
   type RunActionSummary,
 } from "@/lib/api/v1/orchestrator-store";
+import { orchestratorRunPresentationKind } from "@/lib/api/v1/orchestrator-presentation-kind";
 import {
   getToolCapability,
   isToolName,
@@ -28,6 +29,12 @@ import type { CreatorRunHierarchy } from "./session-run-projection.js";
 
 const BOARD_FEEDBACK_TOOL = "board_feedback";
 const AFTER_GATE_PREFIX = "after:";
+const CREATOR_HIDDEN_ACTION_TOOLS = new Set([
+  BOARD_FEEDBACK_TOOL,
+  "creator_direct_proposal",
+  "domain_report",
+  "store_asset_bytes",
+]);
 
 export interface GenerationRunDetail {
   run: GenerationRun;
@@ -70,21 +77,39 @@ export interface RunAssetPrompt {
 }
 
 function generationActions(actions: RunActionSummary[]): RunActionSummary[] {
-  return actions.filter((action) => action.tool !== BOARD_FEEDBACK_TOOL);
+  return actions.filter(
+    (action) =>
+      !CREATOR_HIDDEN_ACTION_TOOLS.has(action.tool) &&
+      (isToolName(action.tool) || action.tool === "generate_poster")
+  );
 }
 
-export function toolStage(tool: string): GenerationStageType {
+function operatorDiagnosticActions(actions: RunActionSummary[]): RunActionSummary[] {
+  return actions.filter((action) => !CREATOR_HIDDEN_ACTION_TOOLS.has(action.tool));
+}
+
+export function toolStage(tool: string): GenerationStageType | undefined {
   const normalizedTool = tool.startsWith(AFTER_GATE_PREFIX)
     ? tool.slice(AFTER_GATE_PREFIX.length)
     : tool;
   switch (normalizedTool) {
     case "create_or_load_brief":
       return "brief_intake";
+    case "develop_story_blueprint":
+    case "plan_shots":
+    case "plan_visual_anchors":
+      return "creative_plan";
+    case "draft_script":
+      return "script";
     case "generate_storyboard":
       return "storyboard";
+    case "generate_poster":
     case "generate_anchor":
     case "generate_keyframe":
     case "generate_clip":
+    case "generate_image_asset":
+    case "generate_video_asset":
+    case "regenerate_image_asset":
     case "edit_video_asset":
       return "asset_generation";
     case "generate_audio":
@@ -99,7 +124,7 @@ export function toolStage(tool: string): GenerationStageType {
     case "publish_to_catalog":
       return "export";
     default:
-      return "creative_plan";
+      return undefined;
   }
 }
 
@@ -114,6 +139,7 @@ function toolItemKind(tool: string): GenerationStageItemKind {
     case "publish_to_catalog":
       return "caption";
     case "generate_clip":
+    case "generate_video_asset":
     case "edit_video_asset":
       return "video";
     case "generate_audio":
@@ -128,7 +154,10 @@ function toolItemKind(tool: string): GenerationStageItemKind {
   }
 }
 
-function toolItemPurpose(tool: string): GenerationStageItemPurpose {
+function toolItemPurpose(
+  tool: string,
+  standalonePresentation?: GenerationRun["presentationKind"]
+): GenerationStageItemPurpose {
   switch (tool) {
     case "create_or_load_brief":
       return "brief";
@@ -139,13 +168,20 @@ function toolItemPurpose(tool: string): GenerationStageItemPurpose {
       return "plan";
     case "generate_storyboard":
       return "storyboard_frame";
+    case "generate_poster":
+      return "asset";
     case "generate_anchor":
       return "visual_anchor";
     case "generate_keyframe":
       return "keyframe";
     case "generate_clip":
-    case "edit_video_asset":
       return "shot";
+    case "generate_image_asset":
+    case "generate_video_asset":
+    case "regenerate_image_asset":
+      return "asset";
+    case "edit_video_asset":
+      return standalonePresentation ? "asset" : "shot";
     case "generate_audio":
     case "fit_audio_to_picture":
       return "audio";
@@ -199,6 +235,16 @@ function hasReachedStoryboardAfterGate(gates: OrchestratorRunGate[]): boolean {
   });
 }
 
+function storyboardBoundaryStatus(
+  gates: OrchestratorRunGate[]
+): GenerationRun["storyboardBoundaryStatus"] {
+  const gate = gates.find((candidate) => candidate.stage === "after:generate_storyboard");
+  if (!gate) return undefined;
+  return gate.status === "pending" || gate.status === "reached"
+    ? gate.status
+    : "resolved";
+}
+
 function completionKind(
   run: OrchestratorRun,
   gates: OrchestratorRunGate[],
@@ -206,9 +252,32 @@ function completionKind(
   assets: ReadonlyMap<string, RunAssetPrompt>
 ): GenerationRun["completionKind"] {
   if (run.status !== "succeeded") return undefined;
+  if (hasReadyStandaloneAsset(run, actions, assets)) return "standalone_asset";
   if (hasFinishedVideo(actions, assets)) return "video";
   if (hasReachedStoryboardAfterGate(gates)) return "storyboard_assets";
   return undefined;
+}
+
+function hasReadyStandaloneAsset(
+  run: OrchestratorRun,
+  actions: RunActionSummary[],
+  assets: ReadonlyMap<string, RunAssetPrompt>
+): boolean {
+  const kind = orchestratorRunPresentationKind(run);
+  if (!kind) return false;
+  const expectedKind = kind === "standalone_image"
+    ? "image"
+    : kind === "standalone_video"
+      ? "video"
+      : "audio";
+  return generationActions(actions).some(
+    (action) =>
+      action.status === "applied" &&
+      action.outputAssetIds.some((assetId) => {
+        const asset = assets.get(assetId);
+        return asset?.status === "ready" && asset.kind === expectedKind;
+      })
+  );
 }
 
 function projectedRunStatus(
@@ -218,6 +287,9 @@ function projectedRunStatus(
   assets: ReadonlyMap<string, RunAssetPrompt>
 ): GenerationRunStatus {
   if (run.status !== "succeeded") return runStatus(run.status);
+  if (orchestratorRunPresentationKind(run)) {
+    return hasReadyStandaloneAsset(run, actions, assets) ? "succeeded" : "failed";
+  }
   if (hasFinishedVideo(actions, assets)) return "succeeded";
   return hasReachedAfterGate(gates) ? "succeeded" : "failed";
 }
@@ -227,6 +299,21 @@ function actionStatus(status: string): GenerationRunStatus {
   if (status === "failed") return "failed";
   if (status === "running") return "running";
   return "queued";
+}
+
+function terminalJobStatusForAction(
+  action: RunActionSummary | undefined,
+  jobs: ReadonlyMap<string, Job>
+): GenerationRunStatus | undefined {
+  if (action?.status !== "running") return undefined;
+  const attachedJobs = [...new Set(action.jobIds)]
+    .map((jobId) => jobs.get(jobId))
+    .filter((job): job is Job => Boolean(job));
+  return attachedJobs.find((job) => job.status === "failed")?.status ??
+    attachedJobs.find((job) => job.status === "canceled")?.status ??
+    (attachedJobs.length > 0 && attachedJobs.every((job) => job.status === "succeeded")
+      ? "succeeded"
+      : undefined);
 }
 
 function runMessage(
@@ -243,6 +330,7 @@ function runMessage(
     case "waiting":
       return "Generation is waiting for a job or approval gate.";
     case "succeeded":
+      if (hasReadyStandaloneAsset(run, actions, assets)) return "Asset is ready.";
       if (hasFinishedVideo(actions, assets)) return "Video export is ready.";
       return hasReachedStoryboardAfterGate(gates)
         ? "Storyboard assets are ready."
@@ -277,14 +365,16 @@ export function toolOrder(tool: string): number {
   const catalogOrder = isToolName(tool)
     ? getToolCapability(tool).runProjection.order
     : null;
-  return catalogOrder ?? 100 + GENERATION_STAGE_ORDER[toolStage(tool)];
+  const stage = toolStage(tool);
+  return catalogOrder ?? (stage ? 100 + GENERATION_STAGE_ORDER[stage] : Number.MAX_SAFE_INTEGER);
 }
 
 export function toolLabel(tool: string): string {
   const catalogLabel = isToolName(tool)
     ? getToolCapability(tool).runProjection.label
     : null;
-  return catalogLabel ?? GENERATION_STAGE_LABELS[toolStage(tool)];
+  const stage = toolStage(tool);
+  return catalogLabel ?? (stage ? GENERATION_STAGE_LABELS[stage] : tool);
 }
 
 function toErrorSummary(error: Record<string, unknown> | undefined) {
@@ -394,23 +484,28 @@ export function projectRun(
 ): GenerationRun {
   const reviewGates = gates.filter((gate) => !gate.stage.startsWith(AFTER_GATE_PREFIX));
   const status = projectedRunStatus(run, actions, gates, assets);
-  // A post-tool gate is the storyboard-review stop: the storyboard work is
-  // complete, but production must not start until the creator continues it.
+  // A post-tool gate is a creator-review stop: its work is complete, but the
+  // next phase must not start until the creator continues it.
   // Project it just like a conventional review gate so every surface has one
   // clear, actionable state rather than a misleading terminal success.
-  const reachedGate = gates.find((gate) => gate.status === "reached");
-  const reviewGate = reachedGate
+  const reachedGate = gates.find(
+    (gate) => gate.status === "reached" && Boolean(toolStage(gate.stage))
+  );
+  const reachedGateStage = reachedGate ? toolStage(reachedGate.stage) : undefined;
+  const reviewGate = reachedGate && reachedGateStage
     ? {
-        stageType: toolStage(reachedGate.stage) as GateableGenerationStageType,
+        stageType: reachedGateStage as GateableGenerationStageType,
         stageId: reviewStageId(run.id, reachedGate.stage),
         state: "awaiting_review" as const,
         enteredAt: reachedGate.updatedAt,
       }
     : null;
   const projectedActions = generationActions(actions);
-  const latestRunningAction = [...projectedActions]
-    .reverse()
-    .find((action) => action.status === "running");
+  const latestRunningAction = status === "running"
+    ? [...projectedActions]
+        .reverse()
+        .find((action) => action.status === "running")
+    : undefined;
   const latestAction = [...projectedActions].reverse()[0];
   const latestByTool = new Map<string, RunActionSummary>();
   for (const action of projectedActions) latestByTool.set(action.tool, action);
@@ -432,13 +527,14 @@ export function projectRun(
       // a delegated specialist assignment, not a provider job.
       : run.status === "waiting" && run.waitReason === "domain"
         ? "waiting_on_domain" as const
-        : run.status === "waiting" && latestAction?.jobIds.length
+        : run.status === "waiting" &&
+            (run.waitReason === "media_job" || latestAction?.jobIds.length)
           ? "waiting_on_job" as const
           : "working" as const;
   const currentStageType =
     reviewGate?.stageType ??
     (status === "succeeded"
-      ? "ready"
+      ? (reviewGate ? reviewGate.stageType : "ready")
       : latestRunningAction
         ? toolStage(latestRunningAction.tool)
         : latestAction
@@ -453,9 +549,14 @@ export function projectRun(
     projectId: run.projectId,
     status,
     completionKind: completionKind(run, gates, actions, assets),
+    presentationKind: orchestratorRunPresentationKind(run),
+    storyboardBoundaryStatus: storyboardBoundaryStatus(gates),
     activityState,
     currentToolName: latestRunningAction?.tool,
-    reviewGates: reviewGates.map((gate) => toolStage(gate.stage) as GateableGenerationStageType),
+    reviewGates: reviewGates.flatMap((gate) => {
+      const stage = toolStage(gate.stage);
+      return stage ? [stage as GateableGenerationStageType] : [];
+    }),
     reviewGate,
     currentStageType,
     progressPercent: status === "succeeded" ? 100 : run.status === "queued" ? 0 : undefined,
@@ -470,8 +571,12 @@ export function projectRun(
     error:
       status === "failed" && run.status === "succeeded"
         ? {
-            code: "missing_video_output",
-            message: "Run ended; no playable video was created.",
+            code: orchestratorRunPresentationKind(run)
+              ? "missing_asset_output"
+              : "missing_video_output",
+            message: orchestratorRunPresentationKind(run)
+              ? "Run ended; no ready standalone asset was created."
+              : "Run ended; no playable video was created.",
             retryable: true,
           }
         : toErrorSummary(run.error),
@@ -506,8 +611,9 @@ function projectStages(
   }
 
   return [...grouped.entries()]
-    .map(([tool, stageActions]) => {
+    .flatMap(([tool, stageActions]) => {
       const type = toolStage(tool);
+      if (!type) return [];
       const latest = stageActions.at(-1);
       const latestByTool = new Map<string, RunActionSummary>();
       for (const action of stageActions) {
@@ -519,17 +625,25 @@ function projectStages(
           (action) =>
             action.status === "failed" && latestByTool.get(action.tool)?.id === action.id
         );
-      const status = latestFailed
+      const actionDerivedStatus = latestFailed
         ? "failed"
         : latest
           ? actionStatus(latest.status)
           : "queued";
-      const statusAction = latestFailed ?? latest;
       const jobActivities = [...new Set(stageActions.flatMap((action) => action.jobIds))]
         .map((jobId) => options.jobs?.get(jobId))
         .filter((job): job is Job => Boolean(job))
         .map((job) => projectGenerationJobActivity(job, options));
-      return {
+      const terminalJobStatus = terminalJobStatusForAction(
+        latest,
+        options.jobs ?? new Map()
+      );
+      const parentStatus = runStatus(run.status);
+      const status = actionDerivedStatus === "running" && parentStatus !== "running"
+        ? terminalJobStatus ?? parentStatus
+        : terminalJobStatus ?? actionDerivedStatus;
+      const statusAction = latestFailed ?? latest;
+      return [{
         stageId: toolStageId(run.id, tool),
         runId: run.id,
         type,
@@ -553,7 +667,7 @@ function projectStages(
         updatedAt: latest?.updatedAt ?? latest?.createdAt ?? run.updatedAt,
         ...(jobActivities.length > 0 ? { jobActivities } : {}),
         error: latestFailed ? toErrorSummary(latestFailed.error) : undefined,
-      };
+      }];
     })
     .sort((a, b) => a.order - b.order);
 }
@@ -574,21 +688,27 @@ function actionPrompt(action: RunActionSummary): string | undefined {
 function projectStageItems(
   run: OrchestratorRun,
   actions: RunActionSummary[],
-  assetPrompts: ReadonlyMap<string, RunAssetPrompt>
+  assetPrompts: ReadonlyMap<string, RunAssetPrompt>,
+  jobs: ReadonlyMap<string, Job>
 ): GenerationStageItem[] {
   return generationActions(actions).flatMap((action) => {
-    const type = toolStage(action.tool);
     const actionLevelPrompt = actionPrompt(action);
     return action.outputAssetIds.map((assetId, index) => {
       const assetPrompt = assetPrompts.get(assetId);
       const prompt = actionLevelPrompt ?? assetPrompt?.prompt ?? assetPrompt?.description;
+      const parentStatus = runStatus(run.status);
+      const terminalJobStatus = terminalJobStatusForAction(action, jobs);
+      const projectedStatus = actionStatus(action.status);
+      const status = projectedStatus === "running" && parentStatus !== "running"
+        ? terminalJobStatus ?? parentStatus
+        : terminalJobStatus ?? projectedStatus;
       return {
         itemId: `${action.id}:${assetId}`,
         stageId: toolStageId(run.id, action.tool),
         kind: toolItemKind(action.tool),
-        purpose: toolItemPurpose(action.tool),
+        purpose: toolItemPurpose(action.tool, orchestratorRunPresentationKind(run)),
         label: `${action.tool} output ${index + 1}`,
-        status: actionStatus(action.status),
+        status,
         ...(prompt ? { prompt, promptPreview: promptPreview(prompt) } : {}),
         assetId,
         artifactId: assetId,
@@ -608,7 +728,7 @@ export function projectRunDetailFromParts(
 ): GenerationRunDetail {
   const jobs = options.jobs ?? new Map();
   const operatorDiagnostics = options.includeOperatorDiagnostics
-    ? generationActions(actions).flatMap((action) =>
+    ? operatorDiagnosticActions(actions).flatMap((action) =>
         action.jobIds.flatMap((jobId) => {
           const job = jobs.get(jobId);
           return job ? [projectJobDiagnostics(run.id, action, job, options)] : [];
@@ -618,7 +738,7 @@ export function projectRunDetailFromParts(
   return {
     run: projectRun(run, gates, actions, assetPrompts, jobs),
     stages: projectStages(run, actions, { ...options, jobs }),
-    stageItems: projectStageItems(run, actions, assetPrompts),
+    stageItems: projectStageItems(run, actions, assetPrompts, jobs),
     resultArtifacts: projectResultArtifacts(run, actions),
     ...(operatorDiagnostics && operatorDiagnostics.length > 0
       ? { operatorDiagnostics }

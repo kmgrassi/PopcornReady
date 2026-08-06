@@ -7,7 +7,6 @@ import type {
   StudioDraftBrief,
   StudioDraftFootageChoice,
   StudioDraftFootageMode,
-  StudioDraftSeedKind,
   StudioDraftPayload,
   StudioDraftStep,
   UpdateStudioDraftRequest,
@@ -17,8 +16,6 @@ import { validationError } from "./errors";
 import { parsePagination } from "./schema-pagination";
 import {
   isPlainObject,
-  optionalBoolean,
-  optionalEnumArray,
   optionalInteger,
   optionalString,
   optionalStringArray,
@@ -94,17 +91,7 @@ const STUDIO_DRAFT_STEPS: StudioDraftStep[] = [
 ];
 const STUDIO_DRAFT_FOOTAGE_CHOICES: StudioDraftFootageChoice[] = ["prompt_only", "upload"];
 const STUDIO_DRAFT_FOOTAGE_MODES: StudioDraftFootageMode[] = ["asset_driven", "hybrid"];
-const STUDIO_DRAFT_SEED_KINDS: StudioDraftSeedKind[] = ["image", "video"];
-const STUDIO_DRAFT_REVIEW_GATES = [
-  "brief_intake",
-  "creative_plan",
-  "storyboard",
-  "asset_generation",
-  "audio_generation",
-  "timeline_assembly",
-  "quality_review",
-  "export",
-] as const;
+const STUDIO_DRAFT_START_SOURCES = ["idea", "script"] as const;
 
 export interface NarrationInput {
   mode: NarrationMode;
@@ -306,6 +293,29 @@ export interface CreateProjectInput {
   name?: string;
   brief?: VideoBrief;
   posterProvider?: string;
+  namingPrompt?: string;
+  namingContext?: "image" | "video" | "soundtrack";
+}
+
+const PROJECT_NAMING_CONTEXTS: NonNullable<CreateProjectInput["namingContext"]>[] = [
+  "image",
+  "video",
+  "soundtrack",
+];
+const MAX_PROJECT_NAMING_PROMPT_LENGTH = 500;
+
+export type ProjectListOrder = "createdAt" | "updatedAt";
+
+export function parseProjectListOrder(
+  searchParams: URLSearchParams
+): ProjectListOrder {
+  const order = searchParams.get("order") ?? "createdAt";
+  if (order !== "createdAt" && order !== "updatedAt") {
+    throw validationError("The request query is invalid.", [
+      { path: "order", message: "Must be createdAt or updatedAt." },
+    ]);
+  }
+  return order;
 }
 
 export function parseCreateProject(input: unknown): CreateProjectInput {
@@ -317,6 +327,19 @@ export function parseCreateProject(input: unknown): CreateProjectInput {
   const fields: FieldError[] = [];
   const name = optionalString(input.name, "name", fields);
   const posterProvider = optionalString(input.posterProvider, "posterProvider", fields);
+  const namingPrompt = optionalString(input.namingPrompt, "namingPrompt", fields);
+  const namingContext = parseEnum(
+    input.namingContext,
+    PROJECT_NAMING_CONTEXTS,
+    "namingContext",
+    fields,
+  );
+  if (namingPrompt && namingPrompt.length > MAX_PROJECT_NAMING_PROMPT_LENGTH) {
+    fields.push({
+      path: "namingPrompt",
+      message: `Must be ${MAX_PROJECT_NAMING_PROMPT_LENGTH} characters or fewer.`,
+    });
+  }
   throwIfInvalid(fields);
 
   const brief =
@@ -328,6 +351,8 @@ export function parseCreateProject(input: unknown): CreateProjectInput {
     ...(name ? { name } : {}),
     ...(brief ? { brief } : {}),
     ...(posterProvider ? { posterProvider } : {}),
+    ...(namingPrompt ? { namingPrompt } : {}),
+    ...(namingContext ? { namingContext } : {}),
   };
 }
 
@@ -373,6 +398,13 @@ function parseStudioDraftBrief(input: Record<string, unknown>, path: string): St
   );
 
   const draft: StudioDraftBrief = {};
+  const startSource = parseEnum(
+    input.startSource,
+    [...STUDIO_DRAFT_START_SOURCES],
+    `${path}.startSource`,
+    fields
+  );
+  const scriptText = optionalString(input.scriptText, `${path}.scriptText`, fields);
   const goal = optionalString(input.goal, `${path}.goal`, fields);
   const aspectRatio = parseEnum(input.aspectRatio, ASPECT_RATIOS, `${path}.aspectRatio`, fields);
   const projectName = optionalString(input.projectName, `${path}.projectName`, fields);
@@ -399,23 +431,11 @@ function parseStudioDraftBrief(input: Record<string, unknown>, path: string): St
   const style = optionalString(input.style, `${path}.style`, fields);
   const callToAction = optionalString(input.callToAction, `${path}.callToAction`, fields);
   const provider = optionalString(input.provider, `${path}.provider`, fields);
-  const seedKind = parseEnum(
-    input.seedKind,
-    STUDIO_DRAFT_SEED_KINDS,
-    `${path}.seedKind`,
-    fields
-  );
-  const seedSize = optionalString(input.seedSize, `${path}.seedSize`, fields);
-  const showCaptions = optionalBoolean(input.showCaptions, `${path}.showCaptions`, fields);
-  const reviewGates = optionalEnumArray(
-    input.reviewGates,
-    [...STUDIO_DRAFT_REVIEW_GATES],
-    `${path}.reviewGates`,
-    fields
-  );
 
   throwIfInvalid(fields);
 
+  if (startSource !== undefined) draft.startSource = startSource;
+  if (scriptText !== undefined) draft.scriptText = scriptText;
   if (goal !== undefined) draft.goal = goal;
   if (input.targetLengthSec !== undefined && input.targetLengthSec !== null) {
     draft.targetLengthSec = targetLengthSec;
@@ -435,10 +455,6 @@ function parseStudioDraftBrief(input: Record<string, unknown>, path: string): St
   if (style !== undefined) draft.style = style;
   if (callToAction !== undefined) draft.callToAction = callToAction;
   if (provider !== undefined) draft.provider = provider;
-  if (seedKind !== undefined) draft.seedKind = seedKind;
-  if (seedSize !== undefined) draft.seedSize = seedSize;
-  if (showCaptions !== undefined) draft.showCaptions = showCaptions;
-  if (reviewGates !== undefined) draft.reviewGates = reviewGates;
 
   return draft;
 }

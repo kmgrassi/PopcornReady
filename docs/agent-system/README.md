@@ -23,5 +23,6 @@
 
 - [Production Browser Testing for Agents](../scopes/production-browser-agent-testing.md)
   scopes deployed release identity, remote browser smoke, isolated production
-  mutations, cleanup, provider budgets, and agent-run evidence. It is a proposal,
-  not live production-testing authority.
+  mutations, cleanup, provider budgets, and agent-run evidence. PR 1 implements
+  release identity and living route truth; the proposal still grants no login,
+  mutation, or provider authority until its later prerequisites land.

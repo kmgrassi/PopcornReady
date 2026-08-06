@@ -7,30 +7,48 @@ import {
   type GenerationRun,
   type GenerationJobDiagnostics,
   type GenerationStage,
-  type GenerationStageType,
   type GenerationStageItem,
   type BoardRevisionTarget,
   type ProjectStoryboard,
-  type V1Project,
-  type VideoBriefInput,
 } from "@popcorn/shared/v1/types";
 import { StageItemCard } from "../generation-progress/StageItemCard";
 import { AiAssetFeedbackDialog } from "../ai-edit/AiAssetFeedbackDialog";
+import { AssetCritiqueButton } from "../ai-edit/AssetCritiqueButton";
 import {
   GenerationRunClient,
   GenerationRunRequestError,
 } from "../../lib/v1/generation-runs/client";
-import { useProjectQuery } from "../../lib/queryClient";
+import type { CreatorRunHierarchy } from "../../lib/v1/generation-runs/status";
+import { useProjectQuery, useProjectScriptQuery } from "../../lib/queryClient";
 import { v1Api } from "../../lib/api-client";
 import { reviewProposalTarget as resolveReviewProposalTarget } from "../../lib/reviewProposalTarget";
-import { PIPELINE_GROUPS, StageRail } from "./StageRail";
 import {
   StoryboardBoard as FeedbackStoryboardBoard,
   storyboardFeedbackTargetKey,
 } from "./StoryboardBoard";
 import { TerminalState } from "./TerminalState";
 import { ReviewGatePanel } from "./ReviewGatePanel";
-import { formatElapsed, useElapsedTime } from "./useElapsedTime";
+import { PlanRecap } from "./PlanRecap";
+import { OperatorDiagnostics, PipelineDepth, usePipelineElapsed } from "./PipelineDepth";
+import { CreatorRunHierarchyPanel } from "./CreatorRunHierarchyPanel";
+import {
+  hierarchyCurrentLabel,
+  hierarchyProgressLabel,
+} from "./creator-run-hierarchy";
+import {
+  currentRunStage,
+  headerStatus,
+  isTerminal,
+  isVisibleGeneratedItem,
+  lastCompletedPipelineStage,
+  nextStageType,
+  progressSummary,
+  reviewStageLabel,
+  splitStoryboardItems,
+  standaloneAssetLabel,
+  workspaceReturnLabel,
+} from "./progress-view-helpers";
+import { canReceiveStageItemFeedback } from "./asset-feedback-eligibility";
 import styles from "./ProgressView.module.css";
 
 interface ProgressViewProps {
@@ -43,7 +61,8 @@ interface ProgressViewProps {
     error?: string | null;
     feedbackNote?: string;
     onFeedbackNoteChange?: (note: string) => void;
-    onApprove: (note: string) => void;
+    onApprove: (note: string, scriptDraftId?: string) => void;
+    onRequestChanges?: (note: string, scriptDraftId: string) => void;
     onCancel: () => void;
   };
   cancelAction?: {
@@ -62,178 +81,7 @@ interface ProgressViewProps {
   alternateRuns?: { runId: string; label: string }[];
   /** Present only for operators; the API also omits this projection for creators. */
   operatorDiagnostics?: GenerationJobDiagnostics[];
-}
-
-function isTerminal(status: GenerationRun["status"]): boolean {
-  return status === "succeeded" || status === "failed" || status === "canceled";
-}
-
-const REVIEW_STAGE_LABELS: Record<GenerationStageType, string> = {
-  brief_intake: "Concept",
-  creative_plan: "Brief",
-  storyboard: "Storyboard",
-  asset_generation: "Assets",
-  audio_generation: "Audio",
-  timeline_assembly: "Timeline",
-  quality_review: "Quality review",
-  export: "Final render",
-  ready: "Ready",
-};
-
-function shortId(id: string): string {
-  if (id.length <= 18) return id;
-  return `${id.slice(0, 8)}...${id.slice(-6)}`;
-}
-
-function reviewStageLabel(stageType: GenerationStageType): string {
-  return REVIEW_STAGE_LABELS[stageType] ?? GENERATION_STAGE_LABELS[stageType];
-}
-
-function progressSummary(run: GenerationRun, stages: GenerationStage[]) {
-  const completed = stages.filter((stage) => stage.status === "succeeded").length;
-  return {
-    completed,
-    percent:
-      run.progressPercent == null
-        ? undefined
-        : Math.max(0, Math.min(100, Math.round(run.progressPercent))),
-  };
-}
-
-function currentRunStage(
-  run: GenerationRun,
-  stages: GenerationStage[],
-): GenerationStage | undefined {
-  return (
-    stages.find((stage) => run.reviewGate?.stageId === stage.stageId) ??
-    stages.find(
-      (stage) => stage.toolName === run.currentToolName && stage.status === "running",
-    ) ??
-    [...stages]
-      .filter((stage) => stage.status === "running")
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ??
-    (run.status === "failed"
-      ? stages.find((stage) => stage.status === "failed")
-      : undefined)
-  );
-}
-
-function nextQueuedStage(
-  run: GenerationRun,
-  stages: GenerationStage[],
-): GenerationStage | undefined {
-  const ordered = [...stages].sort((a, b) => a.order - b.order);
-  const active = currentRunStage(run, ordered);
-  const minOrder = active?.order ?? -1;
-  return ordered.find(
-    (stage) =>
-      stage.order > minOrder &&
-      (stage.status === "queued" || stage.status === "running"),
-  );
-}
-
-function nextStageType(run: GenerationRun, stages: GenerationStage[]): GenerationStageType | undefined {
-  if (isTerminal(run.status)) return undefined;
-
-  const queued = nextQueuedStage(run, stages);
-  if (queued) return queued.type;
-
-  return undefined;
-}
-
-function lastCompletedPipelineStage(stages: GenerationStage[]): string | null {
-  const stagesByTool = new Map(
-    stages
-      .filter((stage) => stage.toolName)
-      .map((stage) => [stage.toolName as string, stage]),
-  );
-
-  const completedGroup = [...PIPELINE_GROUPS]
-    .reverse()
-    .find((group) => {
-      const hasAnyToolStage = group.tools.some((toolName) =>
-        stagesByTool.has(toolName),
-      );
-
-      if (hasAnyToolStage) {
-        return group.tools.every(
-          (toolName) => stagesByTool.get(toolName)?.status === "succeeded",
-        );
-      }
-
-      const fallbackStages = stages.filter((stage) =>
-        (group.fallbackTypes ?? [group.type]).includes(stage.type),
-      );
-      return fallbackStages.some((stage) => stage.status === "succeeded");
-    });
-
-  return completedGroup?.label ?? null;
-}
-
-function formatDateTime(value?: string) {
-  if (!value) return "Not started";
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
-
-function formatLength(seconds?: number): string | null {
-  if (!seconds) return null;
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainder = seconds % 60;
-  return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
-}
-
-function formatBriefMeta(brief: VideoBriefInput): string {
-  return [
-    `${brief.targetLengthSec}s`,
-    brief.aspectRatio,
-    brief.platform,
-    brief.format,
-  ].filter(Boolean).join(" / ");
-}
-
-function planMetaItems(brief: VideoBriefInput): string[] {
-  return [
-    formatLength(brief.targetLengthSec),
-    brief.aspectRatio,
-    brief.platform,
-    brief.format,
-  ].filter((item): item is string => Boolean(item));
-}
-
-function headerStatus(run: GenerationRun): string {
-  if (run.reviewGate) return "Ready for your approval";
-  if (run.status === "queued") return "Waiting to start";
-  if (run.status === "running") {
-    if (run.activityState === "waiting_on_job") return "Waiting on provider";
-    if (run.activityState === "recovering") return "Recovering";
-    return "Producing";
-  }
-  if (run.status === "succeeded") {
-    return run.completionKind === "video" ? "Video ready" : "Partial result";
-  }
-  if (run.status === "failed") {
-    return run.error?.code === "missing_video_output" ? "Partial result" : "Failed";
-  }
-  return "Canceled";
-}
-
-function workspaceReturnLabel({
-  hasStudioDraft,
-  terminal,
-  succeeded,
-}: {
-  hasStudioDraft: boolean;
-  terminal: boolean;
-  succeeded: boolean;
-}): string {
-  if (hasStudioDraft && succeeded) return "Review in Studio";
-  if (hasStudioDraft && terminal) return "View draft";
-  if (hasStudioDraft) return "View draft";
-  return "Open project";
+  hierarchy?: CreatorRunHierarchy;
 }
 
 function mobileProgressSentence({
@@ -263,6 +111,7 @@ function mobileProgressSentence({
 
   if (run.status === "succeeded") {
     if (run.completionKind === "video") return "Your video is ready.";
+    if (run.completionKind === "standalone_asset") return "Your asset is ready.";
     if (run.completionKind === "storyboard_assets") {
       return "Storyboard ready; no video was created.";
     }
@@ -277,110 +126,6 @@ function mobileProgressSentence({
   }
 
   return "This run was canceled.";
-}
-
-const BOARD_STAGE_TYPES = new Set<GenerationStageType>([
-  "storyboard",
-  "asset_generation",
-]);
-
-const ASSET_BOARD_TOOL_LABELS = ["generate_keyframe", "generate_clip"];
-
-function isStoryboardBoardItem(
-  item: GenerationStageItem,
-  stageById: Map<string, GenerationStage>,
-): boolean {
-  if (item.kind !== "image" && item.kind !== "video") return false;
-  const stage = stageById.get(item.stageId);
-  if (!stage || !BOARD_STAGE_TYPES.has(stage.type)) return false;
-  if (stage.type === "storyboard") return true;
-
-  const label = item.label.toLowerCase();
-  return ASSET_BOARD_TOOL_LABELS.some((tool) => label.startsWith(tool));
-}
-
-function splitStoryboardItems(
-  items: GenerationStageItem[],
-  stageById: Map<string, GenerationStage>,
-) {
-  const boardItems: GenerationStageItem[] = [];
-  const genericItems: GenerationStageItem[] = [];
-
-  for (const item of items) {
-    if (isStoryboardBoardItem(item, stageById)) {
-      boardItems.push(item);
-    } else {
-      genericItems.push(item);
-    }
-  }
-
-  return { boardItems, genericItems };
-}
-
-function isVisibleGeneratedItem(item: GenerationStageItem): boolean {
-  return item.kind !== "caption";
-}
-
-function PlanRecap({
-  project,
-  loading,
-}: {
-  project: V1Project | null;
-  loading: boolean;
-}) {
-  const brief = project?.brief ?? null;
-  const requiredBeats = brief?.constraints?.requiredBeats ?? [];
-
-  return (
-    <section className={styles.planRecap} aria-labelledby="plan-recap-heading">
-      <div className={styles.planRecapHeader}>
-        <div>
-          <p className={styles.eyebrow}>Approved plan</p>
-          <h2 id="plan-recap-heading" className={styles.planRecapTitle}>
-            {project?.name ?? "Project plan"}
-          </h2>
-        </div>
-        {brief ? (
-          <div className={styles.planRecapMeta} aria-label={formatBriefMeta(brief)}>
-            {planMetaItems(brief).map((item) => (
-              <span key={item}>{item}</span>
-            ))}
-          </div>
-        ) : null}
-      </div>
-      {loading ? (
-        <p className={styles.planRecapLoading}>Loading plan context...</p>
-      ) : brief ? (
-        <>
-          <p className={styles.planRecapGoal}>{brief.goal}</p>
-          <dl className={styles.planRecapFacts}>
-            {brief.hookQuestion ? (
-              <div>
-                <dt>Hook</dt>
-                <dd>{brief.hookQuestion}</dd>
-              </div>
-            ) : null}
-            {requiredBeats.length > 0 ? (
-              <div>
-                <dt>Beat count</dt>
-                <dd>{requiredBeats.length} planned beats</dd>
-              </div>
-            ) : null}
-            {brief.strongestVisual ? (
-              <div>
-                <dt>Visual direction</dt>
-                <dd>{brief.strongestVisual}</dd>
-              </div>
-            ) : null}
-          </dl>
-        </>
-      ) : (
-        <p className={styles.planRecapLoading}>
-          Plan details are unavailable for this run, but production is continuing from the saved project context.
-        </p>
-      )}
-    </section>
-  );
 }
 
 function stageItemRevisionTarget(
@@ -410,8 +155,9 @@ export function ProgressView({
   headerSlot,
   alternateRuns,
   operatorDiagnostics,
+  hierarchy,
 }: ProgressViewProps) {
-  const [detail, setDetail] = useState({ run, stages, stageItems });
+  const [detail, setDetail] = useState({ run, stages, stageItems, hierarchy });
   const [projectStoryboard, setProjectStoryboard] = useState<ProjectStoryboard | null>(null);
   const [fallbackApproving, setFallbackApproving] = useState(false);
   const [fallbackError, setFallbackError] = useState<string | null>(null);
@@ -421,14 +167,18 @@ export function ProgressView({
   const [reviewProposalOpen, setReviewProposalOpen] = useState(false);
   const reviewGateKey = detail.run.reviewGate?.stageId ?? null;
   const projectQuery = useProjectQuery(detail.run.projectId);
+  const scriptQuery = useProjectScriptQuery(
+    detail.run.projectId,
+    detail.run.reviewGate?.stageType === "script",
+  );
   const project = projectQuery.data?.project ?? null;
   const projectLoading = projectQuery.isLoading;
 
   useEffect(() => {
-    setDetail({ run, stages, stageItems });
+    setDetail({ run, stages, stageItems, hierarchy });
     setFallbackApproving(false);
     setFallbackError(null);
-  }, [run, stages, stageItems]);
+  }, [run, stages, stageItems, hierarchy]);
 
   useEffect(() => {
     setSelectedAssetItemId(null);
@@ -445,7 +195,7 @@ export function ProgressView({
     setFallbackFeedbackNote("");
   }, [reviewGateKey]);
 
-  const terminal = isTerminal(detail.run.status);
+  const terminal = isTerminal(detail.run.status) && !detail.run.reviewGate;
   const reviewItems = detail.run.reviewGate
     ? detail.stageItems
         .filter((item) => item.stageId === detail.run.reviewGate?.stageId)
@@ -503,20 +253,18 @@ export function ProgressView({
   const pending = reviewActions?.pending ?? (fallbackApproving ? "approve" : undefined);
   const actionError = reviewActions?.error ?? fallbackError;
   const showCancelAction = !terminal && !detail.run.reviewGate && !!cancelAction;
-  const showBackgroundActivity = !terminal && !detail.run.reviewGate;
   const feedbackNote = reviewActions?.feedbackNote ?? fallbackFeedbackNote;
   const setFeedbackNote = reviewActions?.onFeedbackNoteChange ?? setFallbackFeedbackNote;
   const progress = progressSummary(detail.run, detail.stages);
-  const elapsed = useElapsedTime(detail.run.startedAt, detail.run.completedAt);
+  const { elapsed, sinceLastActivity } = usePipelineElapsed(detail.run);
   // Only durable progress counts as creator-visible activity. `updatedAt` can
   // move when a recovery sweeper touches the run without any provider output.
-  const sinceLastActivity = useElapsedTime(
-    detail.run.lastProgressAt,
-    detail.run.completedAt,
-  );
   const nextType = nextStageType(detail.run, detail.stages);
   const nextStageLabel = nextType ? reviewStageLabel(nextType) : null;
-  const lastCompletedStageLabel = lastCompletedPipelineStage(detail.stages);
+  const lastCompletedStageLabel = lastCompletedPipelineStage(
+    detail.stages,
+    detail.run.presentationKind,
+  );
   const activeStage = currentRunStage(detail.run, detail.stages);
   const hasExplicitAction = Boolean(detail.run.reviewGate || activeStage);
   const choosingNextStep = detail.run.status === "running" && !hasExplicitAction;
@@ -524,16 +272,18 @@ export function ProgressView({
     ? reviewStageLabel(detail.run.reviewGate.stageType)
     : choosingNextStep
       ? "Choosing the next step"
-    : activeStage?.label
-      ? activeStage.label
-    : detail.run.currentStageType
-      ? reviewStageLabel(detail.run.currentStageType)
-      : "Final render";
+      : activeStage?.label
+        ? activeStage.label
+        : standaloneAssetLabel(detail.run.presentationKind) ??
+          (detail.run.currentStageType
+            ? reviewStageLabel(detail.run.currentStageType)
+            : "Final render");
   const currentStageDisplay = detail.run.reviewGate
     ? `${currentStageLabel} review`
     : currentStageLabel;
   const projectBrief = project?.brief ?? null;
-  const projectTitle = project?.name?.trim() || "your video";
+  const standaloneLabel = standaloneAssetLabel(detail.run.presentationKind);
+  const projectTitle = project?.name?.trim() || (standaloneLabel ? "this project" : "your video");
   const returnLabel = workspaceReturnLabel({
     hasStudioDraft: Boolean(studioReturnPath),
     terminal,
@@ -594,6 +344,7 @@ export function ProgressView({
         run: nextDetail.run,
         stages: nextDetail.stages,
         stageItems: nextDetail.stageItems,
+        hierarchy: nextDetail.hierarchy,
       });
     } catch (err) {
       setFallbackError(
@@ -607,128 +358,31 @@ export function ProgressView({
   }
 
   const onApprove = reviewActions
-    ? () => reviewActions.onApprove(feedbackNote)
+    ? () => reviewActions.onApprove(
+        feedbackNote,
+        detail.run.reviewGate?.stageType === "script"
+          ? scriptQuery.data?.script?.scriptDraftId
+          : undefined,
+      )
     : approveFallback;
 
-  const progressSentence = mobileProgressSentence({
-    run: detail.run,
-    currentStageDisplay,
-    progress,
-    hasExplicitAction,
-  });
+  const progressSentence = detail.hierarchy
+    ? detail.hierarchy.root.message
+    : mobileProgressSentence({
+        run: detail.run,
+        currentStageDisplay,
+        progress,
+        hasExplicitAction,
+      });
 
   const progressContext = [
     lastCompletedStageLabel ? `Last completed: ${lastCompletedStageLabel}` : null,
     nextStageLabel ? `Next: ${nextStageLabel}` : null,
   ].filter((item): item is string => Boolean(item));
   const progressDetails = [
-    choosingNextStep ? null : detail.run.message,
-    ...progressContext,
+    detail.hierarchy || choosingNextStep ? null : detail.run.message,
+    ...(detail.hierarchy ? [] : progressContext),
   ].filter((item): item is string => Boolean(item));
-
-  function renderPipelineDepth() {
-    return (
-      <>
-        <div className={styles.sidePanelHeader}>
-          <div>
-            <p className={styles.eyebrow}>Pipeline</p>
-            <h2 className={styles.sidePanelHeading}>Stages</h2>
-          </div>
-        </div>
-        {showBackgroundActivity ? (
-          <div className={styles.backgroundActivity} role="status">
-            <span className={styles.backgroundSpinner} aria-hidden="true" />
-            <span>
-              {cancelAction?.pending
-                ? "Stopping after the current step..."
-                : detail.run.activityState === "waiting_on_job"
-                  ? "Waiting on a provider"
-                  : detail.run.activityState === "recovering"
-                    ? "Recovering from an earlier failed step"
-                    : choosingNextStep
-                      ? "Choosing the next step"
-                      : "Working in the background"}
-            </span>
-          </div>
-        ) : null}
-        <StageRail
-          stages={detail.stages}
-          runStatus={detail.run.status}
-          currentStageType={detail.run.currentStageType}
-          runProgressPercent={detail.run.progressPercent}
-          runMessage={detail.run.message}
-          reviewGate={detail.run.reviewGate}
-          stageLinks={stageLinks}
-          stopAction={
-            showCancelAction && cancelAction
-              ? {
-                  pending: cancelAction.pending,
-                  error: cancelAction.error,
-                  onStop: cancelAction.onCancel,
-                }
-              : undefined
-          }
-        />
-        {showCancelAction && cancelAction?.error ? (
-          <p className={styles.error} role="alert">
-            {cancelAction.error}
-          </p>
-        ) : null}
-        <p className={styles.sidePanelMeta}>
-          {elapsed !== null ? `Elapsed ${formatElapsed(elapsed)}. ` : ""}
-          {sinceLastActivity !== null
-            ? `Last activity ${formatElapsed(sinceLastActivity)} ago.`
-            : detail.run.status === "running"
-              ? "Waiting for the first meaningful progress update."
-              : "No meaningful progress timestamp was recorded."}
-        </p>
-        {operatorDiagnostics ? (
-          <details className={styles.operatorDiagnostics}>
-            <summary>Operator diagnostics</summary>
-            <div className={styles.operatorDiagnosticsBody}>
-              <div className={styles.diagnostics}>
-                <span className={styles.runIdLabel}>Run ID</span>
-                <code className={styles.runId} title={detail.run.runId}>
-                  {shortId(detail.run.runId)}
-                </code>
-                <button
-                  type="button"
-                  className={styles.copyButton}
-                  onClick={() => void navigator.clipboard?.writeText(detail.run.runId)}
-                >
-                  Copy
-                </button>
-              </div>
-              {operatorDiagnostics.length > 0 ? (
-                <ol className={styles.operatorJobList}>
-                  {operatorDiagnostics.map((job) => (
-                    <li className={styles.operatorJob} key={job.jobId}>
-                      <div className={styles.operatorJobHeading}>
-                        <strong>{job.currentStep ?? "Background job"}</strong>
-                        <span>{job.status}</span>
-                      </div>
-                      <dl className={styles.operatorJobFacts}>
-                        <div><dt>Job</dt><dd><code>{shortId(job.jobId)}</code></dd></div>
-                        <div><dt>Action</dt><dd><code>{shortId(job.actionId)}</code></dd></div>
-                        {job.provider ? <div><dt>Provider</dt><dd>{job.provider}</dd></div> : null}
-                        {job.attempt != null ? <div><dt>Attempt</dt><dd>{job.attempt}</dd></div> : null}
-                        <div><dt>Updated</dt><dd>{formatDateTime(job.updatedAt)}</dd></div>
-                        {job.lastProgressAt ? <div><dt>Progress</dt><dd>{formatDateTime(job.lastProgressAt)}</dd></div> : null}
-                        {job.heartbeatAt ? <div><dt>Heartbeat</dt><dd>{formatDateTime(job.heartbeatAt)}</dd></div> : null}
-                        {job.nextRetryAt ? <div><dt>Next retry</dt><dd>{formatDateTime(job.nextRetryAt)}</dd></div> : null}
-                      </dl>
-                    </li>
-                  ))}
-                </ol>
-              ) : (
-                <p className={styles.operatorEmpty}>No job diagnostics reported yet.</p>
-              )}
-            </div>
-          </details>
-        ) : null}
-      </>
-    );
-  }
 
   async function markBoardFeedbackStarted(target: BoardRevisionTarget) {
     const key = storyboardFeedbackTargetKey(target);
@@ -749,26 +403,38 @@ export function ProgressView({
   const selectedAssetTarget = selectedAssetItem
     ? stageItemRevisionTarget(detail.run.runId, selectedAssetItem)
     : null;
+  const hierarchyCurrent = detail.hierarchy
+    ? hierarchyCurrentLabel(detail.hierarchy)
+    : null;
+  const hierarchyProgress = detail.hierarchy
+    ? hierarchyProgressLabel(detail.hierarchy)
+    : null;
   return (
     <div className={styles.shell}>
       <header className={styles.header}>
         <div className={styles.headerCopy}>
-          <p className={styles.eyebrow}>Unified workspace</p>
-          <h1 className={styles.title}>Producing {projectTitle}</h1>
+          <p className={styles.eyebrow}>{standaloneLabel ? "Asset Studio" : "Unified workspace"}</p>
+          <h1 className={styles.title}>
+            {standaloneLabel ? `${standaloneLabel} for ${projectTitle}` : `Producing ${projectTitle}`}
+          </h1>
           <p className={styles.headerDescription}>
-            The plan, generated assets, review checkpoints, and final export stay
-            attached to this workspace.
+            {standaloneLabel
+              ? "This one-off asset and its generation history stay attached to the project library."
+              : "The plan, generated assets, review checkpoints, and final export stay attached to this workspace."}
           </p>
           {headerSlot ? <div className={styles.headerSlot}>{headerSlot}</div> : null}
         </div>
         <div className={styles.headerActions}>
-          <div className={styles.headerStatusPanel} aria-label="Current run status">
-            <div className={styles.mobileStatusNarrative}>
+          <div
+            className={`${styles.headerStatusPanel}${detail.hierarchy ? ` ${styles.headerStatusPanelHierarchy}` : ""}`}
+            aria-label="Current run status"
+          >
+            {!detail.hierarchy ? <div className={styles.mobileStatusNarrative}>
               <strong>{progressSentence}</strong>
               {progressDetails.map((item) => (
                 <p key={item}>{item}</p>
               ))}
-            </div>
+            </div> : null}
             <div className={styles.statusGrid}>
               <div>
                 <span className={styles.statusLabel}>Status</span>
@@ -776,16 +442,18 @@ export function ProgressView({
               </div>
               {lastCompletedStageLabel ? (
                 <div>
-                  <span className={styles.statusLabel}>Last completed</span>
-                  <strong>{lastCompletedStageLabel}</strong>
+                  <span className={styles.statusLabel}>
+                    {detail.hierarchy ? "Current work" : "Last completed"}
+                  </span>
+                  <strong>{hierarchyCurrent ?? lastCompletedStageLabel}</strong>
                 </div>
               ) : (
                 <div>
                   <span className={styles.statusLabel}>Current step</span>
-                  <strong>{currentStageDisplay}</strong>
+                  <strong>{hierarchyCurrent ?? currentStageDisplay}</strong>
                 </div>
               )}
-              {nextStageLabel ? (
+              {nextStageLabel && !detail.hierarchy ? (
                 <div>
                   <span className={styles.statusLabel}>Next step</span>
                   <strong>{nextStageLabel}</strong>
@@ -793,10 +461,10 @@ export function ProgressView({
               ) : null}
               <div>
                 <span className={styles.statusLabel}>Progress</span>
-                <strong>{progress.completed} tool steps complete</strong>
+                <strong>{hierarchyProgress ?? `${progress.completed} tool steps complete`}</strong>
               </div>
             </div>
-            {progress.percent == null && detail.run.status === "running" ? (
+            {!detail.hierarchy && progress.percent == null && detail.run.status === "running" ? (
               <div
                 className={`${styles.headerMeter} ${styles.headerMeterIndeterminate}`}
                 role="progressbar"
@@ -804,7 +472,7 @@ export function ProgressView({
               >
                 <div className={styles.headerMeterFill} />
               </div>
-            ) : progress.percent != null ? (
+            ) : !detail.hierarchy && progress.percent != null ? (
               <div
                 className={styles.headerMeter}
                 role="progressbar"
@@ -848,9 +516,34 @@ export function ProgressView({
         </div>
       </header>
 
-      <div className={styles.body}>
+      <div className={`${styles.body}${detail.hierarchy ? ` ${styles.bodyHierarchy}` : ""}`}>
         <section className={styles.main}>
           {terminal ? <TerminalState run={detail.run} creditRecovery={creditRecovery} /> : null}
+
+          {detail.hierarchy ? (
+            <CreatorRunHierarchyPanel
+              hierarchy={detail.hierarchy}
+              projectId={detail.run.projectId}
+              stopAction={
+                showCancelAction && cancelAction
+                  ? {
+                      pending: cancelAction.pending,
+                      error: cancelAction.error,
+                      onStop: cancelAction.onCancel,
+                    }
+                  : undefined
+              }
+            />
+          ) : null}
+
+          {detail.hierarchy && operatorDiagnostics ? (
+            <section className={styles.hierarchyOperatorDiagnostics} aria-label="Operator tools">
+              <OperatorDiagnostics
+                runId={detail.run.runId}
+                diagnostics={operatorDiagnostics}
+              />
+            </section>
+          ) : null}
 
           <PlanRecap project={project} loading={projectLoading} />
 
@@ -859,6 +552,9 @@ export function ProgressView({
               stageType={detail.run.reviewGate.stageType}
               projectBrief={projectBrief}
               projectLoading={projectLoading}
+              projectScript={scriptQuery.data?.script?.scriptDraft ?? null}
+              scriptLoading={scriptQuery.isLoading}
+              scriptError={scriptQuery.error instanceof Error ? scriptQuery.error.message : null}
               reviewItems={reviewItems}
               reviewOutputGroups={reviewOutputGroups}
               feedbackNote={feedbackNote}
@@ -867,8 +563,23 @@ export function ProgressView({
               reviewActions={reviewActions}
               onFeedbackNoteChange={setFeedbackNote}
               onApprove={onApprove}
-              onRequestChanges={() => setReviewProposalOpen(true)}
-              canRequestChanges={Boolean(reviewProposalTarget)}
+              onRequestChanges={() => {
+                if (detail.run.reviewGate?.stageType === "script") {
+                  const scriptDraftId = scriptQuery.data?.script?.scriptDraftId;
+                  if (scriptDraftId) reviewActions?.onRequestChanges?.(feedbackNote, scriptDraftId);
+                  return;
+                }
+                setReviewProposalOpen(true);
+              }}
+              canRequestChanges={
+                detail.run.reviewGate.stageType === "script"
+                  ? Boolean(
+                      reviewActions?.onRequestChanges &&
+                      feedbackNote.trim() &&
+                      scriptQuery.data?.script?.scriptDraftId
+                    )
+                  : Boolean(reviewProposalTarget)
+              }
             />
           ) : null}
           <AiAssetFeedbackDialog
@@ -919,24 +630,34 @@ export function ProgressView({
                   <div className={`${styles.itemGrid} ${styles.reviewOutputGrid}`}>
                     {generatedOutputGroups.genericItems.map((item) => (
                       item.assetId ? (
-                        <button
-                          className={styles.assetEditButton}
-                          type="button"
-                          key={item.itemId}
-                          onClick={() => setSelectedAssetItemId(item.itemId)}
-                          aria-label={`Edit ${item.label} with AI`}
-                          aria-busy={
-                            boardFeedbackActiveKeys.includes(
-                              storyboardFeedbackTargetKey(
-                                stageItemRevisionTarget(detail.run.runId, item)
-                              )
-                            ) || undefined
-                          }
-                        >
-                          {/* Embedded in the edit <button>; a nested regenerate
-                              <button> would be invalid markup, so suppress it. */}
-                          <StageItemCard item={item} allowInlineRegenerate={false} />
-                        </button>
+                        <div className={styles.assetReviewItem} key={item.itemId}>
+                          <button
+                            className={styles.assetEditButton}
+                            type="button"
+                            onClick={() => setSelectedAssetItemId(item.itemId)}
+                            aria-label={`Edit ${item.label} with AI`}
+                            aria-busy={
+                              boardFeedbackActiveKeys.includes(
+                                storyboardFeedbackTargetKey(
+                                  stageItemRevisionTarget(detail.run.runId, item)
+                                )
+                              ) || undefined
+                            }
+                          >
+                            {/* Embedded in the edit <button>; a nested regenerate
+                                <button> would be invalid markup, so suppress it. */}
+                            <StageItemCard item={item} allowInlineRegenerate={false} />
+                          </button>
+                          {canReceiveStageItemFeedback(item) && item.assetId ? (
+                            <AssetCritiqueButton
+                              projectId={detail.run.projectId}
+                              assetId={item.assetId}
+                              title={`Review ${item.label}`}
+                              subtitle={item.promptPreview ?? item.purpose}
+                              preview={<StageItemCard item={item} allowInlineRegenerate={false} />}
+                            />
+                          ) : null}
+                        </div>
                       ) : (
                         <div key={item.itemId}>
                           <StageItemCard item={item} allowInlineRegenerate={false} />
@@ -972,9 +693,9 @@ export function ProgressView({
             </section>
           ) : null}
 
-          <details className={styles.mobilePipelineDetails}>
+          {!detail.hierarchy ? <details className={styles.mobilePipelineDetails}>
             <summary>
-              Show pipeline
+              {standaloneLabel ? "Show asset status" : "Show pipeline"}
               <span aria-hidden="true">+</span>
             </summary>
             <div
@@ -982,14 +703,36 @@ export function ProgressView({
               role="complementary"
               aria-label="Stage rail"
             >
-              {renderPipelineDepth()}
+              <PipelineDepth
+                run={detail.run}
+                stages={detail.stages}
+                elapsed={elapsed}
+                sinceLastActivity={sinceLastActivity}
+                stageLinks={stageLinks}
+                showCancelAction={showCancelAction}
+                cancelAction={cancelAction}
+                operatorDiagnostics={operatorDiagnostics}
+                standaloneLabel={standaloneLabel}
+                choosingNextStep={choosingNextStep}
+              />
             </div>
-          </details>
+          </details> : null}
         </section>
 
-        <aside className={styles.sidePanel} aria-label="Stage rail">
-          {renderPipelineDepth()}
-        </aside>
+        {!detail.hierarchy ? <aside className={styles.sidePanel} aria-label="Stage rail">
+          <PipelineDepth
+            run={detail.run}
+            stages={detail.stages}
+            elapsed={elapsed}
+            sinceLastActivity={sinceLastActivity}
+            stageLinks={stageLinks}
+            showCancelAction={showCancelAction}
+            cancelAction={cancelAction}
+            operatorDiagnostics={operatorDiagnostics}
+            standaloneLabel={standaloneLabel}
+            choosingNextStep={choosingNextStep}
+          />
+        </aside> : null}
       </div>
     </div>
   );

@@ -3,6 +3,7 @@
 import { Link } from "react-router-dom";
 import {
   type GenerationJobActivity,
+  type GenerationRun,
   type GenerationRunStatus,
   type GenerationStage,
   type GenerationStageType,
@@ -27,9 +28,10 @@ interface StageRailProps {
   };
   stageLinks?: Partial<Record<string, string>>;
   showUpcomingStages?: boolean;
+  presentationKind?: GenerationRun["presentationKind"];
 }
 
-export const PIPELINE_GROUPS: Array<{
+type StageGroup = {
   id: string;
   type: GenerationStageType;
   activeTypes?: GenerationStageType[];
@@ -37,13 +39,23 @@ export const PIPELINE_GROUPS: Array<{
   label: string;
   description: string;
   tools: string[];
-}> = [
+};
+
+export const PIPELINE_GROUPS: StageGroup[] = [
   {
     id: "concept",
     type: "brief_intake",
     label: "Concept",
     description: "Project goal, audience, and creative direction.",
     tools: ["create_or_load_brief"],
+  },
+  {
+    id: "poster",
+    type: "asset_generation",
+    label: "Poster",
+    description: "A visual cover for the project.",
+    tools: ["generate_poster"],
+    fallbackTypes: [],
   },
   {
     id: "brief",
@@ -54,7 +66,7 @@ export const PIPELINE_GROUPS: Array<{
   },
   {
     id: "script",
-    type: "creative_plan",
+    type: "script",
     label: "Script",
     description: "Narrative beats, voiceover, and scene intent.",
     tools: ["draft_script"],
@@ -98,8 +110,42 @@ export const PIPELINE_GROUPS: Array<{
   },
 ];
 
+const STANDALONE_GROUPS: Record<
+  NonNullable<GenerationRun["presentationKind"]>,
+  StageGroup[]
+> = {
+  standalone_image: [
+    {
+      id: "image-asset",
+      type: "asset_generation",
+      label: "Image asset",
+      description: "A project image generated for the asset library.",
+      tools: ["generate_image_asset", "regenerate_image_asset"],
+    },
+  ],
+  standalone_video: [
+    {
+      id: "video-asset",
+      type: "asset_generation",
+      label: "Video asset",
+      description: "A project video generated for the asset library.",
+      tools: ["generate_video_asset", "edit_video_asset"],
+    },
+  ],
+  standalone_audio: [
+    {
+      id: "audio-asset",
+      type: "audio_generation",
+      label: "Audio asset",
+      description: "Project audio generated for the asset library.",
+      tools: ["generate_audio"],
+    },
+  ],
+};
+
 const TOOL_LABELS: Record<string, string> = {
   create_or_load_brief: "Create/load brief",
+  generate_poster: "Generate poster",
   develop_story_blueprint: "Develop story blueprint",
   draft_script: "Draft script",
   plan_shots: "Plan shots",
@@ -112,6 +158,10 @@ const TOOL_LABELS: Record<string, string> = {
   assemble_timeline: "Assemble timeline",
   critique_timeline: "Critique timeline",
   export_video: "Export video",
+  generate_image_asset: "Generate image",
+  regenerate_image_asset: "Revise image",
+  generate_video_asset: "Generate video",
+  edit_video_asset: "Edit video",
 };
 
 const STATUS_LABEL: Record<GenerationRunStatus | "review", string> = {
@@ -230,12 +280,17 @@ export function StageRail({
   stopAction,
   stageLinks,
   showUpcomingStages = false,
+  presentationKind,
 }: StageRailProps) {
+  const visibleGroups = presentationKind
+    ? STANDALONE_GROUPS[presentationKind]
+    : PIPELINE_GROUPS;
   const ordered = [...stages].sort((a, b) => a.order - b.order);
   const stagesByTool = new Map<string, GenerationStage>();
   const broadFallback = new Map<GenerationStageType, GenerationStage[]>();
   ordered.forEach((stage) => {
     if (stage.toolName) stagesByTool.set(stage.toolName, stage);
+    if (stage.toolName) return;
     const existing = broadFallback.get(stage.type) ?? [];
     existing.push(stage);
     broadFallback.set(stage.type, existing);
@@ -244,7 +299,7 @@ export function StageRail({
   const fallbackCounts = new Map<GenerationStageType, number>();
   return (
     <ol className={styles.stageRail} aria-label="Generation stages">
-      {PIPELINE_GROUPS.map((visibleStage, idx) => {
+      {visibleGroups.map((visibleStage, idx) => {
         let groupStages = visibleStage.tools
           .map((toolName) => stagesByTool.get(toolName))
           .filter((stage): stage is GenerationStage => Boolean(stage));
@@ -262,7 +317,7 @@ export function StageRail({
         const stage = latestStage(groupStages);
         const baseStatus = groupedStatus(groupStages);
         if (groupStages.length === 0 && !showUpcomingStages) return null;
-        const isLast = idx === PIPELINE_GROUPS.length - 1;
+        const isLast = idx === visibleGroups.length - 1;
         const runningStage = groupStages.find((candidate) => candidate.status === "running");
         const failedStage = groupStages.find((candidate) => candidate.status === "failed");
         const isRecovering = Boolean(runningStage && failedStage);

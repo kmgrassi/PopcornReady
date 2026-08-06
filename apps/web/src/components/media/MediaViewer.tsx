@@ -26,6 +26,7 @@ export interface RefreshedMediaUrls {
 
 export interface MediaViewerProps {
   item: MediaViewerItem | null;
+  creditsCharged?: number | null;
   hasPrevious?: boolean;
   hasNext?: boolean;
   actions?: ReactNode;
@@ -33,6 +34,7 @@ export interface MediaViewerProps {
   onPrevious?: () => void;
   onNext?: () => void;
   onRefresh?: (item: MediaViewerItem) => Promise<RefreshedMediaUrls>;
+  onMediaLoad?: (loadedUrl: string) => void;
   // Re-run image generation for an asset with no deliverable URL. Resolve with
   // the now-live media. Reject with an error whose `.code === "prompt_required"`
   // to make the viewer pop a prompt-entry dialog instead of surfacing an error.
@@ -54,14 +56,9 @@ function formatDuration(seconds?: number | null) {
   return `${minutes}:${String(remainder).padStart(2, "0")}`;
 }
 
-function isNearExpiry(expiresAt?: string | null) {
-  if (!expiresAt) return false;
-  const expires = new Date(expiresAt).getTime();
-  return Number.isFinite(expires) && expires - Date.now() < 60_000;
-}
-
 export function MediaViewer({
   item,
+  creditsCharged,
   hasPrevious = false,
   hasNext = false,
   actions,
@@ -69,6 +66,7 @@ export function MediaViewer({
   onPrevious,
   onNext,
   onRefresh,
+  onMediaLoad,
   onRegenerate,
 }: MediaViewerProps) {
   const [media, setMedia] = useState<MediaViewerItem | null>(item);
@@ -77,7 +75,9 @@ export function MediaViewer({
   const [regenerating, setRegenerating] = useState(false);
   const [regenError, setRegenError] = useState<string | null>(null);
   const [promptOpen, setPromptOpen] = useState(false);
-  const lastRefreshIdRef = useRef<string | null>(null);
+  const errorRetryTargetUrlRef = useRef<string | null>(null);
+  const refreshInFlightRef = useRef(false);
+  const previousItemIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     setMedia(item);
@@ -85,31 +85,38 @@ export function MediaViewer({
     setRegenError(null);
     setRegenerating(false);
     setPromptOpen(false);
-    lastRefreshIdRef.current = null;
+    if (previousItemIdRef.current !== item?.id) {
+      errorRetryTargetUrlRef.current = null;
+      previousItemIdRef.current = item?.id ?? null;
+    }
   }, [item]);
 
-  const refresh = useCallback(async () => {
-    if (!media || !onRefresh || refreshing) return;
+  const refresh = useCallback(async (failedUrl: string) => {
+    if (!media || !onRefresh || refreshInFlightRef.current) return;
+    refreshInFlightRef.current = true;
+    errorRetryTargetUrlRef.current = failedUrl;
     setRefreshing(true);
     setRefreshError(null);
     try {
       const next = await onRefresh(media);
+      errorRetryTargetUrlRef.current = next.url ?? next.thumbnailUrl ?? failedUrl;
       setMedia((current) =>
         current && current.id === media.id
           ? {
               ...current,
               url: next.url,
-              thumbnailUrl: next.thumbnailUrl ?? current.thumbnailUrl,
-              expiresAt: next.expiresAt ?? current.expiresAt,
+              thumbnailUrl: next.thumbnailUrl,
+              expiresAt: next.expiresAt,
             }
           : current
       );
     } catch (error) {
       setRefreshError(error instanceof Error ? error.message : "Unable to refresh media URL.");
     } finally {
+      refreshInFlightRef.current = false;
       setRefreshing(false);
     }
-  }, [media, onRefresh, refreshing]);
+  }, [media, onRefresh]);
 
   const regenerate = useCallback(
     async (input?: { prompt?: string; provider?: string; model?: string }) => {
@@ -146,13 +153,6 @@ export function MediaViewer({
   );
 
   useEffect(() => {
-    if (!media || !onRefresh || !isNearExpiry(media.expiresAt)) return;
-    if (lastRefreshIdRef.current === media.id) return;
-    lastRefreshIdRef.current = media.id;
-    void refresh();
-  }, [media, onRefresh, refresh]);
-
-  useEffect(() => {
     if (!media) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
@@ -170,9 +170,16 @@ export function MediaViewer({
   const canRender = Boolean(media.url || media.thumbnailUrl);
 
   const handleMediaError = () => {
-    if (!onRefresh || lastRefreshIdRef.current === media.id) return;
-    lastRefreshIdRef.current = media.id;
-    void refresh();
+    const failedUrl = media.url ?? media.thumbnailUrl;
+    if (!onRefresh || !failedUrl || errorRetryTargetUrlRef.current === failedUrl) return;
+    void refresh(failedUrl);
+  };
+  const handleMediaLoad = () => {
+    const loadedUrl = media.url ?? media.thumbnailUrl;
+    if (loadedUrl) onMediaLoad?.(loadedUrl);
+    if (loadedUrl && errorRetryTargetUrlRef.current === loadedUrl) {
+      errorRetryTargetUrlRef.current = null;
+    }
   };
 
   return (
@@ -186,6 +193,11 @@ export function MediaViewer({
               <span>{media.kind}</span>
               {duration ? <span>{duration}</span> : null}
               {media.projectName ? <span>{media.projectName}</span> : null}
+              {typeof creditsCharged === "number" ? (
+                <span>
+                  {creditsCharged.toLocaleString()} {creditsCharged === 1 ? "credit" : "credits"} used
+                </span>
+              ) : null}
             </div>
           </div>
           <CloseButton className={styles.iconButton} onClick={onClose} />
@@ -199,15 +211,15 @@ export function MediaViewer({
           ) : null}
 
           {canRender && media.kind === "image" ? (
-            <ImageWithSkeleton className={styles.visualMedia} src={media.url ?? media.thumbnailUrl ?? ""} alt={title} fit="contain" onError={handleMediaError} />
+            <ImageWithSkeleton className={styles.visualMedia} src={media.url ?? media.thumbnailUrl ?? ""} alt={title} fit="contain" onError={handleMediaError} onLoad={handleMediaLoad} />
           ) : null}
           {canRender && media.kind === "video" ? (
-            <video className={styles.visualMedia} src={media.url ?? undefined} poster={media.thumbnailUrl ?? undefined} controls preload="metadata" onError={handleMediaError} />
+            <video className={styles.visualMedia} src={media.url ?? undefined} poster={media.thumbnailUrl ?? undefined} controls preload="metadata" onError={handleMediaError} onLoadedData={handleMediaLoad} />
           ) : null}
           {canRender && media.kind === "audio" ? (
             <div className={styles.audioPanel}>
               <div className={styles.audioGlyph}>Audio</div>
-              <audio src={media.url ?? undefined} controls preload="metadata" onError={handleMediaError} />
+              <audio src={media.url ?? undefined} controls preload="metadata" onError={handleMediaError} onLoadedData={handleMediaLoad} />
             </div>
           ) : null}
           {!canRender ? (

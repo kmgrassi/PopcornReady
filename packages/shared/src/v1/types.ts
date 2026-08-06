@@ -380,6 +380,8 @@ export interface V1Asset {
   filename: string;
   url: string; // served/managed path the renderer can read
   thumbnailUrl?: string;
+  // Null for stable public/remote media; ISO timestamp for private signed URLs.
+  expiresAt?: string | null;
   durationSec: number;
   // Human display name written by the generating agent (falls back to a derived name).
   name?: string;
@@ -614,6 +616,7 @@ export type GenerationRunActivityState =
 export type GenerationStageType =
   | "brief_intake"
   | "creative_plan"
+  | "script"
   | "storyboard"
   | "asset_generation"
   | "audio_generation"
@@ -627,6 +630,7 @@ export type GenerationStageType =
 export const GATEABLE_GENERATION_STAGE_TYPES = [
   "brief_intake",
   "creative_plan",
+  "script",
   "storyboard",
   "asset_generation",
   "audio_generation",
@@ -681,7 +685,13 @@ export interface GenerationRun {
   projectId: string;
   briefVersionId?: string;
   status: GenerationRunStatus;
-  completionKind?: "video" | "storyboard_assets";
+  completionKind?: "video" | "storyboard_assets" | "standalone_asset";
+  presentationKind?:
+    | "standalone_image"
+    | "standalone_video"
+    | "standalone_audio";
+  /** Server-projected state of the mandatory storyboard review boundary. */
+  storyboardBoundaryStatus?: "pending" | "reached" | "resolved";
   activityState?: GenerationRunActivityState;
   currentToolName?: string;
   reviewGates?: GateableGenerationStageType[];
@@ -761,6 +771,7 @@ export type GenerationStageItemKind =
   | "export";
 
 export type GenerationStageItemPurpose =
+  | "asset"
   | "brief"
   | "plan"
   | "storyboard_frame"
@@ -820,18 +831,20 @@ export interface BoardRevisionTarget {
 export const GENERATION_STAGE_ORDER: Record<GenerationStageType, number> = {
   brief_intake: 0,
   creative_plan: 1,
-  storyboard: 2,
-  asset_generation: 3,
-  audio_generation: 4,
-  timeline_assembly: 5,
-  quality_review: 6,
-  export: 7,
-  ready: 8,
+  script: 2,
+  storyboard: 3,
+  asset_generation: 4,
+  audio_generation: 5,
+  timeline_assembly: 6,
+  quality_review: 7,
+  export: 8,
+  ready: 9,
 };
 
 export const GENERATION_STAGE_LABELS: Record<GenerationStageType, string> = {
   brief_intake: "Brief",
   creative_plan: "Plan",
+  script: "Script",
   storyboard: "Storyboard",
   asset_generation: "Visuals",
   audio_generation: "Audio",

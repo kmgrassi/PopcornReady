@@ -101,8 +101,8 @@ export function deriveNextAction(
       run: failedRun,
       title: "A generation needs attention",
       body: failedRun.currentStageType
-        ? `${failedRun.projectName} stopped at ${formatStage(failedRun.currentStageType)}. Open the run to see what failed and retry from the failed stage.`
-        : `${failedRun.projectName} stopped. Open the run to see what failed and retry from the failed stage.`,
+        ? `${failedRun.projectName} stopped at ${formatStage(failedRun.currentStageType)}. Open the run to see what stopped, then request changes from the project when you are ready.`
+        : `${failedRun.projectName} stopped. Open the run to see what stopped, then request changes from the project when you are ready.`,
       ctaLabel: "Review failure",
       to: runPath(failedRun),
     };
@@ -123,19 +123,19 @@ export function deriveNextAction(
   if (!pulse || projectCount === 0) {
     return {
       type: "start",
-      title: "Create your first AI rough cut",
-      body: "Start with a brief, add footage, then choose where the run should stop for review.",
-      ctaLabel: "Create new video",
-      to: "/projects/new?start=1",
+      title: "Create your first video or asset",
+      body: "Start a full video, or make an image, short video, or audio asset for a project.",
+      ctaLabel: "Create",
+      to: "/create",
     };
   }
 
   return {
     type: "new",
-    title: "Start the next rough cut",
-    body: "No workspace item needs attention right now. Create a new video when you are ready.",
-    ctaLabel: "Create new video",
-    to: "/projects/new?start=1",
+    title: "Create something new",
+    body: "No workspace item needs attention right now. Start a full video or make one project asset when you are ready.",
+    ctaLabel: "Create",
+    to: "/create",
   };
 }
 

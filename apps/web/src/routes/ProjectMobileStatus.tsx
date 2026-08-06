@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import type {
+  GenerationStageItem,
   ProjectStoryboard,
   StoryboardPanel,
   V1Project,
@@ -9,8 +11,13 @@ import { Button, ButtonLink } from "../components/ui/Button";
 import { ImageWithSkeleton } from "../components/ui/ImageWithSkeleton";
 import type { ProjectWatchMedia } from "../lib/api-client";
 import type { StoryboardProgress } from "../lib/v1/storyboard/progress";
+import { assetLibraryPath } from "../lib/assetLibraryPath";
 import { ProjectPoster } from "./ProjectDetailSections";
 import styles from "./ProjectMobileStatus.module.css";
+import {
+  readyAssetStatus,
+  readyAssetViewLabel,
+} from "./project-ready-asset";
 
 export function MobileProjectStatus({
   project,
@@ -24,6 +31,7 @@ export function MobileProjectStatus({
   status,
   primaryAction,
   runLink,
+  readyAsset,
 }: {
   project: V1Project;
   projectId: string;
@@ -36,6 +44,7 @@ export function MobileProjectStatus({
   status?: string;
   primaryAction?: ReactNode;
   runLink?: string | null;
+  readyAsset?: (Pick<GenerationStageItem, "assetId" | "kind"> & { assetId: string }) | null;
 }) {
   const brief = project.brief;
   const title = brief?.oneBigIdea ?? brief?.goal ?? project.name;
@@ -45,7 +54,12 @@ export function MobileProjectStatus({
 
   return (
     <section className={styles.mobileProjectStatus} aria-label="Project status">
-      <MobileProjectHero project={project} storyboard={storyboard} media={media} />
+      <MobileProjectHero
+        project={project}
+        storyboard={storyboard}
+        media={media}
+        readOnly={readOnly}
+      />
       <div className={styles.mobileStatusCard}>
         <div className={styles.mobileStatusText}>
           <span className={styles.eyebrow}>Project</span>
@@ -59,6 +73,7 @@ export function MobileProjectStatus({
                 hasPlayableOutput: Boolean(media),
                 projectStatus: project.status,
                 storyboardError,
+                readyAsset,
               })}
           </p>
         </div>
@@ -88,7 +103,7 @@ export function MobileProjectStatus({
           <p>
             {momentCount > 0
               ? `${momentCount} ${momentCount === 1 ? "moment" : "moments"} are ready to review.`
-              : "Storyboard scenes and panels will appear after generation starts."}
+              : "The agent plans scenes and moments before drawing storyboard panels."}
           </p>
           {!readOnly && storyboard ? (
             <ButtonLink
@@ -151,13 +166,19 @@ function MobileProjectHero({
   project,
   storyboard,
   media,
+  readOnly,
 }: {
   project: V1Project;
   storyboard: ProjectStoryboard | null;
   media?: ProjectWatchMedia | null;
+  readOnly: boolean;
 }) {
+  const navigate = useNavigate();
   const panel = latestStoryboardPanel(storyboard);
   if (panel) {
+    const assetPath = !readOnly && panel.imageAssetId
+      ? assetLibraryPath(panel.imageAssetId, project.id)
+      : null;
     return (
       <AssetImage
         kind="image"
@@ -167,6 +188,9 @@ function MobileProjectHero({
         status={panel.status}
         mediaClassName={styles.mobileHeroImage}
         placeholderClassName={`${styles.mobileHeroImage} ${styles.posterEmpty}`}
+        alt={assetPath ? `View ${project.name} storyboard asset` : ""}
+        onActivate={assetPath ? () => navigate(assetPath) : undefined}
+        activateClassName={styles.mobileHeroButton}
       />
     );
   }
@@ -179,7 +203,7 @@ function MobileProjectHero({
       />
     );
   }
-  return (
+  const poster = (
     <ProjectPoster
       name={project.name}
       posterUrl={project.posterUrl}
@@ -187,6 +211,18 @@ function MobileProjectHero({
       emptyClassName={styles.posterEmpty}
     />
   );
+  if (!readOnly && project.posterAssetId) {
+    return (
+      <Link
+        className={styles.mobileHeroLink}
+        to={assetLibraryPath(project.posterAssetId, project.id)}
+        aria-label={`View ${project.name} poster asset`}
+      >
+        {poster}
+      </Link>
+    );
+  }
+  return poster;
 }
 
 export function ProjectMobilePrimaryAction({
@@ -197,9 +233,14 @@ export function ProjectMobilePrimaryAction({
   storyboard,
   storyboardGenerating,
   storyboardError,
+  scriptReviewRunLink,
+  hasBrief,
   canGenerateStoryboard,
-  onStoryboardRetry,
   onGenerate,
+  readyAsset,
+  readyAssetLoading,
+  readyAssetError,
+  onRetryReadyAsset,
 }: {
   projectId: string;
   hasPlayableOutput: boolean;
@@ -208,24 +249,15 @@ export function ProjectMobilePrimaryAction({
   storyboard: ProjectStoryboard | null;
   storyboardGenerating: boolean;
   storyboardError: Error | null;
+  scriptReviewRunLink?: string | null;
+  hasBrief: boolean;
   canGenerateStoryboard: boolean;
-  onStoryboardRetry: () => void;
   onGenerate: () => void;
+  readyAsset?: (Pick<GenerationStageItem, "assetId" | "kind"> & { assetId: string }) | null;
+  readyAssetLoading?: boolean;
+  readyAssetError?: boolean;
+  onRetryReadyAsset?: () => void;
 }) {
-  if (storyboardError) {
-    return (
-      <Button variant="cta" fullWidth onClick={onStoryboardRetry}>
-        Retry storyboard
-      </Button>
-    );
-  }
-  if (storyboardGenerating) {
-    return (
-      <ButtonLink variant="cta" fullWidth to="#mobile-stages">
-        View stages
-      </ButtonLink>
-    );
-  }
   if (hasPlayableOutput) {
     return (
       <ButtonLink
@@ -239,6 +271,38 @@ export function ProjectMobilePrimaryAction({
       </ButtonLink>
     );
   }
+  if (readyAsset) {
+    return (
+      <ButtonLink
+        variant="cta"
+        fullWidth
+        to={assetLibraryPath(readyAsset.assetId, projectId)}
+      >
+        {readyAssetViewLabel(readyAsset)}
+      </ButtonLink>
+    );
+  }
+  if (storyboardError) {
+    return (
+      <Button variant="cta" fullWidth onClick={onGenerate}>
+        Retry storyboard workflow
+      </Button>
+    );
+  }
+  if (scriptReviewRunLink) {
+    return (
+      <ButtonLink variant="cta" fullWidth to={scriptReviewRunLink}>
+        Review script
+      </ButtonLink>
+    );
+  }
+  if (storyboardGenerating) {
+    return (
+      <ButtonLink variant="cta" fullWidth to="#mobile-stages">
+        View stages
+      </ButtonLink>
+    );
+  }
   if (storyboard) {
     return (
       <ButtonLink
@@ -248,6 +312,38 @@ export function ProjectMobilePrimaryAction({
       >
         Review storyboard
       </ButtonLink>
+    );
+  }
+  if (!hasBrief) {
+    return (
+      <ButtonLink
+        variant="cta"
+        fullWidth
+        to={`/projects/${encodeURIComponent(projectId)}/brief`}
+      >
+        Finish brief
+      </ButtonLink>
+    );
+  }
+  if (canGenerateStoryboard) {
+    return (
+      <Button variant="cta" fullWidth onClick={onGenerate}>
+        Create storyboard
+      </Button>
+    );
+  }
+  if (readyAssetLoading) {
+    return (
+      <Button variant="secondary" fullWidth disabled>
+        Checking assets…
+      </Button>
+    );
+  }
+  if (readyAssetError) {
+    return (
+      <Button variant="secondary" fullWidth onClick={onRetryReadyAsset}>
+        Retry asset check
+      </Button>
     );
   }
   return (
@@ -267,29 +363,44 @@ export function mobileProjectStatus({
   progress,
   generating,
   hasPlayableOutput,
+  hasBrief = true,
   projectStatus,
   storyboardError,
+  readyAsset,
+  readyAssetLoading,
+  readyAssetError,
+  scriptReviewPending = false,
 }: {
   storyboard: ProjectStoryboard | null;
   progress: StoryboardProgress;
   generating: boolean;
   hasPlayableOutput: boolean;
+  hasBrief?: boolean;
   projectStatus?: string;
   storyboardError?: Error | null;
+  readyAsset?: Pick<GenerationStageItem, "kind"> | null;
+  readyAssetLoading?: boolean;
+  readyAssetError?: boolean;
+  scriptReviewPending?: boolean;
 }) {
+  if (hasPlayableOutput) return "Ready to watch.";
+  if (readyAsset) return readyAssetStatus(readyAsset);
   if (storyboardError) return "Storyboard could not load. Retry to continue.";
+  if (scriptReviewPending) return "Script ready for review.";
   if (generating) {
     if (progress.total > 0) {
       return `Generating storyboard: ${progress.ready + progress.failed} of ${progress.total} panels ready.`;
     }
     return "Generating storyboard: preparing scenes.";
   }
-  if (hasPlayableOutput) return "Ready to watch.";
   if (storyboard) {
     const sceneCount = storyboard.scenes.length;
     return `Storyboard ready: ${sceneCount} ${sceneCount === 1 ? "scene" : "scenes"} to review.`;
   }
   if (projectStatus === "failed") return "Needs attention before generation can continue.";
+  if (!hasBrief) return "Finish the brief to create a storyboard.";
+  if (readyAssetLoading) return "Checking recent project assets.";
+  if (readyAssetError) return "Could not check recent project assets.";
   return "Ready for a storyboard.";
 }
 

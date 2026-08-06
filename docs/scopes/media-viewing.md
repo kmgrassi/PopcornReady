@@ -1,5 +1,13 @@
 # Media viewing — scope & PR plan
 
+<!-- agent-summary: Ready media is projected through one bucket-aware API URL resolver. -->
+<!-- agent-summary: Private signed URLs carry their real nullable expiresAt value through list and focused responses. -->
+<!-- agent-summary: Project Gallery and Library share one auth, workspace, and asset-scoped TanStack media query. -->
+<!-- agent-summary: Selected media refreshes five minutes before expiry; tiles refresh only after a load error. -->
+<!-- agent-summary: Each failed image or video URL gets one focused refresh and cannot create a retry loop. -->
+<!-- agent-summary: Fresh media URLs persist for the browser tab so route changes and reloads reuse the exact URL. -->
+<!-- agent-summary: Signed-credential JSON is private and no-store; immutable byte caching belongs on the object. -->
+
 ## Goal
 
 Make every piece of media in a project **actually viewable**: watch the
@@ -19,7 +27,45 @@ Companion scopes:
 - `docs/scopes/poster-generation.md` — `posterUrl` (shipped in PR #292) is the
   prototype of the projection pattern this doc generalizes.
 
-## The blunt findings (why nothing is viewable today)
+## Implementation update (2026-08-02)
+
+The project media gallery and owned Library now consume the same TanStack Query
+entry: `asset-media/{authScope}/{workspaceId}/{assetId}`. The authenticated
+identity in the key prevents cross-account reuse; the workspace dimension keeps
+identical-looking asset identifiers isolated across tenancy boundaries. Fresh
+entries are mirrored into `sessionStorage`, scoped by the same tuple, so a route
+change or same-tab reload can reuse the exact signed URL and therefore the
+browser's byte cache. Sign-out clears session state, and visibility mutations
+evict persisted media before invalidating the query.
+
+Creator-direct status uses that same focused query for ready recovered outputs.
+The status projection carries the asset's explicit nullable `expiresAt`, and
+its JSON is always `Cache-Control: private, no-store`. A terminal run does not
+need to keep polling merely to renew media: the asset query refreshes five
+minutes before expiry and retries once when the rendered image, video, or audio
+URL fails to load.
+
+`expiresAt` is nullable. Stable public, local, and remote URLs return `null`;
+private S3 URLs preserve their actual one-hour expiry, using the earlier expiry
+when the main media and thumbnail differ. Selected/open media schedules a
+focused refresh five minutes before that boundary. Grid tiles do not schedule
+per-card refresh timers; they refresh only if their image/video load fails.
+Each failed URL can trigger exactly one authenticated
+`GET /api/v1/assets/:assetId/media` retry. If the newly signed URL also fails,
+the component falls back truthfully instead of looping.
+
+The focused endpoint verifies managed bytes with `HeadObject`. A confirmed
+`NoSuchKey`/404 produces null media; authorization, configuration, and network
+errors remain errors. List endpoints intentionally do not perform per-row HEAD
+requests. Project and workspace asset-list JSON uses
+`Cache-Control: private, no-store`, because caching a list's embedded signed
+credentials would extend stale URL failures.
+
+The remaining sections preserve the original implementation plan for context;
+where they describe pre-S3/Supabase-only behavior, the implementation update
+above and `public-private-asset-storage.md` are authoritative.
+
+## Historical findings that motivated the implementation
 
 1. **Asset bytes never reach Supabase Storage.** The only callers of
    `uploadAssetObject()` / `useSupabaseStorage()`

@@ -99,6 +99,10 @@ continues into photoreal keyframes, clips, audio, assembly, and export. This is
 not a return to a forward-only conveyor belt: the asset graph still enables
 targeted re-entry and selective regeneration. It is the deliberate point at
 which a creator sees the plan before the expensive media work begins.
+Creator-facing **Create storyboard** uses this same autonomous run boundary. A
+structured scene-and-moment plan is an internal input to storyboard panels, not
+a separate prerequisite the creator must prepare; missing planning is satisfied
+by the agent before `generate_storyboard` runs.
 
 ## 2. Principles (the mental-model shift)
 
@@ -351,14 +355,21 @@ likeness" is the edge from a clip to its anchor.
   the asset graph; the orchestrator is the single engine, and the legacy
   monolith has been removed.
 - **P2 — Orchestrator agent. ✅ Shipped.** The agent calls the tools via
-  the run loop; initial runs are durable and autonomous through their complete
-  storyboard, then require an explicit production continuation
-  (`orchestrator_run_gates`), and carry a budget ceiling
+  the run loop. Full-video runs accept either an idea or supplied script, keep a
+  supplied script verbatim as the first draft, and stop at a mandatory script
+  review before any poster, storyboard, image, audio, or video generation can
+  begin. Requesting changes creates a superseding text-only script draft; script
+  approval resumes the same run, which later stops again at the complete
+  storyboard boundary (`orchestrator_run_gates`). Runs also carry a budget ceiling
   (`orchestrator_runs.budget_usd` / `spent_usd`). Graph-based Request Changes
   uses a durable proposal, approval, execution, reconciliation, and cost
   settlement lifecycle. Fixed-stage restart and selection-clearing fallbacks
   are deleted. The implementation record is
   [`scopes/full-selective-regeneration-cutover-prs.md`](scopes/full-selective-regeneration-cutover-prs.md).
+  Script-gate changes are the zero-media-spend exception to proposal cost
+  preview: the request is bound to the exact reviewed draft and atomically
+  returns to the same gate. Every asset-affecting change still uses the durable
+  proposal and approval lifecycle.
 - **P3 — Inspection, gates & feedback loop. 🟡 In progress:** artifacts are visible
   as they pop (every tool call is an `action`), gates ship, and immutable image
   regeneration has UI/API coverage. **Open:** the approvals/edits →

@@ -38,14 +38,18 @@ export const queryKeys = {
   project: (projectId: string) => ["projects", projectId] as const,
   projectStoryboard: (projectId: string) =>
     ["projects", projectId, "storyboard"] as const,
-  projectStoryboardJob: (projectId: string) =>
-    ["projects", projectId, "storyboards", "generate", "latest"] as const,
+  projectScript: (projectId: string) =>
+    ["projects", projectId, "script"] as const,
+  projectStoryboardRun: (projectId: string) =>
+    ["projects", projectId, "storyboard-run"] as const,
   projectGenerationRuns: (projectId: string) =>
     ["projects", projectId, "generation-runs"] as const,
   projectAssets: (
     projectId: string,
     params: { limit?: number; cursor?: string | null } = {},
   ) => ["projects", projectId, "assets", params] as const,
+  assetBilling: (authScope: string, projectId: string, assetId: string) =>
+    ["asset-billing", authScope, projectId, assetId] as const,
   dashboardSummary: (workspaceId: string) =>
     ["dashboard", "summary", workspaceId] as const,
   workspaceGenerationRuns: (
@@ -71,7 +75,8 @@ export const queryKeys = {
     workspaceId: string,
     params: { projectId?: string; limit?: number; cursor?: string | null } = {},
   ) => ["workspaces", workspaceId, "outputs", params] as const,
-  assetMedia: (assetId: string) => ["assets", assetId, "media"] as const,
+  assetMedia: (authScope: string, workspaceId: string, assetId: string) =>
+    ["asset-media", authScope, workspaceId, assetId] as const,
   generationRun: (projectId: string, runId: string) =>
     ["projects", projectId, "generation-runs", runId] as const,
   generationRunArtifact: (projectId: string, runId: string, artifactId: string) =>

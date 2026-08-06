@@ -270,6 +270,21 @@
   gap: var(--space-6);
 }
 
+.body.bodyHierarchy {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.hierarchyOperatorDiagnostics {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  padding: 0 var(--space-5) var(--space-4);
+}
+
+.hierarchyOperatorDiagnostics .operatorDiagnostics {
+  border-top: 0;
+}
+
 .main {
   display: flex;
   flex-direction: column;
@@ -417,6 +432,16 @@
 
 .reviewOutputGrid {
   margin-top: var(--space-2);
+}
+
+.assetReviewItem {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+}
+
+.assetReviewItem > :last-child {
+  justify-self: end;
 }
 
 .assetEditButton {
@@ -1024,6 +1049,10 @@
   }
 
   .statusGrid {
+    display: none;
+  }
+
+  .headerStatusPanelHierarchy {
     display: none;
   }
 

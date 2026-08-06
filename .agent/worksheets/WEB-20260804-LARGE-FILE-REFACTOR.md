@@ -20,16 +20,18 @@ module without changing route behavior.
 - Seam: formatting, path builders, status presentation, frame/loading states,
   scope controls, and pagination are shared by Runs, Projects, Assets, and
   Outputs.
-- Reviewer checkpoint: an independent reviewer was dispatched but did not
-  return before the bounded wait windows; local diff review is recorded at
-  implementation and wrap-up.
+- Reviewer checkpoint: an independent reviewer was dispatched for the merge
+  resolution but did not return within two bounded wait windows; local review
+  and targeted validation completed.
 
 ## Changes
 
 - Added `DashboardCollectionsShared.tsx` for shared filters, path builders,
   status presentation, page framing, skeletons, scope controls, and pagination.
-- Reduced `DashboardCollectionsPage.tsx` from 1,038 lines to 604 lines while
-  preserving its four exported route components and CSS module usage.
+- Rebased the extraction onto current `main`, retaining newer deep-linked media,
+  signed-media refresh, quick-loading, asset-feedback, and asset-critique paths.
+- The current route facade is 840 lines and the shared module is 232 lines; the
+  upstream source was 1,058 lines before extraction.
 
 ## Validation
 
@@ -37,9 +39,7 @@ module without changing route behavior.
 - `pnpm --filter @popcorn/web test -- src/routes/projectMediaGallery.test.ts` —
   passed (44 tests).
 - `pnpm exec playwright test e2e/specs/library-collections.spec.ts
-  --project=chromium --project=mobile-chrome` — passed (1 test).
-- Broader accidental Playwright invocation — 79 passed, 5 skipped; the skips
-  are pre-existing auth-mode cases.
+  --project=chromium --project=mobile-chrome` — passed (14 tests).
 - `pnpm agent:lint:fix` — passed.
 - `pnpm agent:validate -- --scope web` — passed.
 
@@ -49,11 +49,12 @@ module without changing route behavior.
 - Desktop/default viewport: Projects heading and Library collections navigation
   rendered; document width was 1,280px with no horizontal overflow.
 - Mobile viewport: 390x844 override rendered Projects and the mobile navigation;
-  document width was 375px and scroll width was 375px, with no overflow.
+  document width and scroll width were both 390px, with no overflow.
 - The browser viewport override was reset after inspection.
 
 ## Handoff
 
-Implementation and wrap-up review are complete. The independent reviewer found
-no concrete regressions; local and independent review both covered the shared
-boundary. Commit, worksheet tag, and open PR URL follow final validation.
+The merge conflict is resolved by merging current `origin/main` and preserving
+its newer library behavior inside the extracted boundary. Independent review
+was dispatched but unavailable within bounded waits; local review, commit,
+push, and PR status follow validation.

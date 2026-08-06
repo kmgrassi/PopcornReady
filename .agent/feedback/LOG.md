@@ -18,6 +18,30 @@
 - Follow-up: <TODO / PR / none>
 ```
 
+### 2026-08-02T07:32:37-04:00 — WEB-20260802-CREATE-LAUNCHER
+- What helped: Treating creation routes as one navigation context kept the launcher UI-only while focused browser tests protected both existing engines.
+- Friction or failure: The first cut covered query-shaped legacy links but missed React Router history-state drafts and trailing-slash route classification.
+- Suggested improvement: Include query, history state, canonicalization, Back, and Forward in the compatibility checklist whenever a live route changes meaning.
+- Follow-up: Continue the production UX audit backlog with a separate bounded refactor after this launcher dose is reviewed.
+
+### 2026-08-02T06:39:23-04:00 — WEB-20260801-PROD-UX-AUDIT review follow-up
+- What helped: Thread-aware review data and source-level auth checks separated intentional creator BYOK/model settings from role-gated operator tools and an ungated developer token.
+- Friction or failure: The original audit omitted plan and implementation checkpoints, used a source-file slug for a multi-route production journey, and left manual browser evidence out of the E2E inventory.
+- Suggested improvement: Resolve audit targets to stable URLs, label the inspected role and release identity, and verify all four review checkpoints plus the feedback log and coverage inventory before handoff.
+- Follow-up: Implement the release-gated production browser harness before treating point-in-time manual inspection as repeatable coverage.
+
+### 2026-07-31T16:35:00-04:00 — WEB-20260731-ASSET-AUTOAPPROVAL review follow-up
+- What helped: Thread-aware review data isolated the two live PR findings, and the existing route-state boundary supported proposal restoration without persistent storage.
+- Friction or failure: The first implementation preserved the editable draft for Back navigation but did not preserve the successful proposal for Forward navigation.
+- Suggested improvement: Treat every browser-history workflow as a Back/Forward state machine and test both directions after asynchronous state becomes authoritative.
+- Follow-up: Add server-backed proposal recovery only if product requirements expand to direct links, new tabs, or lost session history.
+
+### 2026-07-31T15:41:00-04:00 — WEB-20260731-ASSET-AUTOAPPROVAL
+- What helped: The existing two-phase creator-direct gate kept the UI change client-scoped, while absolute-time Playwright clock tests proved the 10-second boundary without slowing CI.
+- Friction or failure: Moving proposal work to a sibling route made form-history restoration and proposal-readiness announcements easy to miss; independent review caught both before handoff.
+- Suggested improvement: Treat every async route split as a history-state and assistive-announcement checklist item, especially when the destination arms timed work.
+- Follow-up: Add durable server-backed recovery for an already-created `/create/review` proposal after reload.
+
 ### 2026-07-29T00:00:00-04:00 — PR-807-20260729-01
 - What helped: Current `main` already contained the same route-helper refactor and its subsequent runtime-control updates, making the safe resolution directly inspectable.
 - Friction or failure: The old PR introduced a second helper module that would duplicate the newer ownership boundary if retained.
@@ -309,3 +333,16 @@
   persistence tests that should not depend on Kong/PostgREST health.
 - Follow-up: Track pooled-mint crash idempotency by canonical action ID before
   activating the PR 3A executor in production.
+
+### 2026-08-01T15:22:00-04:00 — WEB-20260801-LARGE-FILE-REFACTOR
+
+- What helped: The oversized ProgressView had clear state, plan, and pipeline
+  boundaries; extracting those seams reduced the file by 372 lines without
+  changing its public contract.
+- Friction or failure: The worktree started without dependencies, and the first
+  E2E command forwarded a separator incorrectly, so it ran the full suite rather
+  than only the named file; both issues were resolved and validation passed.
+- Suggested improvement: Bootstrap worktrees from the offline pnpm cache before
+  starting checks, and document the package-script argument forwarding syntax for
+  focused Playwright runs.
+- Follow-up: Continue selecting a different oversized file on the next daily run.

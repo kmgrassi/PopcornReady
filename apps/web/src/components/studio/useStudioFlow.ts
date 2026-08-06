@@ -9,13 +9,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Clip, Project, Timeline, TimelineSegment } from "@popcorn/shared/types";
 import type {
   AspectRatio,
-  GateableGenerationStageType,
   GenerationRun,
   GenerationStage,
 } from "@popcorn/shared/v1/types";
 import type { StoryContext } from "@popcorn/shared/types";
 import { deleteDraft, saveDraft, type StudioDraftPayload } from "../../lib/draftStore";
 import type { GenerationRunResultArtifact } from "../../lib/v1/generation-runs/status";
+import type { CreatorRunHierarchy } from "../../lib/v1/generation-runs/status";
 import { createAndStartRun, type StartRunResult } from "../../lib/startRun";
 import type { SelectedFootage } from "../../lib/upload";
 import { useUpdateGenerationRunMutation } from "../../lib/queryClient";
@@ -41,7 +41,7 @@ export type Platform = NonNullable<StoryContext["platform"]>;
 export type StoryFormat = NonNullable<StoryContext["format"]>;
 export type FootageChoice = "prompt_only" | "upload";
 export type FootageMode = "asset_driven" | "hybrid";
-export type SeedKind = "image" | "video";
+export type StudioStartSource = "idea" | "script";
 
 /**
  * BriefDraft — the superset of every step's fields, accumulated across the
@@ -50,6 +50,10 @@ export type SeedKind = "image" | "video";
  * contract stays one object.
  */
 export interface BriefDraft {
+  // Starting material. Supplied script text is an intake input; persisted script
+  // versions are reviewed read-only and revised through the agent.
+  startSource: StudioStartSource;
+  scriptText: string;
   // Brief (step 1) — the < 5 visible controls.
   goal: string;
   targetLengthSec: number;
@@ -73,16 +77,15 @@ export interface BriefDraft {
   style: string;
   callToAction: string;
 
-  // Run handoff config (seed, captions, and review checkpoints).
+  // Run handoff config. Initial runs always gate after the storyboard
+  // (server policy); the provider is the only client-side run knob.
   provider: string;
-  seedKind: SeedKind;
-  seedSize: string;
-  showCaptions: boolean;
-  reviewGates: GateableGenerationStageType[];
 }
 
 /** Initial draft — calm defaults; the empty state seeds goal/length over this. */
 export const EMPTY_BRIEF_DRAFT: BriefDraft = {
+  startSource: "idea",
+  scriptText: "",
   goal: "",
   targetLengthSec: 30,
   aspectRatio: "9:16",
@@ -101,11 +104,15 @@ export const EMPTY_BRIEF_DRAFT: BriefDraft = {
   style: "fast-paced social ad",
   callToAction: "",
   provider: "openai",
-  seedKind: "image",
-  seedSize: "1024x1792",
-  showCaptions: true,
-  reviewGates: [],
 };
+
+export function hasStudioStartingMaterial(
+  draft: Pick<BriefDraft, "startSource" | "goal" | "scriptText">
+): boolean {
+  return draft.startSource === "script"
+    ? Boolean(draft.scriptText.trim())
+    : Boolean(draft.goal.trim());
+}
 
 // --- Flow + step contracts -------------------------------------------------
 
@@ -123,6 +130,8 @@ export interface StudioFlow {
    * poll loop. PR 4's richer checklist consumes the same data.
    */
   stages: GenerationStage[];
+  /** Creator-safe Creative Director and specialist session projection. */
+  hierarchy?: CreatorRunHierarchy;
   /** Result artifacts attached to the active run, including timeline outputs. */
   resultArtifacts: GenerationRunResultArtifact[];
   /** Project id of the in-flight run, for deep-link / polling. */
@@ -230,6 +239,7 @@ export function useStudioFlow(options: UseStudioFlowOptions = {}): StudioFlow {
   }));
   const [run, setRun] = useState<GenerationRun | undefined>(restoredRun);
   const [stages, setStages] = useState<GenerationStage[]>([]);
+  const [hierarchy, setHierarchy] = useState<CreatorRunHierarchy | undefined>();
   const [resultArtifacts, setResultArtifacts] = useState<GenerationRunResultArtifact[]>([]);
   const [projectId, setProjectId] = useState<string | undefined>(
     options.initialPayload?.projectId,
@@ -373,6 +383,7 @@ export function useStudioFlow(options: UseStudioFlowOptions = {}): StudioFlow {
     setError(undefined);
     setRun(undefined);
     setStages([]);
+    setHierarchy(undefined);
     setResultArtifacts([]);
     setProjectId(undefined);
     setReviewProject(null);
@@ -399,6 +410,7 @@ export function useStudioFlow(options: UseStudioFlowOptions = {}): StudioFlow {
     if (!detail) return;
     setRun(detail.run);
     setStages(detail.stages);
+    setHierarchy(detail.hierarchy);
     setResultArtifacts(detail.resultArtifacts ?? []);
 
     if (state === "generating" && isReviewReady(detail.run)) {
@@ -428,6 +440,7 @@ export function useStudioFlow(options: UseStudioFlowOptions = {}): StudioFlow {
         });
         setRun(data.run);
         setStages(data.stages);
+        setHierarchy(data.hierarchy);
         setResultArtifacts(data.resultArtifacts ?? []);
         void runQuery.refetch();
       } catch (gateError) {
@@ -486,6 +499,7 @@ export function useStudioFlow(options: UseStudioFlowOptions = {}): StudioFlow {
       brief,
       run,
       stages,
+      hierarchy,
       resultArtifacts,
       projectId,
       reviewProject,
@@ -514,6 +528,6 @@ export function useStudioFlow(options: UseStudioFlowOptions = {}): StudioFlow {
       updateReviewSegmentNote,
       completeDraft,
     }),
-    [state, step, brief, run, stages, resultArtifacts, projectId, reviewProject, reviewTimeline, reviewTimelineId, reviewSegmentNotes, runQuery.isLoading, reviewCutQuery.isLoading, reviewCutQuery.error, error, goTo, back, next, update, startGeneration, resetGeneration, retryGeneration, approveGate, updateReviewSegment, updateReviewSegmentNote, completeDraft],
+    [state, step, brief, run, stages, hierarchy, resultArtifacts, projectId, reviewProject, reviewTimeline, reviewTimelineId, reviewSegmentNotes, runQuery.isLoading, reviewCutQuery.isLoading, reviewCutQuery.error, error, goTo, back, next, update, startGeneration, resetGeneration, retryGeneration, approveGate, updateReviewSegment, updateReviewSegmentNote, completeDraft],
   );
 }

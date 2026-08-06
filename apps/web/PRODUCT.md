@@ -32,7 +32,9 @@ only the affected assets via a dependency/provenance graph.
 The UI is **observe-first**: the dashboard is read-optimized with minimal
 direct-edit controls, and the *only* way to change content is the object-scoped
 **"Request Changes"** modal — every change flows through the agent. Nothing is
-edited in isolation.
+edited in isolation. Owned ready scripts, images, and videos may also ask the AI
+for exact-asset advisory feedback. That analysis is observation: it can explain
+strengths and improvements, but it never changes the asset or starts a rerun.
 
 Success looks like: a creator describes or uploads something, watches the studio
 generate it autonomously, and reaches a finished, on-brand video by reviewing and

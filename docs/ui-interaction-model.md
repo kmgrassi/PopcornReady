@@ -5,7 +5,7 @@
 > Star defines the agent-orchestrated generation model, and this doc defines the
 > single interaction model every authenticated surface must follow from it. New
 > UI work (human or agent) aligns to this; deviations are conscious and
-> documented. Last updated 2026-06-21.
+> documented. Last updated 2026-08-03.
 
 ## 0. The one rule
 
@@ -64,15 +64,110 @@ Read-optimized presentation of state. The user can:
 Observe surfaces carry **no input boxes and no edit buttons.** Their job is to
 make "what's going on" legible at a glance.
 
+An owned ready script, image, or video may expose **Receive feedback** as an
+observe-time advisory action. It opens an exact-object critique dialog with
+“How can we improve upon this?” prefilled and editable, sends the immutable
+asset snapshot plus that question to the configured AI, and presents strengths,
+improvements, evidence, and limitations. The response may be persisted as a
+critique asset linked to its subject for provenance, but it never changes the
+subject, moves a selection, creates a rerun proposal, or starts generation.
+This is an explicit observe-mode exception to the no-input rule: the question
+changes only the requested analysis, not product content. Audio and public or
+unresolved assets do not expose the action. A remote playback URL is not enough:
+image/video surfaces expose feedback only when the source also has managed
+storage bytes the API can materialize. Script previews render the complete
+active snapshot, including top-level narration, scene narration, and dialogue.
+
+Project overview posters, overview storyboard images, and persisted project-media
+previews use their stable asset identity to open the canonical Library asset
+viewer. In project media, that inspection link remains separate from selecting
+an asset for a new creation intent, and returning from inspection restores the
+in-progress selection and intent rather than discarding the creator's draft.
+Project overviews also keep the latest ready standalone-run asset directly
+viewable through that canonical viewer, even when later run bookkeeping fails or
+a newer full-video run becomes active. A playable final output still owns the
+primary Watch action; otherwise the ready standalone asset becomes the next step.
+Dedicated storyboard and run-review surfaces
+keep their object-scoped Request Changes interaction instead, and public shared
+projects do not link into an authenticated workspace library.
+
+For any owned asset with ready status, the canonical viewer presents one clear
+**Request changes** primary action. It opens the same exact-asset Request Changes
+lifecycle described below; it does not regenerate or overwrite the asset
+directly. Owned pending and processing assets show the action disabled with
+readiness guidance, failed assets explain why it is unavailable, and public
+assets remain read-only without the action. Existing failed-image recovery
+remains a separate path.
+
 ### 2.2 Request Changes (the single edit affordance)
 
 The **only** path to changing content. Selecting an object and choosing to change
 it opens the **Request Changes modal** (§3) — a scoped prompt to the agent. The user
 describes intent in natural language; the agent does the rest.
 
-There is no third primitive. If a proposed interaction is neither "observe" nor
-"request changes," it does not belong in the product without an explicit, documented
-exception (§5).
+There is no third primitive. Receive feedback is advisory observation, not a
+content-editing primitive. If a proposed interaction is neither "observe" nor
+"request changes," it does not belong in the product without an explicit,
+documented exception (§5).
+
+### 2.3 Initial creation entry points
+
+Initial creation is not a third editing primitive because there is no existing
+generated object to mutate yet. The authenticated shell plus Dashboard,
+Activity, and Library use one global **Create** entry at `/create`. This launcher
+asks for the intended outcome and sends **Full video** to `/projects/new` or
+**Asset or script** to `/create/asset`, with Script named in the launcher copy
+so the text-first path is discoverable before entering the workspace. The Create
+workspace collects an Image, Video, or Audio intent, then enters the durable
+proposal/review lifecycle at `/create/review` before generation. It also exposes
+**Script** as a truthful
+handoff into a new full-video project: the creator's story intent is transferred
+through validated navigation state to `/projects/new`, where the Creative
+Director writes the script and stops at the mandatory text-only review boundary
+before any media work. Script does not enter the creator-direct Visuals/Audio
+asset proposal contract, and this entry never replaces an existing project's
+authoritative script. Legacy `/create` asset status links and
+validated draft history entries redirect to `/create/asset` without losing
+their query or route state.
+
+Project context is optional at asset intake: when the creator does not choose a
+project, **Review request** creates one automatically, uses the existing AI
+naming pipeline with a prompt-derived fallback, and continues with the returned
+project. Explicit picker-based creation remains available when the creator wants
+to name or organize the project first. Full-video creation at `/projects/new`
+collects a production brief and source footage, creates the project/run, and
+preserves the storyboard-first production boundary from the North Star. The
+shell's Create item remains active throughout the launcher, asset/review, and
+full-video creation routes; Library owns ordinary project routes. Once either
+flow has produced an object, subsequent content changes return to object-scoped
+**Request Changes**.
+
+An existing project with no storyboard may also expose **Create storyboard**.
+That action starts or returns the project’s storyboard-bounded Creative Director
+run; it does not call the low-level panel generator directly. The agent prepares
+missing scene-and-moment planning internally, generates the storyboard, and
+stops for review. The creator should never have to create or understand a “shot
+plan” prerequisite. Once a storyboard exists, the surface offers **Open
+storyboard** and object-scoped **Request Changes**, not a context-free “Generate
+again” mutation.
+
+Full-video production presents one creator-facing **Creative Director** with
+separate **Visuals** and **Audio** work lanes. The lanes explain whether work is
+active, queued, waiting, blocked, failed, or complete, and link durable outputs
+back to project assets. Completed lanes collapse to a compact checked summary;
+current work stays expanded, while finite runs, actions, and jobs remain behind
+an optional production-details disclosure. Internal run/session identifiers and
+reasoning traces are never creator copy. A specialist question is shown as work
+the Creative Director is resolving, not as a second user conversation. The
+root review gate remains the only production approval loop. Its first mandatory
+boundary is **Script**: the creator reads the authoritative relational script,
+can request a text-only rewrite, and must explicitly approve it before poster,
+storyboard, image, audio, or video generation begins. A supplied script is the
+initial draft rather than a prompt to silently rewrite. The same root run later
+stops at the complete storyboard boundary. If no
+specialist lane was created, the empty state follows the root outcome: active
+work may still be planning, while waiting, blocked, failed, canceled, and
+complete roots must not imply that production is still underway.
 
 ## 3. The "Request Changes" modal
 
@@ -105,6 +200,28 @@ polls waiting/running work, and reports applied, failed, canceled, or rejected
 state from the server. A stale preview must be refreshed and reviewed again
 before execution. Provider and model choice remain server-owned; creator
 authority is the requested intent, exact target, and approved maximum cost.
+Asset Studio standalone creation is the narrow timed-confirmation exception: it
+moves to a dedicated review page, shows the exact proposal and approved maximum,
+offers **Approve this**, and visibly counts down 10 seconds before confirming if
+the creator does not revise. The countdown begins only after the proposal is
+ready, is canceled by revision or a failed manual attempt, and shares the same
+one-use server gate as manual approval. Request Changes and production review
+gates still require deliberate confirmation and never inherit this timer.
+Script review is a second narrow exception to the cost-preview proposal UI:
+because its gate is bound to one exact script draft and the revision is
+text-only with zero media spend, submitting **Request changes** is itself the
+deliberate instruction to persist a superseding script and return to the same
+gate. The atomic decision includes the reviewed draft id; stale or concurrent
+decisions fail instead of broadening to the project.
+After confirmation, the resulting creator-direct run remains project-scoped but
+uses a one-step **Image asset**, **Video asset**, or **Audio asset** activity
+surface. It must not infer Brief, Script, Storyboard, or final-render stages from
+the asset request or imply the full video pipeline, and a terminal parent run
+must never keep a stale tool spinner active. As soon as an exact-run ready asset is available, the status
+surface previews it even while final wrap-up is active. If later report
+bookkeeping fails, the UI says the asset was saved, keeps the run failure
+truthful, and preserves access to the ready image, video, or audio instead of
+replacing it with a generic error.
 If a summary surface cannot resolve a stable graph identity, Request Changes is
 disabled there and directs the creator to open a specific object. A checkpoint
 label must never be converted into a broader project target for convenience.
@@ -126,7 +243,7 @@ STAR §0) focused on one object.
 | **Project** | overview: status, runs, latest output, the story at a glance | anything project-wide ("make the whole thing more upbeat," "rename the hero everywhere") |
 | **Storyboard / story** | the beats/scenes in order, with state per beat | structure ("add a beat after the reveal," "reorder," "tighten the arc") |
 | **Scene / beat** | the beat's intent, its keyframe, its clip, its provenance | that beat ("reshoot this darker," "change what happens here") |
-| **Asset (image/clip/audio)** | the asset full-size + its pool alternatives + lineage | that asset ("brighter," "different angle," "swap the jacket") |
+| **Asset (image/clip/audio)** | the asset full-size + its pool alternatives + lineage + exact credits used when a single-output ledger debit is attributable | that asset ("brighter," "different angle," "swap the jacket") |
 | **Timeline item** | the item in context of the cut | timing/selection/transition intent ("hold this longer," "use the other take") |
 | **Export / output** | the finished video | a new pass ("make a 9:16 version," "punchier ending") |
 

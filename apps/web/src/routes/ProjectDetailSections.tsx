@@ -5,12 +5,15 @@ import type {
   ProjectStoryboard,
   V1Project,
 } from "@popcorn/shared/v1/types";
+import type { ScriptDraft } from "@popcorn/shared/types";
 import type { ProjectWatchMedia } from "../lib/api-client";
 import { Button, ButtonLink } from "../components/ui/Button";
+import { AssetCritiqueDialog } from "../components/ai-edit/AssetCritiqueDialog";
 import { ErrorState } from "../components/ui/StateCard";
 import { ImageWithSkeleton } from "../components/ui/ImageWithSkeleton";
 import { VisibilityBadge } from "../components/ui/VisibilityBadge";
 import { useSetProjectVisibilityMutation } from "../lib/queryClient";
+import { assetLibraryPath } from "../lib/assetLibraryPath";
 import { formatDate, formatDuration, titleCase } from "./project-detail-format";
 import styles from "./ProjectDetailSections.module.css";
 
@@ -60,7 +63,17 @@ export function ProjectConcept({
   const shareUrl = publicProjectUrl(project.id);
   return (
     <section className={styles.hero} id="concept">
-      <ProjectPoster name={project.name} posterUrl={project.posterUrl} />
+      {!readOnly && project.posterAssetId ? (
+        <Link
+          className={styles.posterLink}
+          to={assetLibraryPath(project.posterAssetId, projectId)}
+          aria-label={`View ${project.name} poster asset`}
+        >
+          <ProjectPoster name={project.name} posterUrl={project.posterUrl} />
+        </Link>
+      ) : (
+        <ProjectPoster name={project.name} posterUrl={project.posterUrl} />
+      )}
       <div className={styles.heroBody}>
         <div className={styles.metaRow}>
           <StatusChip status={project.status} />
@@ -341,17 +354,35 @@ export function ProjectScript({
   project,
   projectId,
   storyboard,
+  activeScript,
+  scriptAssetId,
   readOnly,
   onRequestChanges,
 }: {
   project: V1Project;
   projectId: string;
   storyboard: ProjectStoryboard | null;
+  activeScript: ScriptDraft | null;
+  scriptAssetId: string | null;
   readOnly: boolean;
   onRequestChanges?: () => void;
 }) {
+  const [critiqueOpen, setCritiqueOpen] = useState(false);
   const scriptLines = storyboardScriptLines(storyboard);
-  const narrationScript = project.brief?.narration?.script?.trim();
+  const narrationScript = activeScript
+    ? activeScript.narration?.trim()
+    : project.brief?.narration?.script?.trim();
+  const activeScriptLines = activeScript?.scenes.flatMap((scene) => [
+    ...(scene.narration
+      ? [{ id: `${scene.id}-narration`, label: scene.title, text: scene.narration }]
+      : []),
+    ...scene.dialogue.map((line, index) => ({
+      id: `${scene.id}-dialogue-${index}`,
+      label: line.characterName ?? scene.title,
+      text: line.text,
+    })),
+  ]) ?? [];
+  const displayedLines = activeScript ? activeScriptLines : scriptLines;
 
   return (
     <section className={`${styles.panel} ${styles.compactPanel}`} id="script">
@@ -362,6 +393,11 @@ export function ProjectScript({
         </div>
         {!readOnly ? (
           <div className={styles.sectionHeaderActions}>
+            {scriptAssetId && activeScript ? (
+              <Button variant="secondary" size="sm" onClick={() => setCritiqueOpen(true)}>
+                Receive feedback
+              </Button>
+            ) : null}
             {onRequestChanges ? (
               <Button variant="ghost" size="sm" onClick={onRequestChanges}>
                 Request changes
@@ -377,20 +413,34 @@ export function ProjectScript({
           </div>
         ) : null}
       </div>
-      {narrationScript ? (
-        <p className={styles.scriptBlock}>{narrationScript}</p>
-      ) : scriptLines.length > 0 ? (
+      {narrationScript ? <p className={styles.scriptBlock}>{narrationScript}</p> : null}
+      {displayedLines.length > 0 ? (
         <ol className={styles.scriptList}>
-          {scriptLines.map((line) => (
+          {displayedLines.map((line) => (
             <li key={line.id}>
               <span>{line.label}</span>
               <p>{line.text}</p>
             </li>
           ))}
         </ol>
-      ) : (
+      ) : !narrationScript ? (
         <p className={styles.muted}>No script or narrated storyboard moments are ready yet.</p>
-      )}
+      ) : null}
+      <AssetCritiqueDialog
+        open={critiqueOpen}
+        projectId={projectId}
+        assetId={scriptAssetId ?? ""}
+        title="Review this script"
+        subtitle="Ask about clarity, structure, pacing, dialogue, or tone."
+        preview={
+          <div className={styles.scriptBlock}>
+            {[narrationScript, ...displayedLines.map((line) => line.text)]
+              .filter((line): line is string => Boolean(line))
+              .join("\n\n")}
+          </div>
+        }
+        onClose={() => setCritiqueOpen(false)}
+      />
     </section>
   );
 }

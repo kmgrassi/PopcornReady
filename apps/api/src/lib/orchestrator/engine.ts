@@ -33,6 +33,7 @@ import {
   billableUsdSoFar,
   currentRunUserId,
   getWorkspaceOwnerUserId,
+  internallyHandledBillableUsdSoFar,
   userHasAnyProviderKey,
   withProviderKeyUser,
 } from "@/lib/provider-keys/resolve";
@@ -40,7 +41,11 @@ import { applyCreditTransaction, getCreditBalance } from "@/lib/api/v1/credits";
 import { ApiError } from "@/core/errors";
 import { createToolExecutionContext } from "./tool-context";
 import type { ToolCallResult, ToolName } from "./types";
-import type { AgentDomain, DomainTaskV1 } from "@popcorn/shared/domain-agent-contract";
+import type {
+  AgentDomain,
+  DomainRunWaitReason,
+  DomainTaskV1,
+} from "@popcorn/shared/domain-agent-contract";
 import {
   isDispatchToolName,
   isToolName,
@@ -53,9 +58,15 @@ import { uploadedFootageMetadataFromSummary } from "./uploaded-footage-selection
 import {
   resolveAgentDefinition,
   buildDomainReportFromCompletion,
+  DomainCompletionValidationError,
   type AgentDefinition,
   type ResolveAgentDefinitionInput,
 } from "./agent-definition";
+import { buildDomainCompletionContract } from "./domain-completion-contract";
+import {
+  repairDomainCompletion,
+  type DomainCompletionRepairer,
+} from "./domain-completion-repair";
 import {
   failDomainRunTurn,
   finalizeDomainTurn,
@@ -181,6 +192,8 @@ export interface EngineDeps {
   getCreditBalance?: typeof getCreditBalance;
   userHasAnyProviderKey?: typeof userHasAnyProviderKey;
   applyCreditTransaction?: typeof applyCreditTransaction;
+  billableUsdSoFar?: typeof billableUsdSoFar;
+  internallyHandledBillableUsdSoFar?: typeof internallyHandledBillableUsdSoFar;
   /** Fail-closed rollout control: absent roles remain queued. */
   enabledDomainRoles?: readonly AgentDomain[];
   /** Runtime controls require an explicit claimed-domain execution opt-in. */
@@ -194,6 +207,9 @@ export interface EngineDeps {
   resolveAgentDefinition?: (
     input: ResolveAgentDefinitionInput
   ) => Promise<AgentDefinition>;
+  /** Completion seams allow the strict parser and no-tools repair boundary to be tested together. */
+  buildDomainReport?: typeof buildDomainReportFromCompletion;
+  repairDomainCompletion?: DomainCompletionRepairer;
   prepareDomainScope?: (input: {
     workspaceId: string;
     projectId: string;
@@ -274,6 +290,31 @@ function registryForRejectedGate(
   return new Map([[tool.name, tool]]);
 }
 
+const SCRIPT_REVIEW_PHASE_TOOLS = new Set<ToolName>([
+  "create_or_load_brief",
+  "develop_story_blueprint",
+  "draft_script",
+]);
+
+export function registryBeforeScriptApproval(
+  registry: ToolRegistry,
+  gates: OrchestratorRunGate[]
+): ToolRegistry {
+  const scriptGate = gates.find((gate) => gate.stage === afterGateStage("draft_script"));
+  if (!scriptGate || scriptGate.status === "approved") return registry;
+  return new Map(
+    [...registry].filter(([toolName]) => SCRIPT_REVIEW_PHASE_TOOLS.has(toolName))
+  );
+}
+
+export function hasUnresolvedAfterGate(gates: OrchestratorRunGate[]): boolean {
+  return gates.some(
+    (gate) =>
+      gate.stage.startsWith(AFTER_GATE_PREFIX) &&
+      (gate.status === "pending" || gate.status === "rejected")
+  );
+}
+
 function afterGateStage(toolName: string): string {
   return `${AFTER_GATE_PREFIX}${toolName}`;
 }
@@ -314,12 +355,17 @@ function resolved(deps: EngineDeps) {
     getCreditBalance: deps.getCreditBalance ?? getCreditBalance,
     userHasAnyProviderKey: deps.userHasAnyProviderKey ?? userHasAnyProviderKey,
     applyCreditTransaction: deps.applyCreditTransaction ?? applyCreditTransaction,
+    billableUsdSoFar: deps.billableUsdSoFar ?? billableUsdSoFar,
+    internallyHandledBillableUsdSoFar:
+      deps.internallyHandledBillableUsdSoFar ?? internallyHandledBillableUsdSoFar,
     enabledDomainRoles: deps.enabledDomainRoles ?? [],
     domainRuntimeEnabled: deps.domainRuntimeEnabled ?? false,
     sessionClaimGeneration: deps.sessionClaimGeneration,
     finalizeDomainTurn: deps.finalizeDomainTurn ?? finalizeDomainTurn,
     failDomainRunTurn: deps.failDomainRunTurn ?? failDomainRunTurn,
     resolveAgentDefinition: deps.resolveAgentDefinition ?? resolveAgentDefinition,
+    buildDomainReport: deps.buildDomainReport ?? buildDomainReportFromCompletion,
+    repairDomainCompletion: deps.repairDomainCompletion ?? repairDomainCompletion,
     prepareDomainScope:
       deps.prepareDomainScope ??
       (async ({ workspaceId, projectId, task }) => {
@@ -453,7 +499,7 @@ async function reconcileInFlightJob(
         jobId: parkingJobId,
         actionId: parkingAction.id,
       });
-      return park(run, r); // unknown job — leave parked for the sweeper
+      return park(run, r, "media_job"); // unknown job — leave parked for the sweeper
     }
     logger.info("orchestrator_job.reconciled", {
       workspaceId: r.workspaceId,
@@ -521,7 +567,7 @@ async function reconcileInFlightJob(
         ? null
         : finish(run, "failed", r, { ...reconciledError });
     }
-    if (job.status !== "succeeded") return park(run, r); // still running — stay parked
+    if (job.status !== "succeeded") return park(run, r, "media_job"); // still running — stay parked
     // Job done → finalize the parking action with the assets it produced.
     await r.store.markInvocation(parkingAction.id, {
       status: "applied",
@@ -531,7 +577,7 @@ async function reconcileInFlightJob(
     const gate = gates.find((g) => g.stage === parkingAction.tool);
     if (gate?.status === "pending" || gate?.status === "rejected") {
       await r.store.markGateReached(run.id, parkingAction.tool);
-      return park(run, r);
+      return park(run, r, "approval");
     }
     const stopped = await finishIfAfterGateReached(run, parkingAction.tool, r);
     if (stopped) return stopped;
@@ -824,7 +870,10 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
     const priorResults = prior.map((action) =>
       definition.task ? toDomainPriorResult(action, definition, run.projectId) : toPriorResult(action)
     );
-    const turnRegistry = registryForRejectedGate(definition.registry, gates);
+    const turnRegistry = registryForRejectedGate(
+      registryBeforeScriptApproval(definition.registry, gates),
+      gates
+    );
     const agentContext = await definition.loadTurnContext();
 
     let decision;
@@ -839,6 +888,10 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
           registry: turnRegistry,
           systemPrompt: definition.systemPrompt,
           agentContext,
+          completionMode: definition.task ? "domain_json" : "text",
+          completionContract: definition.task
+            ? buildDomainCompletionContract({ task: definition.task })
+            : undefined,
         }),
         r.modelTurnTimeoutMs,
         `orchestrator model turn exceeded ${r.modelTurnTimeoutMs}ms`
@@ -855,7 +908,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
       if (definition.task) {
         let report: import("@popcorn/shared/domain-agent-contract").DomainReportV1;
         try {
-          report = await buildDomainReportFromCompletion({
+          report = await r.buildDomainReport({
             runId: run.id,
             projectId: run.projectId,
             task: definition.task,
@@ -863,10 +916,98 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
             actions: prior,
           });
         } catch (err) {
-          return terminalizeDomainFailure(run, r, {
-            kind: "invalid_input",
-            message: err instanceof Error ? err.message : "Invalid domain completion.",
-            recoverable: false,
+          if (!(err instanceof DomainCompletionValidationError) || !err.repairable) {
+            return terminalizeDomainFailure(run, r, {
+              kind: err instanceof DomainCompletionValidationError
+                ? "invalid_input"
+                : "provider_failed",
+              message: err instanceof DomainCompletionValidationError
+                ? err.message
+                : "Domain completion validation could not verify persisted outputs.",
+              recoverable: false,
+            });
+          }
+          logger.warn("orchestrator.domain_completion_repair_started", {
+            workspaceId: r.workspaceId,
+            projectId: run.projectId,
+            runId: run.id,
+            turn,
+            validationCode: err.code,
+          });
+          let repairedSummary: string;
+          const repairTimeoutMessage =
+            `domain completion repair exceeded ${r.modelTurnTimeoutMs}ms`;
+          try {
+            repairedSummary = await withTimeout(
+              r.repairDomainCompletion({
+                workspaceId: r.workspaceId,
+                projectId: run.projectId,
+                runId: run.id,
+                task: definition.task,
+                actions: prior,
+                previousCompletion: decision.summary,
+                validationError: err,
+              }),
+              r.modelTurnTimeoutMs,
+              repairTimeoutMessage
+            );
+          } catch (repairErr) {
+            const timedOut =
+              repairErr instanceof Error && repairErr.message === repairTimeoutMessage;
+            logger.error("orchestrator.domain_completion_repair_failed", {
+              workspaceId: r.workspaceId,
+              projectId: run.projectId,
+              runId: run.id,
+              turn,
+              validationCode: err.code,
+              failureKind: timedOut ? "timeout" : "provider_failed",
+            });
+            return terminalizeDomainFailure(run, r, {
+              kind: repairErr instanceof DomainCompletionValidationError
+                ? "invalid_input"
+                : timedOut
+                  ? "timeout"
+                  : "provider_failed",
+              message: repairErr instanceof DomainCompletionValidationError
+                ? repairErr.message
+                : timedOut
+                  ? "Domain completion repair timed out."
+                  : "Domain completion repair model call failed.",
+              recoverable: false,
+            });
+          }
+          try {
+            report = await r.buildDomainReport({
+              runId: run.id,
+              projectId: run.projectId,
+              task: definition.task,
+              summary: repairedSummary,
+              actions: prior,
+            });
+          } catch (repairValidationErr) {
+            const validationFailure =
+              repairValidationErr instanceof DomainCompletionValidationError;
+            logger.error("orchestrator.domain_completion_repair_exhausted", {
+              workspaceId: r.workspaceId,
+              projectId: run.projectId,
+              runId: run.id,
+              turn,
+              validationCode: validationFailure ? repairValidationErr.code : undefined,
+            });
+            return terminalizeDomainFailure(run, r, {
+              kind: validationFailure ? "invalid_input" : "provider_failed",
+              message: validationFailure
+                ? repairValidationErr.message
+                : "Corrected domain completion could not verify persisted outputs.",
+              recoverable: false,
+            });
+          }
+          logger.info("orchestrator.domain_completion_repair_succeeded", {
+            workspaceId: r.workspaceId,
+            projectId: run.projectId,
+            runId: run.id,
+            turn,
+            validationCode: err.code,
           });
         }
         try {
@@ -879,6 +1020,15 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
             recoverable: false,
           });
         }
+      }
+      if (hasUnresolvedAfterGate(gates)) {
+        logger.warn("orchestrator.done_before_required_gate", {
+          workspaceId: r.workspaceId,
+          projectId: run.projectId,
+          runId: run.id,
+          turn,
+        });
+        continue;
       }
       logger.info("orchestrator.done", {
         workspaceId: r.workspaceId,
@@ -923,7 +1073,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
           gateId: gate.id,
           gateStatus: gate.status,
         });
-        return park(run, r);
+        return park(run, r, "approval");
       }
     }
 
@@ -993,6 +1143,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
 
     const runUserId = currentRunUserId();
     let billedBeforeUsd = 0;
+    let internallyHandledBeforeUsd = 0;
     try {
       // Credit pre-check: fail fast before spending on a generation a broke user
       // with no BYO keys can't pay for. Only gates BILLABLE tools (estimate > 0) —
@@ -1021,7 +1172,8 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
         }
       }
 
-      billedBeforeUsd = billableUsdSoFar();
+      billedBeforeUsd = r.billableUsdSoFar();
+      internallyHandledBeforeUsd = r.internallyHandledBillableUsdSoFar();
     } catch (err) {
       // Estimation and credit checks can fail before a tool handler runs. Keep
       // the reservation's lifecycle truthful in that case instead of leaving a
@@ -1154,8 +1306,13 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
     // local/guest generation leave the run tally empty, so they debit nothing.
     // 1 credit = $0.01, with a margin. The debit is balance-guarded in Postgres.
     if (result.status === "succeeded" && runUserId) {
-      const afterUsd = billableUsdSoFar();
-      const billableDeltaUsd = afterUsd - billedBeforeUsd;
+      const afterUsd = r.billableUsdSoFar();
+      const internallyHandledDeltaUsd =
+        r.internallyHandledBillableUsdSoFar() - internallyHandledBeforeUsd;
+      const billableDeltaUsd = Math.max(
+        0,
+        afterUsd - billedBeforeUsd - internallyHandledDeltaUsd
+      );
       if (billableDeltaUsd > 0) {
         const credits = Math.ceil(billableDeltaUsd * CREDIT_MARGIN * CREDITS_PER_USD);
         try {
@@ -1164,6 +1321,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
             deltaCredits: -credits,
             reason: "generation_debit",
             runId: run.id,
+            actionId,
             costUsd: billableDeltaUsd,
             // Cumulative billable USD is monotonic + unique per debit in the run,
             // so a retried debit is idempotent rather than double-charging.
@@ -1187,7 +1345,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
 
     if (regeneratingRejectedGate && result.status === "succeeded") {
       await r.store.markGateReached(run.id, decision.toolName);
-      return park(run, r);
+      return park(run, r, "approval");
     }
 
     if (result.status === "succeeded") {
@@ -1221,7 +1379,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
         tool: decision.toolName,
         resultStatus: result.status,
       });
-      const parked = await park(run, r);
+      const parked = await park(run, r, "media_job");
 
       // A fast inline worker can finish before the accepted invocation has been
       // recorded and the run has reached `waiting`. Reconcile its terminal state
@@ -1242,7 +1400,7 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
         tool: decision.toolName,
         resultStatus: result.status,
       });
-      return park(run, r); // parked on an approval gate
+      return park(run, r, "approval");
     }
     if (result.status === "failed" && !result.error.recoverable) {
       return finish(run, "failed", r, { ...result.error });
@@ -1280,10 +1438,14 @@ async function finish(
 async function park(
   run: OrchestratorRun,
   r: Resolved,
-  waitReason: "domain" | null = null
+  waitReason: DomainRunWaitReason
 ): Promise<OrchestratorRun> {
-  // The domain wait is distinct from media-job and approval waits: a root run
-  // parked on a delegated child records it durably so store/projection can
-  // distinguish "waiting on a specialist" from "waiting on a provider job".
-  return r.store.updateOrchestratorRun(run.id, { status: "waiting", waitReason });
+  // Finite Visuals/Audio runs must persist every wait reason. Root runs retain
+  // their historical null media/approval waits because the DB permits only a
+  // domain reason there; root delegation is the one explicit root wait.
+  const persistedReason = isDomainRun(run) || waitReason === "domain" ? waitReason : null;
+  return r.store.updateOrchestratorRun(run.id, {
+    status: "waiting",
+    waitReason: persistedReason,
+  });
 }

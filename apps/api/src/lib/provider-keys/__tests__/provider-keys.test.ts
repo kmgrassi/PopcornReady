@@ -7,7 +7,9 @@ import { decryptApiKey, encryptApiKey, keyHint } from "../crypto";
 import {
   billableUsdSoFar,
   currentRunUserId,
+  internallyHandledBillableUsdSoFar,
   noteBillableGeneration,
+  noteInternallyHandledBillableGeneration,
   resolveProviderApiKey,
   resolveProviderKey,
   withProviderKeyUser,
@@ -85,4 +87,15 @@ test("no billing tally or run user outside a run context", () => {
   assert.equal(billableUsdSoFar(), 0);
   noteBillableGeneration("openai", 10); // no-op: nothing to accrue onto
   assert.equal(billableUsdSoFar(), 0);
+});
+
+test("nested settlement marks billable cost so an outer caller can exclude it", async () => {
+  process.env.OPENAI_API_KEY = "platform-openai";
+  await withProviderKeyUser(null, async () => {
+    await resolveProviderKey("openai");
+    noteBillableGeneration("openai", 0.42);
+    noteInternallyHandledBillableGeneration(0.42);
+    assert.equal(billableUsdSoFar(), 0.42);
+    assert.equal(internallyHandledBillableUsdSoFar(), 0.42);
+  });
 });

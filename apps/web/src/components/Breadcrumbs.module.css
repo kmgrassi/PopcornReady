@@ -43,7 +43,9 @@
 
 .link {
   padding: 0 var(--space-2);
+  overflow: hidden;
   color: var(--muted);
+  text-overflow: ellipsis;
   text-decoration: none;
   transition:
     background var(--transition),
@@ -75,5 +77,9 @@
   .list {
     overflow-x: auto;
     padding-bottom: var(--space-1);
+  }
+
+  .item {
+    flex: 0 0 auto;
   }
 }

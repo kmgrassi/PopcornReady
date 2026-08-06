@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import type { V1Project } from "@popcorn/shared/v1/types";
 import { useAuth } from "../../components/auth/AuthProvider";
+import { QuickLoadingState } from "../../components/ui/QuickLoadingState";
 import { Button } from "../../components/ui/Button";
 import { ImageWithSkeleton } from "../../components/ui/ImageWithSkeleton";
 import { EmptyState, ErrorState } from "../../components/ui/StateCard";
@@ -213,11 +214,18 @@ export function AnchorDetailPage() {
       </Link>
 
       {entryQuery.isLoading ? (
-        <div className={styles.skeleton} aria-hidden="true">
-          <span />
-          <span />
-          <span />
-        </div>
+        <QuickLoadingState
+          title="Loading anchor"
+          description="Gathering this creative reference."
+          reservation={(
+            <div className={styles.skeleton}>
+              <span />
+              <span />
+              <span />
+            </div>
+          )}
+          variant="page"
+        />
       ) : null}
 
       {!entryQuery.isLoading && entryQuery.error ? (

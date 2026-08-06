@@ -289,12 +289,42 @@ spread). A thin, low-alpha shadow that works on white reads as nothing here.
   gold-border ring — clearly current without shouting.
 - **Mobile:** Sidebar collapses to a horizontal scrolling nav row; top bar stacks.
 
-### Signature: Generation Stage Flow & Skeletons
+### Signature: Generation Stage Flow & Loading States
 The pipeline timeline (`admin-flow` / stage rows) renders stages as a vertical
 connected sequence with state-colored index nodes (running = coral glow, complete
-= reel-green). Loading uses **shimmer skeletons** that mirror the real media
-layout, never a centered spinner over empty content. This is where "show the work,
-not the slot machine" lives — make it legible and provenance-rich.
+= reel-green). Ordinary route and data loading waits briefly before revealing a
+shared quick-loading state: content-dense routes show content-shaped skeleton
+geometry, while routes without useful geometry use a compact progress treatment.
+The active pixel-art studio crew is reserved for known queued, running, or
+non-actionable waiting creative production, where the wait is part of the product
+story rather than an incidental fetch. In creator-direct active production, the status leads into a large,
+full-width crew scene on desktop; the indeterminate track and compact creative
+brief sit beneath it as supporting context. Terminal, blocked, question, and
+ready outcomes keep the quieter split layout so their truthful outcome copy is
+not outranked by idle artwork. The same scene may rest in its idle frame as
+context after production finishes; it is not then a loading indicator. Compact
+buttons, pagination, thumbnails, upload progress, and background refreshes keep
+their purpose-sized indicators. This is where "show the work, not the slot
+machine" lives — make it legible and provenance-rich.
+
+Specialized recovery states may retain their own layout when they expose useful
+pending-state context or escape actions; the Run Progress opener keeps its
+stored-run hint and project link before handing off to the crew-based production
+view.
+
+Hierarchy-backed full-video production replaces the primitive stage rail with a
+quiet, divider-based Creative Director summary. Visuals and Audio appear as
+semantic lanes: active or blocked work is open, completed work compresses to a
+checked row, and implementation-level assignments are a nested disclosure.
+State always pairs color with a label and shape. On narrow screens the director
+and current lane precede the approved-plan recap so the live production state is
+visible without navigating an internal pipeline. An empty hierarchy describes
+planning only while the root is queued or active; waiting, blocked, failed,
+canceled, and complete roots use state-specific copy so terminal history never
+looks like live work. Mobile breadcrumbs remain a single internally scrolling
+row with clipped labels rather than shrinking and painting across neighboring
+locations, and it aligns the current location into view on route, label, and
+desktop-to-mobile changes.
 
 ## 6. Do's and Don'ts
 
@@ -307,8 +337,9 @@ not the slot machine" lives — make it legible and provenance-rich.
   case, never a second typeface.
 - **Do** convey depth with tonal layers (bg → twilight → raised) plus dark-tuned
   shadows, and lift interactive elements on hover (reversing on `:active`).
-- **Do** make generation legible: stages, status, provenance, shimmer skeletons
-  that match the real layout, and a path to re-trigger any stage.
+- **Do** make generation legible: stages, status, provenance, studio crew for
+  known creative production, delayed content-shaped route loading, and a path to
+  re-trigger any stage.
 - **Do** keep the creator view quiet; reach operator density (evals/runs) only
   through progressive disclosure.
 - **Do** show the accent-derived focus ring on every interactive element, and pair

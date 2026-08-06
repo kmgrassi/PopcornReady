@@ -24,6 +24,14 @@ export const FAQS: FaqItem[] = [
     tags: ["overview", "creation", "editing"],
   },
   {
+    id: "how-the-agents-work",
+    question: "How does the AI actually make the video?",
+    answer:
+      "Every video is one directed production run by a small crew of AI agents. A creative director agent turns your brief into a plan — scenes, beats, and shots — then delegates the production work to specialists: a visuals agent generates keyframes and video clips, and an audio agent produces voice, music, and sound. The director reviews their work, assembles the timeline, and pauses for your approval at key points, like the finished storyboard. You can watch every assignment and asset in the run view, and step in at any stage.",
+    placements: ["landing", "dashboard"],
+    tags: ["overview", "agents", "workflow"],
+  },
+  {
     id: "approximate-cost",
     question: "Approximately how much does it cost?",
     answer:

@@ -24,7 +24,6 @@ import {
   type StartGenerationRunInput,
   type StartTimelineExportInput,
   type StartUploadedFootageRunInput,
-  type ProjectStoryboardJobResponse,
 } from "./api-client";
 import { queryClient } from "./queryClientCore";
 import { queryKeys, studioProjectTimelineKey } from "./queryKeys";
@@ -33,6 +32,7 @@ import { dashboardApi } from "./v1/dashboard/client";
 import { isRunActive, type GenerationRunDetail } from "./v1/generation-runs/status";
 import { storyboardProgress } from "./v1/storyboard/progress";
 import type { ProjectStoryboardResponse } from "./api-client";
+import { clearPersistedAssetMedia } from "./assetMediaQuery";
 
 const POLL_INTERVAL_MS = 2_000;
 const REVIEW_POLL_INTERVAL_MS = 15_000;
@@ -58,10 +58,13 @@ function shouldPollRun(run: GenerationRunDetail | undefined): boolean {
   return Boolean(run && !isTerminal(run.run.status));
 }
 
-function shouldPollStoryboardJob(
-  response: ProjectStoryboardJobResponse | undefined,
-): boolean {
-  return Boolean(response?.job && !isTerminal(response.job.status));
+export function generationRunRefetchInterval(query: {
+  state: { data: GenerationRunDetail | undefined };
+}): number | false {
+  const data = query.state.data;
+  if (!shouldPollRun(data)) return false;
+  if (document.visibilityState === "hidden") return HIDDEN_POLL_INTERVAL_MS;
+  return data?.run.reviewGate ? REVIEW_POLL_INTERVAL_MS : POLL_INTERVAL_MS;
 }
 
 function shouldPollProjectAssets(assets: V1Asset[] | undefined): boolean {
@@ -316,15 +319,23 @@ export function useProjectQuery(projectId: string, enabled = true) {
   });
 }
 
-export function useCreateProjectMutation() {
+export function useCreateProjectMutation({
+  notifications = true,
+}: { notifications?: boolean } = {}) {
   const client = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: CreateProjectInput) => v1Api.createProject(input),
-    meta: {
-      successMessage: "Project created",
-      errorMessage: "Could not create project",
-    },
+    mutationFn: ({ idempotencyKey, ...input }: CreateProjectInput & {
+      idempotencyKey?: string;
+    }) => v1Api.createProject(input, { idempotencyKey }),
+    ...(notifications
+      ? {
+          meta: {
+            successMessage: "Project created",
+            errorMessage: "Could not create project",
+          },
+        }
+      : { meta: { suppressErrorToast: true } }),
     onSuccess: (response) => {
       void client.invalidateQueries({ queryKey: ["projects"] });
       void client.invalidateQueries({ queryKey: queryKeys.assetStudioProjects() });
@@ -388,6 +399,8 @@ export function useSetProjectVisibilityMutation(projectId: string) {
       }
     },
     onSuccess: (data) => {
+      clearPersistedAssetMedia();
+      void client.invalidateQueries({ queryKey: ["asset-media"] });
       client.setQueryData(queryKeys.project(projectId), data);
       client.removeQueries({ queryKey: projectQueryKeys.publicProject(projectId) });
       void client.invalidateQueries({ queryKey: ["projects"] });
@@ -477,16 +490,27 @@ export function useProjectStoryboardQuery(
   });
 }
 
-export function useGenerateProjectStoryboardMutation(projectId: string) {
+export function useProjectScriptQuery(projectId: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.projectScript(projectId),
+    queryFn: ({ signal }: { signal: QuerySignal }) =>
+      v1Api.getProjectScript(projectId, signal),
+    enabled: enabled && Boolean(projectId),
+  });
+}
+
+export function useStartProjectStoryboardRunMutation(projectId: string) {
   const client = useQueryClient();
 
   return useMutation({
-    mutationFn: () => v1Api.generateProjectStoryboard(projectId),
-    onSuccess: ({ job }) => {
-      // Seed the latest-job cache so polling + the loading banner start
-      // immediately, without waiting for the next poll of the list endpoint.
-      client.setQueryData(queryKeys.projectStoryboardJob(projectId), { job });
+    mutationFn: () => v1Api.startProjectStoryboardRun(projectId),
+    meta: {
+      successMessage: "Storyboard production started",
+      errorMessage: "Could not start storyboard production",
+    },
+    onSuccess: () => {
       void client.invalidateQueries({ queryKey: queryKeys.projectStoryboard(projectId) });
+      void client.invalidateQueries({ queryKey: queryKeys.projectStoryboardRun(projectId) });
       void client.invalidateQueries({ queryKey: queryKeys.project(projectId) });
       void client.invalidateQueries({ queryKey: ["projects"] });
       void client.invalidateQueries({ queryKey: ["workspaces"] });
@@ -495,18 +519,19 @@ export function useGenerateProjectStoryboardMutation(projectId: string) {
   });
 }
 
-// Latest storyboard generation job for the project. Polls while the job is
-// queued/running and — because it reads server state rather than a client-held
-// job id — keeps polling correctly after a page reload mid-generation.
-export function useProjectStoryboardJobQuery(projectId: string, enabled = true) {
+export function useProjectStoryboardRunQuery(projectId: string, enabled = true) {
   return useQuery({
-    queryKey: queryKeys.projectStoryboardJob(projectId),
+    queryKey: queryKeys.projectStoryboardRun(projectId),
     queryFn: ({ signal }: { signal: QuerySignal }) =>
-      v1Api.getProjectStoryboardJob(projectId, signal),
+      v1Api.getProjectStoryboardRunStatus(projectId, signal),
     enabled: enabled && Boolean(projectId),
     refetchInterval: (query) => {
-      const data = query.state.data as ProjectStoryboardJobResponse | undefined;
-      if (!shouldPollStoryboardJob(data)) return false;
+      const run = query.state.data?.run;
+      if (
+        !run ||
+        run.storyboardBoundaryStatus !== "pending" ||
+        isTerminal(run.status)
+      ) return false;
       if (document.visibilityState === "hidden") return HIDDEN_POLL_INTERVAL_MS;
       return POLL_INTERVAL_MS;
     },
@@ -533,6 +558,35 @@ export function useProjectAssetsQuery(
       return POLL_INTERVAL_MS;
     },
     refetchIntervalInBackground: true,
+  });
+}
+
+export function useAssetBillingQuery(
+  authScope: string,
+  projectId: string,
+  assetId: string | null,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: queryKeys.assetBilling(authScope, projectId, assetId ?? "closed"),
+    queryFn: ({ signal }: { signal: QuerySignal }) =>
+      v1Api.getProjectAssetDetail(projectId, assetId!, signal),
+    enabled: enabled && Boolean(projectId && assetId),
+    select: (response) => response.billing,
+  });
+}
+
+export function useProjectAssetDetailQuery(
+  authScope: string,
+  projectId: string,
+  assetId: string | null,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: queryKeys.assetBilling(authScope, projectId, assetId ?? "closed"),
+    queryFn: ({ signal }: { signal: QuerySignal }) =>
+      v1Api.getProjectAssetDetail(projectId, assetId!, signal),
+    enabled: enabled && Boolean(projectId && assetId),
   });
 }
 
@@ -602,22 +656,6 @@ export function useWorkspaceOutputsQuery(
   });
 }
 
-export function useRefreshAssetMediaMutation() {
-  const client = useQueryClient();
-
-  return useMutation({
-    mutationFn: (assetId: string) => v1Api.refreshAssetMedia(assetId),
-    meta: {
-      successMessage: "Media refreshed",
-      errorMessage: "Could not refresh media",
-    },
-    onSuccess: (data, assetId) => {
-      client.setQueryData(queryKeys.assetMedia(assetId), data);
-      void client.invalidateQueries({ queryKey: ["workspaces"] });
-    },
-  });
-}
-
 export function useSetAssetVisibilityMutation() {
   const client = useQueryClient();
 
@@ -635,7 +673,12 @@ export function useSetAssetVisibilityMutation() {
       successMessage: "Visibility updated",
       errorMessage: "Could not update visibility",
     },
-    onSuccess: () => {
+    onSuccess: (_data, { assetId }) => {
+      clearPersistedAssetMedia();
+      void client.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === "asset-media" && query.queryKey[3] === assetId,
+      });
       void client.invalidateQueries({ queryKey: ["workspaces"] });
     },
   });
@@ -661,12 +704,7 @@ export function useGenerationRunQuery(projectId: string, runId: string, enabled 
     queryFn: ({ signal }: { signal: QuerySignal }) =>
       v1Api.getGenerationRun(projectId, runId, signal),
     enabled: enabled && Boolean(projectId && runId),
-    refetchInterval: (query) => {
-      const data = query.state.data as GenerationRunDetail | undefined;
-      if (!shouldPollRun(data)) return false;
-      if (document.visibilityState === "hidden") return HIDDEN_POLL_INTERVAL_MS;
-      return data?.run.reviewGate ? REVIEW_POLL_INTERVAL_MS : POLL_INTERVAL_MS;
-    },
+    refetchInterval: generationRunRefetchInterval,
     refetchIntervalInBackground: true,
   });
 }
@@ -711,11 +749,16 @@ export function useUpdateGenerationRunMutation(projectId: string, runId: string)
       action,
       body,
     }: {
-      action: "approve" | "cancel";
-      body?: { note?: string };
+      action: "approve" | "reject" | "cancel";
+      body?: { note?: string; scriptDraftId?: string };
     }) => v1Api.updateGenerationRun(projectId, runId, action, body),
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       client.setQueryData(queryKeys.generationRun(projectId, runId), data);
+      if (variables.action === "reject") {
+        client.removeQueries({ queryKey: queryKeys.projectScript(projectId) });
+      } else if (variables.action === "approve") {
+        void client.invalidateQueries({ queryKey: queryKeys.projectScript(projectId) });
+      }
       void client.invalidateQueries({ queryKey: queryKeys.projectGenerationRuns(projectId) });
       void client.invalidateQueries({ queryKey: ["dashboard"] });
       void client.invalidateQueries({ queryKey: ["workspaces"] });

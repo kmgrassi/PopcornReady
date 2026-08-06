@@ -71,6 +71,20 @@ Visuals/Audio child runs and primitive actions whose parent root, dispatch
 action, proposal approval context, and execution reservation match one durable
 rerun work item. Unrelated domain runs and primitive actions remain hidden.
 
+Asset-detail billing is intentionally a request-scoped Supabase read. The
+owner-only project asset route resolves attributable `actions` and
+`credit_transactions` through the caller's JWT-backed client, so project and
+ledger RLS remain authoritative. Public discovery routes do not expose or
+request this billing projection. Only actions with exactly one output asset
+are attributable; ambiguous and historical unlinked debits return `null`
+instead of inventing a per-asset split.
+
+Exact-asset advisory critique is also request-scoped. The signed-in critique
+route threads its JWT-backed Supabase client through source lookup, durable
+action creation and finalization, replay lookup, and critique-asset insertion,
+so project, asset, action, edge, and selection policies evaluate the caller.
+Local authentication mode alone uses the service client for this workflow.
+
 ## Direct Postgres safety rules
 
 `DATABASE_URL` is server-only. The pool is lazy, but production readiness now
@@ -139,7 +153,39 @@ memberships/ownership, the absence of extra effective table or column
 privileges, named RLS policies, and routine grants once and caches only a
 successful result. This prevents Railway's caller deployment from becoming
 healthy before the independent Supabase migration workflow has installed the
-required capabilities.
+required capabilities. Every migration that changes a `popcorn_api` table or
+column grant must update the readiness allowlist and the real-role integration
+coverage in the same PR. The rerun lifecycle directly reads the semantic scene
+snapshot pointer, but stable scene/beat identity remains behind the service
+client or the bounded story-application function and is not a direct-role
+grant.
+
+Release readiness adds one non-workflow metadata exception outside `public`:
+`popcorn_api` has `USAGE` on `supabase_migrations` and column-level
+`SELECT(version)` on `supabase_migrations.schema_migrations`. It cannot select
+the table as a whole or read migration names/statements. Health uses those
+nonsecret versions only to prove that every version declared by the immutable
+API build artifact is applied. The query returns no customer data, carries no
+request identity, and is never exposed through PostgREST or an application RPC.
+
+The storyboard creator entrypoint takes a transaction-scoped advisory lock on
+the project before its service-store find-or-create decision. The lock carries
+no table access and adds no role grants; it only serializes this entrypoint
+across API instances so two creator requests cannot create duplicate active
+storyboard-bound roots. Project authorization still runs first on the
+request-scoped access path, and the orchestrator store remains the durable
+run/gate writer. The gate lookup is backed by
+`orchestrator_run_gates(stage, created_at DESC, orchestrator_run_id)` so the
+two-second active-run poll does not scan and sort gate history.
+
+Full-video script approval and rejection use the typed transaction in
+`apps/api/src/lib/postgres/script-review-transaction.ts`. It locks the exact
+reached script gate, Creative Director run, project pointer, and active script
+draft; binds the decision to the reviewed draft id; and atomically updates the
+script status, gate decision, and resumable run state. Rejection also inserts
+its text-only feedback action in the same transaction. The `popcorn_api` role
+has column-level access and RLS policies only for that script-review shape, and
+release readiness checks those grants and policies explicitly.
 
 ## Incremental migration sequence
 

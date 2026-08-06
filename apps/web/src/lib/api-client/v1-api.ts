@@ -13,8 +13,11 @@ import type {
   RerunProposalLifecycleView,
   RerunProposalV2,
 } from "@popcorn/shared/rerun-proposal";
-import type { GenerationRunDetail } from "../v1/generation-runs/status";
-import { apiRequest } from "./transport";
+import {
+  isGenerationRunDetail,
+  type GenerationRunDetail,
+} from "../v1/generation-runs/status";
+import { ApiClientError, apiRequest } from "./transport";
 import type {
   AccountMutationResponse,
   AnonymousDeviceRecoveryResponse,
@@ -31,6 +34,7 @@ import type {
   ModelProvider,
   ModelSettingPurpose,
   ProjectResponse,
+  ProjectScriptResponse,
   ProjectStoryboardJobResponse,
   ProjectStoryboardResponse,
   ProjectTimelineResponse,
@@ -45,6 +49,8 @@ import type {
   SaveProjectStoryboardInput,
   StartGenerationRunInput,
   StartGenerationRunResponse,
+  StartStoryboardGenerationRunResponse,
+  StoryboardGenerationRunStatusResponse,
   StartTimelineExportInput,
   StartUploadedFootageRunInput,
   StoryboardGenerationJobResponse,
@@ -58,6 +64,8 @@ import type {
   WorkspaceOutputsResponse,
   ProjectsResponse,
   ProjectAssetsResponse,
+  ProjectAssetDetailResponse,
+  AssetCritiqueResponse,
 } from "./types";
 
 function studioProjectFromV1(project: V1Project): Project {
@@ -169,6 +177,14 @@ export interface CreditCheckoutResponse {
   url: string | null;
 }
 
+function requireGenerationRunDetail(value: unknown): GenerationRunDetail {
+  if (isGenerationRunDetail(value)) return value;
+  throw new ApiClientError(502, {
+    code: "invalid_generation_run_detail",
+    message: "The production status response was malformed.",
+  });
+}
+
 export const v1Api = {
   me: () => apiRequest<MeResponse>("/api/v1/me"),
   getCredits: () => apiRequest<CreditsBalance>("/api/v1/credits"),
@@ -243,7 +259,11 @@ export const v1Api = {
       method: "POST",
       body: input,
     }),
-  listProjects: (params?: { limit?: number; cursor?: string | null }) =>
+  listProjects: (params?: {
+    limit?: number;
+    cursor?: string | null;
+    order?: "createdAt" | "updatedAt";
+  }) =>
     apiRequest<ProjectsResponse>("/api/v1/projects", {
       searchParams: params,
     }),
@@ -287,9 +307,15 @@ export const v1Api = {
       pagination: response.pagination,
     };
   },
-  createProject: (input: CreateProjectInput) =>
+  createProject: (
+    input: CreateProjectInput,
+    options: { idempotencyKey?: string } = {},
+  ) =>
     apiRequest<CreateProjectResponse>("/api/v1/projects", {
       method: "POST",
+      ...(options.idempotencyKey
+        ? { headers: { "Idempotency-Key": options.idempotencyKey } }
+        : {}),
       body: input,
     }),
   createBriefVersion: (projectId: string, input: CreateProjectInput["brief"]) =>
@@ -320,9 +346,33 @@ export const v1Api = {
         searchParams: params,
       }
     ),
+  getProjectAssetDetail: (projectId: string, assetId: string, signal?: AbortSignal) =>
+    apiRequest<ProjectAssetDetailResponse>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(assetId)}`,
+      { signal }
+    ),
+  createAssetCritique: (
+    projectId: string,
+    assetId: string,
+    question: string,
+    idempotencyKey: string,
+  ) =>
+    apiRequest<AssetCritiqueResponse>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(assetId)}/critique`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: { question },
+      }
+    ),
   getProject: (projectId: string) =>
     apiRequest<ProjectResponse>(
       `/api/v1/projects/${encodeURIComponent(projectId)}`
+    ),
+  getProjectScript: (projectId: string, signal?: AbortSignal) =>
+    apiRequest<ProjectScriptResponse>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/script`,
+      { signal }
     ),
   setProjectVisibility: (projectId: string, visibility: ProjectVisibility) =>
     apiRequest<ProjectResponse>(
@@ -355,6 +405,22 @@ export const v1Api = {
   getProjectStoryboard: (projectId: string, signal?: AbortSignal) =>
     apiRequest<ProjectStoryboardResponse>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/storyboard`,
+      { signal }
+    ),
+  startProjectStoryboardRun: (projectId: string) =>
+    apiRequest<StartStoryboardGenerationRunResponse>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/generation-entrypoints/storyboard`,
+      {
+        method: "POST",
+        body: {},
+        headers: {
+          "Idempotency-Key": `storyboard-run:${projectId}:${globalThis.crypto?.randomUUID?.() ?? Date.now()}`,
+        },
+      }
+    ),
+  getProjectStoryboardRunStatus: (projectId: string, signal?: AbortSignal) =>
+    apiRequest<StoryboardGenerationRunStatusResponse>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/generation-entrypoints/storyboard`,
       { signal }
     ),
   generateProjectStoryboard: (projectId: string) =>
@@ -406,10 +472,10 @@ export const v1Api = {
     runId: string,
     signal?: AbortSignal
   ) =>
-    apiRequest<GenerationRunDetail>(
+    apiRequest<unknown>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/generation-runs/${encodeURIComponent(runId)}`,
       { signal }
-    ),
+    ).then(requireGenerationRunDetail),
   listProjectGenerationRuns: (projectId: string, signal?: AbortSignal) =>
     apiRequest<{ runs: GenerationRun[] }>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/generation-runs`,
@@ -513,21 +579,21 @@ export const v1Api = {
   updateGenerationRun: (
     projectId: string,
     runId: string,
-    action: "approve" | "cancel",
-    body?: { note?: string }
+    action: "approve" | "reject" | "cancel",
+    body?: { note?: string; scriptDraftId?: string }
   ) =>
-    apiRequest<GenerationRunDetail>(
+    apiRequest<unknown>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/generation-runs/${encodeURIComponent(runId)}/${action}`,
       {
         method: "POST",
         body: body ?? {},
       }
-    ),
+    ).then(requireGenerationRunDetail),
   retryGenerationRunAfterCreditUpdate: (projectId: string, runId: string) =>
-    apiRequest<GenerationRunDetail>(
+    apiRequest<unknown>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/generation-runs/${encodeURIComponent(runId)}/retry-after-credit-update`,
       { method: "POST" }
-    ),
+    ).then(requireGenerationRunDetail),
   createRerunProposal: (
     projectId: string,
     input: CreateRerunProposalV2Request

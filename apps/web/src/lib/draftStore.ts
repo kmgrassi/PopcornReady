@@ -13,12 +13,12 @@ import type {
   StudioDraftListResponse,
   StudioDraftPayload as SharedStudioDraftPayload,
   StudioDraftPlatform,
+  StudioDraftStartSource,
   StudioDraftResponse,
-  StudioDraftSeedKind,
   StudioDraftStep,
   UpdateStudioDraftRequest,
 } from "@popcorn/shared/v1/studio-drafts";
-import type { AspectRatio, GateableGenerationStageType } from "@popcorn/shared/v1/types";
+import type { AspectRatio } from "@popcorn/shared/v1/types";
 
 export const STUDIO_DRAFT_PAYLOAD_VERSION = SHARED_STUDIO_DRAFT_PAYLOAD_VERSION;
 
@@ -46,6 +46,8 @@ export interface StudioDraftRecord extends StudioDraftSummary {
 }
 
 const DEFAULT_BRIEF_DRAFT: BriefDraft = {
+  startSource: "idea",
+  scriptText: "",
   goal: "",
   targetLengthSec: 30,
   aspectRatio: "9:16",
@@ -64,10 +66,6 @@ const DEFAULT_BRIEF_DRAFT: BriefDraft = {
   style: "fast-paced social ad",
   callToAction: "",
   provider: "openai",
-  seedKind: "image",
-  seedSize: "1024x1792",
-  showCaptions: true,
-  reviewGates: [],
 };
 
 function workspacePath(workspaceId: string, suffix = ""): string {
@@ -93,10 +91,6 @@ function numberOrUndefined(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
-function booleanOrUndefined(value: unknown): boolean | undefined {
-  return typeof value === "boolean" ? value : undefined;
-}
-
 function aspectRatioOrUndefined(value: unknown): AspectRatio | undefined {
   return value === "9:16" || value === "16:9" || value === "1:1" ? value : undefined;
 }
@@ -107,6 +101,10 @@ function footageChoiceOrUndefined(value: unknown): StudioDraftFootageChoice | un
 
 function footageModeOrUndefined(value: unknown): StudioDraftFootageMode | undefined {
   return value === "asset_driven" || value === "hybrid" ? value : undefined;
+}
+
+function startSourceOrUndefined(value: unknown): StudioDraftStartSource | undefined {
+  return value === "idea" || value === "script" ? value : undefined;
 }
 
 function platformOrUndefined(value: unknown): StudioDraftPlatform | undefined {
@@ -130,25 +128,6 @@ function formatOrUndefined(value: unknown): StudioDraftFormat | undefined {
     value === "aesthetic_montage"
     ? value
     : undefined;
-}
-
-function seedKindOrUndefined(value: unknown): StudioDraftSeedKind | undefined {
-  return value === "image" || value === "video" ? value : undefined;
-}
-
-function reviewGatesOrUndefined(value: unknown): GateableGenerationStageType[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  return value.filter(
-    (gate): gate is GateableGenerationStageType =>
-      gate === "brief_intake" ||
-      gate === "creative_plan" ||
-      gate === "storyboard" ||
-      gate === "asset_generation" ||
-      gate === "audio_generation" ||
-      gate === "timeline_assembly" ||
-      gate === "quality_review" ||
-      gate === "export"
-  );
 }
 
 function sanitizeDraftForJson(draft: BriefDraft): BriefDraft {
@@ -178,6 +157,8 @@ function wireStepFromStudioStep(step: StudioStep): StudioDraftStep {
 
 function serializeDraft(draft: BriefDraft): StudioDraftBrief {
   return {
+    startSource: draft.startSource,
+    scriptText: draft.scriptText,
     goal: draft.goal,
     targetLengthSec: draft.targetLengthSec,
     aspectRatio: draft.aspectRatio,
@@ -195,10 +176,6 @@ function serializeDraft(draft: BriefDraft): StudioDraftBrief {
     style: draft.style,
     callToAction: draft.callToAction,
     provider: draft.provider,
-    seedKind: draft.seedKind,
-    seedSize: draft.seedSize,
-    showCaptions: draft.showCaptions,
-    reviewGates: draft.reviewGates,
   };
 }
 
@@ -235,6 +212,8 @@ function persistedDraftFromUnknown(value: unknown): StudioDraftBrief | null {
   if (!isRecord(value)) return null;
 
   const draft: StudioDraftBrief = {};
+  const startSource = startSourceOrUndefined(value.startSource);
+  const scriptText = stringOrUndefined(value.scriptText);
   const goal = stringOrUndefined(value.goal);
   const targetLengthSec = numberOrUndefined(value.targetLengthSec);
   const aspectRatio = aspectRatioOrUndefined(value.aspectRatio);
@@ -252,11 +231,9 @@ function persistedDraftFromUnknown(value: unknown): StudioDraftBrief | null {
   const style = stringOrUndefined(value.style);
   const callToAction = stringOrUndefined(value.callToAction);
   const provider = stringOrUndefined(value.provider);
-  const seedKind = seedKindOrUndefined(value.seedKind);
-  const seedSize = stringOrUndefined(value.seedSize);
-  const showCaptions = booleanOrUndefined(value.showCaptions);
-  const reviewGates = reviewGatesOrUndefined(value.reviewGates);
 
+  if (startSource !== undefined) draft.startSource = startSource;
+  if (scriptText !== undefined) draft.scriptText = scriptText;
   if (goal !== undefined) draft.goal = goal;
   if (targetLengthSec !== undefined) draft.targetLengthSec = targetLengthSec;
   if (aspectRatio !== undefined) draft.aspectRatio = aspectRatio;
@@ -274,10 +251,6 @@ function persistedDraftFromUnknown(value: unknown): StudioDraftBrief | null {
   if (style !== undefined) draft.style = style;
   if (callToAction !== undefined) draft.callToAction = callToAction;
   if (provider !== undefined) draft.provider = provider;
-  if (seedKind !== undefined) draft.seedKind = seedKind;
-  if (seedSize !== undefined) draft.seedSize = seedSize;
-  if (showCaptions !== undefined) draft.showCaptions = showCaptions;
-  if (reviewGates !== undefined) draft.reviewGates = reviewGates;
 
   return draft;
 }

@@ -1,40 +1,295 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { ProjectPicker } from "../components/projects/ProjectPicker";
-import { Button } from "../components/ui/Button";
-import { ChoiceCard } from "../components/ui/ChoiceCard";
-import { v1Api } from "../lib/api-client";
+import { useEffect, useRef, useState } from "react";
+import type { V1Project } from "@popcorn/shared/v1/types";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
-  useCreationConfirmation,
-  useCreationProposal,
+  CreationProgressExperience,
+  CreationProgressSkeleton,
+  type CreationStatusPresentation,
+} from "../components/creation/CreationProgressExperience";
+import { useAuth } from "../components/auth/AuthProvider";
+import { ProjectPicker } from "../components/projects/ProjectPicker";
+import { ImageWithSkeleton } from "../components/ui/ImageWithSkeleton";
+import { Button } from "../components/ui/Button";
+import { QuickLoadingState } from "../components/ui/QuickLoadingState";
+import { v1Api } from "../lib/api-client";
+import { useAssetMediaQuery } from "../lib/assetMediaQuery";
+import {
   useCreationStatus,
   type CreationGoal,
-  type CreationProposal,
+  type CreationStatusOutput,
 } from "../lib/agent-creations";
+import {
+  creationDraftNavigationState,
+  creationReviewNavigationState,
+  readCreationDraft,
+} from "../lib/creationReview";
 import {
   queryKeys,
   useCreateProjectMutation,
+  useMeQuery,
   useProjectQuery,
 } from "../lib/queryClient";
+import { RecentProjectSwitcher } from "./create/RecentProjectSwitcher";
+import {
+  SCRIPT_CREATION_PROMPT_MAX_LENGTH,
+  scriptCreationHandoffState,
+} from "../lib/scriptCreationHandoff";
 import styles from "./StandaloneCreationPage.module.css";
 
-const goals: Array<[CreationGoal, string, string]> = [
-  ["image", "Image", "A visual for the project asset pool."],
-  ["video", "Video", "A short motion asset, without a full production."],
-  ["soundtrack", "Soundtrack", "Music or sound for the project asset pool."],
+type CreationChoice = CreationGoal | "script";
+
+const goals: Array<{
+  value: CreationChoice;
+  label: string;
+  description: string;
+}> = [
+  { value: "image", label: "Image", description: "A still visual for this project." },
+  { value: "video", label: "Video", description: "A short motion asset for this project." },
+  { value: "soundtrack", label: "Audio", description: "Music or sound for this project." },
+  { value: "script", label: "Script", description: "A text-first draft for a new video project." },
 ];
 
+type StatusPresentation = CreationStatusPresentation & {
+  heading: string;
+  description: string;
+};
+
+function presentStatus(
+  status: string,
+  outcome: CreationStatusOutcome,
+  hasOutputs: boolean,
+): StatusPresentation {
+  const normalizedStatus = status.toLowerCase();
+  if (hasOutputs) {
+    if (["queued", "running", "waiting"].includes(normalizedStatus)) {
+      return {
+        heading: "Your asset is ready",
+        description:
+          "The result is ready to review while the studio finishes wrapping up.",
+        label: "Finishing up",
+        tone: "active",
+        isActive: true,
+      };
+    }
+    if (["failed", "timed_out", "canceled", "cancelled"].includes(normalizedStatus)) {
+      return {
+        heading: "Your asset was saved",
+        description:
+          "The finished result is ready even though the studio hit a problem while wrapping up.",
+        label: "Asset saved",
+        tone: "success",
+        isActive: false,
+      };
+    }
+    return {
+      heading: "Your asset is ready",
+      description:
+        "The finished work is waiting in your project’s asset library.",
+      label: "Ready",
+      tone: "success",
+      isActive: false,
+    };
+  }
+  if (outcome === "blocked") {
+    return {
+      heading: "The studio needs a decision",
+      description: "Work is paused until this request is unblocked.",
+      label: "Blocked",
+      tone: "danger",
+      isActive: false,
+    };
+  }
+  if (outcome === "question") {
+    return {
+      heading: "The studio has a question",
+      description:
+        "A little more direction is needed before work can continue.",
+      label: "Waiting for you",
+      tone: "neutral",
+      isActive: false,
+    };
+  }
+
+  switch (normalizedStatus) {
+    case "queued":
+      return {
+        heading: "Your asset is in motion",
+        description: "Your brief is lined up and the studio will begin shortly.",
+        label: "Queued",
+        tone: "active",
+        isActive: true,
+      };
+    case "running":
+      return {
+        heading: "The studio is making it",
+        description: "Your crew is working through the brief now.",
+        label: "In progress",
+        tone: "active",
+        isActive: true,
+      };
+    case "waiting":
+      return {
+        heading: "Waiting for the next step",
+        description: "The work is safe while the studio waits to continue.",
+        label: "Waiting",
+        tone: "neutral",
+        isActive: true,
+      };
+    case "succeeded":
+    case "completed":
+      return {
+        heading: "The run is complete",
+        description: "No project asset is attached to this run yet.",
+        label: "Complete",
+        tone: "success",
+        isActive: false,
+      };
+    case "failed":
+      return {
+        heading: "The studio hit a snag",
+        description: "This run stopped before an asset was ready.",
+        label: "Needs attention",
+        tone: "danger",
+        isActive: false,
+      };
+    case "canceled":
+    case "cancelled":
+      return {
+        heading: "Creation stopped",
+        description: "This run was canceled before an asset was ready.",
+        label: "Canceled",
+        tone: "neutral",
+        isActive: false,
+      };
+    case "timed_out":
+      return {
+        heading: "The studio ran out of time",
+        description: "This run stopped before an asset was ready.",
+        label: "Timed out",
+        tone: "danger",
+        isActive: false,
+      };
+    case "superseded":
+      return {
+        heading: "A newer request took over",
+        description: "This run stopped because a newer request replaced it.",
+        label: "Replaced",
+        tone: "neutral",
+        isActive: false,
+      };
+    default:
+      return {
+        heading: "Checking your asset",
+        description: "The studio is checking the latest state of this run.",
+        label: "Checking",
+        tone: "neutral",
+        isActive: false,
+      };
+  }
+}
+
+type CreationStatusOutcome = "blocked" | "question" | "other";
+
+function CreationOutputPreview({ output }: { output: CreationStatusOutput }) {
+  const auth = useAuth();
+  const authScope =
+    auth.user?.id ?? (import.meta.env.DEV ? "dev-autopilot" : auth.status);
+  const meQuery = useMeQuery(authScope, { enabled: auth.status !== "loading" });
+  const mediaQuery = useAssetMediaQuery({
+    authScope,
+    workspaceId: meQuery.data?.workspaceId ?? "",
+    assetId: output.assetId,
+    initialMedia: {
+      url: output.url,
+      thumbnailUrl: output.thumbnailUrl,
+      expiresAt: output.expiresAt,
+    },
+    enabled: Boolean(meQuery.data?.workspaceId),
+    fetchWhenMissing: true,
+    proactiveRefresh: true,
+  });
+  const title = output.name?.trim() || "Generated asset";
+  const mediaUrl = mediaQuery.data
+    ? mediaQuery.data.url ?? undefined
+    : output.url;
+  const thumbnailUrl = mediaQuery.data
+    ? mediaQuery.data.thumbnailUrl ?? undefined
+    : output.thumbnailUrl;
+  const stillUrl = mediaUrl ?? thumbnailUrl;
+  const recoverMedia = (url: string) => {
+    void mediaQuery.refreshAfterError(url).catch(() => undefined);
+  };
+
+  return (
+    <section className={styles.outputPreview} aria-label={`${title} preview`}>
+      {output.kind === "image" && stillUrl ? (
+        <ImageWithSkeleton
+          className={styles.outputMedia}
+          src={stillUrl}
+          alt={title}
+          fit="contain"
+          onError={() => recoverMedia(stillUrl)}
+          onLoad={() => mediaQuery.markLoaded(stillUrl)}
+        />
+      ) : output.kind === "video" && mediaUrl ? (
+        <video
+          className={styles.outputMedia}
+          src={mediaUrl}
+          poster={thumbnailUrl}
+          aria-label={`${title} video`}
+          controls
+          playsInline
+          preload="metadata"
+          onError={() => recoverMedia(mediaUrl)}
+          onLoadedData={() => mediaQuery.markLoaded(mediaUrl)}
+        />
+      ) : output.kind === "video" && thumbnailUrl ? (
+        <ImageWithSkeleton
+          className={styles.outputMedia}
+          src={thumbnailUrl}
+          alt={`${title} poster`}
+          fit="contain"
+          onError={() => recoverMedia(thumbnailUrl)}
+          onLoad={() => mediaQuery.markLoaded(thumbnailUrl)}
+        />
+      ) : output.kind === "audio" && mediaUrl ? (
+        <div className={styles.audioPreview}>
+          <span aria-hidden="true">♪</span>
+          <strong>{title}</strong>
+          <audio
+            src={mediaUrl}
+            aria-label={`${title} audio`}
+            controls
+            preload="metadata"
+            onError={() => recoverMedia(mediaUrl)}
+            onLoadedData={() => mediaQuery.markLoaded(mediaUrl)}
+          />
+        </div>
+      ) : (
+        <div className={styles.outputPlaceholder}>
+          <strong>{title}</strong>
+          <span>The asset is saved in the project library.</span>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function StandaloneCreationPage() {
-  const [params, setParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const returnedDraft = readCreationDraft(location.state);
+  const [params] = useSearchParams();
   const projectsQuery = useInfiniteQuery({
     queryKey: queryKeys.assetStudioProjects(),
     queryFn: ({ pageParam }) =>
-      v1Api.listProjects({ limit: 100, cursor: pageParam }),
+      v1Api.listProjects({ limit: 100, cursor: pageParam, order: "updatedAt" }),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.pagination.nextCursor,
   });
   const createProject = useCreateProjectMutation();
+  const autoCreateProject = useCreateProjectMutation({ notifications: false });
   const listedProjects =
     projectsQuery.data?.pages.flatMap((page) => page.projects) ?? [];
   const recentProject = createProject.data?.project;
@@ -43,18 +298,25 @@ export function StandaloneCreationPage() {
     !listedProjects.some((project) => project.id === recentProject.id)
       ? [recentProject, ...listedProjects]
       : listedProjects;
-  const [goal, setGoal] = useState<CreationGoal>("image");
-  const [projectId, setProjectId] = useState(params.get("projectId") ?? "");
-  const [prompt, setPrompt] = useState("");
-  const [improvePrompt, setImprovePrompt] = useState(true);
-  const [proposal, setProposal] = useState<CreationProposal | null>(null);
-  const [proposalError, setProposalError] = useState<Error | null>(null);
+  const [goal, setGoal] = useState<CreationChoice>(returnedDraft?.goal ?? "image");
+  const [projectId, setProjectId] = useState(
+    returnedDraft?.projectId ?? params.get("projectId") ?? "",
+  );
+  const [prompt, setPrompt] = useState(returnedDraft?.prompt ?? "");
+  const [scriptPrompt, setScriptPrompt] = useState("");
+  const [improveImagePrompt, setImproveImagePrompt] = useState(
+    returnedDraft?.goal === "image" ? returnedDraft.improvePrompt : true,
+  );
+  const [improveVideoPrompt, setImproveVideoPrompt] = useState(
+    returnedDraft?.goal === "video" ? returnedDraft.improvePrompt : true,
+  );
   const [proposalKey, setProposalKey] = useState(
     () => `asset-studio:proposal:${crypto.randomUUID()}`,
   );
-  const proposalVersion = useRef(0);
-  const propose = useCreationProposal();
-  const confirm = useCreationConfirmation();
+  const reviewAttemptRef = useRef(false);
+  const pageLifecycleRef = useRef(0);
+  const [isAutoCreatingProject, setIsAutoCreatingProject] = useState(false);
+  const [autoProjectError, setAutoProjectError] = useState<string | null>(null);
   const runId = params.get("runId");
   const status = useCreationStatus(projectId, runId);
   const listedSelection = projects.find((project) => project.id === projectId);
@@ -64,235 +326,436 @@ export function StandaloneCreationPage() {
   );
   const selectedName =
     listedSelection?.name ?? selectedProjectQuery.data?.project.name;
+  const selectedProject = listedSelection ?? selectedProjectQuery.data?.project ?? null;
+  const improvePrompt =
+    goal === "video" ? improveVideoPrompt : improveImagePrompt;
+
+  useEffect(() => {
+    return () => {
+      pageLifecycleRef.current += 1;
+    };
+  }, []);
 
   if (runId && projectId) {
+    const reportOutcome = status.data?.report?.outcome.outcome;
+    const outcome: CreationStatusOutcome =
+      reportOutcome === "blocked" || reportOutcome === "question"
+        ? reportOutcome
+        : "other";
+    const presentation = presentStatus(
+      status.data?.run.status ?? "",
+      outcome,
+      Boolean(status.data?.outputs.length),
+    );
+    const inputSummary = status.data?.run.inputSummary?.trim();
+    const primaryOutput = status.data?.outputs[0];
+    const hasPostOutputFailure =
+      Boolean(primaryOutput) &&
+      ["failed", "timed_out", "canceled", "cancelled"].includes(
+        status.data?.run.status.toLowerCase() ?? "",
+      );
+
     return (
-      <main className={styles.page}>
-        <header className={styles.header}>
-          <h1>Your asset is in motion</h1>
-          <p>It will appear in this project’s asset library when it is ready.</p>
+      <main
+        className={`${styles.page} ${styles.statusPage} ${styles.progressPage}`}
+      >
+        <header className={`${styles.header} ${styles.progressHeader}`}>
+          {selectedName ? (
+            <p className={styles.progressProjectContext}>
+              Creating for {selectedName}
+            </p>
+          ) : null}
+          <h1>
+            {status.isLoading
+              ? "Getting the studio ready"
+              : presentation.heading}
+          </h1>
+          <p>
+            {status.isLoading
+              ? "Checking the latest progress on your asset."
+              : presentation.description}
+          </p>
         </header>
         {status.isLoading ? (
-          <div className={styles.skeleton} aria-label="Loading creation status" />
+          <QuickLoadingState
+            title="Loading creation status"
+            description="Checking the latest progress on your asset."
+            reservation={<CreationProgressSkeleton />}
+            variant="page"
+          />
         ) : null}
         {status.error ? (
-          <p role="alert" className={styles.error}>
-            {status.error.message}
-          </p>
+          <section className={styles.errorPanel} role="alert">
+            <strong>We couldn’t load this run.</strong>
+            <p>{status.error.message}</p>
+          </section>
         ) : null}
         {status.data ? (
-          <section className={styles.status}>
-            <strong>{status.data.run.status}</strong>
-            <p>{status.data.run.inputSummary}</p>
+          <CreationProgressExperience
+            presentation={presentation}
+            inputSummary={inputSummary}
+            preview={
+              primaryOutput ? (
+                <CreationOutputPreview output={primaryOutput} />
+              ) : undefined
+            }
+          >
             {status.data.report?.outcome.outcome === "blocked" ? (
-              <p>{status.data.report.outcome.reason}</p>
-            ) : null}
-            {status.data.report?.outcome.outcome === "question" ? (
-              <p>{status.data.report.outcome.question}</p>
-            ) : null}
-            {status.data.outputs.length ? (
-              <>
-                <p>
-                  {status.data.outputs.length} immutable output
-                  {status.data.outputs.length === 1 ? "" : "s"} ready.
+                <div className={styles.outcomePanel} data-tone="danger">
+                  <strong>What’s blocking the run</strong>
+                  <p>{status.data.report.outcome.reason}</p>
+                </div>
+              ) : null}
+              {status.data.report?.outcome.outcome === "question" ? (
+                <div className={styles.outcomePanel}>
+                  <strong>What the studio needs</strong>
+                  <p>{status.data.report.outcome.question}</p>
+                </div>
+              ) : null}
+              {hasPostOutputFailure ? (
+                <div className={styles.savedAssetNotice} role="status">
+                  <strong>Your result is safe</strong>
+                  <p>
+                    The asset finished successfully, but the studio couldn’t
+                    complete its final wrap-up. You can still review and use the
+                    saved result.
+                  </p>
+                </div>
+              ) : null}
+              {status.data.outputs.length ? (
+                <div className={styles.readyRow}>
+                  <p>
+                    {status.data.outputs.length === 1
+                      ? "1 asset is ready."
+                      : `${status.data.outputs.length} assets are ready.`}
+                  </p>
+                  <Link to={`/projects/${encodeURIComponent(projectId)}/media`}>
+                    Open project assets
+                  </Link>
+                </div>
+              ) : presentation.isActive && outcome === "other" ? (
+                <p className={styles.continuationCopy}>
+                  This page updates automatically. You can leave and come back
+                  without interrupting the work.
                 </p>
-                <Link to={`/projects/${encodeURIComponent(projectId)}/media`}>
-                  Open project assets
-                </Link>
-              </>
-            ) : (
-              <p>Progress and provenance will stay here as work continues.</p>
-            )}
-          </section>
+              ) : null}
+          </CreationProgressExperience>
         ) : null}
       </main>
     );
   }
 
   const resetProposal = () => {
-    proposalVersion.current += 1;
-    setProposal(null);
-    setProposalError(null);
     setProposalKey(`asset-studio:proposal:${crypto.randomUUID()}`);
   };
   const selectProject = (nextProjectId: string) => {
+    if (isAutoCreatingProject) return;
     if (nextProjectId === projectId) return;
+    setAutoProjectError(null);
     setProjectId(nextProjectId);
     resetProposal();
   };
-  const canPropose = Boolean(projectId && prompt.trim());
+  const activePrompt = goal === "script" ? scriptPrompt : prompt;
+  const canPropose = Boolean(activePrompt.trim());
 
-  async function reviewCost() {
-    if (!canPropose) return;
-    const requestedVersion = proposalVersion.current;
-    setProposalError(null);
-    try {
-      const nextProposal = await propose.mutateAsync({
-        projectId,
-        goal,
-        prompt: prompt.trim(),
-        improvePrompt,
-        maximumUsd: 10,
-        idempotencyKey: proposalKey,
+  async function startReview() {
+    if (!canPropose || createProject.isPending || reviewAttemptRef.current) return;
+    if (goal === "script") {
+      navigate("/projects/new", {
+        state: scriptCreationHandoffState(scriptPrompt),
       });
-      if (proposalVersion.current === requestedVersion) {
-        setProposal(nextProposal);
+      return;
+    }
+    reviewAttemptRef.current = true;
+    const lifecycle = pageLifecycleRef.current;
+    setAutoProjectError(null);
+    const draft = {
+      projectId,
+      goal,
+      prompt: prompt.trim(),
+      improvePrompt,
+    };
+    try {
+      let reviewProjectId = draft.projectId;
+      if (!reviewProjectId) {
+        setIsAutoCreatingProject(true);
+        const response = await autoCreateProject.mutateAsync({
+          namingPrompt: draft.prompt.slice(0, 500),
+          namingContext: draft.goal,
+          idempotencyKey: proposalKey.replace(
+            "asset-studio:proposal:",
+            "asset-studio:project:",
+          ),
+        });
+        reviewProjectId = response.project.id;
       }
+      if (pageLifecycleRef.current !== lifecycle) return;
+      const reviewDraft = { ...draft, projectId: reviewProjectId };
+      navigate(`${location.pathname}${location.search}`, {
+        replace: true,
+        state: creationDraftNavigationState(reviewDraft),
+      });
+      navigate("/create/review", {
+        state: creationReviewNavigationState({
+          ...reviewDraft,
+          maximumUsd: 10,
+          idempotencyKey: proposalKey,
+        }),
+      });
     } catch (error) {
-      if (proposalVersion.current === requestedVersion) {
-        setProposalError(
-          error instanceof Error ? error : new Error(String(error)),
-        );
-      }
+      if (pageLifecycleRef.current !== lifecycle) return;
+      setAutoProjectError(
+        error instanceof Error
+          ? error.message
+          : "We couldn’t create a project for this request.",
+      );
+    } finally {
+      reviewAttemptRef.current = false;
+      if (pageLifecycleRef.current === lifecycle) setIsAutoCreatingProject(false);
     }
   }
 
-  async function start() {
-    if (!proposal) return;
-    const result = await confirm.mutateAsync({ projectId, proposal });
-    setParams({ projectId, runId: result.runId });
-  }
-
-  const error = proposalError ?? confirm.error;
-
   return (
     <main className={styles.page}>
-      <header className={styles.header}>
-        <h1>Make an asset for your project</h1>
-        <p>
-          Describe the outcome. For images, a quick prompt-refinement pass runs
-          during review. No asset generation starts until you confirm the cost.
-        </p>
-      </header>
-      <section className={styles.form}>
-        <fieldset>
-          <legend>What are you making?</legend>
-          <div className={styles.choices}>
-            {goals.map(([value, label, description]) => (
-              <ChoiceCard
-                key={value}
-                name="goal"
-                value={value}
-                checked={goal === value}
-                onChange={() => {
-                  setGoal(value);
-                  resetProposal();
-                }}
-                label={label}
-                description={description}
-              />
-            ))}
-          </div>
-        </fieldset>
-
-        <ProjectPicker
+      {goal !== "script" ? (
+        <RecentProjectSwitcher
           projects={projects}
-          value={projectId}
-          selectedName={selectedName}
-          isLoading={projectsQuery.isLoading}
-          error={projectsQuery.data ? null : projectsQuery.error}
-          loadMoreError={
-            projectsQuery.isFetchNextPageError ? projectsQuery.error : null
-          }
-          hasNextPage={Boolean(projectsQuery.hasNextPage)}
-          isFetchingNextPage={projectsQuery.isFetchingNextPage}
-          isCreating={createProject.isPending}
-          createError={createProject.error}
-          onChange={selectProject}
-          onCreate={async (name) =>
-            (await createProject.mutateAsync({ name })).project
-          }
-          onResetCreateError={createProject.reset}
-          onLoadMore={() => void projectsQuery.fetchNextPage()}
-          onRetry={() => void projectsQuery.refetch()}
+          selectedProjectId={projectId}
+          loading={projectsQuery.isLoading}
+          disabled={isAutoCreatingProject}
+          onSelect={selectProject}
         />
+      ) : null}
 
-        <label>
-          What should it feel like?
-          <textarea
-            value={prompt}
-            onChange={(event) => {
-              setPrompt(event.target.value);
-              resetProposal();
-            }}
-            placeholder="A quiet amber-lit close-up of popcorn falling into a bowl"
-          />
-        </label>
+      <div className={styles.workspace}>
+        <aside className={styles.contextRail} aria-label="Creation context">
+          <fieldset className={styles.mediaTypes}>
+            <legend>Creation type</legend>
+            {goals.map(({ value, label, description }) => (
+              <label className={styles.mediaType} key={value}>
+                <input
+                  type="radio"
+                  name="goal"
+                  value={value}
+                  checked={goal === value}
+                  disabled={isAutoCreatingProject}
+                  onChange={() => {
+                    setGoal(value);
+                    resetProposal();
+                  }}
+                />
+                <CreationTypeIcon goal={value} />
+                <span>
+                  <strong>{label}</strong>
+                  <small>{description}</small>
+                </span>
+              </label>
+            ))}
+          </fieldset>
 
-        {goal === "image" ? (
-          <label className={styles.enhancementControl}>
-            <input
-              type="checkbox"
-              checked={improvePrompt}
+          <section className={styles.projectContext} aria-labelledby="project-context-heading">
+            <h2 id="project-context-heading">
+              {goal === "script" ? "Script project" : "Project"}
+            </h2>
+            {goal === "script" ? (
+              <p className={styles.scriptProjectHint} role="status">
+                The Creative Director will start a new video project, write a
+                text-only script, and stop for your review before making media.
+              </p>
+            ) : (
+              <>
+                <ProjectPicker
+                  projects={projects}
+                  value={projectId}
+                  selectedName={selectedName}
+                  isLoading={projectsQuery.isLoading}
+                  error={projectsQuery.data ? null : projectsQuery.error}
+                  loadMoreError={
+                    projectsQuery.isFetchNextPageError ? projectsQuery.error : null
+                  }
+                  hasNextPage={Boolean(projectsQuery.hasNextPage)}
+                  isFetchingNextPage={projectsQuery.isFetchingNextPage}
+                  isCreating={createProject.isPending}
+                  disabled={isAutoCreatingProject}
+                  createError={createProject.error}
+                  onChange={selectProject}
+                  onCreate={async (name) =>
+                    (await createProject.mutateAsync({ name })).project
+                  }
+                  onResetCreateError={createProject.reset}
+                  onLoadMore={() => void projectsQuery.fetchNextPage()}
+                  onRetry={() => void projectsQuery.refetch()}
+                />
+                {!projectId ? (
+                  <p className={styles.projectHint}>
+                    Optional — we’ll create and name one when you review.
+                  </p>
+                ) : null}
+                {selectedProject ? <SelectedProjectContext project={selectedProject} /> : null}
+              </>
+            )}
+          </section>
+        </aside>
+
+        <section className={styles.canvas} aria-label="Creation prompt">
+          <header className={styles.header}>
+            <h1>{goal === "script" ? "Create a script" : "Create"}</h1>
+            <p>
+              {goal === "script"
+                ? "Describe the story you want to tell. You’ll choose its length and direction before the Creative Director writes the first draft."
+                : "Describe the result, then review the exact request before generation. If untouched, generation starts 10 seconds after the proposal is ready."}
+            </p>
+          </header>
+
+          <label className={styles.promptField}>
+            <span>{goal === "script" ? "Describe the script" : "Describe the result"}</span>
+            <textarea
+              value={activePrompt}
+              maxLength={goal === "script" ? SCRIPT_CREATION_PROMPT_MAX_LENGTH : undefined}
+              disabled={isAutoCreatingProject}
               onChange={(event) => {
-                setImprovePrompt(event.target.checked);
+                setAutoProjectError(null);
+                if (goal === "script") {
+                  setScriptPrompt(event.target.value);
+                } else {
+                  setPrompt(event.target.value);
+                }
                 resetProposal();
               }}
+              placeholder={
+                goal === "script"
+                  ? "A sharp 30-second founder story about turning a rough idea into a finished video"
+                  : goal === "video"
+                  ? "A cyclist crossing a rain-slick street as the camera holds still"
+                  : goal === "soundtrack"
+                    ? "Sparse brushed percussion building to a warm final chord"
+                    : "A quiet amber-lit close-up of popcorn falling into a bowl"
+              }
             />
-            <span>
-              <strong>Improve image prompt</strong>
-              <small>
-                Adds concrete composition, lighting, materials, and restraint
-                while preserving your idea.
+            {goal === "script" ? (
+              <small className={styles.promptHelp}>
+                This starts a new video project and stops at script review. Approving
+                the script later continues into storyboard and production.
               </small>
-            </span>
+            ) : null}
           </label>
-        ) : null}
 
-        {proposal ? (
-          <section className={styles.proposal} aria-live="polite">
-            <h2>Review before starting</h2>
-            <p>
-              Asset generation can spend up to ${proposal.maximumUsd.toFixed(2)}.
-              Asset generation has not begun.
-            </p>
-            <div className={styles.promptReview}>
-              {proposal.enhancementApplied ? (
-                <>
-                  <span>Original</span>
-                  <p>{prompt.trim()}</p>
-                  <span>Refined prompt</span>
-                </>
-              ) : (
-                <span>Prompt</span>
-              )}
-              <p className={styles.effectivePrompt}>
-                {proposal.effectivePrompt || prompt.trim()}
+          {goal === "image" || goal === "video" ? (
+            <label className={styles.enhancementControl}>
+              <input
+                type="checkbox"
+                checked={improvePrompt}
+                disabled={isAutoCreatingProject}
+                onChange={(event) => {
+                  if (goal === "video") {
+                    setImproveVideoPrompt(event.target.checked);
+                  } else {
+                    setImproveImagePrompt(event.target.checked);
+                  }
+                  resetProposal();
+                }}
+              />
+              <span>
+                <strong>Improve {goal} prompt</strong>
+                <small>
+                  {goal === "video"
+                    ? "Adds clear action, camera behavior, continuity, and an end state while preserving your idea."
+                    : "Adds concrete composition, lighting, materials, and restraint while preserving your idea."}
+                </small>
+              </span>
+            </label>
+          ) : null}
+
+          <div className={styles.canvasActions}>
+            {autoProjectError ? (
+              <p className={styles.reviewError} role="alert">
+                We couldn’t create a project automatically. {autoProjectError}
               </p>
-            </div>
-            <div className={styles.actions}>
-              <Button
-                variant="cta"
-                size="lg"
-                isLoading={confirm.isPending}
-                onClick={() => void start()}
-              >
-                Confirm and start
-              </Button>
-              <Button variant="ghost" onClick={resetProposal}>
-                Revise request
-              </Button>
-            </div>
-          </section>
-        ) : (
-          <Button
-            variant="cta"
-            size="lg"
-            disabled={!canPropose}
-            isLoading={propose.isPending}
-            onClick={() => void reviewCost()}
-          >
-            {propose.isPending && goal === "image" && improvePrompt
-              ? "Improving prompt..."
-              : "Review cost"}
-          </Button>
-        )}
-        {error ? (
-          <p role="alert" className={styles.error}>
-            {error.message}
-          </p>
-        ) : null}
-      </section>
+            ) : null}
+            <Button
+              variant="cta"
+              size="lg"
+              disabled={!canPropose || createProject.isPending}
+              isLoading={isAutoCreatingProject}
+              onClick={() => void startReview()}
+            >
+              {isAutoCreatingProject
+                ? "Creating project…"
+                : goal === "script"
+                  ? "Continue to script brief"
+                  : "Review request"}
+            </Button>
+          </div>
+        </section>
+      </div>
     </main>
+  );
+}
+
+function SelectedProjectContext({ project }: { project: V1Project }) {
+  const [posterFailed, setPosterFailed] = useState(false);
+
+  useEffect(() => {
+    setPosterFailed(false);
+  }, [project.id, project.posterUrl]);
+
+  const updated = new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+  }).format(new Date(project.updatedAt));
+  const posterUrl = posterFailed ? null : project.posterUrl;
+
+  return (
+    <article className={styles.selectedProject} aria-label={`Selected project ${project.name}`}>
+      {posterUrl ? (
+        <ImageWithSkeleton
+          className={styles.projectPoster}
+          src={posterUrl}
+          alt=""
+          onError={() => setPosterFailed(true)}
+        />
+      ) : (
+        <span className={styles.projectFallback} aria-hidden="true">
+          {project.name.trim().charAt(0).toUpperCase() || "?"}
+        </span>
+      )}
+      <span className={styles.projectCopy}>
+        <strong title={project.name}>{project.name}</strong>
+        <small>Updated {updated}</small>
+      </span>
+    </article>
+  );
+}
+
+function CreationTypeIcon({ goal }: { goal: CreationChoice }) {
+  if (goal === "image") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <circle cx="9" cy="9" r="1.5" />
+        <path d="m5 17 4.5-4 3 2.5 2.5-2 4 3.5" />
+      </svg>
+    );
+  }
+  if (goal === "video") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="4" width="18" height="16" rx="3" />
+        <path d="m10 9 5 3-5 3Z" />
+      </svg>
+    );
+  }
+  if (goal === "script") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M6 3h9l3 3v15H6Z" />
+        <path d="M15 3v4h4M9 11h6M9 15h6" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4" />
+    </svg>
   );
 }

@@ -2,6 +2,7 @@ import type { AssetKind, AssetStatus, V1Asset } from "@popcorn/shared/v1/types";
 
 export type ProjectMediaAsset = Omit<V1Asset, "source"> & {
   source: V1Asset["source"] | { type?: string | null } | string | null;
+  visibility?: "public" | "private" | null;
   thumbnailUrl?: string | null;
   remoteUrl?: string | null;
   graphInputs?: Array<{

@@ -12,6 +12,7 @@ import type {
 } from "./schemas";
 import type { GeneratedAssetProvenance } from "./provenance";
 import type { GraphAssetInput } from "./asset-graph";
+import type { AssetMedia, GraphAssetKind } from "./store-content";
 
 export interface V1Workspace {
   id: string;
@@ -68,6 +69,7 @@ export interface V1Asset {
   visibility?: "public" | "private";
   remoteUrl?: string;
   thumbnailUrl?: string;
+  expiresAt?: string | null;
   storageKey?: string;
   storageBucket?: string;
   durationSec?: number;
@@ -102,6 +104,15 @@ export interface V1Asset {
   inputsFingerprint?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Private embedding projection. Unlike the public V1 asset shape, this keeps
+ * the database's semantic graph kind separate from its physical media.
+ */
+export interface V1AssetEmbeddingSource extends V1Asset {
+  graphKind: GraphAssetKind;
+  media: AssetMedia;
 }
 
 export interface V1AssetAnalysis {
