@@ -142,6 +142,8 @@ Users self-create their first workspace after Supabase sign-up. In
 - `GET /api/v1/projects` — defaults to `createdAt` descending; pass
   `order=updatedAt` for recent-work recovery. Cursors follow the selected order.
 - `GET /api/v1/projects/:projectId`
+- `GET /api/v1/projects/:projectId/script` — returns the active relational
+  script draft (or `null`) for authoritative review; responses are not cached.
 - `PATCH /api/v1/projects/:projectId`
 - `DELETE /api/v1/projects/:projectId`
 
@@ -198,7 +200,10 @@ Generation jobs should reference an immutable `briefVersionId`.
 - `POST /api/v1/projects/:projectId/generation-entrypoints/storyboard`
 
 This creator-facing mutation loads the active brief and starts a Creative
-Director run whose mandatory boundary is `after:generate_storyboard`. The agent
+Director run whose mandatory boundaries are `after:draft_script` and
+`after:generate_storyboard`. Until the script gate is approved, the engine
+exposes only brief, story-development, and script tools to the root model, so
+media generation and specialist delegation cannot start. The agent
 prepares any missing scene-and-moment plan before it generates storyboard
 panels. If the project already has a nonterminal Creative Director root with an
 unresolved storyboard boundary, the endpoint returns that run instead of

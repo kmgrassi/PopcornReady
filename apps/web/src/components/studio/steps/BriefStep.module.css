@@ -20,6 +20,14 @@
   font-weight: 700;
 }
 
+.fieldHelp {
+  max-width: 68ch;
+  margin-top: calc(var(--space-2) * -1);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--line-body);
+}
+
 .goal {
   min-height: clamp(180px, 28vh, 240px);
   width: 100%;
@@ -50,6 +58,11 @@
   box-shadow:
     var(--ring),
     0 18px 44px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.script {
+  min-height: clamp(260px, 42vh, 440px);
+  font-size: 1rem;
 }
 
 .promptChips {
@@ -93,6 +106,18 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
+}
+
+.sourceChoice {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 620px;
+}
+
+.sourceChoice .optionLabel {
+  align-items: flex-start;
+  min-height: 72px;
+  text-align: left;
 }
 
 .option {
@@ -173,6 +198,10 @@
   .segmented {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sourceChoice {
+    grid-template-columns: 1fr;
   }
 
   .optionLabel {

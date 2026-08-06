@@ -36,6 +36,7 @@ import {
   getProject,
 } from "@/lib/api/v1/store";
 import { runStoryboardJob } from "@/lib/orchestrator-tools/storyboard-job";
+import { requireApprovedScriptForProjectMedia } from "@/lib/api/v1/project-media-boundary";
 
 export const storyboardsRouter = Router();
 
@@ -63,6 +64,7 @@ interface GenerateStoryboardPanelsDeps {
   getActiveProjectPlan: typeof getActiveProjectPlan;
   createOrGetJob: typeof agentApiStore.createOrGetJob;
   runStoryboardJob: typeof runStoryboardJob;
+  requireApprovedScript: typeof requireApprovedScriptForProjectMedia;
 }
 
 export async function generateStoryboardPanelsRoute(
@@ -75,10 +77,12 @@ export async function generateStoryboardPanelsRoute(
     getActiveProjectPlan,
     createOrGetJob: agentApiStore.createOrGetJob,
     runStoryboardJob,
+    requireApprovedScript: requireApprovedScriptForProjectMedia,
     ...deps,
   };
   const projectId = requiredParam(params, "projectId");
   await resolved.getProject(ctx.auth.workspaceId, projectId);
+  await resolved.requireApprovedScript(ctx.auth.workspaceId, projectId);
 
   const activePlan = await resolved.getActiveProjectPlan(projectId);
   if (!activePlan) {
@@ -281,6 +285,8 @@ storyboardsRouter.get(
 storyboardsRouter.post(
   "/projects/:projectId/storyboards/:storyboardId/acts/:actId/mockup",
   mutation(async ({ auth, body }, params) => {
+    const projectId = requiredParam(params, "projectId");
+    await requireApprovedScriptForProjectMedia(auth.workspaceId, projectId);
     const prompt =
       body && typeof body === "object" && !Array.isArray(body) &&
       typeof (body as { prompt?: unknown }).prompt === "string"
@@ -288,7 +294,7 @@ storyboardsRouter.post(
         : undefined;
     const result = await generateActMockup({
       auth,
-      projectId: requiredParam(params, "projectId"),
+      projectId,
       storyboardId: requiredParam(params, "storyboardId"),
       actId: requiredParam(params, "actId"),
       prompt,
@@ -470,6 +476,8 @@ storyboardsRouter.delete(
 storyboardsRouter.post(
   "/projects/:projectId/storyboards/:storyboardId/scenes/:sceneId/wireframe",
   mutation(async ({ auth, body }, params) => {
+    const projectId = requiredParam(params, "projectId");
+    await requireApprovedScriptForProjectMedia(auth.workspaceId, projectId);
     const prompt =
       body && typeof body === "object" && !Array.isArray(body) &&
       typeof (body as { prompt?: unknown }).prompt === "string"
@@ -477,7 +485,7 @@ storyboardsRouter.post(
         : undefined;
     const result = await generateSceneWireframe({
       auth,
-      projectId: requiredParam(params, "projectId"),
+      projectId,
       storyboardId: requiredParam(params, "storyboardId"),
       sceneId: requiredParam(params, "sceneId"),
       prompt,

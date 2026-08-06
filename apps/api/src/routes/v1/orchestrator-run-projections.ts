@@ -108,6 +108,12 @@ export function toolStage(tool: string): GenerationStageType | undefined {
   switch (normalizedTool) {
     case "create_or_load_brief":
       return "brief_intake";
+    case "develop_story_blueprint":
+    case "plan_shots":
+    case "plan_visual_anchors":
+      return "creative_plan";
+    case "draft_script":
+      return "script";
     case "generate_storyboard":
       return "storyboard";
     case "generate_poster":
@@ -491,8 +497,8 @@ export function projectRun(
 ): GenerationRun {
   const reviewGates = gates.filter((gate) => !gate.stage.startsWith(AFTER_GATE_PREFIX));
   const status = projectedRunStatus(run, actions, gates, assets);
-  // A post-tool gate is the storyboard-review stop: the storyboard work is
-  // complete, but production must not start until the creator continues it.
+  // A post-tool gate is a creator-review stop: its work is complete, but the
+  // next phase must not start until the creator continues it.
   // Project it just like a conventional review gate so every surface has one
   // clear, actionable state rather than a misleading terminal success.
   const reachedGate = gates.find(
@@ -541,7 +547,7 @@ export function projectRun(
   const currentStageType =
     reviewGate?.stageType ??
     (status === "succeeded"
-      ? "ready"
+      ? (reviewGate ? reviewGate.stageType : "ready")
       : latestRunningAction
         ? toolStage(latestRunningAction.tool)
         : latestAction

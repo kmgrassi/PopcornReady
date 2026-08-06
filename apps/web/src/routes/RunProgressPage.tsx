@@ -105,15 +105,24 @@ function RunProgress({
     setReviewFeedbackNote("");
   }, [reviewGateKey]);
 
-  async function runAction(action: "approve" | "cancel", note?: string) {
+  async function runAction(
+    action: "approve" | "reject" | "cancel",
+    note?: string,
+    scriptDraftId?: string,
+  ) {
     if (actionPending) return;
     setActionError(null);
     try {
       const trimmedNote = note?.trim();
-      const body = action === "approve" && trimmedNote ? { note: trimmedNote } : undefined;
+      const body = action !== "cancel"
+        ? {
+            ...(trimmedNote ? { note: trimmedNote } : {}),
+            ...(scriptDraftId ? { scriptDraftId } : {}),
+          }
+        : undefined;
       const data = await updateRun.mutateAsync({ action, body });
       applyPayload(data);
-      if (action === "approve") {
+      if (action === "approve" || action === "reject") {
         setReviewFeedbackNote("");
       }
       if (action === "cancel" && data.run.status === "canceled") {
@@ -195,7 +204,9 @@ function RunProgress({
               error: actionError,
               feedbackNote: reviewFeedbackNote,
               onFeedbackNoteChange: setReviewFeedbackNote,
-              onApprove: (note) => void runAction("approve", note),
+              onApprove: (note, scriptDraftId) => void runAction("approve", note, scriptDraftId),
+              onRequestChanges: (note, scriptDraftId) =>
+                void runAction("reject", note, scriptDraftId),
               onCancel: () => void runAction("cancel"),
             }
           : undefined

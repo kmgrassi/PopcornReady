@@ -37,5 +37,8 @@ export function reviewProposalTarget(input: {
   if (input.stageType === "creative_plan") {
     return { scope: "brief", runId: input.runId, label: "Brief" };
   }
+  if (input.stageType === "script") {
+    return { scope: "script", runId: input.runId, label: "Script" };
+  }
   return null;
 }

@@ -290,6 +290,31 @@ function registryForRejectedGate(
   return new Map([[tool.name, tool]]);
 }
 
+const SCRIPT_REVIEW_PHASE_TOOLS = new Set<ToolName>([
+  "create_or_load_brief",
+  "develop_story_blueprint",
+  "draft_script",
+]);
+
+export function registryBeforeScriptApproval(
+  registry: ToolRegistry,
+  gates: OrchestratorRunGate[]
+): ToolRegistry {
+  const scriptGate = gates.find((gate) => gate.stage === afterGateStage("draft_script"));
+  if (!scriptGate || scriptGate.status === "approved") return registry;
+  return new Map(
+    [...registry].filter(([toolName]) => SCRIPT_REVIEW_PHASE_TOOLS.has(toolName))
+  );
+}
+
+export function hasUnresolvedAfterGate(gates: OrchestratorRunGate[]): boolean {
+  return gates.some(
+    (gate) =>
+      gate.stage.startsWith(AFTER_GATE_PREFIX) &&
+      (gate.status === "pending" || gate.status === "rejected")
+  );
+}
+
 function afterGateStage(toolName: string): string {
   return `${AFTER_GATE_PREFIX}${toolName}`;
 }
@@ -845,7 +870,10 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
     const priorResults = prior.map((action) =>
       definition.task ? toDomainPriorResult(action, definition, run.projectId) : toPriorResult(action)
     );
-    const turnRegistry = registryForRejectedGate(definition.registry, gates);
+    const turnRegistry = registryForRejectedGate(
+      registryBeforeScriptApproval(definition.registry, gates),
+      gates
+    );
     const agentContext = await definition.loadTurnContext();
 
     let decision;
@@ -992,6 +1020,15 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
             recoverable: false,
           });
         }
+      }
+      if (hasUnresolvedAfterGate(gates)) {
+        logger.warn("orchestrator.done_before_required_gate", {
+          workspaceId: r.workspaceId,
+          projectId: run.projectId,
+          runId: run.id,
+          turn,
+        });
+        continue;
       }
       logger.info("orchestrator.done", {
         workspaceId: r.workspaceId,

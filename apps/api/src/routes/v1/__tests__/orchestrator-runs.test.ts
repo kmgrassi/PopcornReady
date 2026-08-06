@@ -103,7 +103,7 @@ test("makes an unexpected terminal success without video a terminal partial fail
   assert.equal(payload.resultArtifacts?.length, 0);
 });
 
-test("every initial run stops after a complete storyboard", () => {
+test("every initial run stops for script review before storyboard review", () => {
   assert.deepEqual(stopAfterTools({}), []);
   assert.deepEqual(stopAfterTools({ runThrough: true }), []);
   assert.deepEqual(stopAfterTools({ runThrough: false }), ["generate_storyboard"]);
@@ -111,17 +111,17 @@ test("every initial run stops after a complete storyboard", () => {
   assert.deepEqual(stopAfterTools({ runThrough: true, stopAfter: "storyboard" }), [
     "generate_storyboard",
   ]);
-  assert.deepEqual(initialRunStopAfterTools({}), ["generate_storyboard"]);
-  assert.deepEqual(initialRunStopAfterTools({ runThrough: true }), ["generate_storyboard"]);
-  assert.deepEqual(initialRunStopAfterTools({ stopAfter: "brief_intake" }), ["generate_storyboard"]);
-  assert.deepEqual(initialRunStopAfterTools({ stopAfter: "creative_plan" }), ["generate_storyboard"]);
-  assert.deepEqual(initialRunStopAfterTools({ stopAfter: "asset_generation" }), ["generate_storyboard"]);
+  assert.deepEqual(initialRunStopAfterTools({}), ["draft_script", "generate_storyboard"]);
+  assert.deepEqual(initialRunStopAfterTools({ runThrough: true }), ["draft_script", "generate_storyboard"]);
+  assert.deepEqual(initialRunStopAfterTools({ stopAfter: "brief_intake" }), ["draft_script", "generate_storyboard"]);
+  assert.deepEqual(initialRunStopAfterTools({ stopAfter: "creative_plan" }), ["draft_script", "generate_storyboard"]);
+  assert.deepEqual(initialRunStopAfterTools({ stopAfter: "asset_generation" }), ["draft_script", "generate_storyboard"]);
   assert.deepEqual(
     initialRunGates({
       reviewGates: ["brief_intake", "creative_plan", "asset_generation"],
       stopAfter: "creative_plan",
     }),
-    ["after:generate_storyboard"],
+    ["after:draft_script", "after:generate_storyboard"],
   );
 });
 
@@ -159,6 +159,45 @@ test("storyboard entrypoint reuses an active Creative Director root with an unre
   });
   assert.equal(created, false);
   assert.equal(enqueued, false);
+});
+
+test("storyboard entrypoint reuses a succeeded root paused at script review", async () => {
+  const existing = runFixture({ status: "succeeded" });
+  let createCalls = 0;
+  let enqueueCalls = 0;
+  const result = await storyboardGenerationEntrypointRoute(
+    {
+      auth: {
+        workspaceId: "workspace_1",
+        actor: { id: "actor_1" },
+      } as never,
+      body: {},
+    },
+    { projectId: "project_1" },
+    {
+      requireProjectAccess: async () => undefined,
+      listRuns: async () => [existing],
+      listGates: async () => [
+        gateFixture("after:draft_script", { status: "reached" }),
+        gateFixture("after:generate_storyboard", { status: "pending" }),
+      ],
+      createRun: async () => {
+        createCalls += 1;
+        return { run: existing, replayed: false };
+      },
+      enqueueRun: async () => {
+        enqueueCalls += 1;
+      },
+      withProjectLock: async (_projectId, operation) => operation(),
+    },
+  );
+
+  assert.deepEqual(result, {
+    status: 200,
+    body: { runId: "run_1", reused: true },
+  });
+  assert.equal(createCalls, 0);
+  assert.equal(enqueueCalls, 0);
 });
 
 test("storyboard entrypoint retry reuses and re-wakes a queued run after initial dispatch failure", async () => {
@@ -237,6 +276,7 @@ test("storyboard entrypoint does not wake a queued run whose storyboard gate is 
 
 test("storyboard status returns only the latest server-projected boundary run", async () => {
   let requestedStage = "";
+  let listedRunId = "";
   const result = await storyboardGenerationEntrypointStatusRoute(
     {
       auth: { workspaceId: "workspace_1" } as never,
@@ -247,17 +287,27 @@ test("storyboard status returns only the latest server-projected boundary run", 
       getLatestRunForGate: async (_projectId, stage) => {
         requestedStage = stage;
         return {
-          run: runFixture({ status: "running" }),
+          run: runFixture({ status: "succeeded" }),
           gate: gateFixture("after:generate_storyboard", { status: "pending" }),
         };
+      },
+      listGates: async (runId) => {
+        listedRunId = runId;
+        return [
+          gateFixture("after:draft_script", { status: "reached" }),
+          gateFixture("after:generate_storyboard", { status: "pending" }),
+        ];
       },
     }
   );
 
   assert.equal(requestedStage, "after:generate_storyboard");
+  assert.equal(listedRunId, "run_1");
   assert.equal(result.body.run?.runId, "run_1");
   assert.equal(result.body.run?.storyboardBoundaryStatus, "pending");
-  assert.equal(result.body.run?.status, "running");
+  assert.equal(result.body.run?.status, "succeeded");
+  assert.equal(result.body.run?.reviewGate?.stageType, "script");
+  assert.equal(result.body.run?.currentStageType, "script");
 });
 
 test("storyboard entrypoint creates a storyboard-bounded run from the active brief without poster work", async () => {
@@ -292,7 +342,7 @@ test("storyboard entrypoint creates a storyboard-bounded run from the active bri
 
   assert.equal(result.status, 202);
   assert.deepEqual(result.body, { runId: "run_storyboard", reused: false });
-  assert.deepEqual(createdInput?.gates, ["after:generate_storyboard"]);
+  assert.deepEqual(createdInput?.gates, ["after:draft_script", "after:generate_storyboard"]);
   assert.equal(createdInput?.entrypoint, "storyboard");
   assert.equal(createdInput?.idempotencyKey, "storyboard-request-1");
   assert.match(String(createdInput?.inputSummary), /scene-and-moment planning/i);
