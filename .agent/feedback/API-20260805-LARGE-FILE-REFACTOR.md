@@ -19,3 +19,8 @@ semantic-search, and media-url tests passed (16 passed, 14 skipped); API
 typecheck and `pnpm agent:validate -- --scope api` passed. The independent
 reviewer was unavailable, so implementation and wrap-up review were completed
 locally.
+
+PR #895 later conflicted with `main` at the shared asset mapper. The conflict
+was resolved by retaining both the incoming persisted embedding-source
+projection and the refactor's async asset mapper; the branch is now
+mergeable, with required checks still running on GitHub.

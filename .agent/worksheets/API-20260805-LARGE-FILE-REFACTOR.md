@@ -44,6 +44,15 @@ Follow-up validation: storyboard/keyframe tests passed (25); combined store,
 semantic-search, and media-url tests passed (16 passed, 14 skipped); final API
 typecheck and scoped agent validation passed.
 
+## Conflict resolution
+
+The branch was merged with the updated `origin/main` after PR #895 reported a
+conflict in `store.ts`. The only overlapping hunk was the asset mapper: main's
+`mapAssetEmbeddingSourceRow` projection was retained alongside the refactor's
+exported async `mapAsset` used by discovery reads. The merged tree passed API
+typecheck, embedding tests (11), storyboard/keyframe tests (25), and
+`pnpm agent:validate -- --scope api`.
+
 ## Decisions and blockers
 
 - `store.ts` is now 6,574 lines (down from 7,032); the new discovery module is
