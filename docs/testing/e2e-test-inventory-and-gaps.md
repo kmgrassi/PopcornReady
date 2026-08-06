@@ -114,6 +114,12 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
 - `project-mobile-status.spec.ts` covers the compact mobile project status and
   its asset-detail navigation, plus separate desktop poster, storyboard-image,
   and storyboard-scene links.
+- `project-upload-more.spec.ts` covers direct desktop and mobile access from a
+  project overview to a completed standalone video asset through the canonical
+  Library viewer. The fixture verifies polling reveals a newly saved asset and
+  preserves that link after the standalone parent run fails, a newer full-video
+  run becomes active, and a newer empty standalone attempt fails, while keeping
+  Watch reserved for a playable final output.
 - `inspiration-poster.spec.ts` covers opening a generated story poster in the
   shared media viewer and dismissing it with Escape.
 - `storyboard-editor.spec.ts` verifies the dedicated storyboard route renders

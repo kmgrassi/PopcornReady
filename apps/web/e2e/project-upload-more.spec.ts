@@ -41,14 +41,14 @@ const project = {
   updatedAt: now,
 };
 
-test("project overview presents one-off image activity without a script stage", async ({ page }) => {
+test("project overview keeps a completed one-off video viewable after the run fails @mobile", async ({ page }) => {
   await mockLocalApi(page);
   const standaloneRun = {
-    runId: "run_one_off_image",
+    runId: "run_one_off_video",
     projectId,
     status: "succeeded",
     completionKind: "standalone_asset",
-    presentationKind: "standalone_image",
+    presentationKind: "standalone_video",
     currentStageType: "ready",
     progressPercent: 100,
     message: "Asset is ready.",
@@ -59,11 +59,11 @@ test("project overview presents one-off image activity without a script stage", 
     completedAt: now,
   };
   const standaloneStage = {
-    stageId: "run_one_off_image:tool:generate_image_asset",
+    stageId: "run_one_off_video:tool:generate_video_asset",
     runId: standaloneRun.runId,
     type: "asset_generation",
-    toolName: "generate_image_asset",
-    label: "Image asset",
+    toolName: "generate_video_asset",
+    label: "Video asset",
     order: 9,
     status: "succeeded",
     progressPercent: 100,
@@ -75,6 +75,66 @@ test("project overview presents one-off image activity without a script stage", 
     createdAt: now,
     updatedAt: now,
   };
+  const readyAssetItem = {
+    itemId: "action_one_off_video:asset_one_off_video",
+    stageId: standaloneStage.stageId,
+    kind: "video",
+    purpose: "asset",
+    label: "Rainy street cyclist",
+    status: "succeeded",
+    assetId: "asset_one_off_video",
+    artifactId: "asset_one_off_video",
+    createdAt: now,
+    updatedAt: now,
+  };
+  const newerActiveRun = {
+    runId: "run_newer_full_video",
+    projectId,
+    status: "running",
+    currentStageType: "creative_plan",
+    progressPercent: 20,
+    message: "Planning a newer full video.",
+    reviewGate: null,
+    createdAt: now,
+    updatedAt: now,
+    startedAt: now,
+  };
+  const newerActiveStage = {
+    stageId: "run_newer_full_video:tool:create_project_plan",
+    runId: newerActiveRun.runId,
+    type: "creative_plan",
+    toolName: "create_project_plan",
+    label: "Creative plan",
+    order: 1,
+    status: "running",
+    message: "Planning.",
+    startedAt: now,
+    jobIds: [],
+    artifactIds: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+  const newerEmptyStandaloneRun = {
+    runId: "run_newer_empty_video_asset",
+    projectId,
+    status: "failed",
+    completionKind: "standalone_asset",
+    presentationKind: "standalone_video",
+    currentStageType: "asset_generation",
+    message: "The newer asset attempt ended before saving media.",
+    reviewGate: null,
+    createdAt: now,
+    updatedAt: now,
+    startedAt: now,
+    completedAt: now,
+    error: {
+      code: "provider_failed",
+      message: "No media was saved.",
+      retryable: true,
+    },
+  };
+  let projectRuns: Array<Record<string, unknown>> = [standaloneRun];
+  let standaloneDetailRequests = 0;
 
   await page.route(`**/api/v1/projects/${projectId}`, (route) =>
     json(route, { project }),
@@ -86,34 +146,102 @@ test("project overview presents one-off image activity without a script stage", 
     json(route, { job: null }),
   );
   await page.route(`**/api/v1/workspaces/${workspaceId}/generation-runs**`, (route) =>
-    json(route, { runs: [standaloneRun], pagination: { limit: 6, nextCursor: null } }),
+    json(route, { runs: projectRuns, pagination: { limit: 6, nextCursor: null } }),
   );
   await page.route(
     `**/api/v1/projects/${projectId}/generation-runs/${standaloneRun.runId}`,
-    (route) => json(route, { run: standaloneRun, stages: [standaloneStage], stageItems: [] }),
+    (route) => {
+      standaloneDetailRequests += 1;
+      const firstPollIsActive = standaloneDetailRequests === 1;
+      return json(route, {
+        run: firstPollIsActive
+          ? {
+              ...standaloneRun,
+              status: "running",
+              progressPercent: 85,
+              message: "Finishing the asset.",
+              completedAt: undefined,
+            }
+          : standaloneRun,
+        stages: firstPollIsActive
+          ? [{ ...standaloneStage, status: "running", progressPercent: 85, completedAt: undefined }]
+          : [standaloneStage],
+        stageItems: firstPollIsActive ? [] : [readyAssetItem],
+      });
+    },
+  );
+  await page.route(
+    `**/api/v1/projects/${projectId}/generation-runs/${newerActiveRun.runId}`,
+    (route) => json(route, {
+      run: newerActiveRun,
+      stages: [newerActiveStage],
+      stageItems: [],
+    }),
+  );
+  await page.route(
+    `**/api/v1/projects/${projectId}/generation-runs/${newerEmptyStandaloneRun.runId}`,
+    (route) => json(route, {
+      run: newerEmptyStandaloneRun,
+      stages: [],
+      stageItems: [],
+    }),
   );
 
   await page.goto(`/projects/${projectId}`);
 
+  const assetPath =
+    `/library/assets?assetId=asset_one_off_video&projectId=${projectId}`;
+  const mobile = Boolean(page.viewportSize() && page.viewportSize()!.width <= 760);
   const panel = page
     .getByRole("heading", { name: "Generation status" })
     .locator("xpath=ancestor::section");
-  await expect(page.getByRole("heading", { name: "Generation status" })).toBeVisible();
-  await expect(
-    panel.getByLabel("Generation stages").getByText("Image asset", { exact: true }),
-  ).toBeVisible();
-  await expect(panel.getByText("Asset ready", { exact: true })).toBeVisible();
-  await expect(panel.getByText("Script", { exact: true })).toHaveCount(0);
+  if (mobile) {
+    const statusRegion = page.getByLabel("Project status");
+    await expect(statusRegion.getByText("Video asset ready to view.")).toBeVisible();
+    await expect(statusRegion.getByRole("link", { name: "View video asset" })).toHaveAttribute(
+      "href",
+      assetPath,
+    );
+  } else {
+    await expect(page.getByRole("heading", { name: "Generation status" })).toBeVisible();
+    await expect(
+      panel.getByLabel("Generation stages").getByText("Video asset", { exact: true }),
+    ).toBeVisible();
+    await expect(panel.getByText("Asset ready", { exact: true })).toBeVisible();
+    await expect(panel.getByText("Script", { exact: true })).toHaveCount(0);
+    await expect(panel.getByRole("link", { name: "View video asset" })).toHaveAttribute(
+      "href",
+      assetPath,
+    );
+    await expect(page.locator("header").getByRole("link", { name: "View video asset" })).toHaveAttribute(
+      "href",
+      assetPath,
+    );
+  }
+  await expect(page.getByRole("link", { name: "Watch" })).toHaveCount(0);
 
   standaloneRun.status = "failed";
   standaloneRun.message = "Generation failed.";
+  projectRuns = [newerActiveRun, newerEmptyStandaloneRun, standaloneRun];
   await page.reload();
 
-  await expect(panel.getByText("Failed", { exact: true })).toBeVisible();
-  await expect(panel.getByText("Needs attention", { exact: true })).toBeVisible();
-  await expect(
-    panel.getByLabel("Generation stages").getByText("Complete", { exact: true }),
-  ).toBeVisible();
+  if (mobile) {
+    const statusRegion = page.getByLabel("Project status");
+    await expect(statusRegion.getByText("Video asset ready to view.")).toBeVisible();
+    await expect(statusRegion.getByRole("link", { name: "View video asset" })).toHaveAttribute(
+      "href",
+      assetPath,
+    );
+  } else {
+    const activePanel = page
+      .getByRole("heading", { name: "Stage and next step" })
+      .locator("xpath=ancestor::section");
+    await expect(activePanel.getByText("Creative Plan", { exact: true }).first()).toBeVisible();
+    await expect(activePanel.getByRole("link", { name: "View video asset" })).toHaveAttribute(
+      "href",
+      assetPath,
+    );
+  }
 });
 
 test("project overview upload-more targets the existing project", async ({ page }) => {

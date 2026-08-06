@@ -99,6 +99,13 @@ one compact mobile status card, routes its current storyboard image to the
 canonical asset viewer, and exposes separate desktop links for the project
 poster, storyboard image, and storyboard scene navigation.
 
+`project-upload-more.spec.ts` verifies a completed standalone media asset remains
+directly viewable from the project overview on desktop and mobile after its parent
+run fails. The fixture first lets polling discover the saved asset, then adds a
+newer active full-video run and a newer empty standalone attempt to prove current
+or unsuccessful activity does not hide the prior result. The link carries exact
+project and asset identity into the canonical Library viewer.
+
 `rerun-proposal-lifecycle.spec.ts` verifies the durable Request Changes UI
 without provider spend: exact-target proposal preview, preserved/affected work,
 cost approval, separate execution, waiting-state polling, reload recovery,
