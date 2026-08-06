@@ -30,6 +30,12 @@ Library and Activity, and proves neither route flashes a false empty state while
 `/me` is pending; it does not treat the shared 180ms anti-flash interval as a
 completed request.
 
+`creation-entry-points.spec.ts` also verifies the Script choice in the Create
+workspace: project-specific asset controls disappear, the story prompt stays out
+of the URL, and a validated handoff prefills the existing Creative Director brief
+without posting an asset proposal, creating a project, or starting a run. Desktop
+and mobile coverage preserves keyboard reachability and four-choice overflow.
+
 `asset-studio-projects.spec.ts`, `asset-studio-review.spec.ts`, and
 `asset-studio-progress.spec.ts` use browser API fixtures to verify the production
 `/create/asset` route, the 30/70 desktop context-to-prompt workspace, responsive

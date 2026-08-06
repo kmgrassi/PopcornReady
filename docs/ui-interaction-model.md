@@ -101,9 +101,15 @@ Initial creation is not a third editing primitive because there is no existing
 generated object to mutate yet. The authenticated shell plus Dashboard,
 Activity, and Library use one global **Create** entry at `/create`. This launcher
 asks for the intended outcome and sends **Full video** to `/projects/new` or
-**Project asset** to `/create/asset`. The asset workspace collects an Image,
+**Project asset** to `/create/asset`. The Create workspace collects an Image,
 Video, or Audio intent, then enters the durable proposal/review lifecycle at
-`/create/review` before generation. Legacy `/create` asset status links and
+`/create/review` before generation. It also exposes **Script** as a truthful
+handoff into a new full-video project: the creator's story intent is transferred
+through validated navigation state to `/projects/new`, where the Creative
+Director writes the script and stops at the mandatory text-only review boundary
+before any media work. Script does not enter the creator-direct Visuals/Audio
+asset proposal contract, and this entry never replaces an existing project's
+authoritative script. Legacy `/create` asset status links and
 validated draft history entries redirect to `/create/asset` without losing
 their query or route state.
 

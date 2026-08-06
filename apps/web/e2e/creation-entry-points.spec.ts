@@ -166,6 +166,128 @@ test("launcher routes both intents and preserves legacy asset status links", asy
   await expect(page.getByLabel("Improve video prompt")).not.toBeChecked();
 });
 
+test("Create hands script intent to a new Creative Director brief without starting work", async ({ page }) => {
+  await mockProjects(page, [project]);
+  const productionWrites: string[] = [];
+  page.on("request", (request) => {
+    if (
+      request.method() === "POST" &&
+      (request.url().includes("/agent-creations") ||
+        request.url().includes("/generation-entrypoints/") ||
+        request.url().includes("/generation-runs") ||
+        /\/api\/v1\/projects(?:\?|$)/.test(request.url()))
+    ) {
+      productionWrites.push(request.url());
+    }
+  });
+  await page.route(
+    /\/api\/v1\/workspaces\/[^/]+\/studio-drafts(?:\?.*)?$/,
+    async (route) => {
+      if (route.request().method() !== "POST") {
+        await json(route, { drafts: [], pagination: { limit: 20, nextCursor: null } });
+        return;
+      }
+      const body = await route.request().postDataJSON();
+      await json(route, {
+        draft: {
+          id: "script-entry-draft",
+          schemaVersion: "studioDraft.v1",
+          workspaceId,
+          displayExcerpt: body.payload.draft.goal,
+          step: body.payload.step,
+          createdAt: now,
+          updatedAt: now,
+          payload: body.payload,
+        },
+      });
+    },
+  );
+
+  await page.goto("/create/asset");
+  await expect(page.getByRole("navigation", { name: "Recent projects" })).toBeVisible();
+
+  await page.getByText("Script", { exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Create a script" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Recent projects" })).toHaveCount(0);
+  await expect(page.getByText("Script project", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Project Choose a project/ })).toHaveCount(0);
+  await expect(page.getByText(/stops at script review/i)).toBeVisible();
+
+  await page.getByText("Image", { exact: true }).click();
+  await expect(page.getByRole("navigation", { name: "Recent projects" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Review request" })).toBeVisible();
+  await page.getByLabel("Describe the result").fill("A preserved image request");
+
+  await page.getByText("Script", { exact: true }).click();
+  await page.getByRole("textbox", { name: /Describe the script/ }).fill(
+    "  A warm thirty-second founder story about creative momentum  ",
+  );
+  await page.getByText("Image", { exact: true }).click();
+  await expect(page.getByLabel("Describe the result")).toHaveValue(
+    "A preserved image request",
+  );
+  await page.getByText("Script", { exact: true }).click();
+  await expect(page.getByRole("textbox", { name: /Describe the script/ })).toHaveValue(
+    "  A warm thirty-second founder story about creative momentum  ",
+  );
+  await page.getByRole("button", { name: "Continue to script brief" }).click();
+
+  await expect(page).toHaveURL(/\/projects\/new\?draft=script-entry-draft/);
+  expect(page.url()).not.toContain("founder");
+  await expect(
+    page.getByRole("radio", { name: "An idea We’ll write the script", exact: true }),
+  ).toBeChecked();
+  await expect(page.getByLabel("Video idea")).toHaveValue(
+    "A warm thirty-second founder story about creative momentum",
+  );
+  await expect(page.getByRole("radio", { name: "30s Ad", exact: true })).toBeChecked();
+  expect(productionWrites).toEqual([]);
+});
+
+test("Script handoff keeps its prefill when Studio draft persistence is unavailable", async ({ page }) => {
+  await page.route(
+    /\/api\/v1\/workspaces\/[^/]+\/studio-drafts(?:\?.*)?$/,
+    async (route) => {
+      if (route.request().method() === "POST") {
+        await json(route, { error: { message: "Draft persistence unavailable" } }, 500);
+        return;
+      }
+      await json(route, { drafts: [], pagination: { limit: 20, nextCursor: null } });
+    },
+  );
+  await page.goto("/create/asset");
+  await page.getByText("Script", { exact: true }).click();
+  await page.getByRole("textbox", { name: /Describe the script/ }).fill(
+    "A resilient script handoff",
+  );
+  await page.getByRole("button", { name: "Continue to script brief" }).click();
+
+  await expect(page).toHaveURL(/\/projects\/new\?start=1/);
+  await expect(page.getByLabel("Video idea")).toHaveValue(
+    "A resilient script handoff",
+  );
+});
+
+test("four Create choices remain keyboard-reachable without mobile overflow @mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/create/asset");
+
+  const choices = page.getByRole("radio");
+  await expect(choices).toHaveCount(4);
+  await choices.first().focus();
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  await expect(choices.last()).toBeChecked();
+  await expect(page.getByRole("button", { name: "Continue to script brief" })).toBeDisabled();
+
+  const overflow = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  expect(overflow.scrollWidth).toBe(overflow.clientWidth);
+});
+
 test("full-video intake starts from either an idea or a script @mobile", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/projects/new");

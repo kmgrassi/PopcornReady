@@ -26,6 +26,7 @@ import { SourceFootageStep } from "./steps/SourceFootageStep";
 import { ReviewStep } from "./ReviewStep";
 import { ExportStep } from "./steps/ExportStep";
 import {
+  STUDIO_DRAFT_PAYLOAD_VERSION,
   type StudioDraftPayload,
 } from "../../lib/draftStore";
 import {
@@ -205,7 +206,11 @@ export function StudioShell({
       );
     } catch {
       setActiveDraftId(LOCAL_DRAFT_ID);
-      setInitialPayload(null);
+      setInitialPayload({
+        v: STUDIO_DRAFT_PAYLOAD_VERSION,
+        draft: { ...EMPTY_BRIEF_DRAFT, ...seededBrief },
+        step,
+      });
       setFlowKey((current) => current + 1);
       navigate(studioDraftPath({ step, openPanel, started: initialStarted }), {
         replace: true,
