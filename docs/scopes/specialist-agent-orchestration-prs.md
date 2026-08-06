@@ -1233,11 +1233,12 @@ successor, queue, graph-scope, selection, and mocked-provider integration tests.
 Gate 0 to say proceed.
 
 **Implementation status (2026-08-02):** `/create` is the authenticated intent
-launcher: Full video enters `/projects/new`, while Project asset enters
+launcher: Full video enters `/projects/new`, while Asset or script enters
 `/create/asset` for standalone Image, Video, and Soundtrack requests. Legacy
 asset-status query links and validated draft history state remain compatible.
-The
-client-only `VITE_STANDALONE_CREATION_ENABLED` rollout flag was removed after
+Script hands URL-private intent to a new Creative Director project and stops at
+script review before media work. The client-only
+`VITE_STANDALONE_CREATION_ENABLED` rollout flag was removed after
 desktop/mobile browser coverage was added for image proposal and confirmation.
 Proposal work moves immediately to `/create/review`; after the proposal is
 visible, creators can select **Approve this** or let the disclosed 10-second

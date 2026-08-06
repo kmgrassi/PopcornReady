@@ -128,7 +128,7 @@ export function getDashboardBreadcrumbs(
   if (pathname === "/create/asset") {
     return staticCrumbs([
       { label: "Create", to: "/create" },
-      { label: "Project asset" },
+      { label: "Asset or script" },
     ]);
   }
 

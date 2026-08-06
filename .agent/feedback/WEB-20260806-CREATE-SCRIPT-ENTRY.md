@@ -28,6 +28,12 @@ discriminated navigation-state envelope can transfer the intent once, validate
 length and shape, reconstruct only trusted fields, and disappear when Studio
 replaces the history entry with its durable draft URL.
 
+Async handoffs also need route ownership. A durable draft response may arrive
+after the creator uses Back; success and fallback branches must both verify that
+their destination is still mounted before mutating state or replacing browser
+history. The regression should hold the response open, leave the destination,
+then prove its eventual settlement cannot reclaim navigation.
+
 ## Follow-up
 
 - If a truly standalone script workflow is added later, design a Creative

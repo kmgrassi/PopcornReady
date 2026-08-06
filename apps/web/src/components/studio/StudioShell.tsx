@@ -123,6 +123,7 @@ export function StudioShell({
   const handledNewDraftRequestRef = useRef<string | null>(null);
   const createDraftInFlightRef = useRef(false);
   const createDraftPromiseRef = useRef<Promise<string | null> | null>(null);
+  const mountedRef = useRef(false);
   const [pendingAutoStartGeneration, setPendingAutoStartGeneration] =
     useState(autoStartGeneration);
   const draftsQuery = useStudioDraftsQuery();
@@ -135,6 +136,13 @@ export function StudioShell({
     draftActionError ??
     (draftsQuery.error instanceof Error ? draftsQuery.error.message : null) ??
     (draftQuery.error instanceof Error ? draftQuery.error.message : null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const openDraft = useCallback(
     (nextDraftId: string) => {
@@ -192,6 +200,7 @@ export function StudioShell({
         draft: { ...EMPTY_BRIEF_DRAFT, ...seededBrief },
         step,
       });
+      if (!mountedRef.current) return;
       setActiveDraftId(record.draftId);
       setInitialPayload(record.payload);
       setFlowKey((current) => current + 1);
@@ -205,6 +214,7 @@ export function StudioShell({
         { replace: true },
       );
     } catch {
+      if (!mountedRef.current) return;
       setActiveDraftId(LOCAL_DRAFT_ID);
       setInitialPayload({
         v: STUDIO_DRAFT_PAYLOAD_VERSION,
@@ -217,7 +227,7 @@ export function StudioShell({
       });
     } finally {
       createDraftInFlightRef.current = false;
-      setIsStartingFreshDraft(false);
+      if (mountedRef.current) setIsStartingFreshDraft(false);
     }
   }, [
     createDraftMutation,

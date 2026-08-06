@@ -360,8 +360,10 @@ Covered:
 
 - The authenticated global Create action opens the `/create` intent launcher.
 - Dashboard, Activity, populated/empty Library, desktop shell, and mobile shell
-  use that launcher; its Full video and Project asset choices lead to
+  use that launcher; its Full video and Asset or script choices lead to
   `/projects/new` and `/create/asset` while Create retains navigation ownership.
+- Script is named at the launcher, hands validated URL-private intent to a new
+  Creative Director project, and ignores delayed draft persistence after Back.
 - Legacy asset-status query links and validated `/create` draft-history entries
   redirect to `/create/asset` without losing their state.
 - Desktop creation uses a roughly 30/70 project/media context-to-prompt layout;

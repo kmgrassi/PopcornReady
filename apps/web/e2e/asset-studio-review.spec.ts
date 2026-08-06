@@ -927,7 +927,7 @@ test.describe("Asset Studio", () => {
     await createTab.click();
 
     await expect(page).toHaveURL(/\/create$/);
-    await page.getByRole("link", { name: "Create an asset" }).click();
+    await page.getByRole("link", { name: "Create an asset or script" }).click();
     await expect(page).toHaveURL(/\/create\/asset$/);
     await expect(createTab).toHaveAttribute("aria-current", "page");
     const recentStrip = page.getByRole("navigation", { name: "Recent projects" });

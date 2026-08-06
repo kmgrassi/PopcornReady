@@ -18,7 +18,7 @@ test("creation routes stay under the Create breadcrumb", () => {
   assert.deepEqual(getDashboardBreadcrumbs(location("/create/asset")), [
     { label: "Dashboard", to: "/dashboard" },
     { label: "Create", to: "/create" },
-    { label: "Project asset" },
+    { label: "Asset or script" },
   ]);
   assert.deepEqual(getDashboardBreadcrumbs(location("/create/review")), [
     { label: "Dashboard", to: "/dashboard" },

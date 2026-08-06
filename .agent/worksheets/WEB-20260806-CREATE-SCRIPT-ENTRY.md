@@ -55,9 +55,13 @@
 
 - Added Script selection, script-specific copy/icon/context, and a responsive
   four-choice layout to the existing Create workspace.
+- Made Script discoverable from the global `/create` launcher and aligned the
+  workspace breadcrumb with its combined asset-or-script purpose.
 - Added validated, URL-private script handoff state and seeded the existing
   Creative Director brief without expanding `CreationGoal` or agent-creation
   task contracts.
+- Guarded Studio draft completion so a delayed success or failure cannot
+  navigate after the creator leaves the handoff destination.
 - Added unit and desktop/mobile browser coverage plus owning documentation and
   feedback updates.
 
@@ -66,9 +70,13 @@
 - `pnpm --filter @popcorn/web test` — 90 passing unit tests, including strict
   script-handoff validation.
 - `pnpm --filter @popcorn/web typecheck` — pass.
-- `creation-entry-points.spec.ts --project=chromium` — 9 passing browser tests,
+- `creation-entry-points.spec.ts --project=chromium` — 10 passing browser tests,
   including successful durable handoff, failed-persistence fallback, distinct
-  media/script prompt restoration, keyboard reachability, and mobile overflow.
+  media/script prompt restoration, late-response cancellation, keyboard
+  reachability, and mobile overflow.
+- Expanded `creation-entry-points`, `asset-studio-review`, and
+  `asset-studio-projects` Chromium run — 38 passing tests after updating shared
+  target-count coverage for the fourth creation type and stale launcher labels.
 - Focused API `orchestrator-runs.test.ts` — 39 passing tests, including the
   server-owned rule that every initial run stops for Script review before
   Storyboard review.
@@ -86,6 +94,10 @@
   Script selected state, text-first/new-project explanation, prompt field, and
   CTA. The document stayed exactly 390 CSS pixels wide with no horizontal
   overflow.
+- PR feedback browser pass at 1440×1000 and 390×844: opened the actual global
+  `/create` entry, confirmed **Asset or script** and its new-project Script copy
+  are visible, followed the CTA to Script at desktop width, and measured no
+  horizontal overflow at either viewport.
 
 ## Independent reviews
 
@@ -108,6 +120,13 @@
 - Wrap-up re-review approved with no remaining pre-commit blockers after
   verifying the corrected request spy, worksheet evidence, documentation, and
   architecture boundary.
+- PR-comment research review from `/root/comment_research_review` confirmed both
+  reported issues were actionable, recommended explicit launcher discovery plus
+  a Strict Mode-safe mounted guard, and requested an end-to-end delayed-response
+  regression. The implementation and 10-test browser suite cover each point.
+- PR-comment implementation review found stale broader-suite labels, a weak
+  response-settlement barrier, and documentation drift. After those corrections
+  and the 38-test run, final wrap-up re-review approved with no findings.
 
 ## Blockers and risks
 
@@ -120,6 +139,6 @@
 
 ## Next action / handoff
 
-- Publish the validated commit, worksheet tag, and ready-for-review PR. Reviewers
-  should focus on the Script-to-Creative-Director handoff boundary and the
-  successful/fallback state-consumption tests.
+- Publish the review-fix commit to the existing ready-for-review PR. Reviewers
+  should verify Script discovery from `/create` and the delayed draft-response
+  ownership guard.

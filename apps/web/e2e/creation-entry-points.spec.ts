@@ -95,9 +95,11 @@ test("launcher routes both intents and preserves legacy asset status links", asy
   await page.goto("/create");
 
   const fullVideo = page.getByRole("link", { name: "Start a full video" });
-  const projectAsset = page.getByRole("link", { name: "Create an asset" });
+  const projectAsset = page.getByRole("link", { name: "Create an asset or script" });
   await expect(fullVideo).toHaveAttribute("href", "/projects/new");
   await expect(projectAsset).toHaveAttribute("href", "/create/asset");
+  await expect(page.getByRole("heading", { name: "Asset or script" })).toBeVisible();
+  await expect(page.getByText(/start a text-first script/i)).toBeVisible();
 
   const actionColors = await page.evaluate(() => {
     const ctaProbe = document.createElement("span");
@@ -107,7 +109,7 @@ test("launcher routes both intents and preserves legacy asset status links", asy
       (element) => element.textContent?.trim() === "Start a full video",
     );
     const assetAction = Array.from(document.querySelectorAll("a")).find(
-      (element) => element.textContent?.trim() === "Create an asset",
+      (element) => element.textContent?.trim() === "Create an asset or script",
     );
     const colors = {
       cta: getComputedStyle(ctaProbe).backgroundColor,
@@ -203,7 +205,9 @@ test("Create hands script intent to a new Creative Director brief without starti
     },
   );
 
-  await page.goto("/create/asset");
+  await page.goto("/create");
+  await expect(page.getByText(/start a text-first script/i)).toBeVisible();
+  await page.getByRole("link", { name: "Create an asset or script" }).click();
   await expect(page.getByRole("navigation", { name: "Recent projects" })).toBeVisible();
 
   await page.getByText("Script", { exact: true }).click();
@@ -266,6 +270,67 @@ test("Script handoff keeps its prefill when Studio draft persistence is unavaila
   await expect(page.getByLabel("Video idea")).toHaveValue(
     "A resilient script handoff",
   );
+});
+
+test("leaving Studio cancels a pending Script handoff navigation", async ({ page }) => {
+  let releaseDraftRequest = () => {};
+  let markDraftStarted = () => {};
+  const draftRequestRelease = new Promise<void>((resolve) => {
+    releaseDraftRequest = resolve;
+  });
+  const draftStarted = new Promise<void>((resolve) => {
+    markDraftStarted = resolve;
+  });
+
+  await page.route(
+    /\/api\/v1\/workspaces\/[^/]+\/studio-drafts(?:\?.*)?$/,
+    async (route) => {
+      if (route.request().method() !== "POST") {
+        await json(route, { drafts: [], pagination: { limit: 20, nextCursor: null } });
+        return;
+      }
+      const body = await route.request().postDataJSON();
+      markDraftStarted();
+      await draftRequestRelease;
+      await json(route, {
+        draft: {
+          id: "late-script-draft",
+          schemaVersion: "studioDraft.v1",
+          workspaceId,
+          displayExcerpt: body.payload.draft.goal,
+          step: body.payload.step,
+          createdAt: now,
+          updatedAt: now,
+          payload: body.payload,
+        },
+      });
+    },
+  );
+
+  await page.goto("/create/asset");
+  await page.getByText("Script", { exact: true }).click();
+  await page.getByRole("textbox", { name: /Describe the script/ }).fill(
+    "A script handoff the creator decides to leave",
+  );
+  await page.getByRole("button", { name: "Continue to script brief" }).click();
+  await draftStarted;
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/create\/asset$/);
+  const persistedResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      /\/api\/v1\/workspaces\/[^/]+\/studio-drafts(?:\?.*)?$/.test(response.url()),
+  );
+  releaseDraftRequest();
+  await persistedResponse;
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
+  await expect(page).toHaveURL(/\/create\/asset$/);
 });
 
 test("four Create choices remain keyboard-reachable without mobile overflow @mobile", async ({ page }) => {
@@ -344,7 +409,7 @@ test("mobile Create stays active across both creation flows without overflow", a
   });
   expect(createStyle.background).not.toBe(createStyle.cta);
 
-  await page.getByRole("link", { name: "Create an asset" }).click();
+  await page.getByRole("link", { name: "Create an asset or script" }).click();
   await expect(page).toHaveURL(/\/create\/asset$/);
   await expect(create).toHaveAttribute("aria-current", "page");
 
