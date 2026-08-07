@@ -30,6 +30,18 @@ Library and Activity, and proves neither route flashes a false empty state while
 `/me` is pending; it does not treat the shared 180ms anti-flash interval as a
 completed request.
 
+`dashboard-cached-refresh.spec.ts` verifies Home's cold-refresh perceived
+performance in a new browser document: an exact actor/workspace session snapshot
+renders while the authoritative response is delayed, a failed background refresh
+retains that content with an in-place retry, and a successful retry replaces it.
+Pure unit coverage owns the five-minute expiry, malformed/future fail-closed
+behavior, identity/workspace isolation, and omission of signed delivery URLs.
+
+`studio-draft-opening.spec.ts` verifies a saved draft acknowledges keyboard or
+pointer activation immediately, preserves focused-row semantics, fences duplicate
+opens and delete races, restores the exact draft, and recovers from a failed open.
+The busy state runs in Chromium plus both mobile projects.
+
 `creation-entry-points.spec.ts` also verifies the Script choice in the Create
 workspace: project-specific asset controls disappear, the story prompt stays out
 of the URL, and a validated handoff prefills the existing Creative Director brief
@@ -156,6 +168,9 @@ failed-stage retry promise from returning. The separate insufficient-credit
 continuation remains implemented because it owns a real recovery mutation;
 unit coverage gives that direct continuation priority over generic Request
 Changes guidance.
+The same dashboard fixture asserts semantic **Status updated** `<time>` elements
+for active and failed cards; deterministic unit tests own relative-time
+thresholds, clock skew, invalid values, and absolute-date fallback.
 
 `landing-mobile.spec.ts` keeps the mobile landing inside the viewport with a
 tappable primary CTA. `landing-agent-content.spec.ts` protects the landing

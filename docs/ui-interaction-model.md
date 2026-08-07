@@ -5,7 +5,7 @@
 > Star defines the agent-orchestrated generation model, and this doc defines the
 > single interaction model every authenticated surface must follow from it. New
 > UI work (human or agent) aligns to this; deviations are conscious and
-> documented. Last updated 2026-08-03.
+> documented. Last updated 2026-08-07.
 
 ## 0. The one rule
 
@@ -168,6 +168,25 @@ stops at the complete storyboard boundary. If no
 specialist lane was created, the empty state follows the root outcome: active
 work may still be planning, while waiting, blocked, failed, canceled, and
 complete roots must not imply that production is still underway.
+
+### 2.4 Perceived performance and truthful freshness
+
+Observe-first surfaces preserve the last safe, identity-scoped result while an
+authoritative refresh is in flight. Home may seed its TanStack Query from a
+short-lived, tab-scoped snapshot only after resolving the exact actor and
+workspace; it immediately revalidates, never crosses an identity/workspace key,
+and never renews the snapshot unless the network succeeds. Routine polling is
+quiet. On Home, a failed background refresh keeps the readable result in place
+and adds one retryable freshness notice instead of replacing useful content
+with a blocking error. Other consumers may retain the same scoped query data
+without announcing every poll.
+
+Navigation actions acknowledge latency immediately. Opening a saved Studio
+draft keeps the focused row in place, marks it busy, fences duplicate
+resume/delete actions, and restores the row with actionable retry copy on
+failure. Run timestamps describe the server projection truthfully as **Status
+updated**; they do not imply that every `updatedAt` change was meaningful
+creative progress.
 
 ## 3. The "Request Changes" modal
 

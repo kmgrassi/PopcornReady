@@ -4,7 +4,7 @@ import {
   type GateableGenerationStageType,
   type GenerationRunStatus,
 } from "@popcorn/shared/v1/types";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "../ui/Button";
 import { RerunProposalDialog } from "../ai-edit/RerunProposalDialog";
 import { StatusChecklist } from "../ui/StatusChecklist";
@@ -104,6 +104,7 @@ export function StudioShell({
   autoStartGeneration = false,
 }: StudioShellProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const seededBrief = useMemo(
     () => ({
       ...initialBrief,
@@ -115,6 +116,7 @@ export function StudioShell({
   const [pendingDraftRequest, setPendingDraftRequest] = useState<{
     draftId: string;
     requestedAt: number;
+    locationKey: string;
   } | null>(null);
   const [draftActionError, setDraftActionError] = useState<string | null>(null);
   const [flowKey, setFlowKey] = useState(0);
@@ -123,6 +125,8 @@ export function StudioShell({
   const handledNewDraftRequestRef = useRef<string | null>(null);
   const createDraftInFlightRef = useRef(false);
   const createDraftPromiseRef = useRef<Promise<string | null> | null>(null);
+  const draftOpenInFlightRef = useRef(false);
+  const failedRouteDraftRef = useRef<string | null>(null);
   const mountedRef = useRef(false);
   const [pendingAutoStartGeneration, setPendingAutoStartGeneration] =
     useState(autoStartGeneration);
@@ -146,11 +150,48 @@ export function StudioShell({
 
   const openDraft = useCallback(
     (nextDraftId: string) => {
+      if (draftId === nextDraftId && failedRouteDraftRef.current === nextDraftId) return;
+      if (draftOpenInFlightRef.current) return;
+      failedRouteDraftRef.current = null;
+      draftOpenInFlightRef.current = true;
       setDraftActionError(null);
-      setPendingDraftRequest({ draftId: nextDraftId, requestedAt: Date.now() });
+      setPendingDraftRequest({
+        draftId: nextDraftId,
+        requestedAt: Date.now(),
+        locationKey: location.key,
+      });
     },
-    [],
+    [draftId, location.key],
   );
+
+  useEffect(() => {
+    if (!pendingDraftRequest || draftQuery.isFetching || !draftQuery.error) return;
+    if (draftQuery.errorUpdatedAt < pendingDraftRequest.requestedAt) return;
+    setDraftActionError("Could not open that draft. Try again.");
+    draftOpenInFlightRef.current = false;
+    if (draftId === pendingDraftRequest.draftId) {
+      failedRouteDraftRef.current = pendingDraftRequest.draftId;
+      navigate("/projects/new", { replace: true });
+    }
+    setPendingDraftRequest(null);
+  }, [
+    draftId,
+    draftQuery.error,
+    draftQuery.errorUpdatedAt,
+    draftQuery.isFetching,
+    navigate,
+    pendingDraftRequest,
+  ]);
+
+  useEffect(() => {
+    if (!pendingDraftRequest || pendingDraftRequest.locationKey === location.key) return;
+    draftOpenInFlightRef.current = false;
+    setPendingDraftRequest(null);
+  }, [location.key, pendingDraftRequest]);
+
+  useEffect(() => {
+    if (!draftId) failedRouteDraftRef.current = null;
+  }, [draftId]);
 
   useEffect(() => {
     if (draftQuery.isFetching || draftQuery.error) return;
@@ -162,6 +203,7 @@ export function StudioShell({
     setActiveDraftId(record.draftId);
     setInitialPayload(record.payload);
     setFlowKey((current) => current + 1);
+    draftOpenInFlightRef.current = false;
     setPendingDraftRequest(null);
     navigate(`/projects/new?draft=${encodeURIComponent(record.draftId)}`, { replace: true });
   }, [
@@ -180,6 +222,7 @@ export function StudioShell({
 
   const startUnsavedDraft = useCallback((step: StudioStep = "brief") => {
     setDraftActionError(null);
+    draftOpenInFlightRef.current = false;
     setPendingDraftRequest(null);
     setActiveDraftId(LOCAL_DRAFT_ID);
     setInitialPayload(null);
@@ -332,6 +375,7 @@ export function StudioShell({
       if (nextDraftId === activeDraftId) {
         setActiveDraftId(null);
         setInitialPayload(null);
+        draftOpenInFlightRef.current = false;
         setPendingDraftRequest(null);
         navigate("/projects/new", { replace: true });
       }
@@ -361,6 +405,7 @@ export function StudioShell({
           loading={draftsLoading}
           error={draftsError}
           creating={createDraftMutation.isPending}
+          openingDraftId={pendingDraftRequest?.draftId ?? null}
           onCreate={() => startUnsavedDraft("brief")}
           onResume={(id) => void openDraft(id)}
           onDelete={(id) => void removeDraft(id)}

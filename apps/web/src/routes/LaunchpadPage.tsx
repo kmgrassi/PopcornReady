@@ -18,7 +18,14 @@ const DEV_AUTOPILOT = import.meta.env.DEV;
 export function LaunchpadPage() {
   const auth = useAuth();
   const authScope = auth.user?.id ?? (DEV_AUTOPILOT ? "dev-autopilot" : auth.status);
-  const { data, error, loading, refresh } = useDashboardSummaryQuery(authScope);
+  const {
+    data,
+    error,
+    loading,
+    refresh,
+    refreshError,
+    refreshing,
+  } = useDashboardSummaryQuery(authScope);
 
   const pulse = data?.summary ?? null;
   const summaryState = getSummaryState(pulse);
@@ -41,9 +48,21 @@ export function LaunchpadPage() {
 
       {!loading && !error ? (
         action.type === "start" ? (
-          <EmptyDashboard action={action} />
+          <>
+            <DashboardRefreshNotice
+              refreshing={refreshing}
+              refreshError={refreshError}
+              onRetry={refresh}
+            />
+            <EmptyDashboard action={action} />
+          </>
         ) : (
           <>
+            <DashboardRefreshNotice
+              refreshing={refreshing}
+              refreshError={refreshError}
+              onRetry={refresh}
+            />
             {summaryState.isPartial ? (
               <PartialSummaryNotice missing={summaryState.missing} />
             ) : null}
@@ -62,6 +81,37 @@ export function LaunchpadPage() {
       ) : null}
     </div>
   );
+}
+
+function DashboardRefreshNotice({
+  refreshing,
+  refreshError,
+  onRetry,
+}: {
+  refreshing: boolean;
+  refreshError: Error | null;
+  onRetry: () => void;
+}) {
+  if (refreshError) {
+    return (
+      <div className={styles.refreshError}>
+        <span role="status">Showing your last update. We could not refresh Home.</span>
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-busy={refreshing || undefined}
+          aria-disabled={refreshing || undefined}
+          onClick={() => {
+            if (!refreshing) onRetry();
+          }}
+        >
+          {refreshing ? "Trying again…" : "Try again"}
+        </Button>
+      </div>
+    );
+  }
+
+  return refreshing ? <p className={styles.refreshing}>Updating Home…</p> : null;
 }
 
 function getSummaryState(summary: DashboardSummary | null) {

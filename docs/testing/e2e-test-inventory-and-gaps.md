@@ -8,7 +8,7 @@
 <!-- agent-summary: Async dispatch races require local Supabase concurrency coverage when no safe live completion is available. -->
 <!-- agent-summary: Keep remaining gaps concrete, behavior-focused, and tied to the smallest useful next test. -->
 
-Last reconciled with the active route table: 2026-08-05
+Last reconciled with the active route table: 2026-08-07
 
 This inventory covers the active split app described in `CLAUDE.md`: the Vite
 React SPA in `apps/web` and the Express API in `apps/api`. New end-to-end work
@@ -29,6 +29,16 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
   delayed workspace bootstrap on direct Library and Activity loads. The
   direct-load fixture waits for known populated results and proves the routes
   do not show false empty states while `/me` is pending.
+- `dashboard-cached-refresh.spec.ts` hard-reloads Home into a new document and
+  proves the actor/workspace-scoped session snapshot renders before a delayed
+  authoritative response. It also verifies a background 500 keeps cached
+  content and focus in place, exposes an in-place retry, and replaces the stale
+  result after that retry succeeds. Unit coverage owns snapshot expiry,
+  malformed/future rejection, scope isolation, and signed-URL omission.
+- `studio-draft-opening.spec.ts` holds a saved-draft detail response open and
+  verifies immediate busy copy, preserved keyboard focus, duplicate-request and
+  delete fencing, exact draft restoration, and retry after a failed open at
+  desktop and mobile widths.
 - `specs/library-collections.spec.ts` covers the shared quick route-loading
   contract on a mobile Library route, including the anti-flash threshold,
   accessible busy status, reduced motion, no horizontal overflow, visible
@@ -139,6 +149,9 @@ The `apps/web` Playwright harness now covers the first useful browser layer:
 - `creation-entry-points.spec.ts` verifies the full-video intake can start from
   either an idea or a pasted script, requires the selected starting material,
   explains the text-only script boundary, and stays overflow-free on mobile.
+- `dashboard-indeterminate-progress.spec.ts` also verifies active and failed run
+  cards expose semantic **Status updated** timestamps without turning the
+  minute-level clock into a live announcement.
 - `storyboard-orchestration.spec.ts` verifies desktop and mobile project
   overviews explain automatic scene-and-moment planning, start the
   storyboard-specific orchestrator entrypoint, navigate to its run, replace a

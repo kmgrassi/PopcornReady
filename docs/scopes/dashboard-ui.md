@@ -219,11 +219,17 @@ on the dedicated routes below.
   duration, project, and created date — the showcase of completed work.
 - **Loading / empty / error states**: every list has a skeleton loading state,
   a polished empty state, and a typed-error state that reads the standard error
-  envelope.
+  envelope. Home retains a validated, five-minute, actor/workspace-scoped
+  session snapshot during cold refresh and background failure, revalidates it
+  immediately, and never extends its lifetime without a successful response.
+  Routine refresh copy stays quiet; a stale failure exposes an in-place retry.
 - **Polling**: the Home view and Runs view poll while active runs exist, slow or
   pause polling when the tab is hidden, and poll immediately on focus — matching
   [Generation Progress UI](./generation-progress-ui.md). Static views (Outputs,
   Assets) fetch on navigation and on manual refresh.
+- **Run freshness**: compact Home and Activity cards render `updatedAt` as a
+  semantic, human-readable **Status updated** timestamp. The wording avoids
+  claiming that recovery bookkeeping is creator-visible activity.
 
 ## Proposed PR Sequence
 
