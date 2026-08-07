@@ -33,6 +33,7 @@ import { isRunActive, type GenerationRunDetail } from "./v1/generation-runs/stat
 import { storyboardProgress } from "./v1/storyboard/progress";
 import type { ProjectStoryboardResponse } from "./api-client";
 import { clearPersistedAssetMedia } from "./assetMediaQuery";
+import { readDashboardSnapshot, writeDashboardSnapshot } from "./dashboardSnapshot";
 
 const POLL_INTERVAL_MS = 2_000;
 const REVIEW_POLL_INTERVAL_MS = 15_000;
@@ -272,14 +273,39 @@ export function useDashboardSummaryQuery(
 ) {
   const enabled = options.enabled ?? true;
   const meQuery = useMeQuery(authScope, { enabled });
+  const actorId = meQuery.data
+    ? typeof meQuery.data.actor === "string"
+      ? meQuery.data.actor
+      : meQuery.data.actor.id
+    : null;
+  const snapshot = meQuery.data
+    ? readDashboardSnapshot({
+        actorId: actorId!,
+        workspaceId: meQuery.data.workspaceId,
+      })
+    : null;
 
   const summaryQuery = useQuery({
     queryKey: meQuery.data
-      ? queryKeys.dashboardSummary(meQuery.data.workspaceId)
+      ? queryKeys.dashboardSummary(actorId!, meQuery.data.workspaceId)
       : ["dashboard", "summary", "pending"],
-    queryFn: ({ signal }: { signal: QuerySignal }) =>
-      dashboardApi.getSummary(meQuery.data!.workspaceId, signal),
+    queryFn: async ({ signal }: { signal: QuerySignal }) => {
+      const identity = meQuery.data!;
+      const identityActorId = typeof identity.actor === "string"
+        ? identity.actor
+        : identity.actor.id;
+      const data = await dashboardApi.getSummary(identity.workspaceId, signal);
+      writeDashboardSnapshot({
+        actorId: identityActorId,
+        workspaceId: identity.workspaceId,
+        data,
+      });
+      return data;
+    },
     enabled: enabled && Boolean(meQuery.data),
+    initialData: snapshot?.data,
+    initialDataUpdatedAt: snapshot?.savedAt,
+    staleTime: 0,
     refetchInterval: (query) => {
       const data = query.state.data as DashboardSummaryResponse | undefined;
       if (!data?.summary.activeRuns.some((run) => isRunActive(run.status))) return false;
@@ -290,10 +316,16 @@ export function useDashboardSummaryQuery(
     refetchIntervalInBackground: true,
   });
 
+  const data = summaryQuery.data ?? null;
+  const combinedError = enabled ? meQuery.error ?? summaryQuery.error ?? null : null;
+  const hasData = data !== null;
+
   return {
-    data: summaryQuery.data ?? null,
-    error: enabled ? meQuery.error ?? summaryQuery.error ?? null : null,
-    loading: enabled && (meQuery.isLoading || summaryQuery.isLoading),
+    data,
+    error: hasData ? null : combinedError,
+    refreshError: hasData ? combinedError : null,
+    loading: enabled && !hasData && (meQuery.isLoading || summaryQuery.isLoading),
+    refreshing: enabled && hasData && (meQuery.isFetching || summaryQuery.isFetching),
     refresh: () => {
       if (!enabled) return;
       void meQuery.refetch();

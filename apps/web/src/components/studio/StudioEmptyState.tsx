@@ -8,6 +8,7 @@ export interface StudioEmptyStateProps {
   loading?: boolean;
   error?: string | null;
   creating?: boolean;
+  openingDraftId?: string | null;
   onCreate?: () => void;
   onResume?: (draftId: string) => void;
   onDelete?: (draftId: string) => void;
@@ -23,12 +24,14 @@ export function StudioEmptyState({
   loading = false,
   error = null,
   creating = false,
+  openingDraftId = null,
   onCreate,
   onResume,
   onDelete,
 }: StudioEmptyStateProps) {
   const hasDrafts = drafts.length > 0;
   const showZeroState = !loading && !error && !hasDrafts;
+  const isOpeningDraft = openingDraftId !== null;
 
   return (
     <div className={styles.startScreen}>
@@ -65,27 +68,43 @@ export function StudioEmptyState({
           {error ? <p className={styles.draftError}>{error}</p> : null}
           {hasDrafts ? (
             <ul className={styles.draftList}>
-              {drafts.map((draft) => (
-                <li className={styles.draftRow} key={draft.draftId}>
-                  <button
-                    className={styles.draftOpen}
-                    type="button"
-                    onClick={() => onResume?.(draft.draftId)}
-                  >
-                    <span className={styles.draftTitle}>{draft.excerpt}</span>
-                    <span className={styles.draftMeta}>
-                      {stepLabel(draft)} - updated {formatUpdatedAt(draft.updatedAt)}
-                    </span>
-                  </button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onDelete?.(draft.draftId)}
-                  >
-                    Delete
-                  </Button>
-                </li>
-              ))}
+              {drafts.map((draft) => {
+                const isOpening = openingDraftId === draft.draftId;
+                return (
+                  <li className={styles.draftRow} key={draft.draftId}>
+                    <button
+                      className={`${styles.draftOpen} ${isOpening ? styles.draftOpenPending : ""}`}
+                      type="button"
+                      aria-busy={isOpening || undefined}
+                      aria-disabled={isOpeningDraft || undefined}
+                      aria-label={isOpening ? `Opening draft ${draft.excerpt}` : undefined}
+                      onClick={() => {
+                        if (!isOpeningDraft) onResume?.(draft.draftId);
+                      }}
+                    >
+                      <span className={styles.draftTitle}>{draft.excerpt}</span>
+                      <span className={styles.draftMeta}>
+                        {isOpening ? (
+                          <span className={styles.draftOpening}>
+                            <span className={styles.draftSpinner} aria-hidden="true" />
+                            Opening draft…
+                          </span>
+                        ) : (
+                          <>{stepLabel(draft)} - updated {formatUpdatedAt(draft.updatedAt)}</>
+                        )}
+                      </span>
+                    </button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={isOpeningDraft}
+                      onClick={() => onDelete?.(draft.draftId)}
+                    >
+                      Delete
+                    </Button>
+                  </li>
+                );
+              })}
             </ul>
           ) : null}
         </section>

@@ -1,9 +1,11 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import type {
   DashboardActiveRunSummary,
 } from "@popcorn/shared/v1/dashboard";
 import type { GenerationRunStatus } from "@popcorn/shared/v1/types";
 import { formatStage, runPath } from "../../lib/nextAction";
+import { formatRunStatusTime } from "./runStatusTime";
 import styles from "./ActiveRunsPanel.module.css";
 
 const STATUS_LABELS: Record<GenerationRunStatus, string> = {
@@ -19,6 +21,14 @@ export function ActiveRunsPanel({
 }: {
   runs: readonly DashboardActiveRunSummary[];
 }) {
+  const [clockNow, setClockNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (runs.length === 0) return;
+    const timer = window.setInterval(() => setClockNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, [runs.length]);
+
   if (runs.length === 0) return null;
 
   return (
@@ -36,6 +46,7 @@ export function ActiveRunsPanel({
           const needsReview = Boolean(run.reviewGate);
           const failed = run.status === "failed";
           const indeterminate = pct === null && run.status === "running";
+          const statusTime = formatRunStatusTime(run.updatedAt, clockNow);
           return (
             <li key={run.runId}>
               <Link
@@ -65,6 +76,16 @@ export function ActiveRunsPanel({
                       : "Stopped"
                     : formatStage(run.currentStageType)}
                 </span>
+
+                {statusTime ? (
+                  <time
+                    className={styles.timestamp}
+                    dateTime={statusTime.dateTime}
+                    title={statusTime.title}
+                  >
+                    {statusTime.label}
+                  </time>
+                ) : null}
 
                 {failed ? (
                   <div className={styles.recovery} aria-label="Failed run recovery">
