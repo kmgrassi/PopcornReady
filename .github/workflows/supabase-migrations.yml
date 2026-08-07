@@ -47,7 +47,10 @@ jobs:
 
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Keep production mutations on a reviewed exact version. v2.112.0
+          # regressed `link` by rejecting API-key timestamps returned by the
+          # Management API: https://github.com/supabase/cli/issues/6115
+          version: 2.111.0
 
       - name: Link Supabase project
         run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
