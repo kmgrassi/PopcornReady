@@ -531,6 +531,15 @@ export function useProjectScriptQuery(projectId: string, enabled = true) {
   });
 }
 
+export function useProjectStoryBlueprintQuery(projectId: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.projectStoryBlueprint(projectId),
+    queryFn: ({ signal }: { signal: QuerySignal }) =>
+      v1Api.getProjectStoryBlueprint(projectId, signal),
+    enabled: enabled && Boolean(projectId),
+  });
+}
+
 export function useStartProjectStoryboardRunMutation(projectId: string) {
   const client = useQueryClient();
 

@@ -43,3 +43,8 @@ is visible.
 - The existing recovery-enabled local worker continues to produce upstream and
   statement timeouts. Keep that backend issue separate from the UI fallback so
   retained content does not hide operational health work.
+- When merging the dedicated Script creation flow, preserve the dashboard and
+  draft-opening E2E documentation but replace the superseded fourth-choice
+  Script description with the new `/create/script` behavior. Auto-merged query
+  keys remain compatible because the dashboard key is actor/workspace scoped
+  while the Script blueprint key is project scoped.

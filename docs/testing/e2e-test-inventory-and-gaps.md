@@ -256,6 +256,8 @@ Authenticated routes:
   `/dev/landing-upload`, `/dev/media-gallery`, `/dev/video-edit`
 
 Retired route note: `/studio` is not mounted in the current Vite route table.
+Dedicated text-first script creation is mounted at `/create/script`; it creates a
+script-scoped root and never enters the footage/full-video Studio state machine.
 Standalone Image, Video, and Audio creation enters through the authenticated
 shell plus Dashboard, Activity, and Library **Create** actions, then the `/create`
 intent launcher and `/create/asset` workspace. That workspace also exposes a

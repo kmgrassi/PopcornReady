@@ -3,7 +3,7 @@ import test from "node:test";
 import { ApiError } from "@/core/errors";
 import { decideScriptReviewTransaction } from "../script-review-transaction";
 
-function transactionFixture(gateStatus = "reached") {
+function transactionFixture(gateStatus = "reached", scriptBlueprintId = "blueprint-1") {
   const queries: Array<{ sql: string; params?: unknown[] }> = [];
   const transaction = async <T>(
     _operation: string,
@@ -17,12 +17,13 @@ function transactionFixture(gateStatus = "reached") {
             gate_status: gateStatus,
             stage: "after:draft_script",
             script_draft_id: "script-1",
+            story_blueprint_id: "blueprint-1",
           }],
           rowCount: 1,
         };
       }
-      if (sql.includes("select id, status from public.script_drafts")) {
-        return { rows: [{ id: "script-1", status: "draft" }], rowCount: 1 };
+      if (sql.includes("select id, status, story_blueprint_id from public.script_drafts")) {
+        return { rows: [{ id: "script-1", status: "draft", story_blueprint_id: scriptBlueprintId }], rowCount: 1 };
       }
       return { rows: [{ id: "script-1" }], rowCount: 1 };
     },
@@ -49,6 +50,43 @@ test("script approval locks identity and updates draft, gate, and run in one tra
   assert.equal(fixture.queries.some(({ sql }) => /update public\.script_drafts/i.test(sql)), true);
   assert.equal(fixture.queries.some(({ sql }) => /update public\.orchestrator_run_gates/i.test(sql)), true);
   assert.equal(fixture.queries.some(({ sql }) => /update public\.orchestrator_runs/i.test(sql)), true);
+});
+
+test("script-only approval completes the run inside the review transaction", async () => {
+  const fixture = transactionFixture();
+  await decideScriptReviewTransaction(
+    { ...base, decision: "approved", completeRun: true },
+    fixture.transaction as never,
+  );
+  const runUpdate = fixture.queries.find(({ sql }) => /update public\.orchestrator_runs/i.test(sql));
+  assert.equal(runUpdate?.params?.[1], "succeeded");
+  assert.match(runUpdate?.sql ?? "", /completed_at = case/i);
+});
+
+test("script-only approval rejects a script authored from a stale outline", async () => {
+  const fixture = transactionFixture("reached", "blueprint-old");
+  await assert.rejects(
+    decideScriptReviewTransaction(
+      { ...base, decision: "approved", completeRun: true },
+      fixture.transaction as never,
+    ),
+    (error: unknown) => error instanceof ApiError && error.code === "stale_proposal",
+  );
+});
+
+test("script-only revision rejects feedback against a stale outline", async () => {
+  const fixture = transactionFixture("reached", "blueprint-old");
+  await assert.rejects(
+    decideScriptReviewTransaction(
+      { ...base, decision: "rejected", note: "Change the ending.", completeRun: true },
+      fixture.transaction as never,
+    ),
+    (error: unknown) => error instanceof ApiError && error.code === "stale_proposal",
+  );
+  assert.equal(
+    fixture.queries.some(({ sql }) => /insert into public\.actions/i.test(sql)),
+    false,
+  );
 });
 
 test("a second script decision loses the reached-state compare-and-set", async () => {

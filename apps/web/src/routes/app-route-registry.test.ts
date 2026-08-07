@@ -19,7 +19,6 @@ test("the route registry has unique mounted identities and path patterns", () =>
   assert.equal(appRouteRegistry.filter((route) => route.kind === "index").length, 1);
   assert.equal(appRouteRegistry.filter((route) => route.kind === "catchall").length, 1);
 });
-
 test("production route truth excludes every development harness", () => {
   const production = appRoutesForBuild(false);
   const development = appRoutesForBuild(true);
@@ -75,4 +74,3 @@ test("dynamic, index, catchall, and layout semantics remain explicit", () => {
     }
   }
 });
-

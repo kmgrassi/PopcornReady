@@ -104,7 +104,7 @@ const LIFECYCLE_COLUMN_PRIVILEGES = {
     UPDATE: ["error","output_asset_ids","status"],
   },
   script_drafts: {
-    SELECT: ["id", "project_id", "status"],
+    SELECT: ["id", "project_id", "status", "story_blueprint_id"],
     INSERT: [],
     UPDATE: ["status", "updated_at"],
   },
@@ -255,10 +255,10 @@ export function createCreatorDirectDatabaseReadiness(
                  select 1
                    from (
                      values
-                       ('projects', array['id', 'workspace_id', 'current_script_draft_id']::text[], array['current_script_draft_id']::text[], array[]::text[]),
+                       ('projects', array['id', 'workspace_id', 'current_script_draft_id', 'current_story_blueprint_id']::text[], array['current_script_draft_id']::text[], array[]::text[]),
                        ('orchestrator_runs', array['id','project_id','origin_kind','status','parent_run_id','root_action_id','task_params','agent_role','budget_usd','spent_usd']::text[], array['updated_at','status','started_at','completed_at','error']::text[], array['schema_version','project_id','status','input_summary','budget_usd','spent_usd','agent_role']::text[]),
                        ('orchestrator_run_gates', array['id', 'orchestrator_run_id', 'subject_proposal_action_id', 'gate_kind', 'project_id', 'actor_id', 'request_digest', 'approved_max_usd', 'approval_token_hash', 'expires_at', 'token_consumed_at', 'status', 'stage', 'decided_by_action_id']::text[], array['status', 'token_consumed_at', 'decided_at', 'decided_by_action_id', 'updated_at']::text[], array[]::text[]),
-                       ('script_drafts', array['id','project_id','status']::text[], array['status','updated_at']::text[], array[]::text[]),
+                       ('script_drafts', array['id','project_id','status','story_blueprint_id']::text[], array['status','updated_at']::text[], array[]::text[]),
                        ('idempotency', array['scope', 'key', 'body_hash', 'response_body']::text[], array[]::text[], array['scope', 'key', 'body_hash', 'status', 'response_body']::text[])
                    ) as allowed(table_name, select_columns, update_columns, insert_columns)
                    join pg_class c on c.relname = allowed.table_name
@@ -329,6 +329,7 @@ export function createCreatorDirectDatabaseReadiness(
                has_column_privilege(current_user, 'public.projects', 'id', 'SELECT')
                  and has_column_privilege(current_user, 'public.projects', 'workspace_id', 'SELECT')
                  and has_column_privilege(current_user, 'public.projects', 'current_script_draft_id', 'SELECT')
+                 and has_column_privilege(current_user, 'public.projects', 'current_story_blueprint_id', 'SELECT')
                  and has_column_privilege(current_user, 'public.projects', 'current_script_draft_id', 'UPDATE')
                  as projects_read,
                has_column_privilege(current_user, 'public.orchestrator_runs', 'id', 'SELECT')

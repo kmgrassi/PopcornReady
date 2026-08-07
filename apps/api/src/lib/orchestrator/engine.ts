@@ -278,13 +278,21 @@ function nowIso(): string {
 
 function registryForRejectedGate(
   registry: ToolRegistry,
-  gates: OrchestratorRunGate[]
+  gates: OrchestratorRunGate[],
+  run: OrchestratorRun,
 ): ToolRegistry {
   const rejectedGate = gates.find((gate) => gate.status === "rejected");
   if (!rejectedGate) return registry;
   const toolName = rejectedGate.stage.startsWith(AFTER_GATE_PREFIX)
     ? rejectedGate.stage.slice(AFTER_GATE_PREFIX.length)
     : rejectedGate.stage;
+  if (run.creationScope === "script" && toolName === "draft_script") {
+    return new Map(
+      [...registry].filter(([name]) =>
+        name === "develop_story_blueprint" || name === "draft_script"
+      )
+    );
+  }
   const tool = registry.get(toolName as ToolName);
   if (!tool) return registry;
   return new Map([[tool.name, tool]]);
@@ -872,7 +880,8 @@ async function driveLoop(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
     );
     const turnRegistry = registryForRejectedGate(
       registryBeforeScriptApproval(definition.registry, gates),
-      gates
+      gates,
+      run,
     );
     const agentContext = await definition.loadTurnContext();
 

@@ -31,7 +31,10 @@ import type { RunActionSummary } from "@/lib/api/v1/orchestrator-store";
 import { getServiceSupabase } from "@/lib/supabase/clients";
 import { runQuery } from "@/lib/supabase/db-errors";
 import { AUDIO_AGENT_SYSTEM_PROMPT } from "./audio-agent";
-import { CREATIVE_DIRECTOR_SYSTEM_PROMPT } from "./creative-director-agent";
+import {
+  CREATIVE_DIRECTOR_SYSTEM_PROMPT,
+  SCRIPT_CREATION_SYSTEM_PROMPT,
+} from "./creative-director-agent";
 import { loadRootGraphProjection } from "@/lib/orchestrator-context/root-projection";
 
 export interface AgentDefinition {
@@ -90,12 +93,23 @@ export function assertDomainRegistry(role: "visuals" | "audio", registry: ToolRe
 
 function rootDefinition(input: ResolveAgentDefinitionInput): AgentDefinition {
   assertCreativeDirectorHierarchyRoot(input.run, "resolve a production agent");
+  const scriptOnly = input.run.creationScope === "script";
+  const rootRegistry =
+    input.rootRegistry ??
+    toOrchestratorRegistry(createRootToolRegistry(input.registryDeps));
+  const registry = scriptOnly
+    ? new Map(
+        [...rootRegistry].filter(([name]) =>
+          ["create_or_load_brief", "develop_story_blueprint", "draft_script"].includes(name),
+        ),
+      )
+    : rootRegistry;
   return {
     role: "creative_director",
-    registry:
-      input.rootRegistry ??
-      toOrchestratorRegistry(createRootToolRegistry(input.registryDeps)),
-    systemPrompt: CREATIVE_DIRECTOR_SYSTEM_PROMPT,
+    registry,
+    systemPrompt: scriptOnly
+      ? SCRIPT_CREATION_SYSTEM_PROMPT
+      : CREATIVE_DIRECTOR_SYSTEM_PROMPT,
     loadTurnContext: async () => {
       const [graph, family] = await Promise.all([
         loadRootGraphProjection({

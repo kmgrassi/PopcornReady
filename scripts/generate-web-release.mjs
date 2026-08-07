@@ -48,7 +48,6 @@ function resolveGitSha() {
     execFileSync("git", ["rev-parse", "HEAD"], { cwd: repoRoot, encoding: "utf8" }).trim();
   return assertFullGitSha(candidate, "gitSha");
 }
-
 function releaseEnvironment() {
   if (process.env.RELEASE_ENVIRONMENT) return process.env.RELEASE_ENVIRONMENT;
   return process.env.CONTEXT === "production" ? "production" : "development";
@@ -60,4 +59,3 @@ function buildTimestamp() {
   }
   return new Date().toISOString();
 }
-

@@ -29,6 +29,17 @@ import { ToolInputError } from "./types";
 export interface DraftScriptInput {
   feedback?: string;
   revisedScript?: string;
+  authoredScript?: {
+    narration?: string;
+    scenes: Array<{
+      title: string;
+      summary: string;
+      narration?: string;
+      dialogue?: ScriptDialogueLine[];
+      visualIntent?: string;
+      durationSec?: number;
+    }>;
+  };
 }
 
 export interface DraftScriptOutput {
@@ -67,18 +78,24 @@ const dialogueLineSchema = {
   required: ["text"],
 } as const;
 
-const scriptSceneSchema = {
+const authoredScriptSceneSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
-    id: str,
     title: str,
     summary: str,
     narration: str,
-    dialogue: { type: "array", items: dialogueLineSchema },
+    dialogue: { type: "array", items: dialogueLineSchema, minItems: 1 },
     visualIntent: str,
     durationSec: { type: "number" },
   },
+  required: ["title", "summary"],
+  anyOf: [{ required: ["narration"] }, { required: ["dialogue"] }],
+} as const;
+
+const scriptSceneSchema = {
+  ...authoredScriptSceneSchema,
+  properties: { id: str, ...authoredScriptSceneSchema.properties },
   required: ["id", "title", "summary", "dialogue"],
 } as const;
 
@@ -97,6 +114,15 @@ export const draftScriptInputSchema = {
     revisedScript: {
       type: "string",
       description: "Complete revised script text that incorporates the requested changes.",
+    },
+    authoredScript: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        narration: str,
+        scenes: { type: "array", items: authoredScriptSceneSchema },
+      },
+      required: ["scenes"],
     },
   },
   required: [],
@@ -153,6 +179,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function nonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function hasOnlyKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {
+  const keys = new Set(allowed);
+  return Object.keys(value).every((key) => keys.has(key));
+}
+
 export function parseDraftScriptInput(input: unknown): DraftScriptInput {
   if (input === undefined || input === null) return {};
   if (!isRecord(input)) {
@@ -160,7 +195,7 @@ export function parseDraftScriptInput(input: unknown): DraftScriptInput {
       expected: draftScriptInputSchema,
     });
   }
-  const allowed = new Set(["feedback", "revisionInstruction", "revisedScript"]);
+  const allowed = new Set(["feedback", "revisionInstruction", "revisedScript", "authoredScript"]);
   const extra = Object.keys(input).filter((key) => !allowed.has(key));
   if (extra.length > 0) {
     throw new ToolInputError("draft_script received unsupported fields.", {
@@ -179,10 +214,39 @@ export function parseDraftScriptInput(input: unknown): DraftScriptInput {
   if (revisedScript !== undefined && typeof revisedScript !== "string") {
     throw new ToolInputError("draft_script revisedScript must be a string.", {});
   }
+  let authoredScript: DraftScriptInput["authoredScript"];
+  if (input.authoredScript !== undefined) {
+    if (!isRecord(input.authoredScript) ||
+      !hasOnlyKeys(input.authoredScript, ["narration", "scenes"]) ||
+      (input.authoredScript.narration !== undefined && typeof input.authoredScript.narration !== "string") ||
+      !Array.isArray(input.authoredScript.scenes)) {
+      throw new ToolInputError("draft_script authoredScript must contain scenes.", {});
+    }
+    const scenes = input.authoredScript.scenes;
+    if (scenes.length === 0 || scenes.some((scene) =>
+      !isRecord(scene) || !hasOnlyKeys(scene, ["title", "summary", "narration", "dialogue", "visualIntent", "durationSec"]) ||
+      !nonEmptyString(scene.title) || !nonEmptyString(scene.summary) ||
+      (scene.narration !== undefined && typeof scene.narration !== "string") ||
+      (scene.visualIntent !== undefined && typeof scene.visualIntent !== "string") ||
+      (scene.durationSec !== undefined && (typeof scene.durationSec !== "number" || !Number.isFinite(scene.durationSec) || scene.durationSec <= 0)) ||
+      (scene.dialogue !== undefined && (!Array.isArray(scene.dialogue) || scene.dialogue.some((line) =>
+        !isRecord(line) || !hasOnlyKeys(line, ["characterId", "characterName", "text", "delivery"]) ||
+        !nonEmptyString(line.text) ||
+        (line.characterId !== undefined && !nonEmptyString(line.characterId)) ||
+        (line.characterName !== undefined && !nonEmptyString(line.characterName)) ||
+        (line.delivery !== undefined && !nonEmptyString(line.delivery))
+      ))) ||
+      (!nonEmptyString(scene.narration) && (!Array.isArray(scene.dialogue) || scene.dialogue.length === 0))
+    )) {
+      throw new ToolInputError("draft_script authoredScript scenes are incomplete.", {});
+    }
+    authoredScript = input.authoredScript as DraftScriptInput["authoredScript"];
+  }
   const instruction = feedback ?? revisionInstruction;
   return {
     ...(instruction && instruction.trim() ? { feedback: instruction.trim() } : {}),
     ...(revisedScript && revisedScript.trim() ? { revisedScript: revisedScript.trim() } : {}),
+    ...(authoredScript ? { authoredScript } : {}),
   };
 }
 
@@ -335,6 +399,7 @@ export function draftScriptFromState(input: {
   blueprint: ActiveProjectStoryBlueprint;
   feedback?: string;
   revisedScript?: string;
+  authoredScript?: DraftScriptInput["authoredScript"];
   footageGrounding?: FootageGroundingContext | null;
 }): Omit<
   ScriptDraft,
@@ -351,7 +416,17 @@ export function draftScriptFromState(input: {
       ? input.brief.brief.narration.script?.trim()
       : undefined);
 
-  const scenes: ScriptScene[] = acts.map((act, index) => {
+  const scenes: ScriptScene[] = input.authoredScript
+    ? input.authoredScript.scenes.map((scene, index) => ({
+        id: `script_scene_${index + 1}`,
+        title: scene.title.trim(),
+        summary: scene.summary.trim(),
+        ...(scene.narration?.trim() ? { narration: scene.narration.trim() } : {}),
+        dialogue: scene.dialogue ?? [],
+        ...(scene.visualIntent?.trim() ? { visualIntent: scene.visualIntent.trim() } : {}),
+        durationSec: scene.durationSec ?? sceneDuration(story.targetLengthSec, input.authoredScript!.scenes.length),
+      }))
+    : acts.map((act, index) => {
     const narrationParts = providedScript
       ? [
           index === 0 ? providedScript : undefined,
@@ -378,15 +453,15 @@ export function draftScriptFromState(input: {
       visualIntent: `${story.tone ?? input.brief.brief.style ?? "cinematic"} scene for ${act.title}.`,
       durationSec: perSceneDuration,
     };
-  });
+      });
 
-  const narration = providedScript
+  const narration = input.authoredScript?.narration?.trim() || (providedScript
     ? providedScript
     : [
         story.logline ?? story.premise,
         ...scenes.map((scene) => scene.narration).filter(Boolean),
         story.ending,
-      ].join("\n\n");
+      ].join("\n\n"));
 
   return {
     schemaVersion: "scriptDraft.v1",
@@ -440,7 +515,7 @@ export function createDraftScriptTool(
           },
         };
       }
-      if (input.feedback && !input.revisedScript) {
+      if (input.feedback && !input.revisedScript && !input.authoredScript) {
         return {
           status: "failed",
           error: {
@@ -471,6 +546,7 @@ export function createDraftScriptTool(
         blueprint,
         feedback: input.feedback,
         revisedScript: input.revisedScript,
+        authoredScript: input.authoredScript,
         footageGrounding,
       });
       const persisted = await resolved.addProjectScriptDraft({

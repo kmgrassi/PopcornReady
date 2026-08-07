@@ -204,6 +204,17 @@ export function isScriptAfterGate(gate: Pick<OrchestratorRunGate, "stage">): boo
   return gate.stage === `${AFTER_GATE_PREFIX}draft_script`;
 }
 
+export function approvalContinuationEffects(
+  run: Pick<OrchestratorRun, "creationScope">,
+  gate: Pick<OrchestratorRunGate, "stage">,
+): { enqueue: boolean; generatePoster: boolean } {
+  const scriptOnly = run.creationScope === "script";
+  return {
+    enqueue: !scriptOnly,
+    generatePoster: !scriptOnly && isScriptAfterGate(gate),
+  };
+}
+
 export function isAfterGate(gate: Pick<OrchestratorRunGate, "stage">): boolean {
   return gate.stage.startsWith(AFTER_GATE_PREFIX);
 }
@@ -268,6 +279,7 @@ async function createEntrypointRun(args: {
   budgetUsd?: number;
   body: unknown;
   anonymousQuota?: { windowStartIso: string; limit: number };
+  creationScope?: OrchestratorRun["creationScope"];
 }): Promise<{ run: OrchestratorRun; replayed: boolean }> {
   const createRun = () => {
     const input = {
@@ -275,6 +287,7 @@ async function createEntrypointRun(args: {
       inputSummary: args.inputSummary,
       gates: args.gates,
       budgetUsd: args.budgetUsd,
+      creationScope: args.creationScope,
     };
     return args.anonymousQuota
       ? createOrchestratorRunWithAnonymousQuota(input, args.anonymousQuota)
@@ -703,6 +716,51 @@ orchestratorRunsRouter.post(
   mutation((ctx, params) => storyboardGenerationEntrypointRoute(ctx, params))
 );
 
+export interface ScriptGenerationEntrypointDeps {
+  requireProjectAccess: typeof requireProjectAccess;
+  getActiveProjectBrief: typeof getActiveProjectBrief;
+  createRun: typeof createEntrypointRun;
+  enqueueRun: typeof enqueueOrchestratorDispatch;
+}
+
+export async function scriptGenerationEntrypointRoute(
+  ctx: Pick<HandlerCtx, "auth" | "body" | "req">,
+  params: Record<string, string | undefined>,
+  deps: Partial<ScriptGenerationEntrypointDeps> = {},
+) {
+  const projectId = requireParam(params, "projectId");
+  await (deps.requireProjectAccess ?? requireProjectAccess)(ctx.auth.workspaceId, projectId);
+  const briefVersionId = isRecord(ctx.body) && typeof ctx.body.briefVersionId === "string"
+    ? ctx.body.briefVersionId.trim()
+    : "";
+  const activeBrief = await (deps.getActiveProjectBrief ?? getActiveProjectBrief)(projectId);
+  if (!activeBrief || !briefVersionId || activeBrief.assetId !== briefVersionId) {
+    throw new ApiError("brief_missing", "Create the script brief before starting the writing run.");
+  }
+  const { run, replayed } = await (deps.createRun ?? createEntrypointRun)({
+    workspaceId: ctx.auth.workspaceId,
+    actorId: ctx.auth.actor.id,
+    projectId,
+    inputSummary: activeBrief.brief.goal,
+    entrypoint: "script",
+    idempotencyKey: ctx.req.header("Idempotency-Key"),
+    gates: [`${AFTER_GATE_PREFIX}draft_script`],
+    budgetUsd: budgetUsd(ctx.body),
+    body: ctx.body,
+    creationScope: "script",
+    anonymousQuota: anonymousRunQuotaForAuth(ctx.auth),
+  });
+  if (!replayed) {
+    await (deps.enqueueRun ?? enqueueOrchestratorDispatch)(run.id, ctx.auth.workspaceId);
+  }
+  return { status: 202, body: { runId: run.id } };
+}
+
+orchestratorRunsRouter.post(
+  "/projects/:projectId/generation-entrypoints/script",
+  mutation((ctx, params) => scriptGenerationEntrypointRoute(ctx, params))
+);
+
 orchestratorRunsRouter.post(
   "/projects/:projectId/generation-entrypoints/prompt",
   mutation(async ({ auth, body, req }, params) => {
@@ -842,6 +900,7 @@ orchestratorRunsRouter.post(
           gateId: gate.id,
           scriptDraftId,
           decision: "approved",
+          completeRun: run.creationScope === "script",
         });
       } else {
         await resolveGate(gate.id, "approved");
@@ -852,8 +911,11 @@ orchestratorRunsRouter.post(
           await updateOrchestratorRun(runId, storyboardContinuationPatch(await getOrchestratorRun(runId)));
         }
       }
-      await enqueueOrchestratorDispatch(runId, auth.workspaceId);
-      if (isScriptAfterGate(gate)) {
+      const effects = approvalContinuationEffects(run, gate);
+      if (effects.enqueue) {
+        await enqueueOrchestratorDispatch(runId, auth.workspaceId);
+      }
+      if (effects.generatePoster) {
         startPosterGenerationInBackground(auth, projectId);
       }
     }
@@ -892,6 +954,7 @@ orchestratorRunsRouter.post(
       scriptDraftId,
       decision: "rejected",
       note,
+      completeRun: run.creationScope === "script",
     });
     await enqueueOrchestratorDispatch(runId, auth.workspaceId);
     return { status: 202, body: await assembleRunDetail(runId, auth.workspaceId, projectId) };

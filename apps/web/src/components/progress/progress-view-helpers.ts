@@ -133,6 +133,7 @@ export function headerStatus(run: GenerationRun): string {
     return "Producing";
   }
   if (run.status === "succeeded") {
+    if (run.completionKind === "script") return "Script ready";
     if (run.completionKind === "video") return "Video ready";
     if (run.completionKind === "standalone_asset") return "Asset ready";
     return "Partial result";

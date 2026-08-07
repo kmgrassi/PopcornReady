@@ -73,4 +73,15 @@
 
 ## Next action / handoff
 
-- Commit, tag, push, and open the required ready-for-review PR.
+- PR follow-up merged current `main` at `2bbfc438` into the feature branch. The
+  sole textual conflict was in `apps/web/e2e/README.md`; the resolution retains
+  this work's cached-dashboard and draft-opening coverage while adopting main's
+  dedicated `/create/script` coverage in place of the retired fourth Asset
+  Studio choice. Independent review confirmed the resolution and the cleanly
+  merged query-key and interaction-document changes preserve both features.
+- Post-merge `pnpm agent:lint:fix`, web typecheck, the 99-test web unit suite,
+  web build, `pnpm agent:validate -- --scope web`, and `git diff --check` passed.
+  The focused Chromium E2E command could not launch because this checkout lacks
+  Playwright's Chromium 1228 executable; no browser test body ran.
+- Commit and tag the merge, push the updated branch, and confirm the PR checks
+  restart in the browser-equipped GitHub environment.

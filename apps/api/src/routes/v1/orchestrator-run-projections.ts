@@ -252,6 +252,7 @@ function completionKind(
   assets: ReadonlyMap<string, RunAssetPrompt>
 ): GenerationRun["completionKind"] {
   if (run.status !== "succeeded") return undefined;
+  if (run.creationScope === "script") return "script";
   if (hasReadyStandaloneAsset(run, actions, assets)) return "standalone_asset";
   if (hasFinishedVideo(actions, assets)) return "video";
   if (hasReachedStoryboardAfterGate(gates)) return "storyboard_assets";
@@ -287,6 +288,7 @@ function projectedRunStatus(
   assets: ReadonlyMap<string, RunAssetPrompt>
 ): GenerationRunStatus {
   if (run.status !== "succeeded") return runStatus(run.status);
+  if (run.creationScope === "script") return "succeeded";
   if (orchestratorRunPresentationKind(run)) {
     return hasReadyStandaloneAsset(run, actions, assets) ? "succeeded" : "failed";
   }
@@ -330,6 +332,7 @@ function runMessage(
     case "waiting":
       return "Generation is waiting for a job or approval gate.";
     case "succeeded":
+      if (run.creationScope === "script") return "Your script is ready.";
       if (hasReadyStandaloneAsset(run, actions, assets)) return "Asset is ready.";
       if (hasFinishedVideo(actions, assets)) return "Video export is ready.";
       return hasReachedStoryboardAfterGate(gates)

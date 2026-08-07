@@ -60,7 +60,7 @@ export async function expectCreationTypeTargets(page: Page) {
     }),
   );
 
-  expect(targets).toHaveLength(4);
+  expect(targets).toHaveLength(3);
   for (const target of targets) {
     expect(target.width).toBeGreaterThanOrEqual(44);
     expect(target.height).toBeGreaterThanOrEqual(44);

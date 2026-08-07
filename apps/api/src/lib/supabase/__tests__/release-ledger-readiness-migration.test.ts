@@ -22,4 +22,3 @@ test("release readiness grants only migration-version metadata to popcorn_api", 
   assert.doesNotMatch(migration, /grant .*\((?:name|statements)\)/i);
   assert.doesNotMatch(migration, /service_role|security definer/i);
 });
-

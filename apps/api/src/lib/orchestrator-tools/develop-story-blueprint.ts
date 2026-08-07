@@ -10,6 +10,7 @@ import { ToolInputError } from "./types";
 
 export interface DevelopStoryBlueprintInput {
   feedback?: string;
+  authoredBlueprint?: StoryBlueprint;
 }
 
 export interface DevelopStoryBlueprintOutput {
@@ -111,6 +112,7 @@ export const developStoryBlueprintInputSchema = {
       type: "string",
       description: "Alias used by approval-rejection retries.",
     },
+    authoredBlueprint: storyBlueprintSchema,
   },
   required: [],
 } as const;
@@ -130,6 +132,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function nonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function positiveFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function hasOnlyKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {
+  const keys = new Set(allowed);
+  return Object.keys(value).every((key) => keys.has(key));
+}
+
 export function parseDevelopStoryBlueprintInput(
   input: unknown
 ): DevelopStoryBlueprintInput {
@@ -139,7 +154,7 @@ export function parseDevelopStoryBlueprintInput(
       expected: developStoryBlueprintInputSchema,
     });
   }
-  const allowed = new Set(["feedback", "revisionInstruction"]);
+  const allowed = new Set(["feedback", "revisionInstruction", "authoredBlueprint"]);
   const extra = Object.keys(input).filter((key) => !allowed.has(key));
   if (extra.length > 0) {
     throw new ToolInputError("develop_story_blueprint received unsupported fields.", {
@@ -158,7 +173,68 @@ export function parseDevelopStoryBlueprintInput(
     );
   }
   const instruction = feedback ?? revisionInstruction;
-  return instruction && instruction.trim() ? { feedback: instruction.trim() } : {};
+  let authoredBlueprint: StoryBlueprint | undefined;
+  if (input.authoredBlueprint !== undefined) {
+    const candidate = input.authoredBlueprint;
+    if (!isRecord(candidate)) {
+      throw new ToolInputError("develop_story_blueprint authoredBlueprint must be an object.", {});
+    }
+    const requiredStrings = ["premise", "logline", "tone", "ending"] as const;
+    if (
+      !hasOnlyKeys(candidate, ["schemaVersion", "premise", "logline", "tone", "audience", "targetLengthSec", "aspectRatio", "characters", "acts", "scenes", "ending"]) ||
+      candidate.schemaVersion !== "storyBlueprint.v1" ||
+      requiredStrings.some((key) => !nonEmptyString(candidate[key])) ||
+      (candidate.audience !== undefined && !nonEmptyString(candidate.audience)) ||
+      !positiveFiniteNumber(candidate.targetLengthSec) ||
+      !["9:16", "16:9", "1:1"].includes(String(candidate.aspectRatio)) ||
+      !Array.isArray(candidate.characters) ||
+      !Array.isArray(candidate.acts) ||
+      candidate.acts.length === 0 ||
+      !Array.isArray(candidate.scenes) ||
+      candidate.scenes.length === 0
+    ) {
+      throw new ToolInputError("develop_story_blueprint authoredBlueprint is incomplete.", {
+        expected: storyBlueprintSchema,
+      });
+    }
+    const characters = candidate.characters as unknown[];
+    const acts = candidate.acts as unknown[];
+    const scenes = candidate.scenes as unknown[];
+    const characterIds = new Set<string>();
+    const actIds = new Set<string>();
+    const sceneIds = new Set<string>();
+    if (
+      characters.some((value) => {
+        if (!isRecord(value) || !hasOnlyKeys(value, ["id", "name", "role", "description"]) ||
+          !nonEmptyString(value.id) || !nonEmptyString(value.name) ||
+          !nonEmptyString(value.role) || !nonEmptyString(value.description) || characterIds.has(value.id)) return true;
+        characterIds.add(value.id);
+        return false;
+      }) ||
+      acts.some((value) => {
+        if (!isRecord(value) || !hasOnlyKeys(value, ["id", "title", "purpose", "summary", "targetDurationSec"]) ||
+          !nonEmptyString(value.id) || !nonEmptyString(value.title) || !nonEmptyString(value.purpose) ||
+          !nonEmptyString(value.summary) || !positiveFiniteNumber(value.targetDurationSec) || actIds.has(value.id)) return true;
+        actIds.add(value.id);
+        return false;
+      }) ||
+      scenes.some((value) => {
+        if (!isRecord(value) || !hasOnlyKeys(value, ["id", "title", "summary", "actId", "targetDurationSec"]) ||
+          !nonEmptyString(value.id) || !nonEmptyString(value.title) || !nonEmptyString(value.summary) ||
+          !nonEmptyString(value.actId) || !positiveFiniteNumber(value.targetDurationSec) ||
+          !actIds.has(value.actId) || sceneIds.has(value.id)) return true;
+        sceneIds.add(value.id);
+        return false;
+      })
+    ) {
+      throw new ToolInputError("authoredBlueprint contains invalid or duplicate nested story data.", {});
+    }
+    authoredBlueprint = candidate as unknown as StoryBlueprint;
+  }
+  return {
+    ...(instruction && instruction.trim() ? { feedback: instruction.trim() } : {}),
+    ...(authoredBlueprint ? { authoredBlueprint } : {}),
+  };
 }
 
 function sentence(value: string): string {
@@ -262,14 +338,14 @@ export function deriveStoryBlueprint(
 // both paths derive and persist the blueprint identically. Returns null when
 // the project has no active brief (the caller decides how to surface that).
 export async function developStoryBlueprintForProject(
-  input: { workspaceId: string; projectId: string; feedback?: string },
+  input: { workspaceId: string; projectId: string; feedback?: string; authoredBlueprint?: StoryBlueprint },
   deps: Partial<DevelopStoryBlueprintDeps> = {}
 ): Promise<DevelopStoryBlueprintOutput | null> {
   const resolved = { ...defaultDeps, ...deps };
   const active = await resolved.getActiveProjectBrief(input.projectId);
   if (!active) return null;
 
-  const storyBlueprint = deriveStoryBlueprint(active.brief, input.feedback);
+  const storyBlueprint = input.authoredBlueprint ?? deriveStoryBlueprint(active.brief, input.feedback);
   const persisted = await resolved.addProjectStoryBlueprint({
     workspaceId: input.workspaceId,
     projectId: input.projectId,
@@ -346,6 +422,7 @@ export function createDevelopStoryBlueprintTool(
           workspaceId: context.auth.workspaceId,
           projectId: context.projectId,
           feedback: input.feedback,
+          authoredBlueprint: input.authoredBlueprint,
         },
         deps
       );

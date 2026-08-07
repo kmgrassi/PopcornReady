@@ -19,7 +19,7 @@ import {
   GenerationRunRequestError,
 } from "../../lib/v1/generation-runs/client";
 import type { CreatorRunHierarchy } from "../../lib/v1/generation-runs/status";
-import { useProjectQuery, useProjectScriptQuery } from "../../lib/queryClient";
+import { useProjectQuery, useProjectScriptQuery, useProjectStoryBlueprintQuery } from "../../lib/queryClient";
 import { v1Api } from "../../lib/api-client";
 import { reviewProposalTarget as resolveReviewProposalTarget } from "../../lib/reviewProposalTarget";
 import {
@@ -110,6 +110,7 @@ function mobileProgressSentence({
   }
 
   if (run.status === "succeeded") {
+    if (run.completionKind === "script") return "Your script is ready.";
     if (run.completionKind === "video") return "Your video is ready.";
     if (run.completionKind === "standalone_asset") return "Your asset is ready.";
     if (run.completionKind === "storyboard_assets") {
@@ -170,6 +171,10 @@ export function ProgressView({
   const scriptQuery = useProjectScriptQuery(
     detail.run.projectId,
     detail.run.reviewGate?.stageType === "script",
+  );
+  const storyBlueprintQuery = useProjectStoryBlueprintQuery(
+    run.projectId,
+    run.reviewGate?.stageType === "script" && run.presentationKind === "script_creation",
   );
   const project = projectQuery.data?.project ?? null;
   const projectLoading = projectQuery.isLoading;
@@ -553,6 +558,12 @@ export function ProgressView({
               projectBrief={projectBrief}
               projectLoading={projectLoading}
               projectScript={scriptQuery.data?.script?.scriptDraft ?? null}
+              projectStoryBlueprint={storyBlueprintQuery.data?.storyBlueprint?.storyBlueprint ?? null}
+              projectStoryBlueprintId={storyBlueprintQuery.data?.storyBlueprint?.storyBlueprintId ?? null}
+              scriptStoryBlueprintId={scriptQuery.data?.script?.scriptDraft.storyBlueprintId ?? null}
+              storyBlueprintLoading={storyBlueprintQuery.isLoading}
+              storyBlueprintError={storyBlueprintQuery.error instanceof Error ? storyBlueprintQuery.error.message : null}
+              scriptOnly={detail.run.presentationKind === "script_creation"}
               scriptLoading={scriptQuery.isLoading}
               scriptError={scriptQuery.error instanceof Error ? scriptQuery.error.message : null}
               reviewItems={reviewItems}
