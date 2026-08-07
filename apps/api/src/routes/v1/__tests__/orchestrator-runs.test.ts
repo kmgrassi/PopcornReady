@@ -11,6 +11,7 @@ import type { StoryboardEntrypointLock } from "@/lib/postgres/storyboard-entrypo
 import { SCHEMA, type Job } from "@popcorn/shared/v1/types";
 import { projectRunDetailFromParts } from "../orchestrator-run-projections.js";
 import {
+  approvalContinuationEffects,
   initialRunGates,
   initialRunStopAfterTools,
   isStoryboardAfterGate,
@@ -18,6 +19,7 @@ import {
   storyboardContinuationPatch,
   storyboardGenerationEntrypointRoute,
   storyboardGenerationEntrypointStatusRoute,
+  scriptGenerationEntrypointRoute,
   stopAfterTools,
   type StoryboardEntrypointDeps,
 } from "../orchestrator-runs";
@@ -123,6 +125,50 @@ test("every initial run stops for script review before storyboard review", () =>
     }),
     ["after:draft_script", "after:generate_storyboard"],
   );
+});
+
+test("script entrypoint persists text-only scope and only the final script gate", async () => {
+  let createInput: Parameters<StoryboardEntrypointDeps["createRun"]>[0] | undefined;
+  const enqueued: string[] = [];
+  const result = await scriptGenerationEntrypointRoute(
+    {
+      auth: { workspaceId: "workspace_1", actor: { id: "actor_1" } } as never,
+      body: { briefVersionId: "brief_asset_1" },
+      req: { header: () => "script-idempotency" } as never,
+    },
+    { projectId: "project_1" },
+    {
+      requireProjectAccess: async () => undefined,
+      getActiveProjectBrief: async () => ({
+        assetId: "brief_asset_1",
+        contentHash: "brief_hash_1",
+        brief: { goal: "Write the story", targetLengthSec: 180, aspectRatio: "16:9" },
+      }),
+      createRun: async (input) => {
+        createInput = input;
+        return { run: runFixture({ id: "script_run", creationScope: "script" }), replayed: false };
+      },
+      enqueueRun: async (runId) => { enqueued.push(runId); },
+    },
+  );
+
+  assert.equal(result.status, 202);
+  assert.equal(result.body.runId, "script_run");
+  assert.equal(createInput?.creationScope, "script");
+  assert.deepEqual(createInput?.gates, ["after:draft_script"]);
+  assert.deepEqual(enqueued, ["script_run"]);
+});
+
+test("script approval has no dispatch or poster effects while full-video approval preserves both", () => {
+  const gate = gateFixture("after:draft_script");
+  assert.deepEqual(approvalContinuationEffects({ creationScope: "script" }, gate), {
+    enqueue: false,
+    generatePoster: false,
+  });
+  assert.deepEqual(approvalContinuationEffects({ creationScope: "full_video" }, gate), {
+    enqueue: true,
+    generatePoster: true,
+  });
 });
 
 test("storyboard entrypoint reuses an active Creative Director root with an unresolved board gate", async () => {
@@ -544,6 +590,24 @@ test("surfaces orchestrator success as ready once export_video produced output",
       stageId: "run_1:export",
     },
   ]);
+});
+
+test("projects a completed script-scoped run as a ready script without media", () => {
+  const payload = projectRunDetailFromParts(
+    runFixture({ creationScope: "script" }),
+    [gateFixture("after:draft_script", { status: "approved" })],
+    [
+      actionFixture("create_or_load_brief"),
+      actionFixture("develop_story_blueprint"),
+      actionFixture("draft_script"),
+    ],
+  );
+
+  assert.equal(payload.run.status, "succeeded");
+  assert.equal(payload.run.completionKind, "script");
+  assert.equal(payload.run.presentationKind, "script_creation");
+  assert.equal(payload.run.message, "Your script is ready.");
+  assert.doesNotMatch(payload.run.message ?? "", /no playable video/i);
 });
 
 test("projects a creator-direct image as one successful standalone asset step", () => {

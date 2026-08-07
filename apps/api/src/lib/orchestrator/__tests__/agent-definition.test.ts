@@ -12,7 +12,7 @@ import {
   validateDomainCompletionBoundOutputClaims,
   validateDomainCompletionOutputInventory,
 } from "../agent-definition";
-import { CREATIVE_DIRECTOR_SYSTEM_PROMPT } from "../creative-director-agent";
+import { CREATIVE_DIRECTOR_SYSTEM_PROMPT, SCRIPT_CREATION_SYSTEM_PROMPT } from "../creative-director-agent";
 import type { ToolRegistry } from "../registry";
 import type { AgentDefinition } from "../agent-definition";
 
@@ -84,6 +84,19 @@ test("creative-director root exposes only the creative-director surface", async 
   ]);
   assert.equal(definition.registry.has("generate_clip"), false);
   assert.equal(definition.registry.has("generate_audio"), false);
+});
+
+test("script-scoped root permanently exposes only text authoring tools", async () => {
+  const definition = await resolveAgentDefinition({
+    run: { ...rootRun, creationScope: "script" },
+    workspaceId: "workspace-1",
+  });
+  assert.equal(definition.systemPrompt, SCRIPT_CREATION_SYSTEM_PROMPT);
+  assert.deepEqual([...definition.registry.keys()], [
+    "create_or_load_brief",
+    "develop_story_blueprint",
+    "draft_script",
+  ]);
 });
 
 test("root context reports include only root-origin specialist completions", () => {

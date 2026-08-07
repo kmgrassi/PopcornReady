@@ -6,7 +6,7 @@ import type {
   ActiveProjectBrief,
   ActiveProjectStoryBlueprint,
 } from "@/lib/api/v1/store";
-import { createDraftScriptTool, draftScriptFromState } from "../draft-script";
+import { createDraftScriptTool, draftScriptFromState, parseDraftScriptInput } from "../draft-script";
 import { ToolInputError } from "../types";
 import type { ToolCallResult } from "../types";
 
@@ -82,6 +82,51 @@ const activeBlueprint: ActiveProjectStoryBlueprint = {
     ending: "The crew survives with an absurd org chart.",
   },
 };
+
+test("draft_script accepts a complete authored scene contract", () => {
+  const parsed = parseDraftScriptInput({
+    authoredScript: {
+      narration: "A new world, built on old sacrifices.",
+      scenes: [{
+        title: "The archive",
+        summary: "Mara finds her grandmother's records.",
+        narration: "The room remembers scarcity.",
+        dialogue: [{ characterName: "Mara", text: "You lived like this?" }],
+      }],
+    },
+  });
+  assert.equal(parsed.authoredScript?.scenes[0]?.title, "The archive");
+  assert.throws(
+    () => parseDraftScriptInput({
+      authoredScript: {
+        scenes: [{ title: "Broken", summary: "Bad duration", durationSec: Number.POSITIVE_INFINITY }],
+      },
+    }),
+    /scenes are incomplete/,
+  );
+  assert.throws(
+    () => parseDraftScriptInput({
+      authoredScript: { scenes: [{ title: "Empty", summary: "No script copy" }] },
+    }),
+    /scenes are incomplete/,
+  );
+  assert.throws(
+    () => parseDraftScriptInput({
+      authoredScript: {
+        scenes: [{ title: "Broken", summary: "Bad narration", narration: 42 }],
+      },
+    }),
+    /scenes are incomplete/,
+  );
+  assert.throws(
+    () => parseDraftScriptInput({
+      authoredScript: {
+        scenes: [{ title: "Broken", summary: "Unknown field", camera: "wide" }],
+      },
+    }),
+    /scenes are incomplete/,
+  );
+});
 
 test("draft_script validates input before reading graph state", () => {
   let briefReads = 0;

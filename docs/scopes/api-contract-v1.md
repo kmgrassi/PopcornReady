@@ -231,6 +231,19 @@ The GET form returns `{ "run": GenerationRun | null }` for only the latest run
 that owns this boundary. It is the lightweight polling contract for project
 overview state and does not load full run history, actions, or asset metadata.
 
+### Script creation entrypoint
+
+- `POST /api/v1/projects/:projectId/generation-entrypoints/script`
+- `GET /api/v1/projects/:projectId/story-blueprint`
+
+The script mutation requires the exact active `briefVersionId` and starts a
+durable `creation_scope=script` Creative Director root. That scope permanently
+exposes only brief, story-blueprint, and script tools. The run stops at
+`after:draft_script`; approval atomically approves the draft and completes the
+run without poster generation or another dispatch. The blueprint read returns
+the active immutable outline snapshot plus its blueprint id, asset id, and
+content hash for exact review rendering.
+
 Workspace generation-run summaries preserve `presentationKind` for
 creator-direct standalone image, video, and audio work. Project and Activity
 surfaces use that discriminator to fetch the exact run detail and saved asset;

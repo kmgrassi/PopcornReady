@@ -35,7 +35,7 @@
 
 .options {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+  grid-template-columns: minmax(0, 1.6fr) repeat(2, minmax(220px, 1fr));
   gap: var(--space-5);
   align-items: stretch;
 }

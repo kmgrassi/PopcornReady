@@ -141,6 +141,22 @@ const STANDALONE_GROUPS: Record<
       tools: ["generate_audio"],
     },
   ],
+  script_creation: [
+    {
+      id: "story-outline",
+      type: "creative_plan",
+      label: "Story outline",
+      description: "Premise, arc, and plot points.",
+      tools: ["create_or_load_brief", "develop_story_blueprint"],
+    },
+    {
+      id: "script",
+      type: "script",
+      label: "Script",
+      description: "Complete narration and dialogue draft.",
+      tools: ["draft_script"],
+    },
+  ],
 };
 
 const TOOL_LABELS: Record<string, string> = {

@@ -38,8 +38,10 @@ strengths and improvements, but it never changes the asset or starts a rerun.
 
 Success looks like: a creator describes or uploads something, watches the studio
 generate it autonomously, and reaches a finished, on-brand video by reviewing and
-asking for changes — never by wrestling controls. For operators, success is being
-able to see and re-run any stage with full provenance.
+asking for changes — never by wrestling controls. A creator who chooses Script
+instead gets a bounded writing workflow: idea, story outline, complete draft, and
+review, with no media work implied or started. For operators, success is being able
+to see and re-run any stage with full provenance.
 
 ## Brand Personality
 

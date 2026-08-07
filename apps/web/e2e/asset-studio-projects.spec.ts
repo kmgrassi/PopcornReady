@@ -493,7 +493,7 @@ test.describe("Asset Studio", () => {
       .getByRole("link", { name: "Create", exact: true })
       .click();
     await expect(page).toHaveURL(/\/create$/);
-    await page.getByRole("link", { name: "Create an asset or script" }).click();
+    await page.getByRole("link", { name: "Create an asset" }).click();
     await expect(page).toHaveURL(/\/create\/asset$/);
     await expect(
       page.getByRole("radio", {
