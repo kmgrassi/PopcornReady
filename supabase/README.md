@@ -46,6 +46,14 @@ supabase link --project-ref <ref>
 supabase db push
 ```
 
+The production `Apply Supabase migrations` workflow installs an exact Supabase
+CLI version instead of `latest`. This is deliberate: CLI `v2.112.0` introduced
+an [`api-keys.inserted_at` schema regression](https://github.com/supabase/cli/issues/6115)
+that makes `supabase link` fail before migrations can run, while `v2.111.0`
+works against the same project. Upgrade the workflow only to another exact
+stable version after its hosted `link` + `db push --include-all` path has been
+reviewed; do not restore a floating `latest` or `beta` selector.
+
 ## Hosted Auth URL configuration
 
 Production Auth URLs are intentionally kept separate from `config.toml`, which

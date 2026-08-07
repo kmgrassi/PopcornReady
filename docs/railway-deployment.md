@@ -207,6 +207,13 @@ least-privilege migration-ledger read fails, or a required migration is absent.
 Extra applied migrations remain compatible, including lower out-of-order
 versions applied by the repository's supported `--include-all` workflow.
 
+This makes a failed `Apply Supabase migrations` job intentionally block the new
+Railway deployment at its health check while the previous API remains active.
+Recover the serialized migration job first, then redeploy the same main commit;
+rerunning only the release verifier cannot make an unapplied migration set
+coherent. The migration workflow's exact Supabase CLI pin and upgrade policy
+live in [`supabase/README.md`](../supabase/README.md).
+
 Netlify independently emits `/release.json` after Vite builds, hashing the
 deployed `dist` content while excluding the metadata file itself. Both metadata
 surfaces use `Cache-Control: no-store` and expose only nonsecret release fields.

@@ -91,3 +91,17 @@ test("deployment verification cancels obsolete polling, not database mutations",
     );
   }
 });
+
+test("production migrations use a reviewed exact Supabase CLI version", () => {
+  const migrations = liveYaml(".github/workflows/supabase-migrations.yml");
+  assert.match(
+    migrations,
+    /uses: supabase\/setup-cli@v1\n\s+with:\n\s+version: 2\.111\.0/,
+    "production migrations must use the reviewed Supabase CLI version",
+  );
+  assert.doesNotMatch(
+    migrations,
+    /version:\s*(?:latest|beta)\b/,
+    "production migrations must not float to an unreviewed Supabase CLI release",
+  );
+});
