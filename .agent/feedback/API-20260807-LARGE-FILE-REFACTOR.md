@@ -23,4 +23,5 @@ small module extraction around durable job/delegation reconciliation.
 ## Follow-up
 
 The extraction passed 62 focused orchestrator tests, API typecheck, lint repair,
-and `pnpm agent:validate -- --scope api`. Final PR URL will be added after push.
+and `pnpm agent:validate -- --scope api`. Open PR:
+https://github.com/kmgrassi/PopcornReady/pull/902

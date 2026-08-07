@@ -71,4 +71,4 @@
 ## Next action / handoff
 
 - Commit the validated refactor and records, push the branch, and open a
-  non-draft PR.
+  non-draft PR. Open PR: https://github.com/kmgrassi/PopcornReady/pull/902
