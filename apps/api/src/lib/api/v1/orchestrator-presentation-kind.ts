@@ -2,8 +2,9 @@ import type { GenerationRun } from "@popcorn/shared/v1/types";
 import type { OrchestratorRun } from "./orchestrator-store";
 
 export function orchestratorRunPresentationKind(
-  run: Pick<OrchestratorRun, "originKind" | "taskKind">
+  run: Pick<OrchestratorRun, "originKind" | "taskKind" | "creationScope">
 ): GenerationRun["presentationKind"] {
+  if (run.creationScope === "script") return "script_creation";
   if (run.originKind !== "creator_direct") return undefined;
   if (run.taskKind === "image_create") return "standalone_image";
   if (run.taskKind === "video_create" || run.taskKind === "video_edit") {

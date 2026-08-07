@@ -104,6 +104,13 @@ structured scene-and-moment plan is an internal input to storyboard panels, not
 a separate prerequisite the creator must prepare; missing planning is satisfied
 by the agent before `generate_storyboard` runs.
 
+**Script-only creation is a bounded text run.** When Script is the finished
+outcome, a dedicated Creative Director root authors the story blueprint and
+script and stops at script review. Its durable scope never exposes media or
+delegation tools, and approval completes that run rather than silently entering
+production. A later video conversion starts a new full-production root from the
+approved text graph.
+
 ## 2. Principles (the mental-model shift)
 
 1. **The creative director owns the flow; stages are tools.** `brief → plan →

@@ -294,13 +294,14 @@ export interface CreateProjectInput {
   brief?: VideoBrief;
   posterProvider?: string;
   namingPrompt?: string;
-  namingContext?: "image" | "video" | "soundtrack";
+  namingContext?: "image" | "video" | "soundtrack" | "script";
 }
 
 const PROJECT_NAMING_CONTEXTS: NonNullable<CreateProjectInput["namingContext"]>[] = [
   "image",
   "video",
   "soundtrack",
+  "script",
 ];
 const MAX_PROJECT_NAMING_PROMPT_LENGTH = 500;
 

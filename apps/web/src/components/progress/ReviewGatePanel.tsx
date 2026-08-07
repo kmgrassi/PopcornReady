@@ -5,6 +5,7 @@ import {
   type VideoBriefInput,
 } from "@popcorn/shared/v1/types";
 import type { ScriptDraft } from "@popcorn/shared/types";
+import type { StoryBlueprintSnapshot } from "../../lib/api-client";
 import { StageItemCard } from "../generation-progress/StageItemCard";
 import { StoryboardBoard as ReadonlyStoryboardBoard } from "../studio/StoryboardBoard";
 import styles from "./ReviewGatePanel.module.css";
@@ -29,6 +30,12 @@ interface ReviewGatePanelProps {
   projectBrief: VideoBriefInput | null;
   projectLoading: boolean;
   projectScript: ScriptDraft | null;
+  projectStoryBlueprint?: StoryBlueprintSnapshot | null;
+  projectStoryBlueprintId?: string | null;
+  scriptStoryBlueprintId?: string | null;
+  storyBlueprintLoading?: boolean;
+  storyBlueprintError?: string | null;
+  scriptOnly?: boolean;
   scriptLoading: boolean;
   scriptError?: string | null;
   reviewItems: GenerationStageItem[];
@@ -67,7 +74,7 @@ function reviewHeading(stageType: GenerationStageType): string {
   return `${reviewStageLabel(stageType)} ready for review`;
 }
 
-function reviewDescription(stageType: GenerationStageType): string {
+function reviewDescription(stageType: GenerationStageType, scriptOnly = false): string {
   if (stageType === "brief_intake") {
     return "Review the concept brief before the run continues to script generation.";
   }
@@ -77,6 +84,9 @@ function reviewDescription(stageType: GenerationStageType): string {
   }
 
   if (stageType === "script") {
+    if (scriptOnly) {
+      return "Review the story outline and complete draft. This writing run ends when you approve it; no media production will start.";
+    }
     return "Read the words and request any writing changes now. No poster, storyboard, image, audio, or video work starts until you approve this script.";
   }
 
@@ -197,6 +207,14 @@ function ScriptReviewOutput({
       </div>
     );
   }
+  const topLevelNarration = script.narration?.trim();
+  const sceneNarration = script.scenes
+    .map((scene) => scene.narration?.trim())
+    .filter(Boolean)
+    .join("\n\n");
+  const showTopLevelNarration = Boolean(
+    topLevelNarration && !sceneNarration.includes(topLevelNarration)
+  );
   return (
     <article className={styles.briefReviewCard} aria-label="Script draft">
       <div className={styles.briefReviewMetaRow}>
@@ -206,6 +224,12 @@ function ScriptReviewOutput({
       </div>
       <h3 className={styles.briefReviewGoal}>Script</h3>
       <div className={styles.scriptCopy}>
+        {showTopLevelNarration ? (
+          <section>
+            <h4>Narration</h4>
+            <p>{topLevelNarration}</p>
+          </section>
+        ) : null}
         {script.scenes.map((scene) => (
           <section key={scene.id}>
             <h4>{scene.title}</h4>
@@ -223,11 +247,47 @@ function ScriptReviewOutput({
   );
 }
 
+function StoryOutlineOutput({
+  blueprint,
+  loading,
+}: {
+  blueprint: StoryBlueprintSnapshot | null;
+  loading: boolean;
+}) {
+  if (loading) return <div className={styles.briefReviewCard}>Loading story outline…</div>;
+  if (!blueprint) return null;
+  return (
+    <article className={styles.briefReviewCard} aria-label="Story outline">
+      <div className={styles.briefReviewMetaRow}>
+        <span>Story outline</span>
+        <span>{blueprint.scenes.length} plot points</span>
+      </div>
+      <h3 className={styles.briefReviewGoal}>{blueprint.logline}</h3>
+      <p>{blueprint.premise}</p>
+      <ol className={styles.scriptCopy}>
+        {blueprint.scenes.map((scene) => (
+          <li key={scene.id}>
+            <strong>{scene.title}</strong>
+            <p>{scene.summary}</p>
+          </li>
+        ))}
+      </ol>
+      <p><strong>Ending:</strong> {blueprint.ending}</p>
+    </article>
+  );
+}
+
 export function ReviewGatePanel({
   stageType,
   projectBrief,
   projectLoading,
   projectScript,
+  projectStoryBlueprint,
+  projectStoryBlueprintId,
+  scriptStoryBlueprintId,
+  storyBlueprintLoading,
+  storyBlueprintError,
+  scriptOnly,
   scriptLoading,
   scriptError,
   reviewItems,
@@ -242,6 +302,14 @@ export function ReviewGatePanel({
   canRequestChanges,
 }: ReviewGatePanelProps) {
   const isBriefReviewGate = stageType === "brief_intake";
+  const storyIdentityMismatch = Boolean(
+    scriptOnly && projectStoryBlueprintId && scriptStoryBlueprintId &&
+    projectStoryBlueprintId !== scriptStoryBlueprintId
+  );
+  const scriptReviewBlocked = stageType === "script" && (
+    scriptLoading || Boolean(scriptError) || !projectScript ||
+    Boolean(scriptOnly && (storyBlueprintLoading || storyBlueprintError || !projectStoryBlueprint || storyIdentityMismatch))
+  );
 
   return (
     <section className={styles.reviewPanel} aria-labelledby="review-gate-heading">
@@ -250,15 +318,25 @@ export function ReviewGatePanel({
         <h2 id="review-gate-heading" className={styles.reviewTitle}>
           {reviewHeading(stageType)}
         </h2>
-        <p className={styles.reviewDescription}>{reviewDescription(stageType)}</p>
+        <p className={styles.reviewDescription}>{reviewDescription(stageType, scriptOnly)}</p>
       </div>
       {stageType === "script" ? (
-        scriptError ? (
+        scriptError || (scriptOnly && (storyBlueprintError || storyIdentityMismatch)) ? (
           <div className={styles.reviewOutputEmpty} role="alert">
-            Could not load the script for review. Refresh before approving.
+            {storyIdentityMismatch
+              ? "The script was written from an older story outline. Refresh or request a new draft before finishing."
+              : "Could not load the complete outline and script for review. Refresh before finishing."}
           </div>
         ) : (
-          <ScriptReviewOutput script={projectScript} loading={scriptLoading} />
+          <div className={styles.reviewOutputs}>
+            {scriptOnly ? (
+              <StoryOutlineOutput
+                blueprint={projectStoryBlueprint ?? null}
+                loading={Boolean(storyBlueprintLoading)}
+              />
+            ) : null}
+            <ScriptReviewOutput script={projectScript} loading={scriptLoading} />
+          </div>
         )
       ) : isBriefReviewGate && (projectBrief || projectLoading) ? (
         <BriefReviewOutput brief={projectBrief} loading={projectLoading} />
@@ -300,7 +378,7 @@ export function ReviewGatePanel({
           placeholder="Optional feedback before continuing..."
           disabled={
             !!pending ||
-            (stageType === "script" && (scriptLoading || !!scriptError || !projectScript))
+            scriptReviewBlocked
           }
           rows={4}
         />
@@ -328,7 +406,7 @@ export function ReviewGatePanel({
               type="button"
               className={styles.secondaryButton}
               onClick={onRequestChanges}
-              disabled={!!pending || !canRequestChanges}
+              disabled={!!pending || !canRequestChanges || scriptReviewBlocked}
               title={
                 canRequestChanges
                   ? undefined
@@ -352,14 +430,13 @@ export function ReviewGatePanel({
           onClick={onApprove}
           disabled={
             !!pending ||
-            (stageType === "script" &&
-              (scriptLoading || Boolean(scriptError) || !projectScript))
+            scriptReviewBlocked
           }
         >
           {pending === "approve"
             ? "Approving..."
             : stageType === "script"
-              ? "Approve script & continue"
+              ? scriptOnly ? "Finish script" : "Approve script & continue"
               : "Approve and continue"}
         </button>
       </div>

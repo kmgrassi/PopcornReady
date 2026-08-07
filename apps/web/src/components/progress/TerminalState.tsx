@@ -1,7 +1,7 @@
 "use client";
 
 import type { GenerationRun } from "@popcorn/shared/v1/types";
-import { Button } from "../ui/Button";
+import { Button, ButtonLink } from "../ui/Button";
 import { terminalRecoveryMode } from "./terminalRecovery";
 import { formatElapsed, useElapsedTime } from "./useElapsedTime";
 import styles from "./TerminalState.module.css";
@@ -22,6 +22,7 @@ export function TerminalState({ run, creditRecovery }: TerminalStateProps) {
     const storyboardAssetsReady = run.completionKind === "storyboard_assets";
     const videoReady = run.completionKind === "video";
     const standaloneAssetReady = run.completionKind === "standalone_asset";
+    const scriptReady = run.completionKind === "script";
 
     return (
       <div className="terminal-state terminal-succeeded" role="status">
@@ -30,6 +31,8 @@ export function TerminalState({ run, creditRecovery }: TerminalStateProps) {
           <span className="terminal-state-heading">
             {videoReady
               ? "Your video is ready"
+              : scriptReady
+                ? "Your script is ready"
               : standaloneAssetReady
                 ? "Your asset is ready"
               : storyboardAssetsReady
@@ -41,6 +44,8 @@ export function TerminalState({ run, creditRecovery }: TerminalStateProps) {
           {run.message ??
             (videoReady
               ? "Generation finished. The final preview is available below."
+              : scriptReady
+                ? "Your story outline and approved script are saved to the project."
               : standaloneAssetReady
                 ? "Generation finished. The asset is available in the project library."
               : storyboardAssetsReady
@@ -51,6 +56,13 @@ export function TerminalState({ run, creditRecovery }: TerminalStateProps) {
           <p className="terminal-state-meta">
             Completed in {formatElapsed(elapsed)}.
           </p>
+        ) : null}
+        {scriptReady ? (
+          <div className={styles.scriptActions}>
+            <ButtonLink variant="secondary" size="sm" to={`/projects/${run.projectId}`}>
+              Open script
+            </ButtonLink>
+          </div>
         ) : null}
       </div>
     );

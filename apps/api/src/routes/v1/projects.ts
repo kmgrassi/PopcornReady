@@ -22,6 +22,7 @@ import {
   forkPublicProject,
   getProject,
   getActiveProjectScriptDraft,
+  getActiveProjectStoryBlueprint,
   getProjectWatchMedia,
   listProjects,
   recordProjectActivity,
@@ -127,6 +128,22 @@ projectsRouter.get(
     await recordProjectActivity(auth.workspaceId, params.projectId);
     const project = await getProject(auth.workspaceId, params.projectId);
     return { status: 200, body: { project } };
+  })
+);
+
+projectsRouter.get(
+  "/projects/:projectId/story-blueprint",
+  route(async ({ auth }, params) => {
+    if (!params.projectId) {
+      throw new ApiError("validation_failed", "projectId is required.");
+    }
+    await getProject(auth.workspaceId, params.projectId);
+    const storyBlueprint = await getActiveProjectStoryBlueprint(params.projectId);
+    return {
+      status: 200,
+      body: { storyBlueprint },
+      headers: { "Cache-Control": "no-store" },
+    };
   })
 );
 

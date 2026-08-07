@@ -73,6 +73,7 @@ export const appRouteRegistry = [
   route({ id: "create", path: "/create", layout: "authenticated", access: "authenticated", availability: "production", kind: "page", element: "create", routeSmokeFlowId: "route.create", featureFlowIds: ["creation-launcher"], fixture: "managed-auth-user", viewports: bothViewports, allowedNavigationWrites: authRefresh }),
   route({ id: "create-asset", path: "/create/asset", layout: "authenticated", access: "authenticated", availability: "production", kind: "page", element: "createAsset", routeSmokeFlowId: "route.create-asset", featureFlowIds: ["standalone-creation"], fixture: "managed-auth-user", viewports: bothViewports, allowedNavigationWrites: authRefresh }),
   route({ id: "create-review", path: "/create/review", layout: "authenticated", access: "authenticated", availability: "production", kind: "page", element: "createReview", routeSmokeFlowId: "route.create-review", featureFlowIds: ["standalone-creation"], fixture: "managed-auth-user", viewports: bothViewports, allowedNavigationWrites: authRefresh }),
+  route({ id: "create-script", path: "/create/script", layout: "authenticated", access: "authenticated", availability: "production", kind: "page", element: "createScript", routeSmokeFlowId: "route.create-script", featureFlowIds: ["script-creation"], fixture: "managed-auth-user", viewports: bothViewports, allowedNavigationWrites: authRefresh }),
   route({ id: "runs-compat", path: "/runs", layout: "authenticated", access: "authenticated", availability: "production", kind: "redirect", element: "runsCompat", routeSmokeFlowId: "route.runs-compat", featureFlowIds: [], fixture: "managed-auth-user", viewports: bothViewports, allowedNavigationWrites: authRefresh }),
   route({ id: "assets-compat", path: "/assets", layout: "authenticated", access: "authenticated", availability: "production", kind: "redirect", element: "assetsCompat", routeSmokeFlowId: "route.assets-compat", featureFlowIds: [], fixture: "managed-auth-user", viewports: bothViewports, allowedNavigationWrites: authRefresh }),
   route({ id: "outputs-compat", path: "/outputs", layout: "authenticated", access: "authenticated", availability: "production", kind: "redirect", element: "outputsCompat", routeSmokeFlowId: "route.outputs-compat", featureFlowIds: [], fixture: "managed-auth-user", viewports: bothViewports, allowedNavigationWrites: authRefresh }),
@@ -125,4 +126,3 @@ function routePath(id: string): string {
   if (!definition) throw new Error(`Unknown app route: ${id}`);
   return definition.path;
 }
-

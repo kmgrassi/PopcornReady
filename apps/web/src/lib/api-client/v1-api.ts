@@ -35,6 +35,7 @@ import type {
   ModelSettingPurpose,
   ProjectResponse,
   ProjectScriptResponse,
+  ProjectStoryBlueprintResponse,
   ProjectStoryboardJobResponse,
   ProjectStoryboardResponse,
   ProjectTimelineResponse,
@@ -373,6 +374,19 @@ export const v1Api = {
     apiRequest<ProjectScriptResponse>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/script`,
       { signal }
+    ),
+  getProjectStoryBlueprint: (projectId: string, signal?: AbortSignal) =>
+    apiRequest<ProjectStoryBlueprintResponse>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/story-blueprint`,
+      { signal }
+    ),
+  startScriptGenerationRun: (
+    projectId: string,
+    input: { briefVersionId: string }
+  ) =>
+    apiRequest<StartGenerationRunResponse>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/generation-entrypoints/script`,
+      { method: "POST", body: input }
     ),
   setProjectVisibility: (projectId: string, visibility: ProjectVisibility) =>
     apiRequest<ProjectResponse>(

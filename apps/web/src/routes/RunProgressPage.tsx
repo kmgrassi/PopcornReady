@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import type { GenerationRun } from "@popcorn/shared/v1/types";
 import { AnonymousUpgradeBanner } from "../components/auth/AnonymousUpgradeBanner";
 import { useAuth } from "../components/auth/AuthProvider";
@@ -16,6 +17,7 @@ import {
   useRetryGenerationRunAfterCreditUpdateMutation,
   useUpdateGenerationRunMutation,
 } from "../lib/queryClient";
+import { queryKeys } from "../lib/queryKeys";
 
 function isTerminal(status: GenerationRun["status"]): boolean {
   return status === "succeeded" || status === "failed" || status === "canceled";
@@ -55,6 +57,7 @@ function RunProgress({
   runId: string;
 }) {
   const auth = useAuth();
+  const queryClient = useQueryClient();
   const [actionError, setActionError] = useState<string | null>(null);
   const [reviewFeedbackNote, setReviewFeedbackNote] = useState("");
   const hint = readLastRunHint(projectId);
@@ -124,6 +127,12 @@ function RunProgress({
       applyPayload(data);
       if (action === "approve" || action === "reject") {
         setReviewFeedbackNote("");
+        if (scriptDraftId) {
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: queryKeys.projectScript(projectId) }),
+            queryClient.invalidateQueries({ queryKey: queryKeys.projectStoryBlueprint(projectId) }),
+          ]);
+        }
       }
       if (action === "cancel" && data.run.status === "canceled") {
         clearLastRunHint(projectId);

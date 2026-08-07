@@ -12,17 +12,20 @@ export interface DecideScriptReviewInput {
   decision: "approved" | "rejected";
   note?: string;
   feedbackActionId?: string;
+  completeRun?: boolean;
 }
 
 interface ReviewRow extends QueryResultRow {
   gate_status: string;
   stage: string;
   script_draft_id: string | null;
+  story_blueprint_id: string | null;
 }
 
 interface ScriptRow extends QueryResultRow {
   id: string;
   status: string;
+  story_blueprint_id: string;
 }
 
 export type ScriptReviewTransactionRunner = <T>(
@@ -37,7 +40,8 @@ export async function decideScriptReviewTransaction(
   return transaction("script-review.decide", async (client) => {
     const locked = await client.query<ReviewRow>(
       `select g.status as gate_status, g.stage,
-              p.current_script_draft_id as script_draft_id
+              p.current_script_draft_id as script_draft_id,
+              p.current_story_blueprint_id as story_blueprint_id
          from public.orchestrator_run_gates g
          join public.orchestrator_runs r on r.id = g.orchestrator_run_id
          join public.projects p on p.id = r.project_id
@@ -55,13 +59,19 @@ export async function decideScriptReviewTransaction(
       throw new ApiError("stale_proposal", "The active script changed before this decision.");
     }
     const script = await client.query<ScriptRow>(
-      `select id, status from public.script_drafts
+      `select id, status, story_blueprint_id from public.script_drafts
         where id = $1 and project_id = $2
         for update`,
       [input.scriptDraftId, input.projectId],
     );
     if (script.rowCount !== 1 || script.rows[0]?.status !== "draft") {
       throw new ApiError("stale_proposal", "The active script changed before this decision.");
+    }
+    if (
+      input.completeRun &&
+      (!row.story_blueprint_id || script.rows[0]?.story_blueprint_id !== row.story_blueprint_id)
+    ) {
+      throw new ApiError("stale_proposal", "The story outline changed before this decision.");
     }
 
     let feedbackActionId: string | undefined;
@@ -108,10 +118,11 @@ export async function decideScriptReviewTransaction(
     );
     await client.query(
       `update public.orchestrator_runs
-          set status = 'waiting', started_at = coalesce(started_at, now()),
-              completed_at = null, error = null, updated_at = now()
+          set status = $2, started_at = coalesce(started_at, now()),
+              completed_at = case when $2 = 'succeeded' then now() else null end,
+              error = null, updated_at = now()
         where id = $1`,
-      [input.runId],
+      [input.runId, input.completeRun && input.decision === "approved" ? "succeeded" : "waiting"],
     );
     return feedbackActionId ? { feedbackActionId } : {};
   });

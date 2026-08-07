@@ -67,6 +67,45 @@ test("develop_story_blueprint parses retry revisionInstruction as feedback", () 
   );
 });
 
+test("develop_story_blueprint accepts an authored outline with valid act references", () => {
+  const authoredBlueprint: StoryBlueprint = {
+    ...deriveStoryBlueprint(sampleBrief),
+    premise: "A teenager questions a world of abundance.",
+    logline: "A family archive changes how a teenager sees paradise.",
+  };
+  assert.equal(
+    parseDevelopStoryBlueprintInput({ authoredBlueprint }).authoredBlueprint?.logline,
+    authoredBlueprint.logline,
+  );
+  assert.throws(
+    () => parseDevelopStoryBlueprintInput({
+      authoredBlueprint: {
+        ...authoredBlueprint,
+        scenes: [{ ...authoredBlueprint.scenes[0], actId: "missing" }],
+      },
+    }),
+    /invalid or duplicate nested story data/,
+  );
+  assert.throws(
+    () => parseDevelopStoryBlueprintInput({
+      authoredBlueprint: {
+        ...authoredBlueprint,
+        characters: [{ ...authoredBlueprint.characters[0], description: 42 }],
+      },
+    }),
+    /invalid or duplicate nested story data/,
+  );
+  assert.throws(
+    () => parseDevelopStoryBlueprintInput({
+      authoredBlueprint: {
+        ...authoredBlueprint,
+        acts: authoredBlueprint.acts.map((act) => ({ ...act, targetDurationSec: Number.NaN })),
+      },
+    }),
+    /invalid or duplicate nested story data/,
+  );
+});
+
 test("develop_story_blueprint rejects unsupported input fields", () => {
   assert.throws(
     () => parseDevelopStoryBlueprintInput({ unexpected: true }),

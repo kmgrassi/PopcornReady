@@ -13,8 +13,7 @@ import type {
   VersionedTimeline,
   VideoBriefInput,
 } from "@popcorn/shared/v1/types";
-import type { Project } from "@popcorn/shared/types";
-import type { ScriptDraft } from "@popcorn/shared/types";
+import type { Project, ScriptDraft } from "@popcorn/shared/types";
 
 export type {
   AssetKind,
@@ -165,6 +164,26 @@ export interface ProjectScriptResponse {
     assetId: string;
     contentHash: string;
   } | null;
+}
+
+export interface ProjectStoryBlueprintResponse {
+  storyBlueprint: {
+    storyBlueprint: StoryBlueprintSnapshot;
+    storyBlueprintId: string;
+    assetId: string;
+    contentHash: string;
+  } | null;
+}
+
+export interface StoryBlueprintSnapshot {
+  schemaVersion: "storyBlueprint.v1";
+  premise: string;
+  logline: string;
+  tone?: string;
+  targetLengthSec: number;
+  aspectRatio: "9:16" | "16:9" | "1:1";
+  scenes: Array<{ id: string; title: string; summary: string; actId: string }>;
+  ending: string;
 }
 
 export interface SaveStoryboardBeatInput {
@@ -352,7 +371,7 @@ export interface CreateProjectInput {
   brief?: VideoBriefInput;
   posterProvider?: string;
   namingPrompt?: string;
-  namingContext?: "image" | "video" | "soundtrack";
+  namingContext?: "image" | "video" | "soundtrack" | "script";
 }
 
 export interface CreateProjectResponse extends ProjectResponse {

@@ -3,3 +3,7 @@
   gap: var(--space-3, 12px);
   margin-top: var(--space-4, 16px);
 }
+
+.scriptActions {
+  margin-top: var(--space-4, 16px);
+}

@@ -31,13 +31,9 @@ import {
   useProjectQuery,
 } from "../lib/queryClient";
 import { RecentProjectSwitcher } from "./create/RecentProjectSwitcher";
-import {
-  SCRIPT_CREATION_PROMPT_MAX_LENGTH,
-  scriptCreationHandoffState,
-} from "../lib/scriptCreationHandoff";
 import styles from "./StandaloneCreationPage.module.css";
 
-type CreationChoice = CreationGoal | "script";
+type CreationChoice = CreationGoal;
 
 const goals: Array<{
   value: CreationChoice;
@@ -47,7 +43,6 @@ const goals: Array<{
   { value: "image", label: "Image", description: "A still visual for this project." },
   { value: "video", label: "Video", description: "A short motion asset for this project." },
   { value: "soundtrack", label: "Audio", description: "Music or sound for this project." },
-  { value: "script", label: "Script", description: "A text-first draft for a new video project." },
 ];
 
 type StatusPresentation = CreationStatusPresentation & {
@@ -303,7 +298,6 @@ export function StandaloneCreationPage() {
     returnedDraft?.projectId ?? params.get("projectId") ?? "",
   );
   const [prompt, setPrompt] = useState(returnedDraft?.prompt ?? "");
-  const [scriptPrompt, setScriptPrompt] = useState("");
   const [improveImagePrompt, setImproveImagePrompt] = useState(
     returnedDraft?.goal === "image" ? returnedDraft.improvePrompt : true,
   );
@@ -455,17 +449,11 @@ export function StandaloneCreationPage() {
     setProjectId(nextProjectId);
     resetProposal();
   };
-  const activePrompt = goal === "script" ? scriptPrompt : prompt;
+  const activePrompt = prompt;
   const canPropose = Boolean(activePrompt.trim());
 
   async function startReview() {
     if (!canPropose || createProject.isPending || reviewAttemptRef.current) return;
-    if (goal === "script") {
-      navigate("/projects/new", {
-        state: scriptCreationHandoffState(scriptPrompt),
-      });
-      return;
-    }
     reviewAttemptRef.current = true;
     const lifecycle = pageLifecycleRef.current;
     setAutoProjectError(null);
@@ -517,15 +505,13 @@ export function StandaloneCreationPage() {
 
   return (
     <main className={styles.page}>
-      {goal !== "script" ? (
-        <RecentProjectSwitcher
+      <RecentProjectSwitcher
           projects={projects}
           selectedProjectId={projectId}
           loading={projectsQuery.isLoading}
           disabled={isAutoCreatingProject}
           onSelect={selectProject}
         />
-      ) : null}
 
       <div className={styles.workspace}>
         <aside className={styles.contextRail} aria-label="Creation context">
@@ -555,14 +541,8 @@ export function StandaloneCreationPage() {
 
           <section className={styles.projectContext} aria-labelledby="project-context-heading">
             <h2 id="project-context-heading">
-              {goal === "script" ? "Script project" : "Project"}
+              Project
             </h2>
-            {goal === "script" ? (
-              <p className={styles.scriptProjectHint} role="status">
-                The Creative Director will start a new video project, write a
-                text-only script, and stop for your review before making media.
-              </p>
-            ) : (
               <>
                 <ProjectPicker
                   projects={projects}
@@ -593,51 +573,35 @@ export function StandaloneCreationPage() {
                 ) : null}
                 {selectedProject ? <SelectedProjectContext project={selectedProject} /> : null}
               </>
-            )}
           </section>
         </aside>
 
         <section className={styles.canvas} aria-label="Creation prompt">
           <header className={styles.header}>
-            <h1>{goal === "script" ? "Create a script" : "Create"}</h1>
+            <h1>Create</h1>
             <p>
-              {goal === "script"
-                ? "Describe the story you want to tell. You’ll choose its length and direction before the Creative Director writes the first draft."
-                : "Describe the result, then review the exact request before generation. If untouched, generation starts 10 seconds after the proposal is ready."}
+              Describe the result, then review the exact request before generation. If untouched, generation starts 10 seconds after the proposal is ready.
             </p>
           </header>
 
           <label className={styles.promptField}>
-            <span>{goal === "script" ? "Describe the script" : "Describe the result"}</span>
+            <span>Describe the result</span>
             <textarea
               value={activePrompt}
-              maxLength={goal === "script" ? SCRIPT_CREATION_PROMPT_MAX_LENGTH : undefined}
               disabled={isAutoCreatingProject}
               onChange={(event) => {
                 setAutoProjectError(null);
-                if (goal === "script") {
-                  setScriptPrompt(event.target.value);
-                } else {
-                  setPrompt(event.target.value);
-                }
+                setPrompt(event.target.value);
                 resetProposal();
               }}
               placeholder={
-                goal === "script"
-                  ? "A sharp 30-second founder story about turning a rough idea into a finished video"
-                  : goal === "video"
+                goal === "video"
                   ? "A cyclist crossing a rain-slick street as the camera holds still"
                   : goal === "soundtrack"
                     ? "Sparse brushed percussion building to a warm final chord"
                     : "A quiet amber-lit close-up of popcorn falling into a bowl"
               }
             />
-            {goal === "script" ? (
-              <small className={styles.promptHelp}>
-                This starts a new video project and stops at script review. Approving
-                the script later continues into storyboard and production.
-              </small>
-            ) : null}
           </label>
 
           {goal === "image" || goal === "video" ? (
@@ -681,9 +645,7 @@ export function StandaloneCreationPage() {
             >
               {isAutoCreatingProject
                 ? "Creating project…"
-                : goal === "script"
-                  ? "Continue to script brief"
-                  : "Review request"}
+                : "Review request"}
             </Button>
           </div>
         </section>
@@ -742,14 +704,6 @@ function CreationTypeIcon({ goal }: { goal: CreationChoice }) {
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <rect x="3" y="4" width="18" height="16" rx="3" />
         <path d="m10 9 5 3-5 3Z" />
-      </svg>
-    );
-  }
-  if (goal === "script") {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M6 3h9l3 3v15H6Z" />
-        <path d="M15 3v4h4M9 11h6M9 15h6" />
       </svg>
     );
   }

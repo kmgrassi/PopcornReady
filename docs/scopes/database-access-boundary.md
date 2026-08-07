@@ -178,11 +178,13 @@ run/gate writer. The gate lookup is backed by
 `orchestrator_run_gates(stage, created_at DESC, orchestrator_run_id)` so the
 two-second active-run poll does not scan and sort gate history.
 
-Full-video script approval and rejection use the typed transaction in
+Full-video and dedicated script-run approval and rejection use the typed transaction in
 `apps/api/src/lib/postgres/script-review-transaction.ts`. It locks the exact
 reached script gate, Creative Director run, project pointer, and active script
 draft; binds the decision to the reviewed draft id; and atomically updates the
-script status, gate decision, and resumable run state. Rejection also inserts
+script status, gate decision, and run state. Full-video approval resumes the
+run, while dedicated script approval completes it in the same transaction so
+no media continuation can be admitted. Rejection also inserts
 its text-only feedback action in the same transaction. The `popcorn_api` role
 has column-level access and RLS policies only for that script-review shape, and
 release readiness checks those grants and policies explicitly.

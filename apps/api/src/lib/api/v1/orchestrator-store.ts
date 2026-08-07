@@ -33,6 +33,7 @@ export interface OrchestratorRun {
   projectId: string;
   status: OrchestratorRunStatus;
   inputSummary: string;
+  creationScope?: "full_video" | "script";
   /** Persisted role selects the declarative AgentDefinition (PR 8). */
   agentRole?: AgentRole;
   /** Finite domain identity used by creator projections and recovery policy. */
@@ -100,6 +101,7 @@ export interface RunActionSummary {
 export interface CreateOrchestratorRunInput {
   projectId: string;
   inputSummary: string;
+  creationScope?: OrchestratorRun["creationScope"];
   budgetUsd?: number;
   /** Stage/tool names to pause before; [] (or omitted) = fully autonomous. */
   gates?: string[];
@@ -153,6 +155,7 @@ interface OrchestratorRunRow {
   project_id: string;
   status: OrchestratorRunStatus;
   input_summary: string;
+  creation_scope?: "full_video" | "script" | null;
   agent_role?: AgentRole | null;
   task_kind?: string | null;
   origin_kind?: "creative_director" | "creator_direct" | null;
@@ -200,6 +203,7 @@ function mapRun(row: OrchestratorRunRow): OrchestratorRun {
     projectId: row.project_id,
     status: row.status,
     inputSummary: row.input_summary,
+    creationScope: row.creation_scope ?? "full_video",
     spentUsd: row.spent_usd ?? 0,
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
@@ -287,6 +291,7 @@ export async function createOrchestratorRun(
         project_id: input.projectId,
         status: input.status ?? "queued",
         input_summary: input.inputSummary,
+        creation_scope: input.creationScope ?? "full_video",
         budget_usd: input.budgetUsd ?? null,
         spent_usd: 0,
         ...deploymentMetadata(),
@@ -318,6 +323,7 @@ export async function createOrchestratorRunWithAnonymousQuota(
       p_limit: quota.limit,
       p_deploy_id: metadata.deploy_id,
       p_git_sha: metadata.git_sha,
+      p_creation_scope: input.creationScope ?? "full_video",
     })
   );
   const row = (rows as Array<{ run_id: string | null; quota_exceeded: boolean }>)[0];

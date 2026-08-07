@@ -685,11 +685,12 @@ export interface GenerationRun {
   projectId: string;
   briefVersionId?: string;
   status: GenerationRunStatus;
-  completionKind?: "video" | "storyboard_assets" | "standalone_asset";
+  completionKind?: "video" | "storyboard_assets" | "standalone_asset" | "script";
   presentationKind?:
     | "standalone_image"
     | "standalone_video"
-    | "standalone_audio";
+    | "standalone_audio"
+    | "script_creation";
   /** Server-projected state of the mandatory storyboard review boundary. */
   storyboardBoundaryStatus?: "pending" | "reached" | "resolved";
   activityState?: GenerationRunActivityState;

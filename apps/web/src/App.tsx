@@ -38,6 +38,7 @@ import { UploadsPage } from "./routes/UploadsPage";
 import { StandaloneCreationPage } from "./routes/StandaloneCreationPage";
 import { AssetCreationReviewPage } from "./routes/AssetCreationReviewPage";
 import { CreateLauncherPage } from "./routes/CreateLauncherPage";
+import { ScriptCreationPage } from "./routes/ScriptCreationPage";
 import {
   appRoutesForBuild,
   type AppRouteElementKey,
@@ -100,6 +101,7 @@ const routeRenderers: Record<AppRouteElementKey, () => JSX.Element> = {
   create: () => <CreateLauncherPage />,
   createAsset: () => <StandaloneCreationPage />,
   createReview: () => <AssetCreationReviewPage />,
+  createScript: () => <ScriptCreationPage />,
   runsCompat: () => <CollectionCompatRedirect section="runs" />,
   assetsCompat: () => <RedirectWithSearch to="/library/assets" />,
   outputsCompat: () => <CollectionCompatRedirect section="outputs" />,
