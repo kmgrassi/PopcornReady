@@ -21,6 +21,10 @@ persist a fully authored story blueprint and scene-level script. The review surf
 then has to project that outline and draft as writing artifacts, not classify the
 completed run through standalone image/video/audio readiness rules.
 
+Any new column read inside the direct script-review transaction must ship with
+the matching `popcorn_api` column grant and exact release-readiness inventory.
+Local tests running as an owner do not expose a missing least-privilege grant.
+
 ## Follow-up
 
 - Keep future “turn into video” work as a new full-video run derived from the

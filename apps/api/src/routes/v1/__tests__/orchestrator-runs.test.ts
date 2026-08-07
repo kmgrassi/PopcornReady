@@ -606,6 +606,8 @@ test("projects a completed script-scoped run as a ready script without media", (
   assert.equal(payload.run.status, "succeeded");
   assert.equal(payload.run.completionKind, "script");
   assert.equal(payload.run.presentationKind, "script_creation");
+  assert.equal(payload.run.message, "Your script is ready.");
+  assert.doesNotMatch(payload.run.message ?? "", /no playable video/i);
 });
 
 test("projects a creator-direct image as one successful standalone asset step", () => {

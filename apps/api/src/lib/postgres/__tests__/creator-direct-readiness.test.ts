@@ -203,6 +203,7 @@ test("production readiness allows only the direct story-pointer columns", async 
   await readiness();
 
   const requiredPrivileges = JSON.parse(fixture.params()[2] as string) as {
+    script_drafts: { SELECT: string[] };
     story_blueprint_scenes: { SELECT: string[] };
     story_beats: { SELECT: string[] };
   };
@@ -217,6 +218,16 @@ test("production readiness allows only the direct story-pointer columns", async 
     "id",
     "project_id",
   ]);
+  assert.deepEqual(requiredPrivileges.script_drafts.SELECT, [
+    "id",
+    "project_id",
+    "status",
+    "story_blueprint_id",
+  ]);
+  assert.match(
+    fixture.sql(),
+    /projects', 'current_story_blueprint_id', 'SELECT'/,
+  );
 });
 
 test("Railway health fails closed when DATABASE_URL is absent", async () => {

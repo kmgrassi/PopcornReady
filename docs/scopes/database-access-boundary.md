@@ -186,8 +186,10 @@ script status, gate decision, and run state. Full-video approval resumes the
 run, while dedicated script approval completes it in the same transaction so
 no media continuation can be admitted. Rejection also inserts
 its text-only feedback action in the same transaction. The `popcorn_api` role
-has column-level access and RLS policies only for that script-review shape, and
-release readiness checks those grants and policies explicitly.
+has column-level access and RLS policies only for that script-review shape,
+including read-only access to the project and script blueprint identity columns
+used to reject stale combined reviews, and release readiness checks those grants
+and policies explicitly.
 
 ## Incremental migration sequence
 

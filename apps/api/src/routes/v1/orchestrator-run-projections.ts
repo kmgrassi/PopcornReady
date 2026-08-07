@@ -332,6 +332,7 @@ function runMessage(
     case "waiting":
       return "Generation is waiting for a job or approval gate.";
     case "succeeded":
+      if (run.creationScope === "script") return "Your script is ready.";
       if (hasReadyStandaloneAsset(run, actions, assets)) return "Asset is ready.";
       if (hasFinishedVideo(actions, assets)) return "Video export is ready.";
       return hasReachedStoryboardAfterGate(gates)

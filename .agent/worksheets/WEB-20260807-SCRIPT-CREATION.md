@@ -63,6 +63,9 @@
   complete draft together at script review.
 - Updated product, interaction, API, database-boundary, North Star, E2E inventory,
   worksheet, and feedback ownership documentation.
+- PR review follow-up grants the production API role read access to the two
+  outline-identity columns used by the review transaction, extends exact readiness
+  coverage, and gives completed script runs script-specific success copy.
 
 ## Validation evidence
 
@@ -73,7 +76,8 @@
 - Creation launcher/intake Playwright on Chromium and mobile Safari: 13 passed.
 - Dedicated script revise/finish/reload/fail-closed Playwright: 5 passed; the
   completion test observes zero media-related writes.
-- Migration parser/tests: passed for 102 migrations / 2 validator tests.
+- PR review follow-up readiness and projection suites: 53 passed.
+- Migration parser/tests: passed for 103 migrations / 2 validator tests.
 - RPC and relation boundaries: passed (48 production RPC targets; 438 literal
   relation calls; no retired relations).
 - Manual browser, `http://localhost:3000/create` → `/create/script`:
@@ -105,6 +109,12 @@
 - Final reviewer verification found one remaining race on script-scope rejection;
   Request Changes now performs the same atomic active-outline identity check as
   Finish, with a stale-outline rejection test. No other P0/P1 issue was reported.
+- PR #900 automated review identified two actionable follow-ups: missing
+  least-privilege outline-column grants and contradictory completed-script copy.
+  Both are addressed with targeted readiness and projection tests.
+- Independent PR follow-up review found no remaining P0/P1 issue and confirmed
+  that migration manifests auto-enumerate the new grant migration; its combined
+  readiness, transaction, and projection check passed 59/59.
 
 ## Blockers and risks
 
@@ -115,5 +125,4 @@
 
 ## Next action / handoff
 
-- Resolve implementation and wrap-up review findings, run the repository validator,
-  then commit, push, and open the required review-ready PR.
+- Commit and push the PR-review fixes, then report both addressed threads on PR #900.
