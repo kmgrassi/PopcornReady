@@ -27,7 +27,7 @@ import {
 import { recoverDurableOrchestratorJob } from "./job-recovery";
 import { orchestratorModel, type OrchestratorModel } from "./model";
 import { executeRegisteredTool, type ToolRegistry } from "./registry";
-import { classifyToolFailure } from "./tool-errors";
+import { reconcileInFlightWork } from "./reconciliation";
 import { withStoreRetry, type RetryOptions } from "./retry";
 import {
   billableUsdSoFar,
@@ -46,12 +46,7 @@ import type {
   DomainRunWaitReason,
   DomainTaskV1,
 } from "@popcorn/shared/domain-agent-contract";
-import {
-  isDispatchToolName,
-  isToolName,
-} from "@/lib/orchestrator-tools/capability-catalog";
 import { createLogger } from "@/lib/v1/logger";
-import { redactMessage } from "@/lib/v1/redact";
 import { getServiceSupabase } from "@/lib/supabase/clients";
 import { runQuery } from "@/lib/supabase/db-errors";
 import { uploadedFootageMetadataFromSummary } from "./uploaded-footage-selection";
@@ -94,7 +89,6 @@ const PG_INSUFFICIENT_FUNDS = "23514"; // apply_credit_transaction overdraw guar
 
 const DEFAULT_MAX_TURNS = 50;
 const DEFAULT_MODEL_TURN_TIMEOUT_MS = 60_000;
-const MAX_RECOVERABLE_ASYNC_FAILURES_PER_TOOL = 3;
 const AFTER_GATE_PREFIX = "after:";
 const logger = createLogger();
 
@@ -434,7 +428,7 @@ export async function runOrchestratorToCompletion(
     });
   }
   if (run.status !== "running") return run;
-  const reconciled = await reconcileInFlightJob(run, r);
+  const reconciled = await reconcileInFlightWork(run, reconciliationContext(r));
   if (reconciled) return reconciled;
   return driveGuarded(run, r);
 }
@@ -477,7 +471,7 @@ async function resumeRun(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
     run = claimed;
   }
 
-  const reconciled = await reconcileInFlightJob(run, r);
+  const reconciled = await reconcileInFlightWork(run, reconciliationContext(r));
   if (reconciled) return reconciled;
   return driveGuarded(run, r);
 }
@@ -486,182 +480,6 @@ async function resumeRun(run: OrchestratorRun, r: Resolved): Promise<Orchestrato
 // used both by normal resume and by recovery of a process that died after
 // claiming `waiting -> running`; the action row is the durable source of truth
 // for whether a job still owns the run.
-async function reconcileInFlightJob(
-  run: OrchestratorRun,
-  r: Resolved
-): Promise<OrchestratorRun | null> {
-  // Determine the parking action (latest in-flight action carrying a job id).
-  const actions = await r.store.listRunActions(run.id);
-  const parkingAction = [...actions]
-    .reverse()
-    .find((action) => action.status === "running" && action.jobIds.length > 0);
-  const parkingJobId = parkingAction?.jobIds.at(-1);
-
-  if (parkingAction && parkingJobId) {
-    const job = await r.jobs.getJob(parkingJobId, run.projectId);
-    if (!job) {
-      logger.warn("orchestrator_job.reconcile_missing", {
-        workspaceId: r.workspaceId,
-        projectId: run.projectId,
-        runId: run.id,
-        jobId: parkingJobId,
-        actionId: parkingAction.id,
-      });
-      return park(run, r, "media_job"); // unknown job — leave parked for the sweeper
-    }
-    logger.info("orchestrator_job.reconciled", {
-      workspaceId: r.workspaceId,
-      projectId: run.projectId,
-      runId: run.id,
-      jobId: parkingJobId,
-      actionId: parkingAction.id,
-      jobStatus: job.status,
-    });
-    if (job.status === "failed" || job.status === "canceled") {
-      const jobMessage =
-        redactMessage(job.error?.message || `parking job ${parkingJobId} ended ${job.status}`);
-      const error =
-        isToolName(parkingAction.tool) &&
-        (job.error?.code === "object_not_found" ||
-          job.error?.code === "asset_not_ready" ||
-          job.error?.code === "storage_error" ||
-          job.error?.code === "database_error")
-          ? classifyToolFailure(
-              new ApiError(job.error.code, jobMessage, { jobId: parkingJobId }),
-              {
-                toolName: parkingAction.tool,
-                input: parkingAction.params,
-              }
-            )
-          : {
-              kind: "provider_failed" as const,
-              message: jobMessage,
-              recoverable: false,
-              details: job.error?.code
-                ? { code: job.error.code, jobId: parkingJobId }
-                : { jobId: parkingJobId },
-            };
-      let priorMatchingFailures = 0;
-      for (let index = actions.length - 1; index >= 0; index -= 1) {
-        const action = actions[index];
-        if (action.id === parkingAction.id || action.tool !== parkingAction.tool) continue;
-        if (action.status === "failed" && action.error?.kind === error.kind) {
-          priorMatchingFailures += 1;
-          continue;
-        }
-        break;
-      }
-      const asyncFailureCount = priorMatchingFailures + 1;
-      const retryLimitReached =
-        error.recoverable &&
-        asyncFailureCount >= MAX_RECOVERABLE_ASYNC_FAILURES_PER_TOOL;
-      const reconciledError = retryLimitReached
-        ? {
-            ...error,
-            recoverable: false,
-            suggestedNextTools: undefined,
-            details: {
-              ...(error.details ?? {}),
-              asyncFailureCount,
-              asyncFailureLimit: MAX_RECOVERABLE_ASYNC_FAILURES_PER_TOOL,
-            },
-          }
-        : error;
-      await r.store.markInvocation(parkingAction.id, {
-        status: "failed",
-        error: { ...reconciledError },
-      });
-      return reconciledError.recoverable
-        ? null
-        : finish(run, "failed", r, { ...reconciledError });
-    }
-    if (job.status !== "succeeded") return park(run, r, "media_job"); // still running — stay parked
-    // Job done → finalize the parking action with the assets it produced.
-    await r.store.markInvocation(parkingAction.id, {
-      status: "applied",
-      outputAssetIds: jobAssetIds(job.result),
-    });
-    const gates = await r.store.listRunGates(run.id);
-    const gate = gates.find((g) => g.stage === parkingAction.tool);
-    if (gate?.status === "pending" || gate?.status === "rejected") {
-      await r.store.markGateReached(run.id, parkingAction.tool);
-      return park(run, r, "approval");
-    }
-    const stopped = await finishIfAfterGateReached(run, parkingAction.tool, r);
-    if (stopped) return stopped;
-  }
-
-  const delegationParked = await reconcileDelegation(run, actions, r);
-  if (delegationParked) return delegationParked;
-  return null;
-}
-
-const TERMINAL_DOMAIN_RUN_STATUSES = new Set([
-  "succeeded",
-  "failed",
-  "canceled",
-  "timed_out",
-  "superseded",
-]);
-
-// A running delegate_* action means the run parked in the domain wait. The
-// child's report finalization transaction marks the delegation action applied
-// (with the report outputs) BEFORE waking this run's dispatch, so:
-//   - child still active            -> stay parked in the domain wait;
-//   - child terminal without report -> fail the invocation recoverably so the
-//     model can re-delegate (canceled/superseded children never apply it);
-//   - child missing (crash between the invocation write and the dispatch
-//     transaction) -> fail the invocation recoverably; the retried delegation
-//     replays idempotently through the same service.
-async function reconcileDelegation(
-  run: OrchestratorRun,
-  actions: RunActionSummary[],
-  r: Resolved
-): Promise<OrchestratorRun | null> {
-  const delegation = [...actions]
-    .reverse()
-    .find((action) => action.status === "running" && isDispatchToolName(action.tool));
-  if (!delegation) return null;
-
-  if (!r.store.findDelegatedChildRun && !r.store.findDelegatedChildRuns) {
-    return park(run, r, "domain");
-  }
-  const children = r.store.findDelegatedChildRuns
-    ? await r.store.findDelegatedChildRuns(delegation.id)
-    : await r.store.findDelegatedChildRun!(delegation.id).then((child) => child ? [child] : []);
-  if (children.length === 0) {
-    await r.store.markInvocation(delegation.id, {
-      status: "failed",
-      error: {
-        kind: "provider_failed",
-        message: "Delegated assignment was never dispatched; re-delegate to retry.",
-        recoverable: true,
-      },
-    });
-    return null;
-  }
-  if (children.some((child) => !TERMINAL_DOMAIN_RUN_STATUSES.has(child.status))) {
-    logger.info("orchestrator.delegation_waiting", {
-      workspaceId: r.workspaceId,
-      projectId: run.projectId,
-      runId: run.id,
-      delegationActionId: delegation.id,
-      children,
-    });
-    return park(run, r, "domain");
-  }
-  await r.store.markInvocation(delegation.id, {
-    status: "failed",
-    error: {
-      kind: "precondition_unmet",
-      message: `Delegated run(s) ended without completing the durable join.`,
-      recoverable: true,
-      details: { children },
-    },
-  });
-  return null;
-}
-
 // Project a persisted action into the compact result the model sees each turn.
 // Successful actions report only their produced assets; FAILED actions also carry
 // the tool wrapper's recovery guidance (why it failed, which requirements are
@@ -781,15 +599,20 @@ export function selectDomainBlockedCandidate(
 }
 
 // Async tool jobs report their produced assets as { assetIds: string[] }.
-function jobAssetIds(result: unknown): string[] {
-  if (result && typeof result === "object" && "assetIds" in result) {
-    const ids = (result as { assetIds?: unknown }).assetIds;
-    if (Array.isArray(ids)) return ids.filter((id): id is string => typeof id === "string");
-  }
-  return [];
-}
-
 type Resolved = ReturnType<typeof resolved>;
+
+function reconciliationContext(r: Resolved) {
+  return {
+    workspaceId: r.workspaceId,
+    store: r.store,
+    jobs: r.jobs,
+    finish: (run: OrchestratorRun, status: "succeeded" | "failed", error?: Record<string, unknown>) =>
+      finish(run, status, r, error),
+    park: (run: OrchestratorRun, waitReason: DomainRunWaitReason) => park(run, r, waitReason),
+    finishIfAfterGateReached: (run: OrchestratorRun, toolName: string) =>
+      finishIfAfterGateReached(run, toolName, r),
+  };
+}
 
 function isDomainRun(run: OrchestratorRun): boolean {
   return run.agentRole === "visuals" || run.agentRole === "audio";
