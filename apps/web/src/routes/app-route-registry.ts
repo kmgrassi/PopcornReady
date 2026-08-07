@@ -30,7 +30,6 @@ export interface AppRouteDefinition {
   viewports: readonly RouteViewport[];
   allowedNavigationWrites: readonly NavigationWrite[];
 }
-
 const bothViewports = ["desktop", "mobile"] as const;
 const desktopOnly = ["desktop"] as const;
 const authRefresh = ["auth.session.refresh"] as const;
@@ -125,4 +124,3 @@ function routePath(id: string): string {
   if (!definition) throw new Error(`Unknown app route: ${id}`);
   return definition.path;
 }
-
