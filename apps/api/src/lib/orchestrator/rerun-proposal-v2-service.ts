@@ -15,9 +15,9 @@ import {
   type RerunDecisionAdapter,
 } from "./rerun-decision-adapter";
 import {
-  loadRerunDecisionPacket,
   type RerunDecisionPacket,
 } from "./rerun-decision-context";
+import { loadRerunDecisionPacket } from "./rerun-decision-context-loader";
 
 export interface RerunProposalV2ServiceDeps {
   authorizeProject: typeof getProject;

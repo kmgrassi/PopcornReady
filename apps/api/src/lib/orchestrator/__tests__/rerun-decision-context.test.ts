@@ -3,10 +3,12 @@ import test from "node:test";
 import type { ProjectGraphSnapshot } from "@/lib/orchestrator-context/graph-snapshot";
 import {
   buildRerunDecisionPacket,
-  canonicalTimelineItemIds,
-  canonicalTimelineItems,
   RERUN_CONTEXT_LIMITS,
 } from "../rerun-decision-context";
+import {
+  canonicalTimelineItemIds,
+  canonicalTimelineItems,
+} from "../rerun-decision-context-loader";
 
 function snapshot(assetCount = 3): ProjectGraphSnapshot {
   return {
