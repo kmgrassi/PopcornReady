@@ -172,7 +172,7 @@ test("malformed questions can be repaired with only partial task outputs", async
   const repair = createDomainCompletionRepairer({
     loadOutputInventory: async (input) => {
       requireComplete = input.requireComplete;
-      return [{ assetId: "anchor-1", kind: "image", intrinsicRole: "character_anchor" }];
+      return [{ assetId: "anchor-1", kind: "anchor", intrinsicRole: "character_anchor" }];
     },
     structuredCall: async (input) => {
       request = input;
@@ -217,7 +217,7 @@ test("malformed questions can be repaired with only partial task outputs", async
   assert.equal(requireComplete, false);
   assert.deepEqual(payload.eligibleOutputs, [{
     assetId: "anchor-1",
-    kind: "image",
+    kind: "anchor",
     intrinsicRole: "character_anchor",
   }]);
   assert.equal(JSON.parse(result).outcome, "question");

@@ -8,12 +8,12 @@ import {
 test("semantic rerun outputs normalize to their stored graph asset kinds", () => {
   const cases = {
     image: "image",
-    poster: "image",
-    anchor: "image",
-    storyboard: "image",
-    keyframe: "image",
-    clip: "video",
-    audio_track: "audio",
+    poster: "poster",
+    anchor: "anchor",
+    storyboard: "keyframe",
+    keyframe: "keyframe",
+    clip: "clip",
+    audio_track: "audio_track",
     audio_fit: "critique",
     composite: "composite",
     render: "render",
