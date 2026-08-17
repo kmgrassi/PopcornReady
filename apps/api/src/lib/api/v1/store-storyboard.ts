@@ -5,10 +5,12 @@ import { runQuery } from "../../supabase/db-errors";
 import { ApiError, notFound } from "./errors";
 import { iso, markedJson } from "./store-internal";
 import { markedContent } from "./store-content";
-import { assetMediaUrlsForRow } from "./asset-media-urls";
 import type { ProjectStoryboard, StoryboardBeat, StoryboardItemStatus, StoryboardPanel, StoryboardScene, StoryboardStatus } from "@popcorn/shared/v1/types";
 import { dataAssetById, getProject, getServiceSupabase, insertDataAsset } from "./store";
 import type { AssetRow, ProjectRow, StoryBlueprintRow } from "./store";
+import { resolveStoryboardMediaByAssetId } from "./store-storyboard-media";
+
+export { assetGenerationPrompt } from "./store-storyboard-media";
 
 interface StorySpineSceneRow {
   id: string;
@@ -103,11 +105,6 @@ function mapStoryboardPanel(row: StoryboardPanelRow): StoryboardPanel {
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
   };
-}
-
-export function assetGenerationPrompt(row: Pick<AssetRow, "params">): string | undefined {
-  const prompt = row.params?.provenance?.prompt?.trim();
-  return prompt || undefined;
 }
 
 function mapStoryboardBeat(
@@ -207,82 +204,6 @@ export async function requireProjectRow(
   return data as ProjectRow;
 }
 
-// Resolve a set of panel image asset ids to their deliverable media urls,
-// following each asset's lineage HEAD (newest ready media version). A regenerate
-// inserts a new version sharing lineage_id, so resolving the head means a panel
-// keeps showing live bytes without its image_asset_id being repointed. Ids whose
-// lineage has no ready media are absent from the result (the panel stays blank).
-async function resolvePanelMediaByAssetId(
-  db: SupabaseClient,
-  workspaceId: string,
-  projectId: string,
-  assetIds: string[]
-): Promise<Map<string, { url: string | null; thumbnailUrl: string | null; prompt?: string }>> {
-  const result = new Map<
-    string,
-    { url: string | null; thumbnailUrl: string | null; prompt?: string }
-  >();
-  const ids = [...new Set(assetIds.filter(Boolean))];
-  if (ids.length === 0) return result;
-
-  // Map each referenced asset id to its lineage.
-  const refRows = await runQuery(
-    "store.resolvePanelMediaByAssetId refs",
-    db
-      .from("assets")
-      .select("id, lineage_id")
-      .eq("workspace_id", workspaceId)
-      .eq("project_id", projectId)
-      .in("id", ids)
-  );
-  const lineageByAssetId = new Map<string, string>();
-  for (const row of (refRows ?? []) as Array<{ id: string; lineage_id: string }>) {
-    lineageByAssetId.set(row.id, row.lineage_id);
-  }
-  const lineageIds = [...new Set(lineageByAssetId.values())];
-  if (lineageIds.length === 0) return result;
-
-  // Pull every ready media version in those lineages; the first per lineage in
-  // version-desc order is the head.
-  const headRows = await runQuery(
-    "store.resolvePanelMediaByAssetId heads",
-    db
-      .from("assets")
-      .select("*")
-      .eq("workspace_id", workspaceId)
-      .eq("project_id", projectId)
-      .in("lineage_id", lineageIds)
-      .neq("media", "data")
-      .eq("status", "ready")
-      .order("version", { ascending: false })
-  );
-  const headByLineage = new Map<string, AssetRow>();
-  for (const row of (headRows ?? []) as Array<AssetRow & { lineage_id: string }>) {
-    if (!headByLineage.has(row.lineage_id)) headByLineage.set(row.lineage_id, row);
-  }
-
-  const mediaByLineage = new Map<
-    string,
-    { url: string | null; thumbnailUrl: string | null; prompt?: string }
-  >();
-  await Promise.all(
-    [...headByLineage.entries()].map(async ([lineageId, row]) => {
-      const media = await assetMediaUrlsForRow(row);
-      mediaByLineage.set(lineageId, {
-        url: media.url,
-        thumbnailUrl: media.thumbnailUrl ?? null,
-        prompt: assetGenerationPrompt(row),
-      });
-    })
-  );
-
-  for (const [assetId, lineageId] of lineageByAssetId.entries()) {
-    const media = mediaByLineage.get(lineageId);
-    if (media) result.set(assetId, media);
-  }
-  return result;
-}
-
 async function hydrateProjectStoryboardById(
   db: SupabaseClient,
   project: ProjectRow,
@@ -337,7 +258,7 @@ async function hydrateProjectStoryboardById(
     : [];
   const panelRows = (panelsData ?? []) as StoryboardPanelRow[];
 
-  const panelMedia = await resolvePanelMediaByAssetId(
+  const panelMedia = await resolveStoryboardMediaByAssetId(
     db,
     workspaceId,
     projectId,
@@ -364,7 +285,7 @@ async function hydrateProjectStoryboardById(
     beatsByScene.set(beat.sceneId, [...(beatsByScene.get(beat.sceneId) ?? []), beat]);
   }
 
-  const sceneMedia = await resolvePanelMediaByAssetId(
+  const sceneMedia = await resolveStoryboardMediaByAssetId(
     db,
     workspaceId,
     projectId,
