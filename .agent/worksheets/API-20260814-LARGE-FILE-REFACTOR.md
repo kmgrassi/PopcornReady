@@ -34,7 +34,9 @@ Extract the script-draft persistence and reconstruction boundary from `apps/api/
 - `pnpm agent:validate -- --scope api` passed, including API typecheck and database-boundary checks.
 - `git diff --check` passed.
 - Local review confirmed the extracted module has no import of the facade, the facade preserves both script-draft exports, and the dependency boundary contains only the existing store primitives. `AGENT_REVIEW_COMMAND` was unset, so no independent reviewer was available.
+- PR review follow-up added the required matching feedback record and documented `store-script-draft.ts` in `docs/repository-structure.md`.
+- Follow-up `pnpm agent:validate -- --scope all` passed, including web and API typechecks plus documentation/workflow boundary checks.
 
 ## Review and handoff
 
-- Commit the implementation and worksheet together, add the `worksheet/API-20260814-LARGE-FILE-REFACTOR` tag, push `agent/daily-large-file-refactor-20260814`, and open a non-draft PR with `codex` and `codex-automation` labels when available.
+- Original implementation is committed as `3bdd46f6` on the open PR. Commit the review follow-up with the feedback record and ownership-map update, then push it to the same branch.
