@@ -42,6 +42,9 @@ test("home keeps unknown active progress visibly indeterminate", async ({ page }
   const runLink = page.getByRole("link", { name: "Open progress for Working launch" });
   await expect(runLink).toBeVisible();
   await expect(runLink.getByText("Working", { exact: true })).toBeVisible();
+  const statusTime = runLink.locator("time");
+  await expect(statusTime).toContainText("Status updated");
+  await expect(statusTime).toHaveAttribute("datetime", "2026-07-15T14:00:00.000Z");
   const fill = runLink.locator('span[aria-hidden="true"] > span');
   await expect(fill).not.toHaveAttribute("style", /width/);
   await expect
@@ -83,6 +86,7 @@ test("failed Dashboard and Activity cards direct recovery through project change
       "Open the run to see what stopped. Request changes from the project when you are ready.",
     );
     await expect(runLink.getByText("See what stopped", { exact: true })).toBeVisible();
+    await expect(runLink.locator("time")).toContainText("Status updated");
     await expect(runLink).not.toContainText(/retry/i);
   }
 });
