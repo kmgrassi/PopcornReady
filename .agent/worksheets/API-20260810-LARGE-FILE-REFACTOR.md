@@ -35,7 +35,25 @@ store is easier to navigate without changing route-facing behavior.
 - Research/plan: local review; no independent reviewer command was configured.
 - Implementation: local diff review found no behavior, export, tenancy, or database-boundary regressions.
 - Wrap-up: pending final commit and PR review.
+- 2026-08-17 review follow-up: an independent reviewer confirmed the GitHub
+  finding, the store-specific type import as the smallest fix, and a clean
+  integration with current `main`. Their implementation/wrap-up re-review found
+  no code or documentation blockers after the accuracy correction below.
 
 ## Handoff
 
-Pending PR URL.
+PR: https://github.com/kmgrassi/PopcornReady/pull/906
+
+## Review follow-up — 2026-08-17
+
+- GitHub review identified that the extracted module imported the shared
+  `V1Project`, whose optional projection fields widened the existing store API.
+- Restored the store-specific `V1Project` import so `listProjects`,
+  `listPublicProjects`, and `getPublicProjectBundle` retain their original
+  required-field return contract.
+- Targeted evidence: API typecheck proves the exported function signatures use
+  the stricter store type. The focused store/workspace suites pass 10 checks;
+  14 database-backed cases, including the runtime catalog cases, are skipped
+  because local database integration is disabled.
+- After merging current `main`, `pnpm agent:lint:fix`, `git diff --check`, and
+  `pnpm agent:validate -- --scope api` all pass.

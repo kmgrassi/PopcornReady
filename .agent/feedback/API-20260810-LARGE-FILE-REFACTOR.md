@@ -30,3 +30,14 @@ Reviewed the project catalog extraction from `store.ts` into
 The remaining `store.ts` work is still substantial and can be split further in
 future daily runs, especially the public-project fork and asset persistence
 boundaries.
+
+## GitHub review follow-up — 2026-08-17
+
+- The automated Codex review correctly found a public type-contract regression:
+  the new module imported the shared `V1Project`, which makes four projection
+  fields optional, instead of the stricter store-specific `V1Project`.
+- The import now comes from `store-types`, preserving the pre-extraction return
+  contract while leaving runtime behavior and database access unchanged.
+- Independent implementation/wrap-up review verified the facade re-exports,
+  `mapProjectWithProjection` integration after merging current `main`, final
+  four-file PR diff, and passing validation; no remaining findings.

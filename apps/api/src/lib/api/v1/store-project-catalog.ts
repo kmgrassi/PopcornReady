@@ -1,6 +1,6 @@
 // Project catalog and activity persistence for the V1 store.
 
-import type { ProjectStoryboard, V1Project } from "@popcorn/shared/v1/types";
+import type { ProjectStoryboard } from "@popcorn/shared/v1/types";
 import { runQuery } from "../../supabase/db-errors";
 import { notFound } from "./errors";
 import { paginate, paginateByUpdatedAt, type PageResult } from "./pagination";
@@ -12,6 +12,7 @@ import {
 import type { ProjectRow } from "./store";
 import { getProjectWatchMedia } from "./store-asset-discovery";
 import type { ProjectWatchMedia } from "./store-asset-discovery";
+import type { V1Project } from "./store-types";
 
 export async function recordProjectActivity(
   workspaceId: string,
